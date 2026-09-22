@@ -230,7 +230,7 @@ const admin: TranslationStrings = {
   'admin.packingTemplates.deleteCategoryError': 'Не вдалося видалити категорію',
   'admin.packingTemplates.deleteItemError': 'Не вдалося видалити елемент',
   'admin.packingTemplates.saveError': 'Помилка збереження',
-  'admin.tabs.addons': 'Дополнения',
+  'admin.tabs.addons': 'Доповнення',
   'admin.tabs.plugins': 'Плагіни',
   'admin.tabs.storage': 'Сховище',
   'admin.plugins.rescan': 'Пересканувати',
