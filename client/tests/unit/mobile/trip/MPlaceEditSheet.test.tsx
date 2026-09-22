@@ -5,12 +5,13 @@ import type { TripPlanner } from '../../../../src/mobile/screens/trip/MTripShell
 import type { Assignment, Category, Place } from '../../../../src/types'
 import { buildPlanner } from '../../../helpers/mobileTrip'
 import { useAddonStore } from '../../../../src/store/addonStore'
+import { useAuthStore } from '../../../../src/store/authStore'
 import { useTripStore } from '../../../../src/store/tripStore'
 import { server } from '../../../helpers/msw/server'
 import { resetAllStores, seedStore } from '../../../helpers/store'
 import { fireEvent, render, screen, waitFor } from '../../../helpers/render'
 
-// FE-MOB-PLEDIT-001 to FE-MOB-PLEDIT-040, plus the 009b, 025b and 029b variants
+// FE-MOB-PLEDIT-001 to FE-MOB-PLEDIT-042, plus the 009b, 025b and 029b variants
 // planner.t echoes the key, so every label/placeholder is asserted as its key.
 
 const CATEGORIES = [
@@ -542,5 +543,25 @@ describe('MPlaceEditSheet', () => {
       expect(warning).toHaveTextContent('Kaminarimon')
       expect(warning).not.toHaveTextContent('ENEOS')
     })
+  })
+
+  it('FE-MOB-PLEDIT-041: shows the details block for the place under edit', async () => {
+    server.use(
+      http.post('/api/maps/enrichment', () => HttpResponse.json({
+        photos: [],
+        description: { text: 'The oldest temple in Tokyo.', source: 'wikipedia', sourceUrl: null, license: null },
+        facts: [],
+        rating: null,
+        hours: null,
+      })),
+    )
+    setup({ editingPlace: EDITED })
+    expect(await screen.findByText('The oldest temple in Tokyo.')).toBeInTheDocument()
+  })
+
+  it('FE-MOB-PLEDIT-042: keeps the details block off while the instance has enrichment disabled', () => {
+    seedStore(useAuthStore, { placesEnrichEnabled: false })
+    setup({ editingPlace: EDITED })
+    expect(screen.queryByText('places.details.title')).not.toBeInTheDocument()
   })
 })
