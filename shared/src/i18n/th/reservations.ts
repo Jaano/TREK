@@ -10,7 +10,6 @@ const reservations: TranslationStrings = {
   'reservations.confirmed': "ยืนยันแล้ว",
   'reservations.pending': "รอดำเนินการ",
   'reservations.summary': "{confirmed} ยืนยันแล้ว {pending} รอดำเนินการ",
-  'reservations.fromPlan': "จากแผน",
   'reservations.showFiles': "แสดงไฟล์",
   'reservations.editTitle': "แก้ไขการจอง",
   'reservations.status': "สถานะ",

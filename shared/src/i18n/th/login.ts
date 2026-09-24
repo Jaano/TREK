@@ -28,6 +28,8 @@ const login: TranslationStrings = {
   'login.oidcSignIn': "ลงชื่อเข้าใช้ด้วย {name}",
   'login.oidcOnly': "การตรวจสอบรหัสผ่านถูกปิดใช้งาน โปรดลงชื่อเข้าใช้โดยใช้ผู้ให้บริการ SSO ของคุณ",
   'login.oidcLoggedOut': "คุณออกจากระบบแล้ว ลงชื่อเข้าใช้อีกครั้งโดยใช้ผู้ให้บริการ SSO ของคุณ",
+  'login.oidcRedirecting': 'กำลังพาคุณไปที่ {name}…',
+  'login.oidcRedirectSlow': 'ยังอยู่ที่นี่ใช่ไหม? ไปต่อที่ {name}',
   'login.demoHint': "ลองสาธิต — ไม่ต้องลงทะเบียน",
   'login.mfaTitle': "การรับรองความถูกต้องด้วยสองปัจจัย",
   'login.mfaSubtitle': "ป้อนรหัส 6 หลักจากแอปยืนยันตัวตนของคุณ",

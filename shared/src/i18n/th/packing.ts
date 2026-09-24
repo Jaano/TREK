@@ -26,9 +26,6 @@ const packing: TranslationStrings = {
   'packing.progress': "จัดแล้ว {packed} จาก {total} รายการ ({percent}%)",
   'packing.clearChecked': "ลบ {count} ที่เลือกไว้",
   'packing.clearCheckedShort': "ลบ {count}",
-  'packing.suggestions': "ข้อเสนอแนะ",
-  'packing.suggestionsTitle': "เพิ่มคำแนะนำ",
-  'packing.allSuggested': "เพิ่มข้อเสนอแนะทั้งหมดแล้ว",
   'packing.allPacked': "จัดครบแล้ว!",
   'packing.addPlaceholder': "เพิ่มรายการใหม่...",
   'packing.categoryPlaceholder': "รายการ...",
@@ -36,7 +33,6 @@ const packing: TranslationStrings = {
   'packing.filterOpen': "ยังไม่ได้จัด",
   'packing.filterDone': "เสร็จแล้ว",
   'packing.emptyTitle': "รายการจัดกระเป๋าว่างเปล่า",
-  'packing.emptyHint': "เพิ่มรายการหรือใช้คำแนะนำ",
   'packing.emptyFiltered': "ไม่มีรายการที่ตรงกับตัวกรองนี้",
   'packing.menuRename': "เปลี่ยนชื่อ",
   'packing.menuCheckAll': "ทำเครื่องหมายทั้งหมดว่าจัดแล้ว",
@@ -85,128 +81,6 @@ const packing: TranslationStrings = {
   'packing.toast.deleteError': "ลบไม่สำเร็จ",
   'packing.toast.renameError': "เปลี่ยนชื่อไม่สำเร็จ",
   'packing.toast.addError': "เพิ่มไม่สำเร็จ",
-  'packing.suggestions.items': [
-    {
-      name: "หนังสือเดินทาง",
-      category: "เอกสาร",
-    },
-    {
-      name: "บัตรประจำตัวประชาชน",
-      category: "เอกสาร",
-    },
-    {
-      name: "ประกันการเดินทาง",
-      category: "เอกสาร",
-    },
-    {
-      name: "ตั๋วเครื่องบิน",
-      category: "เอกสาร",
-    },
-    {
-      name: "บัตรเครดิต",
-      category: "การเงิน",
-    },
-    {
-      name: "เงินสด",
-      category: "การเงิน",
-    },
-    {
-      name: "วีซ่า",
-      category: "เอกสาร",
-    },
-    {
-      name: "เสื้อยืด",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "กางเกง",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "ชุดชั้นใน",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "ถุงเท้า",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "แจ็คเก็ต",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "ชุดนอน",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "ชุดว่ายน้ำ",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "เสื้อกันฝน",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "รองเท้าที่ใส่สบาย",
-      category: "เสื้อผ้า",
-    },
-    {
-      name: "แปรงสีฟัน",
-      category: "เครื่องใช้ในห้องน้ำ",
-    },
-    {
-      name: "ยาสีฟัน",
-      category: "เครื่องใช้ในห้องน้ำ",
-    },
-    {
-      name: "แชมพู",
-      category: "เครื่องใช้ในห้องน้ำ",
-    },
-    {
-      name: "ยาระงับกลิ่นกาย",
-      category: "เครื่องใช้ในห้องน้ำ",
-    },
-    {
-      name: "ครีมกันแดด",
-      category: "เครื่องใช้ในห้องน้ำ",
-    },
-    {
-      name: "มีดโกน",
-      category: "เครื่องใช้ในห้องน้ำ",
-    },
-    {
-      name: "ที่ชาร์จ",
-      category: "อิเล็กทรอนิกส์",
-    },
-    {
-      name: "พาวเวอร์แบงค์",
-      category: "อิเล็กทรอนิกส์",
-    },
-    {
-      name: "หูฟัง",
-      category: "อิเล็กทรอนิกส์",
-    },
-    {
-      name: "อะแดปเตอร์สำหรับการเดินทาง",
-      category: "อิเล็กทรอนิกส์",
-    },
-    {
-      name: "กล้อง",
-      category: "อิเล็กทรอนิกส์",
-    },
-    {
-      name: "ยาแก้ปวด",
-      category: "สุขภาพ",
-    },
-    {
-      name: "พลาสเตอร์ยา",
-      category: "สุขภาพ",
-    },
-    {
-      name: "ยาฆ่าเชื้อ",
-      category: "สุขภาพ",
-    },
-  ],
   'packing.bagLimit': "จำกัดน้ำหนัก",
   'packing.setBagLimit': "กำหนดขีดจำกัด",
 };

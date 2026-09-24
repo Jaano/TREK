@@ -55,6 +55,9 @@ const system_notice: TranslationStrings = {
   'system_notice.pager.counter': "{current} / {total}",
   'system_notice.pager.goto': "ไปที่ประกาศ {n}",
   'system_notice.pager.position': "ประกาศ {current} จาก {total}",
+  'system_notice.release_notes.feature_docsync_title': 'ซิงค์เอกสาร',
+  'system_notice.release_notes.feature_docsync_body':
+    'Paperless-ngx, Papra, Nextcloud, OpenCloud และ Synology Drive เอกสารของการเดินทางซิงค์ได้ทั้งสองทางกับที่จัดเก็บที่คุณใช้อยู่แล้ว',
   'system_notice.release_notes.eyebrow': "ติดตั้งอัปเดตแล้ว",
   'system_notice.release_notes.headline': "สามสิ่งที่ TREK ทำได้ด้วยตัวเองแล้ว",
   'system_notice.release_notes.intro': "API สถานที่ของตัวเอง การวางแผนโรดทริปตั้งแต่ต้นจนจบ และประวัติตำแหน่งของคุณกลับมาอยู่ในมือคุณ",

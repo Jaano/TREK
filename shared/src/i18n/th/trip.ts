@@ -86,6 +86,9 @@ const trip: TranslationStrings = {
   'transit.transfersLabel': "การเปลี่ยนขบวน",
   'transit.walkLabel': "เดิน",
   'transit.searchHint': "ค้นหาการเชื่อมต่อจริงและเพิ่มโดยตรงไปยังวัน — ข้อมูลผ่าน Transitous",
+  'trip.confirm.deletePlaceNight': 'การดำเนินการนี้จะลบการพักที่จองไว้ที่ “{name}” ด้วย',
+  'trip.confirm.deletePlaceBooked': 'การดำเนินการนี้จะลบการพักที่จองไว้ที่ “{name}” การจอง “{booking}” และค่าใช้จ่ายที่ผูกไว้ด้วย',
+  'trip.confirm.deletePlaceBookedSame': 'การดำเนินการนี้จะลบการพักที่จองไว้ที่ “{name}” รวมถึงการจองและค่าใช้จ่ายที่ผูกไว้ด้วย',
   'trip.toast.loadError': "ไม่สามารถโหลดทริปได้",
   'transit.noResultsVia': "ไม่พบเส้นทางผ่าน {provider} ลองเปลี่ยนเวลาหรือตัวกรอง",
 };

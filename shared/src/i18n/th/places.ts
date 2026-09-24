@@ -83,6 +83,7 @@ const places: TranslationStrings = {
   'places.reservationNotesPlaceholder': "บันทึกการจอง เลขที่ยืนยัน...",
   'places.mapsSearchPlaceholder': "ค้นหาสถานที่...",
   'places.mapsSearchError': "การค้นหาสถานที่ล้มเหลว",
+  'places.searchGoogleInstead': 'ไม่ใช่สถานที่ที่ต้องการใช่ไหม ค้นหาด้วย Google แทน',
   'places.loadingDetails': "กำลังโหลดรายละเอียดสถานที่...",
   'places.osmHint':
     "ใช้การค้นหา OpenStreetMap (ไม่มีรูปภาพ เวลาทำการ หรือการให้คะแนน) เพิ่มคีย์ Google API ในการตั้งค่าเพื่อดูรายละเอียดทั้งหมด",

@@ -130,6 +130,7 @@ const RATE_LIMIT_MESSAGES: Record<string, string> = {
   id:      'Terlalu banyak percobaan. Coba lagi nanti.',
   ja:      '試行回数が多すぎます。時間をおいて再度お試しください。',
   ko:      '시도 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요.',
+  th:      'พยายามหลายครั้งเกินไป โปรดลองอีกครั้งภายหลัง',
   uk:      'Занадто багато спроб. Спробуйте пізніше.',
   sv:      'För många försök. Prova igen senare.',
   ca:      'Massa intents. Torneu-ho a provar més tard.',

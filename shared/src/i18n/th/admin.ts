@@ -166,6 +166,13 @@ const admin: TranslationStrings = {
   'admin.placesEnrich.title': "สถานที่เสริมคุณค่า",
   'admin.placesEnrich.subtitle':
     "แสดงรูปภาพและคำอธิบายขณะเพิ่มสถานที่ มีการใช้ Wikipedia และ OpenStreetMap เสมอ Google จะถูกเพิ่มไว้ด้านบนเมื่อเปิดรูปภาพสถานที่หรือรายละเอียดสถานที่",
+  'admin.placesGoogleOnly.title': 'ค้นหาด้วย Google เท่านั้น',
+  'admin.placesGoogleOnly.subtitle':
+    'ทุกการค้นหาและทุกคำแนะนำจะส่งไปที่ Google Places เมื่อปิด ดัชนีของ TREK เองและ OpenStreetMap จะตอบก่อน และจะถาม Google เฉพาะเมื่อไม่พบผลลัพธ์',
+  'admin.placesGoogleOnly.missingKey':
+    'ต้องมีคีย์ API ของ Google Maps หากไม่มี การค้นหาจะใช้ดัชนีของ TREK เองและ OpenStreetMap ไม่ว่าสวิตช์นี้จะตั้งไว้อย่างไร',
+  'admin.placesGoogleOnly.otherProvider':
+    'ต้องใช้ Google เป็นผู้ให้บริการสถานที่ หากเลือก Amap หรือ OpenStreetMap การค้นหาจะไม่ส่งไปที่ Google ไม่ว่าสวิตช์นี้จะตั้งไว้อย่างไร',
   'admin.bagTracking.title': "ติดตามกระเป๋า",
   'admin.bagTracking.subtitle': "เปิดใช้งานการกำหนดน้ำหนักและถุงสำหรับการบรรจุสินค้า",
   'admin.collab.chat.title': "แชท",
@@ -361,6 +368,7 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:photo-provider': "มอบภาพถ่ายให้กับความทรงจำ",
   'admin.plugins.perm.hook:calendar-source': "จัดให้มีกิจกรรมในปฏิทิน",
   'admin.plugins.perm.hook:place-detail-provider': "เพิ่มรายละเอียด (บทวิจารณ์ คะแนน และลิงก์) ให้กับสถานที่",
+  'admin.plugins.perm.hook:search-provider': 'ตอบการค้นหาสถานที่จากดัชนีของตัวเอง ควบคู่กับผลลัพธ์ของ TREK',
   'admin.plugins.perm.hook:trip-warning-provider': "แจ้งเตือนการตรวจสอบความถูกต้องในการเดินทาง (แสดงใน Planner)",
   'admin.plugins.perm.hook:table-contributor': "เพิ่มคอลัมน์และการดำเนินการให้กับมุมมองการเดินทาง (การจอง สถานที่ วัน)",
   'admin.plugins.perm.hook:map-marker-provider': "เพิ่มเครื่องหมายลงในแผนที่การเดินทาง (เช่น แสดงการจองหรือ POI)",
@@ -733,6 +741,7 @@ const admin: TranslationStrings = {
   'admin.trekApi.notIncluded': "ไม่รวมอยู่",
   'admin.amapKey': "คีย์ API ของ Amap (高德地图)",
   'admin.amapKeyHint': "สำหรับค้นหาสถานที่ในจีนแผ่นดินใหญ่ที่ Google ใช้ไม่ได้และ OpenStreetMap ครอบคลุมไม่มาก ต้องใช้คีย์ “Web 服务” (เว็บเซอร์วิส) ไม่ใช่คีย์ JS API รับได้ที่ console.amap.com",
+  'admin.keyFromEnv': 'ตั้งค่าผ่าน {name}',
   'admin.placesProvider.title': "ผู้ให้บริการค้นหาสถานที่",
   'admin.placesProvider.subtitle': "ดัชนีของ TREK และ OpenStreetMap ตอบทุกการค้นหา การตั้งค่านี้เลือกผู้ให้บริการอื่นที่จะถามเมื่อไม่พบข้อมูล: อัตโนมัติจะเลือก Google หากมีคีย์ แล้วจึง Amap",
   'admin.placesProvider.auto': "อัตโนมัติ",
@@ -761,5 +770,6 @@ const admin: TranslationStrings = {
   'admin.placesUsageTitle': "คีย์นี้ใช้ทำอะไร",
   'admin.mapsKeyHintShort': "เพิ่มรูปภาพ คะแนน และเวลาเปิดทำการ ทุกการค้นหาจะส่งไปยัง Google",
   'admin.amapKeyHintShort': "สำหรับค้นหาสถานที่ในจีนแผ่นดินใหญ่ ต้องใช้คีย์เว็บเซอร์วิส ไม่ใช่คีย์ JS API",
+  'admin.collab.links.subtitle': 'ลิงก์และบุ๊กมาร์กที่แบ่งปัน',
 };
 export default admin;

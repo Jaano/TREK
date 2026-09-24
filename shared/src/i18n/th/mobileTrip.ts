@@ -65,5 +65,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtNoneOnStage': "ไม่มีสิ่งนั้นตลอดช่วงเส้นทางนี้",
   'mobileTrip.rtTruncated.one': "มี 1 ช่วงที่มีผลลัพธ์มากเกินกว่าจะแสดงในคำตอบเดียว เลือกประเภทให้น้อยลงเพื่อดูที่เหลือ",
   'mobileTrip.rtTruncated.other': "มี {count} ช่วงที่มีผลลัพธ์มากเกินกว่าจะแสดงในคำตอบเดียว เลือกประเภทให้น้อยลงเพื่อดูที่เหลือ",
+  'mobileTrip.rtNoDay': 'ยังไม่ได้เลือกวัน',
+  'mobileTrip.rtNoDayHint': 'แผนที่แสดงทั้งการเดินทาง แตะวันด้านบนเพื่อดูเส้นทางขับรถของวันนั้น',
 };
 export default mobileTrip;

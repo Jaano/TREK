@@ -82,6 +82,11 @@ const collab: TranslationStrings = {
   'collab.polls.options': "ตัวเลือก",
   'collab.polls.delete': "ลบ",
   'collab.polls.closedSection': "ปิดแล้ว",
+  'collab.chat.imageLimit': 'คุณแนบรูปภาพได้สูงสุด {max} รูปต่อข้อความ',
+  'collab.chat.uploading': 'กำลังอัปโหลด {percent}%',
+  'collab.chat.attachImages': 'แนบรูปภาพ',
+  'collab.chat.attachedImage': 'รูปภาพที่แนบ',
+  'collab.chat.closeImage': 'ปิดรูปภาพ',
   'collab.tabs.links': "ลิงก์",
   'collab.links.add': "เพิ่มลิงก์",
   'collab.chat.imageRejected': "อนุญาตเฉพาะรูป JPEG, PNG, GIF และ WebP ขนาดไม่เกิน 10 MB",
@@ -93,5 +98,9 @@ const collab: TranslationStrings = {
   'collab.links.pin': "ปักหมุดลิงก์",
   'collab.links.unpin': "เลิกปักหมุดลิงก์",
   'collab.links.delete': "ลบลิงก์",
+  'collab.links.edit': 'แก้ไขลิงก์',
+  'collab.links.open': 'เปิดลิงก์',
+  'collab.links.confirmDeleteTitle': 'ลบลิงก์ใช่ไหม',
+  'collab.links.confirmDeleteBody': 'ลิงก์นี้จะถูกลบอย่างถาวร',
 };
 export default collab;

@@ -20,5 +20,6 @@ const undo: TranslationStrings = {
   'undo.importBooking': "การนำเข้าการยืนยันการจอง",
   'undo.addPlace': "เพิ่มสถานที่แล้ว",
   'undo.done': "เลิกทำ: {action}",
+  'undo.failed': 'ไม่สามารถเลิกทำ: {action}',
 };
 export default undo;

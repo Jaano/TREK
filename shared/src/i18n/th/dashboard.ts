@@ -101,6 +101,7 @@ const dashboard: TranslationStrings = {
   'dashboard.useUnsplashPhoto': "ใช้รูปภาพ Unsplash โดย {photographer}",
   'dashboard.titleRequired': "ต้องระบุชื่อ",
   'dashboard.endDateError': "วันที่สิ้นสุดต้องอยู่หลังวันที่เริ่มต้น",
+  'dashboard.tripTooLong': 'การเดินทางหนึ่งครั้งยาวได้สูงสุด {days} วัน',
   'dashboard.dateShiftTitle': "วันที่เริ่มต้นใหม่",
   'dashboard.dateShiftIntro': "คุณเปลี่ยนวันที่เริ่มต้นของการเดินทางครั้งนี้ แผนของคุณควรปรับตามวันที่ใหม่อย่างไร",
   'dashboard.dateShiftKeepBookings': "ทำการจองตามวันที่ของพวกเขา",
@@ -110,6 +111,20 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftAllDesc':
     "แผนการเดินทางทั้งหมดจะย้ายไปพร้อมกับวันที่ใหม่ รวมถึงการจองและที่พัก",
   'dashboard.dateShiftHint': "เคล็ดลับ: หากต้องการเปลี่ยนแผนการเดินทางเพียงบางส่วน ให้ใช้ \"เพิ่มวัน\" ในเครื่องมือวางแผนแทน",
+  'dashboard.shrinkTitle': 'ลบวันใช่ไหม',
+  'dashboard.shrinkIntro': 'การบันทึกวันที่ใหม่จะลบวันเหล่านี้:',
+  'dashboard.shrinkMoreDays': '+อีก {count}',
+  'dashboard.shrinkLastDays': 'วันสุดท้ายจะถูกลบ ไม่ใช่วันแรก',
+  'dashboard.shrinkLastDaysHint': 'แผนรายวันจะย้ายตามวันที่ใหม่ ดังนั้นวันท้ายๆ ของแผนจะถูกลบเสมอ แม้ว่าวันเริ่มต้นจะเปลี่ยนไปก็ตาม',
+  'dashboard.shrinkBookingsHint': 'ยังคงอยู่ในส่วนการจอง รายการที่วันที่ยังอยู่ในช่วงการเดินทางจะกลับไปอยู่ในวันนั้น',
+  'dashboard.shrinkBookingsShiftHint': 'ยังคงอยู่ในส่วนการจอง โดยไม่ผูกกับวันใด',
+  'dashboard.shrinkStayHint': 'เช็คอินหรือเช็คเอาท์ในวันที่ถูกลบ จึงลบการพักทั้งหมด',
+  'dashboard.shrinkStayBookedHint':
+    'เช็คอินหรือเช็คเอาท์ในวันที่ถูกลบ จึงลบการพักทั้งหมด การจอง “{booking}” และค่าใช้จ่ายของการพักนี้ยังคงอยู่ในส่วนการจอง',
+  'dashboard.shrinkStayBookingHint': 'เช็คอินหรือเช็คเอาท์ในวันที่ถูกลบ จึงลบการพักทั้งหมด การจอง “{booking}” ยังคงอยู่ในส่วนการจอง',
+  'dashboard.shrinkConfirm': 'ลบวันและบันทึก',
+  'dashboard.shrinkUnknown':
+    'ไม่สามารถตรวจสอบวันของการเดินทางนี้ได้ หากวันที่ใหม่มีจำนวนวันน้อยลง การบันทึกจะลบวันท้ายๆ และทุกอย่างที่วางแผนไว้ในวันเหล่านั้น',
   'dashboard.greeting.morning': "สวัสดีตอนเช้า",
   'dashboard.greeting.afternoon': "สวัสดีตอนบ่าย",
   'dashboard.greeting.evening': "สวัสดีตอนเย็น",
