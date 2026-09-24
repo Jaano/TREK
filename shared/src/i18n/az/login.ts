@@ -28,6 +28,8 @@ const login: TranslationStrings = {
   'login.oidcSignIn': '{name} ilə daxil ol',
   'login.oidcOnly': 'Parolla autentifikasiya deaktiv edilib. SSO provayderinizdən istifadə edərək daxil olun.',
   'login.oidcLoggedOut': 'Sistemdən çıxmısınız. SSO provayderinizdən istifadə edərək yenidən daxil olun.',
+  'login.oidcRedirecting': 'Sizi {name} səhifəsinə yönləndiririk…',
+  'login.oidcRedirectSlow': 'Hələ buradasınız? {name} ilə davam edin',
   'login.demoHint': 'Demonu sınayın — qeydiyyat tələb olunmur',
   'login.mfaTitle': 'İki faktorlu autentifikasiya',
   'login.mfaSubtitle': 'Autentifikator tətbiqinizdəki 6 rəqəmli kodu daxil edin.',

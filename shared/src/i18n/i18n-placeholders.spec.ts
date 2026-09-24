@@ -1,4 +1,5 @@
 import ar from './ar';
+import az from './az';
 import br from './br';
 import ca from './ca';
 import cs from './cs';
@@ -39,6 +40,7 @@ import { describe, it, expect } from 'vitest';
  */
 const LOCALES: Record<string, TranslationStrings> = {
   ar,
+  az,
   br,
   ca,
   cs,

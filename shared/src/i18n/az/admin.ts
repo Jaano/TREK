@@ -173,6 +173,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': 'Amap (高德地图) API açarı',
   'admin.amapKeyHint':
     'Google-un əlçatmaz, OpenStreetMap əhatəsinin isə zəif olduğu materik Çinində məkan axtarışı üçün. JS API açarı deyil, "Web 服务" (veb xidməti) açarı tələb olunur. Onu console.amap.com saytından əldə edin.',
+  'admin.keyFromEnv': '{name} ilə təyin edilib',
   'admin.placesProvider.title': 'Məkan axtarışı provayderi',
   'admin.placesProvider.subtitle':
     'TREK-in öz indeksi və OpenStreetMap hər axtarışa cavab verir. Onlar heç nə tapmadıqda başqa kimə sorğu göndəriləcəyini bu seçim müəyyən edir: Avtomatik rejim açar mövcud olduqda əvvəlcə Google-a, sonra Amap-a üstünlük verir.',

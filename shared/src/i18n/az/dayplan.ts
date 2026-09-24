@@ -114,7 +114,7 @@ const dayplan: TranslationStrings = {
   'dayplan.reorderError':
     'Günlərin sırasını dəyişmək mümkün olmadı',
   'dayplan.addDayError': 'Gün əlavə etmək mümkün olmadı',
-    'dayplan.deleteDay': 'Günü sil',
+  'dayplan.deleteDay': 'Günü sil',
   'dayplan.deleteDayTitle': '{day} silinsin?',
   'dayplan.deleteDayBody': 'Gün səyahətdən silinəcək. Bunu geri qaytarmaq mümkün deyil.',
   'dayplan.deleteDayEmpty': 'Bu gün üçün heç nə planlaşdırılmayıb.',

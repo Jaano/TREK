@@ -21,6 +21,7 @@ TREK ships with translations for 23 languages. You can change your language at a
 | `it` | Italiano |
 | `tr` | Türkçe |
 | `ar` | العربية |
+| `az` | Azərbaycanca |
 | `id` | Bahasa Indonesia |
 | `ja` | 日本語 |
 | `ko` | 한국어 |

@@ -31,9 +31,6 @@ const packing: TranslationStrings = {
   'packing.clearChecked': 'İşarələnmiş {count} elementi sil',
   'packing.clearCheckedShort': '{count} elementi sil',
 
-  'packing.suggestions': 'Təkliflər',
-  'packing.suggestionsTitle': 'Təklifləri əlavə et',
-  'packing.allSuggested': 'Bütün təkliflər əlavə edilib',
   'packing.allPacked': 'Hər şey yığılıb!',
 
   'packing.addPlaceholder': 'Yeni element əlavə et...',
@@ -43,8 +40,6 @@ const packing: TranslationStrings = {
   'packing.filterDone': 'Hazırdır',
 
   'packing.emptyTitle': 'Baqaj siyahısı boşdur',
-  'packing.emptyHint':
-    'Elementlər əlavə edin və ya təkliflərdən istifadə edin',
   'packing.emptyFiltered':
     'Bu filtrə uyğun heç bir element yoxdur',
 
@@ -110,128 +105,6 @@ const packing: TranslationStrings = {
   'packing.toast.renameError': 'Adını dəyişmək mümkün olmadı',
   'packing.toast.addError': 'Əlavə etmək mümkün olmadı',
 
-  'packing.suggestions.items': [
-    {
-      name: 'Pasport',
-      category: 'Sənədlər',
-    },
-    {
-      name: 'Şəxsiyyət vəsiqəsi',
-      category: 'Sənədlər',
-    },
-    {
-      name: 'Səyahət sığortası',
-      category: 'Sənədlər',
-    },
-    {
-      name: 'Uçuş biletləri',
-      category: 'Sənədlər',
-    },
-    {
-      name: 'Kredit kartı',
-      category: 'Maliyyə',
-    },
-    {
-      name: 'Nağd pul',
-      category: 'Maliyyə',
-    },
-    {
-      name: 'Viza',
-      category: 'Sənədlər',
-    },
-    {
-      name: 'Köynəklər',
-      category: 'Geyim',
-    },
-    {
-      name: 'Şalvarlar',
-      category: 'Geyim',
-    },
-    {
-      name: 'Alt paltarı',
-      category: 'Geyim',
-    },
-    {
-      name: 'Corablar',
-      category: 'Geyim',
-    },
-    {
-      name: 'Gödəkçə',
-      category: 'Geyim',
-    },
-    {
-      name: 'Yuxu geyimi',
-      category: 'Geyim',
-    },
-    {
-      name: 'Çimərlik geyimi',
-      category: 'Geyim',
-    },
-    {
-      name: 'Yağış gödəkçəsi',
-      category: 'Geyim',
-    },
-    {
-      name: 'Rahat ayaqqabı',
-      category: 'Geyim',
-    },
-    {
-      name: 'Diş fırçası',
-      category: 'Gigiyena vasitələri',
-    },
-    {
-      name: 'Diş məcunu',
-      category: 'Gigiyena vasitələri',
-    },
-    {
-      name: 'Şampun',
-      category: 'Gigiyena vasitələri',
-    },
-    {
-      name: 'Dezodorant',
-      category: 'Gigiyena vasitələri',
-    },
-    {
-      name: 'Günəş kremi',
-      category: 'Gigiyena vasitələri',
-    },
-    {
-      name: 'Ülgüc',
-      category: 'Gigiyena vasitələri',
-    },
-    {
-      name: 'Şarj cihazı',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Powerbank',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Qulaqlıq',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Səyahət adapteri',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Kamera',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Ağrıkəsici',
-      category: 'Sağlamlıq',
-    },
-    {
-      name: 'Yara plastırı',
-      category: 'Sağlamlıq',
-    },
-    {
-      name: 'Dezinfeksiya vasitəsi',
-      category: 'Sağlamlıq',
-    },
-  ],
 
   'packing.bagLimit': 'Çəki limiti',
   'packing.setBagLimit': 'Limit təyin et',

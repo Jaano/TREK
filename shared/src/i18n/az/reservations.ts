@@ -14,7 +14,6 @@ const reservations: TranslationStrings = {
   'reservations.pending': 'Gözləyir',
   'reservations.summary':
     '{confirmed} təsdiqlənib, {pending} gözləyir',
-  'reservations.fromPlan': 'Plandan',
   'reservations.showFiles': 'Faylları göstər',
 
   'reservations.editTitle': 'Rezervasiyanı redaktə et',

@@ -101,7 +101,7 @@ const trip: TranslationStrings = {
   'transit.searchHint':
     'Real bağlantıları axtarın və birbaşa günə əlavə edin — məlumatlar Transitous tərəfindən təmin edilir.',
 
-   'trip.confirm.deletePlaceNight':
+  'trip.confirm.deletePlaceNight':
     'Bu, həmçinin “{name}” məkanında rezervasiya edilmiş qalmanı silir.',
   'trip.confirm.deletePlaceBooked':
     'Bu, həmçinin “{name}” məkanında rezervasiya edilmiş qalmanı, “{booking}” rezervasiyasını və onunla əlaqəli bütün xərcləri silir.',
