@@ -182,6 +182,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': 'Κλειδί API του Amap (高德地图)',
   'admin.amapKeyHint':
     'Για αναζήτηση τοποθεσιών στην ηπειρωτική Κίνα, όπου το Google δεν είναι προσβάσιμο και το OpenStreetMap έχει ελάχιστα δεδομένα. Χρειάζεται κλειδί τύπου «Web 服务» (υπηρεσία web), όχι κλειδί JS API. Διαθέσιμο στο console.amap.com.',
+  'admin.keyFromEnv': 'Ορίζεται μέσω {name}',
   'admin.placesProvider.title': 'Πάροχος αναζήτησης τοποθεσιών',
   'admin.placesProvider.subtitle':
     'Το δικό του ευρετήριο του TREK και το OpenStreetMap απαντούν σε κάθε αναζήτηση. Εδώ επιλέγεται ποιος άλλος ρωτιέται όταν δεν βρίσκουν τίποτα: το Αυτόματο προτιμά τη Google αν υπάρχει κλειδί, μετά το Amap.',

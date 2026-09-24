@@ -51,7 +51,7 @@ The place form on the desktop and the search sheet on the phone use the same hin
 
 ### With a Google Maps API key
 
-> **Admin:** The Google Maps API key is instance-wide, set in **Admin → Settings → API Keys → Google Maps API Key**. It is stored encrypted at rest and used for every member of the instance.
+> **Admin:** The Google Maps API key is instance-wide, set in **Admin → Settings → API Keys → Google Maps API Key**. It is stored encrypted at rest and used for every member of the instance. It can also come from the `PLACES_API_KEY` environment variable, which wins over the field and leaves it read-only; see [Environment Variables](Environment-Variables#place-search-google-places).
 
 A key does not buy a different search by itself. Google fills the slot that answers once the TREK API and OpenStreetMap both have nothing, and it adds what only a commercial provider has: ratings and photos. No open dataset carries either of those for ordinary businesses. A place found through Google keeps its Google id, so its details, rating and photos keep coming from Google.
 

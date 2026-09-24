@@ -135,6 +135,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': '高德地图 API Key',
   'admin.amapKeyHint':
     '用于中国大陆境内的地点搜索（Google 无法访问，OpenStreetMap 内容也很少）。需要「Web 服务」类型的 Key，不是 JS API Key。在 console.amap.com 申请。',
+  'admin.keyFromEnv': '已通过 {name} 设置',
   'admin.placesProvider.title': '地点搜索源',
   'admin.placesProvider.subtitle':
     'TREK 自有索引和 OpenStreetMap 会回应每一次搜索。这里选择的是它们一无所获时还问谁：自动在有密钥时优先 Google，其次 Amap。',

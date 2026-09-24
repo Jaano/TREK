@@ -141,6 +141,7 @@ secretEnv:
   ADMIN_PASSWORD: ""        # initial admin password (first boot only)
   OIDC_CLIENT_SECRET: ""    # set if using OIDC
   UNSPLASH_ACCESS_KEY: ""   # optional; free key from unsplash.com/developers
+  PLACES_API_KEY: ""        # optional; Google Maps API key, wins over the one in Admin > Settings
 ```
 
 Alternatively, use `generateEncryptionKey: true` to let the chart generate and manage the encryption key, or point `existingSecret` / `existingSecretKey` at an existing Kubernetes Secret.

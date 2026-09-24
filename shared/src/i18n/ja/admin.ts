@@ -170,6 +170,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': 'Amap（高德地图）API キー',
   'admin.amapKeyHint':
     'Google に接続できず OpenStreetMap のデータも少ない中国本土での地点検索用です。JS API キーではなく「Web 服务」（Web サービス）タイプのキーが必要です。console.amap.com で取得できます。',
+  'admin.keyFromEnv': '{name} で設定済み',
   'admin.placesProvider.title': '地点検索のプロバイダー',
   'admin.placesProvider.subtitle':
     'TREK 自身の索引と OpenStreetMap がすべての検索に答えます。ここでは、それらが何も見つけられなかったときに誰に尋ねるかを選びます。自動はキーがあれば Google を、次に Amap を選びます。',

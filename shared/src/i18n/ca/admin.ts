@@ -446,6 +446,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': "Clau API d'Amap (高德地图)",
   'admin.amapKeyHint':
     "Per a la cerca de llocs a la Xina continental, on Google no és accessible i la cobertura d'OpenStreetMap és escassa. Cal una clau «Web 服务» (servei web), no una clau de l'API JS. Se n'obté una a console.amap.com.",
+  'admin.keyFromEnv': 'Definida mitjançant {name}',
   'admin.placesProvider.title': 'Proveïdor de la cerca de llocs',
   'admin.placesProvider.subtitle':
     "L'índex propi de TREK i OpenStreetMap responen cada cerca. Aquí es tria a qui més es consulta quan no troben res: Automàtic prefereix Google si hi ha clau, després Amap.",

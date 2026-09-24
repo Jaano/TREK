@@ -136,6 +136,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': 'Chiave API Amap (高德地图)',
   'admin.amapKeyHint':
     'Per la ricerca di luoghi nella Cina continentale, dove Google non è raggiungibile e OpenStreetMap ha pochi dati. Serve una chiave di tipo «Web 服务» (servizio web), non una chiave API JS. Si ottiene su console.amap.com.',
+  'admin.keyFromEnv': 'Impostata tramite {name}',
   'admin.placesProvider.title': 'Provider per la ricerca di luoghi',
   'admin.placesProvider.subtitle': "L'indice di TREK e OpenStreetMap rispondono a ogni ricerca. Qui si sceglie chi altro viene interrogato quando non trovano nulla: Automatico preferisce Google se esiste una chiave, poi Amap.",
   'admin.placesProvider.auto': 'Automatico',

@@ -133,6 +133,11 @@ secretEnv:
   # Get a free key at https://unsplash.com/developers. Can also be set per-admin
   # in Admin > Settings; this value overrides that. Leave empty to disable.
   UNSPLASH_ACCESS_KEY: ""
+  # Optional Google Maps API key (Places API (New) enabled) for place search, photos,
+  # details and Google transit. Overrides the key set in Admin > Settings > API Keys,
+  # whose field then shows this variable read-only. Leave empty to use the key from the
+  # admin panel, or none.
+  PLACES_API_KEY: ""
   # Optional Amap (高德地图) Web 服务 key for place search and geocoding inside mainland
   # China. Overrides the key set in Admin > Settings > API Keys. A Web 端 (JS API) key is
   # a different credential and is rejected with INVALID_USER_KEY. Leave empty to use the

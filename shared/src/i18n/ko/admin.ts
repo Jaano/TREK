@@ -175,6 +175,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': 'Amap(高德地图) API 키',
   'admin.amapKeyHint':
     'Google에 접속할 수 없고 OpenStreetMap 데이터도 부족한 중국 본토에서 장소를 검색할 때 사용합니다. JS API 키가 아니라 "Web 服务"(웹 서비스) 유형의 키가 필요합니다. console.amap.com에서 발급받을 수 있습니다.',
+  'admin.keyFromEnv': '{name}(으)로 설정됨',
   'admin.placesProvider.title': '장소 검색 제공자',
   'admin.placesProvider.subtitle':
     'TREK 자체 색인과 OpenStreetMap이 모든 검색에 답합니다. 여기서는 둘이 아무것도 찾지 못했을 때 누구에게 더 물을지 고릅니다. 자동은 키가 있으면 Google을, 그다음 Amap을 씁니다.',

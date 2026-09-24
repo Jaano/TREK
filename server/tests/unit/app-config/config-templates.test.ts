@@ -38,7 +38,7 @@ describe('OVERPASS_TIMEOUT_MS in the templates', () => {
 describe('the Places and Amap switches in the templates', () => {
   // The index is asked by default and the only way to stop that is this
   // variable, so an operator has to be able to find it where they look.
-  const documented = ['TREK_PLACES_ENABLED', 'TREK_PLACES_URL', 'AMAP_API_KEY', 'AMAP_API_SECRET', 'AMAP_API_BASE'];
+  const documented = ['TREK_PLACES_ENABLED', 'TREK_PLACES_URL', 'PLACES_API_KEY', 'AMAP_API_KEY', 'AMAP_API_SECRET', 'AMAP_API_BASE'];
 
   it('.env.example documents every one of them', () => {
     for (const name of documented) {
@@ -66,12 +66,12 @@ describe('the Places and Amap switches in the templates', () => {
     expect(helmConfigMap).toContain('{{- if not (kindIs "invalid" .Values.env.TREK_PLACES_ENABLED) }}');
   });
 
-  it('the Helm chart carries the Amap credentials in the Secret, never in the ConfigMap', () => {
+  it('the Helm chart carries the Google and Amap credentials in the Secret, never in the ConfigMap', () => {
     // A ConfigMap is readable by anyone who can read the namespace; the key and
     // its signing secret belong next to the other credentials, in both the
     // plain and the generated branch of the Secret, and the pod reads them from
     // there like it reads the Unsplash key.
-    for (const name of ['AMAP_API_KEY', 'AMAP_API_SECRET']) {
+    for (const name of ['PLACES_API_KEY', 'AMAP_API_KEY', 'AMAP_API_SECRET']) {
       expect(helmValues).toContain(`  ${name}: ""`);
       expect(helmSecret).toContain(`${name}: {{ .Values.secretEnv.${name} | b64enc | quote }}`);
       expect(helmSecret).toContain(`${name}: {{ .Values.secretEnv.${name} }}`);

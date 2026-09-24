@@ -311,7 +311,7 @@ Some hosting environments — commonly VPS and datacenter IP ranges (and many Ku
 
 **Two ways to configure it** — pick one; the env var wins if both are present:
 
-1. **Environment variable** (this page) — instance-wide, ideal for Docker/Helm/Unraid where you already manage config as env.
+1. **Environment variable** (this page) — instance-wide, ideal for Docker/Helm/Unraid where you already manage config as env. The **Unsplash API Key** field in the admin panel is then read-only and names the variable.
 2. **Admin → Settings → API Keys** — paste the key into the **Unsplash API Key** field. Stored encrypted at rest and used as a fallback for every user when no env var is set. This is the better option if you'd rather not restart the container to change it.
 
 To get a key: create a free account at [unsplash.com/developers](https://unsplash.com/developers), register a new application, and copy its **Access Key** (not the Secret Key). The Unsplash free tier (demo) allows 50 requests/hour, which is ample for cover search.
@@ -328,6 +328,25 @@ TREK's own place index, the [TREK Places API](TREK-Places-API), answers the sugg
 | `TREK_PLACES_URL`     | Base URL of a copy of the service you run yourself; it has to answer the same `/v1` API. Unset or blank uses the public service. A trailing slash is stripped, and a value that is not a full URL aborts startup. It is configuration rather than user input and is not run through the SSRF guard, so an address on your LAN or Docker network works without `ALLOW_INTERNAL_NETWORK`. | `https://places.liketrek.com` |
 
 On Helm both go under `env:` in `values.yaml`. The chart passes `TREK_PLACES_ENABLED` through whenever it is set at all, so an unquoted `false` or `--set env.TREK_PLACES_ENABLED=false` reaches the container as well.
+
+---
+
+## Place Search (Google Places)
+
+A Google Maps API key gives place search Google as the keyed provider beside the TREK Places index and OpenStreetMap, and switches on Google photos, place details and the Google transit backend. What the key is used for, and the switches that limit it, are on [Places and Search](Places-and-Search#with-a-google-maps-api-key).
+
+| Variable         | Description | Default |
+|------------------|-------------|---------|
+| `PLACES_API_KEY` | Google Maps API key with the **Places API (New)** enabled. When set, it takes priority over the key configured in **Admin → Settings → API Keys** and is used for every member of the instance. | unset |
+
+**Two ways to configure it**, pick one; the env var wins if both are present:
+
+1. **Environment variable** (this page): instance-wide, ideal for Docker/Helm/Unraid where you already manage config as env. In the chart it is a credential and goes under `secretEnv:`, not `env:`.
+2. **Admin → Settings → API Keys**: paste it into the **Google Maps API Key** field. Stored encrypted at rest.
+
+While the variable is set, the **Google Maps API Key** field in the admin panel is read-only and names `PLACES_API_KEY` instead of showing a value. **Test** beside it still works and checks the key from the environment. The same goes for `UNSPLASH_ACCESS_KEY` and `AMAP_API_KEY` and their fields. The value itself never reaches the browser.
+
+If you restrict the key to **HTTP referrers** in Google Cloud Console, set `APP_URL` as well: TREK sends it as the `Referer` header on every Google request, and without it Google rejects them.
 
 ---
 
@@ -351,7 +370,7 @@ type **Web 服务**. A **Web 端 (JS API)** key is a different kind of credentia
 
 **Two ways to configure it**, pick one; the env var wins if both are present:
 
-1. **Environment variable** (this page): instance-wide, ideal for Docker/Helm where you already manage config as env. In the chart the key and the secret are credentials and go under `secretEnv:`, not `env:`; only `AMAP_API_BASE` is a plain `env:` value.
+1. **Environment variable** (this page): instance-wide, ideal for Docker/Helm where you already manage config as env. In the chart the key and the secret are credentials and go under `secretEnv:`, not `env:`; only `AMAP_API_BASE` is a plain `env:` value. The **Amap (高德地图) API Key** field in the admin panel is then read-only and names the variable.
 2. **Admin → Settings → API Keys**: paste it into the **Amap (高德地图) API Key** field. Stored encrypted at rest.
 
 Setting a key is not enough on its own: **Admin → Settings → API Keys → Place search provider** decides which keyed
