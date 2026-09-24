@@ -78,6 +78,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Đơn vị nhiệt độ',
   'settings.distance': 'Đơn vị khoảng cách',
   'settings.timeFormat': 'Định dạng thời gian',
+  'settings.weekStart': 'Tuần bắt đầu vào',
+  'settings.weekStartHint': 'Ngày đầu tuần trong mọi bộ chọn ngày. Vacay có cài đặt riêng.',
   'settings.bookingLabels': 'Nhãn lộ trình đặt chỗ',
   'settings.bookingLabelsHint': 'Hiển thị tên ga/sân bay trên bản đồ. Khi tắt, chỉ có biểu tượng được hiển thị.',
   'settings.mapPoiPill': 'Khám phá các địa điểm trên bản đồ',

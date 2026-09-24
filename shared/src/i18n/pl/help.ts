@@ -1014,7 +1014,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Język, jednostki i waluta, jak zachowują się mapa i rezerwacje oraz z czym TREK się otwiera. Każda zmiana tutaj działa od razu.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region: język interfejsu, format czasu, waluta wyświetlania oraz jednostki odległości i temperatury.',
+    'Language & region: język interfejsu, format czasu, pierwszy dzień tygodnia, waluta wyświetlania oraz jednostki odległości i temperatury.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map: trasy rezerwacji zawsze na mapie, pigułka Odkrywaj miejsca, optymalizacja trasy od zakwaterowania, rozmyte kody rezerwacji i etykiety tras rezerwacji.',
   'help.ctx.settings-display.bullet.3':
@@ -1084,7 +1084,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Wybierz język interfejsu w Language & region. TREK przełącza się od razu, na każdym urządzeniu, na którym się logujesz.',
   'help.guide.language-region.step.2':
-    'Poniżej wybierz format czasu, walutę wyświetlania oraz jednostki odległości i temperatury.',
+    'Poniżej wybierz format czasu, dzień, od którego zaczyna się tydzień we wszystkich wyborach daty, walutę wyświetlania oraz jednostki odległości i temperatury.',
   'help.guide.language-region.result':
     'Daty, odległości i pieniądze czyta się tak, jak oczekujesz; własna waluta podróży nadal pokazuje się obok przeliczonych kwot.',
   'help.guide.language-region.tip.1':

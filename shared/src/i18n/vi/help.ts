@@ -1010,7 +1010,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Ngôn ngữ, đơn vị và tiền tệ, cách bản đồ và đặt chỗ hoạt động, và màn hình TREK mở lúc đầu. Mọi thay đổi ở đây có hiệu lực ngay.',
   'help.ctx.settings-display.bullet.1':
-    '“Ngôn ngữ & khu vực”: ngôn ngữ giao diện, định dạng thời gian, tiền tệ hiển thị, đơn vị khoảng cách và nhiệt độ.',
+    '“Ngôn ngữ & khu vực”: ngôn ngữ giao diện, định dạng thời gian, ngày đầu tuần, tiền tệ hiển thị, đơn vị khoảng cách và nhiệt độ.',
   'help.ctx.settings-display.bullet.2':
     '“Du lịch & bản đồ”: tuyến đường đặt chỗ luôn có trên bản đồ, nút khám phá địa điểm, tối ưu hóa tuyến đường từ chỗ ở của bạn, mã đặt chỗ được làm mờ và tuyến đường đặt chỗ có nhãn.',
   'help.ctx.settings-display.bullet.3':
@@ -1080,7 +1080,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Chọn ngôn ngữ giao diện trong “Ngôn ngữ & khu vực”. TREK chuyển ngay, trên mọi thiết bị bạn đăng nhập.',
   'help.guide.language-region.step.2':
-    'Bên dưới, chọn định dạng thời gian, tiền tệ hiển thị, đơn vị khoảng cách và nhiệt độ.',
+    'Bên dưới, chọn định dạng thời gian, ngày bắt đầu tuần trong mọi bộ chọn ngày, tiền tệ hiển thị, đơn vị khoảng cách và nhiệt độ.',
   'help.guide.language-region.result':
     'Ngày tháng, khoảng cách và tiền đọc đúng như bạn mong đợi; tiền tệ riêng của chuyến đi vẫn hiện bên cạnh số tiền đã quy đổi.',
   'help.guide.language-region.tip.1':

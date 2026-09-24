@@ -976,7 +976,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     '言語、単位、通貨、地図と予約の振る舞い、そしてTREKが最初に開く画面。ここでの変更はすべて即座に反映されます。',
   'help.ctx.settings-display.bullet.1':
-    '「Language & region」：インターフェースの言語、時刻形式、表示通貨、距離と温度の単位。',
+    '「Language & region」：インターフェースの言語、時刻形式、週の最初の曜日、表示通貨、距離と温度の単位。',
   'help.ctx.settings-display.bullet.2':
     '「Travel & map」：予約ルートを常に地図に表示、スポットを探すピル、宿泊先を起点にしたルート最適化、予約コードのぼかし、予約ルートのラベル表示。',
   'help.ctx.settings-display.bullet.3':
@@ -1046,7 +1046,8 @@ const help: TranslationStrings = {
   'help.guide.language-region.goal': 'TREKをあなたの言語で話させ、あなたの流儀で数えさせます。',
   'help.guide.language-region.step.1':
     '「Language & region」でインターフェースの言語を選びます。TREKは即座に切り替わり、サインインしているどの端末にも及びます。',
-  'help.guide.language-region.step.2': 'その下で、時刻形式、表示通貨、距離と温度の単位を選びます。',
+  'help.guide.language-region.step.2':
+    'その下で、時刻形式、すべての日付選択で週を何曜日から始めるか、表示通貨、距離と温度の単位を選びます。',
   'help.guide.language-region.result':
     '日付、距離、金額が期待どおりに読めます。旅行ごとの通貨は、換算後の金額の隣に引き続き表示されます。',
   'help.guide.language-region.tip.1': '表示通貨は旅行をまたいだ合計のためのものです。各旅行は設定した通貨を保ちます。',

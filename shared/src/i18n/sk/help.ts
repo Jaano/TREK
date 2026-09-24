@@ -1033,7 +1033,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Jazyk, jednotky a mena, správanie mapy a rezervácií a to, čím sa TREK otvorí. Každá zmena tu platí okamžite.',
   'help.ctx.settings-display.bullet.1':
-    'Jazyk a región: jazyk rozhrania, formát času, zobrazovaná mena a jednotky vzdialenosti a teploty.',
+    'Jazyk a región: jazyk rozhrania, formát času, prvý deň týždňa, zobrazovaná mena a jednotky vzdialenosti a teploty.',
   'help.ctx.settings-display.bullet.2':
     'Cestovanie a mapa: trasy rezervácií vždy na mape, tlačidlo Objavovať miesta, optimalizácia trasy od ubytovania, skryté rezervačné kódy a popisky trás rezervácií.',
   'help.ctx.settings-display.bullet.3':
@@ -1103,7 +1103,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'V časti Jazyk a región vyberte jazyk rozhrania. TREK sa prepne okamžite na každom zariadení, na ktorom sa prihlásite.',
   'help.guide.language-region.step.2':
-    'Pod ním vyberte formát času, zobrazovanú menu a jednotky vzdialenosti a teploty.',
+    'Pod ním vyberte formát času, deň, ktorým začína týždeň vo všetkých výberoch dátumu, zobrazovanú menu a jednotky vzdialenosti a teploty.',
   'help.guide.language-region.result':
     'Dátumy, vzdialenosti a peniaze sa zobrazujú tak, ako očakávate; vlastná mena cesty sa stále zobrazuje vedľa prepočítaných súm.',
   'help.guide.language-region.tip.1':

@@ -30,6 +30,8 @@ The Admin Panel is divided into tabs. Most tabs are always visible; a few appear
 
 ![Admin panel on the User Defaults tab, setting instance-wide defaults for colour mode, temperature unit, distance unit, time format, currency and blurred booking codes](assets/AdminUserDefaults.png)
 
+The **Week starts on** default decides which day opens each row of every date picker for users who have not picked their own (Monday unless set).
+
 ### Routing services
 
 On desktop and mobile, **User Defaults** includes optional **Own routing engine** and **Own Valhalla instance** fields in the map section. Changes save when you leave the field; **reset** restores the built-in default.

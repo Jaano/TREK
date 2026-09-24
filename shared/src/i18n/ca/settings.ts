@@ -63,6 +63,8 @@ const settings: TranslationStrings = {
   'settings.language': 'Idioma',
   'settings.temperature': 'Unitat de temperatura',
   'settings.timeFormat': "Format d'hora",
+  'settings.weekStart': 'La setmana comença el',
+  'settings.weekStartHint': 'Primer dia de la setmana a tots els selectors de data. Vacay té la seva pròpia opció.',
   'settings.blurBookingCodes': 'Difumina els codis de reserva',
   'settings.optimizeFromAccommodation': "Optimitza la ruta des de l'allotjament",
   'settings.optimizeFromAccommodationHint':

@@ -73,6 +73,8 @@ const settings: TranslationStrings = {
   'settings.temperature': '温度单位',
   'settings.distance': '距离单位',
   'settings.timeFormat': '时间格式',
+  'settings.weekStart': '每周开始于',
+  'settings.weekStartHint': '所有日期选择器中每周的第一天。Vacay 有单独的设置。',
   'settings.blurBookingCodes': '隐藏预订编号',
   'settings.aiAlwaysRetry': '始终用 AI 重试预订导入',
   'settings.aiAlwaysRetryHint': '当标准解析器无法读取文件时，自动改用 AI 重试。',

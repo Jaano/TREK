@@ -1021,7 +1021,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Dil, birimler ve para birimi, haritanın ve rezervasyonların nasıl davrandığı ve TREK’in neyle açılacağı. Buradaki her değişiklik hemen uygulanır.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region: arayüz dili, saat biçimi, görüntüleme para birimi ile mesafe ve sıcaklık birimleri.',
+    'Language & region: arayüz dili, saat biçimi, haftanın ilk günü, görüntüleme para birimi ile mesafe ve sıcaklık birimleri.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map: rezervasyon rotaları her zaman haritada, Yerleri keşfet hapı, konaklamadan rota optimizasyonu, bulanık rezervasyon kodları ve etiketli rezervasyon rotaları.',
   'help.ctx.settings-display.bullet.3':
@@ -1089,7 +1089,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Language & region altında arayüz dilini seçin. TREK oturum açtığınız her cihazda hemen geçiş yapar.',
   'help.guide.language-region.step.2':
-    'Altında saat biçimini, görüntüleme para birimini ile mesafe ve sıcaklık birimlerini seçin.',
+    'Altında saat biçimini, tüm tarih seçicilerde haftanın hangi günle başlayacağını, görüntüleme para birimini ile mesafe ve sıcaklık birimlerini seçin.',
   'help.guide.language-region.result':
     'Tarihler, mesafeler ve para beklediğiniz gibi okunur; bir gezinin kendi para birimi dönüştürülen tutarların yanında görünmeye devam eder.',
   'help.guide.language-region.tip.1':

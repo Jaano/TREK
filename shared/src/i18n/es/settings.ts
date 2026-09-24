@@ -78,6 +78,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Unidad de temperatura',
   'settings.distance': 'Unidad de distancia',
   'settings.timeFormat': 'Formato de hora',
+  'settings.weekStart': 'La semana comienza el',
+  'settings.weekStartHint': 'Primer día de la semana en todos los selectores de fecha. Vacay tiene su propio ajuste.',
   'settings.blurBookingCodes': 'Difuminar códigos de reserva',
   'settings.aiAlwaysRetry': 'Always retry booking imports with AI',
   'settings.aiAlwaysRetryHint': 'When a file cannot be read by the standard parser, automatically retry it with AI.',

@@ -1061,7 +1061,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Langue, unités et devise, le comportement de la carte et des réservations, et ce sur quoi TREK s’ouvre. Chaque changement ici s’applique aussitôt.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region : la langue de l’interface, le format de l’heure, la devise d’affichage, et les unités de distance et de température.',
+    'Language & region : la langue de l’interface, le format de l’heure, le premier jour de la semaine, la devise d’affichage, et les unités de distance et de température.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map : les itinéraires de réservation toujours sur la carte, la pastille Explorer les lieux, l’optimisation de l’itinéraire depuis votre hébergement, les codes de réservation masqués et les itinéraires de réservation étiquetés.',
   'help.ctx.settings-display.bullet.3':
@@ -1132,7 +1132,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Choisissez la langue de l’interface dans Language & region. TREK change aussitôt, sur chaque appareil où vous vous connectez.',
   'help.guide.language-region.step.2':
-    'En dessous, choisissez le format de l’heure, la devise d’affichage, et les unités de distance et de température.',
+    'En dessous, choisissez le format de l’heure, le jour par lequel commence la semaine dans tous les sélecteurs de date, la devise d’affichage, et les unités de distance et de température.',
   'help.guide.language-region.result':
     'Dates, distances et montants se lisent comme vous l’attendez ; la devise propre à un voyage reste affichée à côté des montants convertis.',
   'help.guide.language-region.tip.1':

@@ -853,7 +853,8 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.title': '顯示',
   'help.ctx.settings-display.summary':
     '語言、單位和貨幣，地圖與預訂的行為方式，以及 TREK 開啟時的頁面。這裡的每項變更都立即生效。',
-  'help.ctx.settings-display.bullet.1': '「Language & region」：介面語言、時間格式、顯示貨幣，以及距離和溫度單位。',
+  'help.ctx.settings-display.bullet.1':
+    '「Language & region」：介面語言、時間格式、每週的第一天、顯示貨幣，以及距離和溫度單位。',
   'help.ctx.settings-display.bullet.2':
     '「Travel & map」：訂票路線一律顯示在地圖上、探索地點的小按鈕、從住宿地點最佳化路線、模糊預訂代碼，以及為預訂路線加上標籤。',
   'help.ctx.settings-display.bullet.3': '「啟動」：TREK 開啟時是進入儀表板還是進行中的旅行，以及旅行的哪個分頁先顯示。',
@@ -912,7 +913,8 @@ const help: TranslationStrings = {
   'help.guide.language-region.goal': '讓 TREK 說你的語言，按你的方式計數。',
   'help.guide.language-region.step.1':
     '在「Language & region」中選擇介面語言。TREK 立即切換，在你登入的每台裝置上都一樣。',
-  'help.guide.language-region.step.2': '在它下方選擇時間格式、顯示貨幣，以及距離和溫度單位。',
+  'help.guide.language-region.step.2':
+    '在它下方選擇時間格式、所有日期選擇器中每週從哪一天開始、顯示貨幣，以及距離和溫度單位。',
   'help.guide.language-region.result': '日期、距離和金額按你期望的方式顯示；旅行自己的貨幣仍然顯示在換算金額旁邊。',
   'help.guide.language-region.tip.1': '顯示貨幣用於跨旅行的合計；每次旅行保留你為它設定的貨幣。',
   'help.guide.language-region.tip.2': '語言還決定 Vacay 和日記裡的星期和月份名稱。',

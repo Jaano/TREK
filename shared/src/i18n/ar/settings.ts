@@ -74,6 +74,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'وحدة الحرارة',
   'settings.distance': 'وحدة المسافة',
   'settings.timeFormat': 'تنسيق الوقت',
+  'settings.weekStart': 'يبدأ الأسبوع في',
+  'settings.weekStartHint': 'أول أيام الأسبوع في جميع منتقيات التاريخ. لدى Vacay إعداد خاص به.',
   'settings.bookingLabels': 'تسميات مسارات الحجوزات',
   'settings.bookingLabelsHint': 'عرض أسماء المحطات/المطارات على الخريطة. عند الإيقاف، يتم عرض الرمز فقط.',
   'settings.blurBookingCodes': 'إخفاء رموز الحجز',

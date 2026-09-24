@@ -79,6 +79,8 @@ const settings: TranslationStrings = {
   'settings.temperature': "หน่วยอุณหภูมิ",
   'settings.distance': "หน่วยระยะทาง",
   'settings.timeFormat': "รูปแบบเวลา",
+  'settings.weekStart': "สัปดาห์เริ่มต้นในวัน",
+  'settings.weekStartHint': 'วันแรกของสัปดาห์ในตัวเลือกวันที่ทั้งหมด Vacay มีการตั้งค่าของตัวเอง',
   'settings.bookingLabels': "ป้ายกำกับเส้นทางการจอง",
   'settings.bookingLabelsHint': "แสดงชื่อสถานี/สนามบินบนแผนที่ เมื่อปิด จะแสดงเฉพาะไอคอนเท่านั้น",
   'settings.mapPoiPill': "สำรวจสถานที่บนแผนที่",

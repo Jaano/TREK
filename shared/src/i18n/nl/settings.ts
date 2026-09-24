@@ -77,6 +77,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Temperatuureenheid',
   'settings.distance': 'Afstandseenheid',
   'settings.timeFormat': 'Tijdnotatie',
+  'settings.weekStart': 'Week begint op',
+  'settings.weekStartHint': 'Eerste dag van de week in elke datumkiezer. Vacay heeft een eigen instelling.',
   'settings.blurBookingCodes': 'Boekingscodes vervagen',
   'settings.aiAlwaysRetry': 'Always retry booking imports with AI',
   'settings.aiAlwaysRetryHint': 'When a file cannot be read by the standard parser, automatically retry it with AI.',

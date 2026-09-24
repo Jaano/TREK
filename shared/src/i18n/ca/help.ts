@@ -1042,7 +1042,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Idioma, unitats i divisa, com es comporten el mapa i les reserves, i amb què s’obre TREK. Cada canvi aquí s’aplica a l’instant.',
   'help.ctx.settings-display.bullet.1':
-    'Idioma i regió: l’idioma de la interfície, el format d’hora, la divisa de visualització, i les unitats de distància i temperatura.',
+    'Idioma i regió: l’idioma de la interfície, el format d’hora, el primer dia de la setmana, la divisa de visualització, i les unitats de distància i temperatura.',
   'help.ctx.settings-display.bullet.2':
     'Viatge i mapa: rutes de reserva sempre al mapa, la píndola Explora llocs, optimització de la ruta des del teu allotjament, codis de reserva difuminats i rutes de reserva etiquetades.',
   'help.ctx.settings-display.bullet.3':
@@ -1112,7 +1112,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Tria l’idioma de la interfície a Idioma i regió. TREK canvia a l’instant, a cada dispositiu on inicies sessió.',
   'help.guide.language-region.step.2':
-    'A sota, tria el format d’hora, la divisa de visualització, i les unitats de distància i temperatura.',
+    'A sota, tria el format d’hora, el dia en què comença la setmana a tots els selectors de data, la divisa de visualització, i les unitats de distància i temperatura.',
   'help.guide.language-region.result':
     'Dates, distàncies i diners es llegeixen com esperes; la divisa pròpia d’un viatge continua apareixent al costat dels imports convertits.',
   'help.guide.language-region.tip.1':

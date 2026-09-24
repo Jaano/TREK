@@ -1024,7 +1024,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Keel, ühikud ja valuuta, kaardi ja broneeringute käitumine ning see, millega TREK avaneb. Iga muudatus rakendub kohe.',
   'help.ctx.settings-display.bullet.1':
-    'Keel ja piirkond: liidese keel, ajavorming, kuvamisvaluuta ning vahemaa- ja temperatuuriühikud.',
+    'Keel ja piirkond: liidese keel, ajavorming, nädala esimene päev, kuvamisvaluuta ning vahemaa- ja temperatuuriühikud.',
   'help.ctx.settings-display.bullet.2':
     'Reisimine ja kaart: broneeringute marsruudid alati kaardil, kohtade avastamise nupp, marsruudi optimeerimine majutuskohast, hägustatud broneerimiskoodid ja siltidega broneeringute marsruudid.',
   'help.ctx.settings-display.bullet.3':
@@ -1093,7 +1093,8 @@ const help: TranslationStrings = {
   'help.guide.language-region.goal': 'Pane TREK rääkima sinu keelt ja arvestama nii, nagu sina harjunud oled.',
   'help.guide.language-region.step.1':
     'Vali liidese keel jaotises Keel ja piirkond. TREK vahetab keele kohe igas seadmes, kuhu sisse logid.',
-  'help.guide.language-region.step.2': 'Selle all vali ajavorming, kuvamisvaluuta ning vahemaa- ja temperatuuriühikud.',
+  'help.guide.language-region.step.2':
+    'Selle all vali ajavorming, nädala alguspäev kõigis kuupäevavalijates, kuvamisvaluuta ning vahemaa- ja temperatuuriühikud.',
   'help.guide.language-region.result':
     'Kuupäevad, vahemaad ja rahasummad kuvatakse nii, nagu ootad; reisi enda valuuta on endiselt näha teisendatud summade kõrval.',
   'help.guide.language-region.tip.1':

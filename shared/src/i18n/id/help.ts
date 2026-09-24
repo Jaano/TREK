@@ -1037,7 +1037,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Bahasa, satuan, dan mata uang, cara peta dan pemesanan berperilaku, serta apa yang dibuka TREK saat mulai. Setiap perubahan di sini langsung berlaku.',
   'help.ctx.settings-display.bullet.1':
-    '“Language & region”: bahasa antarmuka, format waktu, mata uang tampilan, serta satuan jarak dan suhu.',
+    '“Language & region”: bahasa antarmuka, format waktu, hari pertama dalam seminggu, mata uang tampilan, serta satuan jarak dan suhu.',
   'help.ctx.settings-display.bullet.2':
     '“Travel & map”: rute pemesanan selalu di peta, pil Jelajahi tempat, optimalisasi rute dari akomodasi Anda, kode pemesanan yang disamarkan, dan rute pemesanan berlabel.',
   'help.ctx.settings-display.bullet.3':
@@ -1108,7 +1108,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Pilih bahasa antarmuka di “Language & region”. TREK langsung beralih, di setiap perangkat tempat Anda masuk.',
   'help.guide.language-region.step.2':
-    'Di bawahnya, pilih format waktu, mata uang tampilan, serta satuan jarak dan suhu.',
+    'Di bawahnya, pilih format waktu, hari yang mengawali minggu di setiap pemilih tanggal, mata uang tampilan, serta satuan jarak dan suhu.',
   'help.guide.language-region.result':
     'Tanggal, jarak, dan uang terbaca seperti yang Anda harapkan; mata uang perjalanan itu sendiri tetap tampil di samping jumlah yang dikonversi.',
   'help.guide.language-region.tip.1':

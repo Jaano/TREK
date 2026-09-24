@@ -1040,7 +1040,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Nyelv, mértékegységek és pénznem, hogyan viselkedik a térkép és a foglalások, és mivel nyílik meg a TREK. Itt minden változás azonnal érvényes.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region: a felület nyelve, az időformátum, a megjelenítési pénznem, valamint a távolság- és hőmérséklet-egységek.',
+    'Language & region: a felület nyelve, az időformátum, a hét első napja, a megjelenítési pénznem, valamint a távolság- és hőmérséklet-egységek.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map: foglalási útvonalak mindig a térképen, a Helyek felfedezése pirula, útvonal-optimalizálás a szállástól, elrejtett foglalási kódok és címkézett foglalási útvonalak.',
   'help.ctx.settings-display.bullet.3':
@@ -1107,7 +1107,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Válaszd ki a felület nyelvét a Language & region alatt. A TREK azonnal vált, minden eszközön, ahol bejelentkezel.',
   'help.guide.language-region.step.2':
-    'Alatta válaszd ki az időformátumot, a megjelenítési pénznemet, valamint a távolság- és hőmérséklet-egységeket.',
+    'Alatta válaszd ki az időformátumot, a hét kezdőnapját minden dátumválasztóban, a megjelenítési pénznemet, valamint a távolság- és hőmérséklet-egységeket.',
   'help.guide.language-region.result':
     'A dátumok, távolságok és pénzösszegek úgy olvashatók, ahogy várod; az utazás saját pénzneme továbbra is ott áll az átváltott összegek mellett.',
   'help.guide.language-region.tip.1':

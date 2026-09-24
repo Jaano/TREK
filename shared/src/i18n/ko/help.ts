@@ -956,7 +956,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     '언어, 단위, 통화, 지도와 예약이 동작하는 방식, 그리고 TREK이 처음 여는 화면. 여기서의 모든 변경은 즉시 적용됩니다.',
   'help.ctx.settings-display.bullet.1':
-    '“Language & region”: 인터페이스 언어, 시간 형식, 표시 통화, 거리 및 온도 단위.',
+    '“Language & region”: 인터페이스 언어, 시간 형식, 한 주의 첫 요일, 표시 통화, 거리 및 온도 단위.',
   'help.ctx.settings-display.bullet.2':
     '“Travel & map”: 예약 경로를 항상 지도에 표시, 장소 탐색 알약 버튼, 숙소 기준 경로 최적화, 예약 코드 흐리게, 예약 경로에 이름 표시.',
   'help.ctx.settings-display.bullet.3':
@@ -1020,7 +1020,8 @@ const help: TranslationStrings = {
   'help.guide.language-region.goal': 'TREK이 내 언어로 말하고 내 방식으로 세게 합니다.',
   'help.guide.language-region.step.1':
     '“Language & region”에서 인터페이스 언어를 고릅니다. TREK은 즉시 바뀌며 로그인한 모든 기기에 반영됩니다.',
-  'help.guide.language-region.step.2': '그 아래에서 시간 형식, 표시 통화, 거리 및 온도 단위를 고릅니다.',
+  'help.guide.language-region.step.2':
+    '그 아래에서 시간 형식, 모든 날짜 선택기에서 한 주가 시작되는 요일, 표시 통화, 거리 및 온도 단위를 고릅니다.',
   'help.guide.language-region.result':
     '날짜, 거리, 금액이 기대한 대로 읽힙니다. 여행 자체의 통화는 환산된 금액 옆에 계속 표시됩니다.',
   'help.guide.language-region.tip.1':

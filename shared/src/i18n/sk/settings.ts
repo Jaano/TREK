@@ -85,6 +85,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Jednotky teploty',
   'settings.distance': 'Jednotky vzdialenosti',
   'settings.timeFormat': 'Formát času',
+  'settings.weekStart': 'Týždeň začína',
+  'settings.weekStartHint': 'Prvý deň týždňa vo všetkých výberoch dátumu. Vacay má vlastné nastavenie.',
   'settings.bookingLabels': 'Popisky trás rezervácií',
   'settings.bookingLabelsHint': 'Zobrazuje názvy staníc / letísk na mape. Ak je vypnuté, zobrazí sa iba ikona.',
   'settings.mapPoiPill': 'Objavovať miesta na mape',

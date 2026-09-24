@@ -1042,7 +1042,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Taal, eenheden en valuta, hoe kaart en boekingen zich gedragen, en waarmee TREK opent. Elke wijziging hier geldt meteen.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region: de taal van de interface, de tijdnotatie, de weergavevaluta, en de eenheden voor afstand en temperatuur.',
+    'Language & region: de taal van de interface, de tijdnotatie, de eerste dag van de week, de weergavevaluta, en de eenheden voor afstand en temperatuur.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map: boekingsroutes altijd op de kaart, de pil Plaatsen ontdekken, routeoptimalisatie vanaf je accommodatie, vervaagde boekingscodes en boekingsroutes met label.',
   'help.ctx.settings-display.bullet.3':
@@ -1111,7 +1111,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Kies de taal van de interface in Language & region. TREK schakelt meteen om, op elk apparaat waarop je inlogt.',
   'help.guide.language-region.step.2':
-    'Daaronder kies je de tijdnotatie, de weergavevaluta, en de eenheden voor afstand en temperatuur.',
+    'Daaronder kies je de tijdnotatie, de dag waarop de week in elke datumkiezer begint, de weergavevaluta, en de eenheden voor afstand en temperatuur.',
   'help.guide.language-region.result':
     'Datums, afstanden en geld lezen zoals je verwacht; de eigen valuta van een reis staat nog steeds naast omgerekende bedragen.',
   'help.guide.language-region.tip.1':

@@ -1059,7 +1059,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Dil, vahidlər və valyuta, xəritə və rezervasiyaların davranışı və TREK-in nə ilə açılması. Buradakı hər dəyişiklik dərhal tətbiq olunur.',
   'help.ctx.settings-display.bullet.1':
-    'Dil və region: interfeys dili, vaxt formatı, göstərilən valyuta, məsafə və temperatur vahidləri.',
+    'Dil və region: interfeys dili, vaxt formatı, həftənin ilk günü, göstərilən valyuta, məsafə və temperatur vahidləri.',
   'help.ctx.settings-display.bullet.2':
     'Səyahət və xəritə: xəritədə həmişə görünən rezervasiya marşrutları, məkanları kəşf etmə düyməsi, yaşayış yerindən marşrut optimallaşdırması, bulanıqlaşdırılmış rezervasiya kodları və etiketli rezervasiya marşrutları.',
   'help.ctx.settings-display.bullet.3':
@@ -1128,7 +1128,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Dil və region bölməsində interfeys dilini seçin. TREK daxil olduğunuz bütün cihazlarda dərhal dəyişir.',
   'help.guide.language-region.step.2':
-    'Onun altında vaxt formatını, göstərilən valyutanı, məsafə və temperatur vahidlərini seçin.',
+    'Onun altında vaxt formatını, bütün tarix seçicilərində həftənin hansı gündən başladığını, göstərilən valyutanı, məsafə və temperatur vahidlərini seçin.',
   'help.guide.language-region.result':
     'Tarixlər, məsafələr və pul gözlədiyiniz kimi göstərilir; səyahətin öz valyutası çevrilmiş məbləğlərin yanında yenə də görünür.',
   'help.guide.language-region.tip.1':

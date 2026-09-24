@@ -996,7 +996,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Jazyk, jednotky a měna, jak se chová mapa a rezervace a s čím se TREK otevře. Každá změna tady se projeví hned.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region: jazyk rozhraní, formát času, zobrazovaná měna a jednotky vzdálenosti a teploty.',
+    'Language & region: jazyk rozhraní, formát času, první den týdne, zobrazovaná měna a jednotky vzdálenosti a teploty.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map: trasy rezervací vždy na mapě, pilulka Objevovat místa, optimalizace trasy od ubytování, skryté rezervační kódy a popisky tras rezervací.',
   'help.ctx.settings-display.bullet.3':
@@ -1064,7 +1064,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Vyberte jazyk rozhraní v Language & region. TREK se přepne hned, na každém zařízení, kde se přihlásíte.',
   'help.guide.language-region.step.2':
-    'Pod ním zvolte formát času, zobrazovanou měnu a jednotky vzdálenosti a teploty.',
+    'Pod ním zvolte formát času, den, kterým začíná týden ve všech výběrech data, zobrazovanou měnu a jednotky vzdálenosti a teploty.',
   'help.guide.language-region.result':
     'Data, vzdálenosti a peníze se čtou tak, jak čekáte; vlastní měna cesty se dál ukazuje vedle přepočtených částek.',
   'help.guide.language-region.tip.1':

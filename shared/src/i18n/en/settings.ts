@@ -84,6 +84,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Temperature Unit',
   'settings.distance': 'Distance Unit',
   'settings.timeFormat': 'Time Format',
+  'settings.weekStart': 'Week starts on',
+  'settings.weekStartHint': 'First day of the week in every date picker. Vacay has its own setting.',
   'settings.bookingLabels': 'Booking route labels',
   'settings.bookingLabelsHint': 'Show station / airport names on the map. When off, only the icon is shown.',
   'settings.mapPoiPill': 'Explore places on the map',

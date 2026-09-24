@@ -75,6 +75,8 @@ const settings: TranslationStrings = {
   'settings.temperature': '温度単位',
   'settings.distance': '距離単位',
   'settings.timeFormat': '時刻形式',
+  'settings.weekStart': '週の開始',
+  'settings.weekStartHint': 'すべての日付選択で週の最初の曜日になります。Vacay には専用の設定があります。',
   'settings.bookingLabels': '予約ルートのラベル',
   'settings.bookingLabelsHint': '地図に駅・空港名を表示。オフ時はアイコンのみ。',
   'settings.blurBookingCodes': '予約コードをぼかす',

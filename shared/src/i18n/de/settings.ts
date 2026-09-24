@@ -77,6 +77,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Temperatureinheit',
   'settings.distance': 'Entfernungseinheit',
   'settings.timeFormat': 'Zeitformat',
+  'settings.weekStart': 'Woche beginnt am',
+  'settings.weekStartHint': 'Erster Tag der Woche in jedem Datumswähler. Vacay hat eine eigene Einstellung.',
   'settings.bookingLabels': 'Orts-Labels auf Buchungsrouten',
   'settings.bookingLabelsHint': 'Zeigt Bahnhofs-/Flughafennamen auf der Karte. Wenn aus, wird nur das Icon angezeigt.',
   'settings.blurBookingCodes': 'Buchungscodes verbergen',

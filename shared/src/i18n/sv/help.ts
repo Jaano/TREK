@@ -1003,7 +1003,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Språk, enheter och valuta, hur kartan och bokningarna beter sig, och vad TREK öppnar med. Varje ändring här slår igenom direkt.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region: gränssnittets språk, tidsformatet, visningsvalutan samt avstånds- och temperaturenheter.',
+    'Language & region: gränssnittets språk, tidsformatet, veckans första dag, visningsvalutan samt avstånds- och temperaturenheter.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map: bokningsrutter alltid på kartan, Utforska platser-pillret, ruttoptimering från ditt boende, blurrade bokningskoder och etiketter på bokningsrutter.',
   'help.ctx.settings-display.bullet.3':
@@ -1071,7 +1071,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Välj gränssnittets språk under Language & region. TREK växlar direkt, på varje enhet du loggar in på.',
   'help.guide.language-region.step.2':
-    'Under det väljer du tidsformatet, visningsvalutan samt avstånds- och temperaturenheterna.',
+    'Under det väljer du tidsformatet, vilken dag veckan börjar på i alla datumväljare, visningsvalutan samt avstånds- och temperaturenheterna.',
   'help.guide.language-region.result':
     'Datum, avstånd och pengar läses som du väntar dig; en resas egen valuta visas fortfarande bredvid omräknade belopp.',
   'help.guide.language-region.tip.1':

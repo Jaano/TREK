@@ -839,7 +839,8 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.title': '显示',
   'help.ctx.settings-display.summary':
     '语言、单位和货币，地图与预订的行为方式，以及 TREK 打开时的页面。这里的每项更改都立即生效。',
-  'help.ctx.settings-display.bullet.1': '“语言与地区”：界面语言、时间格式、显示货币，以及距离和温度单位。',
+  'help.ctx.settings-display.bullet.1':
+    '“语言与地区”：界面语言、时间格式、每周的第一天、显示货币，以及距离和温度单位。',
   'help.ctx.settings-display.bullet.2':
     '“旅行与地图”：预订路线始终显示在地图上、探索地点的小按钮、从住宿地优化路线、隐藏预订编号，以及给预订路线加标签。',
   'help.ctx.settings-display.bullet.3': '“启动”：TREK 打开时是进入仪表盘还是进行中的旅行，以及旅行的哪个标签页先显示。',
@@ -892,7 +893,8 @@ const help: TranslationStrings = {
   'help.guide.language-region.title': '设置语言、单位和货币',
   'help.guide.language-region.goal': '让 TREK 说你的语言，按你的方式计数。',
   'help.guide.language-region.step.1': '在“语言与地区”中选择界面语言。TREK 立即切换，在你登录的每台设备上都一样。',
-  'help.guide.language-region.step.2': '在它下方选择时间格式、显示货币，以及距离和温度单位。',
+  'help.guide.language-region.step.2':
+    '在它下方选择时间格式、所有日期选择器中每周从哪一天开始、显示货币，以及距离和温度单位。',
   'help.guide.language-region.result': '日期、距离和金额按你期望的方式显示；旅行自己的货币仍然显示在换算金额旁边。',
   'help.guide.language-region.tip.1': '显示货币用于跨旅行的合计；每次旅行保留你给它设定的货币。',
   'help.guide.language-region.tip.2': '语言还决定 Vacay 和日记里的星期和月份名称。',

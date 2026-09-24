@@ -1009,7 +1009,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'Language, units and currency, how the map and bookings behave, and what TREK opens with. Every change here applies at once.',
   'help.ctx.settings-display.bullet.1':
-    'Language & region: the interface language, the time format, the display currency, and distance and temperature units.',
+    'Language & region: the interface language, the time format, the first day of the week, the display currency, and distance and temperature units.',
   'help.ctx.settings-display.bullet.2':
     'Travel & map: booking routes always on the map, the Explore places pill, route optimisation from your accommodation, blurred booking codes and labelled booking routes.',
   'help.ctx.settings-display.bullet.3':
@@ -1076,7 +1076,7 @@ const help: TranslationStrings = {
   'help.guide.language-region.step.1':
     'Pick the interface language in Language & region. TREK switches at once, on every device you sign in on.',
   'help.guide.language-region.step.2':
-    'Below it, choose the time format, the display currency, and the distance and temperature units.',
+    'Below it, choose the time format, the day every date picker starts its week on, the display currency, and the distance and temperature units.',
   'help.guide.language-region.result':
     "Dates, distances and money read the way you expect; a trip's own currency still shows next to converted amounts.",
   'help.guide.language-region.tip.1':

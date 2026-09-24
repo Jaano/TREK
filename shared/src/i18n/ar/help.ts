@@ -936,7 +936,7 @@ const help: TranslationStrings = {
   'help.ctx.settings-display.summary':
     'اللغة والوحدات والعملة، وكيف تتصرف الخريطة والحجوزات، وما يفتح به TREK. كل تغيير هنا يسري فورًا.',
   'help.ctx.settings-display.bullet.1':
-    '«Language & region»: لغة الواجهة وتنسيق الوقت وعملة العرض ووحدتا المسافة والحرارة.',
+    '«Language & region»: لغة الواجهة وتنسيق الوقت وأول أيام الأسبوع وعملة العرض ووحدتا المسافة والحرارة.',
   'help.ctx.settings-display.bullet.2':
     '«Travel & map»: مسارات الحجوزات دائمًا على الخريطة، وزر استكشاف الأماكن، وتحسين المسار انطلاقًا من مكان إقامتك، وإخفاء رموز الحجز، ومسارات الحجوزات المسمّاة.',
   'help.ctx.settings-display.bullet.3':
@@ -1001,7 +1001,8 @@ const help: TranslationStrings = {
   'help.guide.language-region.goal': 'اجعل TREK يتحدث لغتك ويحسب كما تحسب.',
   'help.guide.language-region.step.1':
     'اختر لغة الواجهة في «Language & region». يتبدّل TREK فورًا، على كل جهاز تسجّل الدخول منه.',
-  'help.guide.language-region.step.2': 'تحته، اختر تنسيق الوقت وعملة العرض ووحدتي المسافة والحرارة.',
+  'help.guide.language-region.step.2':
+    'تحته، اختر تنسيق الوقت واليوم الذي يبدأ به الأسبوع في جميع منتقيات التاريخ وعملة العرض ووحدتي المسافة والحرارة.',
   'help.guide.language-region.result':
     'تُقرأ التواريخ والمسافات والمبالغ كما تتوقع؛ وتبقى عملة الرحلة نفسها ظاهرة بجانب المبالغ المحوّلة.',
   'help.guide.language-region.tip.1': 'عملة العرض للمجاميع عبر الرحلات؛ وتحتفظ كل رحلة بالعملة التي أعطيتها إياها.',

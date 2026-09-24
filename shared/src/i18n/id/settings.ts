@@ -76,6 +76,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Satuan Suhu',
   'settings.distance': 'Satuan Jarak',
   'settings.timeFormat': 'Format Waktu',
+  'settings.weekStart': 'Awal minggu',
+  'settings.weekStartHint': 'Hari pertama dalam seminggu di setiap pemilih tanggal. Vacay punya pengaturannya sendiri.',
   'settings.blurBookingCodes': 'Sembunyikan Kode Pemesanan',
   'settings.aiAlwaysRetry': 'Always retry booking imports with AI',
   'settings.aiAlwaysRetryHint': 'When a file cannot be read by the standard parser, automatically retry it with AI.',

@@ -12,7 +12,7 @@ If your account requires MFA setup, TREK redirects you directly to the **Account
 
 | Tab | Purpose | Shown when |
 |-----|---------|------------|
-| General | Start page and start tab, currency, language, temperature unit, distance unit, time format, booking route labels, always show booking routes, map POI pills, blur booking codes, and optimize route from accommodation | Always |
+| General | Start page and start tab, currency, language, temperature unit, distance unit, time format, week start, booking route labels, always show booking routes, map POI pills, blur booking codes, and optimize route from accommodation | Always |
 | Appearance | Color mode, color scheme / accent, readability (transparency, reduce motion, density, text size), and which widgets appear on your dashboard | Always |
 | Map | Map provider (Leaflet, Mapbox GL, or MapLibre GL), tile presets, map style and Mapbox token, 3D buildings, high-quality mode | Always |
 | Notifications | Email, webhook, ntfy, and in-app notification preferences | Always |
@@ -38,6 +38,7 @@ The General tab controls the following preferences, all saved immediately on cha
 - **Temperature unit** — Celsius (°C) or Fahrenheit (°F).
 - **Distance unit** — Metric (km) or Imperial (mi).
 - **Time format** — 24h (14:30) or 12h (2:30 PM).
+- **Week starts on**: Monday (the default), Sunday or Saturday: the first column of every date picker. See [Display-Settings](Display-Settings#week-starts-on).
 
 **Travel & map**
 

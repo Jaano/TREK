@@ -88,6 +88,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Temperatuuriühik',
   'settings.distance': 'Vahemaaühik',
   'settings.timeFormat': 'Ajavorming',
+  'settings.weekStart': 'Nädala alguspäev',
+  'settings.weekStartHint': 'Nädala esimene päev kõigis kuupäevavalijates. Vacayl on oma seade.',
   'settings.bookingLabels': 'Broneeringute marsruutide sildid',
   'settings.bookingLabelsHint':
     'Näita kaardil jaamade ja lennujaamade nimesid. Väljalülitatuna näidatakse ainult ikooni.',

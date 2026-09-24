@@ -77,6 +77,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Temperaturenhet',
   'settings.distance': 'Avståndsenhet',
   'settings.timeFormat': 'Tidsformat',
+  'settings.weekStart': 'Vecka börjar på',
+  'settings.weekStartHint': 'Veckans första dag i alla datumväljare. Vacay har en egen inställning.',
   'settings.bookingLabels': 'Etiketter för bokningsrutter',
   'settings.bookingLabelsHint':
     'Visa stations- och flygplatsnamn på kartan. När funktionen är avstängd visas endast ikonen.',

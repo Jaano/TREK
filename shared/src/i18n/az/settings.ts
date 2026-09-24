@@ -111,6 +111,8 @@ const settings: TranslationStrings = {
   'settings.temperature': 'Temperatur vahidi',
   'settings.distance': 'Məsafə vahidi',
   'settings.timeFormat': 'Vaxt formatı',
+  'settings.weekStart': 'Həftənin başlanğıcı',
+  'settings.weekStartHint': 'Bütün tarix seçicilərində həftənin ilk günü. Vacay-ın öz ayarı var.',
 
   'settings.bookingLabels': 'Rezervasiya marşrutu etiketləri',
   'settings.bookingLabelsHint':
