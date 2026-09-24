@@ -10,7 +10,6 @@ const reservations: TranslationStrings = {
   'reservations.confirmed': 'Kinnitatud',
   'reservations.pending': 'Ootel',
   'reservations.summary': '{confirmed} kinnitatud, {pending} ootel',
-  'reservations.fromPlan': 'Plaanist',
   'reservations.showFiles': 'Näita faile',
   'reservations.editTitle': 'Muuda broneeringut',
   'reservations.status': 'Olek',

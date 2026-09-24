@@ -100,6 +100,7 @@ You can set `DEFAULT_LANGUAGE` to any of the 23 languages TREK ships. The curren
 | `en`    | English            |
 | `de`    | Deutsch            |
 | `es`    | Español            |
+| `et`    | Eesti              |
 | `fr`    | Français           |
 | `hu`    | Magyar             |
 | `nl`    | Nederlands         |

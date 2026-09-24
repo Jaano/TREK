@@ -110,6 +110,24 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftAll': 'Nihuta kõike',
   'dashboard.dateShiftAllDesc': 'Kogu reisiplaan, sealhulgas broneeringud ja majutused, liigub uutele kuupäevadele.',
   'dashboard.dateShiftHint': 'Vihje: ainult osa reisiplaani nihutamiseks kasuta planeerijas valikut „Lisa päev“.',
+  'dashboard.shrinkTitle': 'Kas eemaldada päevad?',
+  'dashboard.shrinkIntro': 'Uute kuupäevade salvestamine eemaldab need päevad:',
+  'dashboard.shrinkMoreDays': '+{count} veel',
+  'dashboard.shrinkLastDays': 'Eemaldatakse viimased päevad, mitte esimesed',
+  'dashboard.shrinkLastDaysHint':
+    'Päevaplaanid liiguvad koos uute kuupäevadega, seega eemaldatakse alati plaani viimased päevad, ka siis, kui algus nihkus.',
+  'dashboard.shrinkBookingsHint':
+    'Need jäävad Broneeringute alla. Broneering, mille kuupäev kuulub endiselt reisi hulka, läheb tagasi sellele päevale.',
+  'dashboard.shrinkBookingsShiftHint': 'Need jäävad Broneeringute alla, ilma päevata.',
+  'dashboard.shrinkStayHint':
+    'Sisse- või väljaregistreerimine on eemaldataval päeval, seega eemaldatakse kogu peatumine.',
+  'dashboard.shrinkStayBookedHint':
+    'Sisse- või väljaregistreerimine on eemaldataval päeval, seega eemaldatakse kogu peatumine. Selle broneering „{booking}“ ja kulu jäävad Broneeringute alla.',
+  'dashboard.shrinkStayBookingHint':
+    'Sisse- või väljaregistreerimine on eemaldataval päeval, seega eemaldatakse kogu peatumine. Selle broneering „{booking}“ jääb Broneeringute alla.',
+  'dashboard.shrinkConfirm': 'Eemalda päevad ja salvesta',
+  'dashboard.shrinkUnknown':
+    'Selle reisi päevi ei õnnestunud kontrollida. Kui uutes kuupäevades on vähem päevi, eemaldab salvestamine viimased päevad ja kõik neile plaanitu.',
   'dashboard.greeting.morning': 'Tere hommikust,',
   'dashboard.greeting.afternoon': 'Tere päevast,',
   'dashboard.greeting.evening': 'Tere õhtust,',

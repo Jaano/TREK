@@ -91,5 +91,7 @@ const trip: TranslationStrings = {
   'trip.confirm.deletePlaceNight': 'Kohas „{name}“ broneeritud ööbimine liigub kohaga kaasa.',
   'trip.confirm.deletePlaceBooked':
     'Kohas „{name}“ broneeritud ööbimine liigub kohaga kaasa koos broneeringuga „{booking}“ ja sellega seotud kuludega.',
+  'trip.confirm.deletePlaceBookedSame':
+    'See kustutab ka kohas „{name}“ broneeritud peatumise, selle broneeringu ja sellega seotud kulu.',
 };
 export default trip;

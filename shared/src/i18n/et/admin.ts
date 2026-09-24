@@ -167,6 +167,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': 'Amapi (高德地图) API-võti',
   'admin.amapKeyHint':
     'Kohtade otsimiseks Mandri-Hiinas, kus Google pole kättesaadav ja OpenStreetMapi katvus on hõre. Vajalik on „Web 服务” (veebiteenuse) võti, mitte JS API-võti. Hangi aadressilt console.amap.com.',
+  'admin.keyFromEnv': 'Määratud muutujaga {name}',
   'admin.placesProvider.title': 'Kohaotsingu teenusepakkuja',
   'admin.placesProvider.subtitle':
     "TREKi enda indeks ja OpenStreetMap vastavad igale otsingule. Siin valid, kellelt veel küsida, kui need midagi ei leia: automaatne valik eelistab võtme olemasolul Google'it ja seejärel Amapi.",
@@ -214,6 +215,8 @@ const admin: TranslationStrings = {
     "Iga otsing ja iga soovitus läheb Google Placesile. Väljalülitatuna vastavad esmalt TREKi enda indeks ja OpenStreetMap ning Google'ilt küsitakse ainult siis, kui need midagi ei leia.",
   'admin.placesGoogleOnly.missingKey':
     'Vajab Google Mapsi API-võtit. Ilma selleta kasutab otsing TREKi enda indeksit ja OpenStreetMapi sõltumata selle lüliti asendist.',
+  'admin.placesGoogleOnly.otherProvider':
+    "Vajab kohtade teenusepakkujana Google'it. Kui valitud on Amap või OpenStreetMap, ei lähe otsing kunagi Google'isse, olenemata selle lüliti asendist.",
   'admin.transitProvider.title': 'Ühistranspordi teenusepakkuja',
   'admin.transitProvider.subtitle': 'Milline teenus vastab ühistranspordi otsingutele.',
   'admin.transitProvider.transitous': 'Transitous (tasuta)',

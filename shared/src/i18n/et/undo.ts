@@ -20,5 +20,6 @@ const undo: TranslationStrings = {
   'undo.importBooking': 'Broneeringukinnituse import',
   'undo.addPlace': 'Koht lisatud',
   'undo.done': 'Tagasi võetud: {action}',
+  'undo.failed': 'Tagasivõtmine ebaõnnestus: {action}',
 };
 export default undo;

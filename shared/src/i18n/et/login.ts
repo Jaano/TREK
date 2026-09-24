@@ -28,6 +28,8 @@ const login: TranslationStrings = {
   'login.oidcSignIn': 'Logi sisse teenusega {name}',
   'login.oidcOnly': 'Parooliga autentimine on keelatud. Logi sisse oma SSO-teenuse kaudu.',
   'login.oidcLoggedOut': 'Sind on välja logitud. Logi uuesti sisse oma SSO-teenuse kaudu.',
+  'login.oidcRedirecting': 'Suuname sind teenusesse {name}…',
+  'login.oidcRedirectSlow': 'Ikka veel siin? Jätka teenusesse {name}',
   'login.demoHint': 'Proovi demot — registreerimine pole vajalik',
   'login.mfaTitle': 'Kaheastmeline autentimine',
   'login.mfaSubtitle': 'Sisesta oma autentimisrakenduse 6-kohaline kood.',

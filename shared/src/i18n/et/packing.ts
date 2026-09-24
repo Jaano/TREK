@@ -26,9 +26,6 @@ const packing: TranslationStrings = {
   'packing.progress': 'Pakitud {packed} / {total} ({percent}%)',
   'packing.clearChecked': 'Eemalda {count} märgitud eset',
   'packing.clearCheckedShort': 'Eemalda {count}',
-  'packing.suggestions': 'Soovitused',
-  'packing.suggestionsTitle': 'Lisa soovitused',
-  'packing.allSuggested': 'Kõik soovitused lisatud',
   'packing.allPacked': 'Kõik on pakitud!',
   'packing.addPlaceholder': 'Lisa uus ese...',
   'packing.categoryPlaceholder': 'Nimekiri...',
@@ -36,7 +33,6 @@ const packing: TranslationStrings = {
   'packing.filterOpen': 'Pakkimata',
   'packing.filterDone': 'Pakitud',
   'packing.emptyTitle': 'Pakkimisnimekiri on tühi',
-  'packing.emptyHint': 'Lisa esemeid või kasuta soovitusi',
   'packing.emptyFiltered': 'Ükski ese ei vasta sellele filtrile',
   'packing.menuRename': 'Nimeta ümber',
   'packing.menuCheckAll': 'Märgi kõik',
@@ -85,128 +81,6 @@ const packing: TranslationStrings = {
   'packing.toast.deleteError': 'Kustutamine ebaõnnestus',
   'packing.toast.renameError': 'Ümbernimetamine ebaõnnestus',
   'packing.toast.addError': 'Lisamine ebaõnnestus',
-  'packing.suggestions.items': [
-    {
-      name: 'Pass',
-      category: 'Dokumendid',
-    },
-    {
-      name: 'ID-kaart',
-      category: 'Dokumendid',
-    },
-    {
-      name: 'Reisikindlustus',
-      category: 'Dokumendid',
-    },
-    {
-      name: 'Lennupiletid',
-      category: 'Dokumendid',
-    },
-    {
-      name: 'Krediitkaart',
-      category: 'Raha',
-    },
-    {
-      name: 'Sularaha',
-      category: 'Raha',
-    },
-    {
-      name: 'Viisa',
-      category: 'Dokumendid',
-    },
-    {
-      name: 'T-särgid',
-      category: 'Riided',
-    },
-    {
-      name: 'Püksid',
-      category: 'Riided',
-    },
-    {
-      name: 'Aluspesu',
-      category: 'Riided',
-    },
-    {
-      name: 'Sokid',
-      category: 'Riided',
-    },
-    {
-      name: 'Jakk',
-      category: 'Riided',
-    },
-    {
-      name: 'Ööriided',
-      category: 'Riided',
-    },
-    {
-      name: 'Ujumisriided',
-      category: 'Riided',
-    },
-    {
-      name: 'Vihmajope',
-      category: 'Riided',
-    },
-    {
-      name: 'Mugavad jalanõud',
-      category: 'Riided',
-    },
-    {
-      name: 'Hambahari',
-      category: 'Hügieenitarbed',
-    },
-    {
-      name: 'Hambapasta',
-      category: 'Hügieenitarbed',
-    },
-    {
-      name: 'Šampoon',
-      category: 'Hügieenitarbed',
-    },
-    {
-      name: 'Deodorant',
-      category: 'Hügieenitarbed',
-    },
-    {
-      name: 'Päikesekreem',
-      category: 'Hügieenitarbed',
-    },
-    {
-      name: 'Raseerija',
-      category: 'Hügieenitarbed',
-    },
-    {
-      name: 'Laadija',
-      category: 'Elektroonika',
-    },
-    {
-      name: 'Akupank',
-      category: 'Elektroonika',
-    },
-    {
-      name: 'Kõrvaklapid',
-      category: 'Elektroonika',
-    },
-    {
-      name: 'Reisiadapter',
-      category: 'Elektroonika',
-    },
-    {
-      name: 'Kaamera',
-      category: 'Elektroonika',
-    },
-    {
-      name: 'Valuvaigistid',
-      category: 'Tervis',
-    },
-    {
-      name: 'Plaastrid',
-      category: 'Tervis',
-    },
-    {
-      name: 'Desinfitseerimisvahend',
-      category: 'Tervis',
-    },
-  ],
   'packing.bagLimit': 'Kaalupiirang',
   'packing.setBagLimit': 'Määra piirang',
 };

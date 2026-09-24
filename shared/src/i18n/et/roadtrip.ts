@@ -112,6 +112,9 @@ const roadtrip: TranslationStrings = {
   'roadtrip.line.connect': 'Ühenda päevad',
   'roadtrip.line.dayColors': 'Igale päevale oma värv',
   'roadtrip.line.hint': 'Päevi ühendavad sõidud arvestatakse saabumispäeva hulka.',
+  'roadtrip.line.hotelBookends': 'Alusta ja lõpeta iga päev oma peatumiskohas',
+  'roadtrip.line.hotelBookendsHint':
+    'Pärast broneeritud ööd algab päev selles peatumiskohas ja enne sellist ööd lõpeb see selleks ööks broneeritud peatumiskohas.',
   'roadtrip.avoid.section': 'Võimaluse korral väldi',
   'roadtrip.avoid.toll': 'Tasulised teed',
   'roadtrip.avoid.motorway': 'Kiirteed',
@@ -216,6 +219,17 @@ const roadtrip: TranslationStrings = {
   'roadtrip.alt.slower': '{time} aeglasem',
   'roadtrip.alt.quicker': '{time} kiirem',
   'roadtrip.alt.otherEngine': 'Aja arvutas vältimismarsruutide teenus, mitte peamine marsruuditeenus.',
+  'roadtrip.alt.notHeld': 'Autoreisi marsruutija ei järgi seda marsruuti, seega seda ei salvestatud.',
+  'roadtrip.alt.ferryNotHeld':
+    'See marsruut ületab vee praamiga. Lisa praam transpordibroneeringuna ja sõit järgib seda. Kui see saabub järgmisel päeval, pane vee teisel pool olevad peatused sellele päevale.',
+  'roadtrip.alt.legChanged': 'See lõik muutus marsruudi kontrollimise ajal, seega midagi ei salvestatud.',
+  'roadtrip.alt.offline': 'Muud marsruudid salvestatakse ainult võrgus. Selle valimiseks ühenda uuesti.',
+  'roadtrip.alt.otherEngineStandard': 'Aja arvutas põhimarsruutija, mitte see, millega see lõik on planeeritud.',
+  'roadtrip.alt.avoidNotHeld':
+    'Autoreis sõidab seda marsruuti ainult siis, kui seadetes on jaotises „{setting}“ märgitud „{class}“.',
+  'roadtrip.alt.checking': 'Marsruudi kontrollimine autoreisi marsruutijaga…',
+  'roadtrip.alt.standIn':
+    'Vältimismarsruutija ei vastanud selle lõigu kohta, seega joonistas selle põhimarsruutija. Päringut korratakse.',
   'roadtrip.day': 'Päev {number}',
   'roadtrip.quietDay.empty': 'Peatusi veel pole — lohista üks siia',
   'roadtrip.quietDay.one': 'Seni ainult {name} — lohista siia peatus',
@@ -230,6 +244,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.stop.fillDefault': 'Kasuta minu vaikevalikut',
   'roadtrip.stop.fillSet': 'Määra, kui täis selles peatuses täidetakse',
   'roadtrip.leg.pending': 'Marsruut puudub',
+  'roadtrip.leg.arrivingFrom': 'Kohast {name}',
   'roadtrip.stop.addTitle': 'Lisa peatusena',
   'roadtrip.stop.kind': 'Peatuse tüüp',
   'roadtrip.stop.landsOn': 'Päev {day}, peatus {position}',
@@ -269,6 +284,35 @@ const roadtrip: TranslationStrings = {
   'roadtrip.ride.pickup': 'Kättesaamine {time}',
   'roadtrip.ride.return': 'Tagastamine {time}',
   'roadtrip.ride.open': 'Ava broneering',
+  'roadtrip.ride.undated': '{title} ei ole ühelgi selle reisi päeval, seega sõit seda ei kasuta.',
   'roadtrip.bookings.loose': 'Samaks päevaks broneeritud',
+  'roadtrip.ride.departureFlight': 'Väljumine {time}',
+  'roadtrip.ride.duration': 'Kestus broneeringu järgi',
+  'roadtrip.ride.checkIn': 'Sisseregistreerimine',
+  'roadtrip.ride.boarding': 'Pardaleminek',
+  'roadtrip.ride.missed': 'Maha jäädud',
+  'roadtrip.ride.lateBy': '{time} hilinemist',
+  'roadtrip.ride.reachedAt': 'kohal kell {time}',
+  'roadtrip.ride.hintFlight': '{title} väljub kell {departs}, sisseregistreerimine sulgub kell {pin}.',
+  'roadtrip.ride.hintShip': '{title} väljub kell {departs}, sisseregistreerimine sulgub kell {pin}.',
+  'roadtrip.ride.hintBoarding': '{title} väljub kell {departs}, pardaleminek hiljemalt kell {pin}.',
+  'roadtrip.ride.lateHintFlight':
+    'Sõit jõuab kohta {place} kell {time}. {title} väljub kell {departs}, sisseregistreerimine sulgub kell {pin}.',
+  'roadtrip.ride.lateHintShip':
+    'Sõit jõuab kohta {place} kell {time}. {title} väljub kell {departs}, sisseregistreerimine sulgub kell {pin}.',
+  'roadtrip.ride.lateHintBoarding':
+    'Sõit jõuab kohta {place} kell {time}. {title} väljub kell {departs}, pardaleminek hiljemalt kell {pin}.',
+  'roadtrip.day.rideMissed.flight': 'Lennult maha jäädud',
+  'roadtrip.day.rideMissed.train': 'Rongist maha jäädud',
+  'roadtrip.day.rideMissed.ferry': 'Praamist maha jäädud',
+  'roadtrip.day.rideMissed.cruise': 'Kruiisilt maha jäädud',
+  'roadtrip.day.rideMissed.bus': 'Bussist maha jäädud',
+  'roadtrip.bookend.checkOut': 'Väljaregistreerimine',
+  'roadtrip.bookend.from': 'Päeva algus',
+  'roadtrip.bookend.back': 'Ööbimine',
+  'roadtrip.bookend.checkIn': 'Sisseregistreerimine',
+  'roadtrip.bookend.afterCheckOut': 'Lahkub pärast väljaregistreerimist',
+  'roadtrip.bookend.noVia':
+    'Sõidul peatumiskohta või sealt ära ei saa olla vahepunkti. Lisa selle asemel sinna peatus.',
 };
 export default roadtrip;

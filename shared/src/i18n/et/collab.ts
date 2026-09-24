@@ -25,6 +25,8 @@ const collab: TranslationStrings = {
   'collab.links.delete': 'Kustuta link',
   'collab.links.edit': 'Muuda linki',
   'collab.links.open': 'Ava link',
+  'collab.links.confirmDeleteTitle': 'Kas kustutada link?',
+  'collab.links.confirmDeleteBody': 'See link kustutatakse jäädavalt.',
   'collab.whatsNext.title': 'Järgmisena',
   'collab.whatsNext.today': 'Täna',
   'collab.whatsNext.tomorrow': 'Homme',
