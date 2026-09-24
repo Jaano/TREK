@@ -1,4 +1,5 @@
 import ar from '../ar/externalNotifications';
+import az from '../az/externalNotifications';
 import br from '../br/externalNotifications';
 import cs from '../cs/externalNotifications';
 import de from '../de/externalNotifications';
@@ -45,6 +46,7 @@ const LOCALES = {
   it,
   tr,
   ar,
+  az,
   id,
   ja,
   ko,

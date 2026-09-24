@@ -14,6 +14,7 @@ export const SUPPORTED_LANGUAGES = [
   { value: 'it', label: 'Italiano', locale: 'it-IT' },
   { value: 'tr', label: 'Türkçe', locale: 'tr-TR' },
   { value: 'ar', label: 'العربية', locale: 'ar-SA' },
+  { value: 'az', label: 'Azərbaycanca', locale: 'az-AZ' },
   { value: 'id', label: 'Bahasa Indonesia', locale: 'id-ID' },
   { value: 'ja', label: '日本語', locale: 'ja-JP' },
   { value: 'ko', label: '한국어', locale: 'ko-KR' },
