@@ -2034,16 +2034,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Přidávat, přeuspořádat a přejmenovat dny',
   'help.guide.manage-days.goal': 'Utvářejte samotné dny, nejen to, co na nich je.',
   'help.guide.manage-days.step.1':
-    'Dny pocházejí z dat cesty; změňte data na kartě cesty pod Přehled a dny na koncích přibydou nebo ubydou.',
+    'Dny pocházejí z dat cesty; změňte data na kartě cesty pod Přehled a dny na koncích přibydou nebo ubydou. Než odpadne den s obsahem, seznam ukáže, které dny odejdou a co na nich je.',
   'help.guide.manage-days.step.2':
-    'Změnit pořadí dnů v liště nástrojů otevře seznam: Posunout nahoru a Posunout dolů posunou den se vším, co na něm je; Přidat den připojí den na konec.',
+    'Změnit pořadí dnů v liště nástrojů otevře seznam: Posunout nahoru a Posunout dolů posunou den se vším, co na něm je, a Smazat den, koš vedle nich, ho odstraní. Pod seznamem tlačítko s dalším datem přidá den hned za poslední den s datem a prodlouží cestu o den; Bez data připojí na konec den bez data.',
   'help.guide.manage-days.step.3':
-    'Den přejmenujete tak, že ho otevřete a kliknete na tužku vedle jeho názvu v podrobnostech nad mapou; název nahradí Den 1 na kartě i v PDF.',
+    'Smazat den se nejdřív zeptá: seznam ukáže, co s dnem odejde, jeho místa, poznámky a rezervace, ubytování s příjezdem nebo odjezdem v ten den a dny, které se posunou o datum dopředu. Smazat den ho odstraní, Zrušit ho ponechá; poslední den smazat nelze.',
   'help.guide.manage-days.step.4':
+    'Den přejmenujete tak, že ho otevřete a kliknete na tužku vedle jeho názvu v podrobnostech nad mapou; název nahradí Den 1 na kartě i v PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days a Collapse all days v liště nástrojů složí všechny karty najednou; jedna karta se složí svou šipkou.',
   'help.guide.manage-days.result':
     'Data zůstávají u pozice: den posunutý nahoru dostane dřívější datum a jeho zastávky, poznámky a rezervace cestují s ním.',
-  'help.guide.manage-days.tip.1': 'Změnit pořadí dnů jde z lišty nástrojů vrátit.',
+  'help.guide.manage-days.tip.1': 'Přesouvání dnů jde z lišty nástrojů vrátit, smazání dne ne.',
   'help.guide.manage-days.tip.2': 'Náklady v záhlaví dne sečtou zastávky a rezervace toho dne, které nesou cenu.',
   // bookings-in-plan
   'help.guide.bookings-in-plan.title': 'Přečíst rezervace a dopravu v plánu',

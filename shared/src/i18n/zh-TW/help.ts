@@ -1733,15 +1733,18 @@ const help: TranslationStrings = {
   // manage-days
   'help.guide.manage-days.title': '新增、重排和重新命名日期',
   'help.guide.manage-days.goal': '塑造日期本身，而不只是日期上的內容。',
-  'help.guide.manage-days.step.1': '日期來自行程的日期範圍；在「儀表板」的行程卡片上改日期，兩端就會增加或減少天數。',
+  'help.guide.manage-days.step.1':
+    '日期來自行程的日期範圍；在「儀表板」的行程卡片上改日期，兩端就會增加或減少天數。在刪掉有內容的日期之前，會有一個清單說明哪些日期會被去掉、上面有什麼。',
   'help.guide.manage-days.step.2':
-    '工具列裡的「重新排序日期」開啟一個清單：「上移」和「下移」連同這一天上的一切一起挪動；「新增日期」在末尾追加一天。',
+    '工具列裡的「重新排序日期」開啟一個清單：「上移」和「下移」連同這一天上的一切一起挪動，旁邊的垃圾桶「刪除這一天」會刪掉它。清單下方，帶有下一個日期的按鈕會在最後一個有日期的天之後緊接著新增一天，並把行程延長一天；「無日期」在末尾追加一個沒有日期的天。',
   'help.guide.manage-days.step.3':
-    '要給一天改名，開啟它，在地圖上方的「日程詳情」面板裡點選標題旁邊的鉛筆；這個名字會在卡片裡和 PDF 裡代替「第 1 天」。',
+    '「刪除這一天」會先詢問：清單顯示會隨這一天一起消失的內容，包括地點、筆記和預訂、這天辦理入住或退房的住宿，以及會提前一個日期的天。「刪除這一天」會刪掉它，「取消」則保留；最後一天不能刪除。',
   'help.guide.manage-days.step.4':
+    '要給一天改名，開啟它，在地圖上方的「日程詳情」面板裡點選標題旁邊的鉛筆；這個名字會在卡片裡和 PDF 裡代替「第 1 天」。',
+  'help.guide.manage-days.step.5':
     '工具列裡的「Expand all days」和「Collapse all days」一次收起或展開所有卡片；單張卡片用它的摺疊箭頭收起。',
   'help.guide.manage-days.result': '日期跟著位置走：往上挪的一天拿到更早的日期，它的停留點、備註和預訂都跟著一起走。',
-  'help.guide.manage-days.tip.1': '「重新排序日期」可以從工具列撤銷。',
+  'help.guide.manage-days.tip.1': '移動日期可以從工具列撤銷，刪除一天則不能。',
   'help.guide.manage-days.tip.2': '一天標題列裡的費用把這一天帶價格的停留點和預訂加起來。',
   // bookings-in-plan
   'help.guide.bookings-in-plan.title': '讀懂計劃裡的預訂和交通',

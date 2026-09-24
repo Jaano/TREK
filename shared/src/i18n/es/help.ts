@@ -2148,16 +2148,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Añadir, reordenar y renombrar días',
   'help.guide.manage-days.goal': 'Dar forma a los días en sí, no solo a lo que hay en ellos.',
   'help.guide.manage-days.step.1':
-    'Los días salen de las fechas del viaje; cambia las fechas en la tarjeta del viaje en Panel y se añaden o se quitan días en los extremos.',
+    'Los días salen de las fechas del viaje; cambia las fechas en la tarjeta del viaje en Panel y se añaden o se quitan días en los extremos. Antes de quitar un día con contenido, una lista dice qué días se van y qué llevan.',
   'help.guide.manage-days.step.2':
-    'Reordenar días, en la barra, abre una lista: Subir y Bajar mueven un día con todo lo que lleva; Añadir día añade un día al final.',
+    'Reordenar días, en la barra, abre una lista: Subir y Bajar mueven un día con todo lo que lleva, y Eliminar día, la papelera de al lado, lo quita. Debajo de la lista, el botón con la fecha siguiente añade un día justo después del último con fecha y alarga el viaje un día; Sin fecha añade un día sin fecha al final.',
   'help.guide.manage-days.step.3':
-    'Para renombrar un día, ábrelo y haz clic en el lápiz junto a su título en los Detalles del día sobre el mapa; el nombre sustituye a Día 1 en la tarjeta y en el PDF.',
+    'Eliminar día pregunta primero: la lista muestra lo que se va con el día, sus lugares, notas y reservas, un alojamiento con entrada o salida ese día y los días que adelantan una fecha. Eliminar día lo quita y Cancelar lo conserva; el último día no se puede eliminar.',
   'help.guide.manage-days.step.4':
+    'Para renombrar un día, ábrelo y haz clic en el lápiz junto a su título en los Detalles del día sobre el mapa; el nombre sustituye a Día 1 en la tarjeta y en el PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days y Collapse all days, en la barra, pliegan todas las tarjetas a la vez; una sola tarjeta se pliega con su flecha.',
   'help.guide.manage-days.result':
     'Las fechas se quedan con la posición: un día que sube toma la fecha anterior, y sus paradas, notas y reservas viajan con él.',
-  'help.guide.manage-days.tip.1': 'Reordenar días se puede deshacer desde la barra.',
+  'help.guide.manage-days.tip.1': 'Mover días se puede deshacer desde la barra; eliminar un día, no.',
   'help.guide.manage-days.tip.2':
     'El coste en la cabecera de un día suma las paradas y reservas de ese día que llevan precio.',
   // bookings-in-plan

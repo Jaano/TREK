@@ -75,6 +75,8 @@ const noteBody = (page: Page) => page.getByPlaceholder('Details, links, reminder
 const noteDialog = (page: Page) => portalDialog(page, noteBody(page))
 /** The question a timed stop asks before it moves; also a portal of its own. */
 const timeConfirm = (page: Page) => portalDialog(page, page.getByText('Remove time?'))
+/** The reorder popup's panel, the list and its footer, or the question a bin asks in its place. */
+const reorderPopup = (page: Page) => page.locator('.trek-modal-enter').filter({ hasText: 'Reorder days' })
 
 async function createSpare(page: Page): Promise<void> {
   const { tripId } = seededTrip()
@@ -381,12 +383,35 @@ const SCRIPTS: Record<string, GuideScript> = {
           await expect(p.getByText('Reorder days').first()).toBeVisible()
           await settle(p)
         },
-        target: p => p.getByRole('button', { name: 'Add day' }).locator('xpath=ancestor::div[3]'),
-        act: async p => { await p.keyboard.press('Escape'); await settle(p) },
+        // The whole popup: the rows with their arrows and bins, and the two ways
+        // of adding a day in its footer.
+        target: reorderPopup,
+      },
+      {
+        // The question before a day goes, answered with Cancel: the picture shows
+        // what would go with the second day, its places and its landing, and the
+        // seed keeps all of its days.
+        prepare: async p => {
+          await reorderPopup(p).getByRole('button', { name: 'Delete day' }).nth(1).click()
+          await expect(p.getByRole('heading', { name: /^Delete .+\?$/ })).toBeVisible()
+          await settle(p)
+        },
+        target: reorderPopup,
+        act: async p => {
+          await reorderPopup(p).getByRole('button', { name: 'Cancel' }).click()
+          await expect(p.getByRole('heading', { name: /^Delete .+\?$/ })).toHaveCount(0)
+          await reorderPopup(p).getByRole('button', { name: 'Close', exact: true }).last().click()
+          await expect(reorderPopup(p)).toHaveCount(0)
+          await settle(p)
+        },
       },
       {
         prepare: async p => {
-          await selectDay(p, 1)
+          // The steps before leave the first day selected, and a click on a
+          // selected day folds its panel away: a second one brings it back.
+          await dayHeader(p, 1).click({ position: { x: 22, y: 20 } })
+          await settle(p)
+          if (!(await dayDetails(p).isVisible())) await selectDay(p, 1)
           await expect(renameDay(p)).toBeVisible()
           await settle(p)
         },

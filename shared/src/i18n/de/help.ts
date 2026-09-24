@@ -2156,16 +2156,19 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Tage anlegen, ordnen und benennen',
   'help.guide.manage-days.goal': 'Form die Tage selbst, nicht nur das, was auf ihnen liegt.',
   'help.guide.manage-days.step.1':
-    'Die Tage kommen aus den Daten der Reise; änder die Daten auf der Reisekarte im Dashboard, und Tage kommen an den Enden dazu oder fallen weg.',
+    'Die Tage kommen aus den Daten der Reise; änder die Daten auf der Reisekarte im Dashboard, und Tage kommen an den Enden dazu oder fallen weg. Bevor ein Tag mit Inhalt wegfällt, zeigt eine Liste, welche Tage gehen und was auf ihnen liegt.',
   'help.guide.manage-days.step.2':
-    'Tage neu anordnen in der Leiste öffnet eine Liste: Nach oben und Nach unten verschieben einen Tag mit allem, was auf ihm liegt; Tag hinzufügen hängt einen Tag am Ende an.',
+    'Tage neu anordnen in der Leiste öffnet eine Liste: Nach oben und Nach unten verschieben einen Tag mit allem, was auf ihm liegt, Tag löschen, der Papierkorb daneben, entfernt ihn. Unter der Liste fügt der Button mit dem nächsten Datum einen Tag direkt nach dem letzten datierten ein und verlängert die Reise um einen Tag; Ohne Datum hängt einen Tag ohne Datum an.',
   'help.guide.manage-days.step.3':
-    'Um einen Tag umzubenennen, öffne ihn und klick auf den Stift neben seinem Titel in den Tagesdetails über der Karte; der Name ersetzt Tag 1 in der Karte und im PDF.',
+    'Tag löschen fragt zuerst nach: Es listet, was mit dem Tag geht, seine Orte, Notizen und Buchungen, eine Unterkunft mit Check-in oder Check-out an diesem Tag und die Tage, die ein Datum nach vorn rücken. Tag löschen entfernt ihn, Abbrechen behält ihn; den letzten Tag kann man nicht löschen.',
   'help.guide.manage-days.step.4':
+    'Um einen Tag umzubenennen, öffne ihn und klick auf den Stift neben seinem Titel in den Tagesdetails über der Karte; der Name ersetzt Tag 1 in der Karte und im PDF.',
+  'help.guide.manage-days.step.5':
     'Alle Tage ausklappen und Alle Tage einklappen in der Leiste klappen jede Karte auf einmal; eine einzelne Karte klappt mit ihrem Pfeil.',
   'help.guide.manage-days.result':
     'Die Daten bleiben an der Position: ein Tag, der nach oben rückt, bekommt das frühere Datum, seine Stopps, Notizen und Buchungen wandern mit.',
-  'help.guide.manage-days.tip.1': 'Tage neu anordnen lässt sich über die Leiste rückgängig machen.',
+  'help.guide.manage-days.tip.1':
+    'Das Verschieben von Tagen lässt sich über die Leiste rückgängig machen, das Löschen eines Tages nicht.',
   'help.guide.manage-days.tip.2':
     'Die Kosten im Kopf eines Tages zählen die Stopps und Buchungen dieses Tages zusammen, die einen Preis tragen.',
   // bookings-in-plan

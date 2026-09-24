@@ -2059,16 +2059,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Lägg till, sortera om och byt namn på dagar',
   'help.guide.manage-days.goal': 'Forma dagarna själva, inte bara det som ligger på dem.',
   'help.guide.manage-days.step.1':
-    'Dagarna kommer från resans datum; ändra datumen på resekortet under Översikt så läggs dagar till eller faller bort i ändarna.',
+    'Dagarna kommer från resans datum; ändra datumen på resekortet under Översikt så läggs dagar till eller faller bort i ändarna. Innan en dag med innehåll faller bort visar en lista vilka dagar som försvinner och vad som ligger på dem.',
   'help.guide.manage-days.step.2':
-    'Sortera om dagar i verktygsfältet öppnar en lista: Flytta upp och Flytta ner skjuter en dag med allt som ligger på den; Lägg till dag lägger en dag sist.',
+    'Sortera om dagar i verktygsfältet öppnar en lista: Flytta upp och Flytta ner skjuter en dag med allt som ligger på den, och Ta bort dag, papperskorgen bredvid, tar bort den. Under listan lägger knappen med nästa datum till en dag direkt efter den sista daterade och förlänger resan med en dag; Utan datum lägger en dag utan datum sist.',
   'help.guide.manage-days.step.3':
-    'För att byta namn på en dag öppnar du den och klickar på pennan bredvid dess titel i detaljpanelen över kartan; namnet ersätter Dag 1 i kortet och i PDF:en.',
+    'Ta bort dag frågar först: listan visar vad som försvinner med dagen, dess platser, anteckningar och bokningar, ett boende med incheckning eller utcheckning den dagen och dagarna som flyttas ett datum framåt. Ta bort dag tar bort den, Avbryt behåller den; den sista dagen kan inte tas bort.',
   'help.guide.manage-days.step.4':
+    'För att byta namn på en dag öppnar du den och klickar på pennan bredvid dess titel i detaljpanelen över kartan; namnet ersätter Dag 1 i kortet och i PDF:en.',
+  'help.guide.manage-days.step.5':
     'Expandera alla dagar och Dölj alla dagar i verktygsfältet fäller ihop varje kort på en gång; ett enskilt kort fälls ihop med sin pil.',
   'help.guide.manage-days.result':
     'Datumen stannar vid positionen: en dag som flyttas upp tar det tidigare datumet, och dess stopp, noteringar och bokningar följer med.',
-  'help.guide.manage-days.tip.1': 'Sortera om dagar kan ångras från verktygsfältet.',
+  'help.guide.manage-days.tip.1': 'Att flytta dagar kan ångras från verktygsfältet, att ta bort en dag kan inte det.',
   'help.guide.manage-days.tip.2':
     'Kostnaden i en dags rubrik summerar de stopp och bokningar på den dagen som bär ett pris.',
   // bookings-in-plan

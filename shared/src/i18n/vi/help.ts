@@ -2082,16 +2082,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Thêm, sắp xếp lại và đổi tên các ngày',
   'help.guide.manage-days.goal': 'Tạo hình cho chính các ngày, không chỉ những gì nằm trên chúng.',
   'help.guide.manage-days.step.1':
-    'Các ngày đến từ ngày tháng của chuyến đi; đổi ngày tháng trên thẻ chuyến đi trong “Bảng điều khiển” và các ngày sẽ được thêm vào hoặc bỏ bớt ở hai đầu.',
+    'Các ngày đến từ ngày tháng của chuyến đi; đổi ngày tháng trên thẻ chuyến đi trong “Bảng điều khiển” và các ngày sẽ được thêm vào hoặc bỏ bớt ở hai đầu. Trước khi một ngày có nội dung bị bỏ đi, một danh sách cho biết những ngày nào sẽ mất và trên đó có gì.',
   'help.guide.manage-days.step.2':
-    '“Sắp xếp lại ngày” trên thanh công cụ mở một danh sách: “Di chuyển lên” và “Di chuyển xuống” dời một ngày cùng mọi thứ trên nó; “Thêm ngày” nối thêm một ngày ở cuối.',
+    '“Sắp xếp lại ngày” trên thanh công cụ mở một danh sách: “Di chuyển lên” và “Di chuyển xuống” dời một ngày cùng mọi thứ trên nó, còn “Xóa ngày”, thùng rác bên cạnh, bỏ ngày đó đi. Dưới danh sách, nút có ngày tiếp theo thêm một ngày ngay sau ngày có ngày tháng cuối cùng và kéo dài chuyến đi thêm một ngày; “Không ngày tháng” nối thêm một ngày không có ngày tháng ở cuối.',
   'help.guide.manage-days.step.3':
-    'Để đổi tên một ngày, hãy mở nó và nhấp cây bút chì cạnh tiêu đề của nó trong bảng chi tiết trên bản đồ; tên đó thay cho “Ngày 1” trong thẻ và trong PDF.',
+    '“Xóa ngày” hỏi trước: danh sách cho thấy những gì mất theo ngày đó, gồm địa điểm, ghi chú và đặt chỗ, một chỗ ở có nhận phòng hoặc trả phòng vào ngày đó, và những ngày dời lên một ngày tháng. “Xóa ngày” bỏ ngày đó đi, “Hủy” giữ lại; không thể xóa ngày cuối cùng.',
   'help.guide.manage-days.step.4':
+    'Để đổi tên một ngày, hãy mở nó và nhấp cây bút chì cạnh tiêu đề của nó trong bảng chi tiết trên bản đồ; tên đó thay cho “Ngày 1” trong thẻ và trong PDF.',
+  'help.guide.manage-days.step.5':
     '“Mở rộng tất cả các ngày” và “Thu gọn tất cả các ngày” trên thanh công cụ gập mọi thẻ cùng lúc; một thẻ riêng lẻ gập bằng mũi nhọn của nó.',
   'help.guide.manage-days.result':
     'Ngày tháng gắn với vị trí: một ngày được đưa lên trên nhận ngày tháng sớm hơn, còn các điểm dừng, ghi chú và đặt chỗ của nó đi theo.',
-  'help.guide.manage-days.tip.1': '“Sắp xếp lại ngày” có thể hoàn tác từ thanh công cụ.',
+  'help.guide.manage-days.tip.1': 'Việc di chuyển ngày có thể hoàn tác từ thanh công cụ; việc xóa một ngày thì không.',
   'help.guide.manage-days.tip.2':
     'Chi phí ở phần đầu thẻ của một ngày cộng các điểm dừng và đặt chỗ của ngày đó có mang giá.',
   // bookings-in-plan

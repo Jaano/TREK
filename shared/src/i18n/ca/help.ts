@@ -2141,16 +2141,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Afegir, reordenar i reanomenar dies',
   'help.guide.manage-days.goal': 'Donar forma als dies mateixos, no només al que hi ha a sobre.',
   'help.guide.manage-days.step.1':
-    'Els dies surten de les dates del viatge; canvia les dates a la targeta del viatge sota Tauler i s’afegeixen o es treuen dies als extrems.',
+    'Els dies surten de les dates del viatge; canvia les dates a la targeta del viatge sota Tauler i s’afegeixen o es treuen dies als extrems. Abans que es tregui un dia amb contingut, una llista diu quins dies marxen i què porten.',
   'help.guide.manage-days.step.2':
-    'Reordena els dies a la barra d’eines obre una llista: Puja i Baixa desplacen un dia amb tot el que porta; Afegeix un dia n’afegeix un al final.',
+    'Reordena els dies a la barra d’eines obre una llista: Puja i Baixa desplacen un dia amb tot el que porta, i Elimina el dia, la paperera del costat, el treu. Sota la llista, el botó amb la data següent afegeix un dia just després de l’últim amb data i allarga el viatge un dia; Sense data n’afegeix un sense data al final.',
   'help.guide.manage-days.step.3':
-    'Per reanomenar un dia, obre’l i fes clic al llapis del costat del títol als Detalls del dia sobre el mapa; el nom substitueix Dia 1 a la targeta i al PDF.',
+    'Elimina el dia pregunta primer: la llista mostra què marxa amb el dia, els seus llocs, notes i reserves, un allotjament amb entrada o sortida aquell dia i els dies que avancen una data. Elimina el dia el treu i Cancel·lar el conserva; l’últim dia no es pot eliminar.',
   'help.guide.manage-days.step.4':
+    'Per reanomenar un dia, obre’l i fes clic al llapis del costat del títol als Detalls del dia sobre el mapa; el nom substitueix Dia 1 a la targeta i al PDF.',
+  'help.guide.manage-days.step.5':
     'Expandeix tots els dies i Contreu tots els dies a la barra d’eines pleguen totes les targetes alhora; una targeta sola es plega amb la seva fletxeta.',
   'help.guide.manage-days.result':
     'Les dates es queden amb la posició: un dia que puja pren la data anterior, i les seves parades, notes i reserves viatgen amb ell.',
-  'help.guide.manage-days.tip.1': 'Reordena els dies es pot desfer des de la barra d’eines.',
+  'help.guide.manage-days.tip.1': 'Moure dies es pot desfer des de la barra d’eines; eliminar un dia, no.',
   'help.guide.manage-days.tip.2':
     'El cost a la capçalera d’un dia suma les parades i les reserves d’aquell dia que porten un preu.',
   // bookings-in-plan

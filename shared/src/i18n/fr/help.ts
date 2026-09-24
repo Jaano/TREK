@@ -2196,16 +2196,19 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Ajouter, réorganiser et renommer des jours',
   'help.guide.manage-days.goal': 'Façonner les jours eux-mêmes, pas seulement ce qu’il y a dessus.',
   'help.guide.manage-days.step.1':
-    'Les jours viennent des dates du voyage ; changez les dates sur la carte du voyage sous Tableau de bord et des jours sont ajoutés ou retirés aux extrémités.',
+    'Les jours viennent des dates du voyage ; changez les dates sur la carte du voyage sous Tableau de bord et des jours sont ajoutés ou retirés aux extrémités. Avant qu’un jour avec du contenu ne soit retiré, une liste indique quels jours partent et ce qu’ils contiennent.',
   'help.guide.manage-days.step.2':
-    'Réorganiser les jours dans la barre d’outils ouvre une liste : Monter et Descendre décalent un jour avec tout ce qu’il porte ; Ajouter un jour ajoute un jour à la fin.',
+    'Réorganiser les jours dans la barre d’outils ouvre une liste : Monter et Descendre décalent un jour avec tout ce qu’il porte, et Supprimer le jour, la corbeille à côté, le retire. Sous la liste, le bouton avec la date suivante ajoute un jour juste après le dernier jour daté et prolonge le voyage d’un jour ; Sans date ajoute un jour sans date à la fin.',
   'help.guide.manage-days.step.3':
-    'Pour renommer un jour, ouvrez-le et cliquez sur le crayon à côté de son titre dans les Détails du jour au-dessus de la carte ; le nom remplace Jour 1 dans la carte et dans le PDF.',
+    'Supprimer le jour demande d’abord : la liste montre ce qui part avec le jour, ses lieux, notes et réservations, un hébergement dont l’arrivée ou le départ tombe ce jour-là et les jours qui avancent d’une date. Supprimer le jour le retire, Annuler le garde ; le dernier jour ne peut pas être supprimé.',
   'help.guide.manage-days.step.4':
+    'Pour renommer un jour, ouvrez-le et cliquez sur le crayon à côté de son titre dans les Détails du jour au-dessus de la carte ; le nom remplace Jour 1 dans la carte et dans le PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days et Collapse all days dans la barre d’outils replient toutes les cartes d’un coup ; une carte seule se replie avec son chevron.',
   'help.guide.manage-days.result':
     'Les dates restent attachées à la position : un jour monté prend la date antérieure, ses étapes, ses notes et ses réservations voyagent avec lui.',
-  'help.guide.manage-days.tip.1': 'Réorganiser les jours peut être annulé depuis la barre d’outils.',
+  'help.guide.manage-days.tip.1':
+    'Déplacer des jours peut être annulé depuis la barre d’outils ; supprimer un jour, non.',
   'help.guide.manage-days.tip.2':
     'Le coût dans l’en-tête d’un jour additionne les étapes et les réservations de ce jour qui portent un prix.',
   // bookings-in-plan

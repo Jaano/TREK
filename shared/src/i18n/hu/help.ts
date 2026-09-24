@@ -2147,16 +2147,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Napok hozzáadása, átrendezése és átnevezése',
   'help.guide.manage-days.goal': 'Magukat a napokat formáld, ne csak azt, ami rajtuk van.',
   'help.guide.manage-days.step.1':
-    'A napok az utazás dátumaiból jönnek; módosítsd a dátumokat az utazáskártyán az Irányítópult alatt, és a végeken napok jönnek hozzá vagy esnek ki.',
+    'A napok az utazás dátumaiból jönnek; módosítsd a dátumokat az utazáskártyán az Irányítópult alatt, és a végeken napok jönnek hozzá vagy esnek ki. Mielőtt egy tartalommal bíró nap kiesne, egy lista megmutatja, mely napok mennek és mi van rajtuk.',
   'help.guide.manage-days.step.2':
-    'Az eszköztárban a Napok átrendezése egy listát nyit: a Mozgatás felfelé és a Mozgatás lefelé mindenestül eltolja a napot; a Nap hozzáadása a végére fűz egy napot.',
+    'Az eszköztárban a Napok átrendezése egy listát nyit: a Mozgatás felfelé és a Mozgatás lefelé mindenestül eltolja a napot, a mellettük lévő kuka, a Nap törlése pedig eltávolítja. A lista alatt a következő dátumot mutató gomb közvetlenül az utolsó dátumos nap után szúr be egy napot, és egy nappal meghosszabbítja az utazást; a Dátum nélkül egy dátum nélküli napot fűz a végére.',
   'help.guide.manage-days.step.3':
-    'Egy nap átnevezéséhez nyisd meg, és kattints a címe melletti ceruzára a térkép fölötti részletek panelen; a név a kártyán és a PDF-ben is az 1. nap helyére lép.',
+    'A Nap törlése előbb rákérdez: a lista megmutatja, mi megy a nappal együtt, a helyei, jegyzetei és foglalásai, egy szállás, amelynek aznap van a be- vagy kijelentkezése, és a napok, amelyek egy dátummal előbbre kerülnek. A Nap törlése eltávolítja, a Mégse megtartja; az utolsó nap nem törölhető.',
   'help.guide.manage-days.step.4':
+    'Egy nap átnevezéséhez nyisd meg, és kattints a címe melletti ceruzára a térkép fölötti részletek panelen; a név a kártyán és a PDF-ben is az 1. nap helyére lép.',
+  'help.guide.manage-days.step.5':
     'Az eszköztárban az Expand all days és a Collapse all days egyszerre csukja össze az összes kártyát; egyetlen kártya a saját nyilával csukódik össze.',
   'help.guide.manage-days.result':
     'A dátumok a pozíciónál maradnak: a felfelé mozgatott nap a korábbi dátumot kapja, a megállói, jegyzetei és foglalásai pedig vele együtt utaznak.',
-  'help.guide.manage-days.tip.1': 'A Napok átrendezése az eszköztárból visszavonható.',
+  'help.guide.manage-days.tip.1': 'A napok mozgatása az eszköztárból visszavonható, egy nap törlése nem.',
   'help.guide.manage-days.tip.2':
     'A nap fejlécében lévő költség az adott nap árral rendelkező megállóit és foglalásait adja össze.',
   // bookings-in-plan

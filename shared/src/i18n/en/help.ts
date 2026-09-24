@@ -2031,16 +2031,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Add, reorder and rename days',
   'help.guide.manage-days.goal': 'Shape the days themselves, not just what is on them.',
   'help.guide.manage-days.step.1':
-    'The days come from the trip’s dates; change the dates on the trip card under Dashboard and days are added or dropped at the ends.',
+    'The days come from the trip’s dates; change the dates on the trip card under Dashboard and days are added or dropped at the ends. Before a day with something on it is dropped, a list says which days go and what is on them.',
   'help.guide.manage-days.step.2':
-    'Reorder days in the toolbar opens a list: Move up and Move down shift a day with everything on it; Add day appends a day at the end.',
+    'Reorder days in the toolbar opens a list: Move up and Move down shift a day with everything on it, and Delete day, the bin beside them, removes it. Below the list, the button with the next date adds a day right after the last dated one and extends the trip by one; Without date appends a day without a date.',
   'help.guide.manage-days.step.3':
-    'To rename a day, open it and click the pencil next to its title in the details panel over the map; the name replaces Day 1 in the card and in the PDF.',
+    'Delete day asks first: it lists what goes with the day, its places, notes and bookings, a stay that checks in or out on it, and the days that move up a date. Delete day removes it, Cancel keeps it; the last day cannot be deleted.',
   'help.guide.manage-days.step.4':
+    'To rename a day, open it and click the pencil next to its title in the details panel over the map; the name replaces Day 1 in the card and in the PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days and Collapse all days in the toolbar fold every card at once; a single card folds with its chevron.',
   'help.guide.manage-days.result':
     'The dates stay with the position: a day moved up takes the earlier date, its stops, notes and bookings travel with it.',
-  'help.guide.manage-days.tip.1': 'Reorder days can be undone from the toolbar.',
+  'help.guide.manage-days.tip.1': 'Moving days can be undone from the toolbar; deleting a day cannot.',
   'help.guide.manage-days.tip.2':
     'The cost in a day’s header adds up the stops and bookings of that day that carry a price.',
   // bookings-in-plan

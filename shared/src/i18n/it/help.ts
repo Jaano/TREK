@@ -2128,16 +2128,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Aggiungere, riordinare e rinominare i giorni',
   'help.guide.manage-days.goal': 'Dare forma ai giorni stessi, non solo a quello che ci sta sopra.',
   'help.guide.manage-days.step.1':
-    'I giorni nascono dalle date del viaggio; cambia le date sulla scheda del viaggio in Dashboard e i giorni vengono aggiunti o tolti alle estremità.',
+    'I giorni nascono dalle date del viaggio; cambia le date sulla scheda del viaggio in Dashboard e i giorni vengono aggiunti o tolti alle estremità. Prima che un giorno con dei contenuti venga tolto, una lista dice quali giorni se ne vanno e cosa portano.',
   'help.guide.manage-days.step.2':
-    'Riordina i giorni nella barra apre una lista: Sposta su e Sposta giù spostano un giorno con tutto ciò che porta; Aggiungi giorno aggiunge un giorno alla fine.',
+    'Riordina i giorni nella barra apre una lista: Sposta su e Sposta giù spostano un giorno con tutto ciò che porta, ed Elimina giorno, il cestino accanto, lo toglie. Sotto la lista, il pulsante con la data successiva aggiunge un giorno subito dopo l’ultimo con data e allunga il viaggio di un giorno; Senza data aggiunge in fondo un giorno senza data.',
   'help.guide.manage-days.step.3':
-    'Per rinominare un giorno, aprilo e clicca la matita accanto al suo titolo nei Dettagli del giorno sopra la mappa; il nome sostituisce Giorno 1 nella scheda e nel PDF.',
+    'Elimina giorno chiede prima: la lista mostra cosa se ne va con il giorno, i suoi luoghi, note e prenotazioni, un alloggio con check-in o check-out quel giorno e i giorni che avanzano di una data. Elimina giorno lo toglie, Annulla lo tiene; l’ultimo giorno non si può eliminare.',
   'help.guide.manage-days.step.4':
+    'Per rinominare un giorno, aprilo e clicca la matita accanto al suo titolo nei Dettagli del giorno sopra la mappa; il nome sostituisce Giorno 1 nella scheda e nel PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days e Collapse all days nella barra chiudono tutte le schede in una volta; una singola scheda si chiude con la sua freccia.',
   'help.guide.manage-days.result':
     'Le date restano legate alla posizione: un giorno spostato in su prende la data precedente, e le sue tappe, note e prenotazioni viaggiano con lui.',
-  'help.guide.manage-days.tip.1': 'Riordina i giorni si può annullare dalla barra.',
+  'help.guide.manage-days.tip.1': 'Spostare i giorni si può annullare dalla barra; eliminare un giorno no.',
   'help.guide.manage-days.tip.2':
     'Il costo nell’intestazione di un giorno somma le tappe e le prenotazioni di quel giorno che portano un prezzo.',
   // bookings-in-plan

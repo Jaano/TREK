@@ -27,7 +27,7 @@ export const { context: tripDaysContext, guides: tripDaysGuides } = defineScreen
     ['lock-stop', 'lock', 'quick', 2, 2, { slug: DAYS, anchor: 'toolbar-actions' }, ['day-route', 'reorder-stops']],
     ['day-note', 'pencil', 'quick', 4, 2, { slug: DAYS, anchor: 'day-notes' }, ['read-day-plan'], true],
     ['day-route', 'route', 'guide', 5, 3, { slug: MAP, anchor: 'route-lines' }, ['lock-stop', 'read-day-plan']],
-    ['manage-days', 'calendarDays', 'quick', 4, 2, { slug: DAYS, anchor: 'the-day-plan-sidebar' }, ['edit-trip']],
+    ['manage-days', 'calendarDays', 'quick', 5, 2, { slug: DAYS, anchor: 'the-day-plan-sidebar' }, ['edit-trip']],
     ['bookings-in-plan', 'ticket', 'guide', 5, 2, { slug: DAYS, anchor: 'multi-day-reservations' }, ['read-day-plan']],
     ['export-plan', 'download', 'quick', 4, 3, { slug: MAP, anchor: 'exporting-a-trip-as-gpx' }, ['calendar-feed']],
   ],

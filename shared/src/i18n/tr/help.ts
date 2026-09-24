@@ -2097,16 +2097,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Gün ekleyin, sıralayın ve yeniden adlandırın',
   'help.guide.manage-days.goal': 'Yalnızca günlerin üzerindekini değil, günlerin kendisini biçimlendirin.',
   'help.guide.manage-days.step.1':
-    'Günler gezinin tarihlerinden gelir; Pano altında gezi kartındaki tarihleri değiştirin, uçlarda gün eklenir ya da düşer.',
+    'Günler gezinin tarihlerinden gelir; Pano altında gezi kartındaki tarihleri değiştirin, uçlarda gün eklenir ya da düşer. İçinde bir şey olan bir gün düşmeden önce bir liste hangi günlerin gideceğini ve üzerlerinde ne olduğunu gösterir.',
   'help.guide.manage-days.step.2':
-    'Araç çubuğundaki Günleri yeniden sırala bir liste açar: Yukarı taşı ve Aşağı taşı bir günü üzerindeki her şeyle birlikte kaydırır; Gün ekle sona bir gün ekler.',
+    'Araç çubuğundaki Günleri yeniden sırala bir liste açar: Yukarı taşı ve Aşağı taşı bir günü üzerindeki her şeyle birlikte kaydırır, yanlarındaki çöp kutusu Günü sil ise günü kaldırır. Listenin altında sonraki tarihi taşıyan düğme, tarihli son günün hemen ardına bir gün ekler ve geziyi bir gün uzatır; Tarihsiz sona tarihsiz bir gün ekler.',
   'help.guide.manage-days.step.3':
-    'Bir günü yeniden adlandırmak için onu açın ve haritanın üzerindeki ayrıntı panelinde başlığının yanındaki kaleme tıklayın; ad, kartta ve PDF içinde 1. gün yerine geçer.',
+    'Günü sil önce sorar: liste günle birlikte gidenleri, yani yerlerini, notlarını ve rezervasyonlarını, o gün giriş ya da çıkış yapılan konaklamayı ve bir tarih öne kayan günleri gösterir. Günü sil günü kaldırır, İptal korur; son gün silinemez.',
   'help.guide.manage-days.step.4':
+    'Bir günü yeniden adlandırmak için onu açın ve haritanın üzerindeki ayrıntı panelinde başlığının yanındaki kaleme tıklayın; ad, kartta ve PDF içinde 1. gün yerine geçer.',
+  'help.guide.manage-days.step.5':
     'Araç çubuğundaki Tüm günleri genişlet ve Tüm günleri daralt bütün kartları birden katlar; tek bir kart kendi okuyla katlanır.',
   'help.guide.manage-days.result':
     'Tarihler konumda kalır: yukarı taşınan bir gün daha erken tarihi alır, durakları, notları ve rezervasyonları onunla birlikte gider.',
-  'help.guide.manage-days.tip.1': 'Günleri yeniden sırala işlemi araç çubuğundan geri alınabilir.',
+  'help.guide.manage-days.tip.1': 'Günleri taşımak araç çubuğundan geri alınabilir, bir günü silmek alınamaz.',
   'help.guide.manage-days.tip.2':
     'Bir günün başlığındaki maliyet, o günün fiyat taşıyan duraklarını ve rezervasyonlarını toplar.',
   // bookings-in-plan

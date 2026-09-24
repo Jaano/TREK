@@ -2087,16 +2087,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Dodawać, przestawiać i zmieniać nazwy dni',
   'help.guide.manage-days.goal': 'Kształtuj same dni, nie tylko to, co w nich jest.',
   'help.guide.manage-days.step.1':
-    'Dni biorą się z dat podróży; zmień daty na karcie podróży w Panelu, a dni na końcach dojdą albo znikną.',
+    'Dni biorą się z dat podróży; zmień daty na karcie podróży w Panelu, a dni na końcach dojdą albo znikną. Zanim zniknie dzień z zawartością, lista pokazuje, które dni odejdą i co na nich jest.',
   'help.guide.manage-days.step.2':
-    'Zmień kolejność dni na pasku narzędzi otwiera listę: Przenieś w górę i Przenieś w dół przesuwają dzień ze wszystkim, co w nim jest; Dodaj dzień dopisuje dzień na końcu.',
+    'Zmień kolejność dni na pasku narzędzi otwiera listę: Przenieś w górę i Przenieś w dół przesuwają dzień ze wszystkim, co w nim jest, a Usuń dzień, kosz obok, go usuwa. Pod listą przycisk z następną datą dodaje dzień tuż po ostatnim dniu z datą i wydłuża podróż o jeden dzień; Bez daty dopisuje na końcu dzień bez daty.',
   'help.guide.manage-days.step.3':
-    'Żeby zmienić nazwę dnia, otwórz go i kliknij ołówek obok jego tytułu w panelu szczegółów nad mapą; nazwa zastępuje Dzień 1 na karcie i w PDF.',
+    'Usuń dzień najpierw pyta: lista pokazuje, co odejdzie razem z dniem, jego miejsca, notatki i rezerwacje, nocleg z zameldowaniem lub wymeldowaniem tego dnia oraz dni, które przesuną się o jedną datę wcześniej. Usuń dzień go usuwa, Anuluj zostawia; ostatniego dnia nie da się usunąć.',
   'help.guide.manage-days.step.4':
+    'Żeby zmienić nazwę dnia, otwórz go i kliknij ołówek obok jego tytułu w panelu szczegółów nad mapą; nazwa zastępuje Dzień 1 na karcie i w PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days i Collapse all days na pasku narzędzi zwijają wszystkie karty naraz; pojedyncza karta zwija się swoją strzałką.',
   'help.guide.manage-days.result':
     'Daty zostają przy pozycji: dzień przesunięty w górę dostaje wcześniejszą datę, a jego przystanki, notatki i rezerwacje jadą razem z nim.',
-  'help.guide.manage-days.tip.1': 'Zmień kolejność dni da się cofnąć z paska narzędzi.',
+  'help.guide.manage-days.tip.1': 'Przesunięcie dni da się cofnąć z paska narzędzi, usunięcia dnia nie.',
   'help.guide.manage-days.tip.2':
     'Koszt w nagłówku dnia sumuje te przystanki i rezerwacje tego dnia, które niosą cenę.',
   // bookings-in-plan

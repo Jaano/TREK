@@ -2140,16 +2140,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Menambah, mengurutkan dan mengganti nama hari',
   'help.guide.manage-days.goal': 'Bentuk harinya sendiri, bukan hanya apa yang ada di dalamnya.',
   'help.guide.manage-days.step.1':
-    'Hari berasal dari tanggal perjalanan; ubah tanggalnya pada kartu perjalanan di “Dasbor” dan hari akan ditambahkan atau dikurangi di kedua ujungnya.',
+    'Hari berasal dari tanggal perjalanan; ubah tanggalnya pada kartu perjalanan di “Dasbor” dan hari akan ditambahkan atau dikurangi di kedua ujungnya. Sebelum hari yang berisi dihapus, sebuah daftar menunjukkan hari mana yang hilang dan apa isinya.',
   'help.guide.manage-days.step.2':
-    '“Atur ulang hari” di bilah alat membuka sebuah daftar: “Pindah ke atas” dan “Pindah ke bawah” menggeser sebuah hari beserta segala isinya; “Tambah hari” menambahkan satu hari di akhir.',
+    '“Atur ulang hari” di bilah alat membuka sebuah daftar: “Pindah ke atas” dan “Pindah ke bawah” menggeser sebuah hari beserta segala isinya, dan “Hapus hari”, tempat sampah di sebelahnya, menghapusnya. Di bawah daftar, tombol dengan tanggal berikutnya menambahkan satu hari tepat setelah hari bertanggal terakhir dan memperpanjang perjalanan satu hari; “Tanpa tanggal” menambahkan hari tanpa tanggal di akhir.',
   'help.guide.manage-days.step.3':
-    'Untuk mengganti nama sebuah hari, buka hari itu dan klik pensil di sebelah judulnya pada panel detail di atas peta; nama itu menggantikan “Hari 1” di kartu dan di PDF.',
+    '“Hapus hari” bertanya dulu: daftarnya menunjukkan apa yang ikut hilang bersama hari itu, tempat, catatan, dan pemesanannya, penginapan dengan check-in atau check-out di hari itu, serta hari-hari yang maju satu tanggal. “Hapus hari” menghapusnya, “Batal” menyimpannya; hari terakhir tidak bisa dihapus.',
   'help.guide.manage-days.step.4':
+    'Untuk mengganti nama sebuah hari, buka hari itu dan klik pensil di sebelah judulnya pada panel detail di atas peta; nama itu menggantikan “Hari 1” di kartu dan di PDF.',
+  'help.guide.manage-days.step.5':
     '“Expand all days” dan “Collapse all days” di bilah alat melipat semua kartu sekaligus; satu kartu dilipat dengan tanda panahnya.',
   'help.guide.manage-days.result':
     'Tanggal tetap melekat pada posisi: hari yang dipindahkan ke atas mengambil tanggal yang lebih awal, dan perhentian, catatan serta pemesanannya ikut berpindah.',
-  'help.guide.manage-days.tip.1': '“Atur ulang hari” bisa dibatalkan dari bilah alat.',
+  'help.guide.manage-days.tip.1': 'Memindahkan hari bisa dibatalkan dari bilah alat; menghapus hari tidak bisa.',
   'help.guide.manage-days.tip.2':
     'Biaya di kepala kartu sebuah hari menjumlahkan perhentian dan pemesanan hari itu yang membawa harga.',
   // bookings-in-plan

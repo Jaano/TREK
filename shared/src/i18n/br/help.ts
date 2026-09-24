@@ -2096,16 +2096,18 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Adicionar, reordenar e renomear dias',
   'help.guide.manage-days.goal': 'Dar forma aos dias em si, não só ao que está neles.',
   'help.guide.manage-days.step.1':
-    'Os dias vêm das datas da viagem; mude as datas no cartão da viagem no Painel e os dias são acrescentados ou retirados nas pontas.',
+    'Os dias vêm das datas da viagem; mude as datas no cartão da viagem no Painel e os dias são acrescentados ou retirados nas pontas. Antes que um dia com conteúdo seja retirado, uma lista mostra quais dias saem e o que há neles.',
   'help.guide.manage-days.step.2':
-    'Reordenar dias, na barra de ferramentas, abre uma lista: Mover para cima e Mover para baixo deslocam um dia com tudo o que há nele; Adicionar dia acrescenta um dia no fim.',
+    'Reordenar dias, na barra de ferramentas, abre uma lista: Mover para cima e Mover para baixo deslocam um dia com tudo o que há nele, e Excluir dia, a lixeira ao lado, o remove. Abaixo da lista, o botão com a próxima data acrescenta um dia logo depois do último com data e estende a viagem em um dia; Sem data acrescenta um dia sem data no fim.',
   'help.guide.manage-days.step.3':
-    'Para renomear um dia, abra-o e clique no lápis ao lado do título nos Detalhes do dia sobre o mapa; o nome substitui Dia 1 no cartão e no PDF.',
+    'Excluir dia pergunta antes: a lista mostra o que sai junto com o dia, seus lugares, notas e reservas, uma hospedagem com check-in ou check-out nesse dia e os dias que avançam uma data. Excluir dia o remove, Cancelar o mantém; o último dia não pode ser excluído.',
   'help.guide.manage-days.step.4':
+    'Para renomear um dia, abra-o e clique no lápis ao lado do título nos Detalhes do dia sobre o mapa; o nome substitui Dia 1 no cartão e no PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days e Collapse all days, na barra de ferramentas, dobram todos os cartões de uma vez; um cartão sozinho dobra com a própria setinha.',
   'help.guide.manage-days.result':
     'As datas ficam com a posição: um dia que sobe assume a data anterior, e suas paradas, notas e reservas viajam junto.',
-  'help.guide.manage-days.tip.1': 'Reordenar dias pode ser desfeito pela barra de ferramentas.',
+  'help.guide.manage-days.tip.1': 'Mover dias pode ser desfeito pela barra de ferramentas; excluir um dia, não.',
   'help.guide.manage-days.tip.2':
     'O custo no cabeçalho de um dia soma as paradas e reservas daquele dia que carregam um preço.',
   // bookings-in-plan

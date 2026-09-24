@@ -2146,16 +2146,19 @@ const help: TranslationStrings = {
   'help.guide.manage-days.title': 'Dagen toevoegen, herordenen en hernoemen',
   'help.guide.manage-days.goal': 'De dagen zelf vormgeven, niet alleen wat erop staat.',
   'help.guide.manage-days.step.1':
-    'De dagen komen uit de data van de reis; verander de data op de reiskaart onder Dashboard en er komen dagen bij of vallen dagen weg aan de uiteinden.',
+    'De dagen komen uit de data van de reis; verander de data op de reiskaart onder Dashboard en er komen dagen bij of vallen dagen weg aan de uiteinden. Voordat een dag met inhoud wegvalt, laat een lijst zien welke dagen verdwijnen en wat erop staat.',
   'help.guide.manage-days.step.2':
-    'Dagen herordenen in de werkbalk opent een lijst: Omhoog en Omlaag verschuiven een dag met alles wat erop staat; Dag toevoegen zet een dag achteraan.',
+    'Dagen herordenen in de werkbalk opent een lijst: Omhoog en Omlaag verschuiven een dag met alles wat erop staat, en Dag verwijderen, de prullenbak ernaast, haalt hem weg. Onder de lijst voegt de knop met de volgende datum een dag toe direct na de laatste dag met datum en verlengt de reis met een dag; Zonder datum zet een dag zonder datum achteraan.',
   'help.guide.manage-days.step.3':
-    'Om een dag te hernoemen open je hem en klik je op het potlood naast de titel in de Dagdetails boven de kaart; de naam vervangt Dag 1 in de kaart en in de PDF.',
+    'Dag verwijderen vraagt eerst: de lijst laat zien wat er met de dag verdwijnt, zijn plekken, notities en boekingen, een verblijf met in- of uitchecken op die dag en de dagen die een datum naar voren schuiven. Dag verwijderen haalt hem weg, Annuleren houdt hem; de laatste dag kan niet worden verwijderd.',
   'help.guide.manage-days.step.4':
+    'Om een dag te hernoemen open je hem en klik je op het potlood naast de titel in de Dagdetails boven de kaart; de naam vervangt Dag 1 in de kaart en in de PDF.',
+  'help.guide.manage-days.step.5':
     'Expand all days en Collapse all days in de werkbalk vouwen elke kaart in één keer; een enkele kaart vouwt met zijn eigen pijltje.',
   'help.guide.manage-days.result':
     'De data blijven bij de positie: een dag die omhoog gaat krijgt de eerdere datum, en zijn stops, notities en boekingen reizen mee.',
-  'help.guide.manage-days.tip.1': 'Dagen herordenen kan via de werkbalk ongedaan worden gemaakt.',
+  'help.guide.manage-days.tip.1':
+    'Dagen verschuiven kan via de werkbalk ongedaan worden gemaakt, een dag verwijderen niet.',
   'help.guide.manage-days.tip.2':
     'De kosten in de kop van een dag tellen de stops en boekingen van die dag op die een prijs dragen.',
   // bookings-in-plan
