@@ -19,6 +19,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': "การทดสอบ ntfy ล้มเหลว",
   'admin.notifications.emailPanel.title': "อีเมล์ (SMTP)",
   'admin.notifications.webhookPanel.title': "เว็บฮุค",
+  'admin.notifications.webPushPanel.title': 'เว็บพุช',
+  'admin.notifications.webPushPanel.hint':
+    'ให้ผู้ใช้รับการแจ้งเตือนบนโทรศัพท์และคอมพิวเตอร์ผ่านเบราว์เซอร์ได้ แม้ในขณะที่ปิด TREK อยู่ ต้องใช้ HTTPS และบน iPhone และ iPad ต้องเพิ่ม TREK ไปยังหน้าจอโฮม',
   'admin.notifications.inappPanel.title': "ในแอป",
   'admin.notifications.inappPanel.hint': "การแจ้งเตือนในแอปจะทำงานอยู่เสมอและไม่สามารถปิดใช้งานได้ทั่วโลก",
   'admin.notifications.adminWebhookPanel.title': "แอดมินเว็บฮุค",

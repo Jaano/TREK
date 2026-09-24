@@ -19,6 +19,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': 'Sınaq ntfy bildirişi uğursuz oldu',
   'admin.notifications.emailPanel.title': 'E-poçt (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'İstifadəçilərə TREK bağlı olanda belə brauzer vasitəsilə telefon və kompüterlərində bildiriş almağa imkan verir. HTTPS tələb olunur; iPhone və iPad-də TREK Əsas ekrana əlavə edilməlidir.',
   'admin.notifications.inappPanel.title': 'Tətbiqdaxili',
   'admin.notifications.inappPanel.hint':
     'Tətbiqdaxili bildirişlər həmişə aktivdir və ümumi şəkildə deaktiv edilə bilməz.',

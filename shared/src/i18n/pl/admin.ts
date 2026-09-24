@@ -727,6 +727,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testWebhookFailed': 'Testowy webhook nie powiódł się',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Pozwala użytkownikom otrzymywać powiadomienia na telefonach i komputerach przez przeglądarkę, nawet gdy TREK jest zamknięty. Wymaga HTTPS; na iPhonie i iPadzie TREK musi zostać dodany do ekranu początkowego.',
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint':
     'Powiadomienia w aplikacji są zawsze aktywne i nie można ich globalnie wyłączyć.',

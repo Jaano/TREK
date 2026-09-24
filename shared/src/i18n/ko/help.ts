@@ -980,11 +980,13 @@ const help: TranslationStrings = {
   'help.ctx.settings-map.bullet.3': '안티앨리어싱과 지구본 투영을 위한 “고품질 모드”. “지도 저장”이 선택을 기록합니다.',
   'help.ctx.settings-notifications.title': '알림',
   'help.ctx.settings-notifications.summary':
-    '앱 밖에서 TREK이 나에게 닿는 곳: ntfy 토픽, 웹훅, 또는 플러그인이 제공하는 채널. 채널 아래에서는 이벤트마다 한 줄씩 무엇을 어디로 보낼지 정합니다.',
+    '앱 밖에서 TREK이 나에게 닿는 곳: 이 기기의 푸시 알림, ntfy 토픽, 웹훅, 또는 플러그인이 제공하는 채널. 채널 아래에서는 이벤트마다 한 줄씩 무엇을 어디로 보낼지 정합니다.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: 토픽, 선택 사항인 내 서버, 선택 사항인 액세스 토큰. “테스트”로 바로 하나 보낼 수 있습니다.',
   'help.ctx.settings-notifications.bullet.2': '웹훅: 모든 이벤트를 JSON으로 받는 URL 하나. “테스트”가 있습니다.',
   'help.ctx.settings-notifications.bullet.3':
+    '이 기기의 푸시 알림: “이 기기에서 켜기”는 지금 쓰는 브라우저에만 적용되므로 휴대폰이나 컴퓨터마다 따로 켜야 합니다. “테스트 전송”은 켜 둔 모든 기기로 보냅니다.',
+  'help.ctx.settings-notifications.bullet.4':
     '환경설정 행: 이벤트마다 어느 채널이 켜져 있는지. 플러그인 채널은 설정이 끝날 때까지 “설정하기”를 표시합니다.',
   'help.ctx.settings-integrations.title': '통합',
   'help.ctx.settings-integrations.summary':
@@ -1283,7 +1285,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     '인스턴스가 사용자에게 제공하는 채널과, 관리자인 나에게 닿는 채널입니다. 사용자는 “설정”에서 자기 토픽과 URL을 고르고, 나는 무엇을 제공할지 정하고 이메일을 설정합니다.',
   'help.ctx.admin-notifications.bullet.1':
-    '“앱 내”, “이메일 (SMTP)”, “Ntfy”, “웹훅”: 패널 하나씩이며, 채널을 사용자에게 제공하는 스위치와 필요한 서버 측 설정이 있습니다.',
+    '“앱 내”, “이메일 (SMTP)”, “Ntfy”, “웹훅”, “웹 푸시”: 패널 하나씩이며, 채널을 사용자에게 제공하는 스위치와 필요한 서버 측 설정이 있습니다.',
   'help.ctx.admin-notifications.bullet.2': '“여행 리마인더”: 여행 시작 전에 서버가 리마인더를 보낼지 여부.',
   'help.ctx.admin-notifications.bullet.3':
     '“관리자 Ntfy”와 “관리자 웹훅”: 실패한 백업이나 새 릴리스 같은 관리자 이벤트가 가는 곳이며, “테스트”가 있습니다.',
@@ -1505,7 +1507,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     '“이메일 (SMTP)” 아래에서 SMTP Host, SMTP Port, SMTP User, SMTP Password, From Address를 입력합니다. “테스트 이메일 전송”은 나에게 메일을 보냅니다.',
   'help.guide.channels-instance.step.2':
-    '“Ntfy”와 “웹훅”을 켜서 제공합니다. 그러면 사용자는 “설정”의 “알림”에서 자기 토픽이나 URL을 입력합니다.',
+    '“웹 푸시”, “Ntfy”, “웹훅”을 켜서 제공합니다. 그러면 사용자는 “설정”의 “알림”에서 기기별로 푸시를 켜거나 자기 토픽이나 URL을 입력합니다.',
   'help.guide.channels-instance.step.3':
     '“여행 리마인더”는 여행 시작 전 리마인더를 켜고 끕니다. “앱 내”는 언제나 켜져 있고 여기서는 설명만 합니다.',
   'help.guide.channels-instance.result': '모든 사용자의 “알림” 탭에 내가 켠 채널이 나타납니다.',

@@ -1063,12 +1063,14 @@ const help: TranslationStrings = {
     '“Mode kualitas tinggi” untuk antialiasing dan proyeksi bola dunia; “Simpan Peta” menulis pilihannya.',
   'help.ctx.settings-notifications.title': 'Notifikasi',
   'help.ctx.settings-notifications.summary':
-    'Di mana TREK menjangkau Anda di luar aplikasi: topik ntfy, webhook, atau saluran yang disediakan plugin. Di bawah saluran, satu baris per peristiwa menentukan apa yang dikirim ke mana.',
+    'Di mana TREK menjangkau Anda di luar aplikasi: notifikasi push di perangkat ini, topik ntfy, webhook, atau saluran yang disediakan plugin. Di bawah saluran, satu baris per peristiwa menentukan apa yang dikirim ke mana.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: topik, server Anda sendiri yang opsional, dan token akses yang opsional, dengan “Uji” untuk langsung mengirim satu pesan.',
   'help.ctx.settings-notifications.bullet.2':
     'Webhook: satu URL yang menerima setiap peristiwa sebagai JSON, dengan “Uji”.',
   'help.ctx.settings-notifications.bullet.3':
+    'Notifikasi push di perangkat ini: “Aktifkan untuk perangkat ini” hanya berlaku untuk browser yang sedang Anda gunakan, jadi ulangi di setiap ponsel atau komputer. “Kirim tes” sampai ke semuanya.',
+  'help.ctx.settings-notifications.bullet.4':
     'Baris preferensi: per peristiwa, saluran mana yang aktif. Saluran plugin menampilkan “Konfigurasi” sampai selesai disiapkan.',
   'help.ctx.settings-integrations.title': 'Integrasi',
   'help.ctx.settings-integrations.summary':
@@ -1398,7 +1400,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Saluran yang ditawarkan instans kepada penggunanya, dan saluran yang menjangkau Anda sebagai admin. Pengguna memilih topik dan URL mereka sendiri di “Pengaturan”; Anda menentukan apa yang tersedia dan mengonfigurasi email.',
   'help.ctx.admin-notifications.bullet.1':
-    '“In-App”, “Email (SMTP)”, “Ntfy”, dan “Webhook”: satu panel masing-masing, dengan sakelar yang menawarkan saluran itu kepada pengguna dan konfigurasi sisi server yang dibutuhkannya.',
+    '“In-App”, “Email (SMTP)”, “Ntfy”, “Webhook”, dan “Web Push”: satu panel masing-masing, dengan sakelar yang menawarkan saluran itu kepada pengguna dan konfigurasi sisi server yang dibutuhkannya.',
   'help.ctx.admin-notifications.bullet.2':
     '“Pengingat Perjalanan”: apakah server mengirim pengingat sebelum perjalanan dimulai.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1649,7 +1651,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Di bawah “Email (SMTP)”, masukkan SMTP Host, SMTP Port, SMTP User, SMTP Password, dan From Address; “Kirim email uji” mengirim surat kepada Anda.',
   'help.guide.channels-instance.step.2':
-    'Aktifkan “Ntfy” dan “Webhook” untuk menawarkannya; pengguna lalu memasukkan topik atau URL mereka sendiri di “Pengaturan”, “Notifikasi”.',
+    'Aktifkan “Web Push”, “Ntfy” dan “Webhook” untuk menawarkannya; pengguna lalu mengaktifkan push per perangkat, atau memasukkan topik atau URL mereka sendiri, di “Pengaturan”, “Notifikasi”.',
   'help.guide.channels-instance.step.3':
     '“Pengingat Perjalanan” mengatur pengingat sebelum perjalanan dimulai; “In-App” selalu aktif dan di sini hanya dijelaskan.',
   'help.guide.channels-instance.result': 'Tab “Notifikasi” setiap pengguna menampilkan saluran yang Anda aktifkan.',

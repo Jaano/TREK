@@ -19,6 +19,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': 'Test ntfy misslyckades',
   'admin.notifications.emailPanel.title': 'E-post (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Låter användare ta emot meddelanden på sina telefoner och datorer via webbläsaren, även när TREK är stängt. Kräver HTTPS; på iPhone och iPad måste TREK läggas till på hemskärmen.',
   'admin.notifications.inappPanel.title': 'I-App',
   'admin.notifications.inappPanel.hint': 'Meddelanden i appen är alltid aktiva och kan inte inaktiveras generellt.',
   'admin.notifications.adminWebhookPanel.title': 'Webhook för administratörer',

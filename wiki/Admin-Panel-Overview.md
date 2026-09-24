@@ -21,7 +21,7 @@ The Admin Panel is divided into tabs. Most tabs are always visible; a few appear
 | **Plugins** | Install, update, and manage plugins; rescan the plugins folder; view each plugin's error log. See [Admin-Plugins](Admin-Plugins) | No |
 | **Storage** | Storage backends, category assignment, replication, health | No |
 | **Settings** | Authentication methods, MFA, allowed file types, API keys, OIDC/SSO configuration, and JWT secret rotation | No |
-| **Notifications** | SMTP, webhook, ntfy, and push notification channel configuration; trip reminder toggle; admin notification preferences | No |
+| **Notifications** | SMTP, webhook, ntfy and Web Push channel configuration; trip reminder toggle; admin notification preferences | No |
 | **Backup** | Manual and scheduled full-instance backups: database, uploads, plugin data and plugin code. See [Backups](Backups) | No |
 | **Audit** | Chronological activity log | No |
 | **MCP Access** | OAuth sessions and static API tokens | Only when the MCP addon is enabled |

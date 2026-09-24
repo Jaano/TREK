@@ -128,6 +128,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.pluginConfigured':
     'Nastavené. Prihlasovacie údaje spravujte na stránke nastavení doplnku.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push oznámenia v tomto zariadení',
+  'settings.webPush.hint':
+    'Zobrazuje oznámenia TREK v tomto zariadení, aj keď je TREK zatvorený. Ktoré udalosti prídu, určuje stĺpec Push.',
+  'settings.webPush.enable': 'Zapnúť pre toto zariadenie',
+  'settings.webPush.disable': 'Vypnúť pre toto zariadenie',
+  'settings.webPush.enabled': 'Zapnuté pre toto zariadenie',
+  'settings.webPush.unsupported': 'Tento prehliadač nedokáže prijímať push oznámenia.',
+  'settings.webPush.insecure': 'Push vyžaduje, aby bol TREK otvorený cez HTTPS.',
+  'settings.webPush.iosInstall': 'Na iPhone a iPade najprv pridajte TREK na plochu a otvorte ho odtiaľ.',
+  'settings.webPush.denied':
+    'Oznámenia pre TREK sú v tomto prehliadači zablokované. Povoľte ich v nastaveniach prehliadača a skúste to znova.',
+  'settings.webPush.failed': 'Push sa pre toto zariadenie nepodarilo zapnúť.',
   'settings.notificationPreferences.noChannels':
     'Nie sú nakonfigurované žiadne kanály oznámení. Požiadajte správcu o nastavenie e-mailových alebo webhookových oznámení.',
   'settings.webhookUrl.label': 'URL webhooku',

@@ -1051,11 +1051,13 @@ const help: TranslationStrings = {
     'Modo alta qualidade para antialiasing e a projeção de globo; Salvar mapa grava a escolha.',
   'help.ctx.settings-notifications.title': 'Notificações',
   'help.ctx.settings-notifications.summary':
-    'Onde o TREK alcança você fora do app: um tópico ntfy, um webhook ou um canal que um plugin fornece. Abaixo dos canais, uma linha por evento decide o que vai para onde.',
+    'Onde o TREK alcança você fora do app: notificações push neste dispositivo, um tópico ntfy, um webhook ou um canal que um plugin fornece. Abaixo dos canais, uma linha por evento decide o que vai para onde.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: o tópico, um servidor próprio opcional e um token de acesso opcional, com Testar para enviar um na hora.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: uma URL que recebe cada evento como JSON, com Testar.',
   'help.ctx.settings-notifications.bullet.3':
+    'Notificações push neste dispositivo: Ativar neste dispositivo vale só para o navegador que você está usando, então repita em cada celular ou computador. Enviar teste chega a todos eles.',
+  'help.ctx.settings-notifications.bullet.4':
     'As linhas de preferências: por evento, qual canal está ligado. Canais de plugin mostram Configurar até serem configurados.',
   'help.ctx.settings-integrations.title': 'Integrações',
   'help.ctx.settings-integrations.summary':
@@ -1377,7 +1379,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Os canais que a instância oferece aos usuários, e os que chegam até você como admin. Os usuários escolhem seus próprios tópicos e URLs em Configurações; você decide o que existe e configura o e-mail.',
   'help.ctx.admin-notifications.bullet.1':
-    'In-App, Email (SMTP), Ntfy e Webhook: um painel para cada, com uma chave que oferece o canal aos usuários e a configuração do lado do servidor de que ele precisa.',
+    'In-App, Email (SMTP), Ntfy, Webhook e Web Push: um painel para cada, com uma chave que oferece o canal aos usuários e a configuração do lado do servidor de que ele precisa.',
   'help.ctx.admin-notifications.bullet.2':
     'Lembretes de viagem: se o servidor envia o lembrete antes de uma viagem começar.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1620,7 +1622,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Em Email (SMTP), informe SMTP Host, SMTP Port, SMTP User, SMTP Password e a From Address; Enviar e-mail de teste manda um e-mail para você.',
   'help.guide.channels-instance.step.2':
-    'Ligue Ntfy e Webhook para oferecê-los; os usuários então informam o próprio tópico ou URL em Configurações, Notificações.',
+    'Ligue Web Push, Ntfy e Webhook para oferecê-los; os usuários então ativam o push em cada dispositivo, ou informam o próprio tópico ou URL, em Configurações, Notificações.',
   'help.guide.channels-instance.step.3':
     'Lembretes de viagem controla o lembrete antes de uma viagem começar; In-App está sempre ligado e aqui só é explicado.',
   'help.guide.channels-instance.result': 'A aba Notificações de cada usuário mostra os canais que você ligou.',

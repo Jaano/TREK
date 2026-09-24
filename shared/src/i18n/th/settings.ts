@@ -116,6 +116,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.testFailed': "การทดสอบล้มเหลว",
   'settings.notificationPreferences.pluginConfigured': "กำหนดค่าแล้ว จัดการข้อมูลประจำตัวในหน้าการตั้งค่าปลั๊กอิน",
   'settings.notificationPreferences.ntfy': "เอ็นทีฟี่",
+  'settings.notificationPreferences.push': 'พุช',
+  'settings.webPush.title': 'การแจ้งเตือนแบบพุชบนอุปกรณ์นี้',
+  'settings.webPush.hint':
+    'แสดงการแจ้งเตือนของ TREK บนอุปกรณ์นี้แม้ในขณะที่ปิด TREK อยู่ เหตุการณ์ที่จะได้รับเป็นไปตามคอลัมน์ พุช',
+  'settings.webPush.enable': 'เปิดสำหรับอุปกรณ์นี้',
+  'settings.webPush.disable': 'ปิดสำหรับอุปกรณ์นี้',
+  'settings.webPush.enabled': 'เปิดอยู่สำหรับอุปกรณ์นี้',
+  'settings.webPush.unsupported': 'เบราว์เซอร์นี้ไม่สามารถรับการแจ้งเตือนแบบพุชได้',
+  'settings.webPush.insecure': 'การแจ้งเตือนแบบพุชต้องเปิด TREK ผ่าน HTTPS',
+  'settings.webPush.iosInstall': 'บน iPhone และ iPad ให้เพิ่ม TREK ไปยังหน้าจอโฮมก่อน แล้วเปิดจากที่นั่น',
+  'settings.webPush.denied':
+    'การแจ้งเตือนของ TREK ถูกบล็อกในเบราว์เซอร์นี้ อนุญาตในการตั้งค่าเบราว์เซอร์ แล้วลองอีกครั้ง',
+  'settings.webPush.failed': 'ไม่สามารถเปิดการแจ้งเตือนแบบพุชสำหรับอุปกรณ์นี้ได้',
   'settings.notificationPreferences.noChannels':
     "ไม่มีการกำหนดค่าช่องทางการแจ้งเตือน ขอให้ผู้ดูแลระบบตั้งค่าการแจ้งเตือนทางอีเมลหรือเว็บฮุค",
   'settings.webhookUrl.label': "URL ของเว็บฮุค",

@@ -123,6 +123,20 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.pluginConfigured':
     'Ρυθμίστηκε. Διαχειριστείτε τα διαπιστευτήρια στη σελίδα ρυθμίσεων του πρόσθετου.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push ειδοποιήσεις σε αυτή τη συσκευή',
+  'settings.webPush.hint':
+    'Εμφανίζει τις ειδοποιήσεις του TREK σε αυτή τη συσκευή ακόμη και όταν το TREK είναι κλειστό. Ποια συμβάντα φτάνουν καθορίζεται από τη στήλη Push.',
+  'settings.webPush.enable': 'Ενεργοποίηση για αυτή τη συσκευή',
+  'settings.webPush.disable': 'Απενεργοποίηση για αυτή τη συσκευή',
+  'settings.webPush.enabled': 'Ενεργό για αυτή τη συσκευή',
+  'settings.webPush.unsupported': 'Αυτό το πρόγραμμα περιήγησης δεν μπορεί να λάβει push ειδοποιήσεις.',
+  'settings.webPush.insecure': 'Για το push, το TREK πρέπει να ανοίγει μέσω HTTPS.',
+  'settings.webPush.iosInstall':
+    'Σε iPhone και iPad, προσθέστε πρώτα το TREK στην οθόνη Αφετηρίας και ανοίξτε το από εκεί.',
+  'settings.webPush.denied':
+    'Οι ειδοποιήσεις για το TREK είναι αποκλεισμένες σε αυτό το πρόγραμμα περιήγησης. Επιτρέψτε τις στις ρυθμίσεις του προγράμματος περιήγησης και δοκιμάστε ξανά.',
+  'settings.webPush.failed': 'Δεν ήταν δυνατή η ενεργοποίηση του push για αυτή τη συσκευή.',
   'settings.notificationPreferences.noChannels':
     'Δεν έχουν διαμορφωθεί κανάλια ειδοποιήσεων. Ζητήστε από έναν διαχειριστή να ρυθμίσει ειδοποιήσεις email ή webhook.',
   'settings.webhookUrl.label': 'Webhook URL',

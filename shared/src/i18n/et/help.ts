@@ -1050,11 +1050,13 @@ const help: TranslationStrings = {
     'Kõrge kvaliteediga režiim servade silumiseks ja gloobuse projektsiooniks; Salvesta kaart salvestab valiku.',
   'help.ctx.settings-notifications.title': 'Teavitused',
   'help.ctx.settings-notifications.summary':
-    'Kus TREK sinuni väljaspool rakendust jõuab: ntfy teema, veebihaak või plugina pakutav kanal. Kanalite all otsustab iga sündmuse rida, mis kuhu läheb.',
+    'Kus TREK sinuni väljaspool rakendust jõuab: tõuketeavitused selles seadmes, ntfy teema, veebihaak või plugina pakutav kanal. Kanalite all otsustab iga sündmuse rida, mis kuhu läheb.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: teema, valikuline oma server ja valikuline pääsutõend, koos nupuga Testi, mis saadab kohe ühe sõnumi.',
   'help.ctx.settings-notifications.bullet.2': 'Veebihaak: üks URL, mis saab iga sündmuse JSON-ina, koos nupuga Testi.',
   'help.ctx.settings-notifications.bullet.3':
+    'Tõuketeavitused selles seadmes: Lülita selles seadmes sisse kehtib ainult brauserile, mida praegu kasutad, seega korda seda igas telefonis või arvutis. Saada test jõuab kõigini.',
+  'help.ctx.settings-notifications.bullet.4':
     'Eelistuste read: iga sündmuse puhul, milline kanal on sees. Plugina kanalitel on nupp Seadista, kuni need on seadistatud.',
   'help.ctx.settings-integrations.title': 'Liidestused',
   'help.ctx.settings-integrations.summary':
@@ -1376,7 +1378,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Kanalid, mida instants oma kasutajatele pakub, ja need, mis jõuavad sinuni administraatorina. Kasutajad valivad oma teemad ja URL-id jaotises Seaded; sina otsustad, mis on olemas, ja seadistad e-posti.',
   'help.ctx.admin-notifications.bullet.1':
-    'Rakenduses, E-post (SMTP), Ntfy ja Veebihaak: igaühel oma paneel lülitiga, mis pakub kanalit kasutajatele, ja serveripoolse seadistusega, mida see vajab.',
+    'Rakenduses, E-post (SMTP), Ntfy, Veebihaak ja Veebitõuketeavitused: igaühel oma paneel lülitiga, mis pakub kanalit kasutajatele, ja serveripoolse seadistusega, mida see vajab.',
   'help.ctx.admin-notifications.bullet.2': 'Reisi meeldetuletused: kas server saadab meeldetuletuse enne reisi algust.',
   'help.ctx.admin-notifications.bullet.3':
     'Administraatori ntfy ja Administraatori veebihaak: kuhu lähevad administraatori sündmused, nagu ebaõnnestunud varundus või uus väljalase, koos nupuga Testi.',
@@ -1638,7 +1640,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Jaotises E-post (SMTP) sisesta SMTP-host, SMTP-port, SMTP-kasutaja, SMTP-parool ja Saatja aadress; Saada testkiri saadab sulle kirja.',
   'help.guide.channels-instance.step.2':
-    'Nende pakkumiseks lülita sisse Ntfy ja Veebihaak; seejärel sisestavad kasutajad oma teema või URL-i jaotises Seaded, Teavitused.',
+    'Nende pakkumiseks lülita sisse Veebitõuketeavitused, Ntfy ja Veebihaak; seejärel lülitavad kasutajad jaotises Seaded, Teavitused tõuketeavitused iga seadme jaoks sisse või sisestavad oma teema või URL-i.',
   'help.guide.channels-instance.step.3':
     'Reisi meeldetuletused lülitab sisse või välja meeldetuletuse enne reisi algust; Rakenduses on alati sees ja seda ainult selgitatakse siin.',
   'help.guide.channels-instance.result': 'Iga kasutaja vahekaardil Teavitused on näha kanalid, mille sisse lülitasid.',

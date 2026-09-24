@@ -876,11 +876,13 @@ const help: TranslationStrings = {
   'help.ctx.settings-map.bullet.3': '「高畫質模式」提供反鋸齒和地球儀投影；「儲存地圖」寫入你的選擇。',
   'help.ctx.settings-notifications.title': '通知',
   'help.ctx.settings-notifications.summary':
-    'TREK 在應用程式之外聯絡你的地方：一個 ntfy 主題、一個 webhook，或者外掛提供的管道。管道下方每個事件一列，決定什麼送到哪裡。',
+    'TREK 在應用程式之外聯絡你的地方：此裝置上的推播通知、一個 ntfy 主題、一個 webhook，或者外掛提供的管道。管道下方每個事件一列，決定什麼送到哪裡。',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy：主題、選填的自建伺服器和選填的存取權杖，按「測試」可以立刻送一則。',
   'help.ctx.settings-notifications.bullet.2': 'Webhook：一個以 JSON 接收所有事件的 URL，附「測試」。',
   'help.ctx.settings-notifications.bullet.3':
+    '此裝置上的推播通知：「為此裝置開啟」只對你正在使用的瀏覽器生效，所以要在每支手機或每台電腦上各開一次。「傳送測試」會送到所有這些裝置。',
+  'help.ctx.settings-notifications.bullet.4':
     '偏好設定列：每個事件開啟了哪個管道。外掛管道在設定好之前顯示「前往設定」。',
   'help.ctx.settings-integrations.title': '整合',
   'help.ctx.settings-integrations.summary':
@@ -1147,7 +1149,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     '實例向使用者提供的管道，以及能聯絡到你這位管理員的管道。使用者在「設定」裡選自己的主題和 URL；你決定有哪些管道，並設定郵件。',
   'help.ctx.admin-notifications.bullet.1':
-    '「應用程式內通知」「電子郵件 (SMTP)」「Ntfy」和「Webhook」：各一個面板，帶一個向使用者開放該管道的開關，以及它需要的伺服器端設定。',
+    '「應用程式內通知」「電子郵件 (SMTP)」「Ntfy」「Webhook」和「Web 推播」：各一個面板，帶一個向使用者開放該管道的開關，以及它需要的伺服器端設定。',
   'help.ctx.admin-notifications.bullet.2': '「行程提醒」：伺服器是否在行程開始前傳送提醒。',
   'help.ctx.admin-notifications.bullet.3':
     '「管理員 Ntfy」和「管理員 Webhook」：備份失敗或新版本發布這類管理員事件的去向，帶「測試」。',
@@ -1345,7 +1347,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     '在「電子郵件 (SMTP)」下輸入 SMTP Host、SMTP Port、SMTP User、SMTP Password 和 From Address；「傳送測試郵件」會給你發一封郵件。',
   'help.guide.channels-instance.step.2':
-    '開啟「Ntfy」和「Webhook」以提供它們；使用者隨後在「設定」的「通知」裡輸入自己的主題或 URL。',
+    '開啟「Web 推播」「Ntfy」和「Webhook」以提供它們；使用者隨後在「設定」的「通知」裡為每台裝置開啟推播，或輸入自己的主題或 URL。',
   'help.guide.channels-instance.step.3': '「行程提醒」開關行程開始前的提醒；「應用程式內通知」始終開啟，這裡只是說明。',
   'help.guide.channels-instance.result': '每個使用者的「通知」分頁會顯示你開啟的管道。',
   'help.guide.channels-instance.tip.1': '在這裡輸入的預設 ntfy 伺服器會為使用者預填；他們仍然可以指定自己的。',

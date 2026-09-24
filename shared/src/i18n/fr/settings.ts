@@ -327,6 +327,20 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Notifications push sur cet appareil',
+  'settings.webPush.hint':
+    'Affiche les notifications de TREK sur cet appareil, même quand TREK est fermé. Les événements reçus suivent la colonne Push.',
+  'settings.webPush.enable': 'Activer sur cet appareil',
+  'settings.webPush.disable': 'Désactiver sur cet appareil',
+  'settings.webPush.enabled': 'Activé sur cet appareil',
+  'settings.webPush.unsupported': 'Ce navigateur ne peut pas recevoir de notifications push.',
+  'settings.webPush.insecure': 'Le push nécessite que TREK soit ouvert en HTTPS.',
+  'settings.webPush.iosInstall':
+    "Sur iPhone et iPad, ajoutez d'abord TREK à l'écran d'accueil, puis ouvrez-le depuis celui-ci.",
+  'settings.webPush.denied':
+    'Les notifications sont bloquées pour TREK dans ce navigateur. Autorisez-les dans les réglages du navigateur, puis réessayez.',
+  'settings.webPush.failed': "Le push n'a pas pu être activé sur cet appareil.",
   'settings.currency': "Devise d'affichage",
   'settings.currencyHint':
     "Les montants dans Coûts sont convertis dans cette devise uniquement pour l'affichage — les montants d'origine restent inchangés.",

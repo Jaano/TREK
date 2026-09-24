@@ -728,6 +728,9 @@ const admin: TranslationStrings = {
   'admin.tabs.permissions': 'Jogosultságok',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Lehetővé teszi a felhasználóknak, hogy a böngészőn keresztül értesítéseket kapjanak telefonjukon és számítógépükön, akkor is, ha a TREK be van zárva. HTTPS szükséges; iPhone-on és iPaden a TREK-et hozzá kell adni a Főképernyőhöz.',
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint':
     'Az alkalmazáson belüli értesítések mindig aktívak, és globálisan nem kapcsolhatók ki.',

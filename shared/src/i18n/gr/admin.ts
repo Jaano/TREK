@@ -19,6 +19,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': 'Η δοκιμή ntfy απέτυχε',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Επιτρέπει στους χρήστες να λαμβάνουν ειδοποιήσεις στα τηλέφωνα και τους υπολογιστές τους μέσω του προγράμματος περιήγησης, ακόμη και όταν το TREK είναι κλειστό. Απαιτεί HTTPS· σε iPhone και iPad το TREK πρέπει να προστεθεί στην οθόνη Αφετηρίας.',
   'admin.notifications.inappPanel.title': 'Εντός εφαρμογής',
   'admin.notifications.inappPanel.hint':
     'Οι ειδοποιήσεις εντός εφαρμογής είναι πάντα ενεργές και δεν μπορούν να απενεργοποιηθούν καθολικά.',

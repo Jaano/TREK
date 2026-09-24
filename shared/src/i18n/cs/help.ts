@@ -1021,12 +1021,14 @@ const help: TranslationStrings = {
     'Režim vysoké kvality pro vyhlazování a projekci glóbu; Uložit nastavení mapy volbu zapíše.',
   'help.ctx.settings-notifications.title': 'Oznámení',
   'help.ctx.settings-notifications.summary':
-    'Kde vás TREK zastihne mimo aplikaci: téma ntfy, webhook nebo kanál, který poskytuje doplněk. Pod kanály rozhoduje jeden řádek na událost, co kam půjde.',
+    'Kde vás TREK zastihne mimo aplikaci: push notifikace na tomto zařízení, téma ntfy, webhook nebo kanál, který poskytuje doplněk. Pod kanály rozhoduje jeden řádek na událost, co kam půjde.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: téma, volitelně vlastní server a volitelný přístupový token, s tlačítkem Otestovat, které hned jedno odešle.',
   'help.ctx.settings-notifications.bullet.2':
     'Webhook: jedna URL, která dostává každou událost jako JSON, s tlačítkem Otestovat.',
   'help.ctx.settings-notifications.bullet.3':
+    'Push notifikace na tomto zařízení: Zapnout pro toto zařízení platí jen pro prohlížeč, který právě používáte, takže to zopakujte na každém telefonu nebo počítači. Odeslat test dorazí na všechny.',
+  'help.ctx.settings-notifications.bullet.4':
     'Řádky předvoleb: pro každou událost, který kanál je zapnutý. Kanály doplňků ukazují Nastavit, dokud nejsou nastavené.',
   'help.ctx.settings-integrations.title': 'Integrace',
   'help.ctx.settings-integrations.summary':
@@ -1345,7 +1347,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Kanály, které instance nabízí svým uživatelům, a ty, které zastihnou vás jako administrátora. Uživatelé si vybírají vlastní témata a URL pod Nastavení; vy rozhodujete, co existuje, a nastavujete e-mail.',
   'help.ctx.admin-notifications.bullet.1':
-    'In-App, Email (SMTP), Ntfy a Webhook: jeden panel pro každý, s přepínačem, který kanál nabídne uživatelům, a konfigurací na straně serveru, kterou potřebuje.',
+    'In-App, Email (SMTP), Ntfy, Webhook a Web Push: jeden panel pro každý, s přepínačem, který kanál nabídne uživatelům, a konfigurací na straně serveru, kterou potřebuje.',
   'help.ctx.admin-notifications.bullet.2': 'Připomínky výletů: zda server posílá připomínku před začátkem cesty.',
   'help.ctx.admin-notifications.bullet.3':
     'Admin Ntfy a Admin webhook: kam jdou události pro administrátory, jako neúspěšná záloha nebo nové vydání, s tlačítkem pro test.',
@@ -1580,7 +1582,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Pod Email (SMTP) zadejte SMTP Host, SMTP Port, SMTP User, SMTP Password a From Address; Odeslat testovací e-mail vám pošle zprávu.',
   'help.guide.channels-instance.step.2':
-    'Zapněte Ntfy a Webhook, abyste je nabídli; uživatelé pak zadají vlastní téma nebo URL pod Nastavení, Oznámení.',
+    'Zapněte Web Push, Ntfy a Webhook, abyste je nabídli; uživatelé pak pod Nastavení, Oznámení zapnou push pro každé zařízení, nebo zadají vlastní téma či URL.',
   'help.guide.channels-instance.step.3':
     'Připomínky výletů přepínají připomínku před začátkem cesty; In-App je vždy zapnuté a tady je jen vysvětlené.',
   'help.guide.channels-instance.result': 'Karta Oznámení každého uživatele ukazuje kanály, které jste zapnuli.',

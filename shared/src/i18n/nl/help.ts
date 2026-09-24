@@ -1068,11 +1068,13 @@ const help: TranslationStrings = {
     'Hoge kwaliteit modus voor antialiasing en de globeprojectie; Kaart opslaan legt de keuze vast.',
   'help.ctx.settings-notifications.title': 'Meldingen',
   'help.ctx.settings-notifications.summary':
-    'Waar TREK je buiten de app bereikt: een ntfy-onderwerp, een webhook of een kanaal dat een plug-in levert. Onder de kanalen bepaalt één rij per gebeurtenis wat waarheen gaat.',
+    'Waar TREK je buiten de app bereikt: pushmeldingen op dit apparaat, een ntfy-onderwerp, een webhook of een kanaal dat een plug-in levert. Onder de kanalen bepaalt één rij per gebeurtenis wat waarheen gaat.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: het onderwerp, optioneel een eigen server en een optioneel toegangstoken, met Testen om er meteen een te sturen.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: één URL die elke gebeurtenis als JSON ontvangt, met Testen.',
   'help.ctx.settings-notifications.bullet.3':
+    'Pushmeldingen op dit apparaat: Inschakelen op dit apparaat geldt alleen voor de browser die je nu gebruikt, dus herhaal het op elke telefoon of computer. Test versturen bereikt ze allemaal.',
+  'help.ctx.settings-notifications.bullet.4':
     'De voorkeursrijen: per gebeurtenis welk kanaal aan staat. Plug-inkanalen tonen Instellen tot ze zijn ingesteld.',
   'help.ctx.settings-integrations.title': 'Integraties',
   'help.ctx.settings-integrations.summary':
@@ -1399,7 +1401,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'De kanalen die de instantie zijn gebruikers aanbiedt, en de kanalen die jou als beheerder bereiken. Gebruikers kiezen hun eigen topics en URL’s onder Instellingen; jij bepaalt wat er bestaat en stelt e-mail in.',
   'help.ctx.admin-notifications.bullet.1':
-    'In-App, Email (SMTP), Ntfy en Webhook: elk een paneel, met een schakelaar die het kanaal aan gebruikers aanbiedt en de serverconfiguratie die het nodig heeft.',
+    'In-App, Email (SMTP), Ntfy, Webhook en Web Push: elk een paneel, met een schakelaar die het kanaal aan gebruikers aanbiedt en de serverconfiguratie die het nodig heeft.',
   'help.ctx.admin-notifications.bullet.2':
     'Reisherinneringen: of de server de herinnering stuurt voordat een reis begint.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1652,7 +1654,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Vul onder Email (SMTP) SMTP Host, SMTP Port, SMTP User, SMTP Password en de From Address in; Test-e-mail verzenden stuurt een mail naar jou.',
   'help.guide.channels-instance.step.2':
-    'Zet Ntfy en Webhook aan om ze aan te bieden; gebruikers vullen dan hun eigen topic of URL in onder Instellingen, Meldingen.',
+    'Zet Web Push, Ntfy en Webhook aan om ze aan te bieden; gebruikers zetten dan push per apparaat aan, of vullen hun eigen topic of URL in, onder Instellingen, Meldingen.',
   'help.guide.channels-instance.step.3':
     'Reisherinneringen schakelt de herinnering voordat een reis begint; In-App staat altijd aan en wordt hier alleen uitgelegd.',
   'help.guide.channels-instance.result':

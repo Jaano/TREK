@@ -1002,11 +1002,13 @@ const help: TranslationStrings = {
     'アンチエイリアスと地球儀投影のための「高品質モード」。「地図を保存」で選択が書き込まれます。',
   'help.ctx.settings-notifications.title': '通知',
   'help.ctx.settings-notifications.summary':
-    'アプリの外でTREKがあなたに届く先：ntfyのトピック、Webhook、またはプラグインが提供するチャンネル。チャンネルの下では、イベントごとの行が何をどこへ送るかを決めます。',
+    'アプリの外でTREKがあなたに届く先：このデバイスへのプッシュ通知、ntfyのトピック、Webhook、またはプラグインが提供するチャンネル。チャンネルの下では、イベントごとの行が何をどこへ送るかを決めます。',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy：トピック、任意で自前のサーバー、任意でアクセストークン。「テスト」ですぐに1件送信できます。',
   'help.ctx.settings-notifications.bullet.2': 'Webhook：すべてのイベントをJSONで受け取る1つのURL。「テスト」付きです。',
   'help.ctx.settings-notifications.bullet.3':
+    'このデバイスのプッシュ通知：「このデバイスでオンにする」は今使っているブラウザーだけが対象なので、スマートフォンやパソコンごとに行います。「テスト送信」はそのすべてに届きます。',
+  'help.ctx.settings-notifications.bullet.4':
     '設定の行：イベントごとに、どのチャンネルがオンか。プラグインのチャンネルは設定が済むまで「設定する」と表示されます。',
   'help.ctx.settings-integrations.title': '連携',
   'help.ctx.settings-integrations.summary':
@@ -1327,7 +1329,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'インスタンスがユーザーに提供するチャンネルと、管理者であるあなたに届くチャンネル。ユーザーは「設定」で自分のトピックやURLを選び、あなたは何を用意するかを決めてメールを設定します。',
   'help.ctx.admin-notifications.bullet.1':
-    '「アプリ内」「メール（SMTP）」「Ntfy」「Webhook」：それぞれ1つのパネルに、チャンネルをユーザーに提供するスイッチと、必要なサーバー側の設定があります。',
+    '「アプリ内」「メール（SMTP）」「Ntfy」「Webhook」「Webプッシュ」：それぞれ1つのパネルに、チャンネルをユーザーに提供するスイッチと、必要なサーバー側の設定があります。',
   'help.ctx.admin-notifications.bullet.2':
     '「旅行リマインダー」：旅行が始まる前にサーバーがリマインダーを送るかどうか。',
   'help.ctx.admin-notifications.bullet.3':
@@ -1569,7 +1571,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     '「メール（SMTP）」の下で、SMTP Host、SMTP Port、SMTP User、SMTP Password、From Addressを入力します。「テストメール送信」であなた宛てにメールが送られます。',
   'help.guide.channels-instance.step.2':
-    '「Ntfy」と「Webhook」をオンにして提供します。ユーザーは「設定」の「通知」で自分のトピックやURLを入力します。',
+    '「Webプッシュ」「Ntfy」「Webhook」をオンにして提供します。ユーザーは「設定」の「通知」で、デバイスごとにプッシュをオンにするか、自分のトピックやURLを入力します。',
   'help.guide.channels-instance.step.3':
     '「旅行リマインダー」は旅行が始まる前のリマインダーを切り替えます。「アプリ内」は常にオンで、ここでは説明されるだけです。',
   'help.guide.channels-instance.result':

@@ -714,6 +714,9 @@ const admin: TranslationStrings = {
   'admin.oauthSessions.loadError': 'Falha ao carregar sessões OAuth',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Permite que os usuários recebam notificações no celular e no computador pelo navegador, mesmo com o TREK fechado. Requer HTTPS; no iPhone e no iPad, o TREK precisa ser adicionado à Tela de Início.',
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint':
     'As notificações no aplicativo estão sempre ativas e não podem ser desativadas globalmente.',

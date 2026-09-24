@@ -163,6 +163,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.pluginConfigured':
     'Konfiqurasiya edilib. Giriş məlumatlarını plaginin tənzimləmələr səhifəsindən idarə edin.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Bu cihazda push bildirişləri',
+  'settings.webPush.hint':
+    'TREK bağlı olanda belə TREK bildirişlərini bu cihazda göstərir. Hansı hadisələrin gəldiyini Push sütunu müəyyən edir.',
+  'settings.webPush.enable': 'Bu cihaz üçün aktiv et',
+  'settings.webPush.disable': 'Bu cihaz üçün deaktiv et',
+  'settings.webPush.enabled': 'Bu cihaz üçün aktivdir',
+  'settings.webPush.unsupported': 'Bu brauzer push bildirişlərini qəbul edə bilmir.',
+  'settings.webPush.insecure': 'Push üçün TREK HTTPS vasitəsilə açılmalıdır.',
+  'settings.webPush.iosInstall': 'iPhone və iPad-də əvvəlcə TREK-i Əsas ekrana əlavə edin və onu oradan açın.',
+  'settings.webPush.denied':
+    'Bu brauzerdə TREK üçün bildirişlər bloklanıb. Onlara brauzer tənzimləmələrində icazə verin, sonra yenidən cəhd edin.',
+  'settings.webPush.failed': 'Bu cihaz üçün push aktiv edilə bilmədi.',
   'settings.notificationPreferences.noChannels':
     'Heç bir bildiriş kanalı konfiqurasiya edilməyib. Administratordan e-poçt və ya webhook bildirişlərini quraşdırmasını istəyin.',
 

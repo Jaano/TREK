@@ -131,6 +131,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.testFailed': 'Test ebaõnnestus.',
   'settings.notificationPreferences.pluginConfigured': 'Seadistatud. Halda kasutajaandmeid plugina seadete lehel.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Tõuketeavitus',
+  'settings.webPush.title': 'Tõuketeavitused selles seadmes',
+  'settings.webPush.hint':
+    'Näitab TREKi teavitusi selles seadmes ka siis, kui TREK on suletud. Milliseid sündmusi saabub, määrab veerg Tõuketeavitus.',
+  'settings.webPush.enable': 'Lülita selles seadmes sisse',
+  'settings.webPush.disable': 'Lülita selles seadmes välja',
+  'settings.webPush.enabled': 'Selles seadmes sisse lülitatud',
+  'settings.webPush.unsupported': 'See brauser ei saa tõuketeavitusi vastu võtta.',
+  'settings.webPush.insecure': 'Tõuketeavituste jaoks peab TREK olema avatud HTTPS-i kaudu.',
+  'settings.webPush.iosInstall': "iPhone'is ja iPadis lisa TREK esmalt avakuvale ja ava see sealt.",
+  'settings.webPush.denied':
+    'TREKi teavitused on selles brauseris blokeeritud. Luba need brauseri seadetes ja proovi siis uuesti.',
+  'settings.webPush.failed': 'Tõuketeavitusi ei õnnestunud selles seadmes sisse lülitada.',
   'settings.notificationPreferences.noChannels':
     'Ühtegi teavituskanalit pole seadistatud. Palu administraatoril seadistada e-posti või veebihaagi teavitused.',
   'settings.webhookUrl.label': 'Veebihaagi URL',

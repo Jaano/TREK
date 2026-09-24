@@ -68,7 +68,7 @@ export const settingsTabContexts: HelpContext[] = [
   tab('settings-display', 'sliders', 3, [{ slug: GENERAL }]),
   tab('settings-appearance', 'palette', 4, [{ slug: APPEARANCE }]),
   tab('settings-map', 'map', 3, [{ slug: MAP }]),
-  tab('settings-notifications', 'bell', 3, [{ slug: NOTIFICATIONS }]),
+  tab('settings-notifications', 'bell', 4, [{ slug: NOTIFICATIONS }]),
   tab('settings-integrations', 'plug', 4, [{ slug: SETTINGS, anchor: 'integrations-tab' }, { slug: 'MCP-Setup' }, { slug: 'Photo-Providers' }]),
   tab('settings-offline', 'cloudOff', 4, [{ slug: OFFLINE }]),
   tab('settings-account', 'user', 4, [{ slug: SETTINGS, anchor: 'account-tab-summary' }, { slug: 'Two-Factor-Authentication' }, { slug: 'Passkeys' }]),

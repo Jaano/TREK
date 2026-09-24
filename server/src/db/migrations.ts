@@ -5257,6 +5257,36 @@ function runMigrations(db: Database.Database): void {
         `);
       }
     },
+
+    /*
+     * Web Push (#894): one row per browser a user switched push on in.
+     *
+     * The endpoint is the push service URL that browser handed out, so it is
+     * unique: a browser shared by two accounts belongs to whoever subscribed on
+     * it last. p256dh and auth are the browser's keys for the RFC 8291 message
+     * encryption. vapid_public_key is the server key the subscription was made
+     * against, so a changed key pair shows up as a mismatch the sender can clean
+     * up, rather than as a push service refusing every message. failure_count
+     * and last_success_at are bookkeeping for the sender; the rows go with the
+     * user.
+     */
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          endpoint TEXT NOT NULL UNIQUE,
+          p256dh TEXT NOT NULL,
+          auth TEXT NOT NULL,
+          vapid_public_key TEXT NOT NULL,
+          user_agent TEXT,
+          created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          last_success_at TEXT,
+          failure_count INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+      `);
+    },
   ];
 
   if (currentVersion < migrations.length) {

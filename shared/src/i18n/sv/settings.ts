@@ -120,6 +120,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.pluginConfigured':
     'Konfigurerat. Hantera dina uppgifter på pluginets inställningssida.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push-meddelanden på den här enheten',
+  'settings.webPush.hint':
+    'Visar TREK-meddelanden på den här enheten även när TREK är stängt. Vilka händelser som kommer fram styrs av kolumnen Push.',
+  'settings.webPush.enable': 'Slå på för den här enheten',
+  'settings.webPush.disable': 'Slå av för den här enheten',
+  'settings.webPush.enabled': 'På för den här enheten',
+  'settings.webPush.unsupported': 'Den här webbläsaren kan inte ta emot push-meddelanden.',
+  'settings.webPush.insecure': 'Push kräver att TREK öppnas via HTTPS.',
+  'settings.webPush.iosInstall': 'På iPhone och iPad lägger du först till TREK på hemskärmen och öppnar det därifrån.',
+  'settings.webPush.denied':
+    'Meddelanden från TREK är blockerade i den här webbläsaren. Tillåt dem i webbläsarens inställningar och försök sedan igen.',
+  'settings.webPush.failed': 'Push kunde inte slås på för den här enheten.',
   'settings.notificationPreferences.noChannels':
     'Inga meddelandekanaler har konfigurerats. Be en administratör att ställa in e-post- eller webhook-meddelanden.',
   'settings.webhookUrl.label': 'Webhook URL',

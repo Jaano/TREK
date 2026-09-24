@@ -720,6 +720,9 @@ const admin: TranslationStrings = {
   'admin.notifications.ntfy': 'Ntfy', // en-fallback
   'admin.notifications.emailPanel.title': 'Email (SMTP)', // en-fallback
   'admin.notifications.webhookPanel.title': 'Webhook', // en-fallback
+  'admin.notifications.webPushPanel.title': 'إشعارات الويب الفورية',
+  'admin.notifications.webPushPanel.hint':
+    'تتيح للمستخدمين تلقي الإشعارات على هواتفهم وحواسيبهم عبر المتصفح، حتى عندما يكون TREK مغلقًا. يتطلب HTTPS؛ وعلى iPhone وiPad يجب إضافة TREK إلى الشاشة الرئيسية.',
   'admin.notifications.inappPanel.title': 'In-App', // en-fallback
   'admin.notifications.adminNtfyPanel.serverPlaceholder': 'https://ntfy.sh', // en-fallback
   'admin.notifications.adminNtfyPanel.topicPlaceholder': 'trek-admin-alerts', // en-fallback

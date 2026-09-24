@@ -1066,11 +1066,13 @@ const help: TranslationStrings = {
     'Magas minőség mód az élsimításhoz és a gömbvetülethez; a Térkép mentése írja be a választást.',
   'help.ctx.settings-notifications.title': 'Értesítések',
   'help.ctx.settings-notifications.summary':
-    'Hol ér el a TREK az alkalmazáson kívül: egy ntfy-téma, egy webhook vagy egy bővítmény által adott csatorna. A csatornák alatt eseményenként egy sor dönti el, mi hová megy.',
+    'Hol ér el a TREK az alkalmazáson kívül: push értesítések ezen az eszközön, egy ntfy-téma, egy webhook vagy egy bővítmény által adott csatorna. A csatornák alatt eseményenként egy sor dönti el, mi hová megy.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: a téma, egy opcionális saját szerver és egy opcionális hozzáférési token, a Teszt gombbal, amely azonnal küld egyet.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: egy URL, amely minden eseményt JSON-ként kap, Teszt gombbal.',
   'help.ctx.settings-notifications.bullet.3':
+    'Push értesítések ezen az eszközön: a Bekapcsolás ezen az eszközön csak az éppen használt böngészőre vonatkozik, ezért ismételd meg minden telefonon vagy számítógépen. A Teszt küldése mindegyikre eljut.',
+  'help.ctx.settings-notifications.bullet.4':
     'A preferencia-sorok: eseményenként, melyik csatorna van bekapcsolva. A bővítménycsatornák a Beállítás feliratot mutatják, amíg nincsenek beállítva.',
   'help.ctx.settings-integrations.title': 'Integrációk',
   'help.ctx.settings-integrations.summary':
@@ -1399,7 +1401,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'A csatornák, amelyeket a példány a felhasználóinak kínál, és azok, amelyek téged mint admint érnek el. A felhasználók a Beállítások alatt választják saját témáikat és URL-jeiket; te döntöd el, mi létezik, és te állítod be az e-mailt.',
   'help.ctx.admin-notifications.bullet.1':
-    'In-App, Email (SMTP), Ntfy és Webhook: mindegyiknek egy panel, egy kapcsolóval, amely felkínálja a csatornát a felhasználóknak, és a szerveroldali beállítással, amelyre szüksége van.',
+    'In-App, Email (SMTP), Ntfy, Webhook és Web Push: mindegyiknek egy panel, egy kapcsolóval, amely felkínálja a csatornát a felhasználóknak, és a szerveroldali beállítással, amelyre szüksége van.',
   'help.ctx.admin-notifications.bullet.2':
     'Utazási emlékeztetők: küld-e a szerver emlékeztetőt egy utazás kezdete előtt.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1654,7 +1656,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Az Email (SMTP) alatt add meg az SMTP Host, SMTP Port, SMTP User, SMTP Password és From Address értékeket; a Teszt e-mail küldése neked küld egy levelet.',
   'help.guide.channels-instance.step.2':
-    'Kapcsold be az Ntfy és a Webhook kapcsolót a felkínálásukhoz; a felhasználók ezután a Beállítások, Értesítések alatt adják meg saját témájukat vagy URL-jüket.',
+    'Kapcsold be a Web Push, az Ntfy és a Webhook kapcsolót a felkínálásukhoz; a felhasználók ezután a Beállítások, Értesítések alatt eszközönként bekapcsolják a pusht, vagy megadják saját témájukat vagy URL-jüket.',
   'help.guide.channels-instance.step.3':
     'Az Utazási emlékeztetők az utazás kezdete előtti emlékeztetőt kapcsolja; az In-App mindig be van kapcsolva, és itt csak magyarázat van hozzá.',
   'help.guide.channels-instance.result': 'Minden felhasználó Értesítések füle a bekapcsolt csatornákat mutatja.',

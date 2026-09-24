@@ -25,13 +25,13 @@ A plugin declares one `type` in its manifest, which decides where it surfaces:
 
 ### Notification channels
 
-An `integration` plugin can add a whole new **notification channel** — Gotify, Pushover,
-Telegram, anything that takes a message — alongside TREK's built-in email, webhook and
-ntfy.
+An `integration` plugin can add a whole new **notification channel** (Gotify, Pushover,
+Telegram, anything that takes a message) alongside TREK's built-in email, webhook, ntfy
+and Web Push.
 
 Once you install and activate such a plugin, its channel is live — there is no separate
-switch for it in **Admin → Notifications**, which only turns the built-in email, webhook
-and ntfy channels on. It appears right away as a new column in every user's
+switch for it in **Admin → Notifications**, which only turns the built-in email, webhook,
+ntfy and Web Push channels on. It appears right away as a new column in every user's
 **Settings → Notifications** matrix, and each user supplies their own credentials on the
 plugin's own settings page and picks per-event what they want pushed — exactly like a
 built-in channel.

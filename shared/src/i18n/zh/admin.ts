@@ -668,6 +668,9 @@ const admin: TranslationStrings = {
   'admin.tabs.permissions': '权限',
   'admin.notifications.emailPanel.title': '电子邮件（SMTP）',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web 推送',
+  'admin.notifications.webPushPanel.hint':
+    '让用户即使在 TREK 关闭时，也能通过浏览器在手机和电脑上接收通知。需要 HTTPS；在 iPhone 和 iPad 上，必须将 TREK 添加到主屏幕。',
   'admin.notifications.inappPanel.title': '应用内通知',
   'admin.notifications.inappPanel.hint': '应用内通知始终处于活跃状态，无法全局禁用。',
   'admin.notifications.adminWebhookPanel.title': '管理员 Webhook',

@@ -315,6 +315,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push notifikace na tomto zařízení',
+  'settings.webPush.hint':
+    'Zobrazuje oznámení TREK na tomto zařízení, i když je TREK zavřený. Které události dorazí, určuje sloupec Push.',
+  'settings.webPush.enable': 'Zapnout pro toto zařízení',
+  'settings.webPush.disable': 'Vypnout pro toto zařízení',
+  'settings.webPush.enabled': 'Zapnuto pro toto zařízení',
+  'settings.webPush.unsupported': 'Tento prohlížeč nemůže přijímat push notifikace.',
+  'settings.webPush.insecure': 'Push vyžaduje, aby byl TREK otevřen přes HTTPS.',
+  'settings.webPush.iosInstall': 'Na iPhonu a iPadu nejprve přidejte TREK na plochu a otevřete ho odtud.',
+  'settings.webPush.denied':
+    'Oznámení pro TREK jsou v tomto prohlížeči zablokovaná. Povolte je v nastavení prohlížeče a zkuste to znovu.',
+  'settings.webPush.failed': 'Push se pro toto zařízení nepodařilo zapnout.',
   'settings.currency': 'Zobrazovaná měna',
   'settings.currencyHint':
     'Částky v Nákladech se do této měny přepočítávají pouze pro zobrazení – původní částky zůstávají beze změny.',

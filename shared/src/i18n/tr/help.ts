@@ -1047,11 +1047,13 @@ const help: TranslationStrings = {
     'Kenar yumuşatma ve küre projeksiyonu için Yüksek Kalite Modu; Haritayı Kaydet seçimi yazar.',
   'help.ctx.settings-notifications.title': 'Bildirimler',
   'help.ctx.settings-notifications.summary':
-    'TREK’in size uygulama dışında nereden ulaştığı: bir ntfy konusu, bir web kancası ya da bir eklentinin sağladığı kanal. Kanalların altında, olay başına bir satır neyin nereye gideceğine karar verir.',
+    'TREK’in size uygulama dışında nereden ulaştığı: bu cihazdaki anlık bildirimler, bir ntfy konusu, bir web kancası ya da bir eklentinin sağladığı kanal. Kanalların altında, olay başına bir satır neyin nereye gideceğine karar verir.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: konu, isteğe bağlı kendi sunucunuz ve isteğe bağlı bir erişim anahtarı, hemen bir tane göndermek için Dene ile.',
   'help.ctx.settings-notifications.bullet.2': 'Web kancası: her olayı JSON olarak alan tek bir URL, Dene ile.',
   'help.ctx.settings-notifications.bullet.3':
+    'Bu cihazda anlık bildirimler: Bu cihaz için aç yalnızca kullandığınız tarayıcıyı kapsar, bu yüzden bunu her telefonda veya bilgisayarda tekrarlayın. Test gönder hepsine ulaşır.',
+  'help.ctx.settings-notifications.bullet.4':
     'Tercih satırları: olay başına hangi kanalın açık olduğu. Eklenti kanalları kurulana kadar Yapılandır gösterir.',
   'help.ctx.settings-integrations.title': 'Entegrasyonlar',
   'help.ctx.settings-integrations.summary':
@@ -1372,7 +1374,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Örneğin kullanıcılarına sunduğu kanallar ve yönetici olarak size ulaşanlar. Kullanıcılar kendi konularını ve URL’lerini Ayarlar altında seçer; neyin var olduğuna siz karar verir ve e-postayı yapılandırırsınız.',
   'help.ctx.admin-notifications.bullet.1':
-    'Uygulama içi, E-posta (SMTP), Ntfy ve Web kancası: her biri için bir panel, kanalı kullanıcılara sunan bir anahtar ve ihtiyaç duyduğu sunucu tarafı yapılandırmasıyla.',
+    'Uygulama içi, E-posta (SMTP), Ntfy, Web kancası ve Web anlık bildirimleri: her biri için bir panel, kanalı kullanıcılara sunan bir anahtar ve ihtiyaç duyduğu sunucu tarafı yapılandırmasıyla.',
   'help.ctx.admin-notifications.bullet.2':
     'Seyahat Hatırlatıcıları: sunucunun bir seyahat başlamadan önce hatırlatıcı gönderip göndermediği.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1618,7 +1620,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'E-posta (SMTP) altında SMTP Host, SMTP Port, SMTP User, SMTP Password ve From Address girin; Test e-postası gönder size bir posta gönderir.',
   'help.guide.channels-instance.step.2':
-    'Sunmak için Ntfy ve Web kancası’nı açın; kullanıcılar sonra kendi konularını ya da URL’lerini Ayarlar, Bildirimler altında girer.',
+    'Sunmak için Web anlık bildirimleri, Ntfy ve Web kancası’nı açın; kullanıcılar sonra Ayarlar, Bildirimler altında anlık bildirimleri cihaz başına açar ya da kendi konularını veya URL’lerini girer.',
   'help.guide.channels-instance.step.3':
     'Seyahat Hatırlatıcıları bir seyahat başlamadan önceki hatırlatıcıyı açıp kapatır; Uygulama içi her zaman açıktır ve burada yalnızca açıklanır.',
   'help.guide.channels-instance.result': 'Her kullanıcının Bildirimler sekmesi açtığınız kanalları gösterir.',

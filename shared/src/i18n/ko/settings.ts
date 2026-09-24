@@ -114,6 +114,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.testFailed': '테스트에 실패했습니다.',
   'settings.notificationPreferences.pluginConfigured': '설정됨. 자격 증명은 플러그인 설정 페이지에서 관리하세요.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': '푸시',
+  'settings.webPush.title': '이 기기의 푸시 알림',
+  'settings.webPush.hint':
+    'TREK이 닫혀 있어도 이 기기에 TREK 알림을 표시합니다. 어떤 이벤트가 도착할지는 푸시 열을 따릅니다.',
+  'settings.webPush.enable': '이 기기에서 켜기',
+  'settings.webPush.disable': '이 기기에서 끄기',
+  'settings.webPush.enabled': '이 기기에서 켜짐',
+  'settings.webPush.unsupported': '이 브라우저는 푸시 알림을 받을 수 없습니다.',
+  'settings.webPush.insecure': '푸시를 사용하려면 TREK을 HTTPS로 열어야 합니다.',
+  'settings.webPush.iosInstall': 'iPhone과 iPad에서는 먼저 TREK을 홈 화면에 추가한 뒤 그곳에서 여세요.',
+  'settings.webPush.denied':
+    '이 브라우저에서 TREK 알림이 차단되어 있습니다. 브라우저 설정에서 허용한 뒤 다시 시도하세요.',
+  'settings.webPush.failed': '이 기기에서 푸시를 켤 수 없습니다.',
   'settings.notificationPreferences.noChannels':
     '알림 채널이 설정되지 않았습니다. 관리자에게 이메일 또는 웹훅 알림 설정을 요청하세요.',
   'settings.webhookUrl.label': '웹훅 URL',

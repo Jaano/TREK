@@ -19,6 +19,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': '테스트 ntfy 실패',
   'admin.notifications.emailPanel.title': '이메일 (SMTP)',
   'admin.notifications.webhookPanel.title': '웹훅',
+  'admin.notifications.webPushPanel.title': '웹 푸시',
+  'admin.notifications.webPushPanel.hint':
+    'TREK이 닫혀 있어도 사용자가 브라우저를 통해 휴대폰과 컴퓨터에서 알림을 받을 수 있습니다. HTTPS가 필요하며, iPhone과 iPad에서는 TREK을 홈 화면에 추가해야 합니다.',
   'admin.notifications.inappPanel.title': '앱 내',
   'admin.notifications.inappPanel.hint': '앱 내 알림은 항상 활성화되어 있으며 전역으로 비활성화할 수 없습니다.',
   'admin.notifications.adminWebhookPanel.title': '관리자 웹훅',

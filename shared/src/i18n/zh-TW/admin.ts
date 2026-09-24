@@ -13,6 +13,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testWebhookFailed': '測試 Webhook 傳送失敗',
   'admin.notifications.emailPanel.title': '電子郵件 (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web 推播',
+  'admin.notifications.webPushPanel.hint':
+    '讓使用者即使在 TREK 關閉時，也能透過瀏覽器在手機和電腦上接收通知。需要 HTTPS；在 iPhone 和 iPad 上，必須將 TREK 加入主畫面。',
   'admin.notifications.inappPanel.title': '應用程式內通知',
   'admin.notifications.inappPanel.hint': '應用程式內通知始終啟用，無法全域性停用。',
   'admin.notifications.adminWebhookPanel.title': '管理員 Webhook',

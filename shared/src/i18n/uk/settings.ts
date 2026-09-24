@@ -315,6 +315,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push-сповіщення на цьому пристрої',
+  'settings.webPush.hint':
+    'Показує сповіщення TREK на цьому пристрої, навіть коли TREK закрито. Які події надходять, визначає стовпець Push.',
+  'settings.webPush.enable': 'Увімкнути на цьому пристрої',
+  'settings.webPush.disable': 'Вимкнути на цьому пристрої',
+  'settings.webPush.enabled': 'Увімкнено на цьому пристрої',
+  'settings.webPush.unsupported': 'Цей браузер не може отримувати push-сповіщення.',
+  'settings.webPush.insecure': 'Для push TREK має бути відкрито через HTTPS.',
+  'settings.webPush.iosInstall': 'На iPhone та iPad спершу додайте TREK на початковий екран і відкрийте його звідти.',
+  'settings.webPush.denied':
+    'Сповіщення для TREK заблоковано в цьому браузері. Дозвольте їх у налаштуваннях браузера й спробуйте ще раз.',
+  'settings.webPush.failed': 'Не вдалося увімкнути push на цьому пристрої.',
   'settings.oauth.modal.machineClient': 'Машинний клієнт (без входу через браузер)',
   'settings.oauth.modal.machineClientHint':
     'Використовуйте надання client_credentials — URI перенаправлення не потрібні. Токен видається безпосередньо через client_id + client_secret і діє від вашого імені в межах вибраних областей.',

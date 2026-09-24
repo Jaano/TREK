@@ -1085,11 +1085,13 @@ const help: TranslationStrings = {
     'Hamarlaşdırma və qlobus proyeksiyası üçün Yüksək keyfiyyət rejimi; Xəritəni yadda saxla seçimi saxlayır.',
   'help.ctx.settings-notifications.title': 'Bildirişlər',
   'help.ctx.settings-notifications.summary':
-    'TREK-in tətbiqdən kənarda sizə harada çatdığı: ntfy mövzusu, webhook və ya plaginin təqdim etdiyi kanal. Kanalların altında hər hadisə üçün bir sətir nəyin hara getdiyini müəyyən edir.',
+    'TREK-in tətbiqdən kənarda sizə harada çatdığı: bu cihazda push bildirişləri, ntfy mövzusu, webhook və ya plaginin təqdim etdiyi kanal. Kanalların altında hər hadisə üçün bir sətir nəyin hara getdiyini müəyyən edir.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: mövzu, istəyə bağlı öz serveriniz və istəyə bağlı giriş tokeni, dərhal test göndərmək üçün Sına düyməsi ilə.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: hər hadisəni JSON kimi qəbul edən bir URL, Sına düyməsi ilə.',
   'help.ctx.settings-notifications.bullet.3':
+    'Bu cihazda push bildirişləri: Bu cihaz üçün aktiv et yalnız istifadə etdiyiniz brauzerə aiddir, ona görə də bunu hər telefonda və ya kompüterdə təkrarlayın. Test göndər hamısına çatır.',
+  'help.ctx.settings-notifications.bullet.4':
     'Tənzimləmə sətirləri: hər hadisə üçün hansı kanalın aktiv olduğu. Plagin kanalları qurulana qədər Konfiqurasiya et göstərir.',
   'help.ctx.settings-integrations.title': 'İnteqrasiyalar',
   'help.ctx.settings-integrations.summary':
@@ -1418,7 +1420,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'İnstansiyanın istifadəçilərə təklif etdiyi kanallar və sizə administrator kimi çatan kanallar. İstifadəçilər öz mövzularını və URL-lərini Tənzimləmələr bölməsində seçir; nəyin mövcud olacağını siz müəyyən edirsiniz və e-poçtu siz konfiqurasiya edirsiniz.',
   'help.ctx.admin-notifications.bullet.1':
-    'Tətbiqdaxili, E-poçt (SMTP), Ntfy və Webhook: hər biri üçün kanalı istifadəçilərə təklif edən açarı və tələb etdiyi server tərəfi konfiqurasiyası olan ayrıca panel.',
+    'Tətbiqdaxili, E-poçt (SMTP), Ntfy, Webhook və Web Push: hər biri üçün kanalı istifadəçilərə təklif edən açarı və tələb etdiyi server tərəfi konfiqurasiyası olan ayrıca panel.',
   'help.ctx.admin-notifications.bullet.2':
     'Səyahət xatırlatmaları: serverin səyahət başlamazdan əvvəl xatırlatma göndərib-göndərməməsi.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1687,7 +1689,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'E-poçt (SMTP) bölməsində SMTP hostu, SMTP portu, SMTP istifadəçisi, SMTP parolu və Göndərən ünvanı daxil edin; Sınaq e-poçtu göndər sizə məktub göndərir.',
   'help.guide.channels-instance.step.2':
-    'Ntfy və Webhook-u təklif etmək üçün onları aktiv edin; sonra istifadəçilər Tənzimləmələr, Bildirişlər bölməsində öz mövzularını və ya URL-lərini daxil edirlər.',
+    'Web Push, Ntfy və Webhook-u təklif etmək üçün onları aktiv edin; sonra istifadəçilər Tənzimləmələr, Bildirişlər bölməsində push-u hər cihaz üçün aktiv edir və ya öz mövzularını və ya URL-lərini daxil edirlər.',
   'help.guide.channels-instance.step.3':
     'Səyahət xatırlatmaları səyahət başlamazdan əvvəlki xatırlatmanı aktiv və ya deaktiv edir; Tətbiqdaxili həmişə aktivdir və burada yalnız izah olunur.',
   'help.guide.channels-instance.result':

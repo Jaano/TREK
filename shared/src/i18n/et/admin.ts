@@ -19,6 +19,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': 'Ntfy testteavituse saatmine ebaõnnestus',
   'admin.notifications.emailPanel.title': 'E-post (SMTP)',
   'admin.notifications.webhookPanel.title': 'Veebihaak',
+  'admin.notifications.webPushPanel.title': 'Veebitõuketeavitused',
+  'admin.notifications.webPushPanel.hint':
+    "Võimaldab kasutajatel saada brauseri kaudu teavitusi oma telefonides ja arvutites ka siis, kui TREK on suletud. Vajab HTTPS-i; iPhone'is ja iPadis tuleb TREK lisada avakuvale.",
   'admin.notifications.inappPanel.title': 'Rakenduses',
   'admin.notifications.inappPanel.hint':
     'Rakendusesisesed teavitused on alati aktiivsed ja neid ei saa kõigi jaoks välja lülitada.',

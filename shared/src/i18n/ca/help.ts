@@ -1068,11 +1068,13 @@ const help: TranslationStrings = {
     "Mode d'alta qualitat per a l’antialiàsing i la projecció de globus; Desa el mapa escriu la tria.",
   'help.ctx.settings-notifications.title': 'Notificacions',
   'help.ctx.settings-notifications.summary':
-    'On et troba TREK fora de l’app: un tema de ntfy, un webhook o un canal que aporta un connector. Sota els canals, una fila per esdeveniment decideix què va on.',
+    'On et troba TREK fora de l’app: notificacions push en aquest dispositiu, un tema de ntfy, un webhook o un canal que aporta un connector. Sota els canals, una fila per esdeveniment decideix què va on.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: el tema, un servidor propi opcional i un token d’accés opcional, amb Prova per enviar-ne un a l’instant.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: una URL que rep cada esdeveniment com a JSON, amb Prova.',
   'help.ctx.settings-notifications.bullet.3':
+    'Notificacions push en aquest dispositiu: Activa en aquest dispositiu només afecta el navegador que fas servir, així que repeteix-ho a cada mòbil o ordinador. Envia una prova arriba a tots.',
+  'help.ctx.settings-notifications.bullet.4':
     'Les files de preferències: per esdeveniment, quin canal està actiu. Els canals de connectors mostren Configura fins que estan configurats.',
   'help.ctx.settings-integrations.title': 'Integracions',
   'help.ctx.settings-integrations.summary':
@@ -1401,7 +1403,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Els canals que la instància ofereix als seus usuaris, i els que t’arriben a tu com a admin. Els usuaris trien els seus propis temes i URL a Configuració; tu decideixes què existeix i configures el correu.',
   'help.ctx.admin-notifications.bullet.1':
-    'In-App, Correu (SMTP), Ntfy i Webhook: un panell cadascun, amb un interruptor que ofereix el canal als usuaris i la configuració del costat del servidor que necessita.',
+    'In-App, Correu (SMTP), Ntfy, Webhook i Web Push: un panell cadascun, amb un interruptor que ofereix el canal als usuaris i la configuració del costat del servidor que necessita.',
   'help.ctx.admin-notifications.bullet.2':
     'Recordatoris de viatge: si el servidor envia el recordatori abans que comenci un viatge.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1653,7 +1655,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'A Correu (SMTP), introdueix SMTP Host, SMTP Port, SMTP User, SMTP Password i la From Address; Enviar correu de prova t’envia un correu a tu.',
   'help.guide.channels-instance.step.2':
-    'Activa Ntfy i Webhook per oferir-los; els usuaris introdueixen llavors el seu propi tema o URL a Configuració, Notificacions.',
+    'Activa Web Push, Ntfy i Webhook per oferir-los; els usuaris activen llavors el push per a cada dispositiu, o introdueixen el seu propi tema o URL, a Configuració, Notificacions.',
   'help.guide.channels-instance.step.3':
     'Recordatoris de viatge controla el recordatori abans que comenci un viatge; In-App sempre està activat i aquí només s’explica.',
   'help.guide.channels-instance.result': 'La pestanya Notificacions de cada usuari mostra els canals que has activat.',

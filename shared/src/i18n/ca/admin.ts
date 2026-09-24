@@ -361,6 +361,9 @@ const admin: TranslationStrings = {
   'admin.group.maintenance': 'Manteniment',
   'admin.notifications.emailPanel.title': 'Correu (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    "Permet als usuaris rebre notificacions als telèfons i ordinadors a través del navegador, fins i tot amb TREK tancat. Cal HTTPS; a l'iPhone i l'iPad, TREK s'ha d'afegir a la pantalla d'inici.",
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint':
     'Les notificacions in-app sempre estan actives i no es poden desactivar globalment.',

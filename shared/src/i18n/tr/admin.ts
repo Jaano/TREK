@@ -19,6 +19,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': 'Test ntfy başarısız',
   'admin.notifications.emailPanel.title': 'E-posta (SMTP)',
   'admin.notifications.webhookPanel.title': 'Web kancası',
+  'admin.notifications.webPushPanel.title': 'Web anlık bildirimleri',
+  'admin.notifications.webPushPanel.hint':
+    "Kullanıcıların, TREK kapalıyken bile tarayıcı üzerinden telefon ve bilgisayarlarında bildirim almasını sağlar. HTTPS gerekir; iPhone ve iPad'de TREK'in Ana Ekran'a eklenmesi gerekir.",
   'admin.notifications.inappPanel.title': 'Uygulama içi',
   'admin.notifications.inappPanel.hint': 'Uygulama içi bildirimler her zaman açıktır ve genel olarak kapatılamaz.',
   'admin.notifications.adminWebhookPanel.title': 'Yönetici Webhook',

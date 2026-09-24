@@ -13,6 +13,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testWebhookFailed': 'Test webhook gagal',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Memungkinkan pengguna menerima notifikasi di ponsel dan komputer mereka melalui browser, bahkan saat TREK ditutup. Memerlukan HTTPS; di iPhone dan iPad, TREK harus ditambahkan ke Layar Utama.',
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint': 'Notifikasi in-app selalu aktif dan tidak bisa dinonaktifkan secara global.',
   'admin.notifications.adminWebhookPanel.title': 'Admin Webhook',

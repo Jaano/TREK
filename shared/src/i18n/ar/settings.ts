@@ -300,6 +300,18 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.testFailed': 'فشل الاختبار.',
   'settings.notificationPreferences.pluginConfigured': 'تم الإعداد. أدر بيانات الاعتماد من صفحة إعدادات الإضافة.',
   'settings.notificationPreferences.ntfy': 'Ntfy', // en-fallback
+  'settings.notificationPreferences.push': 'إشعارات فورية',
+  'settings.webPush.title': 'الإشعارات الفورية على هذا الجهاز',
+  'settings.webPush.hint':
+    'يعرض إشعارات TREK على هذا الجهاز حتى عندما يكون TREK مغلقًا. الأحداث التي تصل تتبع عمود «إشعارات فورية».',
+  'settings.webPush.enable': 'تشغيل على هذا الجهاز',
+  'settings.webPush.disable': 'إيقاف على هذا الجهاز',
+  'settings.webPush.enabled': 'مُفعّل على هذا الجهاز',
+  'settings.webPush.unsupported': 'لا يمكن لهذا المتصفح تلقي الإشعارات الفورية.',
+  'settings.webPush.insecure': 'تتطلب الإشعارات الفورية فتح TREK عبر HTTPS.',
+  'settings.webPush.iosInstall': 'على iPhone وiPad، أضف TREK أولًا إلى الشاشة الرئيسية ثم افتحه من هناك.',
+  'settings.webPush.denied': 'الإشعارات محظورة لـ TREK في هذا المتصفح. اسمح بها في إعدادات المتصفح، ثم حاول مرة أخرى.',
+  'settings.webPush.failed': 'تعذّر تشغيل الإشعارات الفورية على هذا الجهاز.',
   'settings.webhookUrl.placeholder': 'https://discord.com/api/webhooks/...', // en-fallback
   'settings.ntfyUrl.topicPlaceholder': 'my-trek-alerts', // en-fallback
   'settings.ntfyUrl.serverPlaceholder': 'https://ntfy.sh', // en-fallback

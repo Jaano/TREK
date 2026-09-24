@@ -269,7 +269,7 @@ parser would ignore one if you added it.
 | `ctx.collab` | `listNotes(tripId)` / `listPolls(tripId)` / `listMessages(tripId, before?)` — a trip's notes, polls (with options + voters) and chat (newest 100, oldest first; `before` = a message id to page back), membership-checked | `db:read:collab` (+ Collab addon) |
 | `ctx.collab` (write) | `createNote(tripId, {title, ...})` / `createPoll(tripId, {question, options})` / `votePoll(tripId, pollId, optionIndex)` / `createMessage(tripId, text, replyTo?)` — broadcasts `collab:*` | `db:write:collab` (+ `collab_edit`, Collab addon) |
 | `ctx.trips.addMember` / `.removeMember` | `addMember(tripId, userId)` — **grants trip access**; `removeMember(tripId, userId)` — revokes it (never the owner), so a directory-sync integration can reconcile departures too | `db:write:members` (+ `member_manage`) |
-| `ctx.notify` | `send({title, body, link?, scope, targetId})` — bell inbox + email/ntfy fan-out; recipient forced to the acting user (`scope:'user'`) or a trip they belong to (`scope:'trip'`) | `notify:send` |
+| `ctx.notify` | `send({title, body, link?, scope, targetId})`: bell inbox + email/ntfy/webhook/Web Push fan-out; recipient forced to the acting user (`scope:'user'`) or a trip they belong to (`scope:'trip'`) | `notify:send` |
 | `ctx.ai` | `complete(prompt, system?)` → `{ text }`; `extract(text, jsonSchema, prompt?)` → `{ results }` — the admin/user-configured provider; host holds the key; output is DATA (no auto-writes) | `ai:invoke` |
 | `ctx.oauth` | `getAccessToken()` → a **short-lived access token** for the acting user of a third-party service the host connected on their behalf (Settings → Plugins → Connect); `null` if not connected / userless. Host holds the refresh token + client secret | `oauth:client` |
 | `ctx.scheduler` | `at(whenMs, name, payload?)` / `in(ms, name, payload?)` / `every(ms, name, payload?)` / `cancel(name)` — **persistent, userless** timers that survive restarts and fire your `scheduled(input, ctx)` handler. `set` is an upsert by `name`; caps: ≤100 tasks, 8 KB payload, recurring interval ≥ 60 s, ≤ ~1 year out. Same risk class as `jobs` (no acting user → trip reads refused) | `jobs:run` |
@@ -839,7 +839,7 @@ to design.
 ## Notification channels
 
 `hook:notification-channel` lets your plugin become a delivery channel alongside TREK's
-built-in email / webhook / ntfy — Gotify, Pushover, Telegram, whatever takes a message.
+built-in email / webhook / ntfy / Web Push: Gotify, Pushover, Telegram, whatever takes a message.
 
 Scaffold one with:
 

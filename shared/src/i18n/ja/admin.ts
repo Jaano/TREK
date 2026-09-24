@@ -18,6 +18,9 @@ const admin: TranslationStrings = {
   'admin.notifications.testNtfyFailed': 'テストntfyに失敗しました',
   'admin.notifications.emailPanel.title': 'メール（SMTP）',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Webプッシュ',
+  'admin.notifications.webPushPanel.hint':
+    'TREKを閉じている間も、ユーザーがブラウザ経由でスマートフォンやパソコンに通知を受け取れるようにします。HTTPSが必要です。iPhoneとiPadでは、TREKをホーム画面に追加する必要があります。',
   'admin.notifications.inappPanel.title': 'アプリ内',
   'admin.notifications.inappPanel.hint': 'アプリ内通知は常に有効で、全体では無効にできません。',
   'admin.notifications.adminWebhookPanel.title': '管理者Webhook',

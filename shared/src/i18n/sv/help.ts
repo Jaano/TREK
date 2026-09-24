@@ -1028,11 +1028,13 @@ const help: TranslationStrings = {
     'Högkvalitetsläge för kantutjämning och globprojektionen; Spara karta skriver valet.',
   'help.ctx.settings-notifications.title': 'Meddelanden',
   'help.ctx.settings-notifications.summary':
-    'Var TREK når dig utanför appen: ett ntfy-ämne, en webhook eller en kanal som ett tillägg tillhandahåller. Under kanalerna avgör en rad per händelse vad som går vart.',
+    'Var TREK når dig utanför appen: push-meddelanden på den här enheten, ett ntfy-ämne, en webhook eller en kanal som ett tillägg tillhandahåller. Under kanalerna avgör en rad per händelse vad som går vart.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: ämnet, en valfri egen server och en valfri åtkomsttoken, med Test för att skicka ett på en gång.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: en URL som tar emot varje händelse som JSON, med Test.',
   'help.ctx.settings-notifications.bullet.3':
+    'Push-meddelanden på den här enheten: Slå på för den här enheten gäller bara webbläsaren du använder, så upprepa det på varje telefon eller dator. Skicka test når dem alla.',
+  'help.ctx.settings-notifications.bullet.4':
     'Preferensraderna: per händelse, vilken kanal som är på. Tilläggskanaler visar Konfigurera tills de är uppsatta.',
   'help.ctx.settings-integrations.title': 'Integrationer',
   'help.ctx.settings-integrations.summary':
@@ -1351,7 +1353,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Kanalerna instansen erbjuder sina användare, och de som når dig som administratör. Användarna väljer sina egna ämnen och URL:er under Inställningar; du bestämmer vad som finns och konfigurerar e-post.',
   'help.ctx.admin-notifications.bullet.1':
-    'I-App, E-post (SMTP), Ntfy och Webhook: en panel var, med ett reglage som erbjuder kanalen till användarna och den serverkonfiguration den behöver.',
+    'I-App, E-post (SMTP), Ntfy, Webhook och Web Push: en panel var, med ett reglage som erbjuder kanalen till användarna och den serverkonfiguration den behöver.',
   'help.ctx.admin-notifications.bullet.2':
     'Påminnelser inför resan: om servern skickar påminnelsen innan en resa börjar.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1591,7 +1593,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Under E-post (SMTP), ange SMTP Host, SMTP Port, SMTP User, SMTP Password och From Address; Skicka ett testmejl skickar ett mejl till dig.',
   'help.guide.channels-instance.step.2':
-    'Slå på Ntfy och Webhook för att erbjuda dem; användarna anger sedan sitt eget ämne eller sin URL under Inställningar, Meddelanden.',
+    'Slå på Web Push, Ntfy och Webhook för att erbjuda dem; användarna slår sedan på push per enhet, eller anger sitt eget ämne eller sin URL, under Inställningar, Meddelanden.',
   'help.guide.channels-instance.step.3':
     'Påminnelser inför resan växlar påminnelsen innan en resa börjar; I-App är alltid på och förklaras bara här.',
   'help.guide.channels-instance.result': 'Fliken Meddelanden hos varje användare visar kanalerna du slog på.',

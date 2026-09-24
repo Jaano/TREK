@@ -321,6 +321,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push-уведомления на этом устройстве',
+  'settings.webPush.hint':
+    'Показывает уведомления TREK на этом устройстве, даже когда TREK закрыт. Какие события приходят, определяет столбец Push.',
+  'settings.webPush.enable': 'Включить на этом устройстве',
+  'settings.webPush.disable': 'Выключить на этом устройстве',
+  'settings.webPush.enabled': 'Включено на этом устройстве',
+  'settings.webPush.unsupported': 'Этот браузер не может получать push-уведомления.',
+  'settings.webPush.insecure': 'Для push TREK должен быть открыт по HTTPS.',
+  'settings.webPush.iosInstall': 'На iPhone и iPad сначала добавьте TREK на экран «Домой» и откройте его оттуда.',
+  'settings.webPush.denied':
+    'Уведомления для TREK заблокированы в этом браузере. Разрешите их в настройках браузера и попробуйте снова.',
+  'settings.webPush.failed': 'Не удалось включить push на этом устройстве.',
   'settings.currency': 'Валюта отображения',
   'settings.currencyHint':
     'Суммы в разделе «Расходы» отображаются в этой валюте только для просмотра — исходные суммы не изменяются.',

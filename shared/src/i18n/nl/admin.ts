@@ -719,6 +719,9 @@ const admin: TranslationStrings = {
   'admin.tabs.permissions': 'Rechten',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Laat gebruikers via de browser meldingen ontvangen op hun telefoons en computers, ook als TREK gesloten is. Vereist HTTPS; op iPhone en iPad moet TREK aan het beginscherm worden toegevoegd.',
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint':
     'In-app-meldingen zijn altijd actief en kunnen niet globaal worden uitgeschakeld.',

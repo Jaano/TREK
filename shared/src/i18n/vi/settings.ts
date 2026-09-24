@@ -121,6 +121,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.pluginConfigured':
     'Đã cấu hình. Quản lý thông tin đăng nhập ở trang cài đặt của plugin.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Thông báo đẩy',
+  'settings.webPush.title': 'Thông báo đẩy trên thiết bị này',
+  'settings.webPush.hint':
+    'Hiển thị thông báo của TREK trên thiết bị này ngay cả khi TREK đang đóng. Những sự kiện nào được gửi đến tuân theo cột Thông báo đẩy.',
+  'settings.webPush.enable': 'Bật cho thiết bị này',
+  'settings.webPush.disable': 'Tắt cho thiết bị này',
+  'settings.webPush.enabled': 'Đã bật cho thiết bị này',
+  'settings.webPush.unsupported': 'Trình duyệt này không thể nhận thông báo đẩy.',
+  'settings.webPush.insecure': 'Thông báo đẩy cần mở TREK qua HTTPS.',
+  'settings.webPush.iosInstall': 'Trên iPhone và iPad, hãy thêm TREK vào Màn hình chính trước rồi mở từ đó.',
+  'settings.webPush.denied':
+    'Thông báo của TREK đang bị chặn trong trình duyệt này. Hãy cho phép trong cài đặt trình duyệt rồi thử lại.',
+  'settings.webPush.failed': 'Không thể bật thông báo đẩy cho thiết bị này.',
   'settings.notificationPreferences.noChannels':
     'Không có kênh thông báo nào được cấu hình. Yêu cầu quản trị viên thiết lập thông báo qua email hoặc webhook.',
   'settings.webhookUrl.label': 'Webhook URL',

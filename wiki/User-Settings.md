@@ -15,7 +15,7 @@ If your account requires MFA setup, TREK redirects you directly to the **Account
 | General | Start page and start tab, currency, language, temperature unit, distance unit, time format, week start, booking route labels, always show booking routes, map POI pills, blur booking codes, and optimize route from accommodation | Always |
 | Appearance | Color mode, color scheme / accent, readability (transparency, reduce motion, density, text size), and which widgets appear on your dashboard | Always |
 | Map | Map provider (Leaflet, Mapbox GL, or MapLibre GL), tile presets, map style and Mapbox token, 3D buildings, high-quality mode | Always |
-| Notifications | Email, webhook, ntfy, and in-app notification preferences | Always |
+| Notifications | Email, webhook, ntfy, push and in-app notification preferences, plus switching push on or off for this device (every device is switched on separately) | Always |
 | Integrations | Photo providers (Immich, Synology, etc.), the AirTrail connection, the Dawarich connection, your own AI parsing model, public API keys, and MCP OAuth clients / API tokens | Only when a photo provider (Immich or Synology Photos), MCP, AirTrail, AI Parsing or Dawarich is enabled |
 | Plugins | Per-user settings for installed plugins | Only when at least one plugin is installed |
 | Offline | Cached trips, pending changes, re-sync and clear cache | Always |

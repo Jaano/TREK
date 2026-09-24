@@ -1034,11 +1034,13 @@ const help: TranslationStrings = {
     'High Quality Mode for antialiasing and the globe projection; Save Map writes the choice.',
   'help.ctx.settings-notifications.title': 'Notifications',
   'help.ctx.settings-notifications.summary':
-    'Where TREK reaches you outside the app: an ntfy topic, a webhook, or a channel a plugin provides. Below the channels, one row per event decides what goes where.',
+    'Where TREK reaches you outside the app: push notifications on this device, an ntfy topic, a webhook, or a channel a plugin provides. Below the channels, one row per event decides what goes where.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: the topic, an optional server of your own and an optional access token, with Test to send one right away.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: one URL that receives every event as JSON, with Test.',
   'help.ctx.settings-notifications.bullet.3':
+    'Push notifications on this device: Turn on for this device covers only the browser you are using, so repeat it on each phone or computer. Send test reaches all of them.',
+  'help.ctx.settings-notifications.bullet.4':
     'The preference rows: per event, which channel is on. Plugin channels show Configure until they are set up.',
   'help.ctx.settings-integrations.title': 'Integrations',
   'help.ctx.settings-integrations.summary':
@@ -1350,7 +1352,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'The channels the instance offers its users, and the ones that reach you as the admin. Users pick their own topics and URLs under Settings; you decide what exists and configure email.',
   'help.ctx.admin-notifications.bullet.1':
-    'In-App, Email (SMTP), Ntfy and Webhook: one panel each, with a switch that offers the channel to users and the server-side configuration it needs.',
+    'In-App, Email (SMTP), Ntfy, Webhook and Web Push: one panel each, with a switch that offers the channel to users and the server-side configuration it needs.',
   'help.ctx.admin-notifications.bullet.2':
     'Trip Reminders: whether the server sends the reminder before a trip starts.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1587,7 +1589,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Under Email (SMTP), enter SMTP Host, SMTP Port, SMTP User, SMTP Password and the From Address; Send test email sends a mail to you.',
   'help.guide.channels-instance.step.2':
-    'Switch Ntfy and Webhook on to offer them; users then enter their own topic or URL under Settings, Notifications.',
+    'Switch Web Push, Ntfy and Webhook on to offer them; users then turn push on per device, or enter their own topic or URL, under Settings, Notifications.',
   'help.guide.channels-instance.step.3':
     'Trip Reminders switches the reminder before a trip starts; In-App is always on and only explained here.',
   'help.guide.channels-instance.result': 'The Notifications tab of every user shows the channels you switched on.',

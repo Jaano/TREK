@@ -112,6 +112,20 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.testFailed': 'Tes gagal.',
   'settings.notificationPreferences.pluginConfigured': 'Sudah diatur. Kelola kredensial di halaman pengaturan plugin.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Notifikasi push di perangkat ini',
+  'settings.webPush.hint':
+    'Menampilkan notifikasi TREK di perangkat ini meskipun TREK sedang ditutup. Peristiwa yang dikirim mengikuti kolom Push.',
+  'settings.webPush.enable': 'Aktifkan untuk perangkat ini',
+  'settings.webPush.disable': 'Nonaktifkan untuk perangkat ini',
+  'settings.webPush.enabled': 'Aktif untuk perangkat ini',
+  'settings.webPush.unsupported': 'Browser ini tidak dapat menerima notifikasi push.',
+  'settings.webPush.insecure': 'Push memerlukan TREK dibuka melalui HTTPS.',
+  'settings.webPush.iosInstall':
+    'Di iPhone dan iPad, tambahkan TREK ke Layar Utama terlebih dahulu, lalu buka dari sana.',
+  'settings.webPush.denied':
+    'Notifikasi untuk TREK diblokir di browser ini. Izinkan di pengaturan browser, lalu coba lagi.',
+  'settings.webPush.failed': 'Push tidak dapat diaktifkan untuk perangkat ini.',
   'settings.notificationPreferences.noChannels':
     'Belum ada saluran notifikasi yang dikonfigurasi. Minta admin untuk mengatur notifikasi email atau webhook.',
   'settings.webhookUrl.label': 'Webhook URL',

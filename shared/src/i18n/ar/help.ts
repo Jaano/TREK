@@ -960,11 +960,13 @@ const help: TranslationStrings = {
     '«وضع الجودة العالية» لتنعيم الحواف وإسقاط الكرة الأرضية؛ و«حفظ الخريطة» يثبّت الاختيار.',
   'help.ctx.settings-notifications.title': 'الإشعارات',
   'help.ctx.settings-notifications.summary':
-    'أين يصلك TREK خارج التطبيق: موضوع ntfy، أو webhook، أو قناة توفرها إضافة. تحت القنوات، صف لكل حدث يحدد ما يذهب إلى أين.',
+    'أين يصلك TREK خارج التطبيق: إشعارات فورية على هذا الجهاز، أو موضوع ntfy، أو webhook، أو قناة توفرها إضافة. تحت القنوات، صف لكل حدث يحدد ما يذهب إلى أين.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: الموضوع، وخادم خاص بك اختياري، ورمز وصول اختياري، مع «اختبار» لإرسال رسالة على الفور.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: عنوان URL واحد يستقبل كل حدث بصيغة JSON، مع «اختبار».',
   'help.ctx.settings-notifications.bullet.3':
+    'الإشعارات الفورية على هذا الجهاز: «تشغيل على هذا الجهاز» يشمل المتصفح الذي تستخدمه فقط، لذا كرّره على كل هاتف أو حاسوب. «إرسال اختبار» يصل إليها جميعًا.',
+  'help.ctx.settings-notifications.bullet.4':
     'صفوف التفضيلات: لكل حدث، أي قناة مفعّلة. تعرض قنوات الإضافات «تهيئة» حتى يتم إعدادها.',
   'help.ctx.settings-integrations.title': 'التكاملات',
   'help.ctx.settings-integrations.summary':
@@ -1266,7 +1268,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'القنوات التي تقدمها النسخة لمستخدميها، والقنوات التي تصلك أنت بصفتك المسؤول. يختار المستخدمون مواضيعهم وعناوين URL الخاصة بهم في «الإعدادات»؛ وأنت تقرر ما يوجد وتهيّئ البريد الإلكتروني.',
   'help.ctx.admin-notifications.bullet.1':
-    '«In-App» و«Email (SMTP)» و«Ntfy» و«Webhook»: لوحة لكل منها، مع مفتاح يقدّم القناة للمستخدمين، والتهيئة التي تحتاجها من جهة الخادم.',
+    '«In-App» و«Email (SMTP)» و«Ntfy» و«Webhook» و«إشعارات الويب الفورية»: لوحة لكل منها، مع مفتاح يقدّم القناة للمستخدمين، والتهيئة التي تحتاجها من جهة الخادم.',
   'help.ctx.admin-notifications.bullet.2': '«تذكيرات الرحلات»: هل يرسل الخادم التذكير قبل بدء الرحلة.',
   'help.ctx.admin-notifications.bullet.3':
     '«Ntfy المسؤول» و«Webhook المسؤول»: وجهة أحداث المسؤول مثل فشل نسخة احتياطية أو صدور إصدار جديد، مع «اختبار».',
@@ -1482,7 +1484,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'تحت «Email (SMTP)»، أدخل SMTP Host وSMTP Port وSMTP User وSMTP Password وFrom Address؛ و«إرسال بريد تجريبي» يرسل رسالة إليك.',
   'help.guide.channels-instance.step.2':
-    'شغّل «Ntfy» و«Webhook» لتقديمهما؛ ثم يدخل المستخدمون موضوعهم أو عنوان URL الخاص بهم في «الإعدادات»، «الإشعارات».',
+    'شغّل «إشعارات الويب الفورية» و«Ntfy» و«Webhook» لتقديمها؛ ثم يشغّل المستخدمون الإشعارات الفورية لكل جهاز، أو يدخلون موضوعهم أو عنوان URL الخاص بهم، في «الإعدادات»، «الإشعارات».',
   'help.guide.channels-instance.step.3':
     '«تذكيرات الرحلات» تشغّل التذكير قبل بدء الرحلة؛ و«In-App» مفعّل دائمًا ويُشرح هنا فحسب.',
   'help.guide.channels-instance.result': 'يعرض تبويب «الإشعارات» لدى كل مستخدم القنوات التي شغّلتها.',

@@ -718,6 +718,9 @@ const admin: TranslationStrings = {
   'admin.tabs.permissions': 'Дозволи',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Дозволяє користувачам отримувати сповіщення на телефонах і комп’ютерах через браузер, навіть коли TREK закрито. Потрібен HTTPS; на iPhone та iPad TREK треба додати на початковий екран.',
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint': 'Сповіщення в додатку завжди активні і не можуть бути вимкнені глобально.',
   'admin.notifications.adminWebhookPanel.title': 'Webhook адміністратора',

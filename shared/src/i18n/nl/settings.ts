@@ -322,6 +322,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Pushmeldingen op dit apparaat',
+  'settings.webPush.hint':
+    'Toont TREK-meldingen op dit apparaat, ook als TREK gesloten is. Welke gebeurtenissen binnenkomen, volgt de kolom Push.',
+  'settings.webPush.enable': 'Inschakelen op dit apparaat',
+  'settings.webPush.disable': 'Uitschakelen op dit apparaat',
+  'settings.webPush.enabled': 'Ingeschakeld op dit apparaat',
+  'settings.webPush.unsupported': 'Deze browser kan geen pushmeldingen ontvangen.',
+  'settings.webPush.insecure': 'Voor push moet TREK via HTTPS geopend zijn.',
+  'settings.webPush.iosInstall': 'Zet TREK op iPhone en iPad eerst op het beginscherm en open het vanaf daar.',
+  'settings.webPush.denied':
+    'Meldingen voor TREK zijn in deze browser geblokkeerd. Sta ze toe in de browserinstellingen en probeer het opnieuw.',
+  'settings.webPush.failed': 'Push kon niet worden ingeschakeld op dit apparaat.',
   'settings.currency': 'Weergavevaluta',
   'settings.currencyHint':
     'Bedragen onder Onkosten worden alleen ter weergave naar deze valuta omgerekend — de oorspronkelijke bedragen blijven ongewijzigd.',

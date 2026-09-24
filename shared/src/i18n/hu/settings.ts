@@ -323,6 +323,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push értesítések ezen az eszközön',
+  'settings.webPush.hint':
+    'Megjeleníti a TREK értesítéseit ezen az eszközön, akkor is, ha a TREK be van zárva. Hogy mely események érkeznek meg, azt a Push oszlop dönti el.',
+  'settings.webPush.enable': 'Bekapcsolás ezen az eszközön',
+  'settings.webPush.disable': 'Kikapcsolás ezen az eszközön',
+  'settings.webPush.enabled': 'Bekapcsolva ezen az eszközön',
+  'settings.webPush.unsupported': 'Ez a böngésző nem tud push értesítéseket fogadni.',
+  'settings.webPush.insecure': 'A pushhoz a TREK-et HTTPS-en keresztül kell megnyitni.',
+  'settings.webPush.iosInstall': 'iPhone-on és iPaden először add hozzá a TREK-et a Főképernyőhöz, és onnan nyisd meg.',
+  'settings.webPush.denied':
+    'A TREK értesítései le vannak tiltva ebben a böngészőben. Engedélyezd őket a böngésző beállításaiban, majd próbáld újra.',
+  'settings.webPush.failed': 'A pusht nem sikerült bekapcsolni ezen az eszközön.',
   'settings.currency': 'Megjelenítési pénznem',
   'settings.currencyHint':
     'A Költségek részben az összegek csak a megjelenítéshez lesznek erre a pénznemre átszámítva – az eredeti összegek nem változnak.',

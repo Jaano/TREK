@@ -728,6 +728,9 @@ const admin: TranslationStrings = {
   'admin.tabs.permissions': 'Permisos',
   'admin.notifications.emailPanel.title': 'Email (SMTP)',
   'admin.notifications.webhookPanel.title': 'Webhook',
+  'admin.notifications.webPushPanel.title': 'Web Push',
+  'admin.notifications.webPushPanel.hint':
+    'Permite a los usuarios recibir notificaciones en sus teléfonos y ordenadores a través del navegador, incluso con TREK cerrado. Requiere HTTPS; en iPhone y iPad, TREK tiene que añadirse a la pantalla de inicio.',
   'admin.notifications.inappPanel.title': 'In-App',
   'admin.notifications.inappPanel.hint':
     'Las notificaciones in-app siempre están activas y no se pueden desactivar globalmente.',

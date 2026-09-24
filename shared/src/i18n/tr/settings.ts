@@ -116,6 +116,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.pluginConfigured':
     'Yapılandırıldı. Kimlik bilgilerini eklentinin ayarlar sayfasından yönetin.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Anlık bildirim',
+  'settings.webPush.title': 'Bu cihazda anlık bildirimler',
+  'settings.webPush.hint':
+    'TREK kapalıyken bile TREK bildirimlerini bu cihazda gösterir. Hangi olayların geleceğini Anlık bildirim sütunu belirler.',
+  'settings.webPush.enable': 'Bu cihaz için aç',
+  'settings.webPush.disable': 'Bu cihaz için kapat',
+  'settings.webPush.enabled': 'Bu cihaz için açık',
+  'settings.webPush.unsupported': 'Bu tarayıcı anlık bildirim alamıyor.',
+  'settings.webPush.insecure': "Anlık bildirimler için TREK'in HTTPS üzerinden açılması gerekir.",
+  'settings.webPush.iosInstall': "iPhone ve iPad'de önce TREK'i Ana Ekran'a ekleyin ve oradan açın.",
+  'settings.webPush.denied':
+    'TREK bildirimleri bu tarayıcıda engellendi. Tarayıcı ayarlarından izin verin, ardından yeniden deneyin.',
+  'settings.webPush.failed': 'Anlık bildirimler bu cihaz için açılamadı.',
   'settings.notificationPreferences.noChannels':
     'Bildirim kanalı yapılandırılmadı. Yöneticiden e-posta veya webhook kurmasını isteyin.',
   'settings.webhookUrl.label': "Web kancası URL'si",

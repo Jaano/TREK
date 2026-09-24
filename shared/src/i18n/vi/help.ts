@@ -1036,11 +1036,13 @@ const help: TranslationStrings = {
     '“Chế độ chất lượng cao” để khử răng cưa và phép chiếu địa cầu; “Lưu bản đồ” ghi lại lựa chọn.',
   'help.ctx.settings-notifications.title': 'Thông báo',
   'help.ctx.settings-notifications.summary':
-    'TREK liên lạc với bạn ở đâu ngoài ứng dụng: một chủ đề ntfy, một webhook, hoặc một kênh do plugin cung cấp. Bên dưới các kênh, mỗi sự kiện một hàng quyết định cái gì đi đâu.',
+    'TREK liên lạc với bạn ở đâu ngoài ứng dụng: thông báo đẩy trên thiết bị này, một chủ đề ntfy, một webhook, hoặc một kênh do plugin cung cấp. Bên dưới các kênh, mỗi sự kiện một hàng quyết định cái gì đi đâu.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: chủ đề, máy chủ riêng của bạn (tùy chọn) và mã thông báo truy cập (tùy chọn), với “Bài kiểm tra” để gửi ngay một tin.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: một URL nhận mọi sự kiện dưới dạng JSON, với “Bài kiểm tra”.',
   'help.ctx.settings-notifications.bullet.3':
+    'Thông báo đẩy trên thiết bị này: “Bật cho thiết bị này” chỉ áp dụng cho trình duyệt bạn đang dùng, nên hãy lặp lại trên từng điện thoại hoặc máy tính. “Gửi thử” sẽ đến tất cả các thiết bị đó.',
+  'help.ctx.settings-notifications.bullet.4':
     'Các hàng tùy chọn: với mỗi sự kiện, kênh nào đang bật. Kênh của plugin hiện “Cấu hình” cho đến khi được thiết lập.',
   'help.ctx.settings-integrations.title': 'Tích hợp',
   'help.ctx.settings-integrations.summary':
@@ -1362,7 +1364,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Các kênh mà phiên bản cung cấp cho người dùng, và các kênh tới bạn với tư cách quản trị viên. Người dùng chọn chủ đề và URL của họ trong “Cài đặt”; bạn quyết định có những kênh nào và cấu hình email.',
   'help.ctx.admin-notifications.bullet.1':
-    '“Trong ứng dụng”, “Email (SMTP)”, “Ntfy” và “Webhook”: mỗi kênh một bảng, với công tắc cung cấp kênh đó cho người dùng và cấu hình phía máy chủ mà nó cần.',
+    '“Trong ứng dụng”, “Email (SMTP)”, “Ntfy”, “Webhook” và “Web Push”: mỗi kênh một bảng, với công tắc cung cấp kênh đó cho người dùng và cấu hình phía máy chủ mà nó cần.',
   'help.ctx.admin-notifications.bullet.2':
     '“Lời nhắc chuyến đi”: máy chủ có gửi lời nhắc trước khi chuyến đi bắt đầu hay không.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1603,7 +1605,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'Dưới “Email (SMTP)”, nhập SMTP Host, SMTP Port, SMTP User, SMTP Password và From Address; “Gửi email kiểm tra” gửi một thư tới bạn.',
   'help.guide.channels-instance.step.2':
-    'Bật “Ntfy” và “Webhook” để cung cấp chúng; người dùng sau đó nhập chủ đề hoặc URL của họ trong “Cài đặt”, “Thông báo”.',
+    'Bật “Web Push”, “Ntfy” và “Webhook” để cung cấp chúng; người dùng sau đó bật thông báo đẩy cho từng thiết bị, hoặc nhập chủ đề hoặc URL của họ, trong “Cài đặt”, “Thông báo”.',
   'help.guide.channels-instance.step.3':
     '“Lời nhắc chuyến đi” bật tắt lời nhắc trước khi chuyến đi bắt đầu; “Trong ứng dụng” luôn bật và ở đây chỉ được giải thích.',
   'help.guide.channels-instance.result': 'Tab “Thông báo” của mọi người dùng hiện các kênh bạn đã bật.',

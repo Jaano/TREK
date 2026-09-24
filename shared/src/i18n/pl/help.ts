@@ -1040,11 +1040,13 @@ const help: TranslationStrings = {
     'Tryb wysokiej jakości dla antyaliasingu i projekcji globusa; Zapisz mapę zapisuje wybór.',
   'help.ctx.settings-notifications.title': 'Powiadomienia',
   'help.ctx.settings-notifications.summary':
-    'Gdzie TREK dociera do Ciebie poza aplikacją: temat ntfy, webhook albo kanał dostarczany przez wtyczkę. Pod kanałami jeden wiersz na zdarzenie decyduje, co idzie dokąd.',
+    'Gdzie TREK dociera do Ciebie poza aplikacją: powiadomienia push na tym urządzeniu, temat ntfy, webhook albo kanał dostarczany przez wtyczkę. Pod kanałami jeden wiersz na zdarzenie decyduje, co idzie dokąd.',
   'help.ctx.settings-notifications.bullet.1':
     'ntfy: temat, opcjonalnie własny serwer i opcjonalny token dostępu, z Testuj, by od razu wysłać wiadomość.',
   'help.ctx.settings-notifications.bullet.2': 'Webhook: jeden URL, który odbiera każde zdarzenie jako JSON, z Testuj.',
   'help.ctx.settings-notifications.bullet.3':
+    'Powiadomienia push na tym urządzeniu: Włącz na tym urządzeniu dotyczy tylko przeglądarki, której używasz, więc powtórz to na każdym telefonie lub komputerze. Wyślij test trafia do nich wszystkich.',
+  'help.ctx.settings-notifications.bullet.4':
     'Wiersze preferencji: dla każdego zdarzenia, który kanał jest włączony. Kanały wtyczek pokazują Skonfiguruj, dopóki nie są ustawione.',
   'help.ctx.settings-integrations.title': 'Integracje',
   'help.ctx.settings-integrations.summary':
@@ -1369,7 +1371,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     'Kanały, które instancja oferuje swoim użytkownikom, i te, które docierają do Ciebie jako administratora. Użytkownicy wybierają własne tematy i URL-e w Ustawienia; Ty decydujesz, co istnieje, i konfigurujesz e-mail.',
   'help.ctx.admin-notifications.bullet.1':
-    'In-App, Email (SMTP), Ntfy i Webhook: po jednym panelu, z przełącznikiem, który oferuje kanał użytkownikom, i konfiguracją po stronie serwera, której potrzebuje.',
+    'In-App, Email (SMTP), Ntfy, Webhook i Web Push: po jednym panelu, z przełącznikiem, który oferuje kanał użytkownikom, i konfiguracją po stronie serwera, której potrzebuje.',
   'help.ctx.admin-notifications.bullet.2':
     'Przypomnienia o podróżach: czy serwer wysyła przypomnienie przed rozpoczęciem podróży.',
   'help.ctx.admin-notifications.bullet.3':
@@ -1614,7 +1616,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     'W Email (SMTP) wpisz SMTP Host, SMTP Port, SMTP User, SMTP Password i From Address; Wyślij testowego e-maila wysyła wiadomość do Ciebie.',
   'help.guide.channels-instance.step.2':
-    'Włącz Ntfy i Webhook, by je zaoferować; użytkownicy wpisują wtedy własny temat lub URL w Ustawienia, Powiadomienia.',
+    'Włącz Web Push, Ntfy i Webhook, by je zaoferować; użytkownicy włączają wtedy push na każdym urządzeniu albo wpisują własny temat lub URL w Ustawienia, Powiadomienia.',
   'help.guide.channels-instance.step.3':
     'Przypomnienia o podróżach przełącza przypomnienie przed rozpoczęciem podróży; In-App jest zawsze włączony i tylko tu opisany.',
   'help.guide.channels-instance.result': 'Zakładka Powiadomienia każdego użytkownika pokazuje kanały, które włączyłeś.',

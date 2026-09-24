@@ -270,7 +270,7 @@ The recipient is **forced** by the host: `scope:'user'` can only reach the actin
 **Needs:** `hook:notification-channel` + `http:outbound:<host>` (and a matching `egress`)
 
 The recipe above *produces* a notification. This one **delivers** one — your plugin becomes a
-channel next to email / webhook / ntfy in the user's notification preferences.
+channel next to email / webhook / ntfy / Web Push in the user's notification preferences.
 
 ```bash
 npx create-trek-plugin my-gotify --type integration --template notification-channel

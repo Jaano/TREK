@@ -125,6 +125,19 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.testFailed': 'Test failed.',
   'settings.notificationPreferences.pluginConfigured': 'Configured. Manage credentials on the plugin’s settings page.',
   'settings.notificationPreferences.ntfy': 'Ntfy',
+  'settings.notificationPreferences.push': 'Push',
+  'settings.webPush.title': 'Push notifications on this device',
+  'settings.webPush.hint':
+    'Shows TREK notifications on this device even while TREK is closed. Which events arrive follows the Push column.',
+  'settings.webPush.enable': 'Turn on for this device',
+  'settings.webPush.disable': 'Turn off for this device',
+  'settings.webPush.enabled': 'On for this device',
+  'settings.webPush.unsupported': 'This browser cannot receive push notifications.',
+  'settings.webPush.insecure': 'Push needs TREK to be opened over HTTPS.',
+  'settings.webPush.iosInstall': 'On iPhone and iPad, add TREK to the Home Screen first and open it from there.',
+  'settings.webPush.denied':
+    'Notifications are blocked for TREK in this browser. Allow them in the browser settings, then try again.',
+  'settings.webPush.failed': 'Push could not be turned on for this device.',
   'settings.notificationPreferences.noChannels':
     'No notification channels are configured. Ask an admin to set up email or webhook notifications.',
   'settings.webhookUrl.label': 'Webhook URL',

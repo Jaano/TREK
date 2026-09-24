@@ -860,10 +860,12 @@ const help: TranslationStrings = {
   'help.ctx.settings-map.bullet.3': '“高画质模式”提供抗锯齿和地球仪投影；“保存地图”写入你的选择。',
   'help.ctx.settings-notifications.title': '通知',
   'help.ctx.settings-notifications.summary':
-    'TREK 在应用之外联系你的地方：一个 ntfy 主题、一个 webhook，或者插件提供的渠道。渠道下方每个事件一行，决定什么发到哪里。',
+    'TREK 在应用之外联系你的地方：此设备上的推送通知、一个 ntfy 主题、一个 webhook，或者插件提供的渠道。渠道下方每个事件一行，决定什么发到哪里。',
   'help.ctx.settings-notifications.bullet.1': 'ntfy：主题、可选的自建服务器和可选的访问令牌，点“测试”可以立刻发一条。',
   'help.ctx.settings-notifications.bullet.2': 'Webhook：一个以 JSON 接收所有事件的 URL，带“测试”。',
-  'help.ctx.settings-notifications.bullet.3': '偏好设置行：每个事件开启了哪个渠道。插件渠道在设置好之前显示“去配置”。',
+  'help.ctx.settings-notifications.bullet.3':
+    '此设备上的推送通知：“为此设备开启”只对你正在使用的浏览器生效，所以要在每台手机或电脑上各开一次。“发送测试”会发到所有这些设备。',
+  'help.ctx.settings-notifications.bullet.4': '偏好设置行：每个事件开启了哪个渠道。插件渠道在设置好之前显示“去配置”。',
   'help.ctx.settings-integrations.title': '集成',
   'help.ctx.settings-integrations.summary':
     '从外部连接到 TREK 的一切：日记用的照片库、脚本用的 API 密钥，以及供 AI 助手使用的 MCP 端点及其令牌和 OAuth 客户端。',
@@ -1119,7 +1121,7 @@ const help: TranslationStrings = {
   'help.ctx.admin-notifications.summary':
     '实例向用户提供的渠道，以及能联系到你这位管理员的渠道。用户在“设置”里选自己的主题和 URL；你决定有哪些渠道，并配置邮件。',
   'help.ctx.admin-notifications.bullet.1':
-    '“应用内通知”“电子邮件（SMTP）”“Ntfy”和“Webhook”：各一个面板，带一个向用户开放该渠道的开关，以及它需要的服务器端配置。',
+    '“应用内通知”“电子邮件（SMTP）”“Ntfy”“Webhook”和“Web 推送”：各一个面板，带一个向用户开放该渠道的开关，以及它需要的服务器端配置。',
   'help.ctx.admin-notifications.bullet.2': '“行程提醒”：服务器是否在行程开始前发送提醒。',
   'help.ctx.admin-notifications.bullet.3':
     '“管理员 Ntfy”和“管理员 Webhook”：备份失败或新版本发布这类管理员事件的去向，带“测试”。',
@@ -1314,7 +1316,7 @@ const help: TranslationStrings = {
   'help.guide.channels-instance.step.1':
     '在“电子邮件（SMTP）”下输入 SMTP Host、SMTP Port、SMTP User、SMTP Password 和 From Address；“发送测试邮件”会给你发一封邮件。',
   'help.guide.channels-instance.step.2':
-    '打开“Ntfy”和“Webhook”以提供它们；用户随后在“设置”的“通知”里输入自己的主题或 URL。',
+    '打开“Web 推送”“Ntfy”和“Webhook”以提供它们；用户随后在“设置”的“通知”里为每台设备开启推送，或输入自己的主题或 URL。',
   'help.guide.channels-instance.step.3': '“行程提醒”开关行程开始前的提醒；“应用内通知”始终开启，这里只是说明。',
   'help.guide.channels-instance.result': '每个用户的“通知”标签页会显示你开启的渠道。',
   'help.guide.channels-instance.tip.1': '在这里输入的默认 ntfy 服务器会为用户预填；他们仍然可以指定自己的。',
