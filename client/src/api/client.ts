@@ -4,6 +4,7 @@ import type { z } from 'zod'
 import type { Day, Place, Trip } from '../types'
 import type { TransitProvider } from '@trek/shared'
 import { randomId } from '../utils/randomId'
+import { postProviderPhotosInBatches } from './providerPhotoBatches'
 import {
   weatherResultSchema, type WeatherResult,
   inAppListResultSchema, type InAppListResult,
@@ -1018,9 +1019,13 @@ export const journeyApi = {
   /** A clip on one entry: the video plus the poster frame the browser grabbed (issue #2341). */
   uploadEntryVideo: (entryId: number, formData: FormData, opts?: UploadOptions) =>
     postMultipart(`/journeys/entries/${entryId}/video`, formData, opts),
-  addProviderPhotosToGallery: (journeyId: number, provider: string, assetIds: string[], passphrase?: string, mediaTypes?: string[]) => apiClient.post(`/journeys/${journeyId}/gallery/provider-photos`, { provider, asset_ids: assetIds, ...(passphrase ? { passphrase } : {}), ...(mediaTypes ? { media_types: mediaTypes } : {}) } satisfies JourneyProviderPhotosRequest).then(r => r.data),
+  // Both provider-photo adds go out in batches of PROVIDER_PHOTO_BATCH ids: one
+  // request for a whole trip ran into the 100 kB body limit (#1587).
+  addProviderPhotosToGallery: (journeyId: number, provider: string, assetIds: string[], passphrase?: string, mediaTypes?: string[]) =>
+    postProviderPhotosInBatches(assetIds, mediaTypes, (ids, types) => apiClient.post(`/journeys/${journeyId}/gallery/provider-photos`, { provider, asset_ids: ids, ...(passphrase ? { passphrase } : {}), ...(types ? { media_types: types } : {}) } satisfies JourneyProviderPhotosRequest).then(r => r.data)),
   addProviderPhoto: (entryId: number, provider: string, assetId: string, caption?: string, passphrase?: string) => apiClient.post(`/journeys/entries/${entryId}/provider-photos`, { provider, asset_id: assetId, caption, ...(passphrase ? { passphrase } : {}) }).then(r => r.data),
-  addProviderPhotos: (entryId: number, provider: string, assetIds: string[], caption?: string, passphrase?: string, mediaTypes?: string[]) => apiClient.post(`/journeys/entries/${entryId}/provider-photos`, { provider, asset_ids: assetIds, caption, ...(passphrase ? { passphrase } : {}), ...(mediaTypes ? { media_types: mediaTypes } : {}) }).then(r => r.data),
+  addProviderPhotos: (entryId: number, provider: string, assetIds: string[], caption?: string, passphrase?: string, mediaTypes?: string[]) =>
+    postProviderPhotosInBatches(assetIds, mediaTypes, (ids, types) => apiClient.post(`/journeys/entries/${entryId}/provider-photos`, { provider, asset_ids: ids, caption, ...(passphrase ? { passphrase } : {}), ...(types ? { media_types: types } : {}) }).then(r => r.data)),
   linkPhoto: (entryId: number, journeyPhotoId: number) => apiClient.post(`/journeys/entries/${entryId}/link-photo`, { journey_photo_id: journeyPhotoId }).then(r => r.data),
   unlinkPhoto: (entryId: number, journeyPhotoId: number) => apiClient.delete(`/journeys/entries/${entryId}/photos/${journeyPhotoId}`).then(r => r.data),
   deleteGalleryPhoto: (journeyId: number, journeyPhotoId: number) => apiClient.delete(`/journeys/${journeyId}/gallery/${journeyPhotoId}`).then(r => r.data),

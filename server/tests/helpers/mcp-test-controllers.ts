@@ -95,6 +95,7 @@ import { ImmichService } from '../../src/nest/memories/immich.service';
 import { SynologyService } from '../../src/nest/memories/synology.service';
 import { MemoriesAccessService } from '../../src/nest/memories/memories-access.service';
 import { PhotoCaptureBackfillService } from '../../src/nest/memories/photo-capture-backfill.service';
+import { JourneyPhotoCaptureService } from '../../src/nest/journey/journey-photo-capture.service';
 import { PhotoResolverService } from '../../src/nest/memories/photo-resolver.service';
 import { ThumbnailService } from '../../src/nest/memories/thumbnail.service';
 import { TrekPhotoCacheService } from '../../src/nest/memories/trek-photo-cache.service';
@@ -245,7 +246,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService, notificationsStub(), generalStorage), dbService, authService, addonsService),
       new TransitMcp(new TransitService(new GoogleTransitProvider(dbService)), daysService, reservationsService, dbService, authService, guards),
       new AtlasMcp(new AtlasService(dbService), addonsService, authService),
-      new JourneyMcp(journeyDomain, new JourneyShareService(dbService, journeyDomain, new SettingsService(dbService)), addonsService, authService, captureBackfill),
+      new JourneyMcp(journeyDomain, new JourneyShareService(dbService, journeyDomain, new SettingsService(dbService)), addonsService, authService, new JourneyPhotoCaptureService(captureBackfill, journeyDomain)),
       new MemoriesMcp(immichService, synologyService, dbService, addonsService),
       new NotificationsMcp(makeNotificationsService(dbService, realtimeService), authService),
       new AirtrailMcp(new AirtrailService(dbService, new AuditService(dbService), new AirtrailClient()), addonsService),
