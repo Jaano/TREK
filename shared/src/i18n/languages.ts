@@ -20,6 +20,7 @@ export const SUPPORTED_LANGUAGES = [
   { value: 'id', label: 'Bahasa Indonesia', locale: 'id-ID' },
   { value: 'ja', label: '日本語', locale: 'ja-JP' },
   { value: 'ko', label: '한국어', locale: 'ko-KR' },
+  { value: 'th', label: 'ไทย', locale: 'th-TH' },
   { value: 'uk', label: 'Українська', locale: 'uk-UA' },
   { value: 'gr', label: 'Ελληνικά', locale: 'el-GR' },
   { value: 'sv', label: 'Svenska', locale: 'sv-SE' },
