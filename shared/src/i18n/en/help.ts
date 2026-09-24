@@ -3448,29 +3448,29 @@ const help: TranslationStrings = {
   'help.guide.files-trash.tip.3': 'A file deleted for good in the trash cannot be brought back.',
 
   // files-sync
-  'help.guide.files-sync.title': 'Keep the documents in step with a Nextcloud folder',
+  'help.guide.files-sync.title': 'Keep the documents in step with your document store',
   'help.guide.files-sync.goal':
-    'Bind the trip to a folder in your own document store, so that what is uploaded here lands there and what is filed there turns up here.',
+    'Bind the trip to your own document store, so that what is uploaded here lands there and what is filed there turns up here.',
   'help.guide.files-sync.step.1':
-    'Click Document sync, next to Trash at the right end of the toolbar. The dialog opens with the trip’s name under its title. On the left, under Connect a provider, stand the stores an administrator has switched on, each with a line on how it files things, Files in a folder for Nextcloud; on the right it reads Nothing connected yet.',
+    'Click Document sync, next to Trash at the right end of the toolbar. The dialog opens with the trip’s name under its title. On the left, under Connect a provider, stand the stores an administrator has switched on, each with a line on how it files things: Paperless-ngx and Papra by tag, Nextcloud and Synology Drive in a folder, OpenCloud in a space. On the right it reads Nothing connected yet.',
   'help.guide.files-sync.step.2':
-    'Click Nextcloud. A smaller dialog opens for the connection, named after the store, with the reminder at the top to use an app password rather than your account password.',
+    'Click your store, here Nextcloud. A smaller dialog opens for the connection, named after the store and asking for what that store signs in with.',
   'help.guide.files-sync.step.3':
-    'Fill in Address, Username, your Nextcloud login name rather than your email address, and App password, which Nextcloud makes under Settings, Security. Base folder is optional: it is where TREK looks for trip folders, /TREK unless you say otherwise, here /Reisen. Accept a self-signed certificate at the bottom is only for an instance on your own network with such a certificate.',
+    'Fill in Address and the store’s own sign-in: an API token for Paperless-ngx, an API key and the Organisation ID for Papra, Username and an App password for Nextcloud, Username and an App token for OpenCloud, and for Synology Drive Username, Password and, if the account asks for one, a Two-factor code. Use an app password or token wherever the store offers one, never your account password. Nextcloud and Synology Drive also take an optional Base folder, where TREK looks for trip folders, here /Reisen. Accept a self-signed certificate at the bottom is only for a store on your own network with such a certificate.',
   'help.guide.files-sync.step.4':
-    'Click Test connection. TREK reaches the store with what you typed and the footer reads Reached it, signed in as followed by the account’s name, here admin. A password that is refused or an address that cannot be reached is named there instead, and nothing is saved either way.',
+    'Click Test connection. TREK reaches the store with what you typed and the footer reads Reached it, signed in as followed by the account’s name. Credentials that are refused or an address that cannot be reached are named there instead, and nothing is saved either way.',
   'help.guide.files-sync.step.5':
-    'Click Connect. The connection is saved with the trip and TREK asks Where should this trip live in Nextcloud? Only what is in that folder is synced. Make a new one creates a folder under the base folder on Create, with a name prefilled from the trip’s title; under Or use one you already have stand the folders that are there already. Click one, here Autumn in Japan.',
+    'Click Connect. The connection is saved with the trip and TREK asks where the trip should live in the store: the tag, folder or space that holds its documents. Only what is in there is synced. Make a new one creates it on Create, with a name prefilled from the trip’s title; under Or use one you already have stand the ones that are there already. Click one, here the folder Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'The dialog is back: Nextcloud stands under This trip on the left, and its card on the right carries the folder, when it last ran and Sync now. A first run starts by itself; Sync now runs one whenever you like. Once a run is through, the Not synced yet badge beside the name gives way to a green dot, In sync when you point at it, and the flow bar counts the documents TREK and Nextcloud each hold, with the lanes Out to the store and In from the store between them. Close the dialog with the ×.',
+    'The dialog is back: your store stands under This trip on the left, and its card on the right carries where it syncs to, when it last ran and Sync now. A first run starts by itself; Sync now runs one whenever you like. Once a run is through, the Not synced yet badge beside the name gives way to a green dot, In sync when you point at it, and the flow bar counts the documents TREK and the store each hold, with the lanes Out to the store and In from the store between them. Close the dialog with the ×.',
   'help.guide.files-sync.result':
-    'The two documents that were already in the folder stand at the top of the list, uploaded in your name, and every document of the trip is in the folder as well. From now on TREK checks the folder in the background and the folder follows the list.',
+    'The documents that were already there stand at the top of the list, uploaded in your name, and every document of the trip is in the store as well. From now on TREK checks the store in the background, and the store follows the list.',
   'help.guide.files-sync.tip.1':
-    'Only the trip’s owner or an instance administrator can bind a trip, since the app password reaches that whole Nextcloud account. Every member can open Document sync, read the card and press Sync now.',
+    'Only the trip’s owner or an instance administrator can bind a trip, since the credentials reach that whole account at the store. Every member can open Document sync, read the card and press Sync now.',
   'help.guide.files-sync.tip.2':
     'A store on your own network needs ALLOW_INTERNAL_NETWORK=true on the TREK server, and its address has to be the machine’s address on the network, never localhost. Without that, Test connection answers That address is not allowed.',
   'help.guide.files-sync.tip.3':
-    'Disconnect on the card ends the pairing and keeps every document on both sides. A folder bound a second time is treated as new, and everything in it comes in again, so after a Disconnect bind an empty folder rather than the old one.',
+    'Disconnect on the card ends the pairing and keeps every document on both sides. A tag, folder or space bound a second time is treated as new, and everything in it comes in again, so after a Disconnect bind an empty one rather than the old one.',
   // ── Screen: trip-collab ───────────────────────────────────────────────────────────────
   'help.ctx.trip-collab.title': 'Collab',
   'help.ctx.trip-collab.summary':

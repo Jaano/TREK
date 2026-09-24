@@ -2478,29 +2478,29 @@ const help: TranslationStrings = {
     'Bir dosyayı atmak ve geri almak Dosyaları sil hakkını gerektirir. Bu hakkı olmayan bir üye ne satırdaki Sil düğmesini ne de çöp kutusundaki düğmeleri görür.',
   'help.guide.files-trash.tip.3': 'Çöp kutusunda kalıcı olarak silinen bir dosya geri getirilemez.',
   // files-sync
-  'help.guide.files-sync.title': 'Belgeleri bir Nextcloud klasörüyle eşit tutun',
+  'help.guide.files-sync.title': 'Belgeleri belge deponuzla eşit tutun',
   'help.guide.files-sync.goal':
-    'Geziyi kendi belge deponuzdaki bir klasöre bağlayın, böylece burada yüklenen oraya iner, orada dosyalanan burada belirir.',
+    'Geziyi kendi belge deponuza bağlayın, böylece burada yüklenen oraya iner, orada dosyalanan burada belirir.',
   'help.guide.files-sync.step.1':
-    'Araç çubuğunun sağ ucunda, Çöp kutusu yanındaki Belge eşitleme düğmesine tıklayın. Pencere, başlığının altında gezinin adıyla açılır. Solda, Sağlayıcı bağla altında, bir yöneticinin açtığı depolar durur, her biri nasıl dosyaladığına dair bir satırla, Nextcloud için Bir klasörde tutar; sağda Henüz bir şey bağlanmadı yazar.',
+    'Araç çubuğunun sağ ucunda, Çöp kutusu yanındaki Belge eşitleme düğmesine tıklayın. Pencere, başlığının altında gezinin adıyla açılır. Solda, Sağlayıcı bağla altında, bir yöneticinin açtığı depolar durur, her biri nasıl dosyaladığına dair bir satırla: Paperless-ngx ve Papra etiketlerle, Nextcloud ve Synology Drive bir klasörde, OpenCloud bir alanda. Sağda Henüz bir şey bağlanmadı yazar.',
   'help.guide.files-sync.step.2':
-    'Nextcloud düğmesine tıklayın. Bağlantı için depodan adını alan daha küçük bir pencere açılır, üstünde hesap parolanız yerine bir uygulama parolası kullanmanızı hatırlatan not.',
+    'Deponuza tıklayın, burada Nextcloud. Bağlantı için depodan adını alan daha küçük bir pencere açılır ve o deponun oturum açmak için istediği bilgileri sorar.',
   'help.guide.files-sync.step.3':
-    'Adres, Kullanıcı adı, e-posta adresiniz değil Nextcloud oturum açma adınız, ve Nextcloud’un Ayarlar, Güvenlik altında oluşturduğu Uygulama parolası alanlarını doldurun. Temel klasör isteğe bağlıdır: TREK’in gezi klasörlerini aradığı yerdir, siz başka bir şey demedikçe /TREK, burada /Reisen. Alttaki Kendinden imzalı sertifikayı kabul et yalnızca kendi ağınızda böyle bir sertifikası olan bir örnek içindir.',
+    'Adres alanını ve deponun kendi oturum açma bilgilerini doldurun: Paperless-ngx için bir API belirteci, Papra için bir API anahtarı ve Kuruluş kimliği, Nextcloud için Kullanıcı adı ve bir Uygulama parolası, OpenCloud için Kullanıcı adı ve bir Uygulama belirteci, Synology Drive için de Kullanıcı adı, Parola ve hesap istiyorsa bir İki adımlı doğrulama kodu. Deponun sunduğu her yerde bir uygulama parolası ya da belirteci kullanın, asla hesap parolanızı değil. Nextcloud ve Synology Drive ayrıca isteğe bağlı bir Temel klasör alır; TREK gezi klasörlerini orada arar, burada /Reisen. Alttaki Kendinden imzalı sertifikayı kabul et yalnızca kendi ağınızda böyle bir sertifikası olan bir depo içindir.',
   'help.guide.files-sync.step.4':
-    'Bağlantıyı test et düğmesine tıklayın. TREK yazdıklarınızla depoya ulaşır ve alt bilgide hesabın adıyla Ulaşıldı, admin olarak oturum açıldı yazar, buradaki hesap admin. Reddedilen bir parola ya da ulaşılamayan bir adres bunun yerine orada adlandırılır ve iki durumda da hiçbir şey kaydedilmez.',
+    'Bağlantıyı test et düğmesine tıklayın. TREK yazdıklarınızla depoya ulaşır ve alt bilgide hesabın adıyla birlikte Ulaşıldı, … olarak oturum açıldı yazar. Reddedilen kimlik bilgileri ya da ulaşılamayan bir adres bunun yerine orada adlandırılır ve iki durumda da hiçbir şey kaydedilmez.',
   'help.guide.files-sync.step.5':
-    'Bağlan düğmesine tıklayın. Bağlantı geziyle birlikte kaydedilir ve TREK Bu gezi Nextcloud içinde nerede dursun? diye sorar. Yalnızca o klasördeki eşitlenir. Yeni bir tane oluştur, Oluştur ile temel klasörün altında gezinin başlığından önceden doldurulmuş bir adla bir klasör oluşturur; Ya da var olanlardan birini kullanın altında zaten orada olan klasörler durur. Birine tıklayın, burada Autumn in Japan.',
+    'Bağlan düğmesine tıklayın. Bağlantı geziyle birlikte kaydedilir ve TREK gezinin depoda nerede duracağını sorar: belgelerini tutan etiket, klasör ya da alan. Yalnızca oradakiler eşitlenir. Yeni bir tane oluştur, Oluştur ile gezinin başlığından önceden doldurulmuş bir adla onu oluşturur; Ya da var olanlardan birini kullanın altında zaten var olanlar durur. Birine tıklayın, burada Autumn in Japan klasörüne.',
   'help.guide.files-sync.step.6':
-    'Pencere geri gelir: Nextcloud solda Bu gezi altında durur ve sağdaki kartı klasörü, en son ne zaman çalıştığını ve Şimdi eşitle düğmesini taşır. İlk çalışma kendiliğinden başlar; Şimdi eşitle istediğiniz zaman bir tane çalıştırır. Bir çalışma bittiğinde adın yanındaki Henüz eşitlenmedi rozeti yerini yeşil bir noktaya bırakır, üzerine geldiğinizde Eşit durumda, ve akış çubuğu TREK ile Nextcloud’un her birinin tuttuğu belgeleri sayar, aralarında Depoya giden ve Depodan gelen şeritleriyle. Pencereyi × ile kapatın.',
+    'Pencere geri gelir: deponuz solda Bu gezi altında durur ve sağdaki kartında nereye eşitlendiği, en son ne zaman çalıştığı ve Şimdi eşitle düğmesi yer alır. İlk çalışma kendiliğinden başlar; Şimdi eşitle istediğiniz zaman bir tane çalıştırır. Bir çalışma bittiğinde adın yanındaki Henüz eşitlenmedi rozeti yerini yeşil bir noktaya bırakır, üzerine geldiğinizde Eşit durumda, ve akış çubuğu TREK ile deponun her birinin tuttuğu belgeleri sayar, aralarında Depoya giden ve Depodan gelen şeritleriyle. Pencereyi × ile kapatın.',
   'help.guide.files-sync.result':
-    'Klasörde zaten olan iki belge listenin en üstünde, sizin adınıza yüklenmiş olarak durur ve gezinin her belgesi klasörde de vardır. Bundan sonra TREK klasörü arka planda denetler ve klasör listeyi izler.',
+    'Orada zaten olan belgeler listenin en üstünde, sizin adınıza yüklenmiş olarak durur ve gezinin her belgesi depoda da vardır. Bundan sonra TREK depoyu arka planda denetler ve depo listeyi izler.',
   'help.guide.files-sync.tip.1':
-    'Bir geziyi yalnızca gezinin sahibi ya da bir örnek yöneticisi bağlayabilir, çünkü uygulama parolası o Nextcloud hesabının tamamına ulaşır. Her üye Belge eşitleme’yi açabilir, kartı okuyabilir ve Şimdi eşitle düğmesine basabilir.',
+    'Bir geziyi yalnızca gezinin sahibi ya da bir örnek yöneticisi bağlayabilir, çünkü kimlik bilgileri depodaki o hesabın tamamına ulaşır. Her üye Belge eşitleme’yi açabilir, kartı okuyabilir ve Şimdi eşitle düğmesine basabilir.',
   'help.guide.files-sync.tip.2':
     'Kendi ağınızdaki bir depo TREK sunucusunda ALLOW_INTERNAL_NETWORK=true ister ve adresi makinenin ağdaki adresi olmalıdır, asla localhost değil. Bu olmadan Bağlantıyı test et, Bu adrese izin verilmiyor. yanıtını verir.',
   'help.guide.files-sync.tip.3':
-    'Karttaki Bağlantıyı kes eşleştirmeyi bitirir ve her belgeyi iki tarafta da tutar. İkinci kez bağlanan bir klasör yeni sayılır ve içindeki her şey yeniden gelir, bu yüzden bir Bağlantıyı kes sonrasında eskisi yerine boş bir klasör bağlayın.',
+    'Karttaki Bağlantıyı kes eşleştirmeyi bitirir ve her belgeyi iki tarafta da tutar. İkinci kez bağlanan bir etiket, klasör ya da alan yeni sayılır ve içindeki her şey yeniden gelir, bu yüzden bir Bağlantıyı kes sonrasında eskisi yerine boş bir tane bağlayın.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Gün ayrıntıları',

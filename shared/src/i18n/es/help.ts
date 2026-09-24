@@ -2540,29 +2540,29 @@ const help: TranslationStrings = {
     'Tirar un archivo y recuperarlo necesita el permiso Eliminar archivos. Un miembro que no lo tiene no ve ni Eliminar en la fila ni los botones de la papelera.',
   'help.guide.files-trash.tip.3': 'Un archivo eliminado para siempre en la papelera no se puede recuperar.',
   // files-sync
-  'help.guide.files-sync.title': 'Mantener los documentos al día con una carpeta de Nextcloud',
+  'help.guide.files-sync.title': 'Mantener los documentos al día con tu almacén de documentos',
   'help.guide.files-sync.goal':
-    'Vincula el viaje a una carpeta de tu propio almacén de documentos, para que lo que se sube aquí aterrice allí y lo que se archiva allí aparezca aquí.',
+    'Vincula el viaje a tu propio almacén de documentos, para que lo que se sube aquí aterrice allí y lo que se archiva allí aparezca aquí.',
   'help.guide.files-sync.step.1':
-    'Haz clic en Sincronización de documentos, junto a Papelera en el extremo derecho de la barra de herramientas. El diálogo se abre con el nombre del viaje bajo su título. A la izquierda, bajo Conectar un proveedor, están los almacenes que un administrador ha activado, cada uno con una línea sobre cómo archiva, Archiva en una carpeta para Nextcloud; a la derecha se lee Aún no hay nada conectado.',
+    'Haz clic en Sincronización de documentos, junto a Papelera en el extremo derecho de la barra de herramientas. El diálogo se abre con el nombre del viaje bajo su título. A la izquierda, bajo Conectar un proveedor, están los almacenes que un administrador ha activado, cada uno con una línea sobre cómo archiva: Paperless-ngx y Papra por etiqueta, Nextcloud y Synology Drive en una carpeta, OpenCloud en un espacio. A la derecha se lee Aún no hay nada conectado.',
   'help.guide.files-sync.step.2':
-    'Haz clic en Nextcloud. Se abre un diálogo más pequeño para la conexión, con el nombre del almacén, con el recordatorio arriba de usar una contraseña de aplicación en vez de la de tu cuenta.',
+    'Haz clic en tu almacén, aquí Nextcloud. Se abre un diálogo más pequeño para la conexión, con el nombre del almacén, que pide los datos con los que se inicia sesión en ese almacén.',
   'help.guide.files-sync.step.3':
-    'Rellena Dirección, Nombre de usuario, tu nombre de inicio de sesión en Nextcloud y no tu correo, y Contraseña de aplicación, que Nextcloud crea en Ajustes, Seguridad. Carpeta base es opcional: es donde TREK busca las carpetas de viaje, /TREK salvo que digas otra cosa, aquí /Reisen. Aceptar un certificado autofirmado, abajo del todo, es solo para una instancia en tu propia red con un certificado así.',
+    'Rellena Dirección y el inicio de sesión propio del almacén: un Token de API para Paperless-ngx, una Clave de API y el ID de organización para Papra, Nombre de usuario y una Contraseña de aplicación para Nextcloud, Nombre de usuario y un Token de aplicación para OpenCloud, y para Synology Drive Nombre de usuario, Contraseña y, si la cuenta lo pide, un Código de doble factor. Usa una contraseña o un token de aplicación siempre que el almacén lo ofrezca, nunca la contraseña de tu cuenta. Nextcloud y Synology Drive admiten además una Carpeta base opcional, donde TREK busca las carpetas de viaje, aquí /Reisen. Aceptar un certificado autofirmado, abajo del todo, es solo para un almacén en tu propia red con un certificado así.',
   'help.guide.files-sync.step.4':
-    'Haz clic en Probar conexión. TREK alcanza el almacén con lo que escribiste y el pie dice Conectado, sesión iniciada como seguido del nombre de la cuenta, aquí admin. Una contraseña rechazada o una dirección inalcanzable se nombra ahí en su lugar, y en ningún caso se guarda nada.',
+    'Haz clic en Probar conexión. TREK alcanza el almacén con lo que escribiste y el pie dice Conectado, sesión iniciada como seguido del nombre de la cuenta. Unas credenciales rechazadas o una dirección inalcanzable se nombran ahí en su lugar, y en ningún caso se guarda nada.',
   'help.guide.files-sync.step.5':
-    'Haz clic en Conectar. La conexión se guarda con el viaje y TREK pregunta ¿Dónde debe guardarse este viaje en Nextcloud? Solo lo que está en esa carpeta se sincroniza. Crear uno nuevo crea una carpeta bajo la carpeta base con Crear, con un nombre prerrellenado a partir del título del viaje; bajo O usa uno que ya tengas están las carpetas que ya existen. Haz clic en una, aquí Autumn in Japan.',
+    'Haz clic en Conectar. La conexión se guarda con el viaje y TREK pregunta dónde debe guardarse el viaje en el almacén: la etiqueta, la carpeta o el espacio que contiene sus documentos. Solo se sincroniza lo que hay dentro. Crear uno nuevo lo crea con Crear, con un nombre prerrellenado a partir del título del viaje; bajo O usa uno que ya tengas están los que ya existen. Haz clic en uno, aquí la carpeta Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'El diálogo vuelve: Nextcloud está bajo Este viaje a la izquierda, y su tarjeta a la derecha lleva la carpeta, cuándo se ejecutó por última vez y Sincronizar ahora. Una primera ejecución arranca sola; Sincronizar ahora lanza una cuando quieras. Cuando una ejecución termina, la etiqueta Aún sin sincronizar junto al nombre da paso a un punto verde, Al día cuando lo señalas, y la barra de flujo cuenta los documentos que tienen TREK y Nextcloud cada uno, con los carriles Hacia el gestor y Desde el gestor entre ellos. Cierra el diálogo con la ×.',
+    'El diálogo vuelve: tu almacén está bajo Este viaje a la izquierda, y su tarjeta a la derecha indica adónde sincroniza, cuándo se ejecutó por última vez y Sincronizar ahora. Una primera ejecución arranca sola; Sincronizar ahora lanza una cuando quieras. Cuando una ejecución termina, la insignia Aún sin sincronizar junto al nombre da paso a un punto verde, Al día cuando lo señalas, y la barra de flujo cuenta los documentos que tienen TREK y el almacén cada uno, con los carriles Hacia el gestor y Desde el gestor entre ellos. Cierra el diálogo con la ×.',
   'help.guide.files-sync.result':
-    'Los dos documentos que ya estaban en la carpeta están arriba de la lista, subidos a tu nombre, y cada documento del viaje está también en la carpeta. Desde ahora TREK revisa la carpeta en segundo plano y la carpeta sigue a la lista.',
+    'Los documentos que ya estaban allí están arriba de la lista, subidos a tu nombre, y cada documento del viaje está también en el almacén. Desde ahora TREK revisa el almacén en segundo plano, y el almacén sigue a la lista.',
   'help.guide.files-sync.tip.1':
-    'Solo el propietario del viaje o un administrador de la instancia puede vincular un viaje, ya que la contraseña de aplicación alcanza toda esa cuenta de Nextcloud. Cualquier miembro puede abrir Sincronización de documentos, leer la tarjeta y pulsar Sincronizar ahora.',
+    'Solo el propietario del viaje o un administrador de la instancia puede vincular un viaje, ya que las credenciales alcanzan toda esa cuenta del almacén. Cualquier miembro puede abrir Sincronización de documentos, leer la tarjeta y pulsar Sincronizar ahora.',
   'help.guide.files-sync.tip.2':
     'Un almacén en tu propia red necesita ALLOW_INTERNAL_NETWORK=true en el servidor de TREK, y su dirección tiene que ser la de la máquina en la red, nunca localhost. Sin eso, Probar conexión responde Esa dirección no está permitida.',
   'help.guide.files-sync.tip.3':
-    'Desconectar en la tarjeta termina el emparejamiento y conserva cada documento en ambos lados. Una carpeta vinculada por segunda vez se trata como nueva, y todo lo que hay en ella entra otra vez, así que después de un Desconectar vincula una carpeta vacía y no la antigua.',
+    'Desconectar en la tarjeta termina el emparejamiento y conserva cada documento en ambos lados. Una etiqueta, carpeta o espacio vinculado por segunda vez se trata como nuevo, y todo lo que hay dentro entra otra vez, así que después de un Desconectar vincula uno vacío y no el antiguo.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Detalles del día',

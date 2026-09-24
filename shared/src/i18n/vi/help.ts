@@ -2464,29 +2464,29 @@ const help: TranslationStrings = {
     'Vứt một tập tin đi rồi lấy lại cần quyền “Xóa tập tin”. Một thành viên không có quyền đó thì không thấy “Xóa bỏ” trên hàng, cũng không thấy các nút trong thùng rác.',
   'help.guide.files-trash.tip.3': 'Một tập tin đã bị xóa vĩnh viễn trong thùng rác thì không thể mang trở lại.',
   // files-sync
-  'help.guide.files-sync.title': 'Giữ tài liệu đồng bộ với một thư mục Nextcloud',
+  'help.guide.files-sync.title': 'Giữ tài liệu đồng bộ với kho tài liệu của bạn',
   'help.guide.files-sync.goal':
-    'Gắn chuyến đi với một thư mục trong kho tài liệu của riêng bạn, để những gì tải lên ở đây đến được đó và những gì lưu ở đó xuất hiện ở đây.',
+    'Gắn chuyến đi với kho tài liệu của riêng bạn, để những gì tải lên ở đây đến được đó và những gì lưu ở đó xuất hiện ở đây.',
   'help.guide.files-sync.step.1':
-    'Nhấp “Đồng bộ tài liệu”, cạnh “Rác” ở đầu bên phải của thanh công cụ. Hộp thoại mở ra với tên chuyến đi dưới tiêu đề. Bên trái, dưới “Kết nối nhà cung cấp”, là các kho mà quản trị viên đã bật, mỗi kho kèm một dòng về cách nó lưu trữ, “Lưu theo thư mục” với Nextcloud; bên phải ghi “Chưa kết nối gì”.',
+    'Nhấp “Đồng bộ tài liệu”, cạnh “Rác” ở đầu bên phải của thanh công cụ. Hộp thoại mở ra với tên chuyến đi dưới tiêu đề. Bên trái, dưới “Kết nối nhà cung cấp”, là các kho mà quản trị viên đã bật, mỗi kho kèm một dòng về cách nó lưu trữ: Paperless-ngx và Papra theo thẻ, Nextcloud và Synology Drive theo thư mục, OpenCloud theo không gian. Bên phải ghi “Chưa kết nối gì”.',
   'help.guide.files-sync.step.2':
-    'Nhấp Nextcloud. Một hộp thoại nhỏ hơn mở ra cho kết nối, mang tên kho, với lời nhắc ở trên cùng hãy dùng mật khẩu ứng dụng thay vì mật khẩu tài khoản.',
+    'Nhấp vào kho của bạn, ở đây là Nextcloud. Một hộp thoại nhỏ hơn mở ra cho kết nối, mang tên kho và hỏi những thông tin mà kho đó dùng để đăng nhập.',
   'help.guide.files-sync.step.3':
-    'Điền “Địa chỉ”, “Tên đăng nhập”, tức tên đăng nhập Nextcloud của bạn chứ không phải địa chỉ email, và “Mật khẩu ứng dụng”, thứ Nextcloud tạo dưới Cài đặt, Bảo mật. “Thư mục gốc” là tùy chọn: đó là nơi TREK tìm các thư mục chuyến đi, /TREK trừ khi bạn chỉ định khác, ở đây là /Reisen. “Chấp nhận chứng chỉ tự ký” ở dưới cùng chỉ dành cho máy chủ trên mạng riêng của bạn có chứng chỉ như vậy.',
+    'Điền “Địa chỉ” và thông tin đăng nhập riêng của kho: “Mã thông báo API” cho Paperless-ngx, “Khóa API” và “ID tổ chức” cho Papra, “Tên đăng nhập” và “Mật khẩu ứng dụng” cho Nextcloud, “Tên đăng nhập” và “Mã thông báo ứng dụng” cho OpenCloud, còn với Synology Drive là “Tên đăng nhập”, “Mật khẩu” và, nếu tài khoản yêu cầu, “Mã xác thực hai yếu tố”. Hãy dùng mật khẩu ứng dụng hoặc mã thông báo ở bất cứ đâu kho cung cấp, không bao giờ dùng mật khẩu tài khoản của bạn. Nextcloud và Synology Drive còn nhận một “Thư mục gốc” tùy chọn, nơi TREK tìm các thư mục chuyến đi, ở đây là /Reisen. “Chấp nhận chứng chỉ tự ký” ở dưới cùng chỉ dành cho kho trên mạng riêng của bạn có chứng chỉ như vậy.',
   'help.guide.files-sync.step.4':
-    'Nhấp “Kiểm tra kết nối”. TREK liên hệ kho bằng những gì bạn đã gõ và phần chân ghi “Đã kết nối, đăng nhập với tư cách” theo sau là tên tài khoản, ở đây là admin. Một mật khẩu bị từ chối hay một địa chỉ không liên hệ được sẽ được nêu ở đó thay vào, và dù thế nào cũng chưa có gì được lưu.',
+    'Nhấp “Kiểm tra kết nối”. TREK liên hệ kho bằng những gì bạn đã gõ và phần chân ghi “Đã kết nối, đăng nhập với tư cách” theo sau là tên tài khoản. Thông tin đăng nhập bị từ chối hay một địa chỉ không liên hệ được sẽ được nêu ở đó thay vào, và dù thế nào cũng chưa có gì được lưu.',
   'help.guide.files-sync.step.5':
-    'Nhấp “Kết nối”. Kết nối được lưu cùng chuyến đi và TREK hỏi “Chuyến đi này nên nằm ở đâu trong Nextcloud?” Chỉ những gì trong thư mục đó được đồng bộ. “Tạo mục mới” tạo một thư mục dưới thư mục gốc khi nhấn “Tạo”, với tên điền sẵn từ tiêu đề chuyến đi; dưới “Hoặc dùng mục bạn đã có” là các thư mục đã có sẵn. Nhấp một thư mục, ở đây là Autumn in Japan.',
+    'Nhấp “Kết nối”. Kết nối được lưu cùng chuyến đi và TREK hỏi chuyến đi nên nằm ở đâu trong kho: thẻ, thư mục hay không gian chứa tài liệu của nó. Chỉ những gì nằm trong đó được đồng bộ. “Tạo mục mới” tạo nó khi nhấn “Tạo”, với tên điền sẵn từ tiêu đề chuyến đi; dưới “Hoặc dùng mục bạn đã có” là các mục đã có sẵn. Nhấp một mục, ở đây là thư mục Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'Hộp thoại trở lại: Nextcloud đứng dưới “Chuyến đi này” ở bên trái, và thẻ của nó ở bên phải mang thư mục, lần chạy gần nhất và “Đồng bộ ngay”. Lần chạy đầu tiên tự bắt đầu; “Đồng bộ ngay” chạy một lần bất cứ khi nào bạn muốn. Khi một lần chạy xong, huy hiệu “Chưa đồng bộ” cạnh tên nhường chỗ cho một chấm xanh lá, “Đã đồng bộ” khi bạn trỏ vào, và thanh luồng đếm số tài liệu mà TREK và Nextcloud mỗi bên đang giữ, với các làn “Gửi ra kho” và “Nhận từ kho” ở giữa. Đóng hộp thoại bằng dấu ×.',
+    'Hộp thoại trở lại: kho của bạn đứng dưới “Chuyến đi này” ở bên trái, và thẻ của nó ở bên phải cho biết nơi nó đồng bộ tới, lần chạy gần nhất và “Đồng bộ ngay”. Lần chạy đầu tiên tự bắt đầu; “Đồng bộ ngay” chạy một lần bất cứ khi nào bạn muốn. Khi một lần chạy xong, huy hiệu “Chưa đồng bộ” cạnh tên nhường chỗ cho một chấm xanh lá, “Đã đồng bộ” khi bạn trỏ vào, và thanh luồng đếm số tài liệu mà TREK và kho mỗi bên đang giữ, với các làn “Gửi ra kho” và “Nhận từ kho” ở giữa. Đóng hộp thoại bằng dấu ×.',
   'help.guide.files-sync.result':
-    'Hai tài liệu đã có sẵn trong thư mục đứng đầu danh sách, được tải lên dưới tên bạn, và mọi tài liệu của chuyến đi cũng đã ở trong thư mục. Từ giờ TREK kiểm tra thư mục ở nền và thư mục theo sát danh sách.',
+    'Những tài liệu đã có sẵn ở đó đứng đầu danh sách, được tải lên dưới tên bạn, và mọi tài liệu của chuyến đi cũng đã ở trong kho. Từ giờ TREK kiểm tra kho ở nền và kho theo sát danh sách.',
   'help.guide.files-sync.tip.1':
-    'Chỉ chủ chuyến đi hoặc quản trị viên của máy chủ mới gắn được một chuyến đi, vì mật khẩu ứng dụng chạm tới toàn bộ tài khoản Nextcloud đó. Mọi thành viên đều có thể mở “Đồng bộ tài liệu”, đọc thẻ và nhấn “Đồng bộ ngay”.',
+    'Chỉ chủ chuyến đi hoặc quản trị viên của máy chủ mới gắn được một chuyến đi, vì thông tin đăng nhập chạm tới toàn bộ tài khoản đó trong kho. Mọi thành viên đều có thể mở “Đồng bộ tài liệu”, đọc thẻ và nhấn “Đồng bộ ngay”.',
   'help.guide.files-sync.tip.2':
     'Một kho trên mạng riêng của bạn cần ALLOW_INTERNAL_NETWORK=true trên máy chủ TREK, và địa chỉ của nó phải là địa chỉ của máy trong mạng, không bao giờ là localhost. Không có vậy, “Kiểm tra kết nối” trả lời “Địa chỉ đó không được phép.”',
   'help.guide.files-sync.tip.3':
-    '“Ngắt kết nối” trên thẻ chấm dứt ghép nối và giữ mọi tài liệu ở cả hai bên. Một thư mục được gắn lần thứ hai được coi là mới, và mọi thứ trong đó lại đi vào lần nữa, nên sau một lần “Ngắt kết nối” hãy gắn một thư mục trống thay vì thư mục cũ.',
+    '“Ngắt kết nối” trên thẻ chấm dứt ghép nối và giữ mọi tài liệu ở cả hai bên. Một thẻ, thư mục hay không gian được gắn lần thứ hai được coi là mới, và mọi thứ trong đó lại đi vào lần nữa, nên sau một lần “Ngắt kết nối” hãy gắn một mục trống thay vì mục cũ.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Chi tiết ngày',

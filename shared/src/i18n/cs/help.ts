@@ -2416,29 +2416,29 @@ const help: TranslationStrings = {
     'Zahodit soubor a dostat ho zpět vyžaduje právo Smazat soubory. Člen, který ho nemá, nevidí ani Smazat na řádku, ani tlačítka v koši.',
   'help.guide.files-trash.tip.3': 'Soubor natrvalo smazaný v koši se už vrátit nedá.',
   // files-sync
-  'help.guide.files-sync.title': 'Držet dokumenty v souladu se složkou Nextcloud',
+  'help.guide.files-sync.title': 'Držet dokumenty v souladu s vaším úložištěm dokumentů',
   'help.guide.files-sync.goal':
-    'Svažte cestu se složkou ve vašem vlastním úložišti dokumentů, aby to, co nahrajete sem, přistálo tam, a co založíte tam, se objevilo tady.',
+    'Svažte cestu s vaším vlastním úložištěm dokumentů, aby to, co nahrajete sem, přistálo tam, a co založíte tam, se objevilo tady.',
   'help.guide.files-sync.step.1':
-    'Klikněte na Synchronizace dokumentů, vedle Koš na pravém konci lišty nástrojů. Dialog se otevře s názvem cesty pod svým titulkem. Vlevo, pod Připojit poskytovatele, stojí úložiště, která správce zapnul, každé s řádkem o tom, jak ukládá, Ukládá do složky u Nextcloud; vpravo stojí Zatím nic nepřipojeno.',
+    'Klikněte na Synchronizace dokumentů, vedle Koš na pravém konci lišty nástrojů. Dialog se otevře s názvem cesty pod svým titulkem. Vlevo, pod Připojit poskytovatele, stojí úložiště, která správce zapnul, každé s řádkem o tom, jak ukládá: Paperless-ngx a Papra podle štítků, Nextcloud a Synology Drive do složky, OpenCloud do prostoru. Vpravo stojí Zatím nic nepřipojeno.',
   'help.guide.files-sync.step.2':
-    'Klikněte na Nextcloud. Otevře se menší dialog pro připojení, pojmenovaný podle úložiště, s upozorněním nahoře, abyste použili heslo aplikace, ne heslo k účtu.',
+    'Klikněte na své úložiště, tady Nextcloud. Otevře se menší dialog pro připojení, pojmenovaný podle úložiště, který se ptá na údaje, kterými se do tohoto úložiště přihlašujete.',
   'help.guide.files-sync.step.3':
-    'Vyplňte Adresa, Uživatelské jméno, vaše přihlašovací jméno v Nextcloudu, ne e-mailovou adresu, a Heslo aplikace, které Nextcloud vytvoří pod Nastavení, Zabezpečení. Základní složka je nepovinná: je to místo, kde TREK hledá složky cest, /TREK, pokud neřeknete jinak, tady /Reisen. Přijmout vlastnoručně podepsaný certifikát dole je jen pro instanci ve vaší vlastní síti s takovým certifikátem.',
+    'Vyplňte Adresa a přihlášení samotného úložiště: API token u Paperless-ngx, API klíč a ID organizace u Papra, Uživatelské jméno a Heslo aplikace u Nextcloud, Uživatelské jméno a Token aplikace u OpenCloud a u Synology Drive Uživatelské jméno, Heslo a, pokud o něj účet žádá, Dvoufaktorový kód. Kdekoli úložiště nabízí heslo nebo token aplikace, použijte ho, nikdy ne heslo ke svému účtu. U Nextcloud a Synology Drive je navíc nepovinná Základní složka, místo, kde TREK hledá složky cest, tady /Reisen. Přijmout vlastnoručně podepsaný certifikát dole je jen pro úložiště ve vaší vlastní síti s takovým certifikátem.',
   'help.guide.files-sync.step.4':
-    'Klikněte na Otestovat připojení. TREK se s tím, co jste zadali, spojí s úložištěm a v patičce stojí Spojení navázáno, přihlášeno jako a za tím jméno účtu, tady admin. Odmítnuté heslo nebo nedostupná adresa se tam pojmenují místo toho a ani v jednom případě se nic neuloží.',
+    'Klikněte na Otestovat připojení. TREK se s tím, co jste zadali, spojí s úložištěm a v patičce stojí Spojení navázáno, přihlášeno jako a za tím jméno účtu. Odmítnuté přihlašovací údaje nebo nedostupná adresa se tam pojmenují místo toho a ani v jednom případě se nic neuloží.',
   'help.guide.files-sync.step.5':
-    'Klikněte na Připojit. Připojení se uloží s cestou a TREK se zeptá Kam v Nextcloud tuto cestu uložit? Synchronizuje se jen to, co je v té složce. Vytvořit nové založí po kliknutí na Vytvořit složku pod základní složkou, s názvem předvyplněným z titulku cesty; pod Nebo použijte existující stojí složky, které tam už jsou. Klikněte na jednu, tady Autumn in Japan.',
+    'Klikněte na Připojit. Připojení se uloží s cestou a TREK se zeptá, kam v úložišti cestu uložit: štítek, složka nebo prostor, který drží její dokumenty. Synchronizuje se jen to, co je uvnitř. Vytvořit nové jej po kliknutí na Vytvořit založí, s názvem předvyplněným z titulku cesty; pod Nebo použijte existující stojí ty, které tam už jsou. Klikněte na jeden, tady na složku Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'Dialog je zpátky: Nextcloud stojí vlevo pod Tato cesta a jeho karta vpravo nese složku, kdy naposledy běžel, a Synchronizovat teď. První běh se spustí sám; Synchronizovat teď spustí jeden, kdykoli chcete. Jakmile je běh hotový, odznak Zatím nesynchronizováno vedle názvu ustoupí zelené tečce, Aktuální, když na ni najedete, a pruh toku počítá dokumenty, které TREK a Nextcloud každý drží, s drahami Do úložiště a Z úložiště mezi nimi. Zavřete dialog křížkem.',
+    'Dialog je zpátky: vaše úložiště stojí vlevo pod Tato cesta a jeho karta vpravo nese, kam se synchronizuje, kdy naposledy běželo, a Synchronizovat teď. První běh se spustí sám; Synchronizovat teď spustí jeden, kdykoli chcete. Jakmile je běh hotový, odznak Zatím nesynchronizováno vedle názvu ustoupí zelené tečce, Aktuální, když na ni najedete, a pruh toku počítá dokumenty, které TREK a úložiště každý drží, s drahami Do úložiště a Z úložiště mezi nimi. Zavřete dialog křížkem ×.',
   'help.guide.files-sync.result':
-    'Dva dokumenty, které už ve složce byly, stojí nahoře v seznamu, nahrané vaším jménem, a každý dokument cesty je také ve složce. Od té chvíle TREK složku kontroluje na pozadí a složka sleduje seznam.',
+    'Dokumenty, které tam už byly, stojí nahoře v seznamu, nahrané vaším jménem, a každý dokument cesty je také v úložišti. Od té chvíle TREK úložiště kontroluje na pozadí a úložiště sleduje seznam.',
   'help.guide.files-sync.tip.1':
-    'Cestu smí svázat jen její vlastník nebo správce instance, protože heslo aplikace dosáhne na celý ten účet Nextcloud. Každý člen může Synchronizace dokumentů otevřít, kartu si přečíst a stisknout Synchronizovat teď.',
+    'Cestu smí svázat jen její vlastník nebo správce instance, protože přihlašovací údaje dosáhnou na celý ten účet v úložišti. Každý člen může Synchronizace dokumentů otevřít, kartu si přečíst a stisknout Synchronizovat teď.',
   'help.guide.files-sync.tip.2':
     'Úložiště ve vaší vlastní síti potřebuje na serveru TREKu ALLOW_INTERNAL_NETWORK=true a jeho adresa musí být adresa stroje v síti, nikdy localhost. Bez toho Otestovat připojení odpoví Tato adresa není povolena.',
   'help.guide.files-sync.tip.3':
-    'Odpojit na kartě ukončí párování a nechá každý dokument na obou stranách. Složka svázaná podruhé se bere jako nová a všechno v ní přijde znovu, takže po Odpojit svažte prázdnou složku, ne tu starou.',
+    'Odpojit na kartě ukončí párování a nechá každý dokument na obou stranách. Štítek, složka nebo prostor svázaný podruhé se bere jako nový a všechno v něm přijde znovu, takže po Odpojit svažte raději nějaký prázdný než ten starý.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Podrobnosti dne',

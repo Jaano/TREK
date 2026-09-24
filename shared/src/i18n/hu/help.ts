@@ -2534,29 +2534,29 @@ const help: TranslationStrings = {
     'Egy fájl kidobásához és visszahozásához Fájlok törlése jog kell. Az a tag, akinek nincs meg, sem a soron lévő Törlést, sem a kukában lévő gombokat nem látja.',
   'help.guide.files-trash.tip.3': 'A kukában véglegesen törölt fájlt már nem lehet visszahozni.',
   // files-sync
-  'help.guide.files-sync.title': 'A dokumentumok szinkronban tartása egy Nextcloud-mappával',
+  'help.guide.files-sync.title': 'A dokumentumok szinkronban tartása a dokumentumtáraddal',
   'help.guide.files-sync.goal':
-    'Kösd az utazást egy mappához a saját dokumentumtáradban, hogy ami itt feltöltődik, ott landoljon, és ami ott kerül lerakásra, itt bukkanjon fel.',
+    'Kösd az utazást a saját dokumentumtáradhoz, hogy ami itt feltöltődik, ott landoljon, és ami ott kerül lerakásra, itt bukkanjon fel.',
   'help.guide.files-sync.step.1':
-    'Kattints a Dokumentumok szinkronizálása gombra, a Kuka mellett az eszköztár jobb végén. A párbeszédablak az utazás nevével nyílik meg a címe alatt. Balra, a Szolgáltató csatlakoztatása alatt állnak a tárolók, amiket egy rendszergazda bekapcsolt, mindegyik egy sorral arról, hogyan rendszerez, a Nextcloudnál Mappába rendszerez; jobbra Még nincs semmi csatlakoztatva áll.',
+    'Kattints a Dokumentumok szinkronizálása gombra, a Kuka mellett az eszköztár jobb végén. A párbeszédablak az utazás nevével nyílik meg a címe alatt. Balra, a Szolgáltató csatlakoztatása alatt állnak a tárolók, amiket egy rendszergazda bekapcsolt, mindegyik egy sorral arról, hogyan rendszerez: a Paperless-ngx és a Papra címke szerint, a Nextcloud és a Synology Drive mappába, az OpenCloud térbe. Jobbra Még nincs semmi csatlakoztatva áll.',
   'help.guide.files-sync.step.2':
-    'Kattints a Nextcloudra. Egy kisebb párbeszédablak nyílik meg a kapcsolathoz, a tárolóról elnevezve, a tetején az emlékeztetővel, hogy alkalmazásjelszót használj a fiókod jelszava helyett.',
+    'Kattints a tárolódra, itt a Nextcloudra. Egy kisebb párbeszédablak nyílik meg a kapcsolathoz, a tárolóról elnevezve, és azt kéri be, amivel ennél a tárolónál be lehet jelentkezni.',
   'help.guide.files-sync.step.3':
-    'Töltsd ki a Cím, a Felhasználónév, ami a Nextcloud bejelentkezési neved, nem az e-mail-címed, és az Alkalmazásjelszó mezőt, amit a Nextcloud a Beállítások, Biztonság alatt készít. Az Alapmappa nem kötelező: ott keresi a TREK az utak mappáit, /TREK, hacsak mást nem mondasz, itt /Reisen. Az alul lévő Saját aláírású tanúsítvány elfogadása csak a saját hálózatodon lévő, ilyen tanúsítványú példányhoz való.',
+    'Töltsd ki a Cím mezőt és a tároló saját bejelentkezési adatait: egy API-tokent a Paperless-ngx-nél, egy API-kulcsot és a Szervezet azonosítóját a Papránál, Felhasználónevet és egy Alkalmazásjelszót a Nextcloudnál, Felhasználónevet és egy Alkalmazástokent az OpenCloudnál, a Synology Drive-nál pedig Felhasználónevet, Jelszót és, ha a fiók kér ilyet, egy Kétlépcsős kódot. Ahol a tároló kínál ilyet, mindig alkalmazásjelszót vagy tokent használj, soha ne a fiókod jelszavát. A Nextcloud és a Synology Drive ezenfelül egy nem kötelező Alapmappát is elfogad, ahol a TREK az utak mappáit keresi, itt /Reisen. Az alul lévő Saját aláírású tanúsítvány elfogadása csak a saját hálózatodon lévő, ilyen tanúsítványú tárolóhoz való.',
   'help.guide.files-sync.step.4':
-    'Kattints a Kapcsolat tesztelése gombra. A TREK eléri a tárolót azzal, amit beírtál, és a láblécen Elértem, bejelentkezve mint áll, utána a fiók nevével, itt admin. Egy visszautasított jelszót vagy egy elérhetetlen címet helyette ott nevez meg, és egyik esetben sem ment semmit.',
+    'Kattints a Kapcsolat tesztelése gombra. A TREK eléri a tárolót azzal, amit beírtál, és a láblécen Elértem, bejelentkezve mint áll, utána a fiók nevével. Az elutasított hitelesítő adatokat vagy egy elérhetetlen címet helyette ott nevezi meg, és egyik esetben sem ment semmit.',
   'help.guide.files-sync.step.5':
-    'Kattints a Csatlakozás gombra. A kapcsolat az utazással együtt mentődik, és a TREK megkérdezi: Hová kerüljön ez az út a(z) Nextcloud tárolóban? Csak az szinkronizálódik, ami abban a mappában van. Az Új létrehozása a Létrehozás gombra mappát hoz létre az alapmappa alatt, az utazás címéből előre kitöltött névvel; a Vagy használj egy meglévőt alatt állnak a már meglévő mappák. Kattints egyre, itt Autumn in Japan.',
+    'Kattints a Csatlakozás gombra. A kapcsolat az utazással együtt mentődik, és a TREK megkérdezi, hová kerüljön az út a tárolóban: melyik címke, mappa vagy tér tartsa a dokumentumait. Csak az szinkronizálódik, ami abban van. Az Új létrehozása a Létrehozás gombra létrehozza, az utazás címéből előre kitöltött névvel; a Vagy használj egy meglévőt alatt állnak a már meglévők. Kattints egyre, itt az Autumn in Japan mappára.',
   'help.guide.files-sync.step.6':
-    'A párbeszédablak visszajött: a Nextcloud balra az Ez az út alatt áll, a kártyája jobbra pedig viszi a mappát, hogy mikor futott utoljára, és a Szinkronizálás most gombot. Az első futás magától indul; a Szinkronizálás most bármikor lefuttat egyet. Amint egy futás átment, a név melletti Még nincs szinkronizálva jelvény zöld pontnak adja át a helyét, Naprakész, ha rámutatsz, és a folyamsáv számolja a dokumentumokat, amiket a TREK és a Nextcloud külön-külön tart, köztük a Ki a tárolóba és a Be a tárolóból sávokkal. Zárd be a párbeszédablakot a × jellel.',
+    'A párbeszédablak visszajött: a tárolód balra az Ez az út alatt áll, a kártyája jobbra pedig mutatja, hová szinkronizál, mikor futott utoljára, és a Szinkronizálás most gombot. Az első futás magától indul; a Szinkronizálás most bármikor lefuttat egyet. Amint egy futás átment, a név melletti Még nincs szinkronizálva jelvény zöld pontnak adja át a helyét, Naprakész, ha rámutatsz, és a folyamsáv számolja a dokumentumokat, amiket a TREK és a tároló külön-külön tart, köztük a Ki a tárolóba és a Be a tárolóból sávokkal. Zárd be a párbeszédablakot a × jellel.',
   'help.guide.files-sync.result':
-    'A két dokumentum, ami már a mappában volt, a lista tetején áll, a te nevedben feltöltve, és az utazás minden dokumentuma a mappában is megvan. Mostantól a TREK a háttérben ellenőrzi a mappát, és a mappa követi a listát.',
+    'A dokumentumok, amik már ott voltak, a lista tetején állnak, a te nevedben feltöltve, és az utazás minden dokumentuma a tárolóban is megvan. Mostantól a TREK a háttérben ellenőrzi a tárolót, és a tároló követi a listát.',
   'help.guide.files-sync.tip.1':
-    'Csak az utazás tulajdonosa vagy egy példány-rendszergazda kötheti be az utazást, mivel az alkalmazásjelszó az egész Nextcloud-fiókot eléri. Minden tag megnyithatja a Dokumentumok szinkronizálása ablakot, elolvashatja a kártyát és megnyomhatja a Szinkronizálás most gombot.',
+    'Csak az utazás tulajdonosa vagy egy példány-rendszergazda kötheti be az utazást, mivel a hitelesítő adatok az egész fiókot elérik a tárolóban. Minden tag megnyithatja a Dokumentumok szinkronizálása ablakot, elolvashatja a kártyát és megnyomhatja a Szinkronizálás most gombot.',
   'help.guide.files-sync.tip.2':
     'A saját hálózatodon lévő tárolóhoz ALLOW_INTERNAL_NETWORK=true kell a TREK-szerveren, és a címének a gép hálózati címének kell lennie, soha nem localhost. Enélkül a Kapcsolat tesztelése azt válaszolja: Ez a cím nem engedélyezett.',
   'help.guide.files-sync.tip.3':
-    'A kártyán lévő Leválasztás megszünteti a párosítást, és mindkét oldalon megtart minden dokumentumot. Egy másodszor bekötött mappát újként kezel, és minden, ami benne van, újra bejön, ezért egy Leválasztás után inkább üres mappát köss be, ne a régit.',
+    'A kártyán lévő Leválasztás megszünteti a párosítást, és mindkét oldalon megtart minden dokumentumot. Egy másodszor bekötött címkét, mappát vagy teret újként kezel, és minden, ami benne van, újra bejön, ezért egy Leválasztás után inkább egy üreset köss be, ne a régit.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Nap részletei',

@@ -2480,29 +2480,29 @@ const help: TranslationStrings = {
     'Jogar um arquivo fora e trazer de volta precisa do direito Excluir arquivos. Um membro sem ele não vê nem Excluir na linha nem os botões na lixeira.',
   'help.guide.files-trash.tip.3': 'Um arquivo excluído para sempre na lixeira não pode ser trazido de volta.',
   // files-sync
-  'help.guide.files-sync.title': 'Manter os documentos em dia com uma pasta do Nextcloud',
+  'help.guide.files-sync.title': 'Manter os documentos em dia com o seu repositório de documentos',
   'help.guide.files-sync.goal':
-    'Amarre a viagem a uma pasta no seu próprio repositório de documentos, para que o que é enviado aqui chegue lá e o que é arquivado lá apareça aqui.',
+    'Amarre a viagem ao seu próprio repositório de documentos, para que o que é enviado aqui chegue lá e o que é arquivado lá apareça aqui.',
   'help.guide.files-sync.step.1':
-    'Clique em Sincronização de documentos, ao lado de Lixeira na ponta direita da barra de ferramentas. A janela abre com o nome da viagem sob o título. À esquerda, em Conectar um provedor, ficam os repositórios que um administrador ligou, cada um com uma linha sobre como arquiva, Arquiva em uma pasta para o Nextcloud; à direita lê-se Nada conectado ainda.',
+    'Clique em Sincronização de documentos, ao lado de Lixeira na ponta direita da barra de ferramentas. A janela abre com o nome da viagem sob o título. À esquerda, em Conectar um provedor, ficam os repositórios que um administrador ligou, cada um com uma linha sobre como arquiva: Paperless-ngx e Papra por etiqueta, Nextcloud e Synology Drive em uma pasta, OpenCloud em um espaço. À direita lê-se Nada conectado ainda.',
   'help.guide.files-sync.step.2':
-    'Clique em Nextcloud. Uma janela menor abre para a conexão, com o nome do repositório, com o lembrete no topo de usar uma senha de aplicativo em vez da senha da sua conta.',
+    'Clique no seu repositório, aqui Nextcloud. Uma janela menor abre para a conexão, com o nome do repositório, e pede os dados com que se faz login nesse repositório.',
   'help.guide.files-sync.step.3':
-    'Preencha Endereço, Nome de usuário, o seu nome de login do Nextcloud e não o seu endereço de e-mail, e Senha de aplicativo, que o Nextcloud cria em Configurações, Segurança. Pasta base é opcional: é onde o TREK procura as pastas das viagens, /TREK a menos que você diga outra coisa, aqui /Reisen. Aceitar certificado autoassinado, embaixo, é só para uma instância na sua própria rede com um certificado desses.',
+    'Preencha Endereço e o login próprio do repositório: um Token de API para o Paperless-ngx, uma Chave de API e o ID da organização para o Papra, Nome de usuário e uma Senha de aplicativo para o Nextcloud, Nome de usuário e um Token de aplicativo para o OpenCloud e, para o Synology Drive, Nome de usuário, Senha e, se a conta pedir, um Código de dois fatores. Use uma senha ou um token de aplicativo sempre que o repositório oferecer, nunca a senha da sua conta. Nextcloud e Synology Drive aceitam também uma Pasta base opcional, onde o TREK procura as pastas das viagens, aqui /Reisen. Aceitar certificado autoassinado, embaixo, é só para um repositório na sua própria rede com um certificado desses.',
   'help.guide.files-sync.step.4':
-    'Clique em Testar conexão. O TREK acessa o repositório com o que você digitou e o rodapé diz Acessado, conectado como seguido do nome da conta, aqui admin. Uma senha recusada ou um endereço que não pode ser alcançado aparece ali no lugar, e nada é salvo em nenhum dos casos.',
+    'Clique em Testar conexão. O TREK acessa o repositório com o que você digitou e o rodapé diz Acessado, conectado como seguido do nome da conta. Credenciais recusadas ou um endereço que não pode ser alcançado aparecem ali no lugar, e nada é salvo em nenhum dos casos.',
   'help.guide.files-sync.step.5':
-    'Clique em Conectar. A conexão é salva com a viagem e o TREK pergunta Onde esta viagem deve ficar no Nextcloud? Só o que está nessa pasta é sincronizado. Criar um novo cria uma pasta sob a pasta base ao clicar em Criar, com um nome pré-preenchido a partir do título da viagem; em Ou use um que você já tem ficam as pastas que já existem. Clique em uma, aqui Autumn in Japan.',
+    'Clique em Conectar. A conexão é salva com a viagem e o TREK pergunta onde a viagem deve ficar no repositório: a etiqueta, a pasta ou o espaço que guarda os documentos dela. Só o que está ali dentro é sincronizado. Em Criar um novo, ele é criado ao clicar em Criar, com um nome pré-preenchido a partir do título da viagem; em Ou use um que você já tem ficam os que já existem. Clique em um, aqui a pasta Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'A janela está de volta: Nextcloud fica em Esta viagem à esquerda, e o cartão dele à direita carrega a pasta, quando rodou pela última vez e Sincronizar agora. Uma primeira execução começa sozinha; Sincronizar agora roda uma quando você quiser. Assim que uma execução termina, o selo Ainda não sincronizado ao lado do nome dá lugar a um ponto verde, Em sincronia quando você aponta para ele, e a barra de fluxo conta os documentos que o TREK e o Nextcloud têm cada um, com as faixas Saída para o repositório e Entrada do repositório entre eles. Feche a janela com o ×.',
+    'A janela está de volta: o seu repositório fica em Esta viagem à esquerda, e o cartão dele à direita carrega para onde sincroniza, quando rodou pela última vez e Sincronizar agora. Uma primeira execução começa sozinha; Sincronizar agora roda uma quando você quiser. Assim que uma execução termina, o selo Ainda não sincronizado ao lado do nome dá lugar a um ponto verde, Em sincronia quando você aponta para ele, e a barra de fluxo conta os documentos que o TREK e o repositório têm cada um, com as faixas Saída para o repositório e Entrada do repositório entre eles. Feche a janela com o ×.',
   'help.guide.files-sync.result':
-    'Os dois documentos que já estavam na pasta ficam no topo da lista, enviados em seu nome, e todo documento da viagem está na pasta também. A partir de agora o TREK verifica a pasta em segundo plano e a pasta acompanha a lista.',
+    'Os documentos que já estavam lá ficam no topo da lista, enviados em seu nome, e todo documento da viagem está no repositório também. A partir de agora o TREK verifica o repositório em segundo plano, e o repositório acompanha a lista.',
   'help.guide.files-sync.tip.1':
-    'Só o dono da viagem ou um administrador da instância pode amarrar uma viagem, já que a senha de aplicativo alcança aquela conta inteira do Nextcloud. Todo membro pode abrir Sincronização de documentos, ler o cartão e apertar Sincronizar agora.',
+    'Só o dono da viagem ou um administrador da instância pode amarrar uma viagem, já que as credenciais alcançam aquela conta inteira no repositório. Todo membro pode abrir Sincronização de documentos, ler o cartão e apertar Sincronizar agora.',
   'help.guide.files-sync.tip.2':
     'Um repositório na sua própria rede precisa de ALLOW_INTERNAL_NETWORK=true no servidor do TREK, e o endereço dele tem de ser o endereço da máquina na rede, nunca localhost. Sem isso, Testar conexão responde Esse endereço não é permitido.',
   'help.guide.files-sync.tip.3':
-    'Desconectar no cartão encerra o pareamento e mantém todos os documentos dos dois lados. Uma pasta amarrada uma segunda vez é tratada como nova, e tudo nela entra de novo, então depois de um Desconectar amarre uma pasta vazia em vez da antiga.',
+    'Desconectar no cartão encerra o pareamento e mantém todos os documentos dos dois lados. Uma etiqueta, pasta ou espaço amarrado uma segunda vez é tratado como novo, e tudo o que está dentro entra de novo, então depois de um Desconectar amarre um que esteja vazio em vez do antigo.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Detalhes do dia',

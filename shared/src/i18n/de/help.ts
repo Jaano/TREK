@@ -2551,29 +2551,29 @@ const help: TranslationStrings = {
     'Eine Datei wegwerfen und zurückholen braucht das Recht Dateien löschen. Ein Mitglied ohne dieses Recht sieht weder Löschen an der Zeile noch die Knöpfe im Papierkorb.',
   'help.guide.files-trash.tip.3': 'Eine im Papierkorb endgültig gelöschte Datei kann nicht zurückgeholt werden.',
   // files-sync
-  'help.guide.files-sync.title': 'Die Dokumente mit einem Nextcloud-Ordner im Gleichstand halten',
+  'help.guide.files-sync.title': 'Die Dokumente mit deinem Dokumentenspeicher im Gleichstand halten',
   'help.guide.files-sync.goal':
-    'Binde die Reise an einen Ordner in deinem eigenen Dokumentenspeicher, damit, was hier hochgeladen wird, dort landet, und was dort abgelegt wird, hier auftaucht.',
+    'Binde die Reise an deinen eigenen Dokumentenspeicher, damit, was hier hochgeladen wird, dort landet, und was dort abgelegt wird, hier auftaucht.',
   'help.guide.files-sync.step.1':
-    'Klick auf Dokumentenabgleich, neben Papierkorb am rechten Ende der Werkzeugleiste. Der Dialog öffnet sich mit dem Namen der Reise unter seinem Titel. Links, unter Anbieter verbinden, stehen die Speicher, die ein Administrator eingeschaltet hat, jeder mit einer Zeile dazu, wie er ablegt, Legt in einem Ordner ab bei Nextcloud; rechts steht Noch nichts verbunden.',
+    'Klick auf Dokumentenabgleich, neben Papierkorb am rechten Ende der Werkzeugleiste. Der Dialog öffnet sich mit dem Namen der Reise unter seinem Titel. Links, unter Anbieter verbinden, stehen die Speicher, die ein Administrator eingeschaltet hat, jeder mit einer Zeile dazu, wie er ablegt: Paperless-ngx und Papra nach Tag, Nextcloud und Synology Drive in einem Ordner, OpenCloud in einem Space. Rechts steht Noch nichts verbunden.',
   'help.guide.files-sync.step.2':
-    'Klick auf Nextcloud. Ein kleinerer Dialog für die Verbindung öffnet sich, benannt nach dem Speicher, mit dem Hinweis oben, ein App-Passwort statt deines Kontopassworts zu nehmen.',
+    'Klick auf deinen Speicher, hier Nextcloud. Ein kleinerer Dialog für die Verbindung öffnet sich, benannt nach dem Speicher, und fragt nach dem, womit sich dieser Speicher anmeldet.',
   'help.guide.files-sync.step.3':
-    'Füll Adresse, Benutzername, deinen Nextcloud-Anmeldenamen statt deiner E-Mail-Adresse, und App-Passwort aus, das Nextcloud unter Einstellungen, Sicherheit anlegt. Basisordner ist freiwillig: Dort sucht TREK nach Reiseordnern, /TREK, wenn du nichts anderes sagst, hier /Reisen. Selbstsigniertes Zertifikat zulassen ganz unten ist nur für eine Instanz in deinem eigenen Netz mit so einem Zertifikat.',
+    'Füll Adresse und die Anmeldung des Speichers aus: einen API-Token bei Paperless-ngx, einen API-Schlüssel und die Organisations-ID bei Papra, Benutzername und ein App-Passwort bei Nextcloud, Benutzername und einen App-Token bei OpenCloud und bei Synology Drive Benutzername, Passwort und, wenn das Konto einen verlangt, einen Zwei-Faktor-Code. Nimm ein App-Passwort oder einen Token, wo immer der Speicher einen anbietet, nie dein Kontopasswort. Nextcloud und Synology Drive nehmen außerdem einen freiwilligen Basisordner, in dem TREK nach Reiseordnern sucht, hier /Reisen. Selbstsigniertes Zertifikat zulassen ganz unten ist nur für einen Speicher in deinem eigenen Netz mit so einem Zertifikat.',
   'help.guide.files-sync.step.4':
-    'Klick auf Verbindung testen. TREK erreicht den Speicher mit dem, was du getippt hast, und die Fußzeile lautet Erreicht, angemeldet als, gefolgt vom Namen des Kontos, hier admin. Ein abgewiesenes Passwort oder eine nicht erreichbare Adresse wird dort stattdessen benannt, und gespeichert wird so oder so nichts.',
+    'Klick auf Verbindung testen. TREK erreicht den Speicher mit dem, was du getippt hast, und die Fußzeile lautet Erreicht, angemeldet als, gefolgt vom Namen des Kontos. Abgewiesene Zugangsdaten oder eine nicht erreichbare Adresse werden dort stattdessen benannt, und gespeichert wird so oder so nichts.',
   'help.guide.files-sync.step.5':
-    'Klick auf Verbinden. Die Verbindung wird mit der Reise gespeichert, und TREK fragt Wo soll diese Reise in Nextcloud liegen? Nur, was in diesem Ordner liegt, wird abgeglichen. Neu anlegen legt mit Anlegen einen Ordner unter dem Basisordner an, mit einem aus dem Reisetitel vorausgefüllten Namen; unter Oder etwas Vorhandenes nehmen stehen die Ordner, die es schon gibt. Klick einen an, hier Autumn in Japan.',
+    'Klick auf Verbinden. Die Verbindung wird mit der Reise gespeichert, und TREK fragt, wo die Reise im Speicher liegen soll: der Tag, der Ordner oder der Space, der ihre Dokumente hält. Nur, was dort liegt, wird abgeglichen. Neu anlegen legt ihn mit Anlegen an, mit einem aus dem Reisetitel vorausgefüllten Namen; unter Oder etwas Vorhandenes nehmen steht, was es schon gibt. Klick eins an, hier den Ordner Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'Der Dialog ist zurück: Nextcloud steht links unter Diese Reise, und seine Karte rechts trägt den Ordner, wann er zuletzt gelaufen ist, und Jetzt abgleichen. Ein erster Lauf startet von selbst; Jetzt abgleichen startet einen, wann immer du willst. Ist ein Lauf durch, weicht das Abzeichen Noch nicht abgeglichen neben dem Namen einem grünen Punkt, Im Gleichstand, wenn du darauf zeigst, und der Flussbalken zählt die Dokumente, die TREK und Nextcloud jeweils halten, mit den Spuren Raus zum Speicher und Rein vom Speicher dazwischen. Schließ den Dialog mit dem ×.',
+    'Der Dialog ist zurück: Dein Speicher steht links unter Diese Reise, und seine Karte rechts trägt, wohin er abgleicht, wann er zuletzt gelaufen ist, und Jetzt abgleichen. Ein erster Lauf startet von selbst; Jetzt abgleichen startet einen, wann immer du willst. Ist ein Lauf durch, weicht das Abzeichen Noch nicht abgeglichen neben dem Namen einem grünen Punkt, Im Gleichstand, wenn du darauf zeigst, und der Flussbalken zählt die Dokumente, die TREK und der Speicher jeweils halten, mit den Spuren Raus zum Speicher und Rein vom Speicher dazwischen. Schließ den Dialog mit dem ×.',
   'help.guide.files-sync.result':
-    'Die zwei Dokumente, die schon im Ordner lagen, stehen oben in der Liste, in deinem Namen hochgeladen, und jedes Dokument der Reise liegt auch im Ordner. Von nun an prüft TREK den Ordner im Hintergrund, und der Ordner folgt der Liste.',
+    'Die Dokumente, die schon dort lagen, stehen oben in der Liste, in deinem Namen hochgeladen, und jedes Dokument der Reise liegt auch im Speicher. Von nun an prüft TREK den Speicher im Hintergrund, und der Speicher folgt der Liste.',
   'help.guide.files-sync.tip.1':
-    'Nur der Besitzer der Reise oder ein Instanz-Administrator kann eine Reise binden, denn das App-Passwort reicht an das ganze Nextcloud-Konto heran. Jedes Mitglied kann Dokumentenabgleich öffnen, die Karte lesen und Jetzt abgleichen drücken.',
+    'Nur der Besitzer der Reise oder ein Instanz-Administrator kann eine Reise binden, denn die Zugangsdaten reichen an das ganze Konto beim Speicher heran. Jedes Mitglied kann Dokumentenabgleich öffnen, die Karte lesen und Jetzt abgleichen drücken.',
   'help.guide.files-sync.tip.2':
     'Ein Speicher in deinem eigenen Netz braucht ALLOW_INTERNAL_NETWORK=true auf dem TREK-Server, und seine Adresse muss die Adresse der Maschine im Netz sein, nie localhost. Ohne das antwortet Verbindung testen mit Diese Adresse ist nicht erlaubt.',
   'help.guide.files-sync.tip.3':
-    'Trennen auf der Karte beendet die Paarung und behält jedes Dokument auf beiden Seiten. Ein zum zweiten Mal gebundener Ordner gilt als neu, und alles darin kommt noch einmal herein, also binde nach einem Trennen lieber einen leeren Ordner als den alten.',
+    'Trennen auf der Karte beendet die Paarung und behält jedes Dokument auf beiden Seiten. Ein zum zweiten Mal gebundener Tag, Ordner oder Space gilt als neu, und alles darin kommt noch einmal herein, also binde nach einem Trennen lieber einen leeren als den alten.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Tagesdetails',

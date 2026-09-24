@@ -2539,29 +2539,29 @@ const help: TranslationStrings = {
   'help.guide.files-trash.tip.3':
     'Een bestand dat in de prullenbak voorgoed is verwijderd, kan niet worden teruggehaald.',
   // files-sync
-  'help.guide.files-sync.title': 'De documenten in de pas houden met een Nextcloud-map',
+  'help.guide.files-sync.title': 'De documenten in de pas houden met je documentopslag',
   'help.guide.files-sync.goal':
-    'Koppel de reis aan een map in je eigen documentopslag, zodat wat hier wordt geüpload daar belandt en wat daar wordt opgeborgen hier opduikt.',
+    'Koppel de reis aan je eigen documentopslag, zodat wat hier wordt geüpload daar belandt en wat daar wordt opgeborgen hier opduikt.',
   'help.guide.files-sync.step.1':
-    'Klik op Documentsynchronisatie, naast Prullenbak aan de rechterkant van de werkbalk. Het venster gaat open met de naam van de reis onder zijn titel. Links, onder Aanbieder koppelen, staan de opslagen die een beheerder heeft aangezet, elk met een regel over hoe hij ordent, Ordent in een map voor Nextcloud; rechts leest het Nog niets verbonden.',
+    'Klik op Documentsynchronisatie, naast Prullenbak aan de rechterkant van de werkbalk. Het venster gaat open met de naam van de reis onder zijn titel. Links, onder Aanbieder koppelen, staan de opslagen die een beheerder heeft aangezet, elk met een regel over hoe hij ordent: Paperless-ngx en Papra op tag, Nextcloud en Synology Drive in een map, OpenCloud in een ruimte. Rechts leest het Nog niets verbonden.',
   'help.guide.files-sync.step.2':
-    'Klik op Nextcloud. Een kleiner venster gaat open voor de verbinding, genoemd naar de opslag, met bovenaan de herinnering om een app-wachtwoord te gebruiken in plaats van je accountwachtwoord.',
+    'Klik op je opslag, hier Nextcloud. Een kleiner venster gaat open voor de verbinding, genoemd naar de opslag, en vraagt om de gegevens waarmee je bij die opslag inlogt.',
   'help.guide.files-sync.step.3':
-    'Vul Adres in, Gebruikersnaam, je Nextcloud-inlognaam en niet je e-mailadres, en App-wachtwoord, dat Nextcloud aanmaakt onder Instellingen, Beveiliging. Basismap is optioneel: het is waar TREK naar reismappen zoekt, /TREK tenzij je anders zegt, hier /Reisen. Zelfondertekend certificaat toestaan onderaan is alleen voor een instantie op je eigen netwerk met zo’n certificaat.',
+    'Vul Adres in en de eigen aanmelding van de opslag: een API-token voor Paperless-ngx, een API-sleutel en de Organisatie-ID voor Papra, Gebruikersnaam en een App-wachtwoord voor Nextcloud, Gebruikersnaam en een App-token voor OpenCloud, en voor Synology Drive Gebruikersnaam, Wachtwoord en, als het account erom vraagt, een Tweestapscode. Gebruik een app-wachtwoord of token overal waar de opslag er een aanbiedt, nooit je accountwachtwoord. Nextcloud en Synology Drive nemen ook een optionele Basismap, waar TREK naar reismappen zoekt, hier /Reisen. Zelfondertekend certificaat toestaan onderaan is alleen voor een opslag op je eigen netwerk met zo’n certificaat.',
   'help.guide.files-sync.step.4':
-    'Klik op Verbinding testen. TREK bereikt de opslag met wat je typte en de voettekst leest Bereikt, aangemeld als gevolgd door de naam van het account, hier admin. Een wachtwoord dat wordt geweigerd of een adres dat niet bereikbaar is staat daar in plaats daarvan, en in beide gevallen wordt er niets opgeslagen.',
+    'Klik op Verbinding testen. TREK bereikt de opslag met wat je typte en de voettekst leest Bereikt, aangemeld als gevolgd door de naam van het account. Inloggegevens die worden geweigerd of een adres dat niet bereikbaar is staan daar in plaats daarvan, en in beide gevallen wordt er niets opgeslagen.',
   'help.guide.files-sync.step.5':
-    'Klik op Verbinden. De verbinding wordt bij de reis opgeslagen en TREK vraagt Waar moet deze reis in Nextcloud komen te staan? Alleen wat in die map staat wordt gesynchroniseerd. Een nieuwe maken maakt bij Aanmaken een map onder de basismap, met een naam die uit de titel van de reis is voorgevuld; onder Of gebruik er een die je al hebt staan de mappen die er al zijn. Klik op een ervan, hier Autumn in Japan.',
+    'Klik op Verbinden. De verbinding wordt bij de reis opgeslagen en TREK vraagt waar de reis in de opslag moet komen te staan: de tag, map of ruimte die haar documenten bevat. Alleen wat daarin staat wordt gesynchroniseerd. Een nieuwe maken maakt hem aan bij Aanmaken, met een naam die uit de titel van de reis is voorgevuld; onder Of gebruik er een die je al hebt staan de bestaande. Klik op een ervan, hier de map Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'Het venster is terug: Nextcloud staat links onder Deze reis, en zijn kaart rechts draagt de map, wanneer hij voor het laatst liep en Nu synchroniseren. Een eerste uitvoering start vanzelf; Nu synchroniseren draait er een wanneer je maar wilt. Zodra een uitvoering klaar is, maakt de badge Nog niet gesynchroniseerd naast de naam plaats voor een groene stip, Synchroon als je erop wijst, en de stroombalk telt de documenten die TREK en Nextcloud elk hebben, met de banen Naar de opslag en Uit de opslag ertussen. Sluit het venster met de ×.',
+    'Het venster is terug: je opslag staat links onder Deze reis, en zijn kaart rechts draagt waarheen hij synchroniseert, wanneer hij voor het laatst liep en Nu synchroniseren. Een eerste uitvoering start vanzelf; Nu synchroniseren draait er een wanneer je maar wilt. Zodra een uitvoering klaar is, maakt de badge Nog niet gesynchroniseerd naast de naam plaats voor een groene stip, Synchroon als je erop wijst, en de stroombalk telt de documenten die TREK en de opslag elk hebben, met de banen Naar de opslag en Uit de opslag ertussen. Sluit het venster met de ×.',
   'help.guide.files-sync.result':
-    'De twee documenten die al in de map stonden staan bovenaan de lijst, geüpload op jouw naam, en elk document van de reis staat ook in de map. Vanaf nu controleert TREK de map op de achtergrond en volgt de map de lijst.',
+    'De documenten die er al stonden staan bovenaan de lijst, geüpload op jouw naam, en elk document van de reis staat ook in de opslag. Vanaf nu controleert TREK de opslag op de achtergrond en volgt de opslag de lijst.',
   'help.guide.files-sync.tip.1':
-    'Alleen de eigenaar van de reis of een beheerder van de instantie kan een reis koppelen, omdat het app-wachtwoord dat hele Nextcloud-account bereikt. Elk lid kan Documentsynchronisatie openen, de kaart lezen en op Nu synchroniseren drukken.',
+    'Alleen de eigenaar van de reis of een beheerder van de instantie kan een reis koppelen, omdat de inloggegevens dat hele account bij de opslag bereiken. Elk lid kan Documentsynchronisatie openen, de kaart lezen en op Nu synchroniseren drukken.',
   'help.guide.files-sync.tip.2':
     'Een opslag op je eigen netwerk heeft ALLOW_INTERNAL_NETWORK=true op de TREK-server nodig, en zijn adres moet het adres van de machine op het netwerk zijn, nooit localhost. Zonder dat antwoordt Verbinding testen Dat adres is niet toegestaan.',
   'help.guide.files-sync.tip.3':
-    'Verbinding verbreken op de kaart beëindigt de koppeling en houdt elk document aan beide kanten. Een map die een tweede keer wordt gekoppeld geldt als nieuw, en alles erin komt opnieuw binnen, koppel na een Verbinding verbreken dus een lege map in plaats van de oude.',
+    'Verbinding verbreken op de kaart beëindigt de koppeling en houdt elk document aan beide kanten. Een tag, map of ruimte die een tweede keer wordt gekoppeld geldt als nieuw, en alles erin komt opnieuw binnen, koppel na een Verbinding verbreken dus liever een lege dan de oude.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Dagdetails',

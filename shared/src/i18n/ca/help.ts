@@ -2530,29 +2530,29 @@ const help: TranslationStrings = {
     'Llençar un fitxer i recuperar-lo demana el dret Elimina fitxers. Un membre que no el té no veu ni Eliminar a la fila ni els botons de la paperera.',
   'help.guide.files-trash.tip.3': 'Un fitxer eliminat per sempre a la paperera no es pot recuperar.',
   // files-sync
-  'help.guide.files-sync.title': 'Mantenir els documents al dia amb una carpeta de Nextcloud',
+  'help.guide.files-sync.title': 'Mantenir els documents al dia amb el teu magatzem de documents',
   'help.guide.files-sync.goal':
-    'Lliga el viatge a una carpeta del teu propi magatzem de documents, perquè el que es puja aquí arribi allà i el que s’arxiva allà aparegui aquí.',
+    'Lliga el viatge al teu propi magatzem de documents, perquè el que es puja aquí arribi allà i el que s’arxiva allà aparegui aquí.',
   'help.guide.files-sync.step.1':
-    'Fes clic a Sincronització de documents, al costat de Paperera a l’extrem dret de la barra d’eines. El diàleg s’obre amb el nom del viatge sota el títol. A l’esquerra, sota Connecta un proveïdor, hi ha els magatzems que un administrador ha activat, cadascun amb una línia sobre com arxiva, Arxiva en una carpeta per a Nextcloud; a la dreta diu Encara no hi ha res connectat.',
+    'Fes clic a Sincronització de documents, al costat de Paperera a l’extrem dret de la barra d’eines. El diàleg s’obre amb el nom del viatge sota el títol. A l’esquerra, sota Connecta un proveïdor, hi ha els magatzems que un administrador ha activat, cadascun amb una línia sobre com arxiva: Paperless-ngx i Papra per etiqueta, Nextcloud i Synology Drive en una carpeta, OpenCloud en un espai. A la dreta diu Encara no hi ha res connectat.',
   'help.guide.files-sync.step.2':
-    'Fes clic a Nextcloud. S’obre un diàleg més petit per a la connexió, amb el nom del magatzem, amb el recordatori a dalt de fer servir una contrasenya d’aplicació en lloc de la del teu compte.',
+    'Fes clic al teu magatzem, aquí Nextcloud. S’obre un diàleg més petit per a la connexió, amb el nom del magatzem, que et demana les dades amb què s’inicia la sessió en aquest magatzem.',
   'help.guide.files-sync.step.3':
-    'Omple Adreça, Nom d’usuari, el teu nom d’usuari de Nextcloud i no la teva adreça electrònica, i Contrasenya d’aplicació, que Nextcloud crea sota Configuració, Seguretat. Carpeta base és opcional: és on TREK busca les carpetes dels viatges, /TREK si no dius el contrari, aquí /Reisen. Accepta un certificat autosignat, a baix, només és per a una instància de la teva pròpia xarxa amb un certificat així.',
+    'Omple Adreça i l’inici de sessió propi del magatzem: un Token API per a Paperless-ngx, una Clau API i l’ID d’organització per a Papra, Nom d’usuari i una Contrasenya d’aplicació per a Nextcloud, Nom d’usuari i un Token d’aplicació per a OpenCloud, i per a Synology Drive Nom d’usuari, Contrasenya i, si el compte en demana un, un Codi de doble factor. Fes servir una contrasenya o un token d’aplicació sempre que el magatzem n’ofereixi, mai la contrasenya del teu compte. Nextcloud i Synology Drive també admeten una Carpeta base opcional, on TREK busca les carpetes dels viatges, aquí /Reisen. Accepta un certificat autosignat, a baix, només és per a un magatzem de la teva pròpia xarxa amb un certificat així.',
   'help.guide.files-sync.step.4':
-    'Fes clic a Prova la connexió. TREK arriba al magatzem amb el que has escrit i el peu diu Contactat, sessió iniciada com a seguit del nom del compte, aquí admin. Una contrasenya rebutjada o una adreça que no es pot abastar hi surt en lloc d’això, i en cap dels dos casos no es desa res.',
+    'Fes clic a Prova la connexió. TREK arriba al magatzem amb el que has escrit i el peu diu Contactat, sessió iniciada com a seguit del nom del compte. Unes credencials rebutjades o una adreça que no es pot abastar hi surten en lloc d’això, i en cap dels dos casos no es desa res.',
   'help.guide.files-sync.step.5':
-    'Fes clic a Connecta. La connexió es desa amb el viatge i TREK pregunta On ha d’anar aquest viatge dins de Nextcloud? Només el que hi ha en aquesta carpeta se sincronitza. Crea’n un de nou crea una carpeta sota la carpeta base en fer Crea, amb un nom preomplert a partir del títol del viatge; sota O fes servir un que ja tinguis hi ha les carpetes que ja existeixen. Fes clic a una, aquí Autumn in Japan.',
+    'Fes clic a Connecta. La connexió es desa amb el viatge i TREK pregunta on ha d’anar el viatge dins del magatzem: l’etiqueta, la carpeta o l’espai que en conté els documents. Només se sincronitza el que hi ha allà dins. Crea’n un de nou el crea en fer Crea, amb un nom preomplert a partir del títol del viatge; sota O fes servir un que ja tinguis hi ha els que ja existeixen. Fes clic a un, aquí la carpeta Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'El diàleg torna a ser-hi: Nextcloud és sota Aquest viatge a l’esquerra, i la seva targeta a la dreta porta la carpeta, quan es va executar per última vegada i Sincronitza ara. Una primera execució comença sola; Sincronitza ara en llança una quan vulguis. Un cop una execució ha acabat, la insígnia Encara no s’ha sincronitzat al costat del nom deixa pas a un punt verd, Al dia quan hi apuntes, i la barra de flux compta els documents que TREK i Nextcloud tenen cadascun, amb els carrils Cap al gestor i Des del gestor entremig. Tanca el diàleg amb la ×.',
+    'El diàleg torna a ser-hi: el teu magatzem és sota Aquest viatge a l’esquerra, i la seva targeta a la dreta porta on se sincronitza, quan es va executar per última vegada i Sincronitza ara. Una primera execució comença sola; Sincronitza ara en llança una quan vulguis. Un cop una execució ha acabat, la insígnia Encara no s’ha sincronitzat al costat del nom deixa pas a un punt verd, Al dia quan hi apuntes, i la barra de flux compta els documents que TREK i el magatzem tenen cadascun, amb els carrils Cap al gestor i Des del gestor entremig. Tanca el diàleg amb la ×.',
   'help.guide.files-sync.result':
-    'Els dos documents que ja eren a la carpeta són a dalt de tot de la llista, pujats a nom teu, i cada document del viatge també és a la carpeta. A partir d’ara TREK revisa la carpeta en segon pla i la carpeta segueix la llista.',
+    'Els documents que ja hi eren són a dalt de tot de la llista, pujats a nom teu, i cada document del viatge també és al magatzem. A partir d’ara TREK revisa el magatzem en segon pla, i el magatzem segueix la llista.',
   'help.guide.files-sync.tip.1':
-    'Només el propietari del viatge o un administrador de la instància pot lligar un viatge, ja que la contrasenya d’aplicació arriba a tot aquell compte de Nextcloud. Tots els membres poden obrir Sincronització de documents, llegir la targeta i prémer Sincronitza ara.',
+    'Només el propietari del viatge o un administrador de la instància pot lligar un viatge, ja que les credencials arriben a tot aquell compte del magatzem. Tots els membres poden obrir Sincronització de documents, llegir la targeta i prémer Sincronitza ara.',
   'help.guide.files-sync.tip.2':
     'Un magatzem a la teva pròpia xarxa necessita ALLOW_INTERNAL_NETWORK=true al servidor de TREK, i la seva adreça ha de ser l’adreça de la màquina a la xarxa, mai localhost. Sense això, Prova la connexió respon Aquesta adreça no està permesa.',
   'help.guide.files-sync.tip.3':
-    'Desconnecta a la targeta acaba l’aparellament i conserva tots els documents a les dues bandes. Una carpeta lligada per segona vegada es tracta com a nova, i tot el que hi ha torna a entrar, així que després d’un Desconnecta lliga una carpeta buida en lloc de la vella.',
+    'Desconnecta a la targeta acaba l’aparellament i conserva tots els documents a les dues bandes. Una etiqueta, carpeta o espai lligat per segona vegada es tracta com a nou, i tot el que hi ha torna a entrar, així que després d’un Desconnecta lliga’n un de buit en lloc del vell.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Detalls del dia',

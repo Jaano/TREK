@@ -2472,29 +2472,29 @@ const help: TranslationStrings = {
     'Wyrzucenie pliku i odzyskanie go wymaga prawa Usuwanie plików. Członek bez niego nie widzi ani Usuń w wierszu, ani przycisków w koszu.',
   'help.guide.files-trash.tip.3': 'Pliku usuniętego na dobre w koszu nie da się już przywrócić.',
   // files-sync
-  'help.guide.files-sync.title': 'Trzymać dokumenty w zgodzie z folderem Nextcloud',
+  'help.guide.files-sync.title': 'Trzymać dokumenty w zgodzie z Twoim magazynem dokumentów',
   'help.guide.files-sync.goal':
-    'Zwiąż podróż z folderem w Twoim własnym magazynie dokumentów, tak by to, co przesłane tutaj, lądowało tam, a to, co odłożone tam, pojawiało się tutaj.',
+    'Zwiąż podróż z Twoim własnym magazynem dokumentów, tak by to, co przesłane tutaj, lądowało tam, a to, co odłożone tam, pojawiało się tutaj.',
   'help.guide.files-sync.step.1':
-    'Kliknij Synchronizacja dokumentów, obok Kosz na prawym końcu paska narzędzi. Okno otwiera się z nazwą podróży pod swoim tytułem. Po lewej, pod Połącz dostawcę, stoją magazyny, które włączył administrator, każdy z wierszem o tym, jak przechowuje, Przechowuje pliki w folderze dla Nextcloud; po prawej stoi Nic jeszcze nie połączono.',
+    'Kliknij Synchronizacja dokumentów, obok Kosz na prawym końcu paska narzędzi. Okno otwiera się z nazwą podróży pod swoim tytułem. Po lewej, pod Połącz dostawcę, stoją magazyny, które włączył administrator, każdy z wierszem o tym, jak przechowuje pliki: Paperless-ngx i Papra tagami, Nextcloud i Synology Drive w folderze, OpenCloud w przestrzeni. Po prawej stoi Nic jeszcze nie połączono.',
   'help.guide.files-sync.step.2':
-    'Kliknij Nextcloud. Otwiera się mniejsze okno dla połączenia, nazwane po magazynie, z przypomnieniem u góry, by użyć hasła aplikacji, a nie hasła do konta.',
+    'Kliknij swój magazyn, tutaj Nextcloud. Otwiera się mniejsze okno dla połączenia, nazwane po magazynie, i prosi o dane, którymi logujesz się do tego magazynu.',
   'help.guide.files-sync.step.3':
-    'Wypełnij Adres, Nazwa użytkownika, Twoją nazwę logowania w Nextcloud, a nie adres e-mail, oraz Hasło aplikacji, które Nextcloud tworzy pod Ustawienia, Bezpieczeństwo. Folder bazowy jest opcjonalny: to tam TREK szuka folderów podróży, /TREK, chyba że powiesz inaczej, tutaj /Reisen. Zezwalaj na certyfikat z własnym podpisem na dole jest tylko dla instancji w Twojej własnej sieci z takim certyfikatem.',
+    'Wypełnij Adres i dane logowania właściwe dla magazynu: Token API dla Paperless-ngx, Klucz API i Identyfikator organizacji dla Papra, Nazwa użytkownika i Hasło aplikacji dla Nextcloud, Nazwa użytkownika i Token aplikacji dla OpenCloud, a dla Synology Drive Nazwa użytkownika, Hasło i, jeśli konto tego wymaga, Kod dwuskładnikowy. Używaj hasła aplikacji lub tokenu wszędzie, gdzie magazyn je oferuje, nigdy hasła do konta. Nextcloud i Synology Drive przyjmują też opcjonalny Folder bazowy, w którym TREK szuka folderów podróży, tutaj /Reisen. Zezwalaj na certyfikat z własnym podpisem na dole jest tylko dla magazynu w Twojej własnej sieci z takim certyfikatem.',
   'help.guide.files-sync.step.4':
-    'Kliknij Testuj połączenie. TREK dociera do magazynu z tym, co wpisałeś, a stopka brzmi Połączono, zalogowano jako i dalej nazwa konta, tutaj admin. Odrzucone hasło albo nieosiągalny adres są tam nazwane zamiast tego, a w obu przypadkach nic nie jest zapisywane.',
+    'Kliknij Testuj połączenie. TREK dociera do magazynu z tym, co wpisałeś, a stopka brzmi Połączono, zalogowano jako i dalej nazwa konta. Odrzucone dane logowania albo nieosiągalny adres są tam nazwane zamiast tego, a w obu przypadkach nic nie jest zapisywane.',
   'help.guide.files-sync.step.5':
-    'Kliknij Połącz. Połączenie jest zapisywane z podróżą, a TREK pyta Gdzie ta podróż ma się znaleźć w Nextcloud? Synchronizowane jest tylko to, co jest w tym folderze. Utwórz nowe miejsce tworzy po kliknięciu Utwórz folder pod folderem bazowym, z nazwą wstępnie wypełnioną z tytułu podróży; pod Albo użyj istniejącego stoją foldery, które już tam są. Kliknij jeden, tutaj Autumn in Japan.',
+    'Kliknij Połącz. Połączenie jest zapisywane z podróżą, a TREK pyta, gdzie podróż ma się znaleźć w magazynie: tag, folder lub przestrzeń, które trzymają jej dokumenty. Synchronizowane jest tylko to, co jest w środku. Utwórz nowe miejsce tworzy je po kliknięciu Utwórz, z nazwą wstępnie wypełnioną z tytułu podróży; pod Albo użyj istniejącego stoją te, które już tam są. Kliknij jedno z nich, tutaj folder Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'Okno jest z powrotem: Nextcloud stoi pod Ta podróż po lewej, a jego karta po prawej niesie folder, kiedy ostatnio działał, i Synchronizuj teraz. Pierwszy przebieg startuje sam; Synchronizuj teraz uruchamia jeden, kiedy chcesz. Gdy przebieg się skończy, plakietka Jeszcze nie synchronizowano obok nazwy ustępuje zielonej kropce, Aktualne, gdy na nią wskażesz, a pasek przepływu liczy dokumenty, które trzymają TREK i Nextcloud każdy z osobna, z pasami Do repozytorium i Z repozytorium między nimi. Zamknij okno krzyżykiem.',
+    'Okno jest z powrotem: Twój magazyn stoi pod Ta podróż po lewej, a jego karta po prawej niesie, dokąd synchronizuje, kiedy ostatnio działał, i Synchronizuj teraz. Pierwszy przebieg startuje sam; Synchronizuj teraz uruchamia jeden, kiedy chcesz. Gdy przebieg się skończy, plakietka Jeszcze nie synchronizowano obok nazwy ustępuje zielonej kropce, Aktualne, gdy na nią wskażesz, a pasek przepływu liczy dokumenty, które trzymają TREK i magazyn każdy z osobna, z pasami Do repozytorium i Z repozytorium między nimi. Zamknij okno krzyżykiem ×.',
   'help.guide.files-sync.result':
-    'Dwa dokumenty, które już były w folderze, stoją na górze listy, przesłane w Twoim imieniu, a każdy dokument podróży jest też w folderze. Od tej chwili TREK sprawdza folder w tle, a folder podąża za listą.',
+    'Dokumenty, które już tam były, stoją na górze listy, przesłane w Twoim imieniu, a każdy dokument podróży jest też w magazynie. Od tej chwili TREK sprawdza magazyn w tle, a magazyn podąża za listą.',
   'help.guide.files-sync.tip.1':
-    'Tylko właściciel podróży albo administrator instancji może związać podróż, bo hasło aplikacji sięga całego tego konta Nextcloud. Każdy członek może otworzyć Synchronizacja dokumentów, przeczytać kartę i nacisnąć Synchronizuj teraz.',
+    'Tylko właściciel podróży albo administrator instancji może związać podróż, bo dane logowania sięgają całego tego konta w magazynie. Każdy członek może otworzyć Synchronizacja dokumentów, przeczytać kartę i nacisnąć Synchronizuj teraz.',
   'help.guide.files-sync.tip.2':
     'Magazyn w Twojej własnej sieci potrzebuje ALLOW_INTERNAL_NETWORK=true na serwerze TREK-a, a jego adres musi być adresem maszyny w sieci, nigdy localhost. Bez tego Testuj połączenie odpowiada Ten adres jest niedozwolony.',
   'help.guide.files-sync.tip.3':
-    'Rozłącz na karcie kończy parowanie i zachowuje każdy dokument po obu stronach. Folder związany drugi raz jest traktowany jak nowy i wszystko w nim wchodzi ponownie, więc po Rozłącz zwiąż pusty folder, a nie stary.',
+    'Rozłącz na karcie kończy parowanie i zachowuje każdy dokument po obu stronach. Tag, folder lub przestrzeń związane drugi raz są traktowane jak nowe i wszystko w nich wchodzi ponownie, więc po Rozłącz zwiąż raczej puste miejsce niż stare.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Szczegóły dnia',

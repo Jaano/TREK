@@ -2517,29 +2517,29 @@ const help: TranslationStrings = {
     'Buttare via un file e riprenderlo richiede il diritto Eliminare file. Un membro che non ce l’ha non vede né Elimina sulla riga né i pulsanti nel cestino.',
   'help.guide.files-trash.tip.3': 'Un file eliminato per sempre nel cestino non può essere riportato indietro.',
   // files-sync
-  'help.guide.files-sync.title': 'Tenere i documenti allineati con una cartella Nextcloud',
+  'help.guide.files-sync.title': 'Tenere i documenti allineati con il tuo archivio di documenti',
   'help.guide.files-sync.goal':
-    'Lega il viaggio a una cartella del tuo archivio di documenti, così che ciò che viene caricato qui finisca lì e ciò che viene archiviato lì compaia qui.',
+    'Lega il viaggio al tuo archivio di documenti, così che ciò che viene caricato qui finisca lì e ciò che viene archiviato lì compaia qui.',
   'help.guide.files-sync.step.1':
-    'Clicca Sincronizzazione documenti, accanto a Cestino all’estremità destra della barra degli strumenti. La finestra si apre con il nome del viaggio sotto il titolo. A sinistra, sotto Collega un provider, stanno gli archivi che un amministratore ha acceso, ognuno con una riga su come archivia, Archivia in una cartella per Nextcloud; a destra si legge Ancora nessun collegamento.',
+    'Clicca Sincronizzazione documenti, accanto a Cestino all’estremità destra della barra degli strumenti. La finestra si apre con il nome del viaggio sotto il titolo. A sinistra, sotto Collega un provider, stanno gli archivi che un amministratore ha acceso, ognuno con una riga su come archivia: Paperless-ngx e Papra per tag, Nextcloud e Synology Drive in una cartella, OpenCloud in uno spazio. A destra si legge Ancora nessun collegamento.',
   'help.guide.files-sync.step.2':
-    'Clicca Nextcloud. Si apre una finestra più piccola per la connessione, con il nome dell’archivio, con in alto il promemoria di usare una password per applicazioni invece della password del tuo account.',
+    'Clicca il tuo archivio, qui Nextcloud. Si apre una finestra più piccola per la connessione, con il nome dell’archivio, che chiede le credenziali con cui si accede a quell’archivio.',
   'help.guide.files-sync.step.3':
-    'Compila Indirizzo, Nome utente, il tuo nome di accesso Nextcloud e non il tuo indirizzo email, e Password per applicazioni, che Nextcloud crea sotto Impostazioni, Sicurezza. Cartella di base è facoltativa: è dove TREK cerca le cartelle dei viaggi, /TREK se non dici altro, qui /Reisen. Accetta un certificato autofirmato in fondo è solo per un’istanza sulla tua rete con un certificato del genere.',
+    'Compila Indirizzo e l’accesso proprio dell’archivio: un Token API per Paperless-ngx, una Chiave API e l’ID organizzazione per Papra, Nome utente e una Password per applicazioni per Nextcloud, Nome utente e un Token applicativo per OpenCloud, e per Synology Drive Nome utente, Password e, se l’account lo chiede, un Codice a due fattori. Usa una password per applicazioni o un token ovunque l’archivio ne offra uno, mai la password del tuo account. Nextcloud e Synology Drive accettano anche una Cartella di base facoltativa, dove TREK cerca le cartelle dei viaggi, qui /Reisen. Accetta un certificato autofirmato in fondo è solo per un archivio sulla tua rete con un certificato del genere.',
   'help.guide.files-sync.step.4':
-    'Clicca Prova la connessione. TREK raggiunge l’archivio con ciò che hai digitato e il piè di pagina dice Raggiunto, accesso come seguito dal nome dell’account, qui admin. Una password rifiutata o un indirizzo irraggiungibile viene nominato lì al suo posto, e in entrambi i casi non viene salvato nulla.',
+    'Clicca Prova la connessione. TREK raggiunge l’archivio con ciò che hai digitato e il piè di pagina dice Raggiunto, accesso come seguito dal nome dell’account. Credenziali rifiutate o un indirizzo irraggiungibile vengono nominati lì al loro posto, e in entrambi i casi non viene salvato nulla.',
   'help.guide.files-sync.step.5':
-    'Clicca Connetti. La connessione viene salvata con il viaggio e TREK chiede Dove deve stare questo viaggio in Nextcloud? Solo ciò che sta in quella cartella viene sincronizzato. Creane uno nuovo crea una cartella sotto la cartella di base con Crea, con un nome precompilato dal titolo del viaggio; sotto Oppure usane uno che hai già stanno le cartelle che esistono già. Cliccane una, qui Autumn in Japan.',
+    'Clicca Connetti. La connessione viene salvata con il viaggio e TREK chiede dove deve stare il viaggio nell’archivio: il tag, la cartella o lo spazio che ne contiene i documenti. Solo ciò che sta lì dentro viene sincronizzato. Creane uno nuovo lo crea con Crea, con un nome precompilato dal titolo del viaggio; sotto Oppure usane uno che hai già stanno quelli che esistono già. Cliccane uno, qui la cartella Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'La finestra è tornata: Nextcloud sta sotto Questo viaggio a sinistra, e la sua scheda a destra porta la cartella, quando è girata l’ultima volta e Sincronizza ora. Una prima esecuzione parte da sola; Sincronizza ora ne lancia una quando vuoi. Finita un’esecuzione, il contrassegno Non ancora sincronizzato accanto al nome lascia il posto a un punto verde, Allineato quando ci punti sopra, e la barra di flusso conta i documenti che TREK e Nextcloud tengono ciascuno, con le corsie Verso l’archivio e Dall’archivio in mezzo. Chiudi la finestra con la ×.',
+    'La finestra è tornata: il tuo archivio sta sotto Questo viaggio a sinistra, e la sua scheda a destra porta dove sincronizza, quando è girata l’ultima volta e Sincronizza ora. Una prima esecuzione parte da sola; Sincronizza ora ne lancia una quando vuoi. Finita un’esecuzione, il contrassegno Non ancora sincronizzato accanto al nome lascia il posto a un punto verde, Allineato quando ci punti sopra, e la barra di flusso conta i documenti che TREK e l’archivio tengono ciascuno, con le corsie Verso l’archivio e Dall’archivio in mezzo. Chiudi la finestra con la ×.',
   'help.guide.files-sync.result':
-    'I due documenti che erano già nella cartella stanno in cima all’elenco, caricati a tuo nome, e ogni documento del viaggio è anche nella cartella. Da ora in poi TREK controlla la cartella in secondo piano e la cartella segue l’elenco.',
+    'I documenti che erano già lì stanno in cima all’elenco, caricati a tuo nome, e ogni documento del viaggio è anche nell’archivio. Da ora in poi TREK controlla l’archivio in secondo piano e l’archivio segue l’elenco.',
   'help.guide.files-sync.tip.1':
-    'Solo il proprietario del viaggio o un amministratore dell’istanza può legare un viaggio, perché la password per applicazioni raggiunge tutto quell’account Nextcloud. Ogni membro può aprire Sincronizzazione documenti, leggere la scheda e premere Sincronizza ora.',
+    'Solo il proprietario del viaggio o un amministratore dell’istanza può legare un viaggio, perché le credenziali raggiungono tutto quell’account nell’archivio. Ogni membro può aprire Sincronizzazione documenti, leggere la scheda e premere Sincronizza ora.',
   'help.guide.files-sync.tip.2':
     'Un archivio sulla tua rete ha bisogno di ALLOW_INTERNAL_NETWORK=true sul server TREK, e il suo indirizzo dev’essere quello della macchina in rete, mai localhost. Senza, Prova la connessione risponde Questo indirizzo non è consentito.',
   'help.guide.files-sync.tip.3':
-    'Disconnetti sulla scheda chiude l’abbinamento e tiene ogni documento da entrambe le parti. Una cartella legata una seconda volta è trattata come nuova, e tutto ciò che contiene entra di nuovo, quindi dopo un Disconnetti lega una cartella vuota invece della vecchia.',
+    'Disconnetti sulla scheda chiude l’abbinamento e tiene ogni documento da entrambe le parti. Un tag, una cartella o uno spazio legato una seconda volta è trattato come nuovo, e tutto ciò che contiene entra di nuovo, quindi dopo un Disconnetti lega uno vuoto invece del vecchio.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Dettagli del giorno',

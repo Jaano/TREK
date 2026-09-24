@@ -2438,29 +2438,29 @@ const help: TranslationStrings = {
     'Att slänga en fil och få tillbaka den kräver rätten Ta bort filer. En medlem utan den ser varken Ta bort på raden eller knapparna i papperskorgen.',
   'help.guide.files-trash.tip.3': 'En fil som tagits bort för gott i papperskorgen kan inte hämtas tillbaka.',
   // files-sync
-  'help.guide.files-sync.title': 'Håll dokumenten i takt med en Nextcloud-mapp',
+  'help.guide.files-sync.title': 'Håll dokumenten i takt med ditt dokumentlager',
   'help.guide.files-sync.goal':
-    'Bind resan till en mapp i ditt eget dokumentlager, så att det som laddas upp här hamnar där och det som arkiveras där dyker upp här.',
+    'Bind resan till ditt eget dokumentlager, så att det som laddas upp här hamnar där och det som arkiveras där dyker upp här.',
   'help.guide.files-sync.step.1':
-    'Klicka på Dokumentsynkronisering, bredvid Papperskorgen i verktygsradens högra ände. Dialogen öppnas med resans namn under sin titel. Till vänster, under Anslut en leverantör, står de lager en administratör slagit på, vart och ett med en rad om hur det sorterar, Sorterar i en mapp för Nextcloud; till höger lyder det Inget anslutet än.',
+    'Klicka på Dokumentsynkronisering, bredvid Papperskorgen i verktygsradens högra ände. Dialogen öppnas med resans namn under sin titel. Till vänster, under Anslut en leverantör, står de lager en administratör slagit på, vart och ett med en rad om hur det sorterar: Paperless-ngx och Papra efter tagg, Nextcloud och Synology Drive i en mapp, OpenCloud i en yta. Till höger lyder det Inget anslutet än.',
   'help.guide.files-sync.step.2':
-    'Klicka på Nextcloud. En mindre dialog öppnas för anslutningen, uppkallad efter lagret, med påminnelsen högst upp om att använda ett applösenord i stället för ditt kontolösenord.',
+    'Klicka på ditt lager, här Nextcloud. En mindre dialog öppnas för anslutningen, uppkallad efter lagret, och frågar efter det som just det lagret loggar in med.',
   'help.guide.files-sync.step.3':
-    'Fyll i Adress, Användarnamn, ditt inloggningsnamn i Nextcloud i stället för din e-postadress, och Applösenord, som Nextcloud skapar under Inställningar, Säkerhet. Basmapp är valfri: det är där TREK letar efter resmappar, /TREK om du inte säger annat, här /Reisen. Tillåt självsignerat certifikat längst ner är bara för en instans i ditt eget nätverk med ett sådant certifikat.',
+    'Fyll i Adress och lagrets egen inloggning: en API-token för Paperless-ngx, en API-nyckel och Organisations-ID för Papra, Användarnamn och ett Applösenord för Nextcloud, Användarnamn och en App-token för OpenCloud, och för Synology Drive Användarnamn, Lösenord och, om kontot kräver en, en Tvåfaktorskod. Använd ett applösenord eller en token överallt där lagret erbjuder det, aldrig ditt kontolösenord. Nextcloud och Synology Drive tar också en valfri Basmapp, där TREK letar efter resmappar, här /Reisen. Tillåt självsignerat certifikat längst ner är bara för ett lager i ditt eget nätverk med ett sådant certifikat.',
   'help.guide.files-sync.step.4':
-    'Klicka på Testa anslutningen. TREK når lagret med det du skrev och sidfoten lyder Nådde den, inloggad som följt av kontots namn, här admin. Ett lösenord som avvisas eller en adress som inte kan nås namnges där i stället, och inget sparas i något av fallen.',
+    'Klicka på Testa anslutningen. TREK når lagret med det du skrev och sidfoten lyder Nådde den, inloggad som följt av kontots namn. Inloggningsuppgifter som avvisas eller en adress som inte kan nås namnges där i stället, och inget sparas i något av fallen.',
   'help.guide.files-sync.step.5':
-    'Klicka på Anslut. Anslutningen sparas med resan och TREK frågar Var ska den här resan ligga i Nextcloud? Bara det som finns i den mappen synkroniseras. Skapa en ny skapar en mapp under basmappen vid Skapa, med ett namn förifyllt från resans titel; under Eller använd en du redan har står mapparna som redan finns. Klicka på en, här Autumn in Japan.',
+    'Klicka på Anslut. Anslutningen sparas med resan och TREK frågar var resan ska ligga i lagret: taggen, mappen eller ytan som rymmer dess dokument. Bara det som finns där synkroniseras. Skapa en ny skapar den vid Skapa, med ett namn förifyllt från resans titel; under Eller använd en du redan har står de som redan finns. Klicka på en, här mappen Autumn in Japan.',
   'help.guide.files-sync.step.6':
-    'Dialogen är tillbaka: Nextcloud står under Den här resan till vänster, och dess kort till höger bär mappen, när den senast kördes och Synkronisera nu. En första körning startar av sig själv; Synkronisera nu kör en när du vill. När en körning är klar ger brickan Inte synkroniserad än bredvid namnet vika för en grön prick, Synkroniserad när du pekar på den, och flödesfältet räknar dokumenten TREK och Nextcloud var för sig har, med körfälten Ut till arkivet och In från arkivet mellan dem. Stäng dialogen med ×.',
+    'Dialogen är tillbaka: ditt lager står under Den här resan till vänster, och dess kort till höger visar vart det synkroniserar, när det senast kördes och Synkronisera nu. En första körning startar av sig själv; Synkronisera nu kör en när du vill. När en körning är klar ger brickan Inte synkroniserad än bredvid namnet vika för en grön prick, Synkroniserad när du pekar på den, och flödesfältet räknar dokumenten TREK och lagret var för sig har, med körfälten Ut till arkivet och In från arkivet mellan dem. Stäng dialogen med ×.',
   'help.guide.files-sync.result':
-    'De två dokument som redan låg i mappen står överst i listan, uppladdade i ditt namn, och varje dokument på resan finns i mappen också. Från och med nu kontrollerar TREK mappen i bakgrunden och mappen följer listan.',
+    'De dokument som redan fanns där står överst i listan, uppladdade i ditt namn, och varje dokument på resan finns i lagret också. Från och med nu kontrollerar TREK lagret i bakgrunden och lagret följer listan.',
   'help.guide.files-sync.tip.1':
-    'Bara resans ägare eller en instansadministratör kan binda en resa, eftersom applösenordet når hela det Nextcloud-kontot. Varje medlem kan öppna Dokumentsynkronisering, läsa kortet och trycka på Synkronisera nu.',
+    'Bara resans ägare eller en instansadministratör kan binda en resa, eftersom inloggningsuppgifterna når hela det kontot i lagret. Varje medlem kan öppna Dokumentsynkronisering, läsa kortet och trycka på Synkronisera nu.',
   'help.guide.files-sync.tip.2':
     'Ett lager i ditt eget nätverk behöver ALLOW_INTERNAL_NETWORK=true på TREK-servern, och dess adress måste vara maskinens adress i nätverket, aldrig localhost. Utan det svarar Testa anslutningen Den adressen är inte tillåten.',
   'help.guide.files-sync.tip.3':
-    'Koppla från på kortet avslutar parningen och behåller varje dokument på båda sidor. En mapp som binds en andra gång behandlas som ny, och allt i den kommer in igen, så efter ett Koppla från bind en tom mapp i stället för den gamla.',
+    'Koppla från på kortet avslutar parningen och behåller varje dokument på båda sidor. En tagg, mapp eller yta som binds en andra gång behandlas som ny, och allt i den kommer in igen, så efter ett Koppla från bind en tom i stället för den gamla.',
 
   // ── Screen: trip-day-detail ───────────────────────────────────────────────────────────
   'help.ctx.trip-day-detail.title': 'Information om dagen',
