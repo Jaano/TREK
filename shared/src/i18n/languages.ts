@@ -2,6 +2,7 @@ export const SUPPORTED_LANGUAGES = [
   { value: 'de', label: 'Deutsch', locale: 'de-DE' },
   { value: 'en', label: 'English', locale: 'en-US' },
   { value: 'es', label: 'Español', locale: 'es-ES' },
+  { value: 'et', label: 'Eesti', locale: 'et-EE' },
   { value: 'fr', label: 'Français', locale: 'fr-FR' },
   { value: 'hu', label: 'Magyar', locale: 'hu-HU' },
   { value: 'nl', label: 'Nederlands', locale: 'nl-NL' },

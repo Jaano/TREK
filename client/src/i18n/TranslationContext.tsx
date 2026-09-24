@@ -20,6 +20,7 @@ const localeLoaders: Record<SupportedLanguageCode, () => Promise<{ default: Tran
   en:      () => Promise.resolve({ default: en }),
   de:      () => import('@trek/shared/i18n/de'),
   es:      () => import('@trek/shared/i18n/es'),
+  et:      () => import('@trek/shared/i18n/et'),
   fr:      () => import('@trek/shared/i18n/fr'),
   hu:      () => import('@trek/shared/i18n/hu'),
   it:      () => import('@trek/shared/i18n/it'),

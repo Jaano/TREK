@@ -112,6 +112,7 @@ const RATE_LIMIT_MESSAGES: Record<string, string> = {
   en:      'Too many attempts. Please try again later.',
   de:      'Zu viele Versuche. Bitte versuchen Sie es später erneut.',
   es:      'Demasiados intentos. Inténtelo de nuevo más tarde.',
+  et:      'Liiga palju katseid. Palun proovi hiljem uuesti.',
   fr:      'Trop de tentatives. Veuillez réessayer plus tard.',
   hu:      'Túl sok próbálkozás. Kérjük, próbálja újra később.',
   nl:      'Te veel pogingen. Probeer het later opnieuw.',
