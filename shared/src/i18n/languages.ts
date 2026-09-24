@@ -8,6 +8,7 @@ export const SUPPORTED_LANGUAGES = [
   { value: 'nl', label: 'Nederlands', locale: 'nl-NL' },
   { value: 'br', label: 'Português (Brasil)', locale: 'pt-BR' },
   { value: 'cs', label: 'Česky', locale: 'cs-CZ' },
+  { value: 'sk', label: 'Slovenčina', locale: 'sk-SK' },
   { value: 'pl', label: 'Polski', locale: 'pl-PL' },
   { value: 'ru', label: 'Русский', locale: 'ru-RU' },
   { value: 'zh', label: '简体中文', locale: 'zh-CN' },

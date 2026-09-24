@@ -17,6 +17,7 @@ import ko from './ko';
 import nl from './nl';
 import pl from './pl';
 import ru from './ru';
+import sk from './sk';
 import sv from './sv';
 import tr from './tr';
 import type { TranslationStrings } from './types';
@@ -58,6 +59,7 @@ const LOCALES: Record<string, TranslationStrings> = {
   nl,
   pl,
   ru,
+  sk,
   sv,
   tr,
   uk,
