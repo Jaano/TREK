@@ -1,6 +1,6 @@
 # Languages
 
-TREK ships with translations for 23 languages. You can change your language at any time without logging out.
+TREK ships with translations for 27 languages. You can change your language at any time without logging out.
 
 ## Supported languages
 
