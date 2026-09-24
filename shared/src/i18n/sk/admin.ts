@@ -164,6 +164,7 @@ const admin: TranslationStrings = {
   'admin.amapKey': 'Amap (高德地图) API kľúč',
   'admin.amapKeyHint':
     'Na vyhľadávanie miest v kontinentálnej Číne, kde Google nie je dostupný a OpenStreetMap má málo dát. Vyžaduje kľúč typu „Web 服务" (webová služba), nie kľúč JS API. Získate na console.amap.com.',
+  'admin.keyFromEnv': 'Nastavené cez {name}',
   'admin.placesProvider.title': 'Poskytovateľ vyhľadávania miest',
   'admin.placesProvider.subtitle':
     'Vlastný index TREKu a OpenStreetMap odpovedajú na každé vyhľadávanie. Tu sa volí, koho sa spýtať navyše, keď nič nenájdu: Automaticky uprednostní Google, ak existuje kľúč, potom Amap.',
@@ -204,6 +205,13 @@ const admin: TranslationStrings = {
   'admin.placesEnrich.title': 'Obohatenie miest',
   'admin.placesEnrich.subtitle':
     'Zobraziť obrázky a popis pri pridávaní miesta. Wikipédia a OpenStreetMap sa používajú vždy; Google sa pridá navyše, keď sú zapnuté Fotografie miest alebo Podrobnosti o mieste.',
+  'admin.placesGoogleOnly.title': 'Hľadať len cez Google',
+  'admin.placesGoogleOnly.subtitle':
+    'Každé vyhľadávanie a každý návrh ide do Google Places. Po vypnutí odpovedá najprv vlastný index TREK a OpenStreetMap a Google sa opýta, len keď nič nenájdu.',
+  'admin.placesGoogleOnly.missingKey':
+    'Vyžaduje API kľúč Google Maps. Bez neho vyhľadávanie beží na vlastnom indexe TREK a OpenStreetMap bez ohľadu na tento prepínač.',
+  'admin.placesGoogleOnly.otherProvider':
+    'Vyžaduje Google ako poskytovateľa miest. Ak je zvolený Amap alebo OpenStreetMap, vyhľadávanie nikdy nejde do Google bez ohľadu na tento prepínač.',
   'admin.transitProvider.title': 'Poskytovateľ verejnej dopravy',
   'admin.transitProvider.subtitle': 'Ktorá služba odpovedá na vyhľadávanie verejnej dopravy.',
   'admin.transitProvider.transitous': 'Transitous (zdarma)',

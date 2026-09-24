@@ -26,9 +26,6 @@ const packing: TranslationStrings = {
   'packing.progress': '{packed} z {total} zabalených ({percent} %)',
   'packing.clearChecked': 'Odstrániť {count} označených',
   'packing.clearCheckedShort': 'Odstrániť {count}',
-  'packing.suggestions': 'Návrhy',
-  'packing.suggestionsTitle': 'Pridať návrhy',
-  'packing.allSuggested': 'Všetky návrhy boli pridané',
   'packing.allPacked': 'Všetko je zabalené!',
   'packing.addPlaceholder': 'Pridať novú položku...',
   'packing.categoryPlaceholder': 'Zoznam...',
@@ -36,7 +33,6 @@ const packing: TranslationStrings = {
   'packing.filterOpen': 'Na zabalenie',
   'packing.filterDone': 'Hotovo',
   'packing.emptyTitle': 'Zoznam vecí je prázdny',
-  'packing.emptyHint': 'Pridajte položky alebo použite návrhy',
   'packing.emptyFiltered': 'Žiadne položky nezodpovedajú tomuto filtru',
   'packing.menuRename': 'Premenovať',
   'packing.menuCheckAll': 'Označiť všetko',
@@ -85,128 +81,6 @@ const packing: TranslationStrings = {
   'packing.toast.deleteError': 'Odstránenie zlyhalo',
   'packing.toast.renameError': 'Premenovanie zlyhalo',
   'packing.toast.addError': 'Pridanie zlyhalo',
-  'packing.suggestions.items': [
-    {
-      name: 'Pas',
-      category: 'Dokumenty',
-    },
-    {
-      name: 'Občiansky preukaz',
-      category: 'Dokumenty',
-    },
-    {
-      name: 'Cestovné poistenie',
-      category: 'Dokumenty',
-    },
-    {
-      name: 'Letenky',
-      category: 'Dokumenty',
-    },
-    {
-      name: 'Platobná karta',
-      category: 'Financie',
-    },
-    {
-      name: 'Hotovosť',
-      category: 'Financie',
-    },
-    {
-      name: 'Vízum',
-      category: 'Dokumenty',
-    },
-    {
-      name: 'Tričká',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Nohavice',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Spodná bielizeň',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Ponožky',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Bunda',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Pyžamo',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Plavky',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Pláštenka',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Pohodlné topánky',
-      category: 'Oblečenie',
-    },
-    {
-      name: 'Zubná kefka',
-      category: 'Hygiena',
-    },
-    {
-      name: 'Zubná pasta',
-      category: 'Hygiena',
-    },
-    {
-      name: 'Šampón',
-      category: 'Hygiena',
-    },
-    {
-      name: 'Dezodorant',
-      category: 'Hygiena',
-    },
-    {
-      name: 'Opaľovací krém',
-      category: 'Hygiena',
-    },
-    {
-      name: 'Holiaci strojček',
-      category: 'Hygiena',
-    },
-    {
-      name: 'Nabíjačka',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Powerbanka',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Slúchadlá',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Cestovný adaptér',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Fotoaparát',
-      category: 'Elektronika',
-    },
-    {
-      name: 'Lieky proti bolesti',
-      category: 'Zdravie',
-    },
-    {
-      name: 'Náplasti',
-      category: 'Zdravie',
-    },
-    {
-      name: 'Dezinfekcia',
-      category: 'Zdravie',
-    },
-  ],
   'packing.bagLimit': 'Hmotnostný limit',
   'packing.setBagLimit': 'Nastaviť limit',
 };

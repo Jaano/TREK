@@ -111,6 +111,23 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftAllDesc': 'Celý itinerár sa posunie podľa nových termínov vrátane rezervácií a ubytovaní.',
   'dashboard.dateShiftHint':
     'Tip: ak chcete posunúť len časť itinerára, použite namiesto toho „Pridať deň“ v plánovači.',
+  'dashboard.shrinkTitle': 'Odobrať dni?',
+  'dashboard.shrinkIntro': 'Uložením nových dátumov sa odoberú tieto dni:',
+  'dashboard.shrinkMoreDays': '+{count} ďalších',
+  'dashboard.shrinkLastDays': 'Odoberú sa posledné dni, nie prvé',
+  'dashboard.shrinkLastDaysHint':
+    'Plány dní sa posúvajú s novými dátumami, takže vždy odpadnú posledné dni plánu, aj keď sa posunul začiatok.',
+  'dashboard.shrinkBookingsHint':
+    'Zostanú v Rezerváciách. Rezervácia, ktorej dátum ešte patrí do cesty, sa vráti na ten deň.',
+  'dashboard.shrinkBookingsShiftHint': 'Zostanú v Rezerváciách, bez dňa.',
+  'dashboard.shrinkStayHint': 'Check-in alebo check-out pripadá na odobraný deň, preto sa odoberie celý pobyt.',
+  'dashboard.shrinkStayBookedHint':
+    'Check-in alebo check-out pripadá na odobraný deň, preto sa odoberie celý pobyt. Jeho rezervácia „{booking}“ a výdavok zostanú v Rezerváciách.',
+  'dashboard.shrinkStayBookingHint':
+    'Check-in alebo check-out pripadá na odobraný deň, preto sa odoberie celý pobyt. Jeho rezervácia „{booking}“ zostane v Rezerváciách.',
+  'dashboard.shrinkConfirm': 'Odobrať dni a uložiť',
+  'dashboard.shrinkUnknown':
+    'Dni tejto cesty sa nepodarilo skontrolovať. Ak majú nové dátumy menej dní, uložením sa odoberú posledné dni a všetko, čo je na nich naplánované.',
   'dashboard.greeting.morning': 'Dobré ráno,',
   'dashboard.greeting.afternoon': 'Dobré popoludnie,',
   'dashboard.greeting.evening': 'Dobrý večer,',

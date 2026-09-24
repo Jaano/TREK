@@ -28,6 +28,8 @@ const login: TranslationStrings = {
   'login.oidcSignIn': 'Prihlásiť sa cez {name}',
   'login.oidcOnly': 'Overovanie heslom je zakázané. Prihláste sa prosím cez svojho SSO poskytovateľa.',
   'login.oidcLoggedOut': 'Boli ste odhlásení. Prihláste sa znova cez svojho SSO poskytovateľa.',
+  'login.oidcRedirecting': 'Presmerovávame vás na {name}…',
+  'login.oidcRedirectSlow': 'Stále tu? Pokračovať na {name}',
   'login.demoHint': 'Vyskúšajte demo — registrácia nie je potrebná',
   'login.mfaTitle': 'Dvojfaktorové overenie',
   'login.mfaSubtitle': 'Zadajte 6-miestny kód z vašej autentifikačnej aplikácie.',

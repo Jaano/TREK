@@ -11,7 +11,6 @@ const reservations: TranslationStrings = {
   'reservations.confirmed': 'Potvrdené',
   'reservations.pending': 'Čaká na potvrdenie',
   'reservations.summary': '{confirmed} potvrdených, {pending} čakajúcich',
-  'reservations.fromPlan': 'Z plánu',
   'reservations.showFiles': 'Zobraziť súbory',
   'reservations.editTitle': 'Upraviť rezerváciu',
   'reservations.status': 'Stav',

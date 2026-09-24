@@ -20,5 +20,6 @@ const undo: TranslationStrings = {
   'undo.importBooking': 'Import potvrdenia rezervácie',
   'undo.addPlace': 'Miesto pridané',
   'undo.done': 'Vrátené späť: {action}',
+  'undo.failed': 'Nepodarilo sa vrátiť späť: {action}',
 };
 export default undo;

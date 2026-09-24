@@ -16,6 +16,7 @@ import ko from '../ko/externalNotifications';
 import nl from '../nl/externalNotifications';
 import pl from '../pl/externalNotifications';
 import ru from '../ru/externalNotifications';
+import sk from '../sk/externalNotifications';
 import sv from '../sv/externalNotifications';
 import tr from '../tr/externalNotifications';
 import uk from '../uk/externalNotifications';
@@ -41,6 +42,7 @@ const LOCALES = {
   nl,
   br,
   cs,
+  sk,
   pl,
   ru,
   zh,

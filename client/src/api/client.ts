@@ -118,6 +118,7 @@ const RATE_LIMIT_MESSAGES: Record<string, string> = {
   nl:      'Te veel pogingen. Probeer het later opnieuw.',
   br:      'Muitas tentativas. Tente novamente mais tarde.',
   cs:      'Příliš mnoho pokusů. Zkuste to prosím znovu.',
+  sk:      'Príliš veľa pokusov. Skúste to prosím neskôr.',
   pl:      'Zbyt wiele prób. Spróbuj ponownie później.',
   ru:      'Слишком много попыток. Попробуйте позже.',
   zh:      '尝试次数过多，请稍后再试。',

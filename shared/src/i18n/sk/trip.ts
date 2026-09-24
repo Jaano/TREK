@@ -91,5 +91,7 @@ const trip: TranslationStrings = {
   'trip.confirm.deletePlaceNight': 'Noc rezervovaná v „{name}“ zmizne spolu s miestom.',
   'trip.confirm.deletePlaceBooked':
     'Noc rezervovaná v „{name}“ zmizne spolu s miestom, vrátane rezervácie „{booking}“ a všetkých naviazaných výdavkov.',
+  'trip.confirm.deletePlaceBookedSame':
+    'Týmto sa vymaže aj pobyt rezervovaný v „{name}“, jeho rezervácia a všetky súvisiace výdavky.',
 };
 export default trip;
