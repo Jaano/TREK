@@ -176,6 +176,9 @@ for manually-uploaded plugins (see [Installing](#installing-a-plugin)), and
 "Reads your costs" / "Adds costs", "Dashboard widget", "Real-time updates",
 "Provides photos", outbound hosts, and so on — so a plugin's real reach is
 legible without opening anything.
+A plugin that adds its own buttons to the category row on the trip map (see
+[Places and Search](Places-and-Search#categories-from-plugins)) carries an
+"Adds map categories" chip.
 
 ## Reviewing a plugin before install
 
@@ -190,6 +193,10 @@ manifest (at the reviewed commit) and lays out:
 - **AI tools it publishes** — for a plugin declaring `capabilities.mcpTools`: each tool's
   name, title and the assistant-facing description, so you read what a connected assistant
   will be told about the plugin *before* you grant it.
+- **Map categories it adds**: for a plugin declaring `capabilities.poiCategories` and
+  asking for `hook:poi-category-provider`, each button it would add to the category
+  row on the trip map, with its icon, colour and name in your language, so you see
+  what your users will get before you grant it.
 - **Details** — version, download size, minimum TREK version, review date, plus
   links to the source repo and homepage.
 - **Versions** — every published version (listed once a plugin has more than one) with its

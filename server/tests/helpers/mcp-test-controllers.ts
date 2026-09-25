@@ -109,6 +109,8 @@ import { makeStorageFixture } from './storage-fixture';
 // PluginHooks.prototype to play the provider fan-out.
 import { TripWarningsMcp } from '../../src/nest/plugins/contributions/trip-warnings.mcp';
 import { PluginSearchMcp } from '../../src/nest/plugins/contributions/plugin-search.mcp';
+import { PluginPoisMcp } from '../../src/nest/plugins/contributions/plugin-pois.mcp';
+import { PluginPoisService } from '../../src/nest/plugins/contributions/plugin-pois.service';
 import { PluginHooks } from '../../src/nest/plugins/plugin-hooks.service';
 import type { PluginRuntimeService } from '../../src/nest/plugins/plugin-runtime.service';
 import { AirtrailMcp } from '../../src/nest/integrations/airtrail.mcp';
@@ -255,6 +257,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new HelpMcp(), new AddonsMcp(addonsService),
       new TripWarningsMcp(new PluginHooks({ providersOf: () => [], invokeHook: async () => [] } as unknown as PluginRuntimeService), dbService),
       new PluginSearchMcp(new PluginHooks({ providersOf: () => [], invokeHook: async () => [] } as unknown as PluginRuntimeService)),
+      new PluginPoisMcp(new PluginPoisService(new PluginHooks({ providersOf: () => [], invokeHook: async () => [] } as unknown as PluginRuntimeService), dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );

@@ -86,6 +86,9 @@ export * from './i18n/languages';
 export * from './plugin-permissions';
 // Plugin settings contracts: the settings-field descriptor + admin instance-config wire shapes.
 export * from './plugins/plugins.schema';
+// Plugin POI categories (#1781): the declared category, the icon allow-list and GET /api/plugin-pois.
+export * from './plugins/plugin-poi-facts';
+export * from './plugins/plugin-poi.schema';
 export * from './roadtrip/preferences.schema';
 export * from './roadtrip/hazards.schema';
 export * from './roadtrip/planning.schema';

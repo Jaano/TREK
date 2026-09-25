@@ -63,6 +63,46 @@ describe('PluginsFeedController', () => {
     expect(profiles.every(p => p.label.length <= 40)).toBe(true);
   });
 
+  describe('poiCategories (#1781)', () => {
+    const cat = { id: 'trailheads', label: 'Trailheads', labels: { de: 'Wanderparkplätze' }, icon: 'Signpost', color: '#2f855a' };
+    const granted = JSON.stringify(['hook:poi-category-provider']);
+
+    it('serves them only alongside the recorded hook:poi-category-provider grant', () => {
+      rows.value = [
+        row({ id: 'granted', capabilities: JSON.stringify({ poiCategories: [cat] }), granted_permissions: granted }),
+        row({ id: 'ungranted', capabilities: JSON.stringify({ poiCategories: [cat] }) }),
+        row({ id: 'searchOnly', capabilities: JSON.stringify({ poiCategories: [cat] }), granted_permissions: JSON.stringify(['hook:search-provider']) }),
+      ];
+      const { plugins } = c.list();
+      expect(plugins.find(p => p.id === 'granted')?.poiCategories).toEqual([cat]);
+      expect(plugins.find(p => p.id === 'ungranted')?.poiCategories).toBeUndefined();
+      expect(plugins.find(p => p.id === 'searchOnly')?.poiCategories).toBeUndefined();
+    });
+
+    it('re-validates a hand-edited row: bad colour, icon or id dropped, duplicates and the fifth one gone', () => {
+      rows.value = [row({
+        capabilities: JSON.stringify({
+          poiCategories: [
+            { ...cat, color: '#fff;background:url(https://tracker.example)' },
+            { ...cat, id: 'x', icon: 'Skull' },
+            { ...cat, id: '../x' },
+            { ...cat, id: 'ok', label: 'Water \u{1F6B0}' },
+            { ...cat, id: 'ok' },
+            { ...cat, id: 'late' },
+          ],
+        }),
+        granted_permissions: granted,
+      })];
+      // The first four entries are the ones read (the cap), and only one of them survives.
+      expect(c.list().plugins[0].poiCategories).toEqual([{ ...cat, id: 'ok', label: 'Water' }]);
+    });
+
+    it('omits the field when nothing survives', () => {
+      rows.value = [row({ capabilities: JSON.stringify({ poiCategories: [{ ...cat, color: 'red' }] }), granted_permissions: granted })];
+      expect(c.list().plugins[0]).not.toHaveProperty('poiCategories');
+    });
+  });
+
   it('flags geolocation only when the grant is recorded', () => {
     rows.value = [
       row({ id: 'granted', granted_permissions: JSON.stringify(['geolocation:read']) }),

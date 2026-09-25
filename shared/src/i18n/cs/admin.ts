@@ -382,6 +382,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:calendar-source': 'Poskytovat události do kalendáře',
   'admin.plugins.perm.hook:place-detail-provider': 'Přidávat další podrobnosti (recenze, hodnocení, odkazy) k místu',
   'admin.plugins.perm.hook:search-provider': 'Odpovídat na vyhledávání míst z vlastního indexu, vedle výsledků TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Přidávat vlastní kategorie míst do „Objevovat místa na mapě“; výběrem některé z nich doplněk obdrží oblast mapy, kterou si právě prohlížíte',
   'admin.plugins.perm.hook:trip-warning-provider': 'Vyvolávat ověřovací upozornění u cesty (zobrazená v plánovači)',
   'admin.plugins.perm.hook:table-contributor': 'Přidávat sloupce a akce do zobrazení cesty (rezervace, místa, dny)',
   'admin.plugins.perm.hook:map-marker-provider': 'Přidávat značky na mapu cesty (např. zobrazit rezervace nebo POI)',
@@ -395,6 +397,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Zveřejňuje AI nástroje',
   'admin.plugins.mcpToolsTitle': 'Zveřejněné AI nástroje',
   'admin.plugins.mcpToolsHint': 'Asistent je může spustit jménem uživatele. Každý jedná s oprávněními udělenými výše.',
+  'admin.plugins.poiCategoriesTitle': 'Kategorie mapy, které přidává',
   'admin.plugins.perm.mcp:tools':
     'Zveřejňovat nástroje, které může AI asistent spustit vaším jménem (jedná s oprávněními, která zde pluginu udělíte, ne se svými)',
   'admin.plugins.perm.geolocation:read':
@@ -535,6 +538,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Poskytuje události kalendáře',
   'admin.plugins.cap.placeDetails': 'Obohacuje místa',
   'admin.plugins.cap.search': 'Odpovídá na vyhledávání',
+  'admin.plugins.cap.poiCategories': 'Přidává kategorie na mapu',
   'admin.plugins.cap.warnings': 'Označuje problémy',
   'admin.plugins.cap.mapLayers': 'Kreslí na mapě',
   'admin.plugins.cap.routing': 'Nabízí trasování',

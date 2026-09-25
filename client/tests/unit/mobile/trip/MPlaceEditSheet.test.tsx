@@ -11,7 +11,7 @@ import { server } from '../../../helpers/msw/server'
 import { resetAllStores, seedStore } from '../../../helpers/store'
 import { fireEvent, render, screen, waitFor } from '../../../helpers/render'
 
-// FE-MOB-PLEDIT-001 to FE-MOB-PLEDIT-042, plus the 009b, 025b and 029b variants
+// FE-MOB-PLEDIT-001 to FE-MOB-PLEDIT-043, plus the 009b, 025b and 029b variants
 // planner.t echoes the key, so every label/placeholder is asserted as its key.
 
 const CATEGORIES = [
@@ -563,5 +563,30 @@ describe('MPlaceEditSheet', () => {
     seedStore(useAuthStore, { placesEnrichEnabled: false })
     setup({ editingPlace: EDITED })
     expect(screen.queryByText('places.details.title')).not.toBeInTheDocument()
+  })
+
+  it('FE-MOB-PLEDIT-043: a plugin POI pick fills the form and asks the details block about its plugin id, not a Google one', async () => {
+    const asked: unknown[] = []
+    server.use(
+      http.post('/api/maps/enrichment', async ({ request }) => {
+        asked.push(await request.json())
+        return HttpResponse.json({ photos: [], description: null, facts: [], rating: null, hours: null })
+      }),
+    )
+    const { planner } = setup({
+      prefillCoords: {
+        lat: 47.1, lng: 11.2, name: 'Trailhead', address: 'Hut 1', website: 'https://trails.example/th-043',
+        phone: '+43 1', osm_id: 'plugin:trail-finder:th-043',
+      },
+    })
+    expect(nameField()).toHaveValue('Trailhead')
+    expect(screen.getByPlaceholderText('https://')).toHaveValue('https://trails.example/th-043')
+    // The server decides who to ask by this id, and never takes a `plugin:` one for Google's.
+    await waitFor(() => expect(asked).toEqual([expect.objectContaining({ placeId: 'plugin:trail-finder:th-043', lat: 47.1, lng: 11.2 })]))
+
+    fireEvent.click(submit())
+    await waitFor(() => expect(planner.handleSavePlace).toHaveBeenCalledTimes(1))
+    expect(planner.handleSavePlace).toHaveBeenCalledWith(expect.objectContaining({ name: 'Trailhead', osm_id: 'plugin:trail-finder:th-043' }))
+    expect(planner.handleSavePlace).not.toHaveBeenCalledWith(expect.objectContaining({ google_place_id: expect.anything() }))
   })
 })

@@ -57,7 +57,7 @@ import type { ManualStopTarget, ServiceStopMode } from '../../components/Roadtri
 import type { RoadtripStopDraft } from '../../components/Roadtrip/RoadtripStopPopup'
 import type { StayDraft } from '../../components/Roadtrip/RoadtripStayModal'
 import { inspectorStay } from '../../components/Roadtrip/stayReading'
-import { MAX_TRIP_DAYS, type RoadtripStopType } from '@trek/shared'
+import { MAX_TRIP_DAYS, normalizePlaceWebsite, type RoadtripStopType } from '@trek/shared'
 import { usePlaceSelection } from '../../hooks/usePlaceSelection'
 import { usePlannerHistory } from '../../hooks/usePlannerHistory'
 import { useAirtrailConnection } from '../../hooks/useAirtrailConnection'
@@ -884,8 +884,12 @@ export function useTripPlanner() {
       lng: poi.lng,
       name: poi.name,
       address: poi.address || '',
-      website: poi.website || undefined,
+      // Checked again on the way into the form: a plugin POI's website is the plugin's
+      // text, and only an address a browser opens as a page belongs in the field.
+      website: normalizePlaceWebsite(poi.website) ?? undefined,
       phone: poi.phone || undefined,
+      // A plugin POI's `plugin:<pluginId>:<id>` rides along as it is. The server never
+      // takes that prefix for a Google place id, so the details column makes no Google call.
       osm_id: poi.osm_id,
       stop_type: stop?.stopType ?? null,
       duration_minutes: stop?.dwellMinutes,

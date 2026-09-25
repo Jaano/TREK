@@ -67,6 +67,14 @@ describe('providersOf enforces the hook:* grant', () => {
     expect(s.providersOf('routeProvider')).toEqual(['ev']);
   });
 
+  it('maps poiCategoryProvider to hook:poi-category-provider (not the search grant)', () => {
+    const s = makeSupervisor();
+    put(s, 'trails', 'active', ['poiCategoryProvider'], ['hook:poi-category-provider']);
+    // A search provider only sees words the user typed; the viewport is its own consent.
+    put(s, 'searchOnly', 'active', ['poiCategoryProvider'], ['hook:search-provider']);
+    expect(s.providersOf('poiCategoryProvider')).toEqual(['trails']);
+  });
+
   it('maps dayScheduleProvider to hook:day-schedule-provider', () => {
     const s = makeSupervisor();
     put(s, 'times', 'active', ['dayScheduleProvider'], ['hook:day-schedule-provider']);

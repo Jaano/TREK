@@ -430,6 +430,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:calendar-source': 'Provide events to the calendar',
   'admin.plugins.perm.hook:place-detail-provider': 'Contribute extra details (reviews, ratings, links) to a place',
   'admin.plugins.perm.hook:search-provider': "Answer place searches from its own index, beside TREK's own results",
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Add its own place categories to Explore places on the map; picking one sends the plugin the map area you are viewing',
   'admin.plugins.perm.hook:trip-warning-provider': 'Raise validation warnings on a trip (shown in the planner)',
   'admin.plugins.perm.hook:table-contributor': 'Add columns and actions to trip views (reservations, places, days)',
   'admin.plugins.perm.hook:map-marker-provider': 'Add markers to the trip map (e.g. show bookings or POIs)',
@@ -443,6 +445,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Publishes AI tools',
   'admin.plugins.mcpToolsTitle': 'AI tools it publishes',
   'admin.plugins.mcpToolsHint': 'An assistant can run these on a user’s behalf. Each one acts with the access granted above.',
+  'admin.plugins.poiCategoriesTitle': 'Map categories it adds',
   'admin.plugins.perm.mcp:tools':
     'Publish tools that an AI assistant can run on your behalf (it acts with the access you grant the plugin here, not with the assistant’s own)',
   'admin.plugins.perm.geolocation:read':
@@ -584,6 +587,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Provides calendar events',
   'admin.plugins.cap.placeDetails': 'Enriches places',
   'admin.plugins.cap.search': 'Answers searches',
+  'admin.plugins.cap.poiCategories': 'Adds map categories',
   'admin.plugins.cap.warnings': 'Flags issues',
   'admin.plugins.cap.mapLayers': 'Draws on the map',
   'admin.plugins.cap.routing': 'Offers routing',

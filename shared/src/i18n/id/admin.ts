@@ -437,6 +437,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:place-detail-provider':
     'Menyumbangkan detail tambahan (ulasan, peringkat, tautan) untuk suatu tempat',
   'admin.plugins.perm.hook:search-provider': 'Menjawab pencarian tempat dari indeks sendiri, di samping hasil TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Menambahkan kategori tempat sendiri ke “Jelajahi tempat di peta”; saat Anda memilih salah satunya, plugin menerima area peta yang sedang Anda lihat',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Munculkan peringatan validasi pada perjalanan (ditampilkan di perencana)',
   'admin.plugins.perm.hook:table-contributor':
@@ -453,6 +455,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Menerbitkan alat AI',
   'admin.plugins.mcpToolsTitle': 'Alat AI yang diterbitkan',
   'admin.plugins.mcpToolsHint': 'Asisten dapat menjalankannya atas nama pengguna. Masing-masing bertindak dengan akses yang diberikan di atas.',
+  'admin.plugins.poiCategoriesTitle': 'Kategori peta yang ditambahkannya',
   'admin.plugins.perm.mcp:tools':
     'Menerbitkan alat yang dapat dijalankan asisten AI atas nama Anda (bertindak dengan akses yang Anda berikan ke plugin di sini, bukan milik asisten)',
   'admin.plugins.perm.geolocation:read':
@@ -594,6 +597,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Menyediakan acara kalender',
   'admin.plugins.cap.placeDetails': 'Memperkaya tempat',
   'admin.plugins.cap.search': 'Menjawab pencarian',
+  'admin.plugins.cap.poiCategories': 'Menambahkan kategori peta',
   'admin.plugins.cap.warnings': 'Tandai masalah',
   'admin.plugins.cap.mapLayers': 'Menggambar di peta',
   'admin.plugins.cap.routing': 'Menyediakan routing',

@@ -1,4 +1,4 @@
-// FE-COMP-PLACEFORM-001 to FE-COMP-PLACEFORM-036, FE-PLANNER-PLACEFORM-016 to FE-PLANNER-PLACEFORM-067, plus FE-PLANNER-PLACEFORM-068 to -091
+// FE-COMP-PLACEFORM-001 to FE-COMP-PLACEFORM-036, FE-PLANNER-PLACEFORM-016 to FE-PLANNER-PLACEFORM-067, plus FE-PLANNER-PLACEFORM-068 to -092
 import { render, screen, waitFor, fireEvent, within, act } from '../../../tests/helpers/render';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -151,6 +151,37 @@ describe('PlaceFormModal', () => {
     );
     expect(screen.getByDisplayValue('48.8566')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Paris')).toBeInTheDocument();
+  });
+
+  it('FE-PLANNER-PLACEFORM-092: a plugin POI prefill asks the details column about its plugin id and saves it as the osm id', async () => {
+    const asked: unknown[] = [];
+    server.use(
+      http.post('/api/maps/enrichment', async ({ request }) => {
+        asked.push(await request.json());
+        return HttpResponse.json({ photos: [], description: null, facts: [], rating: null, hours: null });
+      }),
+    );
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <PlaceFormModal
+        {...defaultProps}
+        onSave={onSave}
+        prefillCoords={{
+          lat: 47.1, lng: 11.2, name: 'Trailhead', address: 'Hut 1',
+          website: 'https://trails.example/th-092', osm_id: 'plugin:trail-finder:th-092',
+        }}
+      />,
+    );
+    expect(screen.getByDisplayValue('Trailhead')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('https://trails.example/th-092')).toBeInTheDocument();
+    // The server picks the provider by this id and never takes a `plugin:` one for Google's.
+    await waitFor(() => expect(asked).toEqual([expect.objectContaining({ placeId: 'plugin:trail-finder:th-092' })]));
+
+    await user.click(screen.getByRole('button', { name: /^Add$/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ name: 'Trailhead', osm_id: 'plugin:trail-finder:th-092' }));
+    expect(onSave).not.toHaveBeenCalledWith(expect.objectContaining({ google_place_id: expect.anything() }));
   });
 
   it('FE-PLANNER-PLACEFORM-017: form resets when isOpen changes from place to null', () => {

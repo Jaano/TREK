@@ -553,10 +553,13 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                 // 860px the viewport centre sits under the Places panel, where this
                 // cluster covered both collapse tabs and Add Place/Activity (#2247).
                 left: `calc(${mapInsetLeft}px + (100% - ${mapInsetLeft}px - ${mapInsetRight}px) / 2)`,
+                // No wider than that corridor either: once plugins add categories the pill
+                // scrolls inside it instead of running on under a panel.
+                maxWidth: `calc(100% - ${mapInsetLeft}px - ${mapInsetRight}px - 24px)`,
                 transform: 'translateX(-50%)', zIndex: 25, pointerEvents: 'none', alignItems: 'flex-start', gap: 8,
               }}>
                 {poiPillEnabled && (
-                  <PoiCategoryPill active={poi.active} onToggle={poi.toggle} loadingKeys={poi.loadingKeys} errorKeys={poi.errorKeys} moved={poi.moved} onSearchArea={poi.searchArea} />
+                  <PoiCategoryPill categories={poi.categories} active={poi.active} onToggle={poi.toggle} loadingKeys={poi.loadingKeys} errorKeys={poi.errorKeys} moved={poi.moved} onSearchArea={poi.searchArea} />
                 )}
                 {glMap && <MapCompassPill map={glMap} />}
               </div>
@@ -574,7 +577,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                 buttons so map touch handlers cannot swallow the tap targets. */}
             {poiPillEnabled && !mobileSidebarOpen && !showPlaceForm && !showMembersModal && !showReservationModal && createPortal(
               <div data-testid="mobile-poi-category-pill" className="flex md:hidden" style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(var(--bottom-nav-h, 0px) + 12px)', justifyContent: 'center', zIndex: 100, pointerEvents: 'none' }}>
-                <PoiCategoryPill active={poi.active} onToggle={poi.toggle} loadingKeys={poi.loadingKeys} errorKeys={poi.errorKeys} moved={poi.moved} onSearchArea={poi.searchArea} />
+                <PoiCategoryPill categories={poi.categories} active={poi.active} onToggle={poi.toggle} loadingKeys={poi.loadingKeys} errorKeys={poi.errorKeys} moved={poi.moved} onSearchArea={poi.searchArea} />
               </div>,
               document.body
             )}

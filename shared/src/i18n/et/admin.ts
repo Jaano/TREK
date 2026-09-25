@@ -440,6 +440,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:place-detail-provider':
     'Lisada kohale täiendavaid üksikasju (arvustused, hinnangud, lingid)',
   'admin.plugins.perm.hook:search-provider': 'Vastata kohaotsingutele oma indeksist kõrvuti TREKi enda tulemustega',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Lisada oma kohakategooriaid jaotisesse „Avasta kaardil kohti“; ühe valimisel saab plugin kaardiala, mida sa parasjagu vaatad',
   'admin.plugins.perm.hook:trip-warning-provider': 'Tõstatada reisi kontrollimisel hoiatusi (kuvatakse planeerijas)',
   'admin.plugins.perm.hook:table-contributor':
     'Lisada reisi vaadetesse veerge ja toiminguid (broneeringud, kohad, päevad)',
@@ -456,6 +458,7 @@ const admin: TranslationStrings = {
   'admin.plugins.mcpToolsTitle': 'Avaldatavad tehisintellekti tööriistad',
   'admin.plugins.mcpToolsHint':
     'Assistent saab neid kasutaja nimel käivitada. Iga tööriist tegutseb ülal antud õigustega.',
+  'admin.plugins.poiCategoriesTitle': 'Kaardikategooriad, mida see lisab',
   'admin.plugins.perm.mcp:tools':
     'Avaldada tööriistu, mida tehisintellekti assistent saab sinu nimel käivitada (see tegutseb siin pluginale antud õigustega, mitte assistendi enda omadega)',
   'admin.plugins.perm.geolocation:read':
@@ -600,6 +603,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Pakub kalendrisündmusi',
   'admin.plugins.cap.placeDetails': 'Täiendab kohaandmeid',
   'admin.plugins.cap.search': 'Vastab otsingutele',
+  'admin.plugins.cap.poiCategories': 'Lisab kaardikategooriaid',
   'admin.plugins.cap.warnings': 'Märgib probleeme',
   'admin.plugins.cap.mapLayers': 'Joonistab kaardile',
   'admin.plugins.cap.routing': 'Pakub marsruutimist',

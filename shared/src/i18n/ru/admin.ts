@@ -387,6 +387,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:place-detail-provider': 'Добавлять дополнительные сведения (отзывы, оценки, ссылки) к месту',
   'admin.plugins.perm.hook:search-provider':
     'Отвечать на поиск мест из собственного индекса, рядом с результатами TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Добавлять собственные категории мест в «Поиск мест на карте»; при выборе одной из них плагин получает область карты, которую вы просматриваете',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Выдавать предупреждения проверки для поездки (отображаются в планировщике)',
   'admin.plugins.perm.hook:table-contributor':
@@ -403,6 +405,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Публикует ИИ-инструменты',
   'admin.plugins.mcpToolsTitle': 'Публикуемые ИИ-инструменты',
   'admin.plugins.mcpToolsHint': 'Ассистент может запускать их от имени пользователя. Каждый действует с правами, выданными выше.',
+  'admin.plugins.poiCategoriesTitle': 'Категории карты, которые он добавляет',
   'admin.plugins.perm.mcp:tools':
     'Публиковать инструменты, которые ИИ-ассистент может запускать от вашего имени (он действует с правами, выданными плагину здесь, а не со своими)',
   'admin.plugins.perm.geolocation:read':
@@ -546,6 +549,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Предоставляет события календаря',
   'admin.plugins.cap.placeDetails': 'Обогащает места',
   'admin.plugins.cap.search': 'Отвечает на поиск',
+  'admin.plugins.cap.poiCategories': 'Добавляет категории на карту',
   'admin.plugins.cap.warnings': 'Отмечает проблемы',
   'admin.plugins.cap.mapLayers': 'Рисует на карте',
   'admin.plugins.cap.routing': 'Предоставляет маршрутизацию',

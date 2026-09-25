@@ -148,6 +148,72 @@ outside `bounds` are dropped, and so is a hit whose own `category` names a diffe
 of those seven kinds. Both fields are absent on ordinary searches, so read them as
 optional.
 
+## Add your own place categories to the map
+
+**Needs:** `hook:poi-category-provider` and `capabilities.poiCategories` (+
+`http:outbound:<host>` and a matching `egress` when the data lives on somebody else's
+server)
+
+The trip map has a row of category buttons (restaurants, sights, museums and so on).
+Declare up to four of your own and they appear after the built-in ones, behind a thin
+divider: trailheads, EV chargers, step-free places, drinking water, campsites, a
+community's own list. When somebody picks one, TREK asks your plugin, and only yours,
+for the places in the part of the map they are looking at.
+
+```json
+"permissions": ["hook:poi-category-provider", "http:outbound:api.example-trails.org"],
+"egress": ["api.example-trails.org"],
+"capabilities": {
+  "poiCategories": [
+    { "id": "trailheads", "label": "Trailheads",
+      "labels": { "de": "Wanderparkplätze", "fr": "Départs de randonnée" },
+      "icon": "Signpost", "color": "#2f855a" }
+  ]
+}
+```
+
+```js
+hooks: {
+  poiCategoryProvider: {
+    async getPois({ category, bounds, lang, limit }, ctx) {
+      // category is one of your declared ids, bounds is { south, west, north, east }
+      const { south, west, north, east } = bounds
+      const res = await fetch(
+        `https://api.example-trails.org/${category}?bbox=${west},${south},${east},${north}&n=${limit}&lang=${lang ?? 'en'}`,
+      )
+      const { items } = await res.json()
+      return items.map(t => ({
+        id: t.ref,                    // namespaced host-side to plugin:<yourId>:<ref>
+        name: t.name,
+        lat: t.lat,
+        lng: t.lon,
+        website: t.url,               // http/https only
+        details: [                    // at most 6 rows, label 40 and value 120 characters
+          { label: 'Length', value: `${t.km} km` },
+          { label: 'Surface', value: t.surface },
+        ],
+      }))
+    },
+  },
+},
+```
+
+`icon` is one of a fixed list of lucide names (`POI_CATEGORY_ICONS` in the SDK) and
+`color` is `#rrggbb` only. The button and every marker use exactly those, whatever your
+answer says. The button is named `labels[<user's language>]` when you ship one, `label`
+otherwise.
+
+`bounds` is the viewport, narrowed to at most 0.5 degrees a side. The host keeps at most
+60 places inside it, caps every string and gives you 8 seconds; a timeout or a throw
+puts an error dot on your button only, and the built-in buttons never wait for it. You
+are called when somebody picks the button or presses **Search this area**, never on a
+pan. The hook runs as that user, so `ctx.settings.get(key)` reads their own settings (a
+wheelchair profile, say), and nothing is cached. The `details` rows show in the marker's
+hover card on the desktop, and a click on a marker opens the place form filled in from
+your answer. A declaration without the permission still installs, but no button ever
+appears; `trek-plugin validate` tells you. The full contract is under
+[Provider hooks](Plugin-Development#provider-hooks).
+
 ## Raise validation warnings on a trip
 
 **Needs:** `hook:trip-warning-provider`

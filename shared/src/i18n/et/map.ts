@@ -13,6 +13,7 @@ const map: TranslationStrings = {
   'poi.cat.museums': 'Muuseumid ja kultuur',
   'poi.cat.nature': 'Loodus ja pargid',
   'poi.cat.activities': 'Tegevused',
+  'poi.pluginCategories': 'Pluginate kategooriad',
   'map.showAllConnections': 'Näita kõiki broneeringute marsruute',
   'map.hideAllConnections': 'Peida kõik broneeringute marsruudid',
   'map.baseLayer.default': 'Kaart',

@@ -548,6 +548,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:map-layer-provider': 'Dibuixar rutes, corredors i zones al mapa del viatge',
   'admin.plugins.perm.hook:search-provider':
     "Respondre cerques de llocs des d'un índex propi, al costat dels resultats de TREK",
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Afegir categories de llocs pròpies a «Explora llocs al mapa»; triar-ne una envia al connector la zona del mapa que estàs mirant',
   'admin.plugins.perm.hook:route-provider':
     'Oferir perfils de ruta amb què el planificador pot calcular els dies (p. ex. rutes per a cotxe elèctric amb parades de recàrrega)',
   'admin.plugins.perm.hook:day-schedule-provider':
@@ -557,6 +559,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Publica eines d’IA',
   'admin.plugins.mcpToolsTitle': 'Eines d’IA que publica',
   'admin.plugins.mcpToolsHint': 'Un assistent pot executar-les en nom d’un usuari. Cadascuna actua amb els permisos concedits a dalt.',
+  'admin.plugins.poiCategoriesTitle': 'Categories del mapa que afegeix',
   'admin.plugins.perm.mcp:tools':
     "Publicar eines que un assistent d'IA pot executar en nom teu (actua amb els permisos que concedeixes aquí al connector, no amb els seus)",
   'admin.plugins.perm.geolocation:read':
@@ -681,6 +684,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Proporciona esdeveniments de calendari',
   'admin.plugins.cap.placeDetails': 'Enriqueix els llocs',
   'admin.plugins.cap.search': 'Respon cerques',
+  'admin.plugins.cap.poiCategories': 'Afegeix categories al mapa',
   'admin.plugins.cap.warnings': 'Marca problemes',
   'admin.plugins.cap.mapLayers': 'Dibuixa al mapa',
   'admin.plugins.cap.routing': 'Calcula rutes',

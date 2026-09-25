@@ -53,44 +53,60 @@ const capOrNull = (v: unknown, n: number): string | null => {
  * that provider, and dropping the whole hit over it would lose the place as well.
  */
 function safeRating(raw: unknown): number | null {
+  // Only a number or a numeric string is a rating. Number(null), Number('') and
+  // Number(true) are 0, 0 and 1, and an unrated place is not a zero-star one.
+  if (typeof raw !== 'number' && (typeof raw !== 'string' || raw.trim() === '')) return null;
   const n = Number(raw);
   if (!Number.isFinite(n)) return null;
   return Math.min(5, Math.max(0, Math.round(n * 10) / 10));
 }
 
+/**
+ * One place a plugin answered, or null when it cannot be shown or picked.
+ *
+ * Also what the plugin POI categories read their hits with (#1781), so a place from a
+ * category chip is capped, namespaced and url-checked exactly like one from a search.
+ */
+export function normalizeSearchHit(pluginId: string, raw: unknown): SearchHit | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const h = raw as Record<string, unknown>;
+  const lat = Number(h.lat);
+  const lng = Number(h.lng);
+  const name = cap(h.name, 200);
+  // A hit with no name or no place on the earth cannot be shown or picked.
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+  // Falls back to the coordinate when the plugin has no stable id of its own, which
+  // still tells two rows apart.
+  const ref = cap(h.id, 100) || `${lat},${lng}`;
+  return {
+    // Namespaced so a plugin id can never collide with a real OSM id or a `gers:`
+    // one from the index.
+    osm_id: `plugin:${pluginId}:${ref}`,
+    name,
+    address: cap(h.address, 300),
+    lat,
+    lng,
+    rating: safeRating(h.rating),
+    // Through the helper every other source uses (#2483): a `javascript:` or
+    // `data:` url rendered as a link is click-XSS into the search list, and a
+    // bare host gains https here as it does from the core search.
+    website: normalizePlaceWebsite(h.website),
+    phone: capOrNull(h.phone, 60),
+    category: capOrNull(h.category, 60),
+    description: capOrNull(h.description, 500),
+    source: `plugin:${pluginId}`,
+    pluginId,
+  };
+}
+
 export function normalizeSearchHits(pluginId: string, raw: unknown): SearchHit[] {
-  const list = Array.isArray(raw) ? (raw as Array<Record<string, unknown>>) : [];
+  const list = Array.isArray(raw) ? (raw as unknown[]) : [];
   const out: SearchHit[] = [];
   for (const h of list) {
     if (out.length >= MAX_HITS) break;
-    if (!h || typeof h !== 'object') continue;
-    const lat = Number(h.lat);
-    const lng = Number(h.lng);
-    const name = cap(h.name, 200);
-    // A hit with no name or no place on the earth cannot be shown or picked.
-    if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) continue;
-    const id = cap(h.id, 100);
-    out.push({
-      // Namespaced so a plugin id can never collide with a real OSM id or a `gers:`
-      // one from the index. Falls back to the coordinate when the plugin has no stable
-      // id of its own, which still tells two rows apart.
-      osm_id: `plugin:${pluginId}:${id || `${lat},${lng}`}`,
-      name,
-      address: cap(h.address, 300),
-      lat,
-      lng,
-      rating: safeRating(h.rating),
-      // Through the helper every other source uses (#2483): a `javascript:` or
-      // `data:` url rendered as a link is click-XSS into the search list, and a
-      // bare host gains https here as it does from the core search.
-      website: normalizePlaceWebsite(h.website),
-      phone: capOrNull(h.phone, 60),
-      category: capOrNull(h.category, 60),
-      description: capOrNull(h.description, 500),
-      source: `plugin:${pluginId}`,
-      pluginId,
-    });
+    const hit = normalizeSearchHit(pluginId, h);
+    if (hit) out.push(hit);
   }
   return out;
 }

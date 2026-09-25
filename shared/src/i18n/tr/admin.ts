@@ -435,6 +435,8 @@ const admin: TranslationStrings = {
     'Bir yere ek ayrıntılar (yorumlar, puanlar, bağlantılar) katkıda bulunur',
   'admin.plugins.perm.hook:search-provider':
     "Yer aramalarını kendi dizininden yanıtlama, TREK'in kendi sonuçlarının yanında",
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Kendi yer kategorilerini “Haritada yerleri keşfet” alanına ekler; birini seçtiğinde eklentiye görüntülediğin harita alanı gönderilir',
   'admin.plugins.perm.hook:trip-warning-provider': 'Bir gezide doğrulama uyarıları oluşturur (planlayıcıda gösterilir)',
   'admin.plugins.perm.hook:table-contributor':
     'Seyahat görünümlerine sütunlar ve eylemler ekler (rezervasyonlar, yerler, günler)',
@@ -450,6 +452,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Yapay zekâ araçları yayımlar',
   'admin.plugins.mcpToolsTitle': 'Yayımlanan yapay zekâ araçları',
   'admin.plugins.mcpToolsHint': 'Bir asistan bunları kullanıcı adına çalıştırabilir. Her biri yukarıda verilen yetkilerle çalışır.',
+  'admin.plugins.poiCategoriesTitle': 'Eklediği harita kategorileri',
   'admin.plugins.perm.mcp:tools':
     'Bir yapay zekâ asistanının sizin adınıza çalıştırabileceği araçlar yayımlamak (burada eklentiye verdiğiniz yetkilerle çalışır, asistanın kendi yetkileriyle değil)',
   'admin.plugins.perm.geolocation:read':
@@ -592,6 +595,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Takvim etkinlikleri sağlar',
   'admin.plugins.cap.placeDetails': 'Yerleri zenginleştirir',
   'admin.plugins.cap.search': 'Aramaları yanıtlar',
+  'admin.plugins.cap.poiCategories': 'Haritaya kategori ekler',
   'admin.plugins.cap.warnings': 'Sorunları işaretler',
   'admin.plugins.cap.mapLayers': 'Haritada çizim yapar',
   'admin.plugins.cap.routing': 'Rota sunar',

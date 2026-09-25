@@ -385,6 +385,8 @@ const admin: TranslationStrings = {
     'Zusatzdetails (Bewertungen, Ratings, Links) zu einem Ort beisteuern',
   'admin.plugins.perm.hook:search-provider':
     'Ortssuchen aus einem eigenen Index beantworten, neben TREKs eigenen Ergebnissen',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Eigene Ortskategorien zu „Orte auf der Karte entdecken“ hinzufügen; wählst du eine davon, erhält das Plugin den Kartenausschnitt, den du gerade ansiehst',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Validierungswarnungen zu einer Reise ausgeben (im Planer angezeigt)',
   'admin.plugins.perm.hook:table-contributor':
@@ -400,6 +402,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Veröffentlicht KI-Tools',
   'admin.plugins.mcpToolsTitle': 'Veröffentlichte KI-Tools',
   'admin.plugins.mcpToolsHint': 'Ein Assistent kann sie im Namen eines Nutzers ausführen. Jedes handelt mit den oben erteilten Rechten.',
+  'admin.plugins.poiCategoriesTitle': 'Kartenkategorien, die es hinzufügt',
   'admin.plugins.perm.mcp:tools':
     'Tools veröffentlichen, die ein KI-Assistent in deinem Namen ausführen kann (es handelt mit den Rechten, die du dem Plugin hier erteilst, nicht mit denen des Assistenten)',
   'admin.plugins.perm.geolocation:read':
@@ -544,6 +547,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Liefert Kalender-Events',
   'admin.plugins.cap.placeDetails': 'Reichert Orte an',
   'admin.plugins.cap.search': 'Beantwortet Suchen',
+  'admin.plugins.cap.poiCategories': 'Fügt Kartenkategorien hinzu',
   'admin.plugins.cap.warnings': 'Meldet Probleme',
   'admin.plugins.cap.mapLayers': 'Zeichnet auf der Karte',
   'admin.plugins.cap.routing': 'Bietet Routing an',

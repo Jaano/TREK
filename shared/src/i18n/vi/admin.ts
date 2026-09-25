@@ -390,6 +390,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:place-detail-provider':
     'Đóng góp thêm thông tin chi tiết (đánh giá, xếp hạng, liên kết) cho một địa điểm',
   'admin.plugins.perm.hook:search-provider': 'Trả lời tìm kiếm địa điểm từ chỉ mục riêng, bên cạnh kết quả của TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Thêm các danh mục địa điểm riêng vào “Khám phá các địa điểm trên bản đồ”; khi bạn chọn một danh mục, plugin sẽ nhận vùng bản đồ bạn đang xem',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Đưa ra cảnh báo xác thực trên một chuyến đi (hiển thị trong trình lập kế hoạch)',
   'admin.plugins.perm.hook:table-contributor':
@@ -406,6 +408,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Xuất bản công cụ AI',
   'admin.plugins.mcpToolsTitle': 'Công cụ AI được xuất bản',
   'admin.plugins.mcpToolsHint': 'Trợ lý có thể chạy chúng thay cho người dùng. Mỗi công cụ hoạt động với quyền được cấp ở trên.',
+  'admin.plugins.poiCategoriesTitle': 'Danh mục bản đồ mà plugin thêm vào',
   'admin.plugins.perm.mcp:tools':
     'Xuất bản các công cụ mà trợ lý AI có thể chạy thay bạn (nó hoạt động với quyền bạn cấp cho tiện ích tại đây, không phải quyền của trợ lý)',
   'admin.plugins.perm.geolocation:read':
@@ -548,6 +551,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Cung cấp sự kiện lịch',
   'admin.plugins.cap.placeDetails': 'Làm phong phú địa điểm',
   'admin.plugins.cap.search': 'Trả lời tìm kiếm',
+  'admin.plugins.cap.poiCategories': 'Thêm danh mục bản đồ',
   'admin.plugins.cap.warnings': 'Gắn cờ vấn đề',
   'admin.plugins.cap.mapLayers': 'Vẽ trên bản đồ',
   'admin.plugins.cap.routing': 'Cung cấp định tuyến',

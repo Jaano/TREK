@@ -441,6 +441,8 @@ const admin: TranslationStrings = {
     'Συνεισφορά επιπλέον λεπτομερειών (κριτικές, βαθμολογίες, σύνδεσμοι) σε ένα μέρος',
   'admin.plugins.perm.hook:search-provider':
     'Απάντηση σε αναζητήσεις τοποθεσιών από δικό του ευρετήριο, δίπλα στα αποτελέσματα του TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Προσθήκη δικών του κατηγοριών τοποθεσιών στην «Εξερεύνηση μερών στον χάρτη»· όταν επιλέγετε μία, το πρόσθετο λαμβάνει την περιοχή του χάρτη που βλέπετε',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Εμφάνιση προειδοποιήσεων επικύρωσης σε ένα ταξίδι (εμφανίζονται στον σχεδιαστή)',
   'admin.plugins.perm.hook:table-contributor':
@@ -457,6 +459,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Δημοσιεύει εργαλεία AI',
   'admin.plugins.mcpToolsTitle': 'Δημοσιευμένα εργαλεία AI',
   'admin.plugins.mcpToolsHint': 'Ένας βοηθός μπορεί να τα εκτελέσει εκ μέρους ενός χρήστη. Καθένα ενεργεί με τα δικαιώματα που δόθηκαν παραπάνω.',
+  'admin.plugins.poiCategoriesTitle': 'Κατηγορίες χάρτη που προσθέτει',
   'admin.plugins.perm.mcp:tools':
     'Δημοσίευση εργαλείων που μπορεί να εκτελέσει ένας βοηθός AI εκ μέρους σας (ενεργεί με τα δικαιώματα που δίνετε εδώ στο πρόσθετο, όχι με τα δικά του)',
   'admin.plugins.perm.geolocation:read':
@@ -601,6 +604,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Παρέχει συμβάντα ημερολογίου',
   'admin.plugins.cap.placeDetails': 'Εμπλουτίζει μέρη',
   'admin.plugins.cap.search': 'Απαντά σε αναζητήσεις',
+  'admin.plugins.cap.poiCategories': 'Προσθέτει κατηγορίες στον χάρτη',
   'admin.plugins.cap.warnings': 'Επισημαίνει ζητήματα',
   'admin.plugins.cap.mapLayers': 'Σχεδιάζει στον χάρτη',
   'admin.plugins.cap.routing': 'Παρέχει δρομολόγηση',

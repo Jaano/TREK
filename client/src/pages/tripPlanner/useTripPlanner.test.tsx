@@ -1,4 +1,4 @@
-// FE-TP-HOOK-001 to FE-TP-HOOK-135
+// FE-TP-HOOK-001 to FE-TP-HOOK-142
 import React from 'react'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { TranslationProvider } from '../../i18n/TranslationContext'
@@ -1060,6 +1060,44 @@ describe('useTripPlanner — add place entry points', () => {
     })
     expect(result.current.showPlaceForm).toBe(true)
     expect(mapsApi.reverse).not.toHaveBeenCalled()
+  })
+
+  it('FE-TP-HOOK-141: a plugin POI prefills with its own id, and a website only when it is a web address', async () => {
+    seedTrip()
+    const { result } = await renderPlanner()
+    const trailhead = {
+      lat: 47.1, lng: 11.2, name: 'Trailhead', address: 'Hut 1', website: 'https://trails.example/th-1', phone: '+43 1',
+      osm_id: 'plugin:trail-finder:th-1', category: 'plugin:trail-finder/trailheads', source: 'plugin:trail-finder',
+      details: [{ label: 'Length', value: '12 km' }], icon: 'Signpost', color: '#2f855a',
+    }
+
+    act(() => { result.current.openAddPlaceFromPoi(trailhead) })
+
+    // Only the fields the form has: the details, icon and colour stay on the map.
+    expect(result.current.prefillCoords).toEqual({
+      lat: 47.1, lng: 11.2, name: 'Trailhead', address: 'Hut 1', website: 'https://trails.example/th-1', phone: '+43 1',
+      osm_id: 'plugin:trail-finder:th-1', stop_type: null, duration_minutes: undefined,
+    })
+    expect(mapsApi.reverse).not.toHaveBeenCalled()
+
+    act(() => { result.current.openAddPlaceFromPoi({ ...trailhead, website: 'javascript:alert(1)' }) })
+    expect(result.current.prefillCoords?.website).toBeUndefined()
+    act(() => { result.current.openAddPlaceFromPoi({ ...trailhead, website: 'trails.example' }) })
+    expect(result.current.prefillCoords?.website).toBe('https://trails.example')
+  })
+
+  it('FE-TP-HOOK-142: a plugin POI tapped on the map opens the same prefilled form', async () => {
+    seedTrip()
+    const { result } = await renderPlanner()
+
+    act(() => {
+      result.current.handlePoiClick({
+        lat: 47.1, lng: 11.2, name: 'Trailhead', address: null, website: null, phone: null, osm_id: 'plugin:trail-finder:th-1',
+      })
+    })
+
+    expect(result.current.showPlaceForm).toBe(true)
+    expect(result.current.prefillCoords).toMatchObject({ name: 'Trailhead', osm_id: 'plugin:trail-finder:th-1', website: undefined })
   })
 
   it('FE-TP-HOOK-050: the pool editor resolves a place\'s lone assignment for its times', async () => {

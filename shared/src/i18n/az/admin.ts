@@ -467,6 +467,8 @@ const admin: TranslationStrings = {
     'Məkana əlavə məlumatlar (rəylər, reytinqlər və keçidlər) təqdim etmək',
   'admin.plugins.perm.hook:search-provider':
     'TREK-in öz nəticələri ilə yanaşı, öz indeksindən məkan axtarışlarına cavab vermək',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Öz məkan kateqoriyalarını “Xəritədə məkanları kəşf et” bölməsinə əlavə etmək; birini seçdikdə plaginə baxdığınız xəritə sahəsi göndərilir',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Səyahətlə bağlı doğrulama xəbərdarlıqları yaratmaq (planlayıcıda göstərilir)',
   'admin.plugins.perm.hook:table-contributor':
@@ -485,6 +487,7 @@ const admin: TranslationStrings = {
   'admin.plugins.mcpToolsTitle': 'Yayımladığı süni intellekt alətləri',
   'admin.plugins.mcpToolsHint':
     'Köməkçi bunları istifadəçinin adından işə sala bilər. Hər biri yuxarıda verilmiş giriş icazələri ilə işləyir.',
+  'admin.plugins.poiCategoriesTitle': 'Əlavə etdiyi xəritə kateqoriyaları',
   'admin.plugins.perm.mcp:tools':
     'Süni intellekt köməkçisinin sizin adınızdan işə sala biləcəyi alətlər yayımlamaq (köməkçinin öz icazələri ilə deyil, burada plaginə verdiyiniz giriş icazələri ilə işləyir)',
   'admin.plugins.perm.geolocation:read':
@@ -637,6 +640,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Təqvim tədbirləri təqdim edir',
   'admin.plugins.cap.placeDetails': 'Məkan məlumatlarını zənginləşdirir',
   'admin.plugins.cap.search': 'Axtarışlara cavab verir',
+  'admin.plugins.cap.poiCategories': 'Xəritəyə kateqoriyalar əlavə edir',
   'admin.plugins.cap.warnings': 'Problemləri işarələyir',
   'admin.plugins.cap.mapLayers': 'Xəritədə təsvirlər çəkir',
   'admin.plugins.cap.routing': 'Marşrutlaşdırma təqdim edir',

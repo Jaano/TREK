@@ -388,6 +388,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:place-detail-provider': 'Ajouter des détails supplémentaires (avis, notes, liens) à un lieu',
   'admin.plugins.perm.hook:search-provider':
     'Répondre aux recherches de lieux depuis son propre index, à côté des résultats de TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    "Ajouter ses propres catégories de lieux à « Explorer les lieux sur la carte » ; en choisir une envoie à l'extension la zone de la carte que vous consultez",
   'admin.plugins.perm.hook:trip-warning-provider':
     'Émettre des avertissements de validation sur un voyage (affichés dans le planificateur)',
   'admin.plugins.perm.hook:table-contributor':
@@ -405,6 +407,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Publie des outils IA',
   'admin.plugins.mcpToolsTitle': 'Outils IA publiés',
   'admin.plugins.mcpToolsHint': "Un assistant peut les exécuter au nom d'un utilisateur. Chacun agit avec les accès accordés ci-dessus.",
+  'admin.plugins.poiCategoriesTitle': 'Catégories de carte ajoutées',
   'admin.plugins.perm.mcp:tools':
     "Publier des outils qu'un assistant IA peut exécuter en votre nom (il agit avec les accès que vous accordez ici à l'extension, pas avec les siens)",
   'admin.plugins.perm.geolocation:read':
@@ -549,6 +552,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Fournit des événements de calendrier',
   'admin.plugins.cap.placeDetails': 'Enrichit les lieux',
   'admin.plugins.cap.search': 'Répond aux recherches',
+  'admin.plugins.cap.poiCategories': 'Ajoute des catégories à la carte',
   'admin.plugins.cap.warnings': 'Signale les problèmes',
   'admin.plugins.cap.mapLayers': 'Dessine sur la carte',
   'admin.plugins.cap.routing': 'Propose des itinéraires',

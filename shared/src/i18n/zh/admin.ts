@@ -353,6 +353,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:calendar-source': '为日历提供事件',
   'admin.plugins.perm.hook:place-detail-provider': '为地点补充额外信息（评论、评分、链接）',
   'admin.plugins.perm.hook:search-provider': '从自有索引回答地点搜索，与 TREK 自身的结果并列显示',
+  'admin.plugins.perm.hook:poi-category-provider':
+    '向“在地图上探索地点”添加自己的地点分类（选择其中一个时，插件会收到你正在查看的地图区域）',
   'admin.plugins.perm.hook:trip-warning-provider': '对行程发出校验警告（显示在规划器中）',
   'admin.plugins.perm.hook:table-contributor': '向行程视图（预订、地点、日期）添加列和操作',
   'admin.plugins.perm.hook:map-marker-provider': '向旅行地图添加标记（例如显示预订或兴趣点）',
@@ -363,6 +365,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': '发布 AI 工具',
   'admin.plugins.mcpToolsTitle': '发布的 AI 工具',
   'admin.plugins.mcpToolsHint': '助手可以代用户运行这些工具。每个工具都以上方授予的权限运行。',
+  'admin.plugins.poiCategoriesTitle': '添加的地图分类',
   'admin.plugins.perm.mcp:tools':
     '发布 AI 助手可以代你运行的工具（它以你在此处授予插件的权限运行，而非助手自身的权限）',
   'admin.plugins.perm.geolocation:read': '在其某个视图打开时请求你的实时位置（由 TREK 使用本站点已有的位置权限读取，不会单独为插件询问）',
@@ -498,6 +501,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': '提供日历事件',
   'admin.plugins.cap.placeDetails': '丰富地点信息',
   'admin.plugins.cap.search': '回答搜索',
+  'admin.plugins.cap.poiCategories': '添加地图分类',
   'admin.plugins.cap.warnings': '标记问题',
   'admin.plugins.cap.mapLayers': '在地图上绘制',
   'admin.plugins.cap.routing': '提供路线规划',

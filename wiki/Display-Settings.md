@@ -113,7 +113,7 @@ Shows or hides station / airport names on the endpoint markers of booking routes
 
 ## Explore places on the map
 
-Shows a row of category buttons on the trip map for finding nearby restaurants, accommodation, sights and more. TREK's own place index answers first and OpenStreetMap fills in; see [Exploring the map by category](Places-and-Search#exploring-the-map-by-category). Set to **On** or **Off**.
+Shows a row of category buttons on the trip map for finding nearby restaurants, accommodation, sights and more. TREK's own place index answers first and OpenStreetMap fills in, and installed plugins can add buttons of their own; see [Exploring the map by category](Places-and-Search#exploring-the-map-by-category). Set to **On** or **Off**.
 
 ## Always show booking routes
 

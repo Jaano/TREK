@@ -450,6 +450,8 @@ const admin: TranslationStrings = {
     'Bidra med extra detaljer (recensioner, betyg, länkar) till en plats',
   'admin.plugins.perm.hook:search-provider':
     'Besvara platssökningar från ett eget index, vid sidan av TREK:s egna resultat',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Lägga till egna platskategorier i ”Utforska platser på kartan”; väljer du en får tillägget det kartområde du tittar på',
   'admin.plugins.perm.hook:trip-warning-provider': 'Visa valideringsvarningar på en resa (visas i planeraren)',
   'admin.plugins.perm.hook:table-contributor':
     'Lägga till kolumner och åtgärder i rese­vyer (bokningar, platser, dagar)',
@@ -464,6 +466,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Publicerar AI-verktyg',
   'admin.plugins.mcpToolsTitle': 'Publicerade AI-verktyg',
   'admin.plugins.mcpToolsHint': 'En assistent kan köra dem åt en användare. Varje verktyg agerar med de rättigheter som getts ovan.',
+  'admin.plugins.poiCategoriesTitle': 'Kartkategorier som tillägget lägger till',
   'admin.plugins.perm.mcp:tools':
     'Publicera verktyg som en AI-assistent kan köra åt dig (det agerar med de rättigheter du ger tillägget här, inte med assistentens egna)',
   'admin.plugins.perm.geolocation:read':
@@ -607,6 +610,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Tillhandahåller kalenderhändelser',
   'admin.plugins.cap.placeDetails': 'Berikar platser',
   'admin.plugins.cap.search': 'Besvarar sökningar',
+  'admin.plugins.cap.poiCategories': 'Lägger till kartkategorier',
   'admin.plugins.cap.warnings': 'Flaggar problem',
   'admin.plugins.cap.mapLayers': 'Ritar på kartan',
   'admin.plugins.cap.routing': 'Erbjuder ruttplanering',

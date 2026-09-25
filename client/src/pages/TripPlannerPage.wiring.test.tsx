@@ -1,4 +1,4 @@
-// FE-PAGE-TPW-001 to FE-PAGE-TPW-062
+// FE-PAGE-TPW-001 to FE-PAGE-TPW-064
 //
 // The planner page is a wiring container: everything stateful lives in
 // useTripPlanner (covered in src/pages/tripPlanner/useTripPlanner.test.tsx).
@@ -44,9 +44,19 @@ function props(name: string): Record<string, AnyProp> {
 
 vi.mock('../components/Map/MapViewAuto', () => ({ MapViewAuto: stub('map', 'map-view') }))
 vi.mock('../components/Map/MapCompassPill', () => ({ MapCompassPill: stub('compass', 'compass-pill') }))
-vi.mock('../components/Map/PoiCategoryPill', () => ({ default: stub('poiPill', 'poi-pill') }))
+// Every pill mount records its props here, so a test can check each one of them.
+const poiPillMounts = vi.hoisted(() => [] as Record<string, unknown>[])
+const poiCategories = vi.hoisted(() => ({ core: [], plugin: [] }))
+vi.mock('../components/Map/PoiCategoryPill', () => ({
+  default: (props: Record<string, unknown>) => {
+    captured.poiPill = props
+    poiPillMounts.push(props)
+    return React.createElement('div', { 'data-testid': 'poi-pill' })
+  },
+}))
 vi.mock('../components/Map/usePoiExplore', () => ({
   usePoiExplore: () => ({
+    categories: poiCategories,
     active: [], pois: [], loadingKeys: [], errorKeys: [], moved: false,
     toggle: vi.fn(), searchArea: vi.fn(), onViewportChange: vi.fn(),
   }),
@@ -494,6 +504,24 @@ describe('TripPlannerPage — plan tab', () => {
     const { container } = renderPage({ leftWidth: 340, rightWidth: 300 })
     const cluster = container.querySelector('div[style*="translateX(-50%)"][style*="z-index: 25"]') as HTMLElement
     expect(cluster.style.left).toBe('calc(350px + 0.5 * (100% - 350px - 310px))')
+  })
+
+  // Plugins can add POI categories (#1781), so the pill may outgrow the corridor; bounded
+  // to it, the pill scrolls there instead of running on under a panel.
+  it('FE-PAGE-TPW-063: the floating map controls are no wider than the corridor', () => {
+    const { container } = renderPage({ leftWidth: 340, rightWidth: 300 })
+    const cluster = container.querySelector('div[style*="translateX(-50%)"][style*="z-index: 25"]') as HTMLElement
+    // The two panel insets (350 and 310) and a 12px margin on either side.
+    expect(cluster.style.maxWidth).toBe('calc(100% - 684px)')
+  })
+
+  it('FE-PAGE-TPW-064: both pill mounts offer the categories the explore hook merged', () => {
+    poiPillMounts.length = 0
+    renderPage()
+    // The floating desktop pill and the portal the narrow layout uses.
+    expect(poiPillMounts.length).toBeGreaterThanOrEqual(2)
+    expect(poiPillMounts.every(mount => mount.categories === poiCategories)).toBe(true)
+    expect(screen.getByTestId('mobile-poi-category-pill')).toContainElement(screen.getAllByTestId('poi-pill')[1])
   })
 
   it('FE-PAGE-TPW-013d: a hidden panel takes no corridor away from the map controls', () => {

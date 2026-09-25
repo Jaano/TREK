@@ -36,6 +36,22 @@ export interface HookSearchRequest {
   bounds?: { south: number; west: number; north: number; east: number };
 }
 
+/**
+ * What a POI category provider is asked for (#1781): the places of ONE of its own
+ * declared categories inside the map area the user is looking at.
+ *
+ * `category` is the plugin-local id from `capabilities.poiCategories`, never a pill
+ * key, and the host only ever sends an id the manifest declared. `bounds` is the
+ * viewport after the host narrowed it to a search window, so a provider never has to
+ * answer for a whole continent.
+ */
+export interface HookPoiRequest {
+  category: string;
+  bounds: { south: number; west: number; north: number; east: number };
+  lang?: string;
+  limit: number;
+}
+
 /** The waypoint request a route provider is asked to solve. */
 export interface HookRouteRequest {
   tripId: number;
@@ -47,8 +63,9 @@ export interface HookRouteRequest {
 /**
  * Every host-to-plugin hook call, in one place.
  *
- * The 16 hooks the consent screen offers used to be invoked straight from the
- * controllers, with the fn name and the timeout written out at each call site. That
+ * The hooks the consent screen offers (one per HOOK_PERMISSION key, 18 of them now)
+ * used to be invoked straight from the controllers, with the fn name and the timeout
+ * written out at each call site. That
  * made three things impossible to check: that a granted `hook:*` permission actually
  * has a consumer (a dead grant on the consent screen looks exactly like a live one),
  * that the fn name the host asks for matches the one the SDK documents, and that two
@@ -111,6 +128,20 @@ export class PluginHooks {
   @PluginHook('searchProvider', { permission: 'hook:search-provider', fn: 'search', timeoutMs: 2000 })
   searchPlaces(pluginId: string, request: HookSearchRequest, userId: number): Promise<unknown> {
     return this.runtime.invokeHook(pluginId, 'searchProvider', 'search', [request], userId, 2000);
+  }
+
+  /**
+   * A chip in the explore pill, answered by the plugin that declared it.
+   *
+   * Longer than the search budget because nobody is typing: the person picked a
+   * category and waits for markers, the way they wait for the core categories, whose
+   * Overpass path is allowed far more. It is still well short of that, because a
+   * provider behind an external API that has not answered in eight seconds is not
+   * going to, and the chip should show its error dot rather than spin.
+   */
+  @PluginHook('poiCategoryProvider', { permission: 'hook:poi-category-provider', fn: 'getPois', timeoutMs: 8000 })
+  categoryPois(pluginId: string, request: HookPoiRequest, userId: number): Promise<unknown> {
+    return this.runtime.invokeHook(pluginId, 'poiCategoryProvider', 'getPois', [request], userId, 8000);
   }
 
   @PluginHook('warningProvider', { permission: 'hook:trip-warning-provider', fn: 'getWarnings', timeoutMs: 5000 })

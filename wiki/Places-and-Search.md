@@ -141,6 +141,28 @@ With **Explore places on the map** switched on in [Display Settings](Display-Set
 
 The TREK API answers these first, from the map centre out to a radius that covers the view, at most 20 km. When it has nothing for the area, or cannot be reached, the public Overpass mirrors of OpenStreetMap answer instead, narrowed to a window of half a degree around the centre; `OVERPASS_URL` and `OVERPASS_TIMEOUT_MS` on [Environment Variables](Environment-Variables) steer those. Results from the TREK API come with address, website, phone and opening hours where the index has them, under the names used on the spot rather than translations. The [Road trip](Road-Trip#search-along-the-route) search along the drive asks the same two sources.
 
+### Categories from plugins
+
+An installed [plugin](Plugins) can add up to four buttons of its own to the row: trailheads, EV chargers, step-free places, public toilets and drinking water, campsites, or a community's own list of places. They come after the built-in buttons, behind a thin divider. When the row holds more buttons than it has room for, it scrolls sideways instead of shrinking them, on the phone as on the desktop.
+
+A plugin's buttons are there while the plugin is switched on and the admin has granted it the permission to add map categories (`hook:poi-category-provider`, see [Plugin Permissions](Plugin-Permissions)). Like the built-in ones they show only an icon, and a picked one fills with the plugin's colour. Rest the pointer on one for its name: in your language when the plugin ships a name for it, otherwise in the plugin's own wording.
+
+A plugin button works like a built-in one: one category at a time, and **Search this area** after you move the map. Only the plugin that added the button is asked, for the part of the map you are looking at, narrowed to the same half-degree window as OpenStreetMap, and at most 60 of its places are shown. The request carries that area, the category and your language, and names no trip. The plugin answers as you, so it can follow your own settings for it, and TREK keeps no copy of the answer. A plugin that takes longer than eight seconds, or fails, gets a red dot on its button and a **Search this area** to try again. The built-in buttons never wait for it.
+
+Plugin categories need a connection. Offline, or with **Force offline mode** on, TREK does not ask the plugin at all: a picked button shows the red dot, and **Search this area** tries again once you are back online. See [Offline Mode and PWA](Offline-Mode-and-PWA).
+
+The markers carry the icon and colour the plugin chose for the category. On the desktop, resting the pointer on a marker shows the place's name and, where the plugin sends them, up to six rows only it knows, such as a trail's length or a step-free entrance. They are always shown as plain text. The phone has no hover, so it does not show these rows.
+
+Clicking or tapping a marker opens the place form with the name, address, website, phone and coordinates filled in, the same as for a marker from a built-in button, for anyone allowed to edit places. A website only comes along when it is an http or https address. Once saved it is an ordinary place of the trip, and it stays when the plugin goes.
+
+When the admin switches a plugin off, uninstalls it or takes the permission away, its buttons disappear, and their markers with them: for the admin straight away, for everyone else the next time TREK loads, or as soon as they press one.
+
+> **Admin:** the Plugins panel marks a plugin that asks for the permission with an **Adds map categories** chip, and a registry plugin's detail lists the categories it would add, with their icons, colours and names, before you install it. See [Admin-Plugins](Admin-Plugins#the-pre-install-review-dialog).
+
+> **AI / MCP:** `list_plugin_poi_categories` names the categories plugins add, and `search_plugin_pois` asks the plugin behind one of them for its places in a map rectangle; see [MCP-Tools-and-Resources](MCP-Tools-and-Resources).
+
+To build such a plugin, see [Plugin Cookbook](Plugin-Cookbook#add-your-own-place-categories-to-the-map).
+
 ## Searching offline
 
 When a trip is kept for offline use, TREK also downloads the places around it from the TREK API: one request of up to 3000 places, in a box around the trip's places with some margin, at most 1.5 degrees a side (a trip spread wider gets its centre). For a city the size of Rostock that is about a megabyte. The download is repeated only when the trip's area changes, and it happens whether or not **Store map tiles offline** is on: the tiles are the big part, the places are not.

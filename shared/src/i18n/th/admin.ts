@@ -372,6 +372,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:calendar-source': "จัดให้มีกิจกรรมในปฏิทิน",
   'admin.plugins.perm.hook:place-detail-provider': "เพิ่มรายละเอียด (บทวิจารณ์ คะแนน และลิงก์) ให้กับสถานที่",
   'admin.plugins.perm.hook:search-provider': 'ตอบการค้นหาสถานที่จากดัชนีของตัวเอง ควบคู่กับผลลัพธ์ของ TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'เพิ่มหมวดหมู่สถานที่ของตัวเองลงใน “สำรวจสถานที่บนแผนที่” เมื่อคุณเลือกหมวดหมู่ใด ปลั๊กอินจะได้รับพื้นที่แผนที่ที่คุณกำลังดูอยู่',
   'admin.plugins.perm.hook:trip-warning-provider': "แจ้งเตือนการตรวจสอบความถูกต้องในการเดินทาง (แสดงใน Planner)",
   'admin.plugins.perm.hook:table-contributor': "เพิ่มคอลัมน์และการดำเนินการให้กับมุมมองการเดินทาง (การจอง สถานที่ วัน)",
   'admin.plugins.perm.hook:map-marker-provider': "เพิ่มเครื่องหมายลงในแผนที่การเดินทาง (เช่น แสดงการจองหรือ POI)",
@@ -385,6 +387,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': "เผยแพร่เครื่องมือ AI",
   'admin.plugins.mcpToolsTitle': "เครื่องมือ AI ที่เผยแพร่",
   'admin.plugins.mcpToolsHint': "ผู้ช่วยสามารถเรียกใช้สิ่งเหล่านี้ในนามของผู้ใช้ได้ แต่ละคนดำเนินการตามสิทธิ์การเข้าถึงที่ได้รับข้างต้น",
+  'admin.plugins.poiCategoriesTitle': 'หมวดหมู่แผนที่ที่ปลั๊กอินเพิ่ม',
   'admin.plugins.perm.mcp:tools':
     "เผยแพร่เครื่องมือที่ผู้ช่วย AI สามารถทำงานในนามของคุณ (จะกระทำกับการเข้าถึงที่คุณให้สิทธิ์ปลั๊กอินที่นี่ ไม่ใช่กับผู้ช่วยเอง)",
   'admin.plugins.perm.geolocation:read':
@@ -766,6 +769,7 @@ const admin: TranslationStrings = {
   'admin.placeShadow.title': "บันทึกการค้นหาสถานที่",
   'admin.placeShadow.subtitle': "บันทึกผลค้นหาที่ถูกเลือก เพื่อวัดดัชนีสถานที่อื่นกับการค้นหาจริงในอนาคต ข้อมูลจะไม่ออกจากอินสแตนซ์นี้ และผู้ดูแลส่งออกหรือลบบันทึกได้ทุกเมื่อ",
   'admin.plugins.cap.search': "ตอบการค้นหา",
+  'admin.plugins.cap.poiCategories': 'เพิ่มหมวดหมู่บนแผนที่',
   'admin.addons.catalog.roadtrip.name': "โรดทริป",
   'admin.addons.catalog.roadtrip.description': "วางแผนการขับรถด้วยจุดแวะตามเส้นทาง เวลาเดินทาง และเวลาไปถึงที่อัปเดตเอง",
   'admin.addons.catalog.dawarich.name': "Dawarich",

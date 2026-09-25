@@ -396,6 +396,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:calendar-source': 'توفير الأحداث للتقويم',
   'admin.plugins.perm.hook:place-detail-provider': 'المساهمة بتفاصيل إضافية (مراجعات، تقييمات، روابط) لمكان ما',
   'admin.plugins.perm.hook:search-provider': 'الإجابة على عمليات البحث عن الأماكن من فهرس خاص به، إلى جانب نتائج TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'إضافة فئات أماكن خاصة بها إلى «استكشاف الأماكن على الخريطة»؛ وعند اختيار إحداها تتلقى الإضافة منطقة الخريطة التي تعرضها',
   'admin.plugins.perm.hook:trip-warning-provider': 'إظهار تحذيرات التحقق على الرحلة (تظهر في المخطط)',
   'admin.plugins.perm.hook:table-contributor': 'إضافة أعمدة وإجراءات إلى عروض الرحلة (الحجوزات، الأماكن، الأيام)',
   'admin.plugins.perm.hook:map-marker-provider': 'إضافة علامات إلى خريطة الرحلة (مثل عرض الحجوزات أو نقاط الاهتمام)',
@@ -408,6 +410,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'ينشر أدوات ذكاء اصطناعي',
   'admin.plugins.mcpToolsTitle': 'أدوات الذكاء الاصطناعي المنشورة',
   'admin.plugins.mcpToolsHint': 'يمكن لمساعد ذكي تشغيلها نيابة عن المستخدم. وتعمل كل أداة بالصلاحيات الممنوحة أعلاه.',
+  'admin.plugins.poiCategoriesTitle': 'فئات الخريطة التي يضيفها',
   'admin.plugins.perm.mcp:tools':
     'نشر أدوات يمكن لمساعد ذكاء اصطناعي تشغيلها نيابة عنك (يعمل بالصلاحيات التي تمنحها للإضافة هنا، وليس بصلاحياته هو)',
   'admin.plugins.perm.geolocation:read':
@@ -548,6 +551,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'يوفّر أحداث التقويم',
   'admin.plugins.cap.placeDetails': 'يُثري الأماكن',
   'admin.plugins.cap.search': 'يجيب على عمليات البحث',
+  'admin.plugins.cap.poiCategories': 'يضيف فئات إلى الخريطة',
   'admin.plugins.cap.warnings': 'يرصد المشكلات',
   'admin.plugins.cap.mapLayers': 'يرسم على الخريطة',
   'admin.plugins.cap.routing': 'يوفّر التوجيه',

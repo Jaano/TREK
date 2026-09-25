@@ -379,6 +379,8 @@ const admin: TranslationStrings = {
     'Contribuir com detalhes extras (avaliações, notas, links) para um local',
   'admin.plugins.perm.hook:search-provider':
     'Responder buscas de lugares a partir de um índice próprio, ao lado dos resultados do TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Adicionar categorias de lugares próprias a “Explorar lugares no mapa”; ao escolher uma, o plugin recebe a área do mapa que você está vendo',
   'admin.plugins.perm.hook:trip-warning-provider': 'Emitir avisos de validação em uma viagem (exibidos no planejador)',
   'admin.plugins.perm.hook:table-contributor':
     'Adicionar colunas e ações às visualizações da viagem (reservas, locais, dias)',
@@ -394,6 +396,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Publica ferramentas de IA',
   'admin.plugins.mcpToolsTitle': 'Ferramentas de IA publicadas',
   'admin.plugins.mcpToolsHint': 'Um assistente pode executá-las em nome de um usuário. Cada uma age com o acesso concedido acima.',
+  'admin.plugins.poiCategoriesTitle': 'Categorias de mapa que adiciona',
   'admin.plugins.perm.mcp:tools':
     'Publicar ferramentas que um assistente de IA pode executar em seu nome (ele age com o acesso que você concede ao plugin aqui, não com o dele)',
   'admin.plugins.perm.geolocation:read':
@@ -537,6 +540,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Fornece eventos de calendário',
   'admin.plugins.cap.placeDetails': 'Enriquece locais',
   'admin.plugins.cap.search': 'Responde buscas',
+  'admin.plugins.cap.poiCategories': 'Adiciona categorias ao mapa',
   'admin.plugins.cap.warnings': 'Sinaliza problemas',
   'admin.plugins.cap.mapLayers': 'Desenha no mapa',
   'admin.plugins.cap.routing': 'Oferece roteamento',

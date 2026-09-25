@@ -385,6 +385,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:place-detail-provider': 'Додавати додаткові деталі (відгуки, оцінки, посилання) до місця',
   'admin.plugins.perm.hook:search-provider':
     'Відповідати на пошук місць із власного індексу, поряд із результатами TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Додавати власні категорії місць до «Досліджуйте місця на карті»; коли ви обираєте одну з них, розширення отримує область карти, яку ви переглядаєте',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Створювати попередження перевірки для подорожі (показуються в планувальнику)',
   'admin.plugins.perm.hook:table-contributor': 'Додавати стовпці та дії до подань подорожі (бронювання, місця, дні)',
@@ -400,6 +402,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Публікує ШІ-інструменти',
   'admin.plugins.mcpToolsTitle': 'Опубліковані ШІ-інструменти',
   'admin.plugins.mcpToolsHint': 'Асистент може запускати їх від імені користувача. Кожен діє з правами, наданими вище.',
+  'admin.plugins.poiCategoriesTitle': 'Категорії карти, які він додає',
   'admin.plugins.perm.mcp:tools':
     'Публікувати інструменти, які ШІ-асистент може запускати від вашого імені (він діє з правами, наданими плаґіну тут, а не зі своїми)',
   'admin.plugins.perm.geolocation:read':
@@ -543,6 +546,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Надає події календаря',
   'admin.plugins.cap.placeDetails': 'Збагачує місця',
   'admin.plugins.cap.search': 'Відповідає на пошук',
+  'admin.plugins.cap.poiCategories': 'Додає категорії на карту',
   'admin.plugins.cap.warnings': 'Позначає проблеми',
   'admin.plugins.cap.mapLayers': 'Малює на карті',
   'admin.plugins.cap.routing': 'Пропонує маршрутизацію',

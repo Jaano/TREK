@@ -386,6 +386,8 @@ const admin: TranslationStrings = {
     'Extra details (reviews, beoordelingen, links) aan een plek toevoegen',
   'admin.plugins.perm.hook:search-provider':
     'Zoekopdrachten naar locaties beantwoorden vanuit een eigen index, naast de resultaten van TREK',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Eigen plaatscategorieën toevoegen aan “Plaatsen op de kaart ontdekken”; kies je er een, dan ontvangt de plug-in het kaartgebied dat je bekijkt',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Validatiewaarschuwingen tonen bij een reis (zichtbaar in de planner)',
   'admin.plugins.perm.hook:table-contributor':
@@ -401,6 +403,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'Publiceert AI-tools',
   'admin.plugins.mcpToolsTitle': 'Gepubliceerde AI-tools',
   'admin.plugins.mcpToolsHint': 'Een assistent kan deze namens een gebruiker uitvoeren. Elke tool handelt met de hierboven verleende rechten.',
+  'admin.plugins.poiCategoriesTitle': 'Kaartcategorieën die het toevoegt',
   'admin.plugins.perm.mcp:tools':
     'Tools publiceren die een AI-assistent namens jou kan uitvoeren (die handelt met de rechten die je de plug-in hier geeft, niet met die van de assistent)',
   'admin.plugins.perm.geolocation:read':
@@ -543,6 +546,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Levert kalenderevenementen',
   'admin.plugins.cap.placeDetails': 'Verrijkt plekken',
   'admin.plugins.cap.search': 'Beantwoordt zoekopdrachten',
+  'admin.plugins.cap.poiCategories': 'Voegt kaartcategorieën toe',
   'admin.plugins.cap.warnings': 'Signaleert problemen',
   'admin.plugins.cap.mapLayers': 'Tekent op de kaart',
   'admin.plugins.cap.routing': 'Biedt routering aan',

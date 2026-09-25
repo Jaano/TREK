@@ -408,6 +408,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:calendar-source': 'カレンダーへの予定の提供',
   'admin.plugins.perm.hook:place-detail-provider': '場所に追加の詳細情報（レビュー、評価、リンク）を提供',
   'admin.plugins.perm.hook:search-provider': '独自のインデックスから場所の検索に回答（TREK 自身の結果と並べて表示）',
+  'admin.plugins.perm.hook:poi-category-provider':
+    '独自のスポットカテゴリを「地図でスポットを探す」に追加（カテゴリを選ぶと、表示中の地図の範囲がプラグインに送られます）',
   'admin.plugins.perm.hook:trip-warning-provider': '旅程に検証警告を表示（プランナー内に表示）',
   'admin.plugins.perm.hook:table-contributor': '旅行のビュー（予約、場所、日程）に列とアクションを追加',
   'admin.plugins.perm.hook:map-marker-provider': '旅行の地図にマーカーを追加（例: 予約や POI を表示）',
@@ -420,6 +422,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'AI ツールを公開',
   'admin.plugins.mcpToolsTitle': '公開する AI ツール',
   'admin.plugins.mcpToolsHint': 'アシスタントがユーザーの代わりに実行できます。各ツールは上記で付与した権限で動作します。',
+  'admin.plugins.poiCategoriesTitle': '追加する地図カテゴリ',
   'admin.plugins.perm.mcp:tools':
     'AI アシスタントがあなたの代わりに実行できるツールを公開する（ここでプラグインに付与した権限で動作し、アシスタント自身の権限ではありません）',
   'admin.plugins.perm.geolocation:read':
@@ -559,6 +562,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'カレンダー予定を提供',
   'admin.plugins.cap.placeDetails': '場所を充実',
   'admin.plugins.cap.search': '検索に回答',
+  'admin.plugins.cap.poiCategories': '地図にカテゴリを追加',
   'admin.plugins.cap.warnings': '問題を検出',
   'admin.plugins.cap.mapLayers': '地図に描画',
   'admin.plugins.cap.routing': 'ルーティングを提供',

@@ -397,6 +397,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:calendar-source': '為行事曆提供事件',
   'admin.plugins.perm.hook:place-detail-provider': '為地點提供額外資訊（評論、評分、連結）',
   'admin.plugins.perm.hook:search-provider': '從自有索引回答地點搜尋，與 TREK 自身的結果並列顯示',
+  'admin.plugins.perm.hook:poi-category-provider':
+    '在「在地圖上探索地點」加入自己的地點分類（選擇其中一個時，外掛會收到你正在檢視的地圖範圍）',
   'admin.plugins.perm.hook:trip-warning-provider': '對行程發出驗證警告（顯示於規劃工具中）',
   'admin.plugins.perm.hook:table-contributor': '向行程檢視（預訂、地點、日期）新增欄位與操作',
   'admin.plugins.perm.hook:map-marker-provider': '向行程地圖新增標記（例如顯示預訂或興趣點）',
@@ -408,6 +410,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': '發布 AI 工具',
   'admin.plugins.mcpToolsTitle': '發布的 AI 工具',
   'admin.plugins.mcpToolsHint': '助理可以代用戶執行這些工具。每個工具都以上方授予的權限運作。',
+  'admin.plugins.poiCategoriesTitle': '新增的地圖分類',
   'admin.plugins.perm.mcp:tools':
     '發布 AI 助理可以代你執行的工具（它以你在此處授予外掛的權限運作，而非助理自身的權限）',
   'admin.plugins.perm.geolocation:read': '在其任一檢視開啟時查詢你的即時位置（由 TREK 使用本站台既有的位置權限讀取，不會另外為外掛詢問）',
@@ -541,6 +544,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': '提供行事曆事件',
   'admin.plugins.cap.placeDetails': '豐富地點',
   'admin.plugins.cap.search': '回答搜尋',
+  'admin.plugins.cap.poiCategories': '新增地圖分類',
   'admin.plugins.cap.warnings': '標記問題',
   'admin.plugins.cap.mapLayers': '在地圖上繪製',
   'admin.plugins.cap.routing': '提供路線規劃',

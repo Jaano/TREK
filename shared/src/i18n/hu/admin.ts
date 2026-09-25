@@ -391,6 +391,8 @@ const admin: TranslationStrings = {
     'További részletek (értékelések, minősítések, hivatkozások) hozzáadása egy helyhez',
   'admin.plugins.perm.hook:search-provider':
     'Helykeresések megválaszolása saját indexből, a TREK saját találatai mellett',
+  'admin.plugins.perm.hook:poi-category-provider':
+    'Saját helykategóriák hozzáadása a „Helyek felfedezése a térképen” sávhoz; ha kiválasztasz egyet, a bővítmény megkapja a térképnek azt a részét, amelyet éppen nézel',
   'admin.plugins.perm.hook:trip-warning-provider':
     'Ellenőrzési figyelmeztetések megjelenítése egy utazáson (a tervezőben látható)',
   'admin.plugins.perm.hook:table-contributor':
@@ -407,6 +409,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.mcpTools': 'MI-eszközöket tesz közzé',
   'admin.plugins.mcpToolsTitle': 'Közzétett MI-eszközök',
   'admin.plugins.mcpToolsHint': 'Egy asszisztens futtathatja őket a felhasználó nevében. Mindegyik a fent megadott jogosultságokkal működik.',
+  'admin.plugins.poiCategoriesTitle': 'Térképkategóriák, amelyeket hozzáad',
   'admin.plugins.perm.mcp:tools':
     'Olyan eszközök közzététele, amelyeket egy MI-asszisztens futtathat a nevedben (a bővítménynek itt adott jogosultságokkal működik, nem a sajátjával)',
   'admin.plugins.perm.geolocation:read':
@@ -550,6 +553,7 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.calendar': 'Naptáreseményeket biztosít',
   'admin.plugins.cap.placeDetails': 'Helyeket gazdagít',
   'admin.plugins.cap.search': 'Válaszol a keresésekre',
+  'admin.plugins.cap.poiCategories': 'Térképkategóriákat ad hozzá',
   'admin.plugins.cap.warnings': 'Problémákat jelez',
   'admin.plugins.cap.mapLayers': 'Rajzol a térképre',
   'admin.plugins.cap.routing': 'Útvonaltervezést biztosít',
