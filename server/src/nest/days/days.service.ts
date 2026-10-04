@@ -109,9 +109,11 @@ export class DaysService {
       COALESCE(da.assignment_end_time, p.end_time) as end_time,
       p.duration_minutes, p.notes as place_notes,
       p.image_url, p.transport_mode, p.google_place_id, p.google_ftid, p.osm_id, p.amap_poi_id, p.website, p.phone, p.stop_type, p.fill_percent,
+      t.place_id AS tour_place_id, CASE WHEN t.place_id IS NOT NULL THEN p.route_geometry END AS tour_route_geometry,
       c.name as category_name, c.color as category_color, c.icon as category_icon
     FROM day_assignments da
     JOIN places p ON da.place_id = p.id
+    LEFT JOIN tours t ON t.place_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
     WHERE da.day_id = ?
     ORDER BY da.order_index ASC, da.created_at ASC
@@ -136,6 +138,8 @@ export class DaysService {
         // a booking wrote, and this copy is one of the paths that feed it.
         accommodation_id: a.accommodation_id ?? null,
         created_at: a.created_at,
+        tour_place_id: a.tour_place_id ?? null,
+        tour_route_geometry: a.tour_route_geometry ?? null,
         place: {
           id: a.place_id,
           name: a.place_name,
@@ -195,9 +199,11 @@ export class DaysService {
       COALESCE(da.assignment_end_time, p.end_time) as end_time,
       p.duration_minutes, p.notes as place_notes,
       p.image_url, p.transport_mode, p.google_place_id, p.google_ftid, p.osm_id, p.amap_poi_id, p.website, p.phone, p.stop_type, p.fill_percent,
+      t.place_id AS tour_place_id, CASE WHEN t.place_id IS NOT NULL THEN p.route_geometry END AS tour_route_geometry,
       c.name as category_name, c.color as category_color, c.icon as category_icon
     FROM day_assignments da
     JOIN places p ON da.place_id = p.id
+    LEFT JOIN tours t ON t.place_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
     WHERE da.day_id IN (${dayPlaceholders})
     ORDER BY da.order_index ASC, da.created_at ASC

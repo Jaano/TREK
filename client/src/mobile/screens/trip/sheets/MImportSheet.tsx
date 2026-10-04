@@ -6,6 +6,7 @@ import MIconBtn from '../../../components/MIconBtn'
 import { FormSheetHeader } from './PlSheetChrome'
 import ImpFileStep from './ImpFileStep'
 import ImpListStep from './ImpListStep'
+import { useAddonStore } from '../../../../store/addonStore'
 import type { TripPlanner } from '../MTripShell'
 
 export interface MImportSheetProps {
@@ -24,6 +25,9 @@ type ImportStep = 'menu' | 'file' | 'list'
 export default function MImportSheet({ planner, open, onClose }: MImportSheetProps) {
   const { t } = planner
   const [step, setStep] = useState<ImportStep>('menu')
+  // File import (GPX/KML/KMZ) belongs to Tours mode while the addon is on;
+  // list import stays here in both states.
+  const toursEnabled = useAddonStore(s => s.isEnabled('tours'))
 
   useEffect(() => {
     if (open) setStep('menu')
@@ -50,12 +54,14 @@ export default function MImportSheet({ planner, open, onClose }: MImportSheetPro
 
       {step === 'menu' && (
         <div className="px-[14px] pb-[14px] pt-1">
+          {!toursEnabled && (
           <ImpMenuRow
             icon={FileDown}
             title={t('places.importFile')}
             sub="GPX · KML · KMZ"
             onClick={() => setStep('file')}
           />
+          )}
           <ImpMenuRow
             icon={MapPin}
             title={t('places.importList')}

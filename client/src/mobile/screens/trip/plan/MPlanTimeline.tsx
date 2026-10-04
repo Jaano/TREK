@@ -163,6 +163,11 @@ export default function MPlanTimeline({ planner, shell }: MPlanTimelineProps) {
         className="absolute left-4 right-4 overflow-y-auto overscroll-contain rounded-[22px] border border-[color:var(--m-cbr)] bg-[color:var(--m-card)] px-3.5 pb-2 pt-1 backdrop-blur-[24px] backdrop-saturate-[1.6] bottom-[calc(env(safe-area-inset-bottom,0px)+90px)]"
         style={{ top: `calc(var(--m-safe-top, 12px) + ${editing ? 140 : tl.upNext ? 216 : 102}px)` }}
       >
+        {planner.toursEnabled && tl.rows.some(row => row.kind === 'place' && row.invalidTour) && (
+          <div role="status" className="border-b border-[color:var(--warning)] p-2 text-sm text-[color:var(--warning)]">
+            {t('tours.dayRoute.endpointUnknown')}
+          </div>
+        )}
         {day && (
           <TimelineHeader
             tl={tl}

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type Database from 'better-sqlite3';
 import { resolveCountryCodeSync } from '../atlas/atlas-geo';
 import { XMLValidator } from 'fast-xml-parser';
 import { TRACK_COLORS, placeMatchStrategies, type PlaceMatchCandidate } from '@trek/shared';
@@ -73,6 +74,14 @@ import {
 type Trip = TripAccess;
 
 type ImportedPlace = { id: number; route_geometry?: string | null; route_color?: string | null };
+
+export interface PreparedGpxPlace {
+  name: string;
+  lat: number;
+  lng: number;
+  description: string | null;
+  routeGeometry?: string;
+}
 
 /** Fields accepted when creating a place. */
 export interface PlaceCreateInput {
@@ -185,9 +194,10 @@ export class PlacesService {
     filters: { search?: string; category?: string; tag?: string; assignment?: 'all' | 'unassigned' | 'assigned' },
   ) {
     let query = `
-    SELECT DISTINCT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon,
+    SELECT DISTINCT p.*, t.place_id AS tour_place_id, c.name as category_name, c.color as category_color, c.icon as category_icon,
       pr.country_code as country_code, pr.region_name as region_name
     FROM places p
+    LEFT JOIN tours t ON t.place_id = p.id
     LEFT JOIN categories c ON p.category_id = c.id
     LEFT JOIN place_regions pr ON pr.place_id = p.id
     WHERE p.trip_id = ?
@@ -507,37 +517,42 @@ export class PlacesService {
     }
   }
 
-  async remove(tripId: string, placeId: string): Promise<{ deleted: boolean; cancelled: CancelledStays }> {
+  async remove(tripId: string, placeId: string): Promise<{ deleted: boolean; deletedTourPlaceIds: number[]; cancelled: CancelledStays }> {
     const place = this.dbs.get<{ google_place_id: string | null; image_url: string | null }>(
       'SELECT google_place_id, image_url FROM places WHERE id = ? AND trip_id = ?', placeId, tripId,
     );
     const cancelled = noCancelledStays();
-    if (!place) return { deleted: false, cancelled };
+    if (!place) return { deleted: false, deletedTourPlaceIds: [], cancelled };
+    let wasTour = false;
     // The linked expense goes with the place, the same way a booking takes its
     // expense with it (#1298). One transaction, so a place can never survive
     // half-detached from its money.
     this.dbs.transaction(() => {
+      wasTour = !!this.dbs.get('SELECT 1 FROM tours WHERE place_id = ?', placeId);
       this.cancelStaysAt(tripId, placeId, cancelled);
       this.dbs.run('DELETE FROM budget_items WHERE trip_id = ? AND place_id = ?', tripId, placeId);
       this.dbs.run('DELETE FROM places WHERE id = ?', placeId);
     });
     await reclaimPhotoCache(this.photoCache, place.google_place_id, place.image_url);
     await reclaimPlaceImage(this.storage, place.image_url);
-    return { deleted: true, cancelled };
+    return { deleted: true, deletedTourPlaceIds: wasTour ? [Number(placeId)] : [], cancelled };
   }
 
-  async removeMany(tripId: string, ids: number[]): Promise<{ deleted: number[]; cancelled: CancelledStays }> {
+  async removeMany(tripId: string, ids: number[]): Promise<{ deleted: number[]; deletedTourPlaceIds: number[]; cancelled: CancelledStays }> {
     const cancelled = noCancelledStays();
-    if (ids.length === 0) return { deleted: [], cancelled };
+    if (ids.length === 0) return { deleted: [], deletedTourPlaceIds: [], cancelled };
     const selectStmt = this.dbs.prepare('SELECT google_place_id, image_url FROM places WHERE id = ? AND trip_id = ?');
+    const selectTourStmt = this.dbs.prepare('SELECT 1 FROM tours WHERE place_id = ?');
     const deleteStmt = this.dbs.prepare('DELETE FROM places WHERE id = ?');
     const deleteExpenseStmt = this.dbs.prepare('DELETE FROM budget_items WHERE trip_id = ? AND place_id = ?');
     const deleted: number[] = [];
+    const deletedTourPlaceIds: number[] = [];
     const reclaimable: { google_place_id: string | null; image_url: string | null }[] = [];
     this.dbs.transaction(() => {
       for (const id of ids) {
         const row = selectStmt.get(id, tripId) as { google_place_id: string | null; image_url: string | null } | undefined;
         if (!row) continue;
+        if (selectTourStmt.get(id)) deletedTourPlaceIds.push(id);
         this.cancelStaysAt(tripId, id, cancelled);
         deleteExpenseStmt.run(tripId, id);
         deleteStmt.run(id);
@@ -550,7 +565,7 @@ export class PlacesService {
       await reclaimPhotoCache(this.photoCache, row.google_place_id, row.image_url);
       await reclaimPlaceImage(this.storage, row.image_url);
     }
-    return { deleted, cancelled };
+    return { deleted, deletedTourPlaceIds, cancelled };
   }
 
   /**
@@ -759,11 +774,17 @@ export class PlacesService {
   }
 
   private importGpxRows(tripId: string, fileBuffer: Buffer, opts: GpxImportOptions = {}): GpxImportResult | null {
+    const rows = this.prepareGpxRows(fileBuffer, opts);
+    if (!rows.length) return null;
+    return this.dbs.transaction(() => this.persistGpxRows(tripId, rows));
+  }
+
+  prepareGpxRows(fileBuffer: Buffer, opts: GpxImportOptions = {}): PreparedGpxPlace[] {
     const { importWaypoints = true, importRoutes = true, importTracks = true, defaultName } = opts;
 
     const parsed = gpxParser.parse(fileBuffer.toString('utf-8'));
     const gpx = parsed?.gpx;
-    if (!gpx) return null;
+    if (!gpx) return [];
 
     const str = (v: unknown) => (v != null ? String(v).trim() : null);
     const num = (v: unknown) => { const n = Number.parseFloat(String(v)); return Number.isNaN(n) ? null : n; };
@@ -782,8 +803,7 @@ export class PlacesService {
       return geoSeq === 1 ? base : `${base} ${geoSeq}`;
     };
 
-    type WaypointEntry = { name: string; lat: number; lng: number; description: string | null; routeGeometry?: string };
-    const waypoints: WaypointEntry[] = [];
+    const waypoints: PreparedGpxPlace[] = [];
 
     // 1) Parse <wpt> elements (named waypoints / POIs)
     if (importWaypoints) {
@@ -828,8 +848,18 @@ export class PlacesService {
       }
     }
 
-    if (waypoints.length === 0) return null;
+    return waypoints;
+  }
 
+  importPreparedGpx(tripId: string, rows: PreparedGpxPlace[]): GpxImportResult {
+    if (!this.dbs.connection.inTransaction) throw new Error('Prepared GPX import requires an active transaction');
+    const result = this.persistGpxRows(tripId, rows);
+    const tracks = result.places.filter(place => place.route_geometry && !place.route_color);
+    this.applyImportedTrackColors(this.dbs.connection, tripId, tracks);
+    return result;
+  }
+
+  private persistGpxRows(tripId: string, waypoints: PreparedGpxPlace[]): GpxImportResult {
     const dedup = this.buildDedupSet(tripId);
     const insertStmt = this.dbs.prepare(`
     INSERT INTO places (trip_id, name, description, lat, lng, transport_mode, route_geometry)
@@ -837,18 +867,16 @@ export class PlacesService {
   `);
     const created: PlaceWithTags[] = [];
     let skipped = 0;
-    this.dbs.transaction(() => {
-      for (const wp of waypoints) {
-        if (isPlaceDuplicate({ name: wp.name, lat: wp.lat, lng: wp.lng }, dedup)) {
-          skipped++;
-          continue;
-        }
-        const result = insertStmt.run(tripId, wp.name, wp.description, wp.lat, wp.lng, wp.routeGeometry || null);
-        const place = this.dbs.getPlaceWithTags(Number(result.lastInsertRowid))!;
-        created.push(place);
-        trackInsertedInDedupSet({ name: wp.name, lat: wp.lat, lng: wp.lng }, dedup);
+    for (const wp of waypoints) {
+      if (isPlaceDuplicate({ name: wp.name, lat: wp.lat, lng: wp.lng }, dedup)) {
+        skipped++;
+        continue;
       }
-    });
+      const result = insertStmt.run(tripId, wp.name, wp.description, wp.lat, wp.lng, wp.routeGeometry || null);
+      const place = this.dbs.getPlaceWithTags(Number(result.lastInsertRowid))!;
+      created.push(place);
+      trackInsertedInDedupSet({ name: wp.name, lat: wp.lat, lng: wp.lng }, dedup);
+    }
 
     return { places: created, count: created.length, skipped };
   }
@@ -1003,20 +1031,25 @@ export class PlacesService {
     // Read and write in one transaction so two concurrent imports cannot both
     // read the same set of free colours.
     this.dbs.transaction((conn) => {
-      const taken = new Set(
-        (conn
-          .prepare('SELECT DISTINCT route_color AS c FROM places WHERE trip_id = ? AND route_color IS NOT NULL')
-          .all(tripId) as { c: string }[]).map((r) => r.c),
-      );
-      const free = TRACK_COLORS.filter((c) => !taken.has(c));
-      const stmt = conn.prepare('UPDATE places SET route_color = ? WHERE id = ?');
-      tracks.forEach((track, i) => {
-        // Free ones first, then wrap through the whole palette — never reuse a
-        // free colour twice within the same import.
-        const color = i < free.length ? free[i] : TRACK_COLORS[(i - free.length) % TRACK_COLORS.length];
-        stmt.run(color, track.id);
-        track.route_color = color;
-      });
+      this.applyImportedTrackColors(conn, tripId, tracks);
+    });
+  }
+
+  private applyImportedTrackColors(conn: Database.Database, tripId: string, tracks: ImportedPlace[]): void {
+    if (tracks.length === 0) return;
+    const taken = new Set(
+      (conn
+        .prepare('SELECT DISTINCT route_color AS c FROM places WHERE trip_id = ? AND route_color IS NOT NULL')
+        .all(tripId) as { c: string }[]).map((r) => r.c),
+    );
+    const free = TRACK_COLORS.filter((c) => !taken.has(c));
+    const stmt = conn.prepare('UPDATE places SET route_color = ? WHERE id = ?');
+    tracks.forEach((track, i) => {
+      // Free ones first, then wrap through the whole palette — never reuse a
+      // free colour twice within the same import.
+      const color = i < free.length ? free[i] : TRACK_COLORS[(i - free.length) % TRACK_COLORS.length];
+      stmt.run(color, track.id);
+      track.route_color = color;
     });
   }
 

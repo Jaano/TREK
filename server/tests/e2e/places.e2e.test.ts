@@ -30,6 +30,8 @@ const { db } = vi.hoisted(() => {
     google_place_id TEXT, google_ftid TEXT, osm_id TEXT, amap_poi_id TEXT, website TEXT, phone TEXT, transport_mode TEXT,
     route_geometry TEXT, route_color TEXT, stop_type TEXT, fill_percent INTEGER, email TEXT, opening_hours TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  // PlacesService projects only tours.place_id and checks for a facet before deletion.
+  tmp.exec('CREATE TABLE tours (place_id INTEGER PRIMARY KEY);');
   tmp.exec(`CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, icon TEXT);`);
   tmp.exec(`CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
@@ -123,7 +125,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   beforeEach(() => {
-    db.exec('DELETE FROM trips; DELETE FROM places; DELETE FROM place_tags; DELETE FROM place_ratings; DELETE FROM day_assignments; DELETE FROM days;');
+    db.exec('DELETE FROM trips; DELETE FROM tours; DELETE FROM places; DELETE FROM place_tags; DELETE FROM place_ratings; DELETE FROM day_assignments; DELETE FROM days;');
     canAccessTrip.mockReturnValue({ id: 5, user_id: 1 });
     checkPermission.mockReturnValue(true);
   });
@@ -142,6 +144,18 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     expect(res.status).toBe(200);
     expect(res.body.places).toHaveLength(1);
     expect(res.body.places[0]).toMatchObject({ id: 1, name: 'Spot', trip_id: 5, tags: [], ratings: [] });
+  });
+
+  it('marks Tour-backed Places without changing ordinary Place rows', async () => {
+    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (1, 5, 'Plain'), (2, 5, 'Tour')").run();
+    db.prepare('INSERT INTO tours (place_id) VALUES (2)').run();
+
+    const all = await request(server).get('/api/trips/5/places').set('Cookie', sessionCookie(1));
+    expect(all.status).toBe(200);
+    expect(all.body.places).toHaveLength(2);
+    const tourPlaceIdById = new Map(all.body.places.map((place: { id: number; tour_place_id: number | null }) => [place.id, place.tour_place_id]));
+    expect(tourPlaceIdById.get(1)).toBeNull();
+    expect(tourPlaceIdById.get(2)).toBe(2);
   });
 
   it('200 list scoped to the trip', async () => {
@@ -171,7 +185,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     db.prepare("INSERT INTO places (id, trip_id, name) VALUES (1, 5, 'A'), (2, 5, 'B'), (3, 6, 'Foreign')").run();
     const ok = await request(server).post('/api/trips/5/places/bulk-delete').set('Cookie', sessionCookie(1)).send({ ids: [1, 2, 3] });
     expect(ok.status).toBe(200);
-    expect(ok.body).toEqual({ deleted: [1, 2], count: 2 });
+    expect(ok.body).toEqual({ deleted: [1, 2], count: 2, tourPlaceIds: [] });
     // The foreign trip's place is untouched.
     expect(db.prepare('SELECT id FROM places ORDER BY id').all()).toEqual([{ id: 3 }]);
 
@@ -297,7 +311,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
 
     const ok = await request(server).delete('/api/trips/5/places/9').set('Cookie', sessionCookie(1));
     expect(ok.status).toBe(200);
-    expect(ok.body).toEqual({ success: true });
+    expect(ok.body).toEqual({ success: true, tourPlaceIds: [] });
     expect(db.prepare('SELECT id FROM places WHERE id = 9').get()).toBeUndefined();
 
     const foreign = await request(server).delete('/api/trips/5/places/10').set('Cookie', sessionCookie(1));

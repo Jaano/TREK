@@ -104,6 +104,25 @@ describe('verifyTripAccess', () => {
 // ── getAssignmentsForDay ──────────────────────────────────────────────────────
 
 describe('getAssignmentsForDay', () => {
+  it('projects only facet-backed Tour geometry in both day read paths', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    const tour = createPlace(testDb, trip.id, { name: 'Hike', lat: 48.1, lng: 11.1 });
+    const track = createPlace(testDb, trip.id, { name: 'Legacy track', lat: 48.2, lng: 11.2 });
+    const geometry = JSON.stringify([[48.1, 11.1], [48.3, 11.3]]);
+    testDb.prepare('UPDATE places SET route_geometry = ? WHERE id IN (?, ?)').run(geometry, tour.id, track.id);
+    testDb.prepare("INSERT INTO tour_types (key, label_key, icon, color) VALUES ('hike', 'hike', 'hike', '#000000')").run();
+    testDb.prepare("INSERT INTO tours (place_id, tour_type) VALUES (?, 'hike')").run(tour.id);
+    createDayAssignment(testDb, day.id, tour.id, { order_index: 0 });
+    createDayAssignment(testDb, day.id, track.id, { order_index: 1 });
+
+    for (const assignments of [svc.getAssignmentsForDay(day.id), svc.list(trip.id).days[0].assignments]) {
+      expect(assignments?.[0]).toMatchObject({ tour_place_id: tour.id, tour_route_geometry: geometry });
+      expect(assignments?.[1]).toMatchObject({ tour_place_id: null, tour_route_geometry: null });
+    }
+  });
+
   it('DAY-SVC-003 — returns empty array when day has no assignments', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);

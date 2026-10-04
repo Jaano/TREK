@@ -86,6 +86,115 @@ function createPlaceRegionsFollowPlaceTrigger(db: Database.Database): void {
   `);
 }
 
+function schemaObjectSql(db: Database.Database, name: string): string | undefined {
+  return (db.prepare('SELECT sql FROM sqlite_master WHERE name = ?').get(name) as { sql: string } | undefined)?.sql;
+}
+
+function hasSchemaColumn(db: Database.Database, table: string, column: string): boolean {
+  return !!db.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?').get(table, column);
+}
+
+function normalizedSchemaSql(sql: string): string {
+  return sql.replace(/IF NOT EXISTS/gi, '').replace(/\s+/g, '').replace(/;$/, '');
+}
+
+function matchesSchemaObject(db: Database.Database, name: string, sql: string | undefined): boolean {
+  const actual = schemaObjectSql(db, name);
+  return sql === undefined ? actual === undefined : actual !== undefined
+    && normalizedSchemaSql(actual) === normalizedSchemaSql(sql);
+}
+
+function matchesToursSchema(db: Database.Database, stage: number): boolean {
+  const expected: Record<string, string | undefined> = {
+    tour_types: `CREATE TABLE tour_types (
+      key TEXT PRIMARY KEY, label_key TEXT NOT NULL, icon TEXT NOT NULL, color TEXT NOT NULL,
+      routing_profile TEXT, is_sport INTEGER NOT NULL DEFAULT 1, enabled INTEGER NOT NULL DEFAULT 1,
+      sort_order INTEGER NOT NULL DEFAULT 0
+    )`,
+    tours: stage >= 2 ? `CREATE TABLE tours (
+      place_id INTEGER PRIMARY KEY REFERENCES places(id) ON DELETE CASCADE,
+      tour_type TEXT NOT NULL REFERENCES tour_types(key), distance REAL, elevation_gain REAL,
+      elevation_loss REAL, duration REAL, difficulty TEXT, wanderer_ref TEXT, match_confidence REAL,
+      tour_group_id INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+      ${stage === 4 ? ', max_hiking_difficulty INTEGER NOT NULL DEFAULT 2 CHECK(max_hiking_difficulty BETWEEN 1 AND 6)' : ''}
+    )` : undefined,
+    tour_waypoints: stage >= 3 ? `CREATE TABLE tour_waypoints (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      place_id INTEGER NOT NULL REFERENCES tours(place_id) ON DELETE CASCADE,
+      lat REAL NOT NULL CHECK(lat >= -90 AND lat <= 90),
+      lng REAL NOT NULL CHECK(lng >= -180 AND lng <= 180),
+      role TEXT NOT NULL CHECK(role IN ('start', 'via', 'end')),
+      sequence INTEGER NOT NULL CHECK(sequence >= 0), UNIQUE(place_id, sequence)
+    )` : undefined,
+    idx_tours_tour_type: stage >= 2 ? 'CREATE INDEX idx_tours_tour_type ON tours(tour_type)' : undefined,
+    idx_tour_waypoints_place: stage >= 3
+      ? 'CREATE INDEX idx_tour_waypoints_place ON tour_waypoints(place_id, sequence)' : undefined,
+  };
+  return Object.entries(expected).every(([name, sql]) => matchesSchemaObject(db, name, sql));
+}
+
+function toursLineageRewind(db: Database.Database, version: number): number | undefined {
+  const legacy = version >= 216 && version <= 218;
+  const frozen = version >= 243 && version <= 246;
+  if (!legacy && !frozen) return undefined;
+  const tourTables = ['tour_types', 'tours', 'tour_waypoints'].map(name => !!schemaObjectSql(db, name));
+  const upstreamMarkers = {
+    immich: hasSchemaColumn(db, 'users', 'immich_allow_insecure_tls'),
+    atlasTrigger: !!schemaObjectSql(db, 'trg_place_regions_follow_place'),
+    push: !!schemaObjectSql(db, 'push_subscriptions'),
+    routeExcluded: hasSchemaColumn(db, 'day_assignments', 'route_excluded'),
+    packedQuantity: hasSchemaColumn(db, 'packing_items', 'packed_quantity'),
+    bucketRegion: hasSchemaColumn(db, 'bucket_list', 'region_code'),
+    holidayFraction: hasSchemaColumn(db, 'vacay_company_holidays', 'fraction'),
+    entryDraft: hasSchemaColumn(db, 'journey_entries', 'is_draft'),
+    travelShare: hasSchemaColumn(db, 'share_tokens', 'share_travel_only'),
+    hiddenImages: hasSchemaColumn(db, 'share_tokens', 'share_hide_images'),
+    settlementNote: hasSchemaColumn(db, 'budget_settlements', 'note'),
+    googleUsage: !!schemaObjectSql(db, 'google_api_usage'),
+    templateWeight: hasSchemaColumn(db, 'packing_template_items', 'weight_grams'),
+    templateQuantity: hasSchemaColumn(db, 'packing_template_items', 'quantity'),
+    templateBag: hasSchemaColumn(db, 'packing_template_items', 'bag_name'),
+    journeyStatus: hasSchemaColumn(db, 'journeys', 'status_override'),
+    placeEmail: hasSchemaColumn(db, 'places', 'email'),
+    placeHours: hasSchemaColumn(db, 'places', 'opening_hours'),
+    photoLocation: hasSchemaColumn(db, 'journeys', 'photo_location'),
+  };
+  const legacyMarkers = {
+    countries: !!schemaObjectSql(db, 'school_holiday_countries'),
+    regions: !!schemaObjectSql(db, 'school_holiday_regions'),
+    periods: !!schemaObjectSql(db, 'school_holiday_periods'),
+    endDay: hasSchemaColumn(db, 'day_assignments', 'end_day'),
+    boundaries: !!schemaObjectSql(db, 'roadtrip_day_boundaries'),
+  };
+  const unsafe = (): never => {
+    throw new Error(`[migrations] Unsafe Tours migration lineage at schema version ${version}: `
+      + JSON.stringify({ tourTables, upstreamMarkers, legacyMarkers })
+      + '. Cursor and data were not changed; inspect this database before retrying.');
+  };
+  if (!tourTables.some(Boolean)) {
+    const laterUpstreamMarkers = Object.entries(upstreamMarkers)
+      .filter(([name]) => !['immich', 'atlasTrigger', 'push'].includes(name));
+    if (frozen && laterUpstreamMarkers.some(([, present]) => present)) unsafe();
+    if (frozen && (!upstreamMarkers.immich
+      || (version === 243 && (upstreamMarkers.atlasTrigger || upstreamMarkers.push))
+      || (version === 244 && !upstreamMarkers.atlasTrigger && !upstreamMarkers.push)
+      || (version === 245 && !upstreamMarkers.push)
+      || (version === 246 && (!upstreamMarkers.atlasTrigger || !upstreamMarkers.push)))) unsafe();
+    if (legacy && (Object.values(upstreamMarkers).some(Boolean)
+      || !legacyMarkers.countries || !legacyMarkers.regions || !legacyMarkers.periods
+      || (version === 216 && (legacyMarkers.endDay || legacyMarkers.boundaries))
+      || (version === 217 && legacyMarkers.boundaries)
+      || (version >= 217 && !legacyMarkers.endDay)
+      || (version >= 218 && !legacyMarkers.boundaries))) unsafe();
+    return undefined;
+  }
+  if (!matchesToursSchema(db, version - (legacy ? 215 : 242))
+    || Object.values(upstreamMarkers).some(Boolean)
+    || (legacy && Object.values(legacyMarkers).some(Boolean))
+    || (frozen && !Object.values(legacyMarkers).every(Boolean))) unsafe();
+  return legacy ? 215 : 242;
+}
+
 function runMigrations(db: Database.Database): void {
   db.exec('CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)');
   const versionRow = db.prepare('SELECT version FROM schema_version').get() as { version: number } | undefined;
@@ -5450,10 +5559,66 @@ function runMigrations(db: Database.Database): void {
       const cols = db.prepare("SELECT name FROM pragma_table_info('journeys')").all() as { name: string }[];
       if (!cols.some(c => c.name === 'photo_location')) db.exec('ALTER TABLE journeys ADD COLUMN photo_location INTEGER NOT NULL DEFAULT 0');
     },
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tour_types (
+          key TEXT PRIMARY KEY,
+          label_key TEXT NOT NULL,
+          icon TEXT NOT NULL,
+          color TEXT NOT NULL,
+          routing_profile TEXT,
+          is_sport INTEGER NOT NULL DEFAULT 1,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER NOT NULL DEFAULT 0
+        )
+      `);
+    },
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tours (
+          place_id INTEGER PRIMARY KEY REFERENCES places(id) ON DELETE CASCADE,
+          tour_type TEXT NOT NULL REFERENCES tour_types(key),
+          distance REAL,
+          elevation_gain REAL,
+          elevation_loss REAL,
+          duration REAL,
+          difficulty TEXT,
+          wanderer_ref TEXT,
+          match_confidence REAL,
+          tour_group_id INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tours_tour_type ON tours(tour_type)');
+    },
+    () => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tour_waypoints (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          place_id INTEGER NOT NULL REFERENCES tours(place_id) ON DELETE CASCADE,
+          lat REAL NOT NULL CHECK(lat >= -90 AND lat <= 90),
+          lng REAL NOT NULL CHECK(lng >= -180 AND lng <= 180),
+          role TEXT NOT NULL CHECK(role IN ('start', 'via', 'end')),
+          sequence INTEGER NOT NULL CHECK(sequence >= 0),
+          UNIQUE(place_id, sequence)
+        )
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tour_waypoints_place ON tour_waypoints(place_id, sequence)');
+    },
+    () => {
+      const cols = db.prepare("SELECT name FROM pragma_table_info('tours')").all() as Array<{ name: string }>;
+      if (!cols.some(c => c.name === 'max_hiking_difficulty')) {
+        db.exec('ALTER TABLE tours ADD COLUMN max_hiking_difficulty INTEGER NOT NULL DEFAULT 2 CHECK(max_hiking_difficulty BETWEEN 1 AND 6)');
+      }
+    },
   ];
 
-  if (currentVersion < migrations.length) {
-    for (let i = currentVersion; i < migrations.length; i++) {
+  const rewindVersion = toursLineageRewind(db, currentVersion);
+  if (rewindVersion !== undefined && migrations.slice(rewindVersion).some(step => typeof step !== 'function')) {
+    throw new Error('[migrations] Unsafe Tours migration lineage: bridge replay contains a raw migration');
+  }
+  const applyMigrations = (startVersion: number): void => {
+    for (let i = startVersion; i < migrations.length; i++) {
       console.log(`[DB] Running migration ${i + 1}/${migrations.length}`);
       try {
         const migration = migrations[i];
@@ -5474,9 +5639,20 @@ function runMigrations(db: Database.Database): void {
         }
       } catch (err) {
         console.error(`[migrations] FATAL: Migration ${i + 1} failed, rolled back:`, err);
+        if (rewindVersion !== undefined) throw err;
         process.exit(1);
       }
     }
+  };
+  if (rewindVersion !== undefined) {
+    db.transaction(() => {
+      db.prepare('UPDATE schema_version SET version = ?').run(rewindVersion);
+      applyMigrations(rewindVersion);
+    })();
+  } else if (currentVersion < migrations.length) {
+    applyMigrations(currentVersion);
+  }
+  if (currentVersion < migrations.length) {
     console.log(`[DB] Migrations complete — schema version ${migrations.length}`);
   }
 }

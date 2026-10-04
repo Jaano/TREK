@@ -12,6 +12,7 @@ import { formatMoney, formatMoneySum, formatClockTime, splitReservationDateTime,
 import { useSettingsStore } from '../../store/settingsStore'
 import { useTripStore } from '../../store/tripStore'
 import { useAddonStore } from '../../store/addonStore'
+import { projectDayItinerary } from '../Map/dayTourProjection'
 import { planCosts } from '../Planner/planCosts'
 import { routeTrip, type TripRouteSummary } from '../Map/tripRouteGeometry'
 import { buildTripMapSvg } from './tripMapSvg'
@@ -271,6 +272,9 @@ export async function downloadTripPDF({ trip, days, places, assignments: allStor
   const unit: DistanceUnit = (_distanceUnit || useSettingsStore.getState().settings.distance_unit) === 'imperial'
     ? 'imperial' : 'metric'
   let tripRoute: TripRouteSummary | null = null
+  const toursEnabled = useAddonStore.getState().isEnabled('tours')
+  const hasInvalidTour = toursEnabled && Object.values(assignments).some(list =>
+    projectDayItinerary(list || [], true, places).some(item => item.kind === 'tour' && !item.valid))
   try {
     tripRoute = await routeTrip(
       {
@@ -279,6 +283,8 @@ export async function downloadTripPDF({ trip, days, places, assignments: allStor
         reservations,
         accommodations: accommodationList,
         optimizeFromAccommodation: useSettingsStore.getState().settings.optimize_from_accommodation,
+        toursEnabled,
+        places,
       },
       { profile: 'driving', tripId: trip.id, timeoutMs: 8000 },
     )
@@ -932,6 +938,7 @@ export async function downloadTripPDF({ trip, days, places, assignments: allStor
 </div>
 
 <!-- Trip map -->
+${hasInvalidTour ? `<p role="status" style="color:#b45309">${escHtml(tr('tours.dayRoute.endpointUnknown'))}</p>` : ''}
 ${tripMapHtml}
 
 <!-- Days -->

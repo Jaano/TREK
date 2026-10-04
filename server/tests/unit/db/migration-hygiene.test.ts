@@ -15,10 +15,21 @@
  * ALLOWED_DESTRUCTIVE below with the reason. Anything not on that list is
  * treated as a regression.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { createTestDb } from '../../helpers/test-db';
+import Database from 'better-sqlite3';
+import { createTables } from '../../../src/db/schema';
+import { runMigrations } from '../../../src/db/migrations';
+
+vi.mock('../../../src/config', () => ({
+  ENCRYPTION_KEY: 'migration-hygiene-test-key',
+  JWT_SECRET: 'migration-hygiene-test-secret',
+  updateJwtSecret: vi.fn(),
+}));
+vi.mock('../../../src/db/database', () => {
+  throw new Error('Migration hygiene tests must not import the global database');
+});
 
 const MIGRATIONS_PATH = resolve(__dirname, '../../../src/db/migrations.ts');
 const migrationsSource = readFileSync(MIGRATIONS_PATH, 'utf8');
@@ -186,13 +197,13 @@ describe('migration hygiene — no silently swallowed errors', () => {
 
 describe('migration hygiene — full chain smoke', () => {
   it('migrates a fresh in-memory database from zero to the latest version', () => {
-    // createTestDb() runs createTables() + the entire runMigrations() chain.
-    // This proves the logging edits in the previously-empty catch blocks do
-    // not change control flow / break the migration runner.
-    const db = createTestDb();
+    const db = new Database(':memory:');
     try {
+      db.pragma('foreign_keys = ON');
+      createTables(db);
+      runMigrations(db);
       const row = db.prepare('SELECT version FROM schema_version').get() as { version: number };
-      expect(row.version).toBeGreaterThan(0);
+      expect(row.version).toBe(262);
     } finally {
       db.close();
     }

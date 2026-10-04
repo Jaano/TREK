@@ -272,6 +272,10 @@ export function applyGlobalMiddleware(
           // document and never reaches the Service Worker that would cache it
           // (#2180). routing.openstreetmap.de below is a different host.
           "https://tile.openstreetmap.de", "https://tiles.stadiamaps.com",
+          // OpenTopoMap is the key-free raster layer offered only by the Tours
+          // planner. Leaflet uses its a/b/c shards; the apex is named too so a
+          // future unsharded template does not repeat the OSM CSP gap above.
+          "https://tile.opentopomap.org", "https://*.tile.opentopomap.org",
           // The imagery host, for the same reason and one more. Leaflet fetches a tile
           // as an <img>, which img-src's blanket `https:` waves through, so the satellite
           // view worked on Leaflet with this host missing. A GL map reads the raster

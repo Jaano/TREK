@@ -1,5 +1,5 @@
 import { runMigrations } from '../../../src/db/migrations';
-import { createTables } from '../../../src/db/schema';
+import { createMigrationPrefixDatabase } from '../../helpers/migration-prefix-db';
 
 import Database from 'better-sqlite3';
 import { describe, expect, it } from 'vitest';
@@ -13,10 +13,8 @@ const PREFERENCES_VERSION = 219;
 
 describe('trip driving preferences migration', () => {
   it('inherits owner values once, tolerates nulls and preserves trip overrides on replay', () => {
-    const db = new Database(':memory:');
+    const db = createMigrationPrefixDatabase(PREFERENCES_VERSION - 1);
     try {
-      createTables(db);
-      runMigrations(db);
       db.exec(
         "INSERT INTO users (id, username, email, password_hash) VALUES (1, 'owner', 'owner@test', 'x'), (2, 'member', 'member@test', 'x')",
       );
@@ -24,16 +22,34 @@ describe('trip driving preferences migration', () => {
       db.exec(
         "INSERT INTO settings (user_id, key, value) VALUES (1, 'roadtrip_range_km', '120'), (2, 'roadtrip_range_km', '300'), (1, 'roadtrip_day_start', '\"08:00\"'), (1, 'roadtrip_day_end', NULL), (1, 'routing_base_url', '\"https://private.test\"')",
       );
-      db.prepare('UPDATE schema_version SET version = ?').run(PREFERENCES_VERSION - 1);
       runMigrations(db);
       expect(db.prepare('SELECT key, value FROM roadtrip_preferences WHERE trip_id = 10 ORDER BY key').all()).toEqual([
         { key: 'roadtrip_day_start', value: '"08:00"' },
         { key: 'roadtrip_range_km', value: '120' },
       ]);
       expect(db.prepare('SELECT value FROM roadtrip_preferences WHERE trip_id = 11').get()).toEqual({ value: '300' });
-      db.exec("UPDATE roadtrip_preferences SET value = '200' WHERE trip_id = 10 AND key = 'roadtrip_range_km'");
+    } finally {
+      db.close();
+    }
+  });
+
+  it('preserves trip overrides when migration 219 is replayed after a partial cursor update', () => {
+    const db = createMigrationPrefixDatabase(PREFERENCES_VERSION);
+    try {
+      db.exec(
+        "INSERT INTO users (id, username, email, password_hash) VALUES (1, 'owner', 'owner@test', 'x'), (2, 'member', 'member@test', 'x')",
+      );
+      db.exec("INSERT INTO trips (id, user_id, title) VALUES (10, 1, 'First'), (11, 2, 'Second')");
+      db.exec(
+        "INSERT INTO settings (user_id, key, value) VALUES (1, 'roadtrip_range_km', '120'), (2, 'roadtrip_range_km', '300'), (1, 'roadtrip_day_start', '\"08:00\"')",
+      );
+      db.exec(
+        "INSERT INTO roadtrip_preferences (trip_id, key, value) VALUES (10, 'roadtrip_day_start', '\"08:00\"'), (10, 'roadtrip_range_km', '200'), (11, 'roadtrip_range_km', '300')",
+      );
       db.prepare('UPDATE schema_version SET version = ?').run(PREFERENCES_VERSION - 1);
+
       runMigrations(db);
+
       expect(
         db.prepare("SELECT value FROM roadtrip_preferences WHERE trip_id = 10 AND key = 'roadtrip_range_km'").get(),
       ).toEqual({ value: '200' });

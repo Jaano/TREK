@@ -122,6 +122,7 @@ function seedAddons(db: Database.Database): void {
       { id: 'naver_list_import', name: 'Naver List Import', description: 'Import places from a shared Naver Maps list', type: 'integration', icon: 'Link2', enabled: 1, sort_order: 13 },
       { id: 'collab', name: 'Collab', description: 'Notes, polls, and live chat for trip collaboration', type: 'trip', icon: 'Users', enabled: 1, sort_order: 6 },
       { id: 'roadtrip', name: 'Road trip', description: 'Drives with stops along the route, driving times, and arrival times that update themselves', type: 'trip', icon: 'Route', enabled: 0, sort_order: 7 },
+      { id: 'tours', name: 'Tours', description: 'Hikes and other single-day tours that follow a route', type: 'trip', icon: 'Mountain', enabled: 0, sort_order: 8 },
       { id: 'journey', name: 'Journey', description: 'Trip tracking & travel journal — check-ins, photos, daily stories', type: 'global', icon: 'Compass', enabled: 0, sort_order: 35 },
       { id: 'airtrail', name: 'AirTrail', description: 'Sync flights from your AirTrail instance', type: 'integration', icon: 'Plane', enabled: 0, sort_order: 14 },
       { id: 'dawarich', name: 'Dawarich', description: 'Read visits and recorded routes from your Dawarich instance — suggested journal entries, places and countries you confirm yourself', type: 'integration', icon: 'Dawarich', enabled: 0, sort_order: 17 },
@@ -180,10 +181,24 @@ function seedAddons(db: Database.Database): void {
   }
 }
 
+// MVP seeds/enables only `hike` — the other controlled tour_types (bike, run, ski,
+// kayak, walk, food) ship in a later release and are intentionally NOT seeded yet.
+function seedTourTypes(db: Database.Database): void {
+  try {
+    const insertType = db.prepare(
+      'INSERT OR IGNORE INTO tour_types (key, label_key, icon, color, routing_profile, is_sport, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    insertType.run('hike', 'tourTypes.hike', 'Mountain', '#16a34a', 'pedestrian', 1, 1, 0);
+  } catch (err: unknown) {
+    console.error('Error seeding tour types:', err instanceof Error ? err.message : err);
+  }
+}
+
 function runSeeds(db: Database.Database): void {
   seedAdminAccount(db);
   seedCategories(db);
   seedAddons(db);
+  seedTourTypes(db);
 }
 
 export { runSeeds, seedAdminAccount };

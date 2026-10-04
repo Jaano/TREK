@@ -65,6 +65,13 @@ export interface PlacesSidebarProps {
   pushUndo?: (label: string, undoFn: () => Promise<void> | void) => void
   initialScrollTop?: number
   onScrollTopChange?: (top: number) => void
+  /**
+  * With the Tours addon on, file import belongs to Tours mode, list import
+  * stays here, and the "Tracks" chip is hidden because tracks are tours.
+   */
+  toursEnabled?: boolean
+  /** Places that are tours (a `tours` facet row exists) — hidden from the pool entirely while tours is on. */
+  excludePlaceIds?: Set<number>
 }
 
 /**
@@ -77,6 +84,10 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
     tripId, places, assignments, selectedDayId, days, accommodations = NO_ACCOMMODATIONS,
     pushUndo, initialScrollTop, onScrollTopChange, onEditPlace, onAssignToDay, onDeletePlace,
   } = props
+  const poolPlaces = useMemo(
+    () => props.toursEnabled && props.excludePlaceIds ? places.filter(p => !props.excludePlaceIds!.has(p.id)) : places,
+    [places, props.toursEnabled, props.excludePlaceIds],
+  )
   const { t, language } = useTranslation()
   const toast = useToast()
   const ctxMenu = useContextMenu()
@@ -107,14 +118,14 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
   }, [])
 
   const handleSidebarDragEnter = (e: React.DragEvent) => {
-    if (!canEditPlaces) return
+    if (!canEditPlaces || props.toursEnabled) return
     e.preventDefault()
     sidebarDragCounter.current++
     setSidebarDragOver(true)
   }
 
   const handleSidebarDragOver = (e: React.DragEvent) => {
-    if (!canEditPlaces) return
+    if (!canEditPlaces || props.toursEnabled) return
     e.preventDefault()
   }
 
@@ -127,7 +138,7 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
     e.preventDefault()
     sidebarDragCounter.current = 0
     setSidebarDragOver(false)
-    if (!canEditPlaces) return
+    if (!canEditPlaces || props.toursEnabled) return
     const f = e.dataTransfer.files[0]
     if (!f) return
     setSidebarDropFile(f)
@@ -195,7 +206,7 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
   // like the rating floor.
   const [localityFilter, setLocalityFilter] = useState<LocalityFilter | null>(null)
   const localityOf = useMemo(() => new Map(places.map(p => [p.id, placeLocality(p, language)])), [places, language])
-  const localities = useMemo(() => localityGroups(places.map(p => localityOf.get(p.id)!)), [places, localityOf])
+  const localities = useMemo(() => localityGroups(poolPlaces.map(p => localityOf.get(p.id)!)), [poolPlaces, localityOf])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [pendingDeleteIds, setPendingDeleteIds] = useState<number[] | null>(null)
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
@@ -257,7 +268,10 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
   const pickFilter = (next: PlacesFilter) => { setFilter(next); setSelectedIds(new Set()) }
 
   // Alle geplanten Ort-IDs abrufen (einem Tag zugewiesen)
-  const hasTracks = useMemo(() => places.some(p => p.route_geometry), [places])
+  const hasTracks = useMemo(
+    () => !props.toursEnabled && poolPlaces.some(p => p.route_geometry),
+    [poolPlaces, props.toursEnabled],
+  )
   useEffect(() => { if (filter === 'tracks' && !hasTracks) setFilter('all') }, [hasTracks, filter])
 
   const plannedIds = useMemo(
@@ -286,7 +300,7 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
   const dayScoped = filter === 'planned' && plannedInDayIds !== null
 
   const filtered = useMemo(() => {
-    const list = places.filter(p => {
+    const list = poolPlaces.filter(p => {
       if (filter === 'unplanned' && plannedIds.has(p.id)) return false
       if (filter === 'planned' && !plannedFilterIds.has(p.id)) return false
       if (filter === 'tracks' && !p.route_geometry) return false
@@ -301,7 +315,7 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
       return true
     })
     return sortPlaces(list, placesSort, language)
-  }, [places, filter, categoryFilters, search, plannedIds, plannedFilterIds, ratingFilter, localityFilter, localityOf, placesSort, language])
+  }, [poolPlaces, filter, categoryFilters, search, plannedIds, plannedFilterIds, ratingFilter, localityFilter, localityOf, placesSort, language])
 
   /**
    * How many places each "show" choice would leave, under the category and search
@@ -311,7 +325,7 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
    * different questions.
    */
   const filterCounts = useMemo(() => {
-    const base = places.filter(p => {
+    const base = poolPlaces.filter(p => {
       if (categoryFilters.size > 0) {
         if (p.category_id == null) {
           if (!categoryFilters.has('uncategorized')) return false
@@ -325,7 +339,7 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
       planned: base.filter(p => plannedFilterIds.has(p.id)).length,
       tracks: base.filter(p => p.route_geometry).length,
     } satisfies Record<PlacesFilter, number>
-  }, [places, categoryFilters, search, plannedIds, plannedFilterIds])
+  }, [poolPlaces, categoryFilters, search, plannedIds, plannedFilterIds])
 
   /** The filters narrowing the list besides the search box, for the badge on the filter button. */
 

@@ -60,6 +60,7 @@ import { findTodayDayId } from './today'
 import { markdownLinkComponents } from '../shared/markdownLink'
 import { RouteConnector, HotelRouteConnector } from './DayPlanSidebarRouteConnector'
 import { resolveLegMode } from './legMode'
+import { projectDayItinerary } from '../Map/dayTourProjection'
 import { usePluginDaySchedule, usePluginDayTints, dayTintBackground, dayTinted, PluginDayScheduleRow, formatScheduleMinutes } from '../Plugins/PluginDaySchedule'
 import { MobileAddPlaceButton } from './DayPlanSidebarMobileAddPlaceButton'
 import { DayPlanSidebarToolbar } from './DayPlanSidebarToolbar'
@@ -130,7 +131,7 @@ interface DayPlanSidebarProps {
   onCreatePlaceForDay?: (dayId: number) => void
   onExpandedDaysChange?: (expandedDayIds: Set<number>) => void
   /** `dayIds`: the days the step acts on, so deleting one of them drops it. */
-  pushUndo?: (label: string, undoFn: () => Promise<void> | void, dayIds?: number[]) => void
+  pushUndo?: (label: string, undoFn: () => Promise<void> | void, dayIds?: number[], placeIds?: number[]) => void
   canUndo?: boolean
   lastActionLabel?: string | null
   onUndo?: () => void
@@ -233,6 +234,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
   const ctxMenu = useContextMenu()
   const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
   const mirrorServiceStops = useRoadtripSettings(s => s.roadtrip_service_stops_in_days !== false)
+  const toursEnabled = useAddonStore(s => s.isEnabled('tours'))
   const tripActions = useRef(useTripStore.getState()).current
   const can = useCanDo()
   const canEditDays = can('day_edit', trip)
@@ -643,6 +645,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     // legs to draw. Side-effect free, so the async loop below only does OSRM I/O.
     const planDay = (dayId: number) => {
       const merged = mergedItemsMap[dayId] || []
+      const projected = new Map(projectDayItinerary(assignments[String(dayId)] || [], toursEnabled, places).map(item => [item.assignment.id, item]))
       // Each run point carries the ORIGIN assignment's per-segment travel mode
       // (#1281): the leg from this point to the next is routed with `mode` (null =
       // inherit the day default). Transport endpoints carry no mode → day default.
@@ -654,8 +657,24 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
       // flight, not a drive — and surface it as a bogus connector distance (#1394).
       let curHasPlace = false
       for (const it of merged) {
-        // A stop out of the route (#2532) is passed by, like a note.
         if (it.type === 'place' && it.data.route_excluded) continue
+        const tour = it.type === 'place' ? projected.get(it.data.id) : undefined
+        if (tour?.kind === 'tour') {
+          if (tour.start) {
+            const prev = cur[cur.length - 1]
+            if (prev && !prev.isPlace && !withinDriveRange(prev, tour.start)) {
+              if (cur.length >= 2 && curHasPlace) runs.push(cur)
+              cur = []
+              curHasPlace = false
+            }
+            cur.push({ id: it.data.id, ...tour.start, isPlace: true, incoming_leg_transport_mode: it.data.incoming_leg_transport_mode ?? null })
+            curHasPlace = true
+          }
+          if (cur.length >= 2 && curHasPlace) runs.push(cur)
+          cur = tour.end ? [{ id: it.data.id, ...tour.end, isPlace: true, leg_transport_mode: it.data.leg_transport_mode ?? null }] : []
+          curHasPlace = !!tour.end
+          continue
+        }
         if (it.type === 'place' && it.data.place?.lat && it.data.place?.lng) {
           // Mirror of the guard below: the open run may hold nothing but a far-away
           // arrival endpoint, which is no more drivable in this direction (#2133).
@@ -714,7 +733,14 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
       // is one you flew out of or landed at rather than drove between (#2133).
       const wayPts: { lat: number; lng: number; isPlace: boolean; time: string | null; carrierEdge?: CarrierEdge; leg_transport_mode?: string | null; incoming_leg_transport_mode?: string | null; id?: number }[] = []
       for (const it of merged) {
-        if (it.type === 'place' && it.data.place?.lat && it.data.place?.lng && !it.data.route_excluded) {
+        if (it.type === 'place' && it.data.route_excluded) continue
+        const tour = it.type === 'place' ? projected.get(it.data.id) : undefined
+        if (tour?.kind === 'tour') {
+          if (tour.start) wayPts.push({ ...tour.start, isPlace: true, time: it.data.place?.place_time ?? null, id: it.data.id, incoming_leg_transport_mode: it.data.incoming_leg_transport_mode ?? null })
+          if (tour.end) wayPts.push({ ...tour.end, isPlace: true, time: it.data.place?.place_time ?? null, id: it.data.id, leg_transport_mode: it.data.leg_transport_mode ?? null })
+          continue
+        }
+        if (it.type === 'place' && it.data.place?.lat && it.data.place?.lng) {
           wayPts.push({ lat: it.data.place.lat, lng: it.data.place.lng, isPlace: true, time: it.data.place?.place_time ?? null, leg_transport_mode: it.data.leg_transport_mode ?? null, incoming_leg_transport_mode: it.data.incoming_leg_transport_mode ?? null, id: it.data.id })
         } else if (it.type === 'transport') {
           const { from, to } = getTransportRouteEndpoints(it.data, dayId)
@@ -725,14 +751,31 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
       }
       const firstWay = wayPts[0]
       const lastWay = wayPts[wayPts.length - 1]
+      const hasRouteWaypoint = (item: typeof merged[number]) => {
+        if (item.type === 'place') {
+          if (item.data.route_excluded) return false
+          const tour = projected.get(item.data.id)
+          if (tour?.kind === 'tour') return !!tour.start || !!tour.end
+          return !!item.data.place?.lat && !!item.data.place?.lng
+        }
+        if (item.type === 'transport') {
+          const { from, to } = getTransportRouteEndpoints(item.data, dayId)
+          return !!from || !!to
+        }
+        return false
+      }
       const reachable = (h: { place_lat?: number | null; place_lng?: number | null } | undefined, w: typeof firstWay) =>
         !h || !w || w.isPlace || h.place_lat == null || h.place_lng == null
         || withinDriveRange({ lat: h.place_lat, lng: h.place_lng }, w)
       // Same carrier evidence the map route uses (#2157): with a located carrier
       // endpoint on the day, the no-time default must not open a hotel leg.
       const dayHasCarrier = wayPts.some(w => w.carrierEdge != null)
-      const wantTop = !!(startHotel && firstWay && bookends && day && shouldDrawMorningLeg(bookends, day, firstWay, dayHasCarrier)) && reachable(startHotel, firstWay)
-      const wantBottom = !!(endHotel && lastWay && bookends && day && shouldDrawEveningLeg(bookends, day, lastWay, dayHasCarrier)) && reachable(endHotel, lastWay)
+      const firstItem = merged.find(hasRouteWaypoint)
+      const firstTour = firstItem?.type === 'place' ? projected.get(firstItem.data.id) : undefined
+      const wantTop = !(firstTour?.kind === 'tour' && !firstTour.start) && !!(startHotel && firstWay && bookends && day && shouldDrawMorningLeg(bookends, day, firstWay, dayHasCarrier)) && reachable(startHotel, firstWay)
+      const lastItem = [...merged].reverse().find(hasRouteWaypoint)
+      const lastTour = lastItem?.type === 'place' ? projected.get(lastItem.data.id) : undefined
+      const wantBottom = !(lastTour?.kind === 'tour' && !lastTour.end) && !!(endHotel && lastWay && bookends && day && shouldDrawEveningLeg(bookends, day, lastWay, dayHasCarrier)) && reachable(endHotel, lastWay)
       return { runs, startHotel, endHotel, firstWay, lastWay, wantTop, wantBottom }
     }
 
@@ -822,7 +865,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     // routeDayIds is memoized from the same inputs as routeDayKey below, so keying the
     // effect on the string is equivalent while staying stable across unrelated renders.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeDayKey, routeProfile, mergedItemsMap, accommodations, days, optimizeFromAccommodation, distanceUnit])
+  }, [routeDayKey, routeProfile, mergedItemsMap, accommodations, days, optimizeFromAccommodation, distanceUnit, toursEnabled, places])
 
   const openAddNote = (dayId, e) => {
     e?.stopPropagation()
@@ -842,7 +885,9 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
   // Unified reorder: assigns positions to ALL item types based on new visual order
   const applyMergedOrder = async (dayId: number, newOrder: { type: string; data: any }[]) => {
     // Capture previous place order for undo
-    const prevAssignmentIds = (assignments[String(dayId)] || []).slice().sort((a, b) => a.order_index - b.order_index).map(a => a.id)
+    const previousAssignments = assignments[String(dayId)] || []
+    const prevAssignmentIds = previousAssignments.slice().sort((a, b) => a.order_index - b.order_index).map(a => a.id)
+    const prevPlaceIds = [...new Set(previousAssignments.map(a => a.place?.id).filter((id): id is number => id != null))]
     // …and, per booking, the fields this call is about to overwrite, so a failed write
     // can put the visible order back instead of leaving a phantom one behind the error
     // toast. Restoring the whole array instead would also drop what a collaborator's
@@ -958,7 +1003,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
         const capturedPrevIds = prevAssignmentIds
         pushUndo?.(t('undo.reorder'), async () => {
           await tripActions.reorderAssignments(tripId, capturedDayId, capturedPrevIds)
-        }, [capturedDayId])
+        }, [capturedDayId], prevPlaceIds)
       }
     } catch (err: unknown) {
       rollBackReservations()
@@ -1090,6 +1135,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     if (da.length < 3) return
 
     const prevIds = (assignments[String(dayId)] || []).slice().sort((a, b) => a.order_index - b.order_index).map(a => a.id)
+    const placeIds = [...new Set((assignments[String(dayId)] || []).map(a => a.place?.id).filter((id): id is number => id != null))]
 
     // Separate fixed (stay at their index) and movable assignments. A place is
     // fixed if it's locked OR has a set time — timed places are anchored by their
@@ -1133,7 +1179,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     const capturedDayId = dayId
     pushUndo?.(t('undo.optimize'), async () => {
       await tripActions.reorderAssignments(tripId, capturedDayId, prevIds)
-    }, [capturedDayId])
+    }, [capturedDayId], placeIds)
   }
 
 
@@ -1364,6 +1410,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
   const optimizeFromAccommodation = useSettingsStore(s => s.settings.optimize_from_accommodation)
   const dateFirst = useSettingsStore(s => s.settings.day_date_first === true)
   const collectionsEnabled = useAddonStore(s => s.isEnabled('collections'))
+  const toursEnabled = useAddonStore(s => s.isEnabled('tours'))
   // Plugin time contributions in the day plan (dayScheduleProvider hook).
   const daySchedule = usePluginDaySchedule(S.tripId)
   // Per-day colours from the dayTintProvider hook — e.g. which leg of the trip a
@@ -1625,6 +1672,11 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
     // Where nothing sits above it (the mobile shell), the height still fills the panel.
     <div ref={setPanel} data-touch-drag={dragDisabled ? undefined : ''} style={{ display: 'flex', flexDirection: 'column', flex: '1 1 0%', minHeight: 0, height: '100%', position: 'relative', fontFamily: "var(--font-system)" }}>
       {/* Toolbar */}
+      {toursEnabled && selectedDayId != null && projectDayItinerary(assignments[String(selectedDayId)] || [], true, places).some(item => item.kind === 'tour' && !item.valid) && (
+        <div role="status" style={{ color: 'var(--warning)', padding: '8px 12px' }}>
+          <span aria-hidden="true">!</span> {t('tours.dayRoute.endpointUnknown')}
+        </div>
+      )}
       <DayPlanSidebarToolbar
         tripId={tripId}
         trip={trip}

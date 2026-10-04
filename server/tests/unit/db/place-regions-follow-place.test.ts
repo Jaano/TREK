@@ -1,5 +1,5 @@
 import { runMigrations } from '../../../src/db/migrations';
-import { createTestDb } from '../../helpers/test-db';
+import { createMigrationPrefixDatabase } from '../../helpers/migration-prefix-db';
 
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -26,8 +26,7 @@ describe('place_regions follows the place it was resolved from (#2527)', () => {
       | { country_code: string; region_code: string }
       | undefined;
 
-  beforeEach(() => {
-    db = createTestDb();
+  function seedPlaces(): void {
     db.exec("INSERT INTO users (username, email, password_hash) VALUES ('traveller', 'traveller@example.test', 'x')");
     const userId = (db.prepare('SELECT id FROM users').get() as { id: number }).id;
     const tripId = db.prepare("INSERT INTO trips (user_id, title) VALUES (?, 'Trip')").run(userId)
@@ -42,6 +41,17 @@ describe('place_regions follows the place it was resolved from (#2527)', () => {
     );
     insertRegion.run(placeId);
     insertRegion.run(otherPlaceId);
+  }
+
+  function replaceWithPrefix(version: number): void {
+    db.close();
+    db = createMigrationPrefixDatabase(version);
+    seedPlaces();
+  }
+
+  beforeEach(() => {
+    db = createMigrationPrefixDatabase(PLACE_REGIONS_TRIGGER_AGAIN_VERSION);
+    seedPlaces();
   });
 
   afterEach(() => db?.close());
@@ -108,12 +118,6 @@ describe('place_regions follows the place it was resolved from (#2527)', () => {
   it('ships at its own schema version and replays without a second trigger', () => {
     expect(triggers()).toHaveLength(1);
 
-    db.exec('DROP TRIGGER trg_place_regions_follow_place');
-    db.prepare('UPDATE schema_version SET version = ?').run(PLACE_REGIONS_TRIGGER_AGAIN_VERSION);
-    runMigrations(db);
-    expect(triggers()).toHaveLength(0);
-
-    db.prepare('UPDATE schema_version SET version = ?').run(PLACE_REGIONS_TRIGGER_VERSION - 1);
     runMigrations(db);
     runMigrations(db);
     expect(triggers()).toHaveLength(1);
@@ -123,6 +127,7 @@ describe('place_regions follows the place it was resolved from (#2527)', () => {
   });
 
   it('keeps the slot it has on main, with Web Push after it and the trigger once more after that', () => {
+    replaceWithPrefix(PLACE_REGIONS_TRIGGER_VERSION - 1);
     const sqlByVersion = new Map<number, string>();
     let running = 0;
     const log = vi.spyOn(console, 'log').mockImplementation((message?: unknown) => {
@@ -135,7 +140,6 @@ describe('place_regions follows the place it was resolved from (#2527)', () => {
       return realExec(sql);
     });
     try {
-      db.prepare('UPDATE schema_version SET version = ?').run(PLACE_REGIONS_TRIGGER_VERSION - 1);
       runMigrations(db);
     } finally {
       exec.mockRestore();
@@ -154,8 +158,7 @@ describe('place_regions follows the place it was resolved from (#2527)', () => {
   });
 
   it('gives a 4.3.3 install, already at 244 with the trigger, the Web Push table', () => {
-    db.exec('DROP TABLE push_subscriptions');
-    db.prepare('UPDATE schema_version SET version = ?').run(PLACE_REGIONS_TRIGGER_VERSION);
+    replaceWithPrefix(PLACE_REGIONS_TRIGGER_VERSION);
     expect(pushTable()).toEqual([]);
 
     runMigrations(db);
@@ -166,6 +169,7 @@ describe('place_regions follows the place it was resolved from (#2527)', () => {
   });
 
   it('gives an instance that ran Web Push at 244 the trigger and keeps its subscriptions', () => {
+    replaceWithPrefix(WEB_PUSH_VERSION);
     db.exec('DROP TRIGGER trg_place_regions_follow_place');
     db.prepare('UPDATE schema_version SET version = ?').run(PLACE_REGIONS_TRIGGER_VERSION);
     db.prepare(

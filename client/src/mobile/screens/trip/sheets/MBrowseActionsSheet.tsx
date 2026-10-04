@@ -26,6 +26,7 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
 
   const canEditPlaces = planner.can('place_edit', planner.trip)
   const canEditDays = planner.can('day_edit', planner.trip)
+  const isTourPlace = (placeId: number) => planner.isTourPlace(placeId)
   const collectionsEnabled = useAddonStore(s => s.isEnabled('collections'))
   const openSavePicker = useSaveToCollectionStore(s => s.open)
 
@@ -56,9 +57,9 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
     openSavePicker(collectionTargetFromPlace(place))
   }
 
-  const assignToDay = (dayId: number) => {
-    shell.closeSheet()
-    planner.handleAssignToDay(place.id, dayId)
+  const assignToDay = async (dayId: number) => {
+    const assigned = await planner.handleAssignToDay(place.id, dayId)
+    if (assigned !== false) shell.closeSheet()
   }
 
   const deletePlace = () => {
@@ -84,13 +85,13 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
           <Eye size={16} strokeWidth={2} className="flex-none text-m-muted" />
           {t('mobileTrip.viewDetails')}
         </button>
-        {canEditPlaces && (
+        {canEditPlaces && !isTourPlace(place.id) && (
           <button type="button" onClick={editPlace} className={rowCls}>
             <Pencil size={16} strokeWidth={2} className="flex-none text-m-muted" />
             {t('common.edit')}
           </button>
         )}
-        {collectionsEnabled && (
+        {collectionsEnabled && !isTourPlace(place.id) && (
           <button type="button" onClick={saveToCollection} className={rowCls}>
             <Bookmark size={16} strokeWidth={2} className="flex-none text-m-muted" />
             {t('inspector.saveToCollection')}
@@ -111,7 +112,7 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
                   <button
                     key={d.id}
                     type="button"
-                    onClick={() => assignToDay(d.id)}
+                    onClick={() => { void assignToDay(d.id) }}
                     className={`flex w-full items-center gap-2 px-3 py-[10px] text-left ${i > 0 ? 'border-t border-[color:var(--m-rowbr)]' : ''}`}
                   >
                     <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold">
@@ -131,7 +132,7 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
             )}
           </>
         )}
-        {canEditPlaces && (
+        {canEditPlaces && !isTourPlace(place.id) && (
           <button type="button" onClick={deletePlace} className={`${rowCls} text-[color:var(--m-st-danger)]`}>
             <Trash2 size={16} strokeWidth={2} className="flex-none" />
             {t('common.delete')}

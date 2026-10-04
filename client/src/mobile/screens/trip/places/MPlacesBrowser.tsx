@@ -21,7 +21,10 @@ import { useTranslation } from '../../../../i18n'
 import type { Place } from '../../../../types'
 import MPlacesBulkCategorySheet from './MPlacesBulkCategorySheet'
 import MPlacesSaveToCollectionSheet from './MPlacesSaveToCollectionSheet'
+import MPlacesToursModeSwitch from './MPlacesToursModeSwitch'
+import MToursSelectionList from './MToursSelectionList'
 import { filterPool, firstPlannedDayNumbers, plannedPlaceIds } from './placesBrowserModel'
+import { useTourPlaceIds } from '../../../../hooks/useTourPlaceIds'
 
 /**
  * Fullscreen places pool (mode === 'browse'): All/Unplanned/Tracks filter
@@ -35,11 +38,19 @@ import { filterPool, firstPlannedDayNumbers, plannedPlaceIds } from './placesBro
  * it. The header ellipsis opens the 'import' sheet (sheets/MImportSheet).
  */
 export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) {
-  const { t, places, categories, assignments, days, trip } = planner
+  const { t, places, categories, assignments, days, trip, tripId } = planner
   // The planner hook carries `t` but not the locale; day labels need both.
   const { locale } = useTranslation()
   const canEditPlaces = planner.can('place_edit', trip)
   const collectionsEnabled = useAddonStore(s => s.isEnabled('collections'))
+  const toursEnabled = useAddonStore(s => s.isEnabled('tours'))
+  // Places that are tours (a `tours` facet row exists) — kept out of the
+  // Places pool entirely while the addon is on.
+  const { tourPlaceIds } = useTourPlaceIds(tripId, toursEnabled)
+  // Top level of the places browser, mirroring the desktop right add-panel's
+  // Places <-> Tours switch placement.
+  const [toursMode, setToursMode] = useState(false)
+  const [toursFilter, setToursFilter] = useState<'all' | 'unplanned' | 'planned'>('all')
 
   const filter = useTripStore(s => s.placesFilter)
   const setFilter = useTripStore(s => s.setPlacesFilter)
@@ -61,7 +72,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
     if (shell.browseFromEdit) setFilter('unplanned')
   }, [shell.browseFromEdit, setFilter])
 
-  const hasTracks = useMemo(() => places.some(p => p.route_geometry), [places])
+  const hasTracks = useMemo(() => !toursEnabled && places.some(p => p.route_geometry), [places, toursEnabled])
   useEffect(() => {
     if (filter === 'tracks' && !hasTracks) setFilter('all')
   }, [filter, hasTracks, setFilter])
@@ -73,10 +84,10 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
     [assignments, planner.tripAccommodations, planner.reservations],
   )
   const dayNumberByPlace = useMemo(() => firstPlannedDayNumbers(assignments, days), [assignments, days])
-  const filtered = useMemo(
-    () => filterPool(places, { filter, categoryFilters, search, plannedIds }),
-    [places, filter, categoryFilters, search, plannedIds],
-  )
+  const filtered = useMemo(() => {
+    const pool = toursEnabled ? places.filter(p => !tourPlaceIds.has(p.id)) : places
+    return filterPool(pool, { filter, categoryFilters, search, plannedIds })
+  }, [places, filter, categoryFilters, search, plannedIds, toursEnabled, tourPlaceIds])
 
   // A bulk delete (or a remote edit) can remove selected places — drop the
   // stale ids so the toolbar count stays honest.
@@ -120,10 +131,11 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
 
   // Compare the ids, not just the counts: a place removed remotely while another
   // one is selected keeps the sizes equal without the sets matching.
-  const allSelected = filtered.length > 0 && filtered.every(p => selectedIds.has(p.id))
+  const selectablePlaces = filtered.filter(place => !planner.isTourPlace(place.id))
+  const allSelected = selectablePlaces.length > 0 && selectablePlaces.every(p => selectedIds.has(p.id))
   const toggleAllVisible = () => {
     if (allSelected) setSelectedIds(new Set())
-    else setSelectedIds(new Set(filtered.map(p => p.id)))
+    else setSelectedIds(new Set(selectablePlaces.map(p => p.id)))
   }
 
   const toggleCategory = (catId: string) => {
@@ -142,17 +154,39 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
 
   const openRow = (place: Place) => {
     if (selectMode) {
+      if (planner.isTourPlace(place.id)) {
+        planner.handlePlaceClick(place.id)
+        return
+      }
       toggleSelected(place.id)
       return
     }
     shell.openSheet('bract', { placeId: place.id, dayPicker: false })
   }
 
+  const selectedTours = [...selectedIds].filter(planner.isTourPlace)
+
   const hasUncategorized = places.some(p => p.category_id == null)
 
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(var(--bottom-nav-h,84px)+22px)] pt-[calc(var(--m-safe-top,12px)+58px)]">
+        {toursEnabled && (
+          <MPlacesToursModeSwitch active={toursMode} onChange={setToursMode} />
+        )}
+        {toursEnabled && toursMode ? (
+          <>
+            {/* All / Unplanned / Planned only — no Tracks chip, no Import/Add/Select
+                buttons: tours are attached here, never created or bulk-managed. */}
+            <div className="flex items-center gap-[6px]">
+              <FilterChip active={toursFilter === 'all'} label={t('places.all')} onClick={() => setToursFilter('all')} />
+              <FilterChip active={toursFilter === 'unplanned'} label={t('places.unplanned')} onClick={() => setToursFilter('unplanned')} />
+              <FilterChip active={toursFilter === 'planned'} label={t('places.planned')} onClick={() => setToursFilter('planned')} />
+            </div>
+            <MToursSelectionList planner={planner} shell={shell} filter={toursFilter} />
+          </>
+        ) : (
+        <>
         {/* ── Filter chips + Import (Add sits in the search row below to free space) ── */}
         <div className="flex items-center gap-[6px]">
           <FilterChip
@@ -266,24 +300,24 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
               <BulkBtn label={allSelected ? t('common.deselectAll') : t('common.selectAll')} onClick={toggleAllVisible}>
                 <CheckCheck size={14} strokeWidth={2} />
               </BulkBtn>
-              <BulkBtn label={t('places.changeCategory')} disabled={selectedIds.size === 0} onClick={() => setCategoryPickerOpen(true)}>
+              <BulkBtn label={t('places.changeCategory')} disabled={selectedIds.size === 0 || selectedTours.length > 0} onClick={() => setCategoryPickerOpen(true)}>
                 <Tag size={14} strokeWidth={2} />
               </BulkBtn>
               {collectionsEnabled && (
-                <BulkBtn label={t('inspector.saveToCollection')} disabled={selectedIds.size === 0} onClick={() => setSaveToListOpen(true)}>
+                <BulkBtn label={t('inspector.saveToCollection')} disabled={selectedIds.size === 0 || selectedTours.length > 0} onClick={() => setSaveToListOpen(true)}>
                   <Bookmark size={14} strokeWidth={2} />
                 </BulkBtn>
               )}
               {collectionsEnabled && (
                 <BulkBtn
                   label={t('collections.markVisitedSelection')}
-                  disabled={selectedIds.size === 0 || markVisitedBusy}
+                  disabled={selectedIds.size === 0 || selectedTours.length > 0 || markVisitedBusy}
                   onClick={markSelectionVisited}
                 >
                   {markVisitedBusy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} strokeWidth={2} />}
                 </BulkBtn>
               )}
-              <BulkBtn label={t('places.deleteSelected')} disabled={selectedIds.size === 0} onClick={() => setConfirmDeleteOpen(true)}>
+              <BulkBtn label={t('places.deleteSelected')} disabled={selectedIds.size === 0 || selectedTours.length > 0} onClick={() => setConfirmDeleteOpen(true)}>
                 <Trash2 size={14} strokeWidth={2} />
               </BulkBtn>
             </div>
@@ -349,7 +383,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
             return (
               <div key={place.id} className="flex items-center gap-[11px] border-b border-[color:var(--m-rowbr)] px-[2px] py-[9px]">
                 <button type="button" onClick={() => openRow(place)} className="flex min-w-0 flex-1 items-center gap-[11px] text-left">
-                  {selectMode && <SquareCheck big checked={selectedIds.has(place.id)} />}
+                  {selectMode && !planner.isTourPlace(place.id) && <SquareCheck big checked={selectedIds.has(place.id)} />}
                   <PlaceAvatar place={place} category={cat} size={40} />
                   <div className="min-w-0 flex-1">
                     <span className="flex items-center gap-[6px]">
@@ -389,6 +423,8 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
             )
           })
         )}
+        </>
+        )}
       </div>
 
       <MPlacesBulkCategorySheet
@@ -418,8 +454,12 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
         open={confirmDeleteOpen}
         onClose={() => setConfirmDeleteOpen(false)}
         title={t('places.deleteSelected')}
-        message={t('trip.confirm.deletePlaces', { count: selectedIds.size })}
-        confirmLabel={t('common.delete')}
+        message={selectedTours.length > 0
+          ? t('tours.delete.bulkConfirmBody')
+          : t('trip.confirm.deletePlaces', { count: selectedIds.size })}
+        confirmLabel={selectedTours.length > 0
+          ? t('tours.delete.confirmAction')
+          : t('common.delete')}
         cancelLabel={t('common.cancel')}
         danger
         onConfirm={async () => {

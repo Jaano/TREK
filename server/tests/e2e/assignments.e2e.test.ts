@@ -13,6 +13,23 @@ import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { Test } from '@nestjs/testing';
 import { seedUser, sessionCookie } from './harness';
 
+vi.mock('../../src/config', async () => {
+  const { readEnv } = await import('../../src/app-config');
+  const env = readEnv();
+  return {
+    ENCRYPTION_KEY: 'assignments-e2e-inert-encryption-key',
+    JWT_SECRET: 'assignments-e2e-inert-jwt-secret',
+    updateJwtSecret: vi.fn(),
+    DEFAULT_LANGUAGE: env.app.defaultLanguage,
+    SESSION_DURATION: env.session.duration,
+    SESSION_DURATION_MS: env.session.durationMs,
+    SESSION_DURATION_SECONDS: env.session.durationSeconds,
+    SESSION_DURATION_REMEMBER: env.session.durationRemember,
+    SESSION_DURATION_REMEMBER_MS: env.session.durationRememberMs,
+    SESSION_DURATION_REMEMBER_SECONDS: env.session.durationRememberSeconds,
+  };
+});
+
 const { db } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const Database = require('better-sqlite3');
@@ -30,7 +47,8 @@ const { db } = vi.hoisted(() => {
     description TEXT, lat REAL, lng REAL, address TEXT, category_id INTEGER, price REAL, currency TEXT,
     place_time TEXT, end_time TEXT, duration_minutes INTEGER DEFAULT 60, notes TEXT, image_url TEXT,
     transport_mode TEXT DEFAULT 'walking', google_place_id TEXT, google_ftid TEXT, osm_id TEXT, amap_poi_id TEXT, website TEXT, phone TEXT,
-    stop_type TEXT, fill_percent INTEGER);`);
+    stop_type TEXT, fill_percent INTEGER, route_geometry TEXT);`);
+  tmp.exec('CREATE TABLE tours (place_id INTEGER PRIMARY KEY);');
   tmp.exec(`CREATE TABLE day_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, day_id INTEGER NOT NULL,
     place_id INTEGER NOT NULL, order_index INTEGER NOT NULL DEFAULT 0, notes TEXT,
     assignment_time TEXT, assignment_end_time TEXT, leg_transport_mode TEXT,
@@ -130,6 +148,47 @@ describe('Assignments e2e (real auth guard + temp SQLite)', () => {
       id, day_id: 3, place_id: 2, order_index: 0, participants: [],
       place: { id: 2, name: 'Louvre', tags: [] },
     });
+  });
+
+  it('200 list projects Tour facets once per assignment and leaves other tracks ordinary', async () => {
+    const legacyGeometry = JSON.stringify([[48, 11, 600], [48.01, 11.02, 650]]);
+    const tourGeometry = JSON.stringify([[48.02, 11.03, 700], [48.03, 11.04, 750]]);
+    db.prepare('INSERT INTO places (id, trip_id, name, route_geometry) VALUES (3, 5, ?, ?), (4, 5, ?, ?)')
+      .run('Legacy track', legacyGeometry, 'Tour', tourGeometry);
+    db.prepare('INSERT INTO tours (place_id) VALUES (4)').run();
+    const assignmentIds = [
+      seedAssignment(3, 2, 0),
+      seedAssignment(3, 3, 1),
+      seedAssignment(3, 4, 2),
+      seedAssignment(3, 4, 3),
+    ];
+
+    const res = await request(server).get('/api/trips/5/days/3/assignments').set('Cookie', sessionCookie(1));
+
+    expect(res.status).toBe(200);
+    const assignments = res.body.assignments as Array<{
+      id: number;
+      place_id: number;
+      order_index: number;
+      tour_place_id: number | null;
+      tour_route_geometry: string | null;
+    }>;
+    expect(assignments).toHaveLength(4);
+    expect(assignments.map(a => a.id)).toEqual(assignmentIds);
+    expect(assignments.map(a => a.order_index)).toEqual([0, 1, 2, 3]);
+    expect(assignments[0]).toMatchObject({ place_id: 2, tour_place_id: null, tour_route_geometry: null });
+    expect(db.prepare('SELECT route_geometry FROM places WHERE id = 3').get()).toEqual({ route_geometry: legacyGeometry });
+    expect(db.prepare('SELECT place_id FROM tours WHERE place_id = 3').get()).toBeUndefined();
+    expect(db.prepare('SELECT place_id FROM tours WHERE place_id = 4').get()).toEqual({ place_id: 4 });
+    expect(assignments[1]).toMatchObject({ place_id: 3, tour_place_id: null, tour_route_geometry: null });
+    expect(assignments.slice(2).map(a => ({
+      place_id: a.place_id,
+      tour_place_id: a.tour_place_id,
+      tour_route_geometry: a.tour_route_geometry,
+    }))).toEqual([
+      { place_id: 4, tour_place_id: 4, tour_route_geometry: tourGeometry },
+      { place_id: 4, tour_place_id: 4, tour_route_geometry: tourGeometry },
+    ]);
   });
 
   it('201 create, 404 place', async () => {

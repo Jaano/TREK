@@ -81,6 +81,8 @@ const { db } = vi.hoisted(() => {
   tmp.exec(`CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT,
     image_url TEXT, address TEXT, lat REAL, lng REAL, category_id INTEGER, description TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  // The trip bundle's PlacesService projection joins the Tours facet by place_id.
+  tmp.exec('CREATE TABLE tours (place_id INTEGER PRIMARY KEY);');
   // PlacesService.list joins categories and batch-loads tags/ratings.
   tmp.exec('CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, icon TEXT);');
   tmp.exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, created_at DATETIME);');

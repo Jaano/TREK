@@ -7,6 +7,16 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import Database from 'better-sqlite3';
+
+vi.mock('../../../src/config', () => ({
+  ENCRYPTION_KEY: 'migration-atomicity-test-key',
+  JWT_SECRET: 'migration-atomicity-test-secret',
+  updateJwtSecret: vi.fn(),
+}));
+vi.mock('../../../src/db/database', () => {
+  throw new Error('Migration version atomicity tests must not import the global database');
+});
+
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 

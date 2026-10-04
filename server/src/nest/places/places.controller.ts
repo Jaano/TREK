@@ -317,7 +317,7 @@ export class PlacesController {
     this.requireEdit(trip, user);
     const { ids } = body;
     if (ids.length === 0) {
-      return { deleted: [], count: 0 };
+      return { deleted: [], count: 0, tourPlaceIds: [] };
     }
     // Scope the ids to the trip before the hook: onPlaceDeleted keys on the
     // place id alone, so an id from another trip would detach that trip's
@@ -328,7 +328,7 @@ export class PlacesController {
     for (const id of scoped) this.places.onDeleted(id);
     // Read the linked expenses before the delete — afterwards the link is gone (#1298).
     const expenseIds = this.places.linkedExpenseIds(tripId, scoped);
-    const { deleted, cancelled } = await this.places.removeMany(tripId, ids);
+    const { deleted, deletedTourPlaceIds = [], cancelled } = await this.places.removeMany(tripId, ids);
     for (const id of deleted) {
       this.places.broadcast(tripId, 'place:deleted', { placeId: id }, socketId);
     }
@@ -346,7 +346,7 @@ export class PlacesController {
     for (const itemId of [...expenseIds, ...cancelled.budgetItemIds]) {
       this.places.broadcast(tripId, 'budget:deleted', { itemId }, undefined);
     }
-    return { deleted, count: deleted.length };
+    return { deleted, count: deleted.length, tourPlaceIds: deletedTourPlaceIds };
   }
 
   @Post('bulk-update')
@@ -530,7 +530,7 @@ export class PlacesController {
     }
     this.places.onDeleted(Number(id));
     const expenseIds = this.places.linkedExpenseIds(tripId, [id]);
-    const { deleted, cancelled } = await this.places.remove(tripId, id);
+    const { deleted, deletedTourPlaceIds = [], cancelled } = await this.places.remove(tripId, id);
     if (!deleted) {
       throw new HttpException({ error: 'Place not found' }, 404);
     }
@@ -545,6 +545,6 @@ export class PlacesController {
     for (const itemId of [...expenseIds, ...cancelled.budgetItemIds]) {
       this.places.broadcast(tripId, 'budget:deleted', { itemId }, undefined);
     }
-    return { success: true };
+    return { success: true, tourPlaceIds: deletedTourPlaceIds };
   }
 }

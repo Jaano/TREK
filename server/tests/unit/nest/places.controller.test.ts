@@ -1,7 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const { legacyDatabaseAccess } = vi.hoisted(() => ({
+  legacyDatabaseAccess: vi.fn((property: string | symbol): never => {
+    throw new Error(`Unexpected legacy database access: ${String(property)}`);
+  }),
+}));
+
+vi.mock('../../../src/config', () => ({
+  ENCRYPTION_KEY: 'test-only-inert-key',
+  JWT_SECRET: 'test-only-inert-secret',
+  updateJwtSecret: vi.fn(),
+}));
+vi.mock('../../../src/db/database', () => ({
+  db: new Proxy({}, {
+    get: (_target, property: string | symbol) => legacyDatabaseAccess(property),
+  }),
+}));
+
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
 import { HttpException } from '@nestjs/common';
 import { PlacesController } from '../../../src/nest/places/places.controller';
+import { TRIP_PERMISSION_KEY } from '../../../src/nest/permissions/trip-access.guard';
 import type { PlacesService } from '../../../src/nest/places/places.service';
 import type { StorageService } from '../../../src/nest/storage/storage.service';
 import type { User } from '../../../src/types';
@@ -43,6 +62,10 @@ async function thrownAsync(fn: () => Promise<unknown>): Promise<{ status: number
 beforeEach(() => vi.spyOn(console, 'error').mockImplementation(() => {}));
 
 describe('PlacesController (parity with the legacy /api/trips/:tripId/places route)', () => {
+  it('does not access the legacy global database initializer', () => {
+    expect(legacyDatabaseAccess).not.toHaveBeenCalled();
+  });
+
   // The trip 404 for this handler is TripAccessGuard's now (see
   // trip-access.guard.test.ts and the places e2e), so it is no longer reachable
   // by calling the method directly.
@@ -256,14 +279,21 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     // element before the handler runs.
     it('returns empty for an empty list without touching the service', async () => {
       const removeMany = vi.fn();
-      expect(await new PlacesController(svc({ removeMany } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).bulkDelete(user, '5', { ids: [] })).toEqual({ deleted: [], count: 0 });
+      expect(await new PlacesController(svc({ removeMany } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).bulkDelete(user, '5', { ids: [] })).toEqual({ deleted: [], count: 0, tourPlaceIds: [] });
+      expect(removeMany).not.toHaveBeenCalled();
+    });
+    it('requires place_edit before a bulk deletion can reach the service', async () => {
+      const removeMany = vi.fn();
+      const s = svc({ canEdit: vi.fn().mockReturnValue(false), removeMany } as Partial<PlacesService>);
+      expect(await thrownAsync(() => new PlacesController(s, new RuntimeEnvService(), storageStub).bulkDelete(user, '5', { ids: [1] })))
+        .toEqual({ status: 403, body: { error: 'No permission' } });
       expect(removeMany).not.toHaveBeenCalled();
     });
     it('deletes, fires hooks + broadcasts per deleted id', async () => {
-      const removeMany = vi.fn().mockReturnValue({ deleted: [1, 2], cancelled: { reservationIds: [], budgetItemIds: [] } }); const onDeleted = vi.fn(); const broadcast = vi.fn();
+      const removeMany = vi.fn().mockReturnValue({ deleted: [1, 2], deletedTourPlaceIds: [2], cancelled: { reservationIds: [], budgetItemIds: [] } }); const onDeleted = vi.fn(); const broadcast = vi.fn();
       const scopedIds = vi.fn().mockReturnValue([1, 2]);
       const s = svc({ removeMany, onDeleted, broadcast, scopedIds } as Partial<PlacesService>);
-      expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).bulkDelete(user, '5', { ids: [1, 2] }, 'sock')).toEqual({ deleted: [1, 2], count: 2 });
+      expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).bulkDelete(user, '5', { ids: [1, 2] }, 'sock')).toEqual({ deleted: [1, 2], count: 2, tourPlaceIds: [2] });
       expect(onDeleted).toHaveBeenCalledTimes(2);
       expect(broadcast).toHaveBeenCalledTimes(2);
     });
@@ -477,8 +507,12 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     expect(await thrownAsync(() => new PlacesController(svc({ remove, onDeleted } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).remove(user, '5', '9'))).toEqual({ status: 404, body: { error: 'Place not found' } });
     expect(onDeleted).toHaveBeenCalledWith(9);
     expect(onDeleted.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
-    const s = svc({ remove: vi.fn().mockReturnValue({ deleted: true, cancelled: { reservationIds: [], budgetItemIds: [] } }), broadcast: vi.fn() } as Partial<PlacesService>);
-    expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).remove(user, '5', '9')).toEqual({ success: true });
+    const s = svc({ remove: vi.fn().mockReturnValue({ deleted: true, deletedTourPlaceIds: [9], cancelled: { reservationIds: [], budgetItemIds: [] } }), broadcast: vi.fn() } as Partial<PlacesService>);
+    expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).remove(user, '5', '9')).toEqual({ success: true, tourPlaceIds: [9] });
+  });
+
+  it('requires place_edit for single Place/Tour deletion', () => {
+    expect(Reflect.getMetadata(TRIP_PERMISSION_KEY, PlacesController.prototype.remove)).toBe('place_edit');
   });
 
   it('DELETE /:id announces the booking and the expense a cancelled night took down', async () => {
@@ -565,7 +599,6 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     });
   });
 });
-
 describe('PUT /:id/image/from-file (#1242)', () => {
   it('maps every refusal to its status and broadcasts a success', async () => {
     const make = (result: unknown, extra: Partial<PlacesService> = {}) =>

@@ -35,6 +35,7 @@ function place(over: Partial<Place>): Place {
 const LOUVRE = place({ id: 1, name: 'Louvre', address: 'Rue de Rivoli', category_id: 1 })
 const EIFFEL = place({ id: 2, name: 'Eiffel Tower', description: 'Iron lady' })
 const SEINE = place({ id: 3, name: 'Seine Track', category_id: 2, route_geometry: 'abc', route_color: '#ff0000' })
+const TOUR = place({ id: 4, name: 'Ridge walk', tour_place_id: 4 })
 
 const PLACES = [LOUVRE, EIFFEL, SEINE]
 
@@ -288,6 +289,23 @@ describe('MPlacesBrowser', () => {
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'common.delete' })) })
     expect(planner.confirmDeletePlaces).toHaveBeenCalledWith([1, 3])
     expect(screen.queryByText(/places.selectionCount/)).not.toBeInTheDocument()
+  })
+
+  it('routes a Tour row to read-only detail instead of mobile Place bulk management', () => {
+    const planner = makePlanner({
+      places: [LOUVRE, TOUR],
+      isTourPlace: vi.fn((placeId: number) => placeId === TOUR.id),
+    })
+    renderBrowser(planner)
+    fireEvent.click(screen.getByRole('button', { name: 'common.select' }))
+    fireEvent.click(row('Louvre'))
+    fireEvent.click(row('Ridge walk'))
+
+    expect(planner.handlePlaceClick).toHaveBeenCalledWith(TOUR.id)
+    expect(screen.getByText('places.selectionCount:1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'places.deleteSelected' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'places.changeCategory' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'common.deselectAll' })).toBeInTheDocument()
   })
 
   it('FE-MOB-PBROW-020b: a failed bulk delete keeps the selection for a retry', async () => {
