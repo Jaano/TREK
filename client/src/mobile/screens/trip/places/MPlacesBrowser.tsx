@@ -1,6 +1,6 @@
 import { ReactNode, useEffect, useMemo, useState } from 'react'
 import {
-  Bookmark, Check, CheckCheck, CheckCircle2, Download, ListChecks, Loader2, MapPin, Plus,
+  Bookmark, CheckCheck, CheckCircle2, Download, ListChecks, Loader2, Plus,
   SlidersHorizontal, Tag, Trash2, X,
 } from 'lucide-react'
 import MDancingTrek from '../../../components/MDancingTrek'
@@ -25,6 +25,8 @@ import MPlacesToursModeSwitch from './MPlacesToursModeSwitch'
 import MToursSelectionList from './MToursSelectionList'
 import { filterPool, firstPlannedDayNumbers, plannedPlaceIds } from './placesBrowserModel'
 import { useTourPlaceIds } from '../../../../hooks/useTourPlaceIds'
+import { MCategoryFilterList, MRatingFloorChips, SquareCheck } from './MPlacesFilterControls'
+import { countActivePlacesFilters } from '../../../../utils/placesFilter'
 
 /**
  * Fullscreen places pool (mode === 'browse'): All/Unplanned/Tracks filter
@@ -55,7 +57,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
   const filter = useTripStore(s => s.placesFilter)
   const setFilter = useTripStore(s => s.setPlacesFilter)
   const categoryFilters = useTripStore(s => s.placesCategoryFilter)
-  const setCategoryFilters = useTripStore(s => s.setPlacesCategoryFilter)
+  const ratingFilter = useTripStore(s => s.placesRatingFilter)
 
   const [search, setSearch] = useState('')
   const [catOpen, setCatOpen] = useState(false)
@@ -73,9 +75,6 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
   }, [shell.browseFromEdit, setFilter])
 
   const hasTracks = useMemo(() => !toursEnabled && places.some(p => p.route_geometry), [places, toursEnabled])
-  useEffect(() => {
-    if (filter === 'tracks' && !hasTracks) setFilter('all')
-  }, [filter, hasTracks, setFilter])
 
   // A hotel is linked through its stay and a venue through its booking; neither is
   // ever dragged onto a day, and the pool used to call both unplanned (#2072).
@@ -84,10 +83,13 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
     [assignments, planner.tripAccommodations, planner.reservations],
   )
   const dayNumberByPlace = useMemo(() => firstPlannedDayNumbers(assignments, days), [assignments, days])
+  const poolPlaces = useMemo(
+    () => toursEnabled ? places.filter(place => !tourPlaceIds.has(place.id)) : places,
+    [places, toursEnabled, tourPlaceIds],
+  )
   const filtered = useMemo(() => {
-    const pool = toursEnabled ? places.filter(p => !tourPlaceIds.has(p.id)) : places
-    return filterPool(pool, { filter, categoryFilters, search, plannedIds })
-  }, [places, filter, categoryFilters, search, plannedIds, toursEnabled, tourPlaceIds])
+    return filterPool(poolPlaces, { filter, categoryFilters, ratingFilter, search, plannedIds })
+  }, [poolPlaces, filter, categoryFilters, ratingFilter, search, plannedIds])
 
   // A bulk delete (or a remote edit) can remove selected places — drop the
   // stale ids so the toolbar count stays honest.
@@ -138,13 +140,6 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
     else setSelectedIds(new Set(selectablePlaces.map(p => p.id)))
   }
 
-  const toggleCategory = (catId: string) => {
-    const next = new Set(categoryFilters)
-    if (next.has(catId)) next.delete(catId)
-    else next.add(catId)
-    setCategoryFilters(next)
-  }
-
   const openAddPlace = () => {
     planner.setEditingPlace(null)
     planner.setEditingAssignmentId(null)
@@ -165,12 +160,11 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
   }
 
   const selectedTours = [...selectedIds].filter(planner.isTourPlace)
-
-  const hasUncategorized = places.some(p => p.category_id == null)
+  const panelFilterCount = countActivePlacesFilters({ filter: 'all', categoryFilters, ratingFilter })
 
   return (
     <div className="flex h-full flex-col">
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[calc(var(--bottom-nav-h,84px)+22px)] pt-[calc(var(--m-safe-top,12px)+58px)]">
+      <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-[calc(var(--bottom-nav-h,84px)+22px)] pt-[calc(var(--m-safe-top,12px)+58px)]">
         {toursEnabled && (
           <MPlacesToursModeSwitch active={toursMode} onChange={setToursMode} />
         )}
@@ -235,13 +229,13 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
             type="button"
             onClick={() => setCatOpen(v => !v)}
             aria-expanded={catOpen}
-            aria-label={t('places.allCategories')}
+            aria-label={t('places.filters')}
             className="relative flex w-[42px] flex-none items-center justify-center rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] text-m-muted"
           >
             <SlidersHorizontal size={15} strokeWidth={2} />
-            {categoryFilters.size > 0 && (
+            {panelFilterCount > 0 && (
               <span className="absolute -right-[3px] -top-[3px] box-border flex h-4 min-w-[16px] items-center justify-center rounded-full bg-m-act px-1 font-geist text-[0.5625rem] font-bold text-m-actfg">
-                {categoryFilters.size}
+                {panelFilterCount}
               </span>
             )}
           </button>
@@ -324,31 +318,13 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
           </div>
         )}
 
-        {/* ── Category filter panel ── */}
+        {/* ── Rating + category filter panel ── */}
         {catOpen && (
           <div className="mt-[6px] overflow-hidden rounded-2xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-glass)]">
-            {categories.map(c => {
-              const CatIcon = getCategoryIcon(c.icon)
-              return (
-                <CategoryFilterRow
-                  key={c.id}
-                  checked={categoryFilters.has(String(c.id))}
-                  onToggle={() => toggleCategory(String(c.id))}
-                  label={c.name}
-                >
-                  <CatIcon size={14} strokeWidth={2} className="flex-none" style={{ color: c.color || 'var(--m-muted)' }} />
-                </CategoryFilterRow>
-              )
-            })}
-            {hasUncategorized && (
-              <CategoryFilterRow
-                checked={categoryFilters.has('uncategorized')}
-                onToggle={() => toggleCategory('uncategorized')}
-                label={t('places.noCategory')}
-              >
-                <MapPin size={14} strokeWidth={2} className="flex-none text-m-faint" />
-              </CategoryFilterRow>
-            )}
+            <div className="border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px]">
+              <MRatingFloorChips onPick={() => setSelectedIds(new Set())} />
+            </div>
+            <MCategoryFilterList categories={categories} places={poolPlaces} />
           </div>
         )}
 
@@ -363,7 +339,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
 
         {/* ── Place list ── */}
         {filtered.length === 0 ? (
-          filter === 'unplanned' && !search && categoryFilters.size === 0 ? (
+          filter === 'unplanned' && !search && categoryFilters.size === 0 && ratingFilter === 'all' ? (
             <div className="flex min-h-[60vh] flex-col items-center justify-center px-8 py-10 text-center">
               <MDancingTrek scene="idle" mood="happy" className="mb-2" />
               <p className="font-geist text-[0.8125rem] font-medium text-m-muted">{t('places.allPlanned')}</p>
@@ -507,40 +483,6 @@ function BulkBtn({ label, onClick, disabled = false, children }: {
       }`}
     >
       {children}
-    </button>
-  )
-}
-
-/** 17px (panel) / 19px (row) square checkbox in the demo's act-fill style. */
-function SquareCheck({ checked, big = false }: { checked: boolean; big?: boolean }) {
-  return (
-    <span
-      className={`flex flex-none items-center justify-center border-[1.5px] ${
-        big ? 'h-[19px] w-[19px] rounded-[6px]' : 'h-[17px] w-[17px] rounded-[5px]'
-      } ${checked ? 'border-[color:var(--m-act)] bg-m-act text-m-actfg' : 'border-[color:var(--m-trackoff)] text-transparent'}`}
-    >
-      <Check size={big ? 12 : 11} strokeWidth={3} />
-    </span>
-  )
-}
-
-function CategoryFilterRow({ checked, onToggle, label, children }: {
-  checked: boolean
-  onToggle: () => void
-  label: string
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      role="checkbox"
-      aria-checked={checked}
-      className="flex w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left last:border-b-0"
-    >
-      <SquareCheck checked={checked} />
-      {children}
-      <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-medium text-m-ink">{label}</span>
     </button>
   )
 }

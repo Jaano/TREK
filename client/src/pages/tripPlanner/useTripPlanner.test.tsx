@@ -1,4 +1,4 @@
-// FE-TP-HOOK-001 to FE-TP-HOOK-175
+// FE-TP-HOOK-001 to FE-TP-HOOK-177
 import React from 'react'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { TranslationProvider } from '../../i18n/TranslationContext'
@@ -646,6 +646,47 @@ describe('useTripPlanner — map derivations', () => {
     expect(result.current.mapPlaces.map(p => p.id)).toEqual([2])
   })
 
+  it('FE-TP-HOOK-177: losing the last track moves the "Tracks" filter back to all', async () => {
+    // The phone map has no places list mounted, so this hook is what keeps the
+    // filter from pointing at a pool no control offers any more.
+    seedTrip({
+      places: [geo(1), geo(2, { route_geometry: '[[1,2]]' })],
+      placesFilter: 'tracks',
+    })
+
+    const { result } = await renderPlanner()
+    expect(useTripStore.getState().placesFilter).toBe('tracks')
+
+    act(() => { useTripStore.setState({ places: [geo(1)] }) })
+
+    await waitFor(() => expect(useTripStore.getState().placesFilter).toBe('all'))
+    expect(result.current.mapPlaces.map(p => p.id)).toEqual([1])
+  })
+
+  it('Tours enabled clears a stale Tracks filter even while track geometry remains', async () => {
+    const tour: TourListItem = {
+      place_id: 7, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
+      elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
+      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+    }
+    useAddonStore.setState({ addons: [{ id: 'tours', enabled: true } as never], loaded: true })
+    vi.mocked(addonsApi.enabled).mockResolvedValue({ addons: [{ id: 'tours' }] })
+    vi.spyOn(toursApi, 'list').mockResolvedValue({ tours: [tour] })
+    seedTrip({
+      places: [
+        buildPlace({ id: 7, lat: 1, lng: 2, tour_place_id: 7, route_geometry: '[[1,2],[3,4]]' }),
+        buildPlace({ id: 8, lat: 3, lng: 4, route_geometry: '[[5,6],[7,8]]' }),
+      ],
+      placesFilter: 'tracks',
+    })
+
+    const { result } = await renderPlanner()
+    await waitFor(() => expect(useTripStore.getState().placesFilter).toBe('all'))
+
+    expect(result.current.enabledAddons.tours).toBe(true)
+    expect(result.current.mapPlaces.map(place => place.id)).toEqual([7, 8])
+  })
+
   it('FE-TP-HOOK-027: the category filter honours the uncategorized bucket', async () => {
     seedTrip({
       places: [geo(1, { category_id: 3 }), geo(2, { category_id: null })],
@@ -658,6 +699,20 @@ describe('useTripPlanner — map derivations', () => {
 
     act(() => { useTripStore.setState({ placesCategoryFilter: new Set(['3']) }) })
     expect(result.current.mapPlaces.map(p => p.id)).toEqual([1])
+  })
+
+  it('FE-TP-HOOK-176: the rating floor the lists set also thins the markers', async () => {
+    seedTrip({
+      places: [geo(1, { rating_avg: 4.5 }), geo(2, { rating_avg: 3 }), geo(3, { rating_avg: null })],
+      placesRatingFilter: 4,
+    })
+
+    const { result } = await renderPlanner()
+
+    expect(result.current.mapPlaces.map(p => p.id)).toEqual([1])
+
+    act(() => { useTripStore.getState().setPlacesRatingFilter('all') })
+    expect(result.current.mapPlaces.map(p => p.id)).toEqual([1, 2, 3])
   })
 
   it('FE-TP-HOOK-028: the unplanned filter drops places that sit on a day', async () => {

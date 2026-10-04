@@ -18,6 +18,7 @@ import { placeToSaveTarget } from '../Collections/saveTarget'
 import type { Place, Category, Day, AssignmentsMap } from '../../types'
 import { getGoogleMapsUrlForPlace } from './placeGoogleMaps'
 import { placeMatchesSearch } from '../../utils/placeSearch'
+import { matchesCategoryFilter, matchesPlacesFilter } from '../../utils/placesFilter'
 import { safeHttpUrl } from '../../utils/safeUrl'
 import { plannedPlaceIds, plannedPlaceIdsForDay, type PlannedAccommodation } from '../../utils/plannedPlaces'
 import type { MenuEntry } from './planParts'
@@ -193,19 +194,20 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
   const categoryFilters = useTripStore((s) => s.placesCategoryFilter)
   const setCategoryFilters = useTripStore((s) => s.setPlacesCategoryFilter)
   const [selectMode, setSelectMode] = useState(false)
-  // Star sort (#1435): list-only toggle, so it stays local (the map keeps its order).
   // Minimum average stars, matching the collections filter (#1435): 'all', or a
   // floor of 1..5 that unrated places fall through. It replaced a sort toggle,
   // which put the best first but still left everything else on the list — no
   // help at all when the point is to see only what the group actually rated.
-  const [ratingFilter, setRatingFilter] = useState<number | 'all'>('all')
+  // In the trip store with the other filters, so the map markers follow it too.
+  const ratingFilter = useTripStore((s) => s.placesRatingFilter)
+  const setRatingFilter = useTripStore((s) => s.setPlacesRatingFilter)
   // The list's order (#2093), remembered on this device.
   const [placesSort, setPlacesSortState] = useState<PlacesSort>(readPlacesSort)
   const setPlacesSort = useCallback((sort: PlacesSort) => { setPlacesSortState(sort); writePlacesSort(sort) }, [])
   // Country, or country and region, from each place's resolved position (#2537). List-only,
   // like the rating floor.
   const [localityFilter, setLocalityFilter] = useState<LocalityFilter | null>(null)
-  const localityOf = useMemo(() => new Map(places.map(p => [p.id, placeLocality(p, language)])), [places, language])
+  const localityOf = useMemo(() => new Map(poolPlaces.map(p => [p.id, placeLocality(p, language)])), [poolPlaces, language])
   const localities = useMemo(() => localityGroups(poolPlaces.map(p => localityOf.get(p.id)!)), [poolPlaces, localityOf])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [pendingDeleteIds, setPendingDeleteIds] = useState<number[] | null>(null)
@@ -272,7 +274,6 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
     () => !props.toursEnabled && poolPlaces.some(p => p.route_geometry),
     [poolPlaces, props.toursEnabled],
   )
-  useEffect(() => { if (filter === 'tracks' && !hasTracks) setFilter('all') }, [hasTracks, filter])
 
   const plannedIds = useMemo(
     () => plannedPlaceIds({ assignments, accommodations, reservations }),
@@ -301,16 +302,8 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
 
   const filtered = useMemo(() => {
     const list = poolPlaces.filter(p => {
-      if (filter === 'unplanned' && plannedIds.has(p.id)) return false
-      if (filter === 'planned' && !plannedFilterIds.has(p.id)) return false
-      if (filter === 'tracks' && !p.route_geometry) return false
-      if (categoryFilters.size > 0) {
-        if (p.category_id == null) {
-          if (!categoryFilters.has('uncategorized')) return false
-        } else if (!categoryFilters.has(String(p.category_id))) return false
-      }
+      if (!matchesPlacesFilter(p, { filter, categoryFilters, ratingFilter }, { plannedIds, plannedFilterIds })) return false
       if (!placeMatchesSearch(p, search)) return false
-      if (ratingFilter !== 'all' && (p.rating_avg == null || p.rating_avg < ratingFilter)) return false
       if (localityFilter && !matchesLocality(localityOf.get(p.id), localityFilter)) return false
       return true
     })
@@ -325,14 +318,7 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
    * different questions.
    */
   const filterCounts = useMemo(() => {
-    const base = poolPlaces.filter(p => {
-      if (categoryFilters.size > 0) {
-        if (p.category_id == null) {
-          if (!categoryFilters.has('uncategorized')) return false
-        } else if (!categoryFilters.has(String(p.category_id))) return false
-      }
-      return placeMatchesSearch(p, search)
-    })
+    const base = poolPlaces.filter(p => matchesCategoryFilter(p, categoryFilters) && placeMatchesSearch(p, search))
     return {
       all: base.length,
       unplanned: base.filter(p => !plannedIds.has(p.id)).length,
