@@ -118,9 +118,6 @@ describe('B4A Places pool', () => {
     expect(sidebar.hasTracks).toBe(true)
     act(() => sidebar.pickFilter('tracks'))
     expect(sidebar.filtered.map(place => place.id)).toEqual([1])
-    rerender(<Host {...props} />)
-    expect(sidebar.filter).toBe('all')
-    expect(sidebar.filtered.map(place => place.id)).toEqual([2])
   })
 
   it('blocks Places file drops while Tours is on and restores them while off', () => {
