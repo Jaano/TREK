@@ -27,18 +27,18 @@ function literalKeys(source: string): string[] {
 }
 
 describe('Tours locale contracts', () => {
-  it('covers all 27 supported locales with 119 source keys', () => {
+  it('covers all 27 supported locales with 118 source keys', () => {
     expect(Object.keys(domains)).toHaveLength(27);
     expect(Object.keys(domains).sort()).toEqual(SUPPORTED_LANGUAGE_CODES.map((code) => `./${code}/tours.ts`).sort());
-    expect(Object.keys(english)).toHaveLength(119);
+    expect(Object.keys(english)).toHaveLength(118);
   });
 
   for (const [path, { default: strings }] of Object.entries(domains)) {
     it(`${path} imports, preserves placeholders and registers every key exactly once`, () => {
       const domainSource = readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
       const domainKeys = literalKeys(domainSource);
-      expect(domainKeys).toHaveLength(119);
-      expect(new Set(domainKeys).size).toBe(119);
+      expect(domainKeys).toHaveLength(118);
+      expect(new Set(domainKeys).size).toBe(118);
       expect(Object.keys(strings).sort()).toEqual(Object.keys(english).sort());
       expect(domainSource).not.toMatch(/export\s*\{\s*default\s*\}\s*from/);
       const indexPath = path.replace('/tours.ts', '/index.ts');
