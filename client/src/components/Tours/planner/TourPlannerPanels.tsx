@@ -479,34 +479,35 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
           </div>
         )}
 
-        <TourSection label={t('tours.mode.tours')}>
-          {loading && tours.length === 0 ? (
-            <p className="m-0 py-6 text-center text-content-faint" style={fs(12, 'body')}>{t('common.loading')}</p>
-          ) : tours.length === 0 ? (
-            <EmptyState scene="tours" size={80} surface="var(--bg-secondary)" title={t('tours.empty.title')}
-              className="!py-6"
-              action={<p className="m-0 max-w-[240px] text-content-faint" style={fs(12, 'body')}>{t('tours.empty.body')}</p>} />
-          ) : (
-            <ul role="listbox" aria-label={t('tours.planner.tripTours')} className="-mx-1 m-0 list-none p-0">
-              {tours.map(tour => (
-                <TourListRow
-                  key={tour.place_id}
-                  tour={tour}
-                  disabled={isSaving}
-                  selected={(planner.mode.type === 'edit-saved' || planner.mode.type === 'view-gpx') && planner.mode.placeId === tour.place_id}
-                  onSelect={requestOpenTour}
-                  action={canAssign && days.length > 0 ? (
-                    <TourDayMenu
-                      days={days}
-                      label={`${t('tours.addToDay')}: ${tour.name}`}
-                      onPick={day => { if (canAssign) void onAssignToDay(tour.place_id, day.id) }}
-                    />
-                  ) : undefined}
-                />
-              ))}
-            </ul>
-          )}
-        </TourSection>
+        {!loading && tours.length === 0 ? (
+          <EmptyState scene="tours" size={116} fill surface="var(--bg-secondary)" title={t('tours.empty.title')} className="flex-1"
+            action={<p className="m-0 max-w-[260px] text-content-muted" style={fs(12, 'body')}>{t('tours.empty.body')}</p>} />
+        ) : (
+          <TourSection label={t('tours.mode.tours')}>
+            {tours.length === 0 ? (
+              <p className="m-0 py-6 text-center text-content-faint" style={fs(12, 'body')}>{t('common.loading')}</p>
+            ) : (
+              <ul role="listbox" aria-label={t('tours.planner.tripTours')} className="-mx-1 m-0 list-none p-0">
+                {tours.map(tour => (
+                  <TourListRow
+                    key={tour.place_id}
+                    tour={tour}
+                    disabled={isSaving}
+                    selected={(planner.mode.type === 'edit-saved' || planner.mode.type === 'view-gpx') && planner.mode.placeId === tour.place_id}
+                    onSelect={requestOpenTour}
+                    action={canAssign && days.length > 0 ? (
+                      <TourDayMenu
+                        days={days}
+                        label={`${t('tours.addToDay')}: ${tour.name}`}
+                        onPick={day => { if (canAssign) void onAssignToDay(tour.place_id, day.id) }}
+                      />
+                    ) : undefined}
+                  />
+                ))}
+              </ul>
+            )}
+          </TourSection>
+        )}
       </div>
 
       <ConfirmDialog

@@ -169,7 +169,7 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
       <div className="trek-stagger min-h-0 flex-1 overflow-y-auto px-2 pb-2 pt-1.5">
         {!loading && filtered.length === 0 ? (
           <EmptyState scene="tours" size={92} fill surface="var(--bg-secondary)" title={t('tours.empty.title')}
-            action={<p className="m-0 max-w-[240px] text-content-faint" style={fs(12, 'body')}>{t('tours.empty.body')}</p>} />
+            action={<p className="m-0 max-w-[260px] text-content-muted" style={fs(12, 'body')}>{t('tours.empty.body')}</p>} />
         ) : (
           <ul role="listbox" aria-label={t('tours.mode.tours')} className="m-0 list-none p-0">
             {filtered.map(tour => (
