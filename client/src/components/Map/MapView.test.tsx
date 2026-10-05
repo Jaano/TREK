@@ -441,6 +441,34 @@ describe('MapView', () => {
     expect(mapMock.fitBounds).toHaveBeenCalled()
   })
 
+  it('frames Tour focus once, ignores waypoint and route updates, then honors a new focus intent', () => {
+    const route: [number, number][][] = [[[48, 11], [48.2, 11.3]]]
+    const { rerender } = render(
+      <MapView places={[]} route={null} followSelection={false} focusKey={1} focusPoints={[]} />,
+    )
+    expect(mapMock.fitBounds).not.toHaveBeenCalled()
+
+    rerender(<MapView places={[]} route={route} followSelection={false} focusKey={1} focusPoints={[[48, 11], [48.2, 11.3]]} />)
+    expect(mapMock.fitBounds).toHaveBeenCalledOnce()
+    mapMock.fitBounds.mockClear()
+
+    rerender(
+      <MapView
+        places={[]}
+        route={[[[48, 11], [48.2, 11.3], [48.4, 11.6]]]}
+        followSelection={false}
+        focusKey={1}
+        focusPoints={[[48, 11], [48.2, 11.3], [48.4, 11.6]]}
+      />,
+    )
+    expect(mapMock.fitBounds).not.toHaveBeenCalled()
+
+    rerender(
+      <MapView places={[]} followSelection={false} focusKey={2} focusPoints={[[48, 11], [48.5, 11.8]]} />,
+    )
+    expect(mapMock.fitBounds).toHaveBeenCalledOnce()
+  })
+
   it('keeps selection fit and the pending route-arrival refit for semantic changes', () => {
     const selectedPlace = buildMapPlace({ id: 901, lat: 48, lng: 11 })
     const route: [number, number][][] = [[[48, 11], [48.2, 11.3]]]

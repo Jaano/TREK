@@ -101,6 +101,6 @@ export function useTripPlannerPage() {
     permissions: { canPlaceEdit, canDayEdit },
     tourPlanner,
     tourDetails: { openerRef: tourDetailOpenerRef, onSelectTour },
-    tourMap: { route, focusPoints, captureViewport },
+    tourMap: { route, focusPoints, focusKey: tourPlanner.mapFocusKey, captureViewport },
   }
 }

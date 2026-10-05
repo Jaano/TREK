@@ -216,6 +216,8 @@ interface Props {
    * needs that leg on screen, which is neither the day nor the trip.
    */
   focusPoints?: [number, number][]
+  /** Changes only when the caller intentionally wants a new initial frame. */
+  focusKey?: number
   /**
    * What the caller's own chrome covers while `focusPoints` is framed, in pixels per edge.
    *
@@ -713,6 +715,7 @@ export function MapViewGL({
   zoom = DEFAULT_MAP_ZOOM,
   fitKey = 0,
   focusPoints,
+  focusKey,
   fitPadding,
   clusterLoosely = false,
   hazards,
@@ -2388,12 +2391,20 @@ export function MapViewGL({
   // The caller's padding as a value, so a parent that builds the object inline on every
   // render does not move the camera each time it renders.
   const fitPaddingKey = fitPadding ? [fitPadding.top, fitPadding.right, fitPadding.bottom, fitPadding.left].join(' ') : ''
+  const didInitialFocusRef = useRef(false)
+  const prevFocusKeyRef = useRef(focusKey)
 
   // Frame whatever was handed over. Nothing happens when it empties, so closing the
   // picker leaves the map where the user left it rather than snapping back.
   useEffect(() => {
     const map = mapRef.current
     if (!map || !focusPoints?.length) return
+    if (focusKey !== undefined) {
+      const shouldFit = !didInitialFocusRef.current || focusKey !== prevFocusKeyRef.current
+      prevFocusKeyRef.current = focusKey
+      if (!shouldFit) return
+      didInitialFocusRef.current = true
+    }
     const bounds = new gl.LngLatBounds()
     focusPoints.forEach(([lat, lng]) => bounds.extend([lng, lat]))
     // A day fit still waiting on its route must not overwrite this a moment later.
@@ -2406,7 +2417,7 @@ export function MapViewGL({
         duration: 400,
       })
     } catch { /* noop */ }
-  }, [focusPoints, fitPaddingKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [focusPoints, focusKey, fitPaddingKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // flyTo selected place
   useEffect(() => {

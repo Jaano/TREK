@@ -930,6 +930,61 @@ describe('MapViewGL', () => {
     expect(glMap.easeTo).not.toHaveBeenCalled()
   })
 
+  it('frames Tour focus once, ignores waypoint and route updates, then honors a new focus intent', async () => {
+    loadOnAttach()
+    const { rerender } = render(
+      <MapViewGL
+        places={[]}
+        route={null}
+        followSelection={false}
+        focusKey={1}
+        focusPoints={[]}
+        glProvider="maplibre-gl"
+      />,
+    )
+    await act(async () => {})
+    expect(glMap.fitBounds).not.toHaveBeenCalled()
+
+    rerender(
+      <MapViewGL
+        places={[]}
+        route={[[[48, 11], [48.2, 11.3]]]}
+        followSelection={false}
+        focusKey={1}
+        focusPoints={[[48, 11], [48.2, 11.3]]}
+        glProvider="maplibre-gl"
+      />,
+    )
+    await act(async () => {})
+    expect(glMap.fitBounds).toHaveBeenCalledOnce()
+    glMap.fitBounds.mockClear()
+
+    rerender(
+      <MapViewGL
+        places={[]}
+        route={[[[48, 11], [48.2, 11.3], [48.4, 11.6]]]}
+        followSelection={false}
+        focusKey={1}
+        focusPoints={[[48, 11], [48.2, 11.3], [48.4, 11.6]]}
+        glProvider="maplibre-gl"
+      />,
+    )
+    await act(async () => {})
+    expect(glMap.fitBounds).not.toHaveBeenCalled()
+
+    rerender(
+      <MapViewGL
+        places={[]}
+        followSelection={false}
+        focusKey={2}
+        focusPoints={[[48, 11], [48.5, 11.8]]}
+        glProvider="maplibre-gl"
+      />,
+    )
+    await act(async () => {})
+    expect(glMap.fitBounds).toHaveBeenCalledOnce()
+  })
+
   it('keeps selection fit and the pending route-arrival refit for semantic changes', async () => {
     loadOnAttach()
     const selectedPlace = buildPlace({ id: 902, lat: 48, lng: 11 })

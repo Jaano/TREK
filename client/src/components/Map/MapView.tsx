@@ -448,6 +448,8 @@ interface BoundsControllerProps {
    * needs that leg on screen, which is neither the day nor the trip.
    */
   focusPoints?: [number, number][]
+  /** Changes only when the caller intentionally wants a new initial frame. */
+  focusKey?: number
   /** False while the map is locked (#2010): an arriving route no longer re-fits it. */
   follow?: boolean
   /**
@@ -470,11 +472,13 @@ function leafletPadding(box: ViewportPadding): L.FitBoundsOptions {
   }
 }
 
-function BoundsController({ places, routeCoords, fitKey, paddingOpts, framedOnMount = false, focusPoints, fitPadding, follow = true }: BoundsControllerProps) {
+function BoundsController({ places, routeCoords, fitKey, paddingOpts, framedOnMount = false, focusPoints, focusKey, fitPadding, follow = true }: BoundsControllerProps) {
   const map = useMap()
   const prevFitKey = useRef(-1)
   const awaitingRoute = useRef(false)
   const fitRan = useRef(false)
+  const didInitialFocus = useRef(false)
+  const prevFocusKey = useRef(focusKey)
 
   const fitTo = useCallback((coords: [number, number][], padding: L.FitBoundsOptions = paddingOpts) => {
     if (coords.length === 0) return
@@ -537,10 +541,16 @@ function BoundsController({ places, routeCoords, fitKey, paddingOpts, framedOnMo
   // picker leaves the map where the user left it rather than snapping back.
   useEffect(() => {
     if (!focusPoints?.length) return
+    if (focusKey !== undefined) {
+      const shouldFit = !didInitialFocus.current || focusKey !== prevFocusKey.current
+      prevFocusKey.current = focusKey
+      if (!shouldFit) return
+      didInitialFocus.current = true
+    }
     // A day fit that has not run yet must not overwrite this a moment later.
     awaitingRoute.current = false
     fitTo(focusPoints, fitPadding ? leafletPadding(fitPadding) : paddingOpts)
-  }, [focusPoints, fitPaddingKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [focusPoints, focusKey, fitPaddingKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return null
 }
@@ -786,6 +796,7 @@ export const MapView = memo(function MapView({
   // the shape a caller without one gets.
   tileUrl = OFM_POSITRON,
   fitKey = 0,
+  focusKey,
   dayOrderMap = {},
   leftWidth = 0,
   rightWidth = 0,
@@ -1249,7 +1260,7 @@ export const MapView = memo(function MapView({
 
       <MapController center={center} zoom={zoom} />
       {hasViewBaseLayer && <MapCameraSnapshot onChange={saveCameraSnapshot} />}
-      <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} routeCoords={dayPlaces.length > 0 ? routeCoords : []} fitKey={fitKey} paddingOpts={paddingOpts} framedOnMount={initialView.framed} focusPoints={focusPoints} fitPadding={fitPadding} follow={followSelection} />
+      <BoundsController places={dayPlaces.length > 0 ? dayPlaces : places} routeCoords={dayPlaces.length > 0 ? routeCoords : []} fitKey={fitKey} paddingOpts={paddingOpts} framedOnMount={initialView.framed} focusPoints={focusPoints} focusKey={focusKey} fitPadding={fitPadding} follow={followSelection} />
       <SelectionController follow={followSelection} places={places} selectedPlaceId={selectedPlaceId} dayPlaces={dayPlaces} selectedPlace={selectedPlace} paddingOpts={paddingOpts} />
       <MapClickHandler onClick={onMapClick} />
       <MapContextMenuHandler onContextMenu={onMapContextMenu} />

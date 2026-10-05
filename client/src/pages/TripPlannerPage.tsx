@@ -1082,6 +1082,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
               tripId={tripId}
               places={[]}
               route={tourMap.route}
+              followSelection={false}
               onMapClick={canPlaceEdit && !tourPlanner.isSaving && (tourPlanner.mode.type === 'new-draft' || tourPlanner.mode.type === 'edit-saved')
                 ? ({ latlng }: { latlng: { lat: number; lng: number } }) => tourPlanner.addWaypoint(latlng.lat, latlng.lng)
                 : undefined}
@@ -1089,6 +1090,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
               leftWidth={leftPanelPx}
               rightWidth={rightPanelPx}
               focusPoints={tourMap.focusPoints}
+              focusKey={tourMap.focusKey}
               plannerWaypoints={tourPlanner.mode.type === 'new-draft' || tourPlanner.mode.type === 'edit-saved' ? tourPlanner.waypoints : []}
               selectedPlannerWaypointId={tourPlanner.mode.type === 'new-draft' || tourPlanner.mode.type === 'edit-saved' ? tourPlanner.selectedWaypointId : null}
               onPlannerWaypointClick={tourPlanner.setSelectedWaypointId}

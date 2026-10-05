@@ -136,6 +136,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
   const [elevationProfileExpanded, setElevationProfileExpanded] = useState(true)
   const [routeProfileFocus, setRouteProfileFocus] = useState<RouteProfileFocus | null>(null)
   const [newDraftGeneration, setNewDraftGeneration] = useState(0)
+  const [mapFocusKey, setMapFocusKey] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
   const generationRef = useRef(0)
   const draftRevisionRef = useRef(0)
@@ -334,6 +335,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
     setNewTourConfirmationOpen(false)
     setElevationProfileExpanded(true)
     setNewDraftGeneration(generation => generation + 1)
+    setMapFocusKey(key => key + 1)
   }, [invalidateDetailRequest, interruptRouting, storageKey])
 
   const startNewTour = useCallback((confirmed = false) => {
@@ -429,6 +431,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
       setDraftRestored(false)
       setEditingPlaceId(result.tour.place_id)
       editingPlaceIdRef.current = result.tour.place_id
+      setMapFocusKey(key => key + 1)
       setSaveOutcome(null)
       setReadOnlyGpxTour(null)
       return true
@@ -613,7 +616,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
     mapBaseLayer, setMapBaseLayer,
     mode, readOnlyGpxTour, readOnlyGpxAnalysis, viewGpxTour, closeGpxTour,
     startNewTour, newTourConfirmationOpen, cancelNewTour,
-    elevationProfileExpanded, toggleElevationProfile, newDraftGeneration, draftRestored,
+    elevationProfileExpanded, toggleElevationProfile, newDraftGeneration, draftRestored, mapFocusKey,
     editingPlaceId, openingTourId, openTour,
     saveOutcome, hasUnsavedChanges, canSave, save, discard, returnToNeutral,
   }

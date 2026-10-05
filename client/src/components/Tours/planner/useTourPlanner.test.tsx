@@ -81,6 +81,36 @@ describe('useTourPlanner', () => {
     expect(result.current.waypoints).toHaveLength(3)
   })
 
+  it('changes the map focus intent only for explicit Tour context changes', async () => {
+    detailTour.mockResolvedValue({
+      tour: savedTour,
+      waypoints: [
+        { lat: 48, lng: 11, role: 'start', sequence: 0 },
+        { lat: 48.01, lng: 11.02, role: 'end', sequence: 1 },
+      ],
+    })
+    const { result } = renderHook(() => useTourPlanner({ tripId: 8 }))
+    const initialFocusKey = result.current.mapFocusKey
+
+    act(() => {
+      result.current.addWaypoint(48, 11)
+      result.current.addWaypoint(48.01, 11.02)
+    })
+    await act(async () => { await vi.advanceTimersByTimeAsync(450) })
+    expect(result.current.mapFocusKey).toBe(initialFocusKey)
+
+    act(() => result.current.retry())
+    expect(result.current.mapFocusKey).toBe(initialFocusKey)
+
+    await act(async () => { expect(await result.current.openTour(savedTour)).toBe(true) })
+    expect(result.current.mapFocusKey).toBe(initialFocusKey + 1)
+    act(() => result.current.addWaypoint(48.02, 11.03))
+    expect(result.current.mapFocusKey).toBe(initialFocusKey + 1)
+
+    act(() => result.current.viewGpxTour({ ...savedTour, has_waypoints: false }, '[[48,11],[48.01,11.02]]'))
+    expect(result.current.mapFocusKey).toBe(initialFocusKey + 2)
+  })
+
   it('TOUR-PLANNER-002: restores a trip-scoped local draft without changing stable ids', () => {
     localStorage.setItem('tour-draft-8', JSON.stringify({
       version: 1,
