@@ -55,7 +55,7 @@ describe('ToursSidebar', () => {
     render(<ToursSidebar tripId={1} days={[]} tours={[tour]} selectedPlaceId={42} onAssignToDay={vi.fn()} onSelectTour={vi.fn()} />)
     const row = screen.getByRole('option', { name: /Selected ridge walk/i })
     expect(row).toHaveAttribute('aria-selected', 'true')
-    expect(row).toHaveStyle({ background: 'var(--border-faint)' })
+    expect(row).toHaveClass('bg-surface-selected')
   })
 
   it('selects the tour from keyboard activation', () => {
@@ -69,7 +69,7 @@ describe('ToursSidebar', () => {
   it.each([
     ['en', 'A deliberately long English hiking tour name that should wrap without pushing its metrics aside'],
     ['de', 'Eine außergewöhnlich lange deutsche Wanderung mit ausführlicher Bezeichnung für schmale Seitenleisten'],
-  ])('keeps %s title, badges, atomic metrics and full-width action in separate rows', (language, name) => {
+  ])('keeps %s title, fact pills and the day action in one place-style row', (language, name) => {
     seedStore(useSettingsStore, { settings: { language, distance_unit: 'metric' } })
     const onAssignToDay = vi.fn()
     const { container } = render(<ToursSidebar
@@ -85,20 +85,19 @@ describe('ToursSidebar', () => {
 
     const row = screen.getByRole('option', { name: new RegExp(name) })
     expect(row).toHaveAttribute('aria-selected', 'true')
-    expect(row.querySelector('span[title]')).toHaveAttribute('title', name)
+    expect(row).toHaveTextContent(name)
     const metrics = row.querySelector('[data-testid="tour-metrics"]')!
     expect(metrics).toHaveTextContent('1.9 km')
     expect(metrics).toHaveTextContent('13 m')
     expect(metrics).toHaveTextContent('11 m')
-    for (const metric of metrics.children) expect(metric).toHaveClass('whitespace-nowrap')
-    expect(metrics.children[0].getAttribute('aria-label')).toContain('1.9 km')
-    expect(metrics.children[1].getAttribute('aria-label')).toContain('13 m')
-    expect(metrics.children[2].getAttribute('aria-label')).toContain('11 m')
+    const labels = [...metrics.querySelectorAll('[aria-label]')].map(element => element.getAttribute('aria-label'))
+    expect(labels[0]).toContain('1.9 km')
+    expect(labels[1]).toContain('13 m')
+    expect(labels[2]).toContain('11 m')
     expect(screen.getByText('TREK')).toBeInTheDocument()
     expect(screen.getByLabelText(/Maximum trail difficulty|Maximale Wanderschwierigkeit|T2/)).toBeInTheDocument()
     const actionRow = row.querySelector('[data-testid="tour-action-row"]')!
-    expect(actionRow).toHaveClass('w-full')
-    expect(actionRow.querySelector('button')).toHaveClass('w-full')
+    expect(actionRow.querySelector('button')).toHaveAttribute('aria-haspopup', 'menu')
     expect(container.querySelector('[data-testid="tour-metrics"]')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /Add to day|Zum Tag hinzufügen/ }))
@@ -130,7 +129,8 @@ describe('ToursSidebar', () => {
     expect(onToursChanged).not.toHaveBeenCalled()
   })
 
-  it('keeps the day picker open and does not refresh when assignment fails', async () => {
+  it('neither refreshes nor reports success when assignment fails', async () => {
+    toast.success.mockClear()
     const onToursChanged = vi.fn()
     render(<ToursSidebar
       canAssign={true}
@@ -145,7 +145,8 @@ describe('ToursSidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: /Add to day|Zum Tag hinzufügen/ }))
     fireEvent.click(screen.getByRole('button', { name: /Day one/ }))
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Day one/ })).toBeInTheDocument())
+    await act(async () => {})
+    expect(toast.success).not.toHaveBeenCalled()
     expect(onToursChanged).not.toHaveBeenCalled()
   })
 

@@ -118,12 +118,11 @@ describe('Tours English and German copy', () => {
   it('German ADD row and save outcome have localized badges, labels and day picker', async () => {
     seedStore(useSettingsStore, { settings: { language: 'de' } })
     const { rerender } = render(<TourListRow tour={tour} onSelect={() => {}} />)
-    await waitFor(() => expect(screen.getByTitle(toursText(de, 'tours.planner.difficulty.t2'))).toBeInTheDocument())
-    expect(screen.getByTitle(toursText(de, 'tours.planner.difficulty.t2'))).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText(toursText(de, 'tours.planner.difficulty.t2'))).toBeInTheDocument())
     rerender(<TourPlannerToursRail planner={planner({ saveOutcome: tour, mode: { type: 'edit-saved', placeId: 42 } })} tours={[tour]} days={[{ id: 7, title: 'Gipfeltag', date: '2026-05-15' } as never]} loading={false} onAssignToDay={vi.fn()} onViewGpxTour={vi.fn()} />)
     expect(screen.getByText(toursText(de, 'tours.planner.saved'))).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: toursText(de, 'tours.planner.assignToDay') }))
-    expect(screen.getByLabelText(toursText(de, 'tours.addToDay.pickDay'))).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Tag 1.*Gipfeltag/ })).toBeInTheDocument()
     assertNoRawToursKeys()
   })
 

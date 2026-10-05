@@ -107,6 +107,7 @@ describe('Tours permissions without database setup', () => {
     expect(Boolean(screen.queryByRole('button', { name: 'common.delete' }))).toBe(canEdit)
     expect(Boolean(screen.queryByRole('button', { name: 'inspector.addToDay' }))).toBe(canAssign)
     if (canEdit) {
+      fireEvent.click(screen.getByRole('button', { name: 'inspector.trackColorAuto' }))
       fireEvent.click(screen.getByRole('button', { name: 'color' }))
       expect(update).toHaveBeenCalledWith(42, { route_color: '#ff0000' })
       fireEvent.click(screen.getByRole('button', { name: 'common.edit' }))
@@ -145,9 +146,12 @@ describe('Tours permissions without database setup', () => {
     fireEvent.click(save)
     expect(planner.save).toHaveBeenCalledTimes(canEdit ? 1 : 0)
     expect((screen.getByRole('button', { name: 'tours.planner.assignToDay' }) as HTMLButtonElement).disabled).toBe(!canAssign)
-    const picker = screen.queryByRole('combobox', { name: 'tours.addToDay: Ridge' })
+    const picker = screen.queryByRole('button', { name: 'tours.addToDay: Ridge' })
     expect(Boolean(picker)).toBe(canAssign)
-    if (picker) fireEvent.change(picker, { target: { value: '3' } })
+    if (picker) {
+      fireEvent.click(picker)
+      fireEvent.click(screen.getByRole('button', { name: /Summit/ }))
+    }
     expect(assign).toHaveBeenCalledTimes(canAssign ? 1 : 0)
     fireEvent.click(screen.getByRole('option', { name: /Ridge/ }))
     expect(planner.openTour).toHaveBeenCalledWith(tour)

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Check, ChevronDown, FileDown, Mountain } from 'lucide-react'
+import { Check, ChevronDown, FileDown } from 'lucide-react'
 import type { TourListItem } from '@trek/shared'
 import type { Day } from '../../types'
 import { toursApi } from '../../api/client'
@@ -10,6 +10,8 @@ import TourListRow from './TourListRow'
 import { useTourPermissions, type TourPermissionProps } from './useTourPermissions'
 import { NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { Tooltip } from '../shared/Tooltip'
+import EmptyState from '../shared/EmptyState'
+import { TourDayMenu } from './tourParts'
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 
@@ -27,10 +29,6 @@ interface ToursSidebarProps extends TourPermissionProps {
   onSelectTour?: (tour: TourListItem | null, opener?: HTMLElement) => void
 }
 
-function dayLabel(day: Day, index: number, t: (key: string, params?: Record<string, unknown>) => string): string {
-  if (day.title) return day.title
-  return t('dayplan.dayN', { n: index + 1 })
-}
 
 /**
  * Tours mode of the right add-panel: a selection list of existing tours
@@ -48,7 +46,6 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
   const loadTrip = useTripStore(s => s.loadTrip)
   const [filter, setFilter] = useState<'all' | 'unplanned' | 'planned'>('all')
   const [importing, setImporting] = useState(false)
-  const [pickerOpenFor, setPickerOpenFor] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
   const filterButtonRef = useRef<HTMLButtonElement>(null)
@@ -90,7 +87,6 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
     if (!canAssign) return
     const assigned = await onAssignToDay(tour.place_id, day.id)
     if (assigned === false) return
-    setPickerOpenFor(null)
     toast.success(t('tours.addedToDay', { n: index + 1 }))
   }
 
@@ -170,53 +166,21 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 16px 16px' }}>
+      <div className="trek-stagger min-h-0 flex-1 overflow-y-auto px-2 pb-2 pt-1.5">
         {!loading && filtered.length === 0 ? (
-          <div className="rounded-xl border border-edge bg-surface-secondary p-6 text-center">
-            <Mountain className="mx-auto mb-2 h-6 w-6 text-content-faint" strokeWidth={1.6} />
-            <p className="font-medium text-content">{t('tours.empty.title')}</p>
-            <p className="mt-1 text-sm text-content-secondary">{t('tours.empty.body')}</p>
-          </div>
+          <EmptyState scene="tours" size={92} fill surface="var(--bg-secondary)" title={t('tours.empty.title')}
+            action={<p className="m-0 max-w-[240px] text-content-faint" style={fs(12, 'body')}>{t('tours.empty.body')}</p>} />
         ) : (
-          <ul className="space-y-2">
-            {filtered.map((tour) => {
-              const isSelected = tour.place_id === selectedPlaceId
-              return (
+          <ul role="listbox" aria-label={t('tours.mode.tours')} className="m-0 list-none p-0">
+            {filtered.map(tour => (
               <TourListRow
                 key={tour.place_id}
                 tour={tour}
-                selected={isSelected}
+                selected={tour.place_id === selectedPlaceId}
                 onSelect={(selectedTour, opener) => onSelectTour?.(selectedTour, opener)}
-                action={(
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); if (canAssign) setPickerOpenFor(v => v === tour.place_id ? null : tour.place_id) }}
-                    disabled={!canAssign || days.length === 0}
-                    className="inline-flex min-h-9 w-full items-center justify-center gap-1 rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-content disabled:opacity-50"
-                  >
-                    {t('tours.addToDay')}
-                    <ChevronDown className="h-3 w-3" strokeWidth={2} style={{ transform: pickerOpenFor === tour.place_id ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
-                  </button>
-                )}
-              >
-                {canAssign && pickerOpenFor === tour.place_id && (
-                  <div className="mt-2 border-t border-edge-faint pt-2 flex flex-col gap-1" onClick={e => e.stopPropagation()}>
-                    {days.map((day, i) => (
-                      <button
-                        type="button"
-                        key={day.id}
-                        onClick={() => { void handleAssign(tour, day, i) }}
-                        className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-content hover:bg-surface-tertiary"
-                      >
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-tertiary text-[11px] font-semibold">{i + 1}</span>
-                        {dayLabel(day, i, t)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </TourListRow>
-              )
-            })}
+                action={<TourDayMenu days={days} label={t('tours.addToDay')} disabled={!canAssign} onPick={(day, index) => { void handleAssign(tour, day, index) }} />}
+              />
+            ))}
           </ul>
         )}
       </div>

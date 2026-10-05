@@ -146,23 +146,24 @@ describe('TourPlannerToursRail', () => {
     expect(controller.startNewTour).toHaveBeenCalledOnce()
     expect(controller.discard).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Assign to a day' }))
-    const dayOption = screen.getByLabelText('Pick a day').querySelector('option[value="7"]')
+    const dayOption = screen.getByRole('button', { name: /Summit day/ })
     expect(dayOption).toHaveTextContent(/Day 1/i)
     expect(dayOption).toHaveTextContent(/May 15/i)
     expect(dayOption).toHaveTextContent(/Fri/i)
-    fireEvent.change(screen.getByLabelText('Pick a day'), { target: { value: '7' } })
+    fireEvent.click(dayOption)
     await waitFor(() => expect(onAssignToDay).toHaveBeenCalledWith(42, 7))
   })
 
-  it('keeps the saved Tour day picker open when assignment fails', async () => {
+  it('keeps the saved outcome and its day action when assignment fails', async () => {
     const controller = planner({ saveOutcome: tour, editingPlaceId: tour.place_id })
     const onAssignToDay = vi.fn().mockResolvedValue(false)
     render(<TourPlannerToursRail planner={controller} tours={[tour]} {...railProps} onAssignToDay={onAssignToDay} />)
     fireEvent.click(screen.getByRole('button', { name: 'Assign to a day' }))
-    fireEvent.change(screen.getByLabelText('Pick a day'), { target: { value: '7' } })
+    fireEvent.click(screen.getByRole('button', { name: /Summit day/ }))
 
     await waitFor(() => expect(onAssignToDay).toHaveBeenCalledWith(42, 7))
-    expect(screen.getByLabelText('Pick a day')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Tour saved')
+    expect(screen.getByRole('button', { name: 'Assign to a day' })).toBeEnabled()
   })
 
   it('TOUR-PLANNER-RAIL-004: protects a dirty draft before selecting a GPX Tour', () => {
@@ -345,9 +346,8 @@ describe('TourPlannerRail', () => {
     expect(secondNumber).toHaveTextContent('2')
     expect(firstNumber).toHaveAttribute('data-waypoint-number', '1')
     expect(secondNumber).toHaveAttribute('data-waypoint-number', '2')
-    expect(firstNumber).toHaveClass('bg-surface-tertiary', 'text-content-secondary', 'font-geist', 'tabular-nums')
-    expect(firstNumber).not.toHaveClass('text-white')
-    expect(firstNumber).toHaveStyle({ display: 'flex', width: '28px', minWidth: '28px', height: '28px', lineHeight: '1' })
+    expect(firstNumber).toHaveClass('bg-accent', 'text-accent-text', 'font-geist', 'tabular-nums', 'h-7', 'w-7')
+    expect(secondNumber).toHaveClass('bg-surface-card', 'text-content', 'font-geist', 'tabular-nums', 'h-7', 'w-7')
   })
 
   it('TOUR-PLANNER-RAIL-007: acknowledges alpine routing once per planner session', () => {
@@ -409,7 +409,7 @@ describe('TourPlannerRail', () => {
     const { rerender } = render(<TourPlannerRail planner={controller} />)
 
     expect(screen.getByText('Plan a tour')).toBeInTheDocument()
-    expect(screen.getByText('Create a route with waypoints and save it to this trip.')).toBeInTheDocument()
+    expect(screen.getByText('Start a new tour and click the map to place its waypoints.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Plan new tour' }))
     expect(controller.startNewTour).toHaveBeenCalledOnce()
     expect(screen.queryByLabelText('Tour name')).not.toBeInTheDocument()

@@ -72,7 +72,7 @@ describe('CustomSelect consumer contracts', () => {
     expect(setDifficulty).toHaveBeenLastCalledWith(4)
   })
 
-  it('keeps the labelled native post-save day picker resolving numeric day ids', async () => {
+  it('keeps the post-save day menu resolving numeric day ids', async () => {
     const user = userEvent.setup()
     const onAssignToDay = vi.fn().mockResolvedValue(undefined)
     render(<TranslationProvider><TourPlannerToursRail
@@ -81,9 +81,7 @@ describe('CustomSelect consumer contracts', () => {
       tours={[tour]} days={days} loading={false} onAssignToDay={onAssignToDay} onViewGpxTour={vi.fn()}
     /></TranslationProvider>)
     await user.click(screen.getByRole('button', { name: 'Assign to a day' }))
-    const picker = screen.getByRole('combobox', { name: 'Pick a day' })
-    expect(picker).toHaveAttribute('id', 'tour-planner-assign-day')
-    await user.selectOptions(picker, '7')
+    await user.click(screen.getByRole('button', { name: /Day 1/ }))
     expect(onAssignToDay).toHaveBeenCalledWith(42, 7)
   })
 

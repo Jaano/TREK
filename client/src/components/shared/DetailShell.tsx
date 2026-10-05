@@ -1,5 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
+import { NEUTRAL_TINT } from './DialogShell'
+import { Tooltip } from './Tooltip'
 
 interface DetailShellProps {
   header: ReactNode
@@ -9,13 +11,17 @@ interface DetailShellProps {
   closeLabel: string
   leftWidth?: number
   rightWidth?: number
-  headerStyle?: CSSProperties
-  contentStyle?: CSSProperties
+  /** The head band's background; the neutral accent wash when left out. */
+  tint?: string
   closeButtonClassName?: string
   testId?: string
 }
 
-/** Shared map-detail surface: panel-aware positioning, chrome and scrolling. */
+/**
+ * The card a selected item opens over the map, in the place inspector's frame:
+ * centred between the planner panels, a tinted head band with the close button,
+ * a body that scrolls and a footer that stays in reach.
+ */
 export default function DetailShell({
   header,
   children,
@@ -24,8 +30,7 @@ export default function DetailShell({
   closeLabel,
   leftWidth = 0,
   rightWidth = 0,
-  headerStyle,
-  contentStyle,
+  tint = NEUTRAL_TINT,
   closeButtonClassName = '',
   testId,
 }: DetailShellProps) {
@@ -41,43 +46,23 @@ export default function DetailShell({
         fontFamily: 'var(--font-system)',
       }}
     >
-      <div
-        className="bg-surface-elevated text-content"
-        style={{
-          backdropFilter: 'blur(40px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-          borderRadius: 20,
-          boxShadow: '0 8px 40px rgba(0,0,0,0.14), 0 0 0 1px rgba(0,0,0,0.06)',
-          overflow: 'hidden',
-          maxHeight: '60vh',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-      >
-        <div className="border-b border-edge-faint" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '18px 16px 14px', flexShrink: 0, ...headerStyle }}>
+      <div className="flex max-h-[60vh] flex-col overflow-hidden rounded-[20px] border border-edge-faint bg-surface-elevated text-content shadow-popover backdrop-blur-[40px] backdrop-saturate-[1.8]">
+        <header className="flex flex-none items-start gap-3.5 border-b border-edge-faint px-4 pb-3 pt-3.5" style={{ background: tint }}>
           {header}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={closeLabel}
-            className={`bg-surface-hover ${closeButtonClassName}`}
-            style={{ width: 28, height: 28, borderRadius: '50%', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, alignSelf: 'flex-start', transition: 'background 0.15s' }}
-            onMouseEnter={event => { event.currentTarget.style.background = 'var(--bg-tertiary)' }}
-            onMouseLeave={event => { event.currentTarget.style.background = 'var(--bg-hover)' }}
-          >
-            <X size={14} strokeWidth={2} color="var(--text-secondary)" />
-          </button>
-        </div>
-        <div
-          data-testid={testId}
-          style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10, ...contentStyle }}
-        >
+          <Tooltip label={closeLabel}>
+            <button type="button" onClick={onClose} aria-label={closeLabel}
+              className={`grid h-8 w-8 flex-none place-items-center rounded-full bg-surface-card text-content-muted shadow-sm transition-colors hover:text-content ${closeButtonClassName}`}>
+              <X size={15} strokeWidth={2.2} />
+            </button>
+          </Tooltip>
+        </header>
+        <div data-testid={testId} className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto overscroll-contain px-4 py-3.5">
           {children}
         </div>
         {footer && (
-          <div className="border-t border-edge-faint" style={{ padding: '10px 16px', display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', flexShrink: 0 }}>
+          <footer className="flex flex-none flex-wrap items-center gap-2 border-t border-edge-faint px-4 py-2.5">
             {footer}
-          </div>
+          </footer>
         )}
       </div>
     </div>
