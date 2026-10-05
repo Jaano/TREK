@@ -471,6 +471,7 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
                 variant="button"
                 primary
                 days={days}
+                placeId={planner.saveOutcome.place_id}
                 label={t('tours.planner.assignToDay')}
                 disabled={!canAssign || assigning}
                 onPick={day => { void assignSavedTour(day.id) }}
@@ -498,6 +499,7 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
                     action={canAssign && days.length > 0 ? (
                       <TourDayMenu
                         days={days}
+                        placeId={tour.place_id}
                         label={`${t('tours.addToDay')}: ${tour.name}`}
                         onPick={day => { if (canAssign) void onAssignToDay(tour.place_id, day.id) }}
                       />

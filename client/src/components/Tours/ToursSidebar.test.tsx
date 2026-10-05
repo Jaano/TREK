@@ -129,6 +129,36 @@ describe('ToursSidebar', () => {
     expect(onToursChanged).not.toHaveBeenCalled()
   })
 
+  it('disables already-assigned days and refreshes availability when the picker is reopened', async () => {
+    const dayOne = { id: 7, trip_id: 1, day_number: 1, title: 'Day one', date: null } as never
+    const dayTwo = { id: 8, trip_id: 1, day_number: 2, title: 'Day two', date: null } as never
+    const dayThree = { id: 9, trip_id: 1, day_number: 3, title: 'Day three', date: null } as never
+    useTripStore.setState({ assignments: { '7': [{ id: 1, day_id: 7, place_id: tour.place_id }] } as never })
+    const onAssignToDay = vi.fn((placeId: number, dayId: number) => {
+      useTripStore.setState(state => ({
+        assignments: { ...state.assignments, [String(dayId)]: [{ id: 2, day_id: dayId, place_id: placeId }] } as never,
+      }))
+      return true
+    })
+    render(<ToursSidebar canAssign tripId={1} days={[dayOne, dayTwo, dayThree]} tours={[tour]} onAssignToDay={onAssignToDay} onSelectTour={vi.fn()} />)
+
+    const openPicker = () => fireEvent.click(screen.getByRole('button', { name: /Add to day|Zum Tag hinzufügen/ }))
+    openPicker()
+    expect(screen.getByRole('button', { name: /Day one/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Day two/ })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: /Day two/ }))
+    expect(onAssignToDay).toHaveBeenCalledTimes(1)
+    expect(onAssignToDay).toHaveBeenCalledWith(tour.place_id, 8)
+
+    openPicker()
+    expect(screen.getByRole('button', { name: /Day one/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Day two/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Day three/ })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: /Day three/ }))
+    expect(onAssignToDay).toHaveBeenCalledTimes(2)
+    expect(onAssignToDay).toHaveBeenLastCalledWith(tour.place_id, 9)
+  })
+
   it('neither refreshes nor reports success when assignment fails', async () => {
     toast.success.mockClear()
     const onToursChanged = vi.fn()

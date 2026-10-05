@@ -1567,6 +1567,37 @@ describe('useTripPlanner — place CRUD', () => {
 })
 
 describe('useTripPlanner — day plan CRUD', () => {
+  it('does not write a Tour assignment twice to one day, but allows another day and preserves Place writes', async () => {
+    const tour: TourListItem = {
+      place_id: 1, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
+      elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
+      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+    }
+    const tourPlace = buildPlace({ id: 1, name: 'Ridge walk', tour_place_id: 1 })
+    const ordinaryPlace = buildPlace({ id: 2, name: 'Ordinary place' })
+    useAddonStore.setState({ addons: [{ id: 'tours', enabled: true } as never], loaded: true })
+    vi.mocked(addonsApi.enabled).mockResolvedValue({ addons: [{ id: 'tours' }] })
+    vi.spyOn(toursApi, 'list').mockResolvedValue({ tours: [tour] })
+    seedTrip({
+      places: [tourPlace, ordinaryPlace],
+      assignments: { '7': [buildAssignment({ id: 70, day_id: 7, place: tourPlace })] },
+    })
+
+    const { result } = await renderPlanner()
+    await waitFor(() => expect(result.current.tours).toEqual([tour]))
+    actions.assignPlaceToDay.mockClear()
+
+    let repeated!: boolean
+    await act(async () => { repeated = await result.current.handleAssignToDay(tourPlace.id, 7) })
+    expect(repeated).toBe(false)
+    expect(actions.assignPlaceToDay).not.toHaveBeenCalled()
+
+    await act(async () => { await result.current.handleAssignToDay(tourPlace.id, 8) })
+    await act(async () => { await result.current.handleAssignToDay(ordinaryPlace.id, 7) })
+    expect(actions.assignPlaceToDay).toHaveBeenNthCalledWith(1, 42, 8, tourPlace.id, undefined)
+    expect(actions.assignPlaceToDay).toHaveBeenNthCalledWith(2, 42, 7, ordinaryPlace.id, undefined)
+  })
+
   it('refreshes Tours only after a successful Tour assignment write', async () => {
     const unplanned: TourListItem = {
       place_id: 1, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,

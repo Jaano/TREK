@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { chronoOrder, type RoadtripVia, type TrekWsPayload, type TrekWsTripEventName } from '@trek/shared';
 import { isEmptyReanchoring, reanchorByStopOrder, type AnchoredVia } from '@trek/shared/roadtrip';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -176,6 +176,15 @@ export class AssignmentsService {
    */
   createAssignment(dayId: string | number, placeId: unknown, notes?: string | null, opts: { accommodationId?: number; orderIndex?: number } = {}) {
     const result = this.dbs.transaction(() => {
+      const duplicateTourAssignment = this.dbs.get<{ id: number }>(
+        `SELECT da.id FROM day_assignments da
+         JOIN tours t ON t.place_id = da.place_id
+         WHERE da.day_id = ? AND da.place_id = ?
+         LIMIT 1`,
+        dayId, placeId,
+      );
+      if (duplicateTourAssignment) throw new ConflictException('Tour is already assigned to this day');
+
       const maxOrder = this.dbs.get<{ max: number | null }>('SELECT MAX(order_index) as max FROM day_assignments WHERE day_id = ?', dayId)!;
       const end = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
       // Somewhere in the middle when the caller says so, which means everything from

@@ -178,7 +178,7 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
                 tour={tour}
                 selected={tour.place_id === selectedPlaceId}
                 onSelect={(selectedTour, opener) => onSelectTour?.(selectedTour, opener)}
-                action={<TourDayMenu days={days} label={t('tours.addToDay')} disabled={!canAssign} onPick={(day, index) => { void handleAssign(tour, day, index) }} />}
+                action={<TourDayMenu days={days} placeId={tour.place_id} label={t('tours.addToDay')} disabled={!canAssign} onPick={(day, index) => { void handleAssign(tour, day, index) }} />}
               />
             ))}
           </ul>

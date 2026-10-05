@@ -204,6 +204,38 @@ describe('Assignments e2e (real auth guard + temp SQLite)', () => {
     expect(miss.body).toEqual({ error: 'Place not found' });
   });
 
+  it('prevents duplicate Tour/day assignments through concurrent REST requests', async () => {
+    const tourPlaceId = 20;
+    db.prepare('INSERT INTO places (id, trip_id, name) VALUES (?, 5, ?)').run(tourPlaceId, 'Ridge walk');
+    db.prepare('INSERT INTO tours (place_id) VALUES (?)').run(tourPlaceId);
+    try {
+      const createTourAssignment = () => request(server)
+        .post('/api/trips/5/days/3/assignments')
+        .set('Cookie', sessionCookie(1))
+        .send({ place_id: tourPlaceId });
+      const results = await Promise.all([createTourAssignment(), createTourAssignment()]);
+
+      expect(results.map(result => result.status).sort()).toEqual([201, 409]);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = 3 AND place_id = ?').get(tourPlaceId)).toEqual({ n: 1 });
+
+      const otherDay = await request(server).post('/api/trips/5/days/4/assignments')
+        .set('Cookie', sessionCookie(1)).send({ place_id: tourPlaceId });
+      expect(otherDay.status).toBe(201);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE place_id = ?').get(tourPlaceId)).toEqual({ n: 2 });
+
+      const firstOrdinary = await request(server).post('/api/trips/5/days/3/assignments')
+        .set('Cookie', sessionCookie(1)).send({ place_id: 2 });
+      const secondOrdinary = await request(server).post('/api/trips/5/days/3/assignments')
+        .set('Cookie', sessionCookie(1)).send({ place_id: 2 });
+      expect(firstOrdinary.status).toBe(201);
+      expect(secondOrdinary.status).toBe(201);
+    } finally {
+      db.prepare('DELETE FROM day_assignments WHERE place_id = ?').run(tourPlaceId);
+      db.prepare('DELETE FROM tours WHERE place_id = ?').run(tourPlaceId);
+      db.prepare('DELETE FROM places WHERE id = ?').run(tourPlaceId);
+    }
+  });
+
   it('200 delete assignment reconciles journey skeletons', async () => {
     reconcileTripSkeletons.mockClear();
     const id = seedAssignment();

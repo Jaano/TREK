@@ -10,6 +10,7 @@ import { formatDate } from '../../utils/formatters'
 import { ContextMenu, useContextMenu } from '../shared/ContextMenu'
 import { DialogButton, fs } from '../shared/DialogShell'
 import { Tooltip } from '../shared/Tooltip'
+import { useTripStore } from '../../store/tripStore'
 import { BOX, Eyebrow } from '../Planner/bookings/bookingParts'
 import { SoftPill } from '../Planner/planParts'
 import { hikeSourceBadgeLabel } from './tourPresentation'
@@ -73,8 +74,9 @@ function dayMenuLabel(day: Day, index: number, t: Translate, locale: string): st
  * Putting a tour on a day: a round "+" on a row, or a footer button with a
  * chevron, both opening the trip's days as a menu.
  */
-export function TourDayMenu({ days, onPick, disabled = false, label, variant = 'round', primary = false }: {
+export function TourDayMenu({ days, placeId, onPick, disabled = false, label, variant = 'round', primary = false }: {
   days: Day[]
+  placeId?: number
   onPick: (day: Day, index: number) => void
   disabled?: boolean
   label: string
@@ -83,9 +85,16 @@ export function TourDayMenu({ days, onPick, disabled = false, label, variant = '
 }) {
   const { t, locale } = useTranslation()
   const menu = useContextMenu()
-  const items = days.map((day, index) => ({ label: dayMenuLabel(day, index, t, locale), onClick: () => onPick(day, index) }))
+  const assignments = useTripStore(state => state.assignments ?? {})
+  const assigned = (dayId: number) => placeId != null && (assignments[String(dayId)] ?? []).some(assignment => assignment.place_id === placeId)
+  const items = days.map((day, index) => ({
+    label: dayMenuLabel(day, index, t, locale),
+    disabled: assigned(day.id),
+    onClick: () => onPick(day, index),
+  }))
+  const hasAvailableDay = items.some(item => !item.disabled)
   const open = (event: React.MouseEvent<HTMLButtonElement>) => {
-    if (disabled || items.length === 0) return
+    if (disabled || !hasAvailableDay) return
     if (menu.menu) { event.stopPropagation(); menu.close(); return }
     menu.open(event, items, true)
   }
@@ -93,13 +102,13 @@ export function TourDayMenu({ days, onPick, disabled = false, label, variant = '
     <>
       {variant === 'round' ? (
         <Tooltip label={label} disabled={!!menu.menu}>
-          <button type="button" onClick={open} disabled={disabled || items.length === 0} aria-label={label} aria-haspopup="menu" aria-expanded={!!menu.menu}
+          <button type="button" onClick={open} disabled={disabled || !hasAvailableDay} aria-label={label} aria-haspopup="menu" aria-expanded={!!menu.menu}
             className={`grid h-[26px] w-[26px] flex-none place-items-center rounded-full shadow-sm ring-1 transition-colors disabled:cursor-default disabled:opacity-40 ${menu.menu ? 'bg-accent text-accent-text ring-transparent' : 'bg-surface-card text-content-muted ring-edge-faint enabled:hover:bg-accent enabled:hover:text-accent-text enabled:hover:ring-transparent'}`}>
             <Plus size={13} strokeWidth={2.4} />
           </button>
         </Tooltip>
       ) : (
-        <DialogButton variant={primary ? 'primary' : 'secondary'} onClick={open} disabled={disabled || items.length === 0}
+        <DialogButton variant={primary ? 'primary' : 'secondary'} onClick={open} disabled={disabled || !hasAvailableDay}
           aria-haspopup="menu" aria-expanded={!!menu.menu} icon={<Plus size={14} strokeWidth={2} />}>
           {label}
           <ChevronDown size={13} strokeWidth={2.2} className={`transition-transform ${menu.menu ? 'rotate-180' : ''}`} />

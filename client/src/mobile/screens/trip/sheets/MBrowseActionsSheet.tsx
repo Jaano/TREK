@@ -31,6 +31,7 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
   const openSavePicker = useSaveToCollectionStore(s => s.open)
 
   const [daysOpen, setDaysOpen] = useState(false)
+  const pendingTourDayIds = useRef(new Set<string>())
   useEffect(() => { setDaysOpen(open && Boolean(payload.dayPicker)) }, [open, payload.dayPicker])
 
   // Hold the last place so the card content survives the exit animation.
@@ -57,9 +58,20 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
     openSavePicker(collectionTargetFromPlace(place))
   }
 
+  const tourAlreadyAssignedToDay = (dayId: number) => isTourPlace(place.id)
+    && (planner.assignments[String(dayId)] ?? []).some(assignment => assignment.place_id === place.id)
+
   const assignToDay = async (dayId: number) => {
-    const assigned = await planner.handleAssignToDay(place.id, dayId)
-    if (assigned !== false) shell.closeSheet()
+    const isTour = isTourPlace(place.id)
+    const pendingKey = `${place.id}:${dayId}`
+    if (isTour && (tourAlreadyAssignedToDay(dayId) || pendingTourDayIds.current.has(pendingKey))) return
+    if (isTour) pendingTourDayIds.current.add(pendingKey)
+    try {
+      const assigned = await planner.handleAssignToDay(place.id, dayId)
+      if (assigned !== false) shell.closeSheet()
+    } finally {
+      if (isTour) pendingTourDayIds.current.delete(pendingKey)
+    }
   }
 
   const deletePlace = () => {
@@ -112,8 +124,9 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
                   <button
                     key={d.id}
                     type="button"
+                    disabled={tourAlreadyAssignedToDay(d.id) || (isTourPlace(place.id) && pendingTourDayIds.current.has(`${place.id}:${d.id}`))}
                     onClick={() => { void assignToDay(d.id) }}
-                    className={`flex w-full items-center gap-2 px-3 py-[10px] text-left ${i > 0 ? 'border-t border-[color:var(--m-rowbr)]' : ''}`}
+                    className={`flex w-full items-center gap-2 px-3 py-[10px] text-left disabled:cursor-default disabled:opacity-40 ${i > 0 ? 'border-t border-[color:var(--m-rowbr)]' : ''}`}
                   >
                     <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold">
                       {/* A day_number of 0 is as unusable as a missing one — both take the row position. */}

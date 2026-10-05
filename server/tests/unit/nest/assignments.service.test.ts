@@ -10,6 +10,7 @@
  * logic is exercised faithfully.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { ConflictException } from '@nestjs/common';
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
 
@@ -97,6 +98,11 @@ function fixture() {
   const day = createDay(testDb, trip.id);
   const place = createPlace(testDb, trip.id, { name: 'Louvre' });
   return { user, trip, day, place };
+}
+
+function addTourFacet(placeId: number) {
+  testDb.prepare("INSERT OR IGNORE INTO tour_types (key, label_key, icon, color) VALUES ('hike', 'hike', 'Mountain', '#000000')").run();
+  testDb.prepare("INSERT INTO tours (place_id, tour_type) VALUES (?, 'hike')").run(placeId);
 }
 
 // ── verifyTripAccess / canEdit ────────────────────────────────────────────────
@@ -192,6 +198,40 @@ describe('createAssignment', () => {
     // created_at only, no user_id — so both read paths share one wire shape.
     expect(a!.place.tags).toEqual([{ id: tag.id, name: 'museum', color: '#10b981', created_at: (tag as { created_at?: string }).created_at }]);
     void trip;
+  });
+
+  it('ASG-SVC-031: rejects a duplicate Tour assignment on the same day but allows another day and ordinary Place duplicates', () => {
+    const { trip, day, place: tourPlace } = fixture();
+    const secondDay = createDay(testDb, trip.id);
+    const ordinaryPlace = createPlace(testDb, trip.id, { name: 'Ordinary place' });
+    addTourFacet(tourPlace.id);
+
+    const firstTourAssignment = svc.createAssignment(day.id, tourPlace.id);
+    expect(() => svc.createAssignment(day.id, tourPlace.id)).toThrow(ConflictException);
+    const otherDayTourAssignment = svc.createAssignment(secondDay.id, tourPlace.id);
+    expect(firstTourAssignment?.day_id).toBe(day.id);
+    expect(otherDayTourAssignment?.day_id).toBe(secondDay.id);
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE place_id = ?').get(tourPlace.id)).toEqual({ n: 2 });
+
+    svc.createAssignment(day.id, ordinaryPlace.id);
+    svc.createAssignment(day.id, ordinaryPlace.id);
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE place_id = ?').get(ordinaryPlace.id)).toEqual({ n: 2 });
+  });
+
+  it('ASG-SVC-032: near-concurrent Tour assignments serialize to one row and one conflict', async () => {
+    const { day, place } = fixture();
+    addTourFacet(place.id);
+
+    const results = await Promise.allSettled([
+      Promise.resolve().then(() => svc.createAssignment(day.id, place.id)),
+      Promise.resolve().then(() => svc.createAssignment(day.id, place.id)),
+    ]);
+
+    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictException);
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = ? AND place_id = ?').get(day.id, place.id)).toEqual({ n: 1 });
   });
 });
 

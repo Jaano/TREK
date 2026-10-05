@@ -2527,6 +2527,7 @@ export function useTripPlanner() {
   const handleAssignToDay = useCallback(async (placeId: number, dayId?: number, position?: number) => {
     const target = dayId || selectedDayId
     if (!target) { toast.error(t('trip.toast.selectDay')); return false }
+    if (isTourPlace(placeId) && (storedAssignments[String(target)] ?? []).some(assignment => assignment.place_id === placeId)) return false
     const place = places.find(p => p.id === placeId)
     // A place with a start of its own is drawn by it, so it is stored there too, the
     // way a stop moved over from another day is. Without one it goes where it was put.
