@@ -194,6 +194,7 @@ const emptyDataTransfer = { setData: vi.fn(), effectAllowed: '', getData: vi.fn(
 beforeEach(() => {
   resetAllStores()
   vi.clearAllMocks()
+  Element.prototype.scrollTo = vi.fn()
   mockPermissions.canEdit = true
   mockPermissions.denied.clear()
   // clearAllMocks keeps implementations, so tests that swap the router out would
@@ -1374,6 +1375,8 @@ describe('DayPlanSidebar', () => {
       render(<DayPlanSidebar {...makeDefaultProps({ days, onSelectDay })} />)
 
       await waitFor(() => expect(onSelectDay).toHaveBeenCalledWith(days[1].id, true))
+      await act(async () => { await new Promise<void>(resolve => requestAnimationFrame(() => resolve())) })
+      expect(Element.prototype.scrollTo).toHaveBeenCalled()
     })
 
     it('FE-PLANNER-DAYPLAN-196: a trip that is not running is left alone', async () => {
