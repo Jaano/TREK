@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { canAccessTrip, pluginsEnabled, tripDays } = vi.hoisted(() => ({
-  canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
+  canAccessTrip: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
   pluginsEnabled: vi.fn(() => true),
   tripDays: { value: [{ id: 10 }, { id: 11 }] as Array<{ id: number }> },
 }));
@@ -16,12 +16,12 @@ vi.mock('../../../src/db/database', () => ({
   db: { prepare: () => ({ all: () => tripDays.value }) },
   canAccessTrip,
 }));
-import { db as dbConn } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
 import { DayScheduleController } from '../../../src/nest/plugins/contributions/day-schedule.controller';
 import type { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
+import type { DaysRepository } from '../../../src/db/repositories/Days.repository';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const req = (id?: number) => ({ user: id === undefined ? undefined : { id } }) as any;
@@ -30,12 +30,14 @@ function controller(invoke: (id: string) => unknown, providers = ['p1']) {
     providersOf: vi.fn(() => providers),
     daySchedule: vi.fn(async (id: string) => invoke(id)),
   } as unknown as PluginHooks;
-  return { c: new DayScheduleController(runtime, new DatabaseService(dbConn)), runtime };
+  // CT1 (Plan 3j Task 5) — the day-id-set read is now DaysRepository.listIdsByTrip.
+  const days = { listIdsByTrip: vi.fn(async () => tripDays.value.map((d) => d.id)) } as unknown as DaysRepository;
+  return { c: new DayScheduleController(runtime, { findAccessible: canAccessTrip } as unknown as TripsRepository, days), runtime };
 }
 const item = (over: Record<string, unknown> = {}) => ({ id: 's1', dayId: 10, label: 'Charging', ...over });
 
 describe('DayScheduleController', () => {
-  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockReturnValue({ id: 1 } as never); });
+  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockResolvedValue({ id: 1 } as never); });
 
   it('gates: disabled / no user / non-member all return [] (no plugin calls on the first)', async () => {
     pluginsEnabled.mockReturnValue(false);
@@ -45,7 +47,7 @@ describe('DayScheduleController', () => {
     pluginsEnabled.mockReturnValue(true);
 
     expect((await controller(() => [item()]).c.get('1', req(undefined))).items).toEqual([]);
-    canAccessTrip.mockReturnValue(undefined as never);
+    canAccessTrip.mockResolvedValue(undefined as never);
     expect((await controller(() => [item()]).c.get('1', req(5))).items).toEqual([]);
   });
 

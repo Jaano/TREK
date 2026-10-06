@@ -70,11 +70,11 @@ export class DawarichMcp {
     access: { group: 'journey', mode: 'read' },
     when: dawarichAddonOn,
   })
-  listSuggestions(
+  async listSuggestions(
     { tripId, state, limit }: { tripId?: number; state?: 'new' | 'accepted' | 'dismissed'; limit?: number },
     ctx: McpContext,
   ) {
-    const all = this.suggestions.list(ctx.userId, { tripId, state });
+    const all = await this.suggestions.list(ctx.userId, { tripId, state });
     const cap = limit ?? DEFAULT_LIMIT;
     const page = all.suggestions.slice(0, cap);
     return ok({
@@ -104,11 +104,11 @@ export class DawarichMcp {
     access: { group: 'places', mode: 'write' },
     when: dawarichAddonOn,
   })
-  acceptAsPlace(
+  async acceptAsPlace(
     args: { suggestionId: number; tripId?: number; dayId?: number; name?: string; notes?: string; lat?: number; lng?: number },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
     const { suggestionId, ...rest } = args;
     return this.run(() => this.suggestions.accept(ctx.userId, suggestionId, { target: 'place', ...rest }));
   }
@@ -129,11 +129,11 @@ export class DawarichMcp {
     access: { group: 'journey', mode: 'write' },
     when: dawarichAddonOn,
   })
-  acceptAsJournalEntry(
+  async acceptAsJournalEntry(
     args: { suggestionId: number; journalId: number; name?: string; notes?: string; date?: string; time?: string },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
     const { suggestionId, ...rest } = args;
     return this.run(() => this.suggestions.accept(ctx.userId, suggestionId, { target: 'journal', ...rest }));
   }
@@ -151,11 +151,11 @@ export class DawarichMcp {
     access: { group: 'atlas', mode: 'write' },
     when: dawarichAddonOn,
   })
-  markBucketVisited(
+  async markBucketVisited(
     { suggestionId, bucketListItemId }: { suggestionId: number; bucketListItemId?: number },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
     return this.run(() =>
       this.suggestions.accept(ctx.userId, suggestionId, { target: 'bucket_list', bucketListItemId }),
     );
@@ -173,12 +173,12 @@ export class DawarichMcp {
     access: { group: 'journey', mode: 'write' },
     when: dawarichAddonOn,
   })
-  dismiss(
+  async dismiss(
     { suggestionId, state }: { suggestionId: number; state?: 'dismissed' | 'new' },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    const updated = this.suggestions.setState(ctx.userId, suggestionId, state ?? 'dismissed');
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    const updated = await this.suggestions.setState(ctx.userId, suggestionId, state ?? 'dismissed');
     if (!updated) return errorResult('Suggestion not found');
     return ok({ suggestion: updated });
   }
@@ -229,9 +229,9 @@ export class DawarichMcp {
   }
 
   /** The MCP echo of the controller's error shaping: a refusal, not an exception. */
-  private run<T>(action: () => T) {
+  private async run<T>(action: () => Promise<T>) {
     try {
-      return ok(action() as object);
+      return ok((await action()) as object);
     } catch (err) {
       if (err instanceof AcceptError) return errorResult(err.message);
       throw err;

@@ -1,5 +1,6 @@
 import { Controller, HttpException, Param, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { memoryStorage } from 'multer';
 import type { ReceiptScanStartResponse } from '@trek/shared';
 import type { User } from '../../types';
@@ -7,7 +8,8 @@ import { ADDON_IDS } from '../../addons';
 import { AddonsService } from '../addons/addons.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { DatabaseService } from '../database/database.service';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../db/repositories/Trips.repository';
 import { PermissionsService } from '../permissions/permissions.service';
 import { ImportJobsService } from '../booking-import/import-jobs.service';
 import { LlmParseService } from '../llm-parse/llm-parse.service';
@@ -38,7 +40,7 @@ export class ReceiptScanController {
   constructor(
     private readonly importJobs: ImportJobsService,
     private readonly llmParse: LlmParseService,
-    private readonly db: DatabaseService,
+    @InjectRepository(Trips) private readonly trips: TripsRepository,
     private readonly permissions: PermissionsService,
     private readonly addons: AddonsService,
   ) {}
@@ -50,10 +52,10 @@ export class ReceiptScanController {
     @Param('tripId') tripId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
   ): Promise<ReceiptScanStartResponse> {
-    const trip = this.db.canAccessTrip(tripId, user.id);
+    const trip = await this.trips.findAccessible(tripId, user.id);
     if (!trip) throw new HttpException({ error: 'Trip not found' }, 404);
-    if (!this.addons.isAddonEnabled(ADDON_IDS.BUDGET)) throw new HttpException({ error: 'Costs addon is not enabled' }, 404);
-    if (!this.permissions.checkPermission('budget_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id)) {
+    if (!(await this.addons.isAddonEnabled(ADDON_IDS.BUDGET))) throw new HttpException({ error: 'Costs addon is not enabled' }, 404);
+    if (!(await this.permissions.checkPermission('budget_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id))) {
       throw new HttpException({ error: 'No permission' }, 403);
     }
     if (!file) throw new HttpException({ error: 'No file uploaded' }, 400);

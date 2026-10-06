@@ -1,105 +1,37 @@
 /**
  * Days + day-notes module e2e — exercises both migrated mounts through the real
- * JwtAuthGuard against a temp SQLite db. DaysService and DayNotesService run
- * their real SQL via DatabaseModule (the DATABASE_CONNECTION factory picks up
- * the mocked db singleton); trip access resolves through a real-SQL
- * canAccessTrip over the temp db. Only the permission check and the WebSocket
- * broadcast stay mocked.
+ * JwtAuthGuard against a real migrated-and-seeded temp SQLite db
+ * (createSnapshotTestDb(), Plan 3c Task 2 — this used to hand-roll a dozen
+ * CREATE TABLEs, a second hand-maintained schema copy that omitted
+ * `roadtrip_day_tracks` and the rest of the entity graph `DaysRepository
+ * .listByTrip`'s ORM `find()` now needs to resolve at query time, the exact
+ * "e2e suites build their schema from hand-written partial DDL" risk the
+ * plan's inventory §15c flagged — `no such table: roadtrip_day_tracks` on
+ * this suite's very first `GET /api/trips/:id/days` was the failure that
+ * proved it). DaysService and DayNotesService now run through real
+ * repositories over the same migrated connection; trip access resolves
+ * through `TripsRepository.findAccessible` via the real request-scoped
+ * `EntityManager` `createTestMikroOrmModule` wires in, not a hand-rolled
+ * `canAccessTrip` mock (the legacy override this file used to export from
+ * `db/database.ts` — deleted there since Plan 3c Task 0b; a stale mock here
+ * would silently do nothing, not fail loudly, which is worse than removing
+ * it). Only the permission check and the WebSocket broadcast stay mocked.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { Test } from '@nestjs/testing';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 
-vi.mock('../../src/config', async () => {
-  const { readEnv } = await import('../../src/app-config');
-  const env = readEnv();
-  return {
-    ENCRYPTION_KEY: 'days-e2e-inert-encryption-key',
-    JWT_SECRET: 'days-e2e-inert-jwt-secret',
-    updateJwtSecret: vi.fn(),
-    DEFAULT_LANGUAGE: env.app.defaultLanguage,
-    SESSION_DURATION: env.session.duration,
-    SESSION_DURATION_MS: env.session.durationMs,
-    SESSION_DURATION_SECONDS: env.session.durationSeconds,
-    SESSION_DURATION_REMEMBER: env.session.durationRemember,
-    SESSION_DURATION_REMEMBER_MS: env.session.durationRememberMs,
-    SESSION_DURATION_REMEMBER_SECONDS: env.session.durationRememberSeconds,
-  };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
-    avatar TEXT);`);
-  // start_date + updated_at: deleting a dated day can end the trip a day earlier.
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, start_date TEXT, end_date TEXT, feed_token TEXT, updated_at TEXT);');
-  tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
-  // The tables DaysService really queries (real SQL, no service mock).
-  tmp.exec(`CREATE TABLE days (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
-    day_number INTEGER, date TEXT, title TEXT, notes TEXT, default_transport_mode TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(trip_id, day_number));`);
-  tmp.exec('CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, icon TEXT);');
-  tmp.exec(`CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT,
-    description TEXT, lat REAL, lng REAL, address TEXT, category_id INTEGER, price REAL, currency TEXT,
-    place_time TEXT, end_time TEXT, duration_minutes INTEGER, notes TEXT, image_url TEXT, transport_mode TEXT,
-    google_place_id TEXT, google_ftid TEXT, osm_id TEXT, amap_poi_id TEXT, website TEXT, phone TEXT, stop_type TEXT,
-    fill_percent INTEGER, route_geometry TEXT);`);
-  tmp.exec('CREATE TABLE tours (place_id INTEGER PRIMARY KEY);');
-  tmp.exec(`CREATE TABLE day_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, day_id INTEGER NOT NULL,
-    place_id INTEGER NOT NULL, order_index INTEGER DEFAULT 0, notes TEXT,
-    assignment_time TEXT, assignment_end_time TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
-  tmp.exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, name TEXT, color TEXT);');
-  tmp.exec('CREATE TABLE place_tags (place_id INTEGER NOT NULL, tag_id INTEGER NOT NULL);');
-  tmp.exec(`CREATE TABLE assignment_participants (assignment_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
-    PRIMARY KEY (assignment_id, user_id));`);
-  tmp.exec(`CREATE TABLE day_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, day_id INTEGER NOT NULL,
-    trip_id INTEGER NOT NULL, text TEXT NOT NULL, time TEXT, icon TEXT DEFAULT '📝',
-    color TEXT, sort_order REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
-  // Reorder/insert touch accommodations + reservation restamping.
-  tmp.exec(`CREATE TABLE day_accommodations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
-    place_id INTEGER, start_day_id INTEGER, end_day_id INTEGER, check_in TEXT, check_in_end TEXT,
-    check_out TEXT, confirmation TEXT, notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
-  tmp.exec(`CREATE TABLE reservations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, title TEXT,
-    day_id INTEGER, end_day_id INTEGER, type TEXT, status TEXT DEFAULT 'pending', reservation_time TEXT,
-    reservation_end_time TEXT, location TEXT, confirmation_number TEXT, notes TEXT, accommodation_id TEXT,
-    metadata TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
-  tmp.exec(`CREATE TABLE reservation_endpoints (id INTEGER PRIMARY KEY AUTOINCREMENT, reservation_id INTEGER NOT NULL,
-    local_date TEXT);`);
-  // A deleted day moves the road trip boundaries after it up with their days.
-  tmp.exec(`CREATE TABLE roadtrip_day_boundaries (trip_id INTEGER NOT NULL, day_number INTEGER NOT NULL CHECK (day_number >= 1),
-    from_assignment_id INTEGER NOT NULL, to_assignment_id INTEGER, fraction REAL NOT NULL, PRIMARY KEY (trip_id, day_number));`);
-  // StorageRegistryService (behind StorageModule, now in this module chain) reads
-  // this at onModuleInit.
-  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  return { db: tmp };
-});
-
-vi.mock('../../src/db/database', () => ({
-  db,
-  // Real-SQL trip access over the temp db — DaysService.verifyTripAccess and
-  // DatabaseModule both read the mocked singleton.
-  canAccessTrip: (tripId: number | string, userId: number) =>
-    db.prepare(`
-      SELECT t.id, t.user_id FROM trips t
-      LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-      WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-    `).get(userId, tripId, userId),
-  isOwner: () => false,
-  getPlaceWithTags: () => null,
-  closeDb: () => {},
-  reinitialize: () => {},
-}));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
+import { db } from '../../src/db/database';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 
 // Since the permissions DI migration, the check is a spy on the container's
@@ -113,13 +45,15 @@ import { DaysModule } from '../../src/nest/days/days.module';
 import { DayNotesModule } from '../../src/nest/day-notes/day-notes.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Days + day-notes e2e (real auth guard + temp SQLite, real day SQL)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, DaysModule, DayNotesModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, DaysModule, DayNotesModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalPipes(new ZodValidationPipe());
@@ -129,7 +63,13 @@ describe('Days + day-notes e2e (real auth guard + temp SQLite, real day SQL)', (
   }
 
   beforeAll(async () => {
-    seedUser(db as never, { id: 1 });
+    // harness.ts's seedUser() omits password_hash, which the real migrated
+    // schema requires NOT NULL (addons.e2e.test.ts/share.e2e.test.ts hit the
+    // same thing) — a raw insert here instead, matching the SeededUser shape
+    // id/role/password_version=0 that sessionCookie(1) needs.
+    db.prepare(
+      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
+    ).run();
     db.prepare('INSERT INTO trips (id, user_id, title) VALUES (5, 1, ?)').run('Trip');
     db.prepare('INSERT INTO days (id, trip_id, day_number) VALUES (3, 5, 1)').run();
     app = await build();
@@ -163,7 +103,7 @@ describe('Days + day-notes e2e (real auth guard + temp SQLite, real day SQL)', (
     const tourGeometry = JSON.stringify([[48.02, 11.03, 700], [48.03, 11.04, 750]]);
     db.prepare('INSERT INTO places (id, trip_id, name, route_geometry) VALUES (2, 5, ?, ?), (3, 5, ?, ?), (4, 5, ?, ?)')
       .run('Ordinary', null, 'Legacy track', legacyGeometry, 'Tour', tourGeometry);
-    db.prepare('INSERT INTO tours (place_id) VALUES (4)').run();
+    db.prepare("INSERT INTO tours (place_id, tour_type) VALUES (4, 'hike')").run();
     const assignmentIds = [2, 3, 4, 4].map((placeId, orderIndex) => Number(
       db.prepare('INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (3, ?, ?)')
         .run(placeId, orderIndex).lastInsertRowid,

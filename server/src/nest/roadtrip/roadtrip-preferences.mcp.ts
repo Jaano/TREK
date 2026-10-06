@@ -12,7 +12,9 @@ import {
 import { addonGate } from '../addons/addon-gate';
 import { AddonsService } from '../addons/addons.service';
 import { AuthService } from '../auth/auth.service';
-import { DatabaseService } from '../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../db/repositories/Trips.repository';
 import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { RoadtripPreferencesService } from './roadtrip-preferences.service';
 import { answeringRefusals } from './roadtrip-mcp.helpers';
@@ -28,7 +30,7 @@ export class RoadtripPreferencesMcp {
     private readonly preferences: RoadtripPreferencesService,
     private readonly auth: AuthService,
     readonly addons: AddonsService,
-    private readonly db: DatabaseService,
+    @InjectRepository(Trips) private readonly tripsRepo: TripsRepository,
     private readonly guards: McpToolGuardsService,
   ) {}
 
@@ -42,8 +44,8 @@ export class RoadtripPreferencesMcp {
     when,
   })
   async read({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    return ok({ tripId, settings: this.preferences.read(tripId), scope: 'trip' });
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    return ok({ tripId, settings: await this.preferences.read(tripId), scope: 'trip' });
   }
 
   @Tool({
@@ -56,10 +58,10 @@ export class RoadtripPreferencesMcp {
     when,
   })
   async update({ tripId, settings }: { tripId: number; settings: RoadtripPreferences }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('day_edit', tripId, ctx.userId))) return permissionDenied();
     // A day window that ends before it starts is refused by the service, with the reason.
-    return answeringRefusals(() => ok({ tripId, settings: this.preferences.update(tripId, settings), scope: 'trip' }));
+    return answeringRefusals(async () => ok({ tripId, settings: await this.preferences.update(tripId, settings), scope: 'trip' }));
   }
 }

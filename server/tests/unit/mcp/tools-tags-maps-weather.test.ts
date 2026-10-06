@@ -5,27 +5,13 @@
  * get_weather, get_detailed_weather.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
+import { db as testDb } from '../../../src/db/database';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -56,8 +42,6 @@ vi.mock('../../../src/nest/maps/trek-places.client', async (importOriginal) => (
   trekPlacesNearby: trekNearbyMock,
 }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
@@ -86,18 +70,13 @@ vi.spyOn(MapsService.prototype, 'searchOverpassPois').mockResolvedValue({
   clamped: false,
 } as never);
 // Off by default, so the existing cases exercise the lookup rather than the gate.
-vi.spyOn(MapsService.prototype, 'detailsDisabled').mockReturnValue(false);
+vi.spyOn(MapsService.prototype, 'detailsDisabled').mockResolvedValue(false);
 vi.spyOn(MapsService.prototype, 'reverseGeocode').mockResolvedValue({ name: 'Paris', address: 'France' });
 vi.spyOn(MapsService.prototype, 'resolveGoogleMapsUrl').mockResolvedValue({
   lat: 48.8566,
   lng: 2.3522,
   name: 'Paris',
 } as never);
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -837,12 +816,12 @@ describe('Tool: get_airport', () => {
 
 describe('Tool: get_place_details (admin kill switch)', () => {
   afterEach(() => {
-    vi.mocked(MapsService.prototype.detailsDisabled).mockReturnValue(false);
+    vi.mocked(MapsService.prototype.detailsDisabled).mockResolvedValue(false);
   });
 
   it('fetches nothing when an admin has turned Place Details off', async () => {
     const { user } = createUser(testDb);
-    vi.spyOn(MapsService.prototype, 'detailsDisabled').mockReturnValue(true);
+    vi.spyOn(MapsService.prototype, 'detailsDisabled').mockResolvedValue(true);
     vi.mocked(MapsService.prototype.getPlaceDetails).mockClear();
     vi.mocked(MapsService.prototype.getPlaceDetailsExpanded).mockClear();
 
@@ -861,7 +840,7 @@ describe('Tool: get_place_details (admin kill switch)', () => {
 
   it('the switch also stops the expensive expanded path', async () => {
     const { user } = createUser(testDb);
-    vi.spyOn(MapsService.prototype, 'detailsDisabled').mockReturnValue(true);
+    vi.spyOn(MapsService.prototype, 'detailsDisabled').mockResolvedValue(true);
     vi.mocked(MapsService.prototype.getPlaceDetailsExpanded).mockClear();
 
     await withHarness(user.id, async (h) => {
@@ -876,7 +855,7 @@ describe('Tool: get_place_details (admin kill switch)', () => {
 
   it('leaves the lookup alone while the switch is on', async () => {
     const { user } = createUser(testDb);
-    vi.spyOn(MapsService.prototype, 'detailsDisabled').mockReturnValue(false);
+    vi.spyOn(MapsService.prototype, 'detailsDisabled').mockResolvedValue(false);
     vi.mocked(MapsService.prototype.getPlaceDetails).mockClear();
 
     await withHarness(user.id, async (h) => {

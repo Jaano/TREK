@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import {
   PLUGIN_POI_HIT_CAP,
   pluginPoiCategoryKey,
@@ -6,7 +7,8 @@ import {
   type PluginPoiCategory,
   type PluginPoiResponse,
 } from '@trek/shared';
-import { DatabaseService } from '../../database/database.service';
+import { Plugins } from '../../../db/entities/Plugins.entity';
+import type { PluginsRepository } from '../../../db/repositories/Plugins.repository';
 import { pluginsEnabled } from '../kill-switch';
 import { PluginHooks } from '../plugin-hooks.service';
 import { poiCategoriesOf } from '../poi-categories';
@@ -64,17 +66,15 @@ const PLUGIN_NAME_MAX = 80;
 export class PluginPoisService {
   constructor(
     private readonly hooks: PluginHooks,
-    private readonly dbs: DatabaseService,
+    @InjectRepository(Plugins) private readonly plugins: PluginsRepository,
   ) {}
 
   /** Every category a provider currently answers, in the order the feed lists plugins. */
-  available(language = 'en'): AvailablePoiCategory[] {
+  async available(language = 'en'): Promise<AvailablePoiCategory[]> {
     if (!pluginsEnabled()) return [];
     const providers = new Set(this.hooks.providersOf('poiCategoryProvider'));
     if (providers.size === 0) return [];
-    const rows = this.dbs.all<{ id: string; name: string; capabilities: string | null }>(
-      "SELECT id, name, capabilities FROM plugins WHERE status = 'active' ORDER BY sort_order, name",
-    );
+    const rows = await this.plugins.listActiveNameCapabilities(); // PPS1
     return rows
       .filter((row) => providers.has(row.id))
       .flatMap((row) => {
@@ -92,15 +92,15 @@ export class PluginPoisService {
   }
 
   /** The declaration behind (pluginId, categoryId), or null when there is none to answer. */
-  declared(pluginId: string, categoryId: string): PluginPoiCategory | null {
+  async declared(pluginId: string, categoryId: string): Promise<PluginPoiCategory | null> {
     if (!pluginsEnabled()) return null;
     if (!this.hooks.providersOf('poiCategoryProvider').includes(pluginId)) return null;
-    const row = this.dbs.get<{ capabilities: string | null }>('SELECT capabilities FROM plugins WHERE id = ?', pluginId);
-    return poiCategoriesOf(row?.capabilities).find((c) => c.id === categoryId) ?? null;
+    const capabilities = await this.plugins.findCapabilities(pluginId); // PR52 text, PPS2
+    return poiCategoriesOf(capabilities).find((c) => c.id === categoryId) ?? null;
   }
 
   async search(input: PluginPoiSearch, userId: number): Promise<PluginPoiOutcome> {
-    const category = this.declared(input.pluginId, input.category);
+    const category = await this.declared(input.pluginId, input.category);
     if (!category) return { ok: false, status: 404, error: UNKNOWN_POI_CATEGORY };
 
     const { bounds, clamped } = pluginPoiWindow(input.bbox);

@@ -4,26 +4,14 @@
  * counterparts of the GET /api/plugins feed and GET /api/plugin-pois. Both go through
  * PluginPoisService, so the gate, the window and the normalization are the REST ones.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA foreign_keys = ON');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: () => undefined,
-    isOwner: () => false,
-  };
-  return { testDb: db, dbMock: mock };
-});
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { pluginsEnabled } = vi.hoisted(() => ({ pluginsEnabled: vi.fn(() => true) }));
 
-vi.mock('../../../src/db/database', () => dbMock);
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
+});
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
@@ -32,8 +20,7 @@ vi.mock('../../../src/config', () => ({
 }));
 vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
-import { runMigrations } from '../../../src/db/migrations';
-import { createTables } from '../../../src/db/schema';
+import { db as testDb } from '../../../src/db/database';
 import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 import { resetTestDb } from '../../helpers/test-db';
@@ -44,11 +31,6 @@ const categoryPoisMock = vi.spyOn(PluginHooks.prototype, 'categoryPois');
 
 const trailheads = { id: 'trailheads', label: 'Trailheads', labels: { de: 'Wanderparkplätze' }, icon: 'Signpost', color: '#2f855a' };
 const bbox = { south: 47, west: 11, north: 47.5, east: 11.5 };
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
 
 beforeEach(() => {
   resetTestDb(testDb);

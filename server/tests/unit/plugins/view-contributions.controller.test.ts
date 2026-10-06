@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { canAccessTrip, pluginsEnabled } = vi.hoisted(() => ({
-  canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
+  canAccessTrip: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
   pluginsEnabled: vi.fn(() => true),
 }));
 vi.mock('../../../src/db/database', () => ({ db: { prepare: () => ({ get: () => undefined }) }, canAccessTrip }));
@@ -16,7 +16,7 @@ vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
 import { ViewContributionsController } from '../../../src/nest/plugins/contributions/view-contributions.controller';
 import type { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const req = (id?: number) => ({ user: id === undefined ? undefined : { id } }) as any;
@@ -25,13 +25,13 @@ function controller(invoke: (id: string) => unknown, providers = ['p1']) {
     providersOf: vi.fn(() => providers),
     tableContributions: vi.fn(async (id: string) => invoke(id)),
   } as unknown as PluginHooks;
-  return { c: new ViewContributionsController(runtime, { canAccessTrip } as unknown as DatabaseService), runtime };
+  return { c: new ViewContributionsController(runtime, { findAccessible: canAccessTrip } as unknown as TripsRepository), runtime };
 }
 const col = (over: Record<string, unknown> = {}) => ({ kind: 'column', entityId: 1, id: 'c1', label: 'X', ...over });
 const act = (over: Record<string, unknown> = {}) => ({ kind: 'action', entityId: 1, id: 'a1', label: 'Go', target: { kind: 'frame', sub: '/ui' }, ...over });
 
 describe('ViewContributionsController', () => {
-  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockReturnValue({ id: 1 } as never); });
+  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockResolvedValue({ id: 1 } as never); });
 
   it('gates: disabled / unknown view / no user / non-member all return [] (no plugin calls on the first two)', async () => {
     pluginsEnabled.mockReturnValue(false);
@@ -52,7 +52,7 @@ describe('ViewContributionsController', () => {
     }
 
     expect((await controller(() => [col()]).c.get('places', '1', req(undefined))).contributions).toEqual([]);
-    canAccessTrip.mockReturnValue(undefined as never);
+    canAccessTrip.mockResolvedValue(undefined as never);
     expect((await controller(() => [col()]).c.get('day', '1', req(5))).contributions).toEqual([]);
   });
 

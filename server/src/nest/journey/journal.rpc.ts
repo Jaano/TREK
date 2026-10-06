@@ -8,11 +8,9 @@ import { BadParams, ForbiddenResource } from '../plugins/host/rpc-errors';
 import { asPayload, num } from '../plugins/host/rpc-params';
 import type { PluginRpcContext } from '../plugins/host/rpc-kit/types';
 import { ADDON_IDS } from '../../addons';
-import { readEnv } from '../../app-config';
-import { isDemoEmail } from '../common/demo';
 import { AllowedFileTypesService } from '../files/allowed-file-types.service';
-import { DatabaseService } from '../database/database.service';
 import { StorageService } from '../storage/storage.service';
+import { DemoService } from '../common/demo.service';
 import { JourneyDomainService } from './journey-domain.service';
 import { JourneyPhotoCaptureService } from './journey-photo-capture.service';
 
@@ -46,66 +44,70 @@ export class JournalRpc {
     private readonly storage: StorageService,
     private readonly allowedTypes: AllowedFileTypesService,
     private readonly photoCapture: JourneyPhotoCaptureService,
-    private readonly db: DatabaseService,
+    // SV8 (R-survivors) — Plan 3i: DemoService.isDemoUserId replaces the inline
+    // env + email lookup + isDemoEmail check (3g's own JR1 conversion of the
+    // SELECT onto UsersRepository.getEmail still duplicated the demo-gating
+    // LOGIC; this collapses it onto the shared primitive).
+    private readonly demo: DemoService,
   ) {}
 
   @PluginMethod('journal.listMine', { permission: 'db:read:journal' })
-  listMine(_params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async listMine(_params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const userId = this.requireJournalUser(ctx, 'reads');
-    this.requireJourneyAddon();
+    await this.requireJourneyAddon();
     return this.journey.listJourneys(userId);
   }
 
   @PluginMethod('journal.getEntries', { permission: 'db:read:journal' })
-  getEntries(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async getEntries(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const userId = this.requireJournalUser(ctx, 'reads');
     const journeyId = num(params.journeyId, 'journeyId');
-    this.requireJourneyAddon();
+    await this.requireJourneyAddon();
     // listEntries self-gates via canAccessJourney and returns null when the user
     // cannot see it.
-    const entries = this.journey.listEntries(journeyId, userId);
+    const entries = await this.journey.listEntries(journeyId, userId);
     if (entries === null) throw new ForbiddenResource(`no access to journey ${journeyId}`);
     return entries;
   }
 
   @PluginMethod('journal.createEntry', { permission: 'db:write:journal' })
-  createEntry(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async createEntry(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const userId = this.requireJournalUser(ctx, 'writes');
     const input = asPayload(params.input);
     if (typeof input.entry_date !== 'string' || input.entry_date === '') throw new BadParams('entry_date is required');
     const journeyId = num(params.journeyId, 'journeyId');
-    this.requireJourneyAddon();
-    const entry = this.journey.createEntry(journeyId, userId, input as never);
+    await this.requireJourneyAddon();
+    const entry = await this.journey.createEntry(journeyId, userId, input as never);
     if (!entry) throw new ForbiddenResource(`no editable journey ${journeyId} for this user`);
     return entry;
   }
 
   @PluginMethod('journal.updateEntry', { permission: 'db:write:journal' })
-  updateEntry(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async updateEntry(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const userId = this.requireJournalUser(ctx, 'writes');
     const entryId = num(params.entryId, 'entryId');
-    this.requireJourneyAddon();
-    const entry = this.journey.updateEntry(entryId, userId, asPayload(params.input) as never);
+    await this.requireJourneyAddon();
+    const entry = await this.journey.updateEntry(entryId, userId, asPayload(params.input) as never);
     if (!entry) throw new ForbiddenResource(`no editable journal entry ${entryId} for this user`);
     return entry;
   }
 
   @PluginMethod('journal.deleteEntry', { permission: 'db:write:journal' })
-  deleteEntry(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async deleteEntry(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const userId = this.requireJournalUser(ctx, 'writes');
     const entryId = num(params.entryId, 'entryId');
-    this.requireJourneyAddon();
-    if (!this.journey.deleteEntry(entryId, userId)) {
+    await this.requireJourneyAddon();
+    if (!(await this.journey.deleteEntry(entryId, userId))) {
       throw new ForbiddenResource(`no editable journal entry ${entryId} for this user`);
     }
     return { deleted: true };
   }
 
   @PluginMethod('journal.createJourney', { permission: 'db:write:journal' })
-  createJourney(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async createJourney(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const userId = this.requireJournalUser(ctx, 'writes');
     const input = asPayload(params.input);
-    this.requireJourneyAddon();
+    await this.requireJourneyAddon();
     const title = typeof input.title === 'string' ? input.title.trim() : '';
     if (!title) throw new BadParams('journal title is required');
     return this.journey.createJourney(userId, {
@@ -137,7 +139,7 @@ export class JournalRpc {
     const entryId = num(params.entryId, 'entryId');
     // num() accepts "3" and 1.5; a row id is neither.
     if (!Number.isInteger(entryId) || entryId <= 0) throw new BadParams('entryId must be a positive integer');
-    this.requireJourneyAddon();
+    await this.requireJourneyAddon();
 
     const parsed = journalPluginPhotoInputSchema.safeParse(params.input);
     if (!parsed.success) throw new BadParams(`invalid photo input: ${parsed.error.issues[0]?.message ?? 'unknown'}`);
@@ -145,10 +147,7 @@ export class JournalRpc {
 
     // Mirrors the REST upload guard: a demo user must not write bytes to the
     // shared demo instance, not even through a plugin's db:write:journal.
-    if (readEnv().demo.enabled) {
-      const uploader = this.db.prepare('SELECT email FROM users WHERE id = ?').get(userId) as { email?: string } | undefined;
-      if (isDemoEmail(uploader?.email)) throw new ForbiddenResource('Uploads are disabled in demo mode.');
-    }
+    if (await this.demo.isDemoUserId(userId)) throw new ForbiddenResource('Uploads are disabled in demo mode.'); // SV8 — Plan 3i
 
     // basename first: a name is a name, never a path.
     const original = pathMod.basename(input.name);
@@ -158,7 +157,7 @@ export class JournalRpc {
     }
     // The operator's allow-list gates this path too, or the RPC would be the way
     // around an admin setting that the REST upload obeys (journeyImageFileFilter).
-    const allowed = this.allowedTypes.get().split(',').map((e) => e.trim().toLowerCase());
+    const allowed = (await this.allowedTypes.get()).split(',').map((e) => e.trim().toLowerCase());
     if (!allowed.includes('*') && !allowed.includes(ext.slice(1))) {
       throw new BadParams(`file type ${ext} is not allowed`);
     }
@@ -175,7 +174,7 @@ export class JournalRpc {
     // gallery entry aimed at bytes that never arrived.
     await this.storage.put('journey', filename, Readable.from(buf), { contentType: MIME_BY_EXT[ext] ?? 'image/jpeg' });
 
-    const photo = this.journey.addPhoto(entryId, userId, `journey/${filename}`, undefined, input.caption);
+    const photo = await this.journey.addPhoto(entryId, userId, `journey/${filename}`, undefined, input.caption);
     if (!photo) {
       // Nothing references the object now, and nothing ever would.
       await this.storage.delete('journey', filename).catch(() => {});
@@ -189,11 +188,11 @@ export class JournalRpc {
   }
 
   @PluginMethod('journal.deleteJourney', { permission: 'db:write:journal' })
-  deleteJourney(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async deleteJourney(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const userId = this.requireJournalUser(ctx, 'writes');
     const journeyId = num(params.journeyId, 'journeyId');
-    this.requireJourneyAddon();
-    if (!this.journey.deleteJourney(journeyId, userId)) {
+    await this.requireJourneyAddon();
+    if (!(await this.journey.deleteJourney(journeyId, userId))) {
       throw new ForbiddenResource(`no deletable journal ${journeyId} for this user`);
     }
     return { deleted: true };
@@ -206,7 +205,7 @@ export class JournalRpc {
     return ctx.actingUserId;
   }
 
-  private requireJourneyAddon(): void {
-    this.guards.requireAddon(ADDON_IDS.JOURNEY, 'journey');
+  private async requireJourneyAddon(): Promise<void> {
+    await this.guards.requireAddon(ADDON_IDS.JOURNEY, 'journey');
   }
 }

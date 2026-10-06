@@ -6,6 +6,15 @@ export default defineConfig({
   // (vitest's default esbuild does not emit it -> type-based DI would break).
   plugins: [
     swc.vite({
+      // unplugin-swc's default filter is /\.m?[jt]sx?$/ — anchored at the end of the
+      // id, so anything carrying a query string skips the SWC transform. The istanbul
+      // provider's uncovered-file pass asks vite for every never-imported source as
+      // `<file>.ts?cache=<n>&vitest-uncovered-coverage=true`; with the default filter
+      // those ids come back as raw TypeScript and babel's instrumenter (no TS or
+      // decorator plugins) dies on the first `as const`/`interface`/`@Global()`.
+      // Match the same extensions with an optional query so those ids are transformed
+      // exactly like the imported ones.
+      include: /\.[cm]?[jt]sx?(\?.*)?$/,
       jsc: {
         parser: { syntax: 'typescript', decorators: true },
         transform: { legacyDecorator: true, decoratorMetadata: true },
@@ -17,18 +26,31 @@ export default defineConfig({
     root: '.',
     include: ['tests/**/*.test.ts'],
     globals: true,
+    // Migrates one database for the whole run and snapshots it; workers open a
+    // copy instead of replaying 242 migrations per file. See tests/global-setup.ts.
+    globalSetup: ['tests/global-setup.ts'],
     setupFiles: ['tests/setup.ts', 'tests/setup.console-noise.ts'],
     testTimeout: 15000,
     hookTimeout: 15000,
     pool: 'forks',
-    silent: false,
-    reporters: ['verbose'],
+    // Console output is kept for failing tests and dropped for passing ones: a
+    // green run used to print every e2e boot and every migrator line (~100k
+    // lines) and a red one buried its failure in them. `default` prints one line
+    // per file and the full detail only for failures; on CI the github-actions
+    // reporter adds inline annotations on the PR.
+    silent: 'passed-only',
+    reporters: process.env.CI ? ['default', 'github-actions'] : ['default'],
     coverage: {
       // Vite 8 + Vitest 4 made the sourcemap-based `v8` provider under-report branch
       // coverage on the SWC/decorator-transformed output (it dropped to ~68% even
       // though every test passes). `istanbul` instruments the source directly, so
       // coverage is measured independently of the transform pipeline.
       provider: 'istanbul',
+      // Serialises report processing: three identical runs otherwise gave 13/6/6
+      // threshold errors (files like platform/api-docs.ts flipping between 0% and
+      // 100%) because the default concurrency processes per-file coverage results
+      // out of order against istanbul's shared state.
+      processingConcurrency: 1,
       // json-summary is what the per-domain ratchet below is derived from: the text
       // reporter prints one row per DIRECTORY, not a recursive total, so reading the
       // thresholds off it silently understates any domain with subdirectories.
@@ -155,7 +177,14 @@ export default defineConfig({
         // src/demo/** is deliberately absent: it measures 0%, and a floor of
         // zero asserts nothing. It needs tests before it needs a threshold.
         'src/app-config/**/*.ts': { statements: 99, branches: 95, functions: 99, lines: 99 },
-        'src/db/**/*.ts': { statements: 73, branches: 38, functions: 59, lines: 80 },
+        // Hand-maintained (scripts/coverage-thresholds.mjs only emits src/nest/* lines): floor(measured) - 1 after Plan 2.
+        'src/db/**/*.ts': { statements: 84, branches: 42, functions: 95, lines: 87 },
+        'src/db/dialect/**/*.ts': { statements: 99, branches: 99, functions: 99, lines: 99 },
+        // Branches re-pinned at floor(measured) - 1 once Plans 3a–4 had grown the
+        // folder from the Plan 2 handful to 136 repositories (89.83% measured,
+        // identical locally and on CI); the 99 was set before any of them existed.
+        'src/db/repositories/**/*.ts': { statements: 99, branches: 88, functions: 99, lines: 99 },
+        'src/db/types/**/*.ts': { statements: 93, branches: 99, functions: 99, lines: 93 },
         'src/mcp/**/*.ts': { statements: 58, branches: 43, functions: 63, lines: 60 },
         'src/middleware/**/*.ts': { statements: 91, branches: 89, functions: 87, lines: 94 },
         // The folded-in nest-mcp decorator/registry layer keeps the 80% floor

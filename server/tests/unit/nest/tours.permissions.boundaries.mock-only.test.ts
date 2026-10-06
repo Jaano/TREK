@@ -1,20 +1,34 @@
+/**
+ * Tours reuse the ordinary place and day-assignment endpoints for deletion and
+ * planning, so their permissions are those endpoints' permissions: deleting a
+ * tour needs 'place_edit' only, assigning or unassigning one needs 'day_edit'
+ * only. Run through the real TripAccessGuard with mocked collaborators (no DB).
+ * The last block pins ToursService's trip boundary on update against stubbed
+ * repositories.
+ */
 import 'reflect-metadata';
-import { afterAll, describe, expect, it, vi } from 'vitest';
-import { HttpException, type ExecutionContext } from '@nestjs/common';
+import { describe, expect, it, vi } from 'vitest';
+import { HttpException, NotFoundException, RequestMethod, type ExecutionContext } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
-import { RequestMethod } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { EntityManager } from '@mikro-orm/core';
 import type { TourCreateRequest } from '@trek/shared';
 
-vi.mock('../../../src/config', () => { throw new Error('Config initialization is forbidden in mock-only tests'); });
-vi.mock('../../../src/nest/database/database.service', () => ({
-  DatabaseService: vi.fn(() => { throw new Error('Database construction is forbidden in this suite'); }),
+const { legacyDatabaseAccess } = vi.hoisted(() => ({
+  legacyDatabaseAccess: vi.fn((property: string | symbol): never => {
+    throw new Error(`Unexpected legacy database access: ${String(property)}`);
+  }),
+}));
+
+vi.mock('../../../src/config', () => ({
+  ENCRYPTION_KEY: 'test-only-inert-key',
+  JWT_SECRET: 'test-only-inert-secret',
+  updateJwtSecret: vi.fn(),
 }));
 vi.mock('../../../src/db/database', () => ({
-  db: { prepare: vi.fn(() => { throw new Error('Legacy database access is forbidden in this suite'); }) },
-}));
-vi.mock('better-sqlite3', () => ({
-  default: vi.fn(() => { throw new Error('SQLite construction is forbidden in this suite'); }),
+  db: new Proxy({}, {
+    get: (_target, property: string | symbol) => legacyDatabaseAccess(property),
+  }),
 }));
 vi.mock('../../../src/nest/permissions/permissions.service', () => ({ PermissionsService: class {} }));
 vi.mock('../../../src/nest/places/places.service', () => ({ PlacesService: class {} }));
@@ -23,67 +37,76 @@ vi.mock('../../../src/nest/app-config/runtime-env.service', () => ({ RuntimeEnvS
 vi.mock('../../../src/nest/storage/storage.service', () => ({ StorageService: class {} }));
 vi.mock('../../../src/nest/auth/jwt-verify', () => ({ extractToken: vi.fn(), verifyJwtAndLoadUser: vi.fn() }));
 
-import { DatabaseService } from '../../../src/nest/database/database.service';
-import { db as legacyDatabase } from '../../../src/db/database';
-import SqliteDatabase from 'better-sqlite3';
 import { PlacesController } from '../../../src/nest/places/places.controller';
 import { DayAssignmentsController } from '../../../src/nest/assignments/assignments.controller';
 import { ToursService } from '../../../src/nest/tours/tours.service';
 import { JwtAuthGuard } from '../../../src/nest/auth/jwt-auth.guard';
 import { TripAccessGuard, TRIP_PERMISSION_KEY } from '../../../src/nest/permissions/trip-access.guard';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import type { PlacesService } from '../../../src/nest/places/places.service';
+import type { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
+import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
+import type { StorageService } from '../../../src/nest/storage/storage.service';
+import type { UnitOfWork } from '../../../src/nest/database/unit-of-work';
+import type { PlacesRepository } from '../../../src/db/repositories/Places.repository';
+import type { ToursRepository } from '../../../src/db/repositories/Tours.repository';
+import type { TourWaypointsRepository } from '../../../src/db/repositories/TourWaypoints.repository';
+import type { User } from '../../../src/types';
 
 const matrix = [[false, false], [true, false], [false, true], [true, true]] as const;
 
-afterAll(() => {
-  expect(DatabaseService).not.toHaveBeenCalled();
-  expect(legacyDatabase.prepare).not.toHaveBeenCalled();
-  expect(SqliteDatabase).not.toHaveBeenCalled();
-});
-
 function authorization(controller: typeof PlacesController | typeof DayAssignmentsController, handler: 'create' | 'remove', canEdit: boolean, canAssign: boolean, tripId = '7') {
-  const request = { params: { tripId }, user: { id: 2, role: 'user' } };
+  const request = { params: { tripId }, user: { id: 2, role: 'user' } as User };
   const trip = { id: 7, user_id: 1 };
-  const access = vi.fn((id: number, userId: number) => id === 7 && userId === 2 ? trip : undefined);
-  const permission = vi.fn((action: string) => action === 'place_edit' ? canEdit : action === 'day_edit' && canAssign);
+  const access = vi.fn(async (id: number, userId: number) => id === 7 && userId === 2 ? trip : undefined);
+  const permission = vi.fn(async (action: string) => action === 'place_edit' ? canEdit : action === 'day_edit' && canAssign);
   const context = {
     switchToHttp: () => ({ getRequest: () => request }),
     getHandler: () => controller.prototype[handler],
     getClass: () => controller,
   } as unknown as ExecutionContext;
-  const guard = new TripAccessGuard({ canAccessTrip: access } as never, { checkPermission: permission } as never, new Reflector());
+  const em = { getRepository: vi.fn(() => ({ findAccessible: access })) } as unknown as EntityManager;
+  const guard = new TripAccessGuard(em, { checkPermission: permission } as unknown as PermissionsService, new Reflector());
   return { request, access, permission, context, guard };
 }
 
-async function rejected(action: () => unknown, status: number) {
-  await expect(Promise.resolve().then(action)).rejects.toMatchObject({ status });
+async function rejected(action: () => Promise<unknown>, status: number) {
+  await expect(action()).rejects.toMatchObject({ status });
 }
 
 function placesFixture() {
   const places = {
-    get: vi.fn(() => ({ id: 42, trip_id: 7 })),
-    onDeleted: vi.fn(),
-    linkedExpenseIds: vi.fn(() => []),
-    remove: vi.fn(async () => ({ deleted: true, deletedTourPlaceIds: [], cancelled: { reservationIds: [], budgetItemIds: [] } })),
+    get: vi.fn(async () => ({ id: 42, trip_id: 7 })),
+    onDeleted: vi.fn(async () => {}),
+    linkedExpenseIds: vi.fn(async () => []),
+    remove: vi.fn(async () => ({ deleted: true, deletedTourPlaceIds: [42], cancelled: { reservationIds: [], budgetItemIds: [] } })),
     broadcast: vi.fn(),
   };
-  return { places, controller: new PlacesController(places as never, {} as never, {} as never) };
+  const controller = new PlacesController(
+    places as unknown as PlacesService, {} as RuntimeEnvService, {} as StorageService,
+  );
+  return { places, controller };
 }
 
 function assignmentsFixture() {
   const assignment = { id: 51, place_id: 42, day_id: 11 };
   const assignments = {
-    dayExists: vi.fn(() => true),
-    placeExists: vi.fn(() => true),
-    assignmentExistsInDay: vi.fn(() => true),
-    createAssignment: vi.fn(() => assignment),
-    deleteAssignment: vi.fn(),
+    dayExists: vi.fn(async () => true),
+    placeExists: vi.fn(async () => true),
+    assignmentExistsInDay: vi.fn(async () => true),
+    createAssignment: vi.fn(async () => assignment),
+    deleteAssignment: vi.fn(async () => {}),
     broadcast: vi.fn(),
-    reconcile: vi.fn(),
+    reconcile: vi.fn(async () => {}),
   };
-  return { assignment, assignments, controller: new DayAssignmentsController(assignments as never) };
+  return { assignment, assignments, controller: new DayAssignmentsController(assignments as unknown as AssignmentsService) };
 }
 
 describe('Tours deletion and assignment authorization (mock-only)', () => {
+  it('does not access the legacy global database initializer', () => {
+    expect(legacyDatabaseAccess).not.toHaveBeenCalled();
+  });
+
   it('keeps existing Places deletion and day assignment endpoints wired to their exact permissions', () => {
     expect(Reflect.getMetadata(PATH_METADATA, PlacesController)).toBe('api/trips/:tripId/places');
     expect(Reflect.getMetadata(GUARDS_METADATA, PlacesController)).toEqual([JwtAuthGuard]);
@@ -104,12 +127,12 @@ describe('Tours deletion and assignment authorization (mock-only)', () => {
   it.each(matrix)('edit=%s assign=%s: tour deletion requires only place_edit', async (canEdit, canAssign) => {
     const auth = authorization(PlacesController, 'remove', canEdit, canAssign);
     const { places, controller } = placesFixture();
-    const invoke = () => {
-      auth.guard.canActivate(auth.context);
-      return controller.remove(auth.request.user as never, '7', '42', 'socket');
+    const invoke = async () => {
+      await auth.guard.canActivate(auth.context);
+      return await controller.remove(auth.request.user, '7', '42', 'socket');
     };
     if (canEdit) {
-      await expect(invoke()).resolves.toEqual({ success: true, tourPlaceIds: [] });
+      await expect(invoke()).resolves.toEqual({ success: true, tourPlaceIds: [42] });
       expect(places.get).toHaveBeenCalledWith('7', '42');
       expect(places.onDeleted).toHaveBeenCalledWith(42);
       expect(places.remove).toHaveBeenCalledWith('7', '42');
@@ -125,14 +148,14 @@ describe('Tours deletion and assignment authorization (mock-only)', () => {
     it.each(matrix)('edit=%s assign=%s: requires only day_edit', async (canEdit, canAssign) => {
       const auth = authorization(DayAssignmentsController, handler, canEdit, canAssign);
       const { assignment, assignments, controller } = assignmentsFixture();
-      const invoke = () => {
-        auth.guard.canActivate(auth.context);
+      const invoke = async () => {
+        await auth.guard.canActivate(auth.context);
         return handler === 'create'
-          ? controller.create(auth.request.user as never, '7', '11', { place_id: 42, notes: 'Tour' }, 'socket')
-          : controller.remove(auth.request.user as never, '7', '11', '51', 'socket');
+          ? await controller.create(auth.request.user, '7', '11', { place_id: 42, notes: 'Tour' }, 'socket')
+          : await controller.remove(auth.request.user, '7', '11', '51', 'socket');
       };
       if (canAssign) {
-        expect(invoke()).toEqual(handler === 'create' ? { assignment } : { success: true });
+        expect(await invoke()).toEqual(handler === 'create' ? { assignment } : { success: true });
         if (handler === 'create') {
           expect(assignments.dayExists).toHaveBeenCalledWith('11', '7');
           expect(assignments.placeExists).toHaveBeenCalledWith(42, '7');
@@ -175,64 +198,76 @@ const input: TourCreateRequest = {
   ],
 };
 
-function tourDatabaseFixture(ownerTripId: string) {
+/** Tour 42 belongs to `ownerTripId`; findInTrip answers only for that trip. */
+function tourRepositoryFixture(ownerTripId: number) {
   const row = {
     place_id: 42, name: 'Ridge walk', tour_type: 'hike', distance: 3,
     elevation_gain: 30, elevation_loss: 0, duration: null, difficulty: null,
     wanderer_ref: null, match_confidence: 1, tour_group_id: null,
     max_hiking_difficulty: 2, planned: 0, has_waypoints: 1,
   };
-  const waypointRun = vi.fn();
-  const db = {
-    get: vi.fn((sql: string, tripId: string, placeId: string) => {
-      expect(sql.replace(/\s+/g, ' ')).toContain('WHERE p.trip_id = ? AND p.id = ?');
-      return tripId === ownerTripId && placeId === '42' ? row : undefined;
-    }),
-    all: vi.fn(() => input.waypoints),
-    run: vi.fn(),
-    prepare: vi.fn(() => ({ run: waypointRun })),
-    transaction: vi.fn((write: () => void) => write()),
-    getPlaceWithTags: vi.fn(() => ({ id: 42, trip_id: Number(ownerTripId) })),
+  const uow = { transactional: vi.fn(async <T>(fn: () => Promise<T>): Promise<T> => await fn()) };
+  const toursRepo = {
+    findInTrip: vi.fn(async (tripId: number, placeId: number) => tripId === ownerTripId && placeId === 42 ? row : undefined),
+    updateInTrip: vi.fn(async () => true),
+  };
+  const waypointsRepo = {
+    listForPlace: vi.fn(async () => input.waypoints),
+    deleteForPlace: vi.fn(async () => {}),
+    insertForPlace: vi.fn(async () => {}),
+  };
+  const placesRepo = {
+    updateTourRoute: vi.fn(async () => true),
+    findInTrip: vi.fn(async () => undefined),
+    findWithTagsAndRatings: vi.fn(async () => ({ id: 42, trip_id: ownerTripId })),
   };
   const places = { broadcast: vi.fn() };
-  return { db, waypointRun, places, service: new ToursService(db as never, places as never) };
+  const service = new ToursService(
+    uow as unknown as UnitOfWork,
+    places as unknown as PlacesService,
+    toursRepo as unknown as ToursRepository,
+    waypointsRepo as unknown as TourWaypointsRepository,
+    placesRepo as unknown as PlacesRepository,
+  );
+  return { uow, toursRepo, waypointsRepo, placesRepo, places, service };
 }
 
-describe('Real ToursService update trip boundary (mock database module)', () => {
-  it('rejects a placeId belonging to another trip before any transaction or write', () => {
-    const { db, waypointRun, places, service } = tourDatabaseFixture('8');
-    expect(service.getTour('8', '42').tour.place_id).toBe(42);
-    db.get.mockClear();
-    db.all.mockClear();
-    try {
-      service.updateTour('7', '42', input, 'socket');
-      expect.fail('Expected cross-trip rejection');
-    } catch (error) {
-      expect(error).toBeInstanceOf(HttpException);
-      expect((error as HttpException).getStatus()).toBe(404);
-      expect((error as Error).message).toBe('Tour not found');
-    }
-    expect(db.get).toHaveBeenCalledExactlyOnceWith(expect.any(String), '7', '42');
-    for (const method of [db.all, db.transaction, db.run, db.prepare, waypointRun, db.getPlaceWithTags, places.broadcast]) {
+describe('Real ToursService update trip boundary (stubbed repositories)', () => {
+  it('rejects a placeId belonging to another trip before any write', async () => {
+    const f = tourRepositoryFixture(8);
+    expect((await f.service.getTour('8', '42')).tour.place_id).toBe(42);
+    f.toursRepo.findInTrip.mockClear();
+    f.waypointsRepo.listForPlace.mockClear();
+
+    const error: unknown = await f.service.updateTour('7', '42', input, 'socket').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    expect((error as HttpException).getStatus()).toBe(404);
+    expect((error as Error).message).toBe('Tour not found');
+    expect(f.toursRepo.findInTrip).toHaveBeenCalledExactlyOnceWith(7, 42);
+    for (const method of [
+      f.placesRepo.updateTourRoute, f.toursRepo.updateInTrip, f.waypointsRepo.deleteForPlace,
+      f.waypointsRepo.insertForPlace, f.waypointsRepo.listForPlace, f.placesRepo.findWithTagsAndRatings, f.places.broadcast,
+    ]) {
       expect(method).not.toHaveBeenCalled();
     }
-    expect(DatabaseService).not.toHaveBeenCalled();
   });
 
-  it('allows a same-trip update through the fake transaction and prepare interface', () => {
-    const { db, waypointRun, places, service } = tourDatabaseFixture('7');
-    expect(service.updateTour('7', '42', input, 'socket').tour.place_id).toBe(42);
-    expect(db.get).toHaveBeenCalledTimes(2);
-    expect(db.transaction).toHaveBeenCalledOnce();
-    expect(db.run).toHaveBeenCalledTimes(3);
-    expect(db.run).toHaveBeenNthCalledWith(1, expect.stringMatching(/WHERE id = \? AND trip_id = \?/), input.name, 48, 11, JSON.stringify(input.route_geometry), '42', '7');
-    expect(db.prepare).toHaveBeenCalledExactlyOnceWith(expect.stringContaining('INSERT INTO tour_waypoints'));
-    expect(waypointRun).toHaveBeenCalledTimes(2);
-    for (const waypoint of input.waypoints) {
-      expect(waypointRun).toHaveBeenCalledWith('42', waypoint.lat, waypoint.lng, waypoint.role, waypoint.sequence);
-    }
-    expect(db.getPlaceWithTags).toHaveBeenCalledWith(42);
-    expect(places.broadcast).toHaveBeenCalledWith('7', 'place:updated', { place: { id: 42, trip_id: 7 } }, 'socket');
-    expect(DatabaseService).not.toHaveBeenCalled();
+  it('allows a same-trip update through the transaction with trip-scoped writes', async () => {
+    const f = tourRepositoryFixture(7);
+
+    expect((await f.service.updateTour('7', '42', input, 'socket')).tour.place_id).toBe(42);
+
+    expect(f.uow.transactional).toHaveBeenCalledOnce();
+    // Once inside the write, once for the response.
+    expect(f.toursRepo.findInTrip).toHaveBeenCalledTimes(2);
+    expect(f.placesRepo.updateTourRoute).toHaveBeenCalledExactlyOnceWith(42, 7, {
+      name: input.name, lat: 48, lng: 11, route_geometry: JSON.stringify(input.route_geometry),
+    });
+    expect(f.toursRepo.updateInTrip).toHaveBeenCalledExactlyOnceWith(7, 42, expect.objectContaining({ tour_type: 'hike', duration: null }));
+    expect(f.waypointsRepo.deleteForPlace).toHaveBeenCalledExactlyOnceWith(42);
+    expect(f.waypointsRepo.insertForPlace).toHaveBeenCalledExactlyOnceWith(42, input.waypoints);
+    expect(f.placesRepo.findWithTagsAndRatings).toHaveBeenCalledWith(42);
+    expect(f.places.broadcast).toHaveBeenCalledWith('7', 'place:updated', { place: { id: 42, trip_id: 7 } }, 'socket');
   });
 });

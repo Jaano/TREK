@@ -1,4 +1,5 @@
 import { Injectable, HttpException } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { ReservationsService } from '../reservations/reservations.service';
@@ -8,7 +9,10 @@ import { imageMimeType } from '../llm-parse/image-input';
 import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
 import { MapsService } from '../maps/maps.service';
-import { DatabaseService, type TripAccess } from '../database/database.service';
+import { Days } from '../../db/entities/Days.entity';
+import { DaysRepository } from '../../db/repositories/Days.repository';
+import { Reservations } from '../../db/entities/Reservations.entity';
+import { ReservationsRepository } from '../../db/repositories/Reservations.repository';
 import type { User } from '../../types';
 import { KitineraryExtractorService } from './kitinerary-extractor.service';
 import { LlmParseService } from '../llm-parse/llm-parse.service';
@@ -22,7 +26,8 @@ export class BookingImportService {
   constructor(
     private readonly extractor: KitineraryExtractorService,
     private readonly llmParse: LlmParseService,
-    private readonly dbs: DatabaseService,
+    @InjectRepository(Days) private readonly daysRepo: DaysRepository,
+    @InjectRepository(Reservations) private readonly reservationsRepo: ReservationsRepository,
     private readonly reservations: ReservationsService,
     private readonly permissions: PermissionsService,
     private readonly budget: BudgetService,
@@ -32,20 +37,34 @@ export class BookingImportService {
     private readonly places: PlacesService,
   ) {}
 
-  private get db() {
-    return this.dbs.connection;
-  }
-
-  private resolveDayId(tripId: string, iso: string | null | undefined): number | null {
+  /**
+   * BI1/BI2 — `SELECT id FROM days WHERE trip_id = ? AND date = ? LIMIT 1`
+   * then, on a miss, `SELECT id FROM days WHERE trip_id = ? ORDER BY
+   * ABS(JULIANDAY(date) - JULIANDAY(?)) ASC, date ASC LIMIT 1`. The SAME
+   * two-statement shape `ReservationsService#resolveDayIdFromTime` already
+   * converted (RS10/RS11) — `DaysRepository.findByTripAndDate` for the exact
+   * match, `ReservationsRepository.findNearestDayId` (which already wraps
+   * `dayDistance`, R4/BI2's own "not a new SQL helper" resolution) for the
+   * nearest-day fallback — reused here rather than re-derived, per the
+   * project's single-source-of-truth rule.
+   */
+  private async resolveDayId(tripId: string, iso: string | null | undefined): Promise<number | null> {
     if (!iso) return null;
     const date = iso.slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
-    const exact = this.db.prepare('SELECT id FROM days WHERE trip_id = ? AND date = ? LIMIT 1').get(tripId, date) as { id: number } | undefined;
+    const tripIdNum = this.rowIdNum(tripId);
+    const exact = await this.daysRepo.findByTripAndDate(tripIdNum, date);
     if (exact) return exact.id;
     // Clamp to the nearest trip day so an out-of-range / unmatched check-in still
     // resolves and the accommodation row is inserted.
-    const nearest = this.db.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY ABS(JULIANDAY(date) - JULIANDAY(?)) ASC, date ASC LIMIT 1').get(tripId, date) as { id: number } | undefined;
-    return nearest?.id ?? null;
+    const nearestId = await this.reservationsRepo.findNearestDayId(tripIdNum, date);
+    return nearestId ?? null;
+  }
+
+  /** `tripId` arrives as a route-param string; both repository calls above need a genuine `number` (rule 23) — same coercion shape as `ReservationsService.rowIdNum`. */
+  private rowIdNum(value: string): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : -1;
   }
 
   isAvailable(): boolean {
@@ -53,7 +72,7 @@ export class BookingImportService {
   }
 
   /** True when the LLM fallback is enabled and configured for this user. */
-  aiAvailable(userId: number): boolean {
+  async aiAvailable(userId: number): Promise<boolean> {
     return this.llmParse.isAvailable(userId);
   }
 
@@ -143,7 +162,7 @@ export class BookingImportService {
     onProgress?: (done: number, total: number, fileName: string) => void,
   ): Promise<BookingImportPreviewResponse> {
     const kitineraryAvailable = this.extractor.isAvailable();
-    const aiAvailable = this.llmParse.isAvailable(userId);
+    const aiAvailable = await this.llmParse.isAvailable(userId);
     if (!kitineraryAvailable && !aiAvailable) {
       throw new HttpException({ error: 'KItinerary extractor is not available on this server' }, 503);
     }
@@ -260,7 +279,7 @@ export class BookingImportService {
             }
           }
 
-          const place = this.places.create(tripId, {
+          const place = await this.places.create(tripId, {
             name: _venue.name,
             lat,
             lng,
@@ -294,8 +313,8 @@ export class BookingImportService {
         // the accommodation row is actually inserted (createReservation gates on them).
         let createAccommodation: { place_id?: number; start_day_id?: number; end_day_id?: number; check_in?: string; check_out?: string; confirmation?: string } | undefined;
         if (item.type === 'hotel' && _accommodation) {
-          const startDayId = this.resolveDayId(tripId, _accommodation.check_in);
-          const endDayId   = this.resolveDayId(tripId, _accommodation.check_out);
+          const startDayId = await this.resolveDayId(tripId, _accommodation.check_in);
+          const endDayId   = await this.resolveDayId(tripId, _accommodation.check_out);
           createAccommodation = {
             place_id: placeId,
             start_day_id: startDayId ?? undefined,
@@ -306,7 +325,7 @@ export class BookingImportService {
           };
         }
 
-        const { reservation, accommodationCreated } = this.reservations.create(tripId, {
+        const { reservation, accommodationCreated } = await this.reservations.create(tripId, {
           ...reservationData,
           place_id: placeId,
           create_accommodation: createAccommodation,
@@ -319,7 +338,7 @@ export class BookingImportService {
 
         // Turn an extracted price into a real linked cost (Costs addon), so the
         // booking shows up as an expense — not just a price in metadata.
-        if (this.addons.isAddonEnabled(ADDON_IDS.BUDGET)) {
+        if ((await this.addons.isAddonEnabled(ADDON_IDS.BUDGET))) {
           const meta =
             reservationData.metadata && typeof reservationData.metadata === 'object'
               ? (reservationData.metadata as Record<string, unknown>)
@@ -337,7 +356,7 @@ export class BookingImportService {
               // Freeze the live FX rate for a foreign-currency booking price so a
               // settled position isn't re-opened when live rates drift (#1445).
               await this.budget.freezeForeignRate(tripId, budgetData);
-              const budgetItem = this.budget.createBudgetItem(tripId, budgetData);
+              const budgetItem = await this.budget.createBudgetItem(tripId, budgetData);
               this.realtime.broadcast(tripId, 'budget:created', { item: budgetItem }, socketId);
             } catch (err) {
               console.error(

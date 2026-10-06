@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { AtlasController } from './atlas.controller';
 import { TravelStatsController } from './travel-stats.controller';
 import { AtlasService } from './atlas.service';
@@ -11,6 +12,16 @@ import { PublicStatsController } from './public-stats.controller';
 import { ApiTokenGuard } from '../public-api/api-token.guard';
 import { TokensModule } from '../tokens/tokens.module';
 import { RateLimitModule } from '../common/rate-limit.module';
+import { BucketList } from '../../db/entities/BucketList.entity';
+import { HiddenCountries } from '../../db/entities/HiddenCountries.entity';
+import { HiddenRegions } from '../../db/entities/HiddenRegions.entity';
+import { VisitedCountries } from '../../db/entities/VisitedCountries.entity';
+import { VisitedRegions } from '../../db/entities/VisitedRegions.entity';
+import { PlaceRegions } from '../../db/entities/PlaceRegions.entity';
+import { Trips } from '../../db/entities/Trips.entity';
+import { Places } from '../../db/entities/Places.entity';
+import { ReservationEndpoints } from '../../db/entities/ReservationEndpoints.entity';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
 import { SchedulingModule } from '../scheduling/scheduling.module';
 import { PlaceRegionsRepairJob } from './place-regions-repair.job';
 
@@ -32,10 +43,25 @@ import { PlaceRegionsRepairJob } from './place-regions-repair.job';
  * declaring controller's module, so exporting it from over there would still leave
  * its TokenService unresolvable here. TokensModule is a leaf, so the edge is free.
  *
- * PlaceRegionsRepairJob puts right, once, the place_regions rows cached before #2527.
+ * `MikroOrmModule.forFeature` registers every entity `AtlasService`'s
+ * `@InjectRepository` constructor needs (Plan 3f Task 1) — the six
+ * atlas-owned tables (`BucketList`/`HiddenCountries`/`HiddenRegions`/
+ * `VisitedCountries`/`VisitedRegions`/`PlaceRegions`) plus the three it
+ * reads additive methods on (`Trips`/`Places`/`ReservationEndpoints`).
+ *
+ * PlaceRegionsRepairJob puts right, once, the place_regions rows cached before #2527;
+ * `AppSettings` is in the feature list for the marker row it reads and writes.
  */
 @Module({
-  imports: [AuthModule, PluginGuardsModule, AddonsModule, TokensModule, RateLimitModule, SchedulingModule],
+  imports: [
+    AuthModule,
+    PluginGuardsModule,
+    AddonsModule,
+    TokensModule,
+    RateLimitModule,
+    SchedulingModule,
+    MikroOrmModule.forFeature([BucketList, HiddenCountries, HiddenRegions, VisitedCountries, VisitedRegions, PlaceRegions, Trips, Places, ReservationEndpoints, AppSettings]),
+  ],
   controllers: [AtlasController, TravelStatsController, PublicStatsController],
   providers: [AtlasService, AtlasMcp, AtlasRpc, ApiTokenGuard, PlaceRegionsRepairJob],
   exports: [AtlasService],

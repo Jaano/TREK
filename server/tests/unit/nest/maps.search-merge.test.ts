@@ -31,9 +31,15 @@ vi.mock('../../../src/nest/geo/nominatim.client', async (importOriginal) => ({
 vi.mock('../../../src/config', () => ({ JWT_SECRET: 'test-secret', ENCRYPTION_KEY: '0'.repeat(64) }));
 
 import { MapsService } from '../../../src/nest/maps/maps.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
 import type { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-photo-cache.service';
 import { noGoogleQuota } from '../../helpers/google-quota';
+import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
+
+// keyedProvider/resolveMapsKey (maps.service.ts) go through instance-api-keys.ts
+// on every call now. No per-user key is configured anywhere here; the instance
+// rows a case needs come from make()'s `rows`, read through AppSettingsRepository.
+const noUsers = { getApiKeyColumn: async () => null } as unknown as UsersRepository;
 
 // The index switch is an environment variable now, not an admin row: it decides
 // whether a search leaves the instance at all, so it is pinned by the operator
@@ -83,12 +89,10 @@ const osmAnswer = (rows: unknown[]) => ({ ok: true, json: async () => rows });
  */
 function make(enabled = true, rows: Record<string, string> = {}) {
   trekPlaces.on = enabled;
-  const database = {
-    get: vi.fn((sql: string, key?: unknown) =>
-      typeof key === 'string' && sql.includes('app_settings') && rows[key] !== undefined ? { value: rows[key] } : undefined,
-    ),
-  } as unknown as DatabaseService;
-  return new MapsService(database, {} as PlacePhotoCacheService, noGoogleQuota);
+  const appSettings = {
+    getValue: async (key: string) => (rows[key] !== undefined ? rows[key] : null),
+  } as unknown as AppSettingsRepository;
+  return new MapsService({} as PlacePhotoCacheService, appSettings, noUsers, {} as never, {} as never, noGoogleQuota);
 }
 
 const googleAnswer = (name: string) => ({

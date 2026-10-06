@@ -1,18 +1,16 @@
 /**
  * Web Push subscriptions: what the browser may hand over (PUSHSUB-CHK-*) and
- * the table behind it (PUSHSUB-*), on the real schema including migration 245.
+ * the table behind it (PUSHSUB-*), on the migrated snapshot including legacy step 245.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 import { createECDH } from 'node:crypto';
 import { MAX_PUSH_ENDPOINT_LENGTH, pushUnsubscribeRequestSchema } from '@trek/shared';
 
-// One :memory: connection per file, created inside the factory so nothing has
+// One snapshot connection per file, created inside the factory so nothing has
 // to be hoisted above the imports; the tests reach it through the mocked module.
 vi.mock('../../../../src/db/database', async () => {
-  const { default: Database } = await import('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
+  const { createSnapshotTestDb } = await import('../../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   return {
     db,
     closeDb: () => {},
@@ -29,11 +27,9 @@ vi.mock('../../../../src/config', () => ({
 }));
 
 import { db as testDb } from '../../../../src/db/database';
-import { createTables } from '../../../../src/db/schema';
-import { runMigrations } from '../../../../src/db/migrations';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createUser } from '../../../helpers/factories';
-import { DatabaseService } from '../../../../src/nest/database/database.service';
+import { makePushSubscriptionsService } from '../../../helpers/notifications';
 import {
   MAX_PUSH_DEVICES_PER_USER,
   PushSubscriptionsService,
@@ -46,7 +42,7 @@ import {
   type CheckedPushSubscription,
 } from '../../../../src/nest/notifications/push/push-subscription.helpers';
 
-const subs = new PushSubscriptionsService(new DatabaseService(testDb));
+let subs: PushSubscriptionsService;
 
 function browserKeys() {
   const ua = createECDH('prime256v1');
@@ -62,9 +58,8 @@ function checked(endpoint: string): CheckedPushSubscription {
 
 const FCM = 'https://fcm.googleapis.com/fcm/send/device-1';
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+beforeAll(async () => {
+  subs = await makePushSubscriptionsService(testDb);
 });
 
 beforeEach(() => {
@@ -167,12 +162,12 @@ describe('checkPushEndpoint / checkPushSubscription', () => {
 });
 
 describe('PushSubscriptionsService', () => {
-  it('PUSHSUB-001: stores a subscription with the key it was made for and counts devices', () => {
+  it('PUSHSUB-001: stores a subscription with the key it was made for and counts devices', async () => {
     const { user } = createUser(testDb);
     const sub = checked(FCM);
-    expect(subs.hasAny(user.id)).toBe(false);
-    expect(subs.upsert(user.id, sub, 'server-key', 'Mozilla/5.0')).toBe(1);
-    const [row] = subs.listForUser(user.id);
+    expect(await subs.hasAny(user.id)).toBe(false);
+    expect(await subs.upsert(user.id, sub, 'server-key', 'Mozilla/5.0')).toBe(1);
+    const [row] = await subs.listForUser(user.id);
     expect(row).toMatchObject({
       user_id: user.id,
       endpoint: FCM,
@@ -183,18 +178,18 @@ describe('PushSubscriptionsService', () => {
       failure_count: 0,
       last_success_at: null,
     });
-    expect(subs.hasAny(user.id)).toBe(true);
-    expect(subs.countForUser(user.id)).toBe(1);
+    expect(await subs.hasAny(user.id)).toBe(true);
+    expect(await subs.countForUser(user.id)).toBe(1);
   });
 
-  it('PUSHSUB-002: subscribing again refreshes the same row instead of adding one', () => {
+  it('PUSHSUB-002: subscribing again refreshes the same row instead of adding one', async () => {
     const { user } = createUser(testDb);
-    subs.upsert(user.id, checked(FCM), 'old-key');
-    const [before] = subs.listForUser(user.id);
-    subs.recordFailure(before.id);
+    await subs.upsert(user.id, checked(FCM), 'old-key');
+    const [before] = await subs.listForUser(user.id);
+    await subs.recordFailure(before.id);
     const fresh = checked(FCM);
-    expect(subs.upsert(user.id, fresh, 'new-key', null)).toBe(1);
-    const [after] = subs.listForUser(user.id);
+    expect(await subs.upsert(user.id, fresh, 'new-key', null)).toBe(1);
+    const [after] = await subs.listForUser(user.id);
     expect(after.id).toBe(before.id);
     expect(after).toMatchObject({
       p256dh: fresh.p256dh,
@@ -204,70 +199,70 @@ describe('PushSubscriptionsService', () => {
     });
   });
 
-  it('PUSHSUB-003: a browser shared by two accounts belongs to whoever subscribed on it last', () => {
+  it('PUSHSUB-003: a browser shared by two accounts belongs to whoever subscribed on it last', async () => {
     const { user: first } = createUser(testDb);
     const { user: second } = createUser(testDb);
-    subs.upsert(first.id, checked(FCM), 'k');
-    expect(subs.upsert(second.id, checked(FCM), 'k')).toBe(1);
-    expect(subs.countForUser(first.id)).toBe(0);
-    expect(subs.listForUser(second.id).map((r) => r.endpoint)).toEqual([FCM]);
+    await subs.upsert(first.id, checked(FCM), 'k');
+    expect(await subs.upsert(second.id, checked(FCM), 'k')).toBe(1);
+    expect(await subs.countForUser(first.id)).toBe(0);
+    expect((await subs.listForUser(second.id)).map((r) => r.endpoint)).toEqual([FCM]);
   });
 
-  it('PUSHSUB-004: caps the devices per user and drops the one registered longest ago', () => {
+  it('PUSHSUB-004: caps the devices per user and drops the one registered longest ago', async () => {
     const { user } = createUser(testDb);
     for (let i = 0; i < MAX_PUSH_DEVICES_PER_USER; i++) {
-      subs.upsert(user.id, checked(`https://fcm.googleapis.com/fcm/send/d${i}`), 'k');
+      await subs.upsert(user.id, checked(`https://fcm.googleapis.com/fcm/send/d${i}`), 'k');
     }
     // Same second for every row; the id breaks the tie, so d0 is the oldest.
     // d0 subscribing again renews it, which leaves d1 as the oldest.
     testDb.prepare("UPDATE push_subscriptions SET created_at = '2026-01-01 00:00:00'").run();
-    subs.upsert(user.id, checked('https://fcm.googleapis.com/fcm/send/d0'), 'k');
-    expect(subs.upsert(user.id, checked('https://fcm.googleapis.com/fcm/send/new'), 'k')).toBe(
+    await subs.upsert(user.id, checked('https://fcm.googleapis.com/fcm/send/d0'), 'k');
+    expect(await subs.upsert(user.id, checked('https://fcm.googleapis.com/fcm/send/new'), 'k')).toBe(
       MAX_PUSH_DEVICES_PER_USER,
     );
-    const endpoints = subs.listForUser(user.id).map((r) => r.endpoint);
+    const endpoints = (await subs.listForUser(user.id)).map((r) => r.endpoint);
     expect(endpoints).toContain('https://fcm.googleapis.com/fcm/send/d0');
     expect(endpoints).toContain('https://fcm.googleapis.com/fcm/send/new');
     expect(endpoints).not.toContain('https://fcm.googleapis.com/fcm/send/d1');
   });
 
-  it('PUSHSUB-005: a user can only remove their own endpoint', () => {
+  it('PUSHSUB-005: a user can only remove their own endpoint', async () => {
     const { user: owner } = createUser(testDb);
     const { user: other } = createUser(testDb);
-    subs.upsert(owner.id, checked(FCM), 'k');
-    expect(subs.removeForUser(other.id, FCM)).toBe(false);
-    expect(subs.countForUser(owner.id)).toBe(1);
-    expect(subs.removeForUser(owner.id, FCM)).toBe(true);
-    expect(subs.countForUser(owner.id)).toBe(0);
+    await subs.upsert(owner.id, checked(FCM), 'k');
+    expect(await subs.removeForUser(other.id, FCM)).toBe(false);
+    expect(await subs.countForUser(owner.id)).toBe(1);
+    expect(await subs.removeForUser(owner.id, FCM)).toBe(true);
+    expect(await subs.countForUser(owner.id)).toBe(0);
   });
 
-  it('PUSHSUB-006: success resets the failure count, failures add up, deleteById removes the row', () => {
+  it('PUSHSUB-006: success resets the failure count, failures add up, deleteById removes the row', async () => {
     const { user } = createUser(testDb);
-    subs.upsert(user.id, checked(FCM), 'k');
-    const [row] = subs.listForUser(user.id);
-    expect(subs.recordFailure(row.id)).toBe(1);
-    expect(subs.recordFailure(row.id)).toBe(2);
-    expect(subs.listForUser(user.id)[0].failure_count).toBe(2);
-    subs.recordSuccess(row.id);
-    const [after] = subs.listForUser(user.id);
+    await subs.upsert(user.id, checked(FCM), 'k');
+    const [row] = await subs.listForUser(user.id);
+    expect(await subs.recordFailure(row.id)).toBe(1);
+    expect(await subs.recordFailure(row.id)).toBe(2);
+    expect((await subs.listForUser(user.id))[0].failure_count).toBe(2);
+    await subs.recordSuccess(row.id);
+    const [after] = await subs.listForUser(user.id);
     expect(after.failure_count).toBe(0);
     expect(after.last_success_at).not.toBeNull();
-    expect(subs.recordFailure(row.id)).toBe(1);
-    subs.deleteById(row.id);
-    expect(subs.hasAny(user.id)).toBe(false);
+    expect(await subs.recordFailure(row.id)).toBe(1);
+    await subs.deleteById(row.id);
+    expect(await subs.hasAny(user.id)).toBe(false);
     // A failure recorded for a row another send already removed changes nothing.
-    expect(subs.recordFailure(row.id)).toBe(0);
+    expect(await subs.recordFailure(row.id)).toBe(0);
   });
 
-  it('PUSHSUB-007: cuts a long user agent and the rows go with the user', () => {
+  it('PUSHSUB-007: cuts a long user agent and the rows go with the user', async () => {
     const { user } = createUser(testDb);
-    subs.upsert(user.id, checked(FCM), 'k', 'x'.repeat(1000));
-    expect(subs.listForUser(user.id)[0].user_agent).toHaveLength(256);
+    await subs.upsert(user.id, checked(FCM), 'k', 'x'.repeat(1000));
+    expect((await subs.listForUser(user.id))[0].user_agent).toHaveLength(256);
     testDb.prepare('DELETE FROM users WHERE id = ?').run(user.id);
     expect(testDb.prepare('SELECT COUNT(*) AS n FROM push_subscriptions').get()).toEqual({ n: 0 });
   });
 
-  it('PUSHSUB-008: migration 245 created the table with its user index', () => {
+  it('PUSHSUB-008: migration 245 created the table with its user index', async () => {
     const index = testDb
       .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'push_subscriptions'")
       .all() as { name: string }[];

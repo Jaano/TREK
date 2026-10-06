@@ -24,9 +24,15 @@ vi.mock('../../../src/nest/maps/trek-places.client', async (importOriginal) => (
 vi.mock('../../../src/config', () => ({ JWT_SECRET: 'test-secret', ENCRYPTION_KEY: '0'.repeat(64) }));
 
 import { MapsService } from '../../../src/nest/maps/maps.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
 import type { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-photo-cache.service';
 import { noGoogleQuota } from '../../helpers/google-quota';
+import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
+
+// keyedProvider/resolveMapsKey (maps.service.ts) go through instance-api-keys.ts
+// on every call now. No per-user key is configured anywhere here; the instance
+// rows a case needs come from make()'s `rows`, read through AppSettingsRepository.
+const noUsers = { getApiKeyColumn: async () => null } as unknown as UsersRepository;
 
 // The index switch is an environment variable now, not an admin row: it decides
 // whether a search leaves the instance at all, so it is pinned by the operator
@@ -78,18 +84,17 @@ const osmHit = (over: Record<string, unknown> = {}) => ({
  * app_settings the instance holds, by key: a Google key, the provider choice,
  * the Google-only switch. Anything else reads as absent.
  *
- * Keyed on the statement rather than answering everything the same way: the
- * same `get` also resolves the Google key, and a blanket answer would hand
- * `'false'` to the key resolver and send the fallback at Google for real.
+ * Keyed on the setting rather than answering everything the same way: the
+ * same `getValue` also resolves the Google key (`maps_api_key`), and a blanket
+ * answer would hand `'false'` to the key resolver and send the fallback at
+ * Google for real.
  */
 function make(enabled = true, rows: Record<string, string> = {}) {
   trekPlaces.on = enabled;
-  const database = {
-    get: vi.fn((sql: string, key?: unknown) =>
-      typeof key === 'string' && sql.includes('app_settings') && rows[key] !== undefined ? { value: rows[key] } : undefined,
-    ),
-  } as unknown as DatabaseService;
-  return new MapsService(database, {} as PlacePhotoCacheService, noGoogleQuota);
+  const appSettings = {
+    getValue: async (key: string) => (rows[key] !== undefined ? rows[key] : null),
+  } as unknown as AppSettingsRepository;
+  return new MapsService({} as PlacePhotoCacheService, appSettings, noUsers, {} as never, {} as never, noGoogleQuota);
 }
 
 /** Google's autocomplete envelope, which is not the shape its text search answers in. */

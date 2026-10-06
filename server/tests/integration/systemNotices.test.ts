@@ -10,26 +10,10 @@ import type { INestApplication } from '@nestjs/common';
 // ─────────────────────────────────────────────────────────────────────────────
 // Bare in-memory DB — schema applied in beforeAll after mocks register
 // ─────────────────────────────────────────────────────────────────────────────
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: () => null,
-    isOwner: () => false,
-  };
-
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -41,15 +25,15 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb } from '../helpers/test-db';
 import { createUser, createAdmin } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { SYSTEM_NOTICES } from '../../src/systemNotices/registry';
 import { getCurrentAppVersion } from '../../src/systemNotices/service';
 import type { SystemNotice } from '../../src/systemNotices/types';
+import { ADDON_IDS } from '../../src/addons';
 
 let nestApp: INestApplication;
 let app: Application;
@@ -67,9 +51,22 @@ const TEST_NOTICE: SystemNotice = {
   priority: 0,
 };
 
+// Test notice gated on an addon, so the addonFlags lookup in getActiveNoticesFor
+// (built once per call from every addonEnabled condition in SYSTEM_NOTICES) is
+// exercised for both the enabled and the disabled case.
+const TEST_NOTICE_ADDON: SystemNotice = {
+  id: 'test-addon-notice',
+  display: 'modal',
+  severity: 'info',
+  titleKey: 'system_notice.test_addon_notice.title',
+  bodyKey: 'system_notice.test_addon_notice.body',
+  dismissible: true,
+  conditions: [{ kind: 'addonEnabled', addonId: ADDON_IDS.JOURNEY }],
+  publishedAt: '2026-01-01T00:00:00Z',
+  priority: 0,
+};
+
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
@@ -134,6 +131,31 @@ describe('GET /api/system-notices/active', () => {
       expect(testNotice.maxVersion).toBeUndefined();
     } finally {
       const idx = SYSTEM_NOTICES.indexOf(TEST_NOTICE);
+      if (idx !== -1) SYSTEM_NOTICES.splice(idx, 1);
+    }
+  });
+
+  it('an addonEnabled-gated notice appears only while the addon is on', async () => {
+    SYSTEM_NOTICES.push(TEST_NOTICE_ADDON);
+    try {
+      const { user } = createUser(testDb);
+      testDb.prepare('UPDATE addons SET enabled = 0 WHERE id = ?').run(ADDON_IDS.JOURNEY);
+
+      const off = await request(app)
+        .get('/api/system-notices/active')
+        .set('Cookie', authCookie(user.id));
+      expect(off.status).toBe(200);
+      expect(off.body.find((n: { id: string }) => n.id === TEST_NOTICE_ADDON.id)).toBeUndefined();
+
+      testDb.prepare('UPDATE addons SET enabled = 1 WHERE id = ?').run(ADDON_IDS.JOURNEY);
+
+      const on = await request(app)
+        .get('/api/system-notices/active')
+        .set('Cookie', authCookie(user.id));
+      expect(on.status).toBe(200);
+      expect(on.body.find((n: { id: string }) => n.id === TEST_NOTICE_ADDON.id)).toBeDefined();
+    } finally {
+      const idx = SYSTEM_NOTICES.indexOf(TEST_NOTICE_ADDON);
       if (idx !== -1) SYSTEM_NOTICES.splice(idx, 1);
     }
   });

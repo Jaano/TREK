@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { placeWebsiteSchema } from '@trek/shared';
 import type {
   MapsPlaceEnrichmentRequest,
@@ -11,7 +12,10 @@ import type {
   PlaceRating,
 } from '@trek/shared';
 import { safeFetchFollow } from '../../utils/ssrfGuard';
-import { DatabaseService } from '../database/database.service';
+import { PlaceDetailsCache } from '../../db/entities/PlaceDetailsCache.entity';
+import type { PlaceDetailsCacheRepository } from '../../db/repositories/PlaceDetailsCache.repository';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
 import {
   MapsService,
   isGoogleMapsHost,
@@ -308,7 +312,8 @@ export function collectRating(details: Record<string, unknown> | null): PlaceRat
 @Injectable()
 export class PlaceEnrichmentService {
   constructor(
-    private readonly database: DatabaseService,
+    @InjectRepository(PlaceDetailsCache) private readonly cache: PlaceDetailsCacheRepository,
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
     private readonly maps: MapsService,
     private readonly photoCache: PlacePhotoCacheService,
   ) {}
@@ -319,13 +324,13 @@ export class PlaceEnrichmentService {
    * would mean backfilling a row for every existing install just to keep them
    * working, and there is nothing here that warrants a migration.
    */
-  enrichDisabled(): boolean {
-    const row = this.database.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', 'places_enrich_enabled');
-    return row?.value === 'false';
+  async enrichDisabled(): Promise<boolean> {
+    const value = await this.appSettings.getValue('places_enrich_enabled');
+    return value === 'false';
   }
 
   async enrich(userId: number, req: MapsPlaceEnrichmentRequest): Promise<MapsPlaceEnrichmentResult> {
-    if (this.enrichDisabled()) return { photos: [], description: null, facts: [], disabled: true };
+    if (await this.enrichDisabled()) return { photos: [], description: null, facts: [], disabled: true };
 
     const placeId = req.placeId?.trim() || `coords:${req.lat}:${req.lng}`;
     const lang = req.lang;
@@ -379,7 +384,7 @@ export class PlaceEnrichmentService {
     // A summary or a link the lookup here fetched itself is the map's and keeps.
     const fromCaller = req.details != null
       && (description?.source === 'osm' || ownFacts.some((fact) => fact.url != null));
-    if (!fromCaller) this.writeCache(placeId, lang, result);
+    if (!fromCaller) await this.writeCache(placeId, lang, result);
     return result;
   }
 
@@ -449,8 +454,8 @@ export class PlaceEnrichmentService {
     /** The record the caller already holds; only its category is read. */
     details: Record<string, unknown> | null,
   ): Promise<PlacePhotoCandidate[]> {
-    const apiKey = this.maps.getMapsKey(userId);
-    const wantsGoogle = !!apiKey && !this.maps.photosDisabled() && isGooglePlaceId(placeId);
+    const apiKey = await this.maps.getMapsKey(userId);
+    const wantsGoogle = !!apiKey && !(await this.maps.photosDisabled()) && isGooglePlaceId(placeId);
 
     const { wikidata, wikipedia } = identity;
 
@@ -694,8 +699,8 @@ export class PlaceEnrichmentService {
     const fromSite = await this.websiteDescription(placeId);
     if (fromSite) return fromSite;
 
-    const apiKey = this.maps.getMapsKey(userId);
-    if (apiKey && !this.maps.detailsDisabled() && isGooglePlaceId(placeId)) {
+    const apiKey = await this.maps.getMapsKey(userId);
+    if (apiKey && !(await this.maps.detailsDisabled()) && isGooglePlaceId(placeId)) {
       const summary = await this.maps.fetchEditorialSummary(placeId, apiKey, req.lang);
       if (summary) {
         return {
@@ -808,12 +813,7 @@ export class PlaceEnrichmentService {
 
   private async readCache(placeId: string, lang: string | undefined): Promise<CachedEnrichment | null> {
     try {
-      const row = this.database.get<{ payload_json: string; fetched_at: number }>(
-        'SELECT payload_json, fetched_at FROM place_details_cache WHERE place_id = ? AND lang = ? AND expanded = ?',
-        placeId,
-        lang ?? '',
-        CACHE_KIND,
-      );
+      const row = await this.cache.findEntry(placeId, lang ?? '', CACHE_KIND);
       if (!row) return null;
       const parsed = JSON.parse(row.payload_json) as CachePayload;
       if (parsed.v !== CACHE_VERSION) return null;
@@ -843,16 +843,15 @@ export class PlaceEnrichmentService {
     }
   }
 
-  private writeCache(placeId: string, lang: string | undefined, value: CachedEnrichment): void {
+  private async writeCache(placeId: string, lang: string | undefined, value: CachedEnrichment): Promise<void> {
     try {
-      this.database.run(
-        'INSERT OR REPLACE INTO place_details_cache (place_id, lang, expanded, payload_json, fetched_at) VALUES (?, ?, ?, ?, ?)',
-        placeId,
-        lang ?? '',
-        CACHE_KIND,
-        JSON.stringify({ ...value, v: CACHE_VERSION } satisfies CachePayload),
-        Date.now(),
-      );
+      await this.cache.upsertEntry({
+        place_id: placeId,
+        lang: lang ?? '',
+        expanded: CACHE_KIND,
+        payload_json: JSON.stringify({ ...value, v: CACHE_VERSION } satisfies CachePayload),
+        fetched_at: Date.now(),
+      });
     } catch (err) {
       console.error('Failed to cache place enrichment:', err);
     }

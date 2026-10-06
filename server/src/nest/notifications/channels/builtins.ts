@@ -47,14 +47,14 @@ export function buildBuiltinChannels({ mailer, webhook, ntfy, push }: BuiltinCha
     bypassesActiveToggleForAdminEvents: true,
     supportsEvent: supportsAllButSynology,
     isInstanceConfigured: () => mailer.isSmtpConfigured(),
-    isConfiguredFor: (userId) => !!mailer.getUserEmail(userId),
+    isConfiguredFor: async (userId) => !!(await mailer.getUserEmail(userId)),
     async sendToUser(userId, msg) {
-      const email = mailer.getUserEmail(userId);
+      const email = await mailer.getUserEmail(userId);
       if (!email) return false;
       return mailer.sendEmail(email, msg.title, msg.body, userId, msg.navigateTarget);
     },
     async test(userId) {
-      const email = mailer.getUserEmail(userId);
+      const email = await mailer.getUserEmail(userId);
       if (!email) return { success: false, error: 'No email address on file' };
       return mailer.testSmtp(email);
     },
@@ -66,19 +66,19 @@ export function buildBuiltinChannels({ mailer, webhook, ntfy, push }: BuiltinCha
     labelKey: 'settings.notificationPreferences.webhook',
     supportsAdminGlobal: true,
     supportsEvent: supportsAllButSynology,
-    isConfiguredFor: (userId) => !!webhook.getUserWebhookUrl(userId),
+    isConfiguredFor: async (userId) => !!(await webhook.getUserWebhookUrl(userId)),
     async sendToUser(userId, msg) {
-      const url = webhook.getUserWebhookUrl(userId);
+      const url = await webhook.getUserWebhookUrl(userId);
       if (!url) return false;
       return webhook.sendWebhook(url, { event: msg.event, title: msg.title, body: msg.body, tripName: msg.tripName, link: msg.url });
     },
     async sendGlobal(msg: ChannelMessage) {
-      const url = webhook.getAdminWebhookUrl();
+      const url = await webhook.getAdminWebhookUrl();
       if (!url) return false;
       return webhook.sendWebhook(url, { event: msg.event, title: msg.title, body: msg.body, link: msg.url });
     },
     async test(userId, override) {
-      const url = (typeof override?.url === 'string' && override.url) || webhook.getUserWebhookUrl(userId);
+      const url = (typeof override?.url === 'string' && override.url) || (await webhook.getUserWebhookUrl(userId));
       if (!url) return { success: false, error: 'No webhook URL configured' };
       return webhook.testWebhook(url);
     },
@@ -90,10 +90,10 @@ export function buildBuiltinChannels({ mailer, webhook, ntfy, push }: BuiltinCha
     labelKey: 'settings.notificationPreferences.ntfy',
     supportsAdminGlobal: true,
     supportsEvent: supportsAllButSynology,
-    isConfiguredFor: (userId) => !!resolveNtfyUrl(ntfy.getAdminNtfyConfig(), ntfy.getUserNtfyConfig(userId)),
+    isConfiguredFor: async (userId) => !!resolveNtfyUrl(await ntfy.getAdminNtfyConfig(), await ntfy.getUserNtfyConfig(userId)),
     async sendToUser(userId, msg) {
-      const userCfg = ntfy.getUserNtfyConfig(userId);
-      const adminCfg = ntfy.getAdminNtfyConfig();
+      const userCfg = await ntfy.getUserNtfyConfig(userId);
+      const adminCfg = await ntfy.getAdminNtfyConfig();
       const url = resolveNtfyUrl(adminCfg, userCfg);
       if (!url) return false;
       // Not `?? adminCfg.token`: the user picks their own ntfy_server, so that
@@ -102,13 +102,13 @@ export function buildBuiltinChannels({ mailer, webhook, ntfy, push }: BuiltinCha
       return ntfy.sendNtfy(url, resolveNtfyToken(adminCfg, userCfg), { event: msg.event, title: msg.title, body: msg.body, link: msg.url });
     },
     async sendGlobal(msg: ChannelMessage) {
-      const adminCfg = ntfy.getAdminNtfyConfig();
+      const adminCfg = await ntfy.getAdminNtfyConfig();
       const url = resolveAdminNtfyUrl(adminCfg);
       if (!url) return false;
       return ntfy.sendNtfy(url, adminCfg.token, { event: msg.event, title: msg.title, body: msg.body, link: msg.url });
     },
     async test(userId, override) {
-      const topic = typeof override?.topic === 'string' ? override.topic : ntfy.getUserNtfyConfig(userId)?.topic;
+      const topic = typeof override?.topic === 'string' ? override.topic : (await ntfy.getUserNtfyConfig(userId))?.topic;
       if (!topic) return { success: false, error: 'Could not resolve ntfy URL — missing topic' };
       return ntfy.testNtfy({
         topic,

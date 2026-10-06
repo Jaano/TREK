@@ -10,14 +10,12 @@
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../../../src/db/database', async () => {
-  const Database = (await import('better-sqlite3')).default;
-  const db = new Database(':memory:');
-  return { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: () => null, isOwner: () => false, getPlaceWithTags: () => null };
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
 
 import { Test } from '@nestjs/testing';
 import { AppModule } from '../../../src/nest/app.module';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import {
   ANONYMOUS_GUARDED_ROUTE_ALLOW_LIST,
   collectRouteGuards,
@@ -26,10 +24,9 @@ import {
 } from '../../../src/nest/common/validate-route-guards';
 
 async function buildApp() {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(DatabaseService)
-    .useValue({ get: () => undefined, all: () => [], run: () => ({}), canAccessTrip: () => null, isOwner: () => false })
-    .compile();
+  // Plan 4 Task 4: `DatabaseService` is gone — nothing left in the graph
+  // needs overriding for this to compile.
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
   return moduleRef.createNestApplication();
 }
 

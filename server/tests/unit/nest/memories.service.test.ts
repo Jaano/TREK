@@ -73,9 +73,9 @@ describe('MemoriesService (delegation wrapper over services/memories/*)', () => 
     );
   });
 
-  it('access check + broadcast forward verbatim', () => {
+  it('access check + broadcast forward verbatim', async () => {
     helpers.canAccessUserPhoto.mockReturnValue(false);
-    expect(svc.canAccessUserPhoto(1, 2, '5', 'a', 'immich')).toBe(false);
+    expect(await svc.canAccessUserPhoto(1, 2, '5', 'a', 'immich')).toBe(false);
     expect(helpers.canAccessUserPhoto).toHaveBeenCalledWith(1, 2, '5', 'a', 'immich');
 
     svc.broadcast('5', 'memories:updated', { userId: 1 }, 'sock');
@@ -88,7 +88,7 @@ describe('MemoriesService (delegation wrapper over services/memories/*)', () => 
   });
 
   it('unified methods delegate', async () => {
-    svc.listTripPhotos('5', 7);
+    await svc.listTripPhotos('5', 7);
     expect(unified.listTripPhotos).toHaveBeenCalledWith('5', 7);
 
     const selections = [{ provider: 'immich', asset_ids: ['a'] }];
@@ -98,32 +98,32 @@ describe('MemoriesService (delegation wrapper over services/memories/*)', () => 
     await svc.setTripPhotoSharing('5', 7, 9, false);
     expect(unified.setTripPhotoSharing).toHaveBeenCalledWith('5', 7, 9, false);
 
-    svc.removeTripPhoto('5', 7, 9);
+    await svc.removeTripPhoto('5', 7, 9);
     expect(unified.removeTripPhoto).toHaveBeenCalledWith('5', 7, 9);
 
-    svc.listTripAlbumLinks('5', 7);
+    await svc.listTripAlbumLinks('5', 7);
     expect(unified.listTripAlbumLinks).toHaveBeenCalledWith('5', 7);
 
-    svc.removeAlbumLink('5', 'l1', 7);
+    await svc.removeAlbumLink('5', 'l1', 7);
     expect(unified.removeAlbumLink).toHaveBeenCalledWith('5', 'l1', 7);
   });
 
-  it('createTripAlbumLink forwards a passphrase when present and omits it when absent', () => {
-    svc.createTripAlbumLink('5', 7, 'immich', 'a1', 'Trip', 'secret');
+  it('createTripAlbumLink forwards a passphrase when present and omits it when absent', async () => {
+    await svc.createTripAlbumLink('5', 7, 'immich', 'a1', 'Trip', 'secret');
     expect(unified.createTripAlbumLink).toHaveBeenCalledWith('5', 7, 'immich', 'a1', 'Trip', 'secret');
 
-    svc.createTripAlbumLink('5', 7, 'immich', 'a1', 'Trip');
+    await svc.createTripAlbumLink('5', 7, 'immich', 'a1', 'Trip');
     expect(unified.createTripAlbumLink).toHaveBeenLastCalledWith('5', 7, 'immich', 'a1', 'Trip', undefined);
   });
 
   it('immich methods delegate', async () => {
-    svc.immichGetConnectionSettings(7);
+    await svc.immichGetConnectionSettings(7);
     expect(immich.getConnectionSettings).toHaveBeenCalledWith(7);
 
     await svc.immichSaveSettings(7, 'u', 'k', '1.2.3.4', true);
     expect(immich.saveImmichSettings).toHaveBeenCalledWith(7, 'u', 'k', '1.2.3.4', true);
 
-    svc.immichSetAutoUpload(7, true);
+    await svc.immichSetAutoUpload(7, true);
     expect(immich.setImmichAutoUpload).toHaveBeenCalledWith(7, true);
 
     await svc.immichGetConnectionStatus(7);

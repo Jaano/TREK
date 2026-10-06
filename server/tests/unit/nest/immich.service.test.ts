@@ -9,27 +9,27 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  return {
-    testDb: db,
-    dbMock: { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: () => null, isOwner: () => false, getPlaceWithTags: () => null },
-  };
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
+    return { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: () => null, isOwner: () => false, getPlaceWithTags: () => null };
 });
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'x'.repeat(40),
   ENCRYPTION_KEY: 'a'.repeat(64),
   updateJwtSecret: () => {},
 }));
 
-const { decryptMock } = vi.hoisted(() => ({ decryptMock: vi.fn((v: string) => v) }));
+const { decryptMock, maybeEncryptMock } = vi.hoisted(() => ({
+  decryptMock: vi.fn((v: string) => v),
+  maybeEncryptMock: vi.fn((v: string) => v),
+}));
 vi.mock('../../../src/nest/common/crypto/apiKeyCrypto', () => ({
   decrypt_api_key: decryptMock,
   encrypt_api_key: (v: string) => v,
-  maybe_encrypt_api_key: (v: string) => v,
+  maybe_encrypt_api_key: maybeEncryptMock,
 }));
 
 const { safeFetch, checkSsrf } = vi.hoisted(() => ({ safeFetch: vi.fn(), checkSsrf: vi.fn() }));
@@ -40,22 +40,20 @@ vi.mock('../../../src/utils/ssrfGuard', () => ({
   SsrfBlockedError: class extends Error {},
 }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { db as testDb } from '../../../src/db/database';
 import { ImmichService } from '../../../src/nest/memories/immich.service';
 import type { AuditService } from '../../../src/nest/audit/audit.service';
 import type { MemoriesAccessService } from '../../../src/nest/memories/memories-access.service';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
+import { createTestUsersRepo } from '../../helpers/test-uow';
 import { PROVIDER_SELECT_ALL_MAX_PAGES } from '@trek/shared';
 
 const audit = { writeAudit: vi.fn() };
 const access = { getAlbumIdFromLink: vi.fn() };
-const dbs = new DatabaseService(testDb);
 const journeyFx = makeStorageFixture('journey/');
-const svc = new ImmichService(dbs, audit as unknown as AuditService, access as unknown as MemoriesAccessService, journeyFx.storage);
+let svc: ImmichService;
 
 const USER = 1;
 
@@ -76,14 +74,15 @@ function upstream(opts: { ok?: boolean; status?: number; json?: unknown; url?: s
   };
 }
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+beforeAll(async () => {
+  const users = await createTestUsersRepo(testDb);
+  svc = new ImmichService(audit as unknown as AuditService, access as unknown as MemoriesAccessService, journeyFx.storage, users);
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
   decryptMock.mockImplementation((v: string) => v);
+  maybeEncryptMock.mockImplementation((v: string) => v);
   checkSsrf.mockResolvedValue({ allowed: true, isPrivate: false, resolvedIp: '1.2.3.4' });
   testDb.prepare('DELETE FROM users').run();
   seedUser(USER, 'https://immich.test', 'key-1');
@@ -92,27 +91,27 @@ beforeEach(() => {
 afterAll(() => testDb.close());
 
 describe('getImmichCredentials', () => {
-  it('IMMICH-001: returns null when the user row is missing', () => {
-    expect(svc.getImmichCredentials(999)).toBeNull();
+  it('IMMICH-001: returns null when the user row is missing', async () => {
+    expect(await svc.getImmichCredentials(999)).toBeNull();
   });
 
-  it('IMMICH-002: returns null without a URL', () => {
+  it('IMMICH-002: returns null without a URL', async () => {
     seedUser(2, null, 'key');
-    expect(svc.getImmichCredentials(2)).toBeNull();
+    expect(await svc.getImmichCredentials(2)).toBeNull();
   });
 
-  it('IMMICH-003: returns null without an API key', () => {
+  it('IMMICH-003: returns null without an API key', async () => {
     seedUser(3, 'https://immich.test', null);
-    expect(svc.getImmichCredentials(3)).toBeNull();
+    expect(await svc.getImmichCredentials(3)).toBeNull();
   });
 
-  it('IMMICH-004: returns null when the stored key cannot be decrypted', () => {
+  it('IMMICH-004: returns null when the stored key cannot be decrypted', async () => {
     decryptMock.mockReturnValue(null);
-    expect(svc.getImmichCredentials(USER)).toBeNull();
+    expect(await svc.getImmichCredentials(USER)).toBeNull();
   });
 
-  it('IMMICH-005: returns the decrypted pair otherwise', () => {
-    expect(svc.getImmichCredentials(USER)).toEqual({ immich_url: 'https://immich.test', immich_api_key: 'key-1', allow_insecure_tls: false });
+  it('IMMICH-005: returns the decrypted pair otherwise', async () => {
+    expect(await svc.getImmichCredentials(USER)).toEqual({ immich_url: 'https://immich.test', immich_api_key: 'key-1', allow_insecure_tls: false });
   });
 });
 
@@ -125,20 +124,20 @@ describe('isValidAssetId', () => {
 });
 
 describe('getConnectionSettings / setImmichAutoUpload', () => {
-  it('IMMICH-007: reports connected with the URL when configured', () => {
-    expect(svc.getConnectionSettings(USER)).toEqual({ immich_url: 'https://immich.test', connected: true, auto_upload: false, allow_insecure_tls: false });
+  it('IMMICH-007: reports connected with the URL when configured', async () => {
+    expect(await svc.getConnectionSettings(USER)).toEqual({ immich_url: 'https://immich.test', connected: true, auto_upload: false, allow_insecure_tls: false });
   });
 
-  it('IMMICH-008: reports an empty URL and not connected when it is not', () => {
+  it('IMMICH-008: reports an empty URL and not connected when it is not', async () => {
     seedUser(4, null, null);
-    expect(svc.getConnectionSettings(4)).toEqual({ immich_url: '', connected: false, auto_upload: false, allow_insecure_tls: false });
+    expect(await svc.getConnectionSettings(4)).toEqual({ immich_url: '', connected: false, auto_upload: false, allow_insecure_tls: false });
   });
 
-  it('IMMICH-009: surfaces the auto-upload flag both ways', () => {
-    svc.setImmichAutoUpload(USER, true);
-    expect(svc.getConnectionSettings(USER).auto_upload).toBe(true);
-    svc.setImmichAutoUpload(USER, false);
-    expect(svc.getConnectionSettings(USER).auto_upload).toBe(false);
+  it('IMMICH-009: surfaces the auto-upload flag both ways', async () => {
+    await svc.setImmichAutoUpload(USER, true);
+    expect((await svc.getConnectionSettings(USER)).auto_upload).toBe(true);
+    await svc.setImmichAutoUpload(USER, false);
+    expect((await svc.getConnectionSettings(USER)).auto_upload).toBe(false);
   });
 });
 
@@ -149,14 +148,14 @@ describe('saveImmichSettings', () => {
     const result = await svc.saveImmichSettings(USER, 'http://169.254.169.254', 'k', null);
 
     expect(result).toEqual({ success: false, error: 'Invalid Immich URL: blocked host' });
-    expect(svc.getImmichCredentials(USER)!.immich_url).toBe('https://immich.test');
+    expect((await svc.getImmichCredentials(USER))!.immich_url).toBe('https://immich.test');
   });
 
   it('IMMICH-011: stores a trimmed URL and reports plain success', async () => {
     const result = await svc.saveImmichSettings(USER, '  https://new.test  ', 'k2', null);
 
     expect(result).toEqual({ success: true });
-    expect(svc.getImmichCredentials(USER)).toEqual({ immich_url: 'https://new.test', immich_api_key: 'k2', allow_insecure_tls: false });
+    expect(await svc.getImmichCredentials(USER)).toEqual({ immich_url: 'https://new.test', immich_api_key: 'k2', allow_insecure_tls: false });
   });
 
   it('IMMICH-012: warns and audits when the URL resolves to a private IP', async () => {
@@ -174,7 +173,27 @@ describe('saveImmichSettings', () => {
 
     expect(result).toEqual({ success: true });
     expect(checkSsrf).not.toHaveBeenCalled();
-    expect(svc.getImmichCredentials(USER)).toBeNull();
+    expect(await svc.getImmichCredentials(USER)).toBeNull();
+  });
+
+  // R6 — the encrypt call still runs; this file mocks `maybe_encrypt_api_key`
+  // as identity everywhere else (so cases above can assert on the plaintext
+  // round-trip), so this one case swaps in the REAL crypto for the duration
+  // of a single call and reads the raw column back — proving
+  // `UsersRepository.setImmichSettings` never bypasses the service's encrypt
+  // step. `beforeEach` restores the identity stub for every other case.
+  it('IMMICH-051 (R6): the stored immich_api_key is the encrypted envelope, never the plaintext', async () => {
+    const real = await vi.importActual<typeof import('../../../src/nest/common/crypto/apiKeyCrypto')>(
+      '../../../src/nest/common/crypto/apiKeyCrypto',
+    );
+    maybeEncryptMock.mockImplementation(real.maybe_encrypt_api_key);
+
+    const plaintext = 'synthetic-test-immich-key-001';
+    await svc.saveImmichSettings(USER, 'https://immich.test', plaintext, null);
+
+    const row = testDb.prepare('SELECT immich_api_key FROM users WHERE id = ?').get(USER) as { immich_api_key: string };
+    expect(row.immich_api_key).not.toBe(plaintext);
+    expect(row.immich_api_key.startsWith('enc:v1:')).toBe(true);
   });
 });
 
@@ -861,16 +880,16 @@ describe('self-signed certificates', () => {
    */
   const EVERY_PATH_CALLS = 13;
 
-  it('IMMICH-TLS-001: only a stored 1 turns the switch on', () => {
+  it('IMMICH-TLS-001: only a stored 1 turns the switch on', async () => {
     seedUser(USER, 'https://immich.test', 'key-1', 0, 1);
-    expect(svc.getImmichCredentials(USER)!.allow_insecure_tls).toBe(true);
+    expect((await svc.getImmichCredentials(USER))!.allow_insecure_tls).toBe(true);
 
     seedUser(USER, 'https://immich.test', 'key-1', 0, 0);
-    expect(svc.getImmichCredentials(USER)!.allow_insecure_tls).toBe(false);
+    expect((await svc.getImmichCredentials(USER))!.allow_insecure_tls).toBe(false);
 
     // Anything the column should never hold reads as off, not as truthy.
     seedUser(USER, 'https://immich.test', 'key-1', 0, 2);
-    expect(svc.getImmichCredentials(USER)!.allow_insecure_tls).toBe(false);
+    expect((await svc.getImmichCredentials(USER))!.allow_insecure_tls).toBe(false);
   });
 
   it('IMMICH-TLS-002: with the switch on, every request to the server skips the certificate check', async () => {
@@ -915,14 +934,14 @@ describe('self-signed certificates', () => {
 
   it('IMMICH-TLS-005: saving without the switch keeps it, saving with it sets it, disconnecting clears it', async () => {
     await svc.saveImmichSettings(USER, 'https://immich.test', 'key-1', null, true);
-    expect(svc.getConnectionSettings(USER).allow_insecure_tls).toBe(true);
+    expect((await svc.getConnectionSettings(USER)).allow_insecure_tls).toBe(true);
 
     // An older client does not send the field; its save must not turn the switch off.
     await svc.saveImmichSettings(USER, 'https://immich.test', 'key-1', null);
-    expect(svc.getConnectionSettings(USER).allow_insecure_tls).toBe(true);
+    expect((await svc.getConnectionSettings(USER)).allow_insecure_tls).toBe(true);
 
     await svc.saveImmichSettings(USER, 'https://immich.test', 'key-1', null, false);
-    expect(svc.getConnectionSettings(USER).allow_insecure_tls).toBe(false);
+    expect((await svc.getConnectionSettings(USER)).allow_insecure_tls).toBe(false);
 
     await svc.saveImmichSettings(USER, 'https://immich.test', 'key-1', null, true);
     await svc.saveImmichSettings(USER, undefined, undefined, null, true);
@@ -935,7 +954,7 @@ describe('self-signed certificates', () => {
 
     // Same server with a trailing slash: still the same connection, the switch stays.
     await svc.saveImmichSettings(USER, 'https://nas.local/', 'key-1', null);
-    expect(svc.getConnectionSettings(USER).allow_insecure_tls).toBe(true);
+    expect((await svc.getConnectionSettings(USER)).allow_insecure_tls).toBe(true);
 
     await svc.saveImmichSettings(USER, 'https://photos.example.com', 'key-2', null);
     expect(testDb.prepare('SELECT immich_url, immich_allow_insecure_tls FROM users WHERE id = ?').get(USER)).toEqual({
@@ -944,7 +963,7 @@ describe('self-signed certificates', () => {
 
     // Sent along with the new URL, it holds for that server.
     await svc.saveImmichSettings(USER, 'https://other.example.com', 'key-3', null, true);
-    expect(svc.getConnectionSettings(USER).allow_insecure_tls).toBe(true);
+    expect((await svc.getConnectionSettings(USER)).allow_insecure_tls).toBe(true);
   });
 
   it('IMMICH-TLS-006: a URL the guard refuses leaves the stored switch alone', async () => {
@@ -953,7 +972,7 @@ describe('self-signed certificates', () => {
 
     await svc.saveImmichSettings(USER, 'http://169.254.169.254', 'k', null, false);
 
-    expect(svc.getConnectionSettings(USER).allow_insecure_tls).toBe(true);
+    expect((await svc.getConnectionSettings(USER)).allow_insecure_tls).toBe(true);
   });
 
   it('IMMICH-TLS-007: the connection test uses the switch it is handed, strict by default', async () => {

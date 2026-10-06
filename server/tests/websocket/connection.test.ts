@@ -12,31 +12,10 @@ import request from 'supertest';
 import WebSocket from 'ws';
 import { broadcastToUser, getOnlineUserIds } from '../../src/websocket';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -49,31 +28,33 @@ vi.mock('../../src/config', () => ({
 
 import type { INestApplication } from '@nestjs/common';
 import { buildApp, getHttpServer } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
+import { db as testDb } from '../../src/db/database';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { createEphemeralToken } from '../../src/nest/auth/ephemeral-tokens';
 import { TokenService } from '../../src/nest/tokens/token.service';
-import { DatabaseService } from '../../src/nest/database/database.service';
 import { EphemeralTokenService } from '../../src/nest/auth/ephemeral-token.service';
+import { createTestMcpTokensRepo, createTestUsersRepo } from '../helpers/test-uow';
 
 // The gateway consumes ws-tokens through its injected TokenService; the
 // ephemeral store is module-scoped on purpose, so a directly-constructed
 // instance mints tokens the app under test accepts (TokenService is a leaf —
-// its own unit suite constructs it the same way).
-const tokenService = new TokenService(new DatabaseService(testDb), new EphemeralTokenService());
-const createWsToken = tokenService.createWsToken.bind(tokenService);
+// its own unit suite constructs it the same way). `createSnapshotTestDb`
+// (behind the `../../src/db/database` mock above) already carries the full
+// migrated schema, so the repositories can build immediately — no
+// `createTables`/`runMigrations` step needed first, unlike suites that start
+// from a bare `:memory:` handle.
+let tokenService: TokenService;
+const createWsToken = (...args: Parameters<TokenService['createWsToken']>) =>
+  tokenService.createWsToken(...args);
 
 let server: http.Server;
 let wsUrl: string;
 let nestApp: INestApplication;
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
-
+  tokenService = new TokenService(await createTestMcpTokensRepo(testDb), await createTestUsersRepo(testDb), new EphemeralTokenService());
   // Real WebSocket against the unified NestJS app (Express is gone). buildApp owns
   // the same composition production uses; we attach the real ws server to it.
   nestApp = await buildApp();
@@ -254,6 +235,77 @@ describe('WS rooms', () => {
       expect(msg.message).toMatch(/access denied/i);
     } finally {
       client.close();
+    }
+  });
+
+  /**
+   * Plan 3c Task 9 fix wave (A-H1, live regression): before the
+   * `Number.isFinite` guard on `realtime.gateway.ts::handleJoin`, a
+   * non-numeric `tripId` became `NaN`, which used to reach
+   * `TripsRepository.findAccessible`'s raw bind as the unquoted bareword
+   * `NaN` and throw `SqliteError: no such column: NaN` — the promise this
+   * handler returns never resolved, so the client got NO reply at all
+   * (confirmed on the compiled dual boot: 4 `[ERROR]` lines, HEAD only).
+   * The platform's own `NaN` -> `NULL` rendering (`NulSafeSqlitePlatform`)
+   * fixes the crash even without this guard; this test pins the WS-level
+   * contract (the SAME `Access denied` frame WS-005 gets for a real trip
+   * with no access), not just "does not throw".
+   */
+  it('WS-005b — join with a non-numeric tripId receives the same error frame as no access (rule 22 / A-H1)', async () => {
+    const { user } = createUser(testDb);
+    const token = createEphemeralToken(user.id, 'ws')!;
+
+    const client = await connectWs(token);
+    try {
+      await client.next(); // welcome
+
+      client.send({ type: 'join', tripId: 'abc' });
+      const msg = await client.next();
+      expect(msg.type).toBe('error');
+      expect(msg.message).toMatch(/access denied/i);
+    } finally {
+      client.close();
+    }
+  });
+
+  /**
+   * Plan 3c Task 0b (R9): `handleJoin`'s `this.db.canAccessTrip(...)` call
+   * (`realtime.gateway.ts:173`) is now `TripsRepository.findAccessible`
+   * underneath `DatabaseService`, reached through the request context
+   * `TrekWsAdapter`'s `@SubscribeMessage` wrapper forks
+   * (`nest/realtime/trek-ws.adapter.ts:273`, pinned generically by
+   * SEAM-001/BOOT-SWEEP-001) — no ratchet existed for this SPECIFIC seam
+   * before this task (inventory §12b). WS-004 above already proves the happy
+   * path returns `{type:'joined'}`, which requires the repository read to
+   * have succeeded; this test makes that explicit and structural, the same
+   * `cannotUseGlobalContext`/"global EntityManager" console-error filter
+   * `boot-sweeps-request-context.test.ts` uses, so a regression that routes
+   * `handleJoin` around the adapter's request context fails HERE by message,
+   * not only by an indirect "joined never arrived" timeout.
+   */
+  it('WS-SEAM-001 — handleJoin\'s repository read runs inside the WS request context (no cannotUseGlobalContext)', async () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const token = createEphemeralToken(user.id, 'ws')!;
+
+      const client = await connectWs(token);
+      try {
+        await client.next(); // welcome
+        client.send({ type: 'join', tripId: trip.id });
+        const msg = await client.next();
+        expect(msg.type).toBe('joined');
+      } finally {
+        client.close();
+      }
+
+      const suspicious = errSpy.mock.calls
+        .map((args) => args.map(String).join(' '))
+        .filter((line) => /cannotUseGlobalContext|global EntityManager/i.test(line));
+      expect(suspicious).toEqual([]);
+    } finally {
+      errSpy.mockRestore();
     }
   });
 
@@ -448,7 +500,7 @@ describe('WS auth edge cases', () => {
   it('WS-027 — ws-token minted before a password change is rejected (session gate)', async () => {
     // createWsToken stamps the user's current password_version (0) into the token.
     const { user } = createUser(testDb);
-    const result = createWsToken(user.id);
+    const result = await createWsToken(user.id);
     const token = result.token!;
 
     // Simulate a password reset bumping the version AFTER the token was issued.
@@ -466,7 +518,7 @@ describe('WS auth edge cases', () => {
     const { user } = createUser(testDb);
     // Bump the version first, THEN mint — the token captures the current pv.
     testDb.prepare('UPDATE users SET password_version = 3 WHERE id = ?').run(user.id);
-    const result = createWsToken(user.id);
+    const result = await createWsToken(user.id);
     const client = await connectWs(result.token!);
     try {
       const msg = await client.next();

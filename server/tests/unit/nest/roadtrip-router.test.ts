@@ -36,14 +36,12 @@ const osrm = () =>
   );
 function setup(settings = {}) {
   const hooks = { providersOf: vi.fn(() => ['scenic']), route: vi.fn() };
-  const db = {
-    connection: {
-      prepare: () => ({ get: () => ({ capabilities: JSON.stringify({ routeProfiles: [{ id: 'car' }] }) }) }),
-    },
-  };
+  // RRT1/RRT2 (Plan 3j Task 3, confirmed at Task 5's own HEAD) — `declaredProfiles`
+  // now takes `PluginsRepository`, not a raw connection.
+  const plugins = { findCapabilities: vi.fn(async () => JSON.stringify({ routeProfiles: [{ id: 'car' }] })) };
   return {
     hooks,
-    router: new RoadtripRouterService({ getUserSettings: () => settings } as never, hooks as never, db as never),
+    router: new RoadtripRouterService({ getUserSettings: () => settings } as never, hooks as never, plugins as never),
   };
 }
 beforeEach(() => {
@@ -184,6 +182,6 @@ describe('server Roadtrip router', () => {
     });
     expect((await router.route(7, 8, 9, points, 'plugin:scenic/car', [])).leg.seg.distance).toBe(3000);
     expect(hooks.route).toHaveBeenCalledWith('scenic', { tripId: 8, dayId: 9, profile: 'car', waypoints: points }, 7);
-    expect(router.profiles()).toContain('plugin:scenic/car');
+    expect(await router.profiles()).toContain('plugin:scenic/car');
   });
 });

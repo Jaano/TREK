@@ -17,12 +17,10 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   // Passkeys are trip-free, so the trip-access helpers are inert stubs.
   const mock = {
     db,
@@ -32,10 +30,10 @@ const { testDb, dbMock } = vi.hoisted(() => {
     canAccessTrip: () => undefined,
     isOwner: () => false,
   };
-  return { testDb: db, dbMock: mock };
+    return mock;
 });
 
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -71,12 +69,10 @@ const { swMock } = vi.hoisted(() => ({
 }));
 vi.mock('@simplewebauthn/server', () => swMock);
 
+import { db as testDb } from '../../../src/db/database';
 import jwtLib from 'jsonwebtoken';
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
@@ -89,6 +85,26 @@ import { UserCleanupService } from '../../../src/nest/auth/user-cleanup.service'
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 import { AllowedFileTypesService } from '../../../src/nest/files/allowed-file-types.service';
 import { MailerService } from '../../../src/nest/notifications/mailer/mailer.service';
+import {
+  createTestUnitOfWork,
+  createTestAppSettingsRepo,
+  sharedTestOrm,
+  createTestUsersRepo,
+  createTestWebauthnCredentialsRepo,
+  createTestWebauthnChallengesRepo,
+  createTestInviteTokensRepo,
+  createTestMcpTokensRepo,
+  createTestOauthTokensRepo,
+  createTestPasswordResetTokensRepo,
+  createTestTripsRepo,
+  createTestTripMembersRepo,
+} from '../../helpers/test-uow';
+import { budgetRepoArgs } from '../../helpers/budget-repos';
+import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
+import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
+import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourneyContributorsRepo } from '../../helpers/journey-repos';
+import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
+import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-repos';
 
 // MailerService is injected since the notifications fold — a stub instead of a
 // module mock. sendPasswordResetEmail is the only thing auth reaches for.
@@ -109,27 +125,37 @@ const webauthn = { resolve: resolveWebauthnConfigMock } as unknown as WebauthnCo
 // undefined so a future case that does reach one gets a working object; each
 // takes only the DatabaseService. AuthService's own webauthn is the real
 // resolver, separate from the `webauthn` switch PasskeyService is handed.
-const auth = new AuthService(
-  new DatabaseService(testDb),
-  new PermissionsService(new DatabaseService(testDb)),
-  new TripMembershipService(new DatabaseService(testDb)),
-  new WebauthnConfigService(new DatabaseService(testDb)),
-  new UserCleanupService(new DatabaseService(testDb), new BudgetService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new ExchangeRatesService(), new RealtimeService())),
+
+let auth: AuthService;
+let svc: PasskeyService;
+beforeAll(async () => {
+  auth = new AuthService(
+  new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)),
+  new TripMembershipService(await createTestTripsRepo(testDb), await createTestTripMembersRepo(testDb)),
+  new WebauthnConfigService(await createTestAppSettingsRepo(testDb)),
+  new UserCleanupService((await sharedTestOrm(testDb)).em, new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb))), await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestTripMembersRepo(testDb), await createTestBudgetItemsRepo(testDb), await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb), await createTestShareTokensRepo(testDb), await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb)),
   mailerStub,
   new EphemeralTokenService(),
-  new AllowedFileTypesService(new DatabaseService(testDb)),
+  new AllowedFileTypesService(await createTestAppSettingsRepo(testDb)), await createTestUnitOfWork(testDb),
+  await createTestAppSettingsRepo(testDb), await createTestUsersRepo(testDb),
+  await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb), await createTestOauthTokensRepo(testDb),
+  await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
+  await createTestPushSubscriptionsRepo(testDb),
 );
-const svc = new PasskeyService(new DatabaseService(testDb), auth, webauthn);
+  svc = new PasskeyService(
+    auth,
+    webauthn,
+    await createTestUnitOfWork(testDb),
+    await createTestWebauthnCredentialsRepo(testDb),
+    await createTestWebauthnChallengesRepo(testDb),
+    await createTestUsersRepo(testDb),
+  );
+});
 
 const CFG = { rpID: 'trek.example.com', rpName: 'TREK', origins: ['https://trek.example.com'], explicitOrigins: false };
 // The unconfigured fallback resolve() yields when APP_URL is unset (#2147).
 const LOCALHOST_CFG = { rpID: 'localhost', rpName: 'TREK', origins: ['http://localhost:5173', 'http://localhost:3001'], explicitOrigins: false };
 const NOT_CONFIGURED_ERROR = 'Passkey login is not configured for this server.';
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -596,13 +622,19 @@ describe('passkeyLoginVerify', () => {
 
   it('PASSKEY-SVC-024: success mints a real session, strips the user and bumps the bookkeeping', async () => {
     const { user } = createUser(testDb);
+    // A `users` column outside the `User` contract type (Plan 3b Task 3
+    // review, F5) — the legacy `stripUserForClient(user)` ran on the FULL
+    // `SELECT *` row at runtime regardless of its `User`-typed generic, so
+    // this must still survive the repository-backed path's `toClientUser`
+    // spread, not be silently dropped by a narrower field-by-field mapping.
+    testDb.prepare("UPDATE users SET display_name = 'Legacy Passthrough' WHERE id = ?").run(user.id);
     const cred = insertCredential(user.id, { credential_id: 'good', counter: 5 });
     seedChallenge('a9', null, 'authentication');
     swMock.verifyAuthenticationResponse.mockResolvedValue({ verified: true, authenticationInfo: { newCounter: 6 } });
 
     const result = await svc.passkeyLoginVerify({ assertionResponse: ceremonyResponse('a9', { id: 'good' }) });
     expect(result.auditUserId).toBe(user.id);
-    expect(result.user).toMatchObject({ id: user.id, email: user.email });
+    expect(result.user).toMatchObject({ id: user.id, email: user.email, display_name: 'Legacy Passthrough' });
     expect(result.user).toHaveProperty('avatar_url');
     expect(result.user).not.toHaveProperty('password_hash');
     // The token is the SAME session shape password login mints ({ id, pv }).
@@ -653,7 +685,7 @@ describe('passkeyLoginVerify', () => {
 // ── listPasskeys ──────────────────────────────────────────────────────────────
 
 describe('listPasskeys', () => {
-  it('PASSKEY-SVC-025: lists newest-first with backed_up remapped to a boolean', () => {
+  it('PASSKEY-SVC-025: lists newest-first with backed_up remapped to a boolean', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
     testDb.prepare(
@@ -662,7 +694,7 @@ describe('listPasskeys', () => {
     ).run(user.id, user.id);
     insertCredential(other.id);
 
-    const list = svc.listPasskeys(user.id);
+    const list = await svc.listPasskeys(user.id);
     expect(list.map((c) => c.name)).toEqual(['New', 'Old']);
     expect(list[0]).toEqual({
       id: expect.any(Number),
@@ -679,56 +711,90 @@ describe('listPasskeys', () => {
 // ── renamePasskey ─────────────────────────────────────────────────────────────
 
 describe('renamePasskey', () => {
-  it('PASSKEY-SVC-026: rejects a missing, non-string or whitespace-only name', () => {
+  it('PASSKEY-SVC-026: rejects a missing, non-string or whitespace-only name', async () => {
     const { user } = createUser(testDb);
     const cred = insertCredential(user.id);
-    expect(svc.renamePasskey(user.id, String(cred.id), undefined)).toEqual({ error: 'Name is required', status: 400 });
-    expect(svc.renamePasskey(user.id, String(cred.id), 42)).toEqual({ error: 'Name is required', status: 400 });
-    expect(svc.renamePasskey(user.id, String(cred.id), '   ')).toEqual({ error: 'Name is required', status: 400 });
+    expect(await svc.renamePasskey(user.id, String(cred.id), undefined)).toEqual({ error: 'Name is required', status: 400 });
+    expect(await svc.renamePasskey(user.id, String(cred.id), 42)).toEqual({ error: 'Name is required', status: 400 });
+    expect(await svc.renamePasskey(user.id, String(cred.id), '   ')).toEqual({ error: 'Name is required', status: 400 });
   });
 
-  it('PASSKEY-SVC-027: renames (trimmed, capped at 60) and 404s on foreign or unknown ids', () => {
+  it('PASSKEY-SVC-027: renames (trimmed, capped at 60) and 404s on foreign or unknown ids', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
     const cred = insertCredential(user.id);
 
-    expect(svc.renamePasskey(user.id, String(cred.id), `  ${'n'.repeat(80)}  `)).toEqual({ success: true });
+    expect(await svc.renamePasskey(user.id, String(cred.id), `  ${'n'.repeat(80)}  `)).toEqual({ success: true });
     const row = testDb.prepare('SELECT name FROM webauthn_credentials WHERE id = ?').get(cred.id) as { name: string };
     expect(row.name).toBe('n'.repeat(60));
 
-    expect(svc.renamePasskey(other.id, String(cred.id), 'Steal')).toEqual({ error: 'Passkey not found', status: 404 });
-    expect(svc.renamePasskey(user.id, '999999', 'Ghost')).toEqual({ error: 'Passkey not found', status: 404 });
+    expect(await svc.renamePasskey(other.id, String(cred.id), 'Steal')).toEqual({ error: 'Passkey not found', status: 404 });
+    expect(await svc.renamePasskey(user.id, '999999', 'Ghost')).toEqual({ error: 'Passkey not found', status: 404 });
+  });
+
+  it('PASSKEY-SVC-042: 404s (not a 500) on a non-numeric id — Plan 3b Task 3 review, F1', async () => {
+    const { user } = createUser(testDb);
+    expect(await svc.renamePasskey(user.id, 'abc', 'Ghost')).toEqual({ error: 'Passkey not found', status: 404 });
+    expect(await svc.renamePasskey(user.id, '1abc', 'Ghost')).toEqual({ error: 'Passkey not found', status: 404 });
+  });
+
+  // task-3-rereview.md R1: the legacy `renamePasskey` bound `Number(id)`
+  // (unlike the invite route's raw-string bind), so `Number('0x10') === 16`
+  // — the legacy statement would have ACTED on credential 16, not 404'd.
+  // This pins the deliberate `toRowId` narrowing the fix round chose
+  // (accepted deviation, not parity), not "the legacy 404".
+  it('PASSKEY-SVC-042B: refuses a prefixed-numeric id (0x10) via the toRowId narrowing', async () => {
+    const { user } = createUser(testDb);
+    expect(await svc.renamePasskey(user.id, '0x10', 'Ghost')).toEqual({ error: 'Passkey not found', status: 404 });
   });
 });
 
 // ── deletePasskey ─────────────────────────────────────────────────────────────
 
 describe('deletePasskey', () => {
-  it('PASSKEY-SVC-028: requires the current password (missing, wrong, or no hash all 401)', () => {
+  it('PASSKEY-SVC-028: requires the current password (missing, wrong, or no hash all 401)', async () => {
     const { user, password } = createUser(testDb);
     const cred = insertCredential(user.id);
-    expect(svc.deletePasskey(user.id, String(cred.id), undefined)).toEqual({ error: 'Incorrect password', status: 401 });
-    expect(svc.deletePasskey(user.id, String(cred.id), `${password}x`)).toEqual({ error: 'Incorrect password', status: 401 });
+    expect(await svc.deletePasskey(user.id, String(cred.id), undefined)).toEqual({ error: 'Incorrect password', status: 401 });
+    expect(await svc.deletePasskey(user.id, String(cred.id), `${password}x`)).toEqual({ error: 'Incorrect password', status: 401 });
     testDb.prepare("UPDATE users SET password_hash = '' WHERE id = ?").run(user.id);
-    expect(svc.deletePasskey(user.id, String(cred.id), password)).toEqual({ error: 'Incorrect password', status: 401 });
+    expect(await svc.deletePasskey(user.id, String(cred.id), password)).toEqual({ error: 'Incorrect password', status: 401 });
   });
 
-  it('PASSKEY-SVC-029: deletes own credentials only — foreign ids 404 without leaking', () => {
+  it('PASSKEY-SVC-029: deletes own credentials only — foreign ids 404 without leaking', async () => {
     const { user, password } = createUser(testDb);
     const { user: other, password: otherPassword } = createUser(testDb);
     const cred = insertCredential(user.id);
 
-    expect(svc.deletePasskey(other.id, String(cred.id), otherPassword)).toEqual({ error: 'Passkey not found', status: 404 });
-    expect(svc.deletePasskey(user.id, String(cred.id), password)).toEqual({ success: true });
+    expect(await svc.deletePasskey(other.id, String(cred.id), otherPassword)).toEqual({ error: 'Passkey not found', status: 404 });
+    expect(await svc.deletePasskey(user.id, String(cred.id), password)).toEqual({ success: true });
     expect(testDb.prepare('SELECT COUNT(*) AS n FROM webauthn_credentials').get()).toEqual({ n: 0 });
+  });
+
+  it('PASSKEY-SVC-043: 404s (not a 500) on a non-numeric id once the password check passes — Plan 3b Task 3 review, F1', async () => {
+    const { user, password } = createUser(testDb);
+    expect(await svc.deletePasskey(user.id, 'abc', password)).toEqual({ error: 'Passkey not found', status: 404 });
+  });
+
+  // task-3-rereview.md R1: same distinction as PASSKEY-SVC-042B —
+  // `deletePasskey`'s legacy bind was `Number(id)`, so `'0x10'` would have
+  // acted on credential 16, not 404'd. This pins the `toRowId` narrowing.
+  it('PASSKEY-SVC-043B: refuses a prefixed-numeric id (0x10) via the toRowId narrowing, once the password check passes', async () => {
+    const { user, password } = createUser(testDb);
+    expect(await svc.deletePasskey(user.id, '0x10', password)).toEqual({ error: 'Passkey not found', status: 404 });
+  });
+
+  it('PASSKEY-SVC-044: a wrong password still wins over a non-numeric id — 401, not 404 (legacy statement order)', async () => {
+    const { user, password } = createUser(testDb);
+    expect(await svc.deletePasskey(user.id, 'abc', `${password}x`)).toEqual({ error: 'Incorrect password', status: 401 });
   });
 });
 
 // ── adminResetPasskeys ────────────────────────────────────────────────────────
 
 describe('adminResetPasskeys', () => {
-  it('PASSKEY-SVC-030: 404s on an unknown user, else clears all credentials and reports the count', () => {
-    expect(svc.adminResetPasskeys(999_999)).toEqual({ error: 'User not found', status: 404 });
+  it('PASSKEY-SVC-030: 404s on an unknown user, else clears all credentials and reports the count', async () => {
+    expect(await svc.adminResetPasskeys(999_999)).toEqual({ error: 'User not found', status: 404 });
 
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
@@ -736,8 +802,12 @@ describe('adminResetPasskeys', () => {
     insertCredential(user.id);
     const kept = insertCredential(other.id);
 
-    expect(svc.adminResetPasskeys(user.id)).toEqual({ success: true, deleted: 2, email: user.email });
-    expect(svc.adminResetPasskeys(user.id)).toEqual({ success: true, deleted: 0, email: user.email });
+    expect(await svc.adminResetPasskeys(user.id)).toEqual({ success: true, deleted: 2, email: user.email });
+    expect(await svc.adminResetPasskeys(user.id)).toEqual({ success: true, deleted: 0, email: user.email });
     expect(testDb.prepare('SELECT id FROM webauthn_credentials').all()).toEqual([{ id: kept.id }]);
+  });
+
+  it('PASSKEY-SVC-045: 404s (not a 500) when the caller hands in NaN — AdminService.resetUserPasskeys converts a non-numeric route id with a bare Number(id) before calling in (Plan 3b Task 3 review, F1)', async () => {
+    expect(await svc.adminResetPasskeys(Number('abc'))).toEqual({ error: 'User not found', status: 404 });
   });
 });

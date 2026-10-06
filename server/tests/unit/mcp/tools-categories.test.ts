@@ -8,25 +8,13 @@
  * registerResources fan-out anymore).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { db as testDb } from '../../../src/db/database';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: () => null,
-    isOwner: () => false,
-  };
-  return { testDb: db, dbMock: mock };
+
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -36,8 +24,6 @@ vi.mock('../../../src/config', () => ({
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory';
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
@@ -45,16 +31,12 @@ import { createTestRegistry } from '../../../src/nest-mcp';
 import { trekMcpAccessPolicy, trekMcpValidateAccess } from '../../../src/mcp/nest-mcp-policy';
 import { CategoriesMcp } from '../../../src/nest/categories/categories.mcp';
 import { CategoriesService } from '../../../src/nest/categories/categories.service';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
+import { DemoService } from '../../../src/nest/common/demo.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { McpToolGuardsService } from '../../../src/nest/mcp-shared/mcp-tool-guards.service';
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestCategoriesRepo, createTestTripsRepo, createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -78,17 +60,20 @@ async function withHarness(
 // wired here rather than through the shared harness. Everything points at this
 // file's DB, which is what lets the admin gate and the demo gate be driven from
 // the users table instead of from a stub.
-const categoriesDb = new DatabaseService(testDb);
-const categoriesMcp = new CategoriesMcp(
-  new CategoriesService(categoriesDb),
-  categoriesDb,
+let categoriesMcp: CategoriesMcp;
+beforeAll(async () => {
+  const categoriesEm = (await sharedTestOrm(testDb)).em;
+  categoriesMcp = new CategoriesMcp(
+  new CategoriesService(await createTestCategoriesRepo(testDb)),
   new RuntimeEnvService(),
-  new McpToolGuardsService(categoriesDb, new PermissionsService(categoriesDb), new RealtimeService()),
+  new McpToolGuardsService(await createTestTripsRepo(testDb), await createTestUsersRepo(testDb), new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService()),
+  new DemoService(new RuntimeEnvService(), categoriesEm),
 );
+});
 
 async function withWriteHarness(userId: number, fn: (client: Client) => Promise<void>) {
   const server = new McpServer({ name: 'trek-test', version: '1.0.0' });
-  createTestRegistry([categoriesMcp], { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess })
+  await createTestRegistry([categoriesMcp], { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess })
     .attach(server, { userId, scopes: null, isStaticToken: false });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test-client', version: '1.0.0' });

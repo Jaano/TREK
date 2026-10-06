@@ -24,25 +24,25 @@ import { Public } from '../auth/public.decorator';
 export class TripShareController {
   constructor(private readonly share: ShareService) {}
 
-  private requireManage(tripId: string, user: User) {
-    const trip = this.share.verifyTripAccess(tripId, user.id);
+  private async requireManage(tripId: string, user: User) {
+    const trip = await this.share.verifyTripAccess(tripId, user.id);
     if (!trip) {
       throw new HttpException({ error: 'Trip not found' }, 404);
     }
-    if (!this.share.canManage(trip, user)) {
+    if (!(await this.share.canManage(trip, user))) {
       throw new HttpException({ error: 'No permission' }, 403);
     }
   }
 
   @Post()
-  create(
+  async create(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Body() body: ShareLinkDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.requireManage(tripId, user);
-    const result = this.share.createOrUpdate(tripId, user.id, {
+    await this.requireManage(tripId, user);
+    const result = await this.share.createOrUpdate(tripId, user.id, {
       share_map: body.share_map,
       share_bookings: body.share_bookings,
       share_packing: body.share_packing,
@@ -57,21 +57,21 @@ export class TripShareController {
   }
 
   @Get()
-  get(@CurrentUser() user: User, @Param('tripId') tripId: string) {
+  async get(@CurrentUser() user: User, @Param('tripId') tripId: string) {
     // The token is the whole credential for the anonymous /api/shared/:token
     // page, so reading it needs the same share_manage permission as creating or
     // deleting it, not just trip access. Trip membership lets someone read the
     // trip while signed in; it does not let them hand out a copy that works
     // without an account and outlives their membership.
-    this.requireManage(tripId, user);
-    const info = this.share.get(tripId);
+    await this.requireManage(tripId, user);
+    const info = await this.share.get(tripId);
     return info ? info : { token: null };
   }
 
   @Delete()
-  remove(@CurrentUser() user: User, @Param('tripId') tripId: string) {
-    this.requireManage(tripId, user);
-    this.share.remove(tripId);
+  async remove(@CurrentUser() user: User, @Param('tripId') tripId: string) {
+    await this.requireManage(tripId, user);
+    await this.share.remove(tripId);
     return { success: true };
   }
 }
@@ -145,9 +145,9 @@ export class SharedController {
   }
 
   @Get(':token')
-  read(@Param('token') token: string) {
-    const data = this.share.getSharedTripData(token);
-    if (!data) {
+  async read(@Param('token') token: string) {
+    const data = await this.share.getSharedTripData(token);
+    if (!(await data)) {
       throw new HttpException({ error: 'Invalid or expired link' }, 404);
     }
     return data;

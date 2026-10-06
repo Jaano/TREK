@@ -1,19 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { PushSubscriptions } from '../../../db/entities/PushSubscriptions.entity';
+import type {
+  PushSubscriptionRow,
+  PushSubscriptionsRepository,
+} from '../../../db/repositories/PushSubscriptions.repository';
+import { UnitOfWork } from '../../database/unit-of-work';
 import type { CheckedPushSubscription } from './push-subscription.helpers';
 
-export interface PushSubscriptionRow {
-  id: number;
-  user_id: number;
-  endpoint: string;
-  p256dh: string;
-  auth: string;
-  vapid_public_key: string;
-  user_agent: string | null;
-  created_at: string;
-  last_success_at: string | null;
-  failure_count: number;
-}
+export type { PushSubscriptionRow } from '../../../db/repositories/PushSubscriptions.repository';
 
 /**
  * How many browsers one account can receive push on. Generous for phones,
@@ -31,7 +26,10 @@ const USER_AGENT_MAX_LENGTH = 256;
  */
 @Injectable()
 export class PushSubscriptionsService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    @InjectRepository(PushSubscriptions) private readonly repo: PushSubscriptionsRepository,
+    private readonly uow: UnitOfWork,
+  ) {}
 
   /**
    * Register a browser, or refresh it when it subscribes again. The endpoint
@@ -40,79 +38,54 @@ export class PushSubscriptionsService {
    * makes the cap drop the device that registered longest ago rather than one
    * that is in daily use. Answers how many devices the user now has.
    */
-  upsert(
+  async upsert(
     userId: number,
     subscription: CheckedPushSubscription,
     vapidPublicKey: string,
     userAgent?: string | null,
-  ): number {
+  ): Promise<number> {
     const agent = userAgent ? userAgent.slice(0, USER_AGENT_MAX_LENGTH) : null;
-    return this.db.transaction(() => {
-      this.db.run(
-        `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, vapid_public_key, user_agent)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(endpoint) DO UPDATE SET
-           user_id = excluded.user_id,
-           p256dh = excluded.p256dh,
-           auth = excluded.auth,
-           vapid_public_key = excluded.vapid_public_key,
-           user_agent = excluded.user_agent,
-           created_at = CURRENT_TIMESTAMP,
-           failure_count = 0`,
-        userId,
-        subscription.endpoint,
-        subscription.p256dh,
-        subscription.auth,
-        vapidPublicKey,
-        agent,
-      );
-      const overflow = this.countForUser(userId) - MAX_PUSH_DEVICES_PER_USER;
+    return await this.uow.transactional(async () => {
+      await this.repo.upsertSubscription({
+        user_id: userId,
+        endpoint: subscription.endpoint,
+        p256dh: subscription.p256dh,
+        auth: subscription.auth,
+        vapid_public_key: vapidPublicKey,
+        user_agent: agent,
+      }); // PS1
+      const overflow = (await this.countForUser(userId)) - MAX_PUSH_DEVICES_PER_USER;
       if (overflow > 0) {
-        this.db.run(
-          `DELETE FROM push_subscriptions WHERE id IN (
-             SELECT id FROM push_subscriptions
-             WHERE user_id = ? AND endpoint <> ?
-             ORDER BY created_at ASC, id ASC
-             LIMIT ?
-           )`,
-          userId,
-          subscription.endpoint,
-          overflow,
-        );
+        await this.repo.deleteOldestForUser(userId, subscription.endpoint, overflow); // PS2
       }
-      return this.countForUser(userId);
+      return await this.countForUser(userId);
     });
   }
 
   /** Forget one of the caller's own browsers. Someone else's endpoint is never touched. */
-  removeForUser(userId: number, endpoint: string): boolean {
-    return (
-      this.db.run('DELETE FROM push_subscriptions WHERE user_id = ? AND endpoint = ?', userId, endpoint).changes > 0
-    );
+  async removeForUser(userId: number, endpoint: string): Promise<boolean> {
+    return await this.repo.deleteForUserEndpoint(userId, endpoint); // PS3
   }
 
-  listForUser(userId: number): PushSubscriptionRow[] {
-    return this.db.all<PushSubscriptionRow>('SELECT * FROM push_subscriptions WHERE user_id = ? ORDER BY id', userId);
+  async listForUser(userId: number): Promise<PushSubscriptionRow[]> {
+    return await this.repo.listForUser(userId); // PS4
   }
 
-  countForUser(userId: number): number {
-    return this.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?', userId)?.n ?? 0;
+  async countForUser(userId: number): Promise<number> {
+    return await this.repo.countForUser(userId); // PS5
   }
 
-  hasAny(userId: number): boolean {
-    return !!this.db.get('SELECT 1 FROM push_subscriptions WHERE user_id = ? LIMIT 1', userId);
+  async hasAny(userId: number): Promise<boolean> {
+    return await this.repo.hasAnyForUser(userId); // PS6
   }
 
   /** The sender's clean-up: the push service said the browser is gone, or the row can no longer be sent to. */
-  deleteById(id: number): void {
-    this.db.run('DELETE FROM push_subscriptions WHERE id = ?', id);
+  async deleteById(id: number): Promise<void> {
+    await this.repo.deleteSubscription(id); // PS7
   }
 
-  recordSuccess(id: number): void {
-    this.db.run(
-      'UPDATE push_subscriptions SET last_success_at = CURRENT_TIMESTAMP, failure_count = 0 WHERE id = ?',
-      id,
-    );
+  async recordSuccess(id: number): Promise<void> {
+    await this.repo.recordSuccess(id); // PS8
   }
 
   /**
@@ -120,12 +93,7 @@ export class PushSubscriptionsService {
    * count, read in the same statement so two sends at once cannot both see
    * the old value. 0 when the row is gone already.
    */
-  recordFailure(id: number): number {
-    return (
-      this.db.get<{ failure_count: number }>(
-        'UPDATE push_subscriptions SET failure_count = failure_count + 1 WHERE id = ? RETURNING failure_count',
-        id,
-      )?.failure_count ?? 0
-    );
+  async recordFailure(id: number): Promise<number> {
+    return await this.repo.incrementFailureCount(id); // PS9
   }
 }

@@ -10,7 +10,7 @@ vi.mock('exifr', () => ({ default: { parse: vi.fn() } }));
 import exifr from 'exifr';
 import { PhotoCaptureBackfillService } from '../../../src/nest/memories/photo-capture-backfill.service';
 import type { PhotoResolverService } from '../../../src/nest/memories/photo-resolver.service';
-import type { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
+import type { TrekPhotoRegistrationService } from '../../../src/nest/photos/trek-photo-registration.service';
 import type { StorageService } from '../../../src/nest/storage/storage.service';
 
 // The storage layer's job here is only to hand the EXIF reader a real path;
@@ -32,7 +32,7 @@ function build(rows: Row[], info: Record<number, unknown>) {
   const photos = {
     resolve: (id: number) => rows.find(r => r.id === id) ?? null,
     recordCaptureMetadata,
-  } as unknown as TrekPhotosRepository;
+  } as unknown as TrekPhotoRegistrationService;
   const resolver = { getPhotoInfo } as unknown as PhotoResolverService;
   return { svc: new PhotoCaptureBackfillService(resolver, photos, storageStub), recordCaptureMetadata, getPhotoInfo };
 }
@@ -56,7 +56,7 @@ function buildHung(rows: Row[]) {
   const photos = {
     resolve: (id: number) => rows.find(r => r.id === id) ?? null,
     recordCaptureMetadata,
-  } as unknown as TrekPhotosRepository;
+  } as unknown as TrekPhotoRegistrationService;
   const svc = new PhotoCaptureBackfillService({ getPhotoInfo } as unknown as PhotoResolverService, photos, storageStub);
   const recover = () => {
     nas.up = true;
@@ -171,7 +171,7 @@ describe('PhotoCaptureBackfillService', () => {
     const photos = {
       resolve: (id: number) => rows.find(r => r.id === id) ?? null,
       recordCaptureMetadata,
-    } as unknown as TrekPhotosRepository;
+    } as unknown as TrekPhotoRegistrationService;
     const svc = new PhotoCaptureBackfillService({ getPhotoInfo } as unknown as PhotoResolverService, photos, storageStub);
     return { svc, rows, recordCaptureMetadata, getPhotoInfo, load };
   }
@@ -324,7 +324,7 @@ describe('PhotoCaptureBackfillService — local files', () => {
     const photos = {
       resolve: (id: number) => rows.find(r => r.id === id) ?? null,
       recordCaptureMetadata,
-    } as unknown as TrekPhotosRepository;
+    } as unknown as TrekPhotoRegistrationService;
     const resolver = { getPhotoInfo } as unknown as PhotoResolverService;
     return { svc: new PhotoCaptureBackfillService(resolver, photos, storageStub), recordCaptureMetadata, getPhotoInfo };
   }
@@ -446,7 +446,7 @@ describe('PhotoCaptureBackfillService — local files', () => {
     const photos = {
       resolve: () => { throw new Error('db gone'); },
       recordCaptureMetadata,
-    } as unknown as TrekPhotosRepository;
+    } as unknown as TrekPhotoRegistrationService;
     const svc = new PhotoCaptureBackfillService({} as PhotoResolverService, photos, storageStub);
 
     await expect(svc.run([7], 1)).resolves.toBe(false);

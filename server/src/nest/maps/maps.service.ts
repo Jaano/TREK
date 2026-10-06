@@ -13,6 +13,15 @@ import { readEnv, getAppUrl } from '../../app-config';
 import { safeFetchFollow, SsrfBlockedError } from '../../utils/ssrfGuard';
 import { discardBody, exceedsDeclaredLength, readCapped, readCappedText } from '../../utils/cappedFetch';
 import { resolveApiKey, type ApiKeySource } from '../settings/instance-api-keys';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
+import { Users } from '../../db/entities/Users.entity';
+import type { UsersRepository } from '../../db/repositories/Users.repository';
+import { PlaceDetailsCache } from '../../db/entities/PlaceDetailsCache.entity';
+import type { PlaceDetailsCacheRepository } from '../../db/repositories/PlaceDetailsCache.repository';
+import { Places } from '../../db/entities/Places.entity';
+import type { PlacesRepository } from '../../db/repositories/Places.repository';
 import { isPlacesProviderChoice, type PlacesProviderChoice } from './providers/places-provider';
 import {
   AMAP_SHORT_HOSTS,
@@ -24,7 +33,6 @@ import {
 } from './providers/amap.provider';
 // ── Photo cache (disk-backed) ────────────────────────────────────────────────
 import { PlacePhotoCacheService } from '../place-photos/place-photo-cache.service';
-import { DatabaseService } from '../database/database.service';
 import { GoogleQuotaService } from '../google-quota/google-quota.service';
 import { nominatimFetch, type GeoLane } from '../geo/nominatim.client';
 import {
@@ -736,24 +744,35 @@ type KeyedProvider =
  * (Nominatim/Overpass/Google), the place-details/photo caches and the SSRF
  * guard on every outbound URL. DI-native since the maps fold: the legacy
  * services/mapsService.ts functions live here as methods over the injected
- * DatabaseService (byte-identical SQL and behaviour). Every consumer injects
+ * repositories (byte-identical SQL and behaviour). Every consumer injects
  * this class; pure helpers live in maps.helpers.ts.
  *
  * The per-endpoint kill-switches are settings reads the legacy route does
  * inline; they're encapsulated here as `*Disabled()` helpers over the same
- * `app_settings` rows.
+ * `app_settings` rows (`AppSettingsRepository`, already injected pre-Plan-3h
+ * for the API-key resolution logic).
+ *
+ * Plan 3h Task 4 (R8): the file's last 9 raw statements are converted —
+ * MAP1/MAP2 reuse the already-injected `AppSettingsRepository`; MAP3-8
+ * (`place_details_cache`) reuse `PlaceDetailsCacheRepository` — built for
+ * `place-enrichment.service.ts`, an unrelated domain reading the SAME
+ * table — no new repository; MAP9 (`places.image_url`) is one additive
+ * `PlacesRepository` method.
  */
 @Injectable()
 export class MapsService {
   constructor(
-    private readonly database: DatabaseService,
     private readonly photoCache: PlacePhotoCacheService,
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+    @InjectRepository(Users) private readonly usersRepo: UsersRepository,
+    @InjectRepository(PlaceDetailsCache) private readonly placeDetailsCache: PlaceDetailsCacheRepository,
+    @InjectRepository(Places) private readonly placesRepo: PlacesRepository,
     private readonly googleQuota: GoogleQuotaService,
   ) {}
 
   /** Every call to Google goes through here, so the admin's daily ceiling sees it (#1582). */
-  private google(endpoint: string, label: string, init?: RequestInit): Promise<Response> {
-    this.googleQuota.record();
+  private async google(endpoint: string, label: string, init?: RequestInit): Promise<Response> {
+    await this.googleQuota.record();
     return googleFetch(endpoint, label, init);
   }
 
@@ -765,12 +784,9 @@ export class MapsService {
    *  a provider is built per request, and a pick is two requests. */
   private readonly amapTips = new AmapTipStash();
 
-  private isSettingDisabled(key: string): boolean {
-    const row = this.database.get<{ value: string }>(
-      'SELECT value FROM app_settings WHERE key = ?',
-      key,
-    );
-    return row?.value === 'false';
+  private async isSettingDisabled(key: string): Promise<boolean> {
+    const value = await this.appSettings.getValue(key);
+    return value === 'false';
   }
 
   /**
@@ -816,15 +832,15 @@ export class MapsService {
     }
   }
 
-  autocompleteDisabled(): boolean {
+  autocompleteDisabled(): Promise<boolean> {
     return this.isSettingDisabled('places_autocomplete_enabled');
   }
 
-  detailsDisabled(): boolean {
+  detailsDisabled(): Promise<boolean> {
     return this.isSettingDisabled('places_details_enabled');
   }
 
-  photosDisabled(): boolean {
+  photosDisabled(): Promise<boolean> {
     return this.isSettingDisabled('places_photos_enabled');
   }
 
@@ -1076,8 +1092,8 @@ export class MapsService {
    * everybody else got the lowest-id admin's and a 403 from Google. The source
    * is returned so a provider error can say which of the three was used.
    */
-  resolveMapsKey(userId: number): { key: string | null; source: ApiKeySource | null } {
-    return resolveApiKey(this.database, 'maps_api_key', userId, readEnv().maps.placesApiKey);
+  async resolveMapsKey(userId: number): Promise<{ key: string | null; source: ApiKeySource | null }> {
+    return resolveApiKey(this.appSettings, this.usersRepo, 'maps_api_key', userId, readEnv().maps.placesApiKey);
   }
 
   /**
@@ -1085,14 +1101,14 @@ export class MapsService {
    * admin's daily ceiling (#1582), which makes every caller fall back to what a
    * keyless install does instead of failing.
    */
-  getMapsKey(userId: number): string | null {
-    if (this.googleQuota.exhausted()) return null;
-    return this.resolveMapsKey(userId).key;
+  async getMapsKey(userId: number): Promise<string | null> {
+    if (await this.googleQuota.exhausted()) return null;
+    return (await this.resolveMapsKey(userId)).key;
   }
 
   /** The Amap credential, resolved through the identical three-step chain. */
-  resolveAmapKey(userId: number): { key: string | null; source: ApiKeySource | null } {
-    return resolveApiKey(this.database, 'amap_api_key', userId, readEnv().maps.amapApiKey);
+  async resolveAmapKey(userId: number): Promise<{ key: string | null; source: ApiKeySource | null }> {
+    return resolveApiKey(this.appSettings, this.usersRepo, 'amap_api_key', userId, readEnv().maps.amapApiKey);
   }
 
   // ── Keyed provider selection ───────────────────────────────────────────────
@@ -1104,12 +1120,9 @@ export class MapsService {
    * is read on the hot path of every search, and a hand-edited settings row must
    * not take place search down.
    */
-  placesProviderChoice(): PlacesProviderChoice {
-    const row = this.database.get<{ value: string }>(
-      'SELECT value FROM app_settings WHERE key = ?',
-      PLACES_PROVIDER_SETTING,
-    );
-    return isPlacesProviderChoice(row?.value) ? row.value : 'auto';
+  async placesProviderChoice(): Promise<PlacesProviderChoice> {
+    const value = await this.appSettings.getValue(PLACES_PROVIDER_SETTING);
+    return isPlacesProviderChoice(value) ? value : 'auto';
   }
 
   /**
@@ -1127,22 +1140,22 @@ export class MapsService {
    * walked when there is no Google key, so an install on Google issues exactly
    * the database reads it always did.
    */
-  keyedProvider(userId: number): KeyedProvider | null {
-    const choice = this.placesProviderChoice();
+  async keyedProvider(userId: number): Promise<KeyedProvider | null> {
+    const choice = await this.placesProviderChoice();
     if (choice === 'openstreetmap') return null;
 
     if (choice !== 'amap') {
-      const google = this.resolveMapsKey(userId);
+      const google = await this.resolveMapsKey(userId);
       // Past the daily ceiling (#1582) the key is spent for today: answer as if
       // there were none, so `auto` moves on and OpenStreetMap fills in.
-      if (google.key && !this.googleQuota.exhausted()) return { id: 'google', key: google.key, source: google.source };
+      if (google.key && !(await this.googleQuota.exhausted())) return { id: 'google', key: google.key, source: google.source };
       // An explicit 'google' choice with no key is not a reason to query Amap
       // instead: this install is on Google and is misconfigured. OSM answers,
       // the way a keyless install has always been answered.
       if (choice === 'google') return null;
     }
 
-    const amap = this.resolveAmapKey(userId);
+    const amap = await this.resolveAmapKey(userId);
     return amap.key
       ? { id: 'amap', provider: new AmapPlacesProvider({ key: amap.key, source: amap.source, userId }, this.amapTips) }
       : null;
@@ -1165,14 +1178,10 @@ export class MapsService {
    * key chain, and a setting read ahead of it would shift the order of the
    * app_settings reads every test of the chain stubs by position.
    */
-  private googleOnly(keyed: KeyedProvider | null, requested = false): boolean {
+  private async googleOnly(keyed: KeyedProvider | null, requested = false): Promise<boolean> {
     if (keyed?.id !== 'google') return false;
     if (requested) return true;
-    const row = this.database.get<{ value: string }>(
-      'SELECT value FROM app_settings WHERE key = ?',
-      PLACES_GOOGLE_ONLY_SETTING,
-    );
-    return row?.value === 'true';
+    return (await this.appSettings.getValue(PLACES_GOOGLE_ONLY_SETTING)) === 'true';
   }
 
   /**
@@ -1182,14 +1191,14 @@ export class MapsService {
    * the wrong place (the Eiffel Tower lands in Macau), so the gate is the point,
    * not the provider.
    */
-  private amapAnswersFirst(point?: { lat: number; lng: number }): boolean {
+  private async amapAnswersFirst(point?: { lat: number; lng: number }): Promise<boolean> {
     if (!point || !Number.isFinite(point.lat) || !Number.isFinite(point.lng)) return false;
-    return this.placesProviderChoice() === 'amap' && !isOutsideChina(point.lat, point.lng);
+    return (await this.placesProviderChoice()) === 'amap' && !isOutsideChina(point.lat, point.lng);
   }
 
   /** The Amap provider, when Amap holds the keyed slot; null otherwise. */
-  resolvePlacesProvider(userId: number): AmapPlacesProvider | null {
-    const keyed = this.keyedProvider(userId);
+  async resolvePlacesProvider(userId: number): Promise<AmapPlacesProvider | null> {
+    const keyed = await this.keyedProvider(userId);
     return keyed?.id === 'amap' ? keyed.provider : null;
   }
 
@@ -1207,9 +1216,9 @@ export class MapsService {
    * install that has since dropped its Amap key. Callers treat that as a miss,
    * not an error.
    */
-  private providerForPlaceId(userId: number, placeId: string): AmapPlacesProvider | null {
+  private async providerForPlaceId(userId: number, placeId: string): Promise<AmapPlacesProvider | null> {
     if (!isAmapPlaceId(placeId)) return null;
-    const amap = this.resolveAmapKey(userId);
+    const amap = await this.resolveAmapKey(userId);
     return amap.key ? new AmapPlacesProvider({ key: amap.key, source: amap.source, userId }, this.amapTips) : null;
   }
 
@@ -2137,7 +2146,7 @@ export class MapsService {
     locationBias?: { lat: number; lng: number; radius?: number },
     opts: { googleIdentityOnly?: boolean; googleOnly?: boolean } = {},
   ): Promise<{ places: Record<string, unknown>[]; source: string }> {
-    const keyed = this.keyedProvider(userId);
+    const keyed = await this.keyedProvider(userId);
     const { key: apiKey, source: keySource } = keyed?.id === 'google' ? keyed : { key: null, source: null };
 
     // The TREK index answers first, whether or not a Google key exists. It is
@@ -2167,7 +2176,7 @@ export class MapsService {
     // Its answer is kept, so the Amap slot further down never pays for the same
     // question twice. A failure drops through to the usual order.
     let amapAnswer: Record<string, unknown>[] | null = null;
-    if (keyed?.id === 'amap' && this.amapAnswersFirst(locationBias)) {
+    if (keyed?.id === 'amap' && (await this.amapAnswersFirst(locationBias))) {
       amapAnswer = await keyed.provider.searchText(query, lang, locationBias).catch((err: unknown) => {
         console.warn('Amap search failed, falling back:', (err as Error).message);
         return null;
@@ -2178,7 +2187,7 @@ export class MapsService {
     // A search sent to Google on purpose, or the admin's "Google only" switch,
     // skips the pair the same way: the search then reads exactly as it did
     // before 4.3.0 on an install with a key.
-    if (this.trekPlacesEnabled() && !(opts.googleIdentityOnly && apiKey) && !this.googleOnly(keyed, opts.googleOnly)) {
+    if (this.trekPlacesEnabled() && !(opts.googleIdentityOnly && apiKey) && !(await this.googleOnly(keyed, opts.googleOnly))) {
       // Both at once. The index is a dataset of businesses and is very good
       // at those; OpenStreetMap is where the temples, bridges, riverside
       // walks and viewpoints are, and a travel search asks for those
@@ -2323,8 +2332,8 @@ export class MapsService {
     limit: number,
     lang: string,
   ): Promise<{ places: Record<string, unknown>[]; source: string }> {
-    const keyed = this.keyedProvider(userId);
-    if (this.trekPlacesEnabled() && !this.googleOnly(keyed)) {
+    const keyed = await this.keyedProvider(userId);
+    if (this.trekPlacesEnabled() && !(await this.googleOnly(keyed))) {
       // Never throws upward, like the search: a slow index drops to the next source.
       const found = await trekPlacesNearby(origin.lat, origin.lng, { radius, limit }).catch((err: unknown) => {
         console.warn('TREK Places nearby failed, falling back:', (err as Error).message);
@@ -2367,7 +2376,7 @@ export class MapsService {
     locationBias?: { low: { lat: number; lng: number }; high: { lat: number; lng: number } },
     sessionToken?: string,
   ): Promise<MapsAutocompleteResult> {
-    const keyed = this.keyedProvider(userId);
+    const keyed = await this.keyedProvider(userId);
     const { key: apiKey, source: keySource } = keyed?.id === 'google' ? keyed : { key: null, source: null };
 
     // This is the path that mattered most. Nominatim's usage policy names
@@ -2383,7 +2392,7 @@ export class MapsService {
     const boxCentre = locationBias
       ? { lat: (locationBias.low.lat + locationBias.high.lat) / 2, lng: (locationBias.low.lng + locationBias.high.lng) / 2 }
       : undefined;
-    if (keyed?.id === 'amap' && this.amapAnswersFirst(boxCentre)) {
+    if (keyed?.id === 'amap' && (await this.amapAnswersFirst(boxCentre))) {
       amapTips = await keyed.provider.autocomplete(input, lang, locationBias).catch((err: unknown) => {
         console.warn('Amap autocomplete failed, falling back:', (err as Error).message);
         return null;
@@ -2391,7 +2400,7 @@ export class MapsService {
       if (amapTips && amapTips.length > 0) return { suggestions: amapTips, source: 'amap' };
     }
 
-    if (this.trekPlacesEnabled() && !this.googleOnly(keyed)) {
+    if (this.trekPlacesEnabled() && !(await this.googleOnly(keyed))) {
       try {
         const centre = locationBias
           ? {
@@ -2670,7 +2679,7 @@ export class MapsService {
     // (the 'de' the legacy service defaulted to was a development leftover;
     // cache rows keyed 'de' for lang-less callers go cold once — 7-day TTL).
     const langKey = toApiLang(lang);
-    const apiKey = this.getMapsKey(userId);
+    const apiKey = await this.getMapsKey(userId);
     // No key means no way to resolve a Google id: they have no OpenStreetMap
     // equivalent to fall back to. That is an empty result, not a client error.
     // Search and autocomplete already answer their keyless case with the OSM
@@ -2681,11 +2690,7 @@ export class MapsService {
 
     // Check DB cache first (lean mask, expanded=0) — 7-day TTL
     const DETAILS_TTL = 7 * 24 * 60 * 60 * 1000;
-    const cached = this.database.get<{ payload_json: string; fetched_at: number }>(
-      'SELECT payload_json, fetched_at FROM place_details_cache WHERE place_id = ? AND lang = ? AND expanded = 0',
-      placeId,
-      langKey,
-    );
+    const cached = await this.placeDetailsCache.findEntry(placeId, langKey, 0);
     if (cached && Date.now() - cached.fetched_at < DETAILS_TTL) return { place: cachedDetails(cached.payload_json) };
 
     // Closes the autocomplete session this lookup belongs to, so Google bills
@@ -2741,13 +2746,7 @@ export class MapsService {
     };
 
     try {
-      this.database.run(
-        'INSERT OR REPLACE INTO place_details_cache (place_id, lang, expanded, payload_json, fetched_at) VALUES (?, ?, 0, ?, ?)',
-        placeId,
-        langKey,
-        JSON.stringify(place),
-        Date.now(),
-      );
+      await this.placeDetailsCache.upsertEntry({ place_id: placeId, lang: langKey, expanded: 0, payload_json: JSON.stringify(place), fetched_at: Date.now() });
     } catch (dbErr) {
       console.error('Failed to cache place details:', dbErr);
     }
@@ -2769,29 +2768,19 @@ export class MapsService {
     placeId: string,
     lang?: string,
   ): Promise<{ place: Record<string, unknown> | null }> {
-    const provider = this.providerForPlaceId(userId, placeId);
+    const provider = await this.providerForPlaceId(userId, placeId);
     if (!provider) return { place: null };
 
     const langKey = toApiLang(lang);
     const DETAILS_TTL = 7 * 24 * 60 * 60 * 1000;
-    const cached = this.database.get<{ payload_json: string; fetched_at: number }>(
-      'SELECT payload_json, fetched_at FROM place_details_cache WHERE place_id = ? AND lang = ? AND expanded = 0',
-      placeId,
-      langKey,
-    );
+    const cached = await this.placeDetailsCache.findEntry(placeId, langKey, 0);
     if (cached && Date.now() - cached.fetched_at < DETAILS_TTL) return { place: cachedDetails(cached.payload_json) };
 
     const place = await provider.placeDetails(placeId, lang);
     if (!place) return { place: null };
 
     try {
-      this.database.run(
-        'INSERT OR REPLACE INTO place_details_cache (place_id, lang, expanded, payload_json, fetched_at) VALUES (?, ?, 0, ?, ?)',
-        placeId,
-        langKey,
-        JSON.stringify(place),
-        Date.now(),
-      );
+      await this.placeDetailsCache.upsertEntry({ place_id: placeId, lang: langKey, expanded: 0, payload_json: JSON.stringify(place), fetched_at: Date.now() });
     } catch (dbErr) {
       console.error('Failed to cache place details:', dbErr);
     }
@@ -2824,17 +2813,13 @@ export class MapsService {
     }
 
     const langKey = toApiLang(lang); // 'en' default — see getPlaceDetails
-    const apiKey = this.getMapsKey(userId);
+    const apiKey = await this.getMapsKey(userId);
     // Same as the lean lookup above: an empty result, not a client error.
     if (!apiKey) return { place: null };
 
     // Check DB cache for expanded result
     if (!refresh) {
-      const cached = this.database.get<{ payload_json: string }>(
-        'SELECT payload_json FROM place_details_cache WHERE place_id = ? AND lang = ? AND expanded = 1',
-        placeId,
-        langKey,
-      );
+      const cached = await this.placeDetailsCache.findEntry(placeId, langKey, 1);
       if (cached) return { place: cachedDetails(cached.payload_json) };
     }
 
@@ -2889,13 +2874,7 @@ export class MapsService {
     };
 
     try {
-      this.database.run(
-        'INSERT OR REPLACE INTO place_details_cache (place_id, lang, expanded, payload_json, fetched_at) VALUES (?, ?, 1, ?, ?)',
-        placeId,
-        langKey,
-        JSON.stringify(place),
-        Date.now(),
-      );
+      await this.placeDetailsCache.upsertEntry({ place_id: placeId, lang: langKey, expanded: 1, payload_json: JSON.stringify(place), fetched_at: Date.now() });
     } catch (dbErr) {
       console.error('Failed to cache expanded place details:', dbErr);
     }
@@ -2924,7 +2903,7 @@ export class MapsService {
     const noPhoto = { photoUrl: null, attribution: null };
 
     // Recent miss — don't hammer the API
-    if (this.photoCache.getErrored(placeId)) return noPhoto;
+    if (await this.photoCache.getErrored(placeId)) return noPhoto;
 
     // Deduplicate concurrent requests for the same placeId
     const existing = this.photoCache.getInFlight(placeId);
@@ -2942,7 +2921,7 @@ export class MapsService {
     const fetchPromise = (async (): Promise<{ attribution: string | null } | null> => {
       await acquirePhotoFetchSlot();
       try {
-        const apiKey = this.getMapsKey(userId);
+        const apiKey = await this.getMapsKey(userId);
 
         // Coordinate-based Wikipedia/Wikimedia lookup. Used for coordinate-only
         // (right-click) places and as a fallback when a Google place yields no photo,
@@ -3039,11 +3018,7 @@ export class MapsService {
 
           // Persist stable proxy URL to database
           try {
-            this.database.run(
-              "UPDATE places SET image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE google_place_id = ? AND (image_url IS NULL OR image_url = '')",
-              cached.photoUrl,
-              placeId,
-            );
+            await this.placesRepo.setImageUrlIfUnset(placeId, cached.photoUrl);
           } catch (dbErr) {
             console.error('Failed to persist photo URL to database:', dbErr);
           }
@@ -3062,7 +3037,7 @@ export class MapsService {
         const fallback = await fetchWikimediaFallback();
         if (fallback) return fallback;
 
-        this.photoCache.markError(placeId, providerFailed ? 'provider-error' : 'no-photo');
+        await this.photoCache.markError(placeId, providerFailed ? 'provider-error' : 'no-photo');
         return null;
       } finally {
         releasePhotoFetchSlot();
@@ -3092,7 +3067,7 @@ export class MapsService {
     // operator env var and the instance-wide row, and nobody's personal key is
     // read on somebody else's behalf (#1939). Nominatim stays the fallback, so
     // an Amap outage does not take a right-click down with it.
-    const amap = this.resolvePlacesProvider(0);
+    const amap = await this.resolvePlacesProvider(0);
     if (amap) {
       const latNum = Number.parseFloat(lat);
       const lngNum = Number.parseFloat(lng);

@@ -8,14 +8,20 @@
  * namespaced, and styled by the HOST's copy of the declaration, never the plugin's
  * answer, because the colour and icon end up inside marker markup.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import Database from 'better-sqlite3';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 import { HttpException } from '@nestjs/common';
 
 const { pluginsEnabled } = vi.hoisted(() => ({ pluginsEnabled: vi.fn(() => true) }));
 vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return { db, closeDb: () => {}, reinitialize: () => {}, getPlaceWithTags: () => null, canAccessTrip: () => null, isOwner: () => false };
+});
 
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { db as testDb } from '../../../src/db/database';
+import type { PluginsRepository } from '../../../src/db/repositories/Plugins.repository';
+import { createTestPluginsRepo } from '../../helpers/share-repos';
 import type { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
 import { PluginPoisService } from '../../../src/nest/plugins/contributions/plugin-pois.service';
 import { PluginPoisController, parsePluginPoiQuery } from '../../../src/nest/plugins/contributions/plugin-pois.controller';
@@ -31,22 +37,27 @@ const trailheads: PluginPoiCategory = { id: 'trailheads', label: 'Trailheads', l
 const bounds = { south: 47, west: 11, north: 47.5, east: 11.5 };
 const hit = (over: Record<string, unknown> = {}) => ({ id: 'th-1', name: 'Trailhead', lat: 47.2, lng: 11.2, ...over });
 
-function makeDb(): DatabaseService {
-  const conn = new Database(':memory:');
-  conn.exec("CREATE TABLE plugins (id TEXT PRIMARY KEY, name TEXT, status TEXT, sort_order INTEGER DEFAULT 0, capabilities TEXT)");
-  const insert = conn.prepare('INSERT INTO plugins (id, name, status, sort_order, capabilities) VALUES (?, ?, ?, ?, ?)');
+// The plugin rows every case reads, re-seeded before each one on the migrated
+// snapshot the ORM repository is bound to.
+function seedPlugins(): void {
+  testDb.prepare('DELETE FROM plugins').run();
+  const insert = testDb.prepare('INSERT INTO plugins (id, name, status, sort_order, capabilities) VALUES (?, ?, ?, ?, ?)');
   insert.run('trail-finder', 'Trail Finder', 'active', 1, JSON.stringify({ poiCategories: [trailheads, { ...trailheads, id: 'huts', label: 'Huts', labels: undefined, icon: 'Tent' }] }));
   insert.run('water-map', 'Water Map', 'active', 0, JSON.stringify({ poiCategories: [{ id: 'taps', label: 'Taps', icon: 'Droplet', color: '#2b6cb0' }] }));
   insert.run('quiet', 'Quiet', 'active', 2, JSON.stringify({ poiCategories: [{ id: 'benches', label: 'Benches', icon: 'Info', color: '#000000' }] }));
-  return new DatabaseService(conn);
 }
 
-function makeService(answer: () => unknown, providers = ['trail-finder', 'water-map'], db = makeDb()) {
+let pluginsRepo: PluginsRepository;
+beforeAll(async () => { pluginsRepo = await createTestPluginsRepo(testDb); });
+beforeEach(() => seedPlugins());
+afterAll(() => { testDb.close(); });
+
+function makeService(answer: () => unknown, providers = ['trail-finder', 'water-map']) {
   const hooks = {
     providersOf: vi.fn(() => providers),
     categoryPois: vi.fn(async () => answer()),
   } as unknown as PluginHooks & { providersOf: ReturnType<typeof vi.fn>; categoryPois: ReturnType<typeof vi.fn> };
-  return { service: new PluginPoisService(hooks, db), hooks };
+  return { service: new PluginPoisService(hooks, pluginsRepo), hooks };
 }
 
 beforeEach(() => pluginsEnabled.mockReturnValue(true));
@@ -204,24 +215,23 @@ describe('PluginPoisService', () => {
       .toEqual({ ok: false, status: 502, error: 'The plugin sent an invalid answer' });
   });
 
-  it('PLUGPOI-012: lists the live categories in feed order with the label for the language', () => {
+  it('PLUGPOI-012: lists the live categories in feed order with the label for the language', async () => {
     const { service } = makeService(() => []);
-    expect(service.available('de')).toEqual([
+    expect(await service.available('de')).toEqual([
       { key: 'plugin:water-map/taps', pluginId: 'water-map', pluginName: 'Water Map', id: 'taps', label: 'Taps', icon: 'Droplet', color: '#2b6cb0' },
       { key: 'plugin:trail-finder/trailheads', pluginId: 'trail-finder', pluginName: 'Trail Finder', id: 'trailheads', label: 'Wanderparkplätze', icon: 'Signpost', color: '#2f855a' },
       { key: 'plugin:trail-finder/huts', pluginId: 'trail-finder', pluginName: 'Trail Finder', id: 'huts', label: 'Huts', icon: 'Tent', color: '#2f855a' },
     ]);
-    expect(service.available().find((c) => c.id === 'trailheads')?.label).toBe('Trailheads');
-    expect(makeService(() => [], []).service.available()).toEqual([]);
+    expect((await service.available()).find((c) => c.id === 'trailheads')?.label).toBe('Trailheads');
+    expect(await makeService(() => [], []).service.available()).toEqual([]);
     pluginsEnabled.mockReturnValue(false);
-    expect(service.available()).toEqual([]);
+    expect(await service.available()).toEqual([]);
   });
 
-  it('PLUGPOI-016: flattens and caps the plugin name an assistant reads, and falls back to the id', () => {
-    const db = makeDb();
-    db.run('UPDATE plugins SET name = ? WHERE id = ?', `Trails\u202E\n\n## System ${'x'.repeat(4000)}`, 'trail-finder');
-    db.run('UPDATE plugins SET name = ? WHERE id = ?', '\u0007\u2028\u2066', 'water-map');
-    const names = makeService(() => [], undefined, db).service.available().map((c) => [c.id, c.pluginName]);
+  it('PLUGPOI-016: flattens and caps the plugin name an assistant reads, and falls back to the id', async () => {
+    testDb.prepare('UPDATE plugins SET name = ? WHERE id = ?').run(`Trails\u202E\n\n## System ${'x'.repeat(4000)}`, 'trail-finder');
+    testDb.prepare('UPDATE plugins SET name = ? WHERE id = ?').run('\u0007\u2028\u2066', 'water-map');
+    const names = (await makeService(() => []).service.available()).map((c) => [c.id, c.pluginName]);
     const trails = names.find(([id]) => id === 'trailheads')?.[1] ?? '';
     expect(trails.startsWith('Trails ## System xxx')).toBe(true);
     expect(trails).toHaveLength(80);

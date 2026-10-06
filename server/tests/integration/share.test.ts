@@ -7,31 +7,10 @@ import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -43,19 +22,21 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip, addTripMember, createDay, createPlace, createDayAssignment, createDayNote } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { PlacePhotoCacheService } from '../../src/nest/place-photos/place-photo-cache.service';
-import { DatabaseService } from '../../src/nest/database/database.service';
 import { db as sharedDb } from '../../src/db/database';
 import { LocalDriver } from '../../src/nest/storage/drivers/local.driver';
 import { StorageService } from '../../src/nest/storage/storage.service';
 import type { StorageRegistryService, ResolvedCategory } from '../../src/nest/storage/storage-registry.service';
 import { DEFAULT_UPLOADS_ROOT, GLOBAL_TEMP_DIR } from '../../src/nest/storage/storage-paths';
+import { createTestOrm } from '../helpers/test-orm';
+import { GooglePlacePhotoMeta } from '../../src/db/entities/GooglePlacePhotoMeta.entity';
+import { Places } from '../../src/db/entities/Places.entity';
+import { CollectionPlaces } from '../../src/db/entities/CollectionPlaces.entity';
 
 // A real instance over the same connection the app uses — these cases write a
 // cache entry and then read it back through the HTTP route, so the stub
@@ -68,7 +49,12 @@ const testStorage = new StorageService({
   tempDir: () => GLOBAL_TEMP_DIR,
   replicaFailures: () => [],
 } as unknown as StorageRegistryService);
-const placePhotoCache = new PlacePhotoCacheService(new DatabaseService(sharedDb), testStorage);
+// Plan 3c Task 1: PlacePhotoCacheService now needs two repositories — a
+// second, throwaway MikroORM bound to the SAME `sharedDb` connection
+// (`allowGlobalContext: true`, the same shape `place-photo-cache.service
+// .test.ts` uses), since this helper's two call sites below run outside any
+// HTTP request the app's own `withRequestContext` would wrap.
+let placePhotoCache: PlacePhotoCacheService;
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -77,10 +63,10 @@ let nestApp: INestApplication;
 let app: Application;
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  const t = await createTestOrm(sharedDb, { allowGlobalContext: true });
+  placePhotoCache = new PlacePhotoCacheService(testStorage, t.repo(GooglePlacePhotoMeta), t.repo(Places), t.repo(CollectionPlaces));
 });
 
 beforeEach(() => {

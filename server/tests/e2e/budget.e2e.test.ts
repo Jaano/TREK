@@ -1,7 +1,7 @@
 /**
  * Budget module e2e — exercises the migrated /api/trips/:tripId/budget endpoints
- * through the real JwtAuthGuard against a temp SQLite db carrying the full real
- * schema (createTables + runMigrations), so the folded BudgetService runs its
+ * through the real JwtAuthGuard against a temp SQLite db carrying the full real,
+ * migrated schema (createSnapshotTestDb), so the folded BudgetService runs its
  * real SQL. Only the db singleton (trip access) and the WebSocket broadcast are
  * mocked; the permission check is a spy on the container's PermissionsService.
  * ReservationsModule is mounted beside it because an expense can be linked to a
@@ -11,29 +11,24 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockIns
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { Test } from '@nestjs/testing';
 import { sessionCookie } from './harness';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec('PRAGMA foreign_keys = ON');
-  return { db: tmp };
-});
 const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
 
-vi.mock('../../src/db/database', () => ({
-  db,
-  closeDb: () => {},
-  reinitialize: () => {},
-  canAccessTrip,
-  getPlaceWithTags: () => null,
-  isOwner: () => false,
-}));
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return {
+    db,
+    closeDb: () => {},
+    reinitialize: () => {},
+    canAccessTrip,
+    getPlaceWithTags: () => null,
+    isOwner: () => false,
+  };
+});
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
@@ -42,14 +37,15 @@ import { PermissionsService } from '../../src/nest/permissions/permissions.servi
 // PermissionsService singleton (created in beforeAll, after build()).
 let checkPermission: MockInstance;
 
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
+import { db } from '../../src/db/database';
 import { BudgetModule } from '../../src/nest/budget/budget.module';
 import { ReservationsModule } from '../../src/nest/reservations/reservations.module';
 import { NotificationsService } from '../../src/nest/notifications/notifications.service';
 import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   let server: Server;
@@ -57,7 +53,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   let tripId: number;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, BudgetModule, ReservationsModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, BudgetModule, ReservationsModule] })
       // The settlement read awaits live FX rates; the trip here is all-EUR, so a
       // null result is the identity — and the test never touches the network.
       .overrideProvider(ExchangeRatesService)
@@ -75,8 +71,6 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   }
 
   beforeAll(async () => {
-    createTables(db);
-    runMigrations(db);
     // The temp db carries the real schema (password_hash NOT NULL), so seed the
     // auth users directly instead of via the trimmed-DDL seedUser helper.
     db.prepare(
@@ -95,7 +89,11 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   });
 
   beforeEach(() => {
-    canAccessTrip.mockReturnValue({ id: tripId, user_id: 1, currency: 'EUR' });
+    // 0b review L2 / security review F-B7: `canAccessTrip` is dead mock
+    // scaffolding — `TripAccessGuard` reads `TripsRepository.findAccessible`
+    // directly now (Plan 3c Task 0b), so `db/database`'s `canAccessTrip`
+    // property is never imported by production code; this line used to be a
+    // no-op that read as if it still controlled access.
     checkPermission.mockReturnValue(true);
   });
 
@@ -109,10 +107,20 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   });
 
   it('404 when the trip is not accessible', async () => {
-    canAccessTrip.mockReturnValue(undefined);
-    const res = await request(server).get(`/api/trips/${tripId}/budget`).set('Cookie', sessionCookie(1));
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Trip not found' });
+    // Plan 3c Task 0b: TripAccessGuard reads TripsRepository.findAccessible
+    // directly now, a real query — `canAccessTrip.mockReturnValue(...)` no
+    // longer intercepts it. The trip row is seeded once in `beforeAll` (not
+    // re-seeded per test), so it is removed and restored around this one
+    // assertion instead.
+    db.prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+    try {
+      const res = await request(server).get(`/api/trips/${tripId}/budget`).set('Cookie', sessionCookie(1));
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+    } finally {
+      db.prepare("INSERT INTO trips (id, user_id, title, currency) VALUES (?, 1, 'E2E Trip', 'EUR')").run(tripId);
+      db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, 2)').run(tripId);
+    }
   });
 
   it('201 on create with permission, then 200 list returns the stored row', async () => {
@@ -319,6 +327,28 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     expect(res.body).toEqual({ error: 'Settlement not found' });
   });
 
+  // Plan 4 Task 8b (U6) — :id is now parsed ONCE at the controller gate
+  // (toRowId), so a non-numeric id 404s cleanly through that guard instead
+  // of falling through to the repository and depending on SQLite's
+  // column-affinity CAST to simply not match (the legacy outcome was also a
+  // 404, same status — this pins the gate itself, not just the status).
+  it('404 (not 500) on a budget item update with a non-numeric :id', async () => {
+    const res = await request(server)
+      .put(`/api/trips/${tripId}/budget/abc`)
+      .set('Cookie', sessionCookie(1))
+      .send({ name: 'X' });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Budget item not found' });
+  });
+
+  it('404 (not 500) on a budget item delete with a non-numeric :id', async () => {
+    const res = await request(server)
+      .delete(`/api/trips/${tripId}/budget/abc`)
+      .set('Cookie', sessionCookie(1));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Budget item not found' });
+  });
+
   // #2084: an expense that already exists can be linked to a booking of its trip
   // (several per booking), let go of again, and goes with the booking it is on.
   describe('linking expenses to bookings (#2084)', () => {
@@ -477,7 +507,6 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     function audTrip(): number {
       const id = Number(db.prepare("INSERT INTO trips (user_id, title, currency) VALUES (1, 'AUD Trip', 'AUD')").run().lastInsertRowid);
       db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, 2)').run(id);
-      canAccessTrip.mockReturnValue({ id, user_id: 1, currency: 'AUD' });
       return id;
     }
     const balanceOf = (body: { balances: { user_id: number; balance: number }[] }, uid: number) =>

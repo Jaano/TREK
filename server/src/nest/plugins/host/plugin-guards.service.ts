@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { PermissionsService } from '../../permissions/permissions.service';
 import { AddonsService } from '../../addons/addons.service';
+import { Users } from '../../../db/entities/Users.entity';
+import type { UsersRepository } from '../../../db/repositories/Users.repository';
+import { Trips } from '../../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../../db/repositories/Trips.repository';
 import { BadParams, ForbiddenResource } from './rpc-errors';
 import { num } from './rpc-params';
 import type { PluginRpcContext } from './rpc-kit/types';
@@ -20,9 +24,13 @@ import type { PluginRpcContext } from './rpc-kit/types';
 @Injectable()
 export class PluginGuards {
   constructor(
-    private readonly db: DatabaseService,
+    // Plan 4 Task 2 — canAccessTrip's own DatabaseService delegation is gone:
+    // this injects TripsRepository directly (same constructor slot) and
+    // calls findAccessible.
+    @InjectRepository(Trips) private readonly trips: TripsRepository,
     private readonly permissions: PermissionsService,
     private readonly addons: AddonsService,
+    @InjectRepository(Users) private readonly users: UsersRepository,
   ) {}
 
   /**
@@ -31,12 +39,12 @@ export class PluginGuards {
    * so a plugin cannot read another user's trips by naming their id. A userless
    * context (a job, or onLoad) has no acting user and is refused.
    */
-  tripRead<T>(params: Record<string, unknown>, ctx: PluginRpcContext, read: (userId: number) => T): T {
+  async tripRead<T>(params: Record<string, unknown>, ctx: PluginRpcContext, read: (userId: number) => T): Promise<T> {
     const tripId = num(params.tripId, 'tripId');
     if (ctx.actingUserId === undefined) {
       throw new ForbiddenResource('trip reads require an authenticated user context');
     }
-    if (!this.db.canAccessTrip(tripId, ctx.actingUserId)) {
+    if (!(await this.trips.findAccessible(tripId, ctx.actingUserId))) {
       throw new ForbiddenResource(`no access to trip ${tripId}`);
     }
     // The read runs only for a bound, membership-checked user, so hand the id through
@@ -56,9 +64,9 @@ export class PluginGuards {
   }
 
   /** A write is allowed only if the acting user can access AND edit the trip. */
-  requireTripEdit(tripId: number, userId: number, action: string): void {
-    if (!this.db.canAccessTrip(tripId, userId)) throw new ForbiddenResource(`no access to trip ${tripId}`);
-    if (!this.canEditAs(action, tripId, userId)) throw new ForbiddenResource(`no permission to edit trip ${tripId}`);
+  async requireTripEdit(tripId: number, userId: number, action: string): Promise<void> {
+    if (!(await this.trips.findAccessible(tripId, userId))) throw new ForbiddenResource(`no access to trip ${tripId}`);
+    if (!(await this.canEditAs(action, tripId, userId))) throw new ForbiddenResource(`no permission to edit trip ${tripId}`);
   }
 
   /**
@@ -66,12 +74,21 @@ export class PluginGuards {
    * per-domain canEdit. Returns false and never throws, so the caller decides which
    * message the refusal carries.
    */
-  canEditAs(action: string, tripId: number, userId: number): boolean {
-    const trip = this.db.canAccessTrip(tripId, userId);
+  async canEditAs(action: string, tripId: number, userId: number): Promise<boolean> {
+    const trip = await this.trips.findAccessible(tripId, userId);
     if (!trip) return false;
-    const user = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
-    if (!user) return false;
-    return this.permissions.checkPermission(action, user.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
+    // UsersRepository.getRole (PG3, Plan 3j Task 1) — `SELECT role FROM users
+    // WHERE id = ?`, converted. Its `string | null` return already folds "no
+    // row" and "row with a null role" into one value (the `role` column is
+    // `NOT NULL DEFAULT 'user'`, so the second case cannot occur against the
+    // real schema), so a null role here IS the "row is gone" refusal the
+    // legacy `!user` check made. The `?? 'user'` fallback below is kept
+    // verbatim rather than dropped, even though it is now unreachable code,
+    // so a future change to getRole's contract can't silently resurrect the
+    // old defensive gap.
+    const role = await this.users.getRole(userId);
+    if (role === null) return false;
+    return this.permissions.checkPermission(action, role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
   }
 
   /**
@@ -79,17 +96,22 @@ export class PluginGuards {
    * requireTripEdit. `trip_create` is the only one today: it has no trip to check
    * against yet, which is why the owner id is passed as null.
    */
-  canCreateAs(action: string, userId: number): boolean {
-    const user = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
-    return this.permissions.checkPermission(action, user?.role ?? 'user', null, userId, false);
+  async canCreateAs(action: string, userId: number): Promise<boolean> {
+    // Same converted read as canEditAs (PG4, identical statement text). No
+    // early refusal here, unchanged from the legacy branch: a vanished row
+    // falls back to role 'user' rather than refusing outright, exactly like
+    // `user?.role ?? 'user'` did — `trip_create`'s 'everybody' default means
+    // that fallback alone is enough to let the call through today.
+    const role = await this.users.getRole(userId);
+    return this.permissions.checkPermission(action, role ?? 'user', null, userId, false);
   }
 
   /**
    * A subsystem read is refused when its addon is off, matching the app, where a
    * disabled addon means there is simply nothing to read.
    */
-  requireAddon(addonId: string, noun: string): void {
-    if (!this.addons.isAddonEnabled(addonId)) throw new ForbiddenResource(`the ${noun} addon is disabled`);
+  async requireAddon(addonId: string, noun: string): Promise<void> {
+    if (!(await this.addons.isAddonEnabled(addonId))) throw new ForbiddenResource(`the ${noun} addon is disabled`);
   }
 
   /**

@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
+import { withRequestContext } from '../database/request-context';
 import { PhotoCaptureBackfillService } from '../memories/photo-capture-backfill.service';
 import { MapsService } from '../maps/maps.service';
 import { JourneyDomainService } from './journey-domain.service';
@@ -28,6 +30,12 @@ function trekPhotoIdsOf(photos: readonly unknown[]): number[] {
  * Uploads from a device fill their capture times here too, but tell nobody (see
  * scheduleUpload): one upload request carries one file, so a refresh per request
  * would reload every open client once per photo of a bulk upload.
+ *
+ * Every schedule* method runs its work after the add has answered, so each one
+ * forks its own request context with `withRequestContext` instead of riding the
+ * `EntityManager` fork of a request that is already over — the same shape the
+ * import-job runner (`ImportJobsService#start`) and the webhook nudge timer
+ * (`DocSyncWebhookController#schedule`) use for their detached chains.
  */
 @Injectable()
 export class JourneyPhotoCaptureService {
@@ -35,20 +43,33 @@ export class JourneyPhotoCaptureService {
     private readonly backfill: PhotoCaptureBackfillService,
     private readonly journey: JourneyDomainService,
     private readonly maps: MapsService,
+    private readonly orm: MikroORM,
   ) {}
 
   /** Provider photos just added to a journey, to its gallery or to one of its entries. Detached. */
   scheduleForJourney(journeyId: number, photos: readonly unknown[], userId: number): void {
     const ids = trekPhotoIdsOf(photos);
     if (!ids.length) return;
-    void this.fill(journeyId, ids, userId);
+    void withRequestContext(this.orm, () => this.fill(journeyId, ids, userId));
   }
 
   /** Provider photos just added to an entry, for a caller that only knows the entry. Detached. */
   scheduleForEntry(entryId: number, photos: readonly unknown[], userId: number): void {
     const ids = trekPhotoIdsOf(photos);
     if (!ids.length) return;
-    void this.fill(this.journey.journeyIdOfEntry(entryId), ids, userId);
+    void withRequestContext(this.orm, () => this.fillForEntry(entryId, ids, userId));
+  }
+
+  /** scheduleForEntry's detached half: find the entry's journey, then fill. Never rejects. */
+  private async fillForEntry(entryId: number, trekPhotoIds: number[], userId: number): Promise<void> {
+    let journeyId: number | null;
+    try {
+      journeyId = await this.journey.journeyIdOfEntry(entryId);
+    } catch (err) {
+      console.error(`[Journey] capture refresh failed for entry ${entryId}:`, err instanceof Error ? err.message : err);
+      return;
+    }
+    await this.fill(journeyId, trekPhotoIds, userId);
   }
 
   /**
@@ -63,8 +84,9 @@ export class JourneyPhotoCaptureService {
   scheduleUpload(photos: readonly unknown[], userId: number): void {
     const ids = trekPhotoIdsOf(photos);
     if (!ids.length) return;
-    void this.backfill.run(ids, userId)
-      .then(() => this.placeEntries(ids))
+    // The placing is chained inside the fork, not after it, so it runs in the
+    // same context as the backfill rather than in whatever the caller had.
+    void withRequestContext(this.orm, () => this.backfill.run(ids, userId).then(() => this.placeEntries(ids)))
       .catch(err => console.error('[Journey] capture for uploads failed:', err instanceof Error ? err.message : err));
   }
 
@@ -75,9 +97,9 @@ export class JourneyPhotoCaptureService {
    * which the owner can still name by hand.
    */
   async placeEntries(trekPhotoIds: number[]): Promise<number> {
-    let placed: ReturnType<JourneyDomainService['placeEntriesFromPhotos']>;
+    let placed: Awaited<ReturnType<JourneyDomainService['placeEntriesFromPhotos']>>;
     try {
-      placed = this.journey.placeEntriesFromPhotos(trekPhotoIds);
+      placed = await this.journey.placeEntriesFromPhotos(trekPhotoIds);
     } catch (err) {
       // An extra on top of the capture times: it must never cost the refresh below it.
       console.error('[Journey] placing entries from photos failed:', err instanceof Error ? err.message : err);
@@ -88,11 +110,11 @@ export class JourneyPhotoCaptureService {
       try {
         const where = await this.maps.reverseGeocode(String(p.lat), String(p.lng), undefined, { timeoutMs: 8000, locality: true });
         const name = where.name || where.address;
-        if (name) this.journey.nameEntryLocation(p.entryId, name);
+        if (name) await this.journey.nameEntryLocation(p.entryId, name);
       } catch { /* the pin stands without a name */ }
     }));
     for (const journeyId of new Set(placed.map(p => p.journeyId))) {
-      this.journey.broadcastJourneyEvent(journeyId, 'journey:photos:updated', {});
+      await this.journey.broadcastJourneyEvent(journeyId, 'journey:photos:updated', {});
     }
     return placed.length;
   }
@@ -110,7 +132,7 @@ export class JourneyPhotoCaptureService {
       // Its own broadcast when it places something; the one below is about order.
       await this.placeEntries(trekPhotoIds);
       if (changed && journeyId != null) {
-        this.journey.broadcastJourneyEvent(journeyId, 'journey:photos:updated', {});
+        await this.journey.broadcastJourneyEvent(journeyId, 'journey:photos:updated', {});
       }
     } catch (err) {
       console.error(`[Journey] capture refresh failed for journey ${journeyId}:`, err instanceof Error ? err.message : err);

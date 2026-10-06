@@ -3,7 +3,7 @@ import { HttpException } from '@nestjs/common';
 import { ReceiptScanController } from '../../../src/nest/receipt-scan/receipt-scan.controller';
 import type { ImportJobsService } from '../../../src/nest/booking-import/import-jobs.service';
 import type { LlmParseService } from '../../../src/nest/llm-parse/llm-parse.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import type { User } from '../../../src/types';
@@ -13,13 +13,13 @@ const photo = (name = 'r.jpg') => ({ originalname: name, buffer: Buffer.from('x'
 
 function make(over: { readsImages?: boolean; trip?: unknown; addon?: boolean; allowed?: boolean } = {}) {
   const startReceipt = vi.fn(() => 'job-1');
-  const checkPermission = vi.fn(() => over.allowed ?? true);
+  const checkPermission = vi.fn(async () => over.allowed ?? true);
   const c = new ReceiptScanController(
     { startReceipt } as unknown as ImportJobsService,
     { readsImages: vi.fn(async () => over.readsImages ?? true) } as unknown as LlmParseService,
-    { canAccessTrip: vi.fn(() => ('trip' in over ? over.trip : { user_id: 5 })) } as unknown as DatabaseService,
+    { findAccessible: vi.fn(async () => ('trip' in over ? over.trip : { user_id: 5 })) } as unknown as TripsRepository,
     { checkPermission } as unknown as PermissionsService,
-    { isAddonEnabled: vi.fn(() => over.addon ?? true) } as unknown as AddonsService,
+    { isAddonEnabled: vi.fn(async () => over.addon ?? true) } as unknown as AddonsService,
   );
   return { c, startReceipt, checkPermission };
 }

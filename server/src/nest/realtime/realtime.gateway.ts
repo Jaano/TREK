@@ -10,9 +10,16 @@ import {
 } from '@nestjs/websockets';
 import type { IncomingMessage } from 'node:http';
 import type { WebSocketServer } from 'ws';
-import { DatabaseService } from '../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { EphemeralTokenService } from '../auth/ephemeral-token.service';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
+import { Users } from '../../db/entities/Users.entity';
+import type { UsersRepository } from '../../db/repositories/Users.repository';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../db/repositories/Trips.repository';
 import { User } from '../../types';
+import { logError } from '../audit/audit-log.logger';
 import {
   bookPeers,
   broadcastToBook,
@@ -57,7 +64,10 @@ export class RealtimeGateway
   private heartbeat: ReturnType<typeof setInterval> | null = null;
 
   constructor(
-    private readonly db: DatabaseService,
+    // Plan 4 Task 2 — canAccessTrip's own DatabaseService delegation is gone:
+    // this injects TripsRepository directly (same constructor slot) and
+    // calls findAccessible from `handleJoin`.
+    @InjectRepository(Trips) private readonly trips: TripsRepository,
     private readonly tokens: EphemeralTokenService,
     /*
      * For the book rooms, and injected rather than reimplemented: who may open
@@ -65,6 +75,8 @@ export class RealtimeGateway
      * is a second thing to keep in step with the REST routes.
      */
     private readonly journeys: JourneyDomainService,
+    @InjectRepository(Users) private readonly users: UsersRepository,
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
   ) {}
 
   afterInit(server: WebSocketServer): void {
@@ -90,56 +102,63 @@ export class RealtimeGateway
    * Every rejection closes with the code the client already handles: 4001 for
    * anything about identity, 4403 for the MFA policy. The order matters and is
    * unchanged — a missing token is refused before the store is touched, and the
-   * password-version gate runs before the MFA one.
+   * password-version gate runs before the MFA one. An unexpected error anywhere
+   * in the handshake is also closed as 4001, reason 'connection setup failed',
+   * instead of escaping as an uncaught exception.
    */
-  handleConnection(socket: TrekWebSocket, request: IncomingMessage): void {
-    const url = new URL(request.url ?? '/', 'http://localhost');
-    const token = url.searchParams.get('token');
-    if (!token) {
-      socket.close(4001, 'Authentication required');
-      return;
-    }
+  async handleConnection(socket: TrekWebSocket, request: IncomingMessage): Promise<void> {
+    // TrekWsAdapter.bindClientConnect fires this from a plain 'connection'
+    // listener and cannot await it, so a throw here would otherwise become an
+    // unhandled rejection once the handshake goes async below (recipe R1.5).
+    // Closed the same way every other rejected handshake already is.
+    try {
+      const url = new URL(request.url ?? '/', 'http://localhost');
+      const token = url.searchParams.get('token');
+      if (!token) {
+        socket.close(4001, 'Authentication required');
+        return;
+      }
 
-    const consumed = this.tokens.consumeWithMeta(token, 'ws');
-    if (!consumed) {
-      socket.close(4001, 'Invalid or expired token');
-      return;
-    }
+      const consumed = this.tokens.consumeWithMeta(token, 'ws');
+      if (!consumed) {
+        socket.close(4001, 'Invalid or expired token');
+        return;
+      }
 
-    const row = this.db.get<User & { password_version?: number }>(
-      'SELECT id, username, email, role, mfa_enabled, password_version FROM users WHERE id = ?',
-      consumed.userId,
-    );
-    if (!row) {
-      socket.close(4001, 'User not found');
-      return;
-    }
+      const row = await this.users.findForWsHandshake(consumed.userId);
+      if (!row) {
+        socket.close(4001, 'User not found');
+        return;
+      }
 
-    // Session gate (defence-in-depth): reject a ws-token minted before a
-    // password change. Tokens carry the pv they were issued with; tokens minted
-    // without a pv (legacy) are treated as version 0, matching the JWT `pv`
-    // claim semantics in verifyJwtAndLoadUser.
-    const tokenPv = typeof consumed.pv === 'number' ? consumed.pv : 0;
-    const currentPv = typeof row.password_version === 'number' ? row.password_version : 0;
-    if (tokenPv !== currentPv) {
-      socket.close(4001, 'Invalid or expired token');
-      return;
-    }
+      // Session gate (defence-in-depth): reject a ws-token minted before a
+      // password change. Tokens carry the pv they were issued with; tokens minted
+      // without a pv (legacy) are treated as version 0, matching the JWT `pv`
+      // claim semantics in verifyJwtAndLoadUser.
+      const tokenPv = typeof consumed.pv === 'number' ? consumed.pv : 0;
+      const currentPv = typeof row.password_version === 'number' ? row.password_version : 0;
+      if (tokenPv !== currentPv) {
+        socket.close(4001, 'Invalid or expired token');
+        return;
+      }
 
-    // Don't leak password_version beyond the handshake.
-    const { password_version: _pv, ...user } = row;
-    const requireMfa =
-      this.db.get<{ value: string }>("SELECT value FROM app_settings WHERE key = 'require_mfa'")?.value === 'true';
-    const mfaOk = user.mfa_enabled === 1 || user.mfa_enabled === true;
-    if (requireMfa && !mfaOk) {
-      socket.close(4403, 'MFA required');
-      return;
-    }
+      // Don't leak password_version beyond the handshake.
+      const { password_version: _pv, ...user } = row;
+      const requireMfa = (await this.appSettings.getValue('require_mfa')) === 'true';
+      const mfaOk = user.mfa_enabled === 1 || user.mfa_enabled === true;
+      if (requireMfa && !mfaOk) {
+        socket.close(4403, 'MFA required');
+        return;
+      }
 
-    socket.isAlive = true;
-    const sid = registerSocket(socket, user as User);
-    socket.send(JSON.stringify({ type: 'welcome', socketId: sid }));
-    socket.on('pong', () => { socket.isAlive = true; });
+      socket.isAlive = true;
+      const sid = registerSocket(socket, user as User);
+      socket.send(JSON.stringify({ type: 'welcome', socketId: sid }));
+      socket.on('pong', () => { socket.isAlive = true; });
+    } catch (err) {
+      logError(`ws handshake failed: ${err instanceof Error ? err.message : String(err)}`);
+      socket.close(4001, 'connection setup failed');
+    }
   }
 
   handleDisconnect(socket: TrekWebSocket): void {
@@ -150,15 +169,23 @@ export class RealtimeGateway
   }
 
   @SubscribeMessage('join')
-  handleJoin(
+  async handleJoin(
     @MessageBody() message: { tripId?: number | string },
     @ConnectedSocket() socket: TrekWebSocket,
-  ): { type: string; tripId?: number; message?: string } | undefined {
+  ): Promise<{ type: string; tripId?: number; message?: string } | undefined> {
     const user = userOf(socket);
     if (!user || !message?.tripId) return undefined;
 
+    // Rule 22 / A-H1 (Task 9 fix wave): `Number.isFinite` first, the same
+    // guard `handleBookJoin` below already carries — without it, a
+    // non-numeric `tripId` (`'abc'`) becomes `NaN`, which used to reach
+    // `TripsRepository.findAccessible`'s raw bind as the unquoted bareword
+    // `NaN` and throw (`no such column: NaN`), leaving this handler's
+    // promise unanswered instead of the legacy `Access denied` frame. The
+    // platform now renders a bound `NaN` as `NULL` too (`NulSafeSqlitePlatform`),
+    // so this guard is defence in depth, not the only fix.
     const tripId = Number(message.tripId);
-    if (!this.db.canAccessTrip(tripId, user.id)) {
+    if (!Number.isFinite(tripId) || !(await this.trips.findAccessible(tripId, user.id))) {
       return { type: 'error', message: 'Access denied' };
     }
     joinRoom(socket, tripId);
@@ -174,15 +201,15 @@ export class RealtimeGateway
    */
 
   @SubscribeMessage('book:join')
-  handleBookJoin(
+  async handleBookJoin(
     @MessageBody() message: { journeyId?: number | string },
     @ConnectedSocket() socket: TrekWebSocket,
-  ): { type: string; journeyId?: number; message?: string } | undefined {
+  ): Promise<{ type: string; journeyId?: number; message?: string } | undefined> {
     const user = userOf(socket);
     if (!user || !message?.journeyId) return undefined;
 
     const journeyId = Number(message.journeyId);
-    if (!Number.isFinite(journeyId) || !this.journeys.canAccessJourney(journeyId, user.id)) {
+    if (!Number.isFinite(journeyId) || !(await this.journeys.canAccessJourney(journeyId, user.id))) {
       return { type: 'error', message: 'Access denied' };
     }
 

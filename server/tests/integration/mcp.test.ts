@@ -10,31 +10,10 @@ import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -46,9 +25,8 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser } from '../helpers/factories';
 import { generateToken } from '../helpers/auth';
@@ -59,18 +37,23 @@ import { setPluginMcpToolSource } from '../../src/plugin-mcp-tools';
 import type { McpDynamicTool } from '../../src/nest-mcp';
 import { getMcpSafeUrl } from '../../src/app-config';
 import { OauthService } from '../../src/nest/oauth/oauth.service';
-import { DatabaseService } from '../../src/nest/database/database.service';
-import { AddonsService } from '../../src/nest/addons/addons.service';
+import { createTestAddonsService } from '../helpers/test-addons';
 import { AuditService } from '../../src/nest/audit/audit.service';
+import { createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { Users } from '../../src/db/entities/Users.entity';
+import { OauthClients } from '../../src/db/entities/OauthClients.entity';
+import { OauthTokens } from '../../src/db/entities/OauthTokens.entity';
+import { OauthConsents } from '../../src/db/entities/OauthConsents.entity';
+import { MikroORM } from '@mikro-orm/core';
 
-const oauthDbs = new DatabaseService(testDb);
-const oauthSvc = new OauthService(oauthDbs, new AddonsService(oauthDbs), new AuditService(oauthDbs));
+let oauthSvc: OauthService;
 
 /** Mint a trekoa_ access token for the user via a fresh OAuth client. */
-function mintOauthToken(userId: number, audience: string | null, scopes: string[] = ['trips:read']): { accessToken: string; clientId: string } {
-  const created = oauthSvc.createOAuthClient(userId, 'MCP Test Client', ['https://client.example.com/cb'], scopes);
+async function mintOauthToken(userId: number, audience: string | null, scopes: string[] = ['trips:read']): Promise<{ accessToken: string; clientId: string }> {
+  const created = await oauthSvc.createOAuthClient(userId, 'MCP Test Client', ['https://client.example.com/cb'], scopes);
   const clientId = (created.client as { client_id: string }).client_id;
-  const tokens = oauthSvc.issueTokens(clientId, userId, scopes, null, audience);
+  const tokens = await oauthSvc.issueTokens(clientId, userId, scopes, null, audience);
   return { accessToken: tokens.access_token, clientId };
 }
 
@@ -87,12 +70,13 @@ const EXPECTED_CHALLENGE =
 
 let nestApp: INestApplication;
 let app: Application;
+let t: TestOrm;
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  t = await createTestOrm(testDb);
+  oauthSvc = new OauthService(t.repo(OauthClients), t.repo(OauthTokens), t.repo(OauthConsents), await createTestAddonsService(testDb), new AuditService(t.repo(AuditLog), t.repo(Users)));
 });
 
 beforeEach(() => {
@@ -103,6 +87,7 @@ beforeEach(() => {
 afterAll(async () => {
   closeMcpSessions();
   await nestApp.close();
+  await t.close();
   testDb.close();
 });
 
@@ -423,7 +408,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
 
   it('MCP-P04 — a trekoa_ token with the wrong audience is rejected with a challenge', async () => {
     const { user } = createUser(testDb);
-    const { accessToken } = mintOauthToken(user.id, 'https://other.example.com/api');
+    const { accessToken } = await mintOauthToken(user.id, 'https://other.example.com/api');
     const res = await request(app)
       .post('/mcp')
       .set('Authorization', `Bearer ${accessToken}`)
@@ -434,7 +419,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
 
   it('MCP-P05 — a trekoa_ token with the MCP audience authenticates', async () => {
     const { user } = createUser(testDb);
-    const { accessToken } = mintOauthToken(user.id, MCP_AUDIENCE);
+    const { accessToken } = await mintOauthToken(user.id, MCP_AUDIENCE);
     const res = await request(app)
       .post('/mcp')
       .set('Authorization', `Bearer ${accessToken}`)
@@ -473,7 +458,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
   it('MCP-P08 — a session created via JWT rejects resumption by an OAuth client', async () => {
     const { user } = createUser(testDb);
     const sessionId = await createSession(generateToken(user.id));
-    const { accessToken } = mintOauthToken(user.id, MCP_AUDIENCE);
+    const { accessToken } = await mintOauthToken(user.id, MCP_AUDIENCE);
 
     const res = await request(app)
       .post('/mcp')
@@ -487,10 +472,10 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
 
   it('MCP-P08b — a narrower token cannot resume a session that was created with wider scopes', async () => {
     const { user } = createUser(testDb);
-    const created = oauthSvc.createOAuthClient(user.id, 'Scope Test Client', ['https://client.example.com/cb'], ['trips:read', 'trips:write']);
+    const created = await oauthSvc.createOAuthClient(user.id, 'Scope Test Client', ['https://client.example.com/cb'], ['trips:read', 'trips:write']);
     const clientId = (created.client as { client_id: string }).client_id;
-    const wide = oauthSvc.issueTokens(clientId, user.id, ['trips:read', 'trips:write'], null, MCP_AUDIENCE);
-    const narrow = oauthSvc.issueTokens(clientId, user.id, ['trips:read'], null, MCP_AUDIENCE);
+    const wide = await oauthSvc.issueTokens(clientId, user.id, ['trips:read', 'trips:write'], null, MCP_AUDIENCE);
+    const narrow = await oauthSvc.issueTokens(clientId, user.id, ['trips:read'], null, MCP_AUDIENCE);
     const sessionId = await createSession(wide.access_token);
 
     // The tool surface was registered from the wide set; resuming with the
@@ -507,10 +492,10 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
 
   it('MCP-P08c — the same scopes in a different order still resume', async () => {
     const { user } = createUser(testDb);
-    const created = oauthSvc.createOAuthClient(user.id, 'Scope Order Client', ['https://client.example.com/cb'], ['trips:read', 'trips:write']);
+    const created = await oauthSvc.createOAuthClient(user.id, 'Scope Order Client', ['https://client.example.com/cb'], ['trips:read', 'trips:write']);
     const clientId = (created.client as { client_id: string }).client_id;
-    const first = oauthSvc.issueTokens(clientId, user.id, ['trips:read', 'trips:write'], null, MCP_AUDIENCE);
-    const reordered = oauthSvc.issueTokens(clientId, user.id, ['trips:write', 'trips:read'], null, MCP_AUDIENCE);
+    const first = await oauthSvc.issueTokens(clientId, user.id, ['trips:read', 'trips:write'], null, MCP_AUDIENCE);
+    const reordered = await oauthSvc.issueTokens(clientId, user.id, ['trips:write', 'trips:read'], null, MCP_AUDIENCE);
     const sessionId = await createSession(first.access_token);
 
     const res = await request(app)
@@ -549,7 +534,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
 
   it('MCP-P13 — an authorized tools/call writes exactly one mcp.tool_call audit row', async () => {
     const { user } = createUser(testDb);
-    const { accessToken, clientId } = mintOauthToken(user.id, MCP_AUDIENCE);
+    const { accessToken, clientId } = await mintOauthToken(user.id, MCP_AUDIENCE);
     const sessionId = await createSession(accessToken);
     testDb.prepare("DELETE FROM audit_log WHERE action = 'mcp.tool_call'").run();
 
@@ -667,7 +652,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
   it('MCP-P17 — a contributed tool call writes an mcp.tool_call audit row like any other', async () => {
     const { user } = createUser(testDb);
     setPluginMcpToolSource(() => [dynamicTool('plugin_demo_echo', 'contributed')]);
-    const { accessToken, clientId } = mintOauthToken(user.id, MCP_AUDIENCE, ['trips:read', 'plugins:use']);
+    const { accessToken, clientId } = await mintOauthToken(user.id, MCP_AUDIENCE, ['trips:read', 'plugins:use']);
     const sessionId = await createSession(accessToken);
     testDb.prepare("DELETE FROM audit_log WHERE action = 'mcp.tool_call'").run();
 
@@ -695,7 +680,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
     setPluginMcpToolSource(() => [dynamicTool('plugin_demo_echo', 'contributed')]);
     // trips:read only. The declarative access marker on every contributed tool
     // resolves through the same policy as a built-in's.
-    const { accessToken } = mintOauthToken(user.id, MCP_AUDIENCE, ['trips:read']);
+    const { accessToken } = await mintOauthToken(user.id, MCP_AUDIENCE, ['trips:read']);
     const sessionId = await createSession(accessToken);
 
     const list = await request(app)
@@ -772,5 +757,53 @@ describe('MCP rate limiting', () => {
       if (originalLimit === undefined) delete process.env.MCP_RATE_LIMIT;
       else process.env.MCP_RATE_LIMIT = originalLimit;
     }
+  });
+});
+
+/**
+ * Plan 3b Task 0 (D6): the MCP transport's bearer-token verification step
+ * (`McpTransportService.verifyToken`, called from `handle()` before any tool
+ * dispatch) is expected to already run inside the HTTP request context —
+ * `/mcp` is an ordinary (if `@Public()`) Nest-routed controller, so
+ * the per-request EntityManager-fork middleware `buildApp()` mounts
+ * (bootstrap.ts's pathless `mikroOrmRequestContext`) applies to it exactly
+ * like every other route, BEFORE any guard runs. Verified here rather than
+ * assumed: `TokenService.verifyMcpToken` (TK13 in the inventory) is now
+ * repository-backed (`McpTokensRepository.findUserByHashAndKind` +
+ * `touchLastUsedByHash`, Plan 3b Task 2) — MCP-CTX-002 drives a real `trek_`
+ * bearer token through the genuine DI-provided `TokenService` singleton the
+ * `/mcp` route calls (no mock of `verifyMcpToken` itself, per the Task 2
+ * review's F5: a spy on the very method under test does not exercise the
+ * repository path it exists to guard) and asserts the repository's write
+ * (`last_used_at`) actually moved, which is only possible if the read ran
+ * inside the forked context.
+ */
+describe('MCP bearer-token verification runs inside the HTTP request context (Plan 3b Task 0, D6)', () => {
+  it('MCP-CTX-001: outside of any request, the SAME ORM refuses a query (allowGlobalContext: false is genuinely enforced, not just permissively configured)', async () => {
+    const orm = nestApp.get(MikroORM);
+    await expect(orm.em.getRepository(Users).findOne({ id: 1 })).rejects.toThrow(/context/i);
+  });
+
+  it('MCP-CTX-002: a repository read inside verifyMcpToken (the trek_ bearer-token branch) succeeds — the /mcp route already forks a request context before the auth step runs', async () => {
+    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    const { user } = createUser(testDb);
+    const { rawToken, id: tokenId } = createMcpToken(testDb, user.id);
+    const before = (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(tokenId) as { last_used_at: string | null }).last_used_at;
+    expect(before).toBeNull();
+
+    const res = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${rawToken}`)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
+    expect(res.status).toBe(200);
+
+    // The real `TokenService.verifyMcpToken` ran `McpTokensRepository`'s
+    // `findUserByHashAndKind` (TK13) then `touchLastUsedByHash` (TK14) —
+    // `last_used_at` moving is only possible if both reached the DB, which
+    // MCP-CTX-001 proves the ORM refuses outside a forked request context.
+    const after = (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(tokenId) as { last_used_at: string | null }).last_used_at;
+    expect(after).not.toBeNull();
+    expect(after).not.toBe(before);
   });
 });

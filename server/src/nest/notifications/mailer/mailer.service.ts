@@ -1,10 +1,16 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import nodemailer from 'nodemailer';
 import { PASSWORD_RESET_I18N } from '@trek/shared/i18n/externalNotifications';
 import { readEnv } from '../../../app-config';
 import { logError, logInfo, logDebug, logWarn } from '../../audit/audit-log.logger';
 import { decrypt_api_key } from '../../common/crypto/apiKeyCrypto';
-import { DatabaseService } from '../../database/database.service';
+import { AppSettingsRepository } from '../../../db/repositories/AppSettings.repository';
+import { SettingsRepository } from '../../../db/repositories/Settings.repository';
+import { UsersRepository } from '../../../db/repositories/Users.repository';
+import { AppSettings } from '../../../db/entities/AppSettings.entity';
+import { Settings } from '../../../db/entities/Settings.entity';
+import { Users } from '../../../db/entities/Users.entity';
 import { buildEmailHtml, buildPasswordResetHtml } from './email-html';
 import { emailLogoAttachment } from './email-logo';
 import { describeSmtpFailure, describeSmtpGap, parseSmtpPort, type SmtpTarget } from './smtp-diagnostics';
@@ -55,26 +61,26 @@ const TEST_SOCKET_TIMEOUT_MS = 30_000;
 export class MailerService {
   private skippedTlsWarned = false;
 
-  constructor(private readonly db: DatabaseService) {}
-
-  private getAppSetting(key: string): string | null {
-    return this.db.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', key)?.value || null;
-  }
+  constructor(
+    @InjectRepository(Users) private readonly users: UsersRepository,
+    @InjectRepository(Settings) private readonly settings: SettingsRepository,
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+  ) {}
 
   /** Env wins over the admin panel, per field. Read fresh on every send. */
-  private readSmtpSettings() {
+  private async readSmtpSettings() {
     const smtpEnv = readEnv().smtp;
     return {
-      host: smtpEnv.host || this.getAppSetting('smtp_host'),
-      port: smtpEnv.port || this.getAppSetting('smtp_port'),
-      user: smtpEnv.user || this.getAppSetting('smtp_user'),
-      pass: smtpEnv.pass || decrypt_api_key(this.getAppSetting('smtp_pass')) || '',
-      from: smtpEnv.from || this.getAppSetting('smtp_from'),
+      host: smtpEnv.host || (await this.appSettings.getValue('smtp_host')),
+      port: smtpEnv.port || (await this.appSettings.getValue('smtp_port')),
+      user: smtpEnv.user || (await this.appSettings.getValue('smtp_user')),
+      pass: smtpEnv.pass || decrypt_api_key(await this.appSettings.getValue('smtp_pass')) || '',
+      from: smtpEnv.from || (await this.appSettings.getValue('smtp_from')),
     };
   }
 
-  private getSmtpConfig(): SmtpConfig | null {
-    const { host, port, user, pass, from } = this.readSmtpSettings();
+  private async getSmtpConfig(): Promise<SmtpConfig | null> {
+    const { host, port, user, pass, from } = await this.readSmtpSettings();
     // An unusable port counts as unconfigured rather than as a dial: net.connect
     // on NaN throws from inside nodemailer, where the reason gets lost.
     const portNumber = parseSmtpPort(port);
@@ -96,8 +102,8 @@ export class MailerService {
    * The three call sites below each built this inline before the fold; keeping it
    * one method is the only change, and it keeps the freshness property visible.
    */
-  private createTransport(config: SmtpConfig, socketTimeoutMs: number = SOCKET_TIMEOUT_MS) {
-    const skipTls = readEnv().smtp.skipTlsVerify || this.getAppSetting('smtp_skip_tls_verify') === 'true';
+  private async createTransport(config: SmtpConfig, socketTimeoutMs: number = SOCKET_TIMEOUT_MS) {
+    const skipTls = readEnv().smtp.skipTlsVerify || (await this.appSettings.getValue('smtp_skip_tls_verify')) === 'true';
     if (skipTls) this.warnOnceAboutSkippedTls(config);
     return nodemailer.createTransport({
       host: config.host,
@@ -131,21 +137,18 @@ export class MailerService {
   }
 
   /** Is SMTP configured at the instance level? (Independent of any one user's address.) */
-  isSmtpConfigured(): boolean {
-    return !!(readEnv().smtp.host || this.getAppSetting('smtp_host'));
+  async isSmtpConfigured(): Promise<boolean> {
+    return !!(readEnv().smtp.host || (await this.appSettings.getValue('smtp_host')));
   }
 
-  getUserEmail(userId: number): string | null {
+  async getUserEmail(userId: number): Promise<string | null> {
     // Defense-in-depth (#1362): a guest's synthetic email must never be emailed.
-    return this.db.get<{ email: string }>(
-      'SELECT email FROM users WHERE id = ? AND COALESCE(is_guest, 0) = 0', userId,
-    )?.email || null;
+    return await this.users.getEmailNonGuest(userId);
   }
 
-  getUserLanguage(userId: number): string {
-    return this.db.get<{ value: string }>(
-      "SELECT value FROM settings WHERE user_id = ? AND key = 'language'", userId,
-    )?.value || 'en';
+  async getUserLanguage(userId: number): Promise<string> {
+    const row = await this.settings.getOne(userId, 'language');
+    return row?.value || 'en';
   }
 
   /**
@@ -161,9 +164,9 @@ export class MailerService {
     resetUrl: string,
     userId: number | null,
   ): Promise<{ delivered: 'email' | 'log' | 'failed' }> {
-    const lang = userId ? this.getUserLanguage(userId) : 'en';
+    const lang = userId ? await this.getUserLanguage(userId) : 'en';
     const strings = PASSWORD_RESET_I18N[lang] || PASSWORD_RESET_I18N.en;
-    const smtpCfg = this.getSmtpConfig();
+    const smtpCfg = await this.getSmtpConfig();
 
     if (!smtpCfg) {
       // No SMTP configured — log the link in a visually distinct block so
@@ -183,7 +186,7 @@ export class MailerService {
     }
 
     try {
-      await this.createTransport(smtpCfg).sendMail({
+      await (await this.createTransport(smtpCfg)).sendMail({
         from: smtpCfg.from,
         to,
         subject: `TREK — ${strings.subject}`,
@@ -206,13 +209,13 @@ export class MailerService {
     userId?: number,
     navigateTarget?: string,
   ): Promise<boolean> {
-    const config = this.getSmtpConfig();
+    const config = await this.getSmtpConfig();
     if (!config) return false;
 
-    const lang = userId ? this.getUserLanguage(userId) : 'en';
+    const lang = userId ? await this.getUserLanguage(userId) : 'en';
 
     try {
-      await this.createTransport(config).sendMail({
+      await (await this.createTransport(config)).sendMail({
         from: config.from,
         to,
         subject: `TREK — ${subject}`,
@@ -237,15 +240,15 @@ export class MailerService {
    * blocked port.
    */
   async testSmtp(to: string): Promise<{ success: boolean; error?: string }> {
-    const config = this.getSmtpConfig();
+    const config = await this.getSmtpConfig();
     if (!config) {
-      const { host, port, from } = this.readSmtpSettings();
+      const { host, port, from } = await this.readSmtpSettings();
       const reason = describeSmtpGap({ host, port, from });
       logWarn(`SMTP test not attempted to=${to}: ${reason}`);
       return { success: false, error: reason };
     }
     try {
-      await this.createTransport(config, TEST_SOCKET_TIMEOUT_MS).sendMail({
+      await (await this.createTransport(config, TEST_SOCKET_TIMEOUT_MS)).sendMail({
         from: config.from,
         to,
         subject: 'TREK — Test Notification',

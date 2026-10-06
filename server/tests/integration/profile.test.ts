@@ -8,31 +8,10 @@ import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
 import path from 'path';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -44,9 +23,8 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, createTrip } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
@@ -57,8 +35,6 @@ const FIXTURE_JPEG = path.join(__dirname, '../fixtures/small-image.jpg');
 const FIXTURE_PDF = path.join(__dirname, '../fixtures/test.pdf');
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
@@ -93,6 +69,64 @@ describe('PROFILE-001 — Get current user profile', () => {
     expect(res.body.user.mfa_secret).toBeUndefined();
     expect(res.body.user).toHaveProperty('mfa_enabled');
     expect(res.body.user).toHaveProperty('must_change_password');
+  });
+});
+
+// PUT /api/auth/me/settings — F3 (task-1-review.md): the B1 regression's
+// user-visible symptom was exactly this route answering 200 while silently
+// discarding the write. Asserts the DB row directly, not only the response
+// body, and the response body against a fresh GET /api/auth/me — either one
+// alone would have missed B1 (the response body came from the pre-flush
+// in-memory entity, which still looked right).
+describe('PUT /api/auth/me/settings (F3)', () => {
+  it('PROFILE-016 — a username+email change persists: the response, a fresh GET, and the raw row all agree', async () => {
+    const { user } = createUser(testDb, { username: 'before-name', email: 'before@example.test' });
+
+    const put = await request(app)
+      .put('/api/auth/me/settings')
+      .set('Cookie', authCookie(user.id))
+      .send({ username: 'after-name', email: 'after@example.test' });
+    expect(put.status).toBe(200);
+    expect(put.body.success).toBe(true);
+    expect(put.body.user).toMatchObject({ username: 'after-name', email: 'after@example.test' });
+
+    const get = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', authCookie(user.id));
+    expect(get.status).toBe(200);
+    expect(get.body.user).toMatchObject({ username: 'after-name', email: 'after@example.test' });
+
+    const row = testDb.prepare('SELECT username, email FROM users WHERE id = ?').get(user.id) as { username: string; email: string };
+    expect(row.username).toBe('after-name');
+    expect(row.email).toBe('after@example.test');
+  });
+
+  // Program rule 18 / Plan 3b Task 7 review H1 — UP6's own-rename collision
+  // check (findIdByEmailCI) must fold both sides of a non-ASCII identifier
+  // with the same engine. (UP5's username collision check, findIdByUsernameCI,
+  // is exercised at the repository level — USERSREPO-044b — since the
+  // username field itself is ASCII-only by the service's own validation
+  // regex, `^[a-zA-Z0-9_.-]+$`, so a non-ASCII collision can never reach
+  // this route.)
+  it('PROFILE-016b — renaming to a non-ASCII email that collides with ANOTHER user still 409s; renaming to one\'s own exact non-ASCII spelling succeeds', async () => {
+    createUser(testDb, { email: 'JOSÉ-OTHER@x.com' });
+    const { user } = createUser(testDb, { email: 'plain-self@example.test' });
+
+    // Differs from the stored spelling only in ASCII-letter case (the accented
+    // 'É' is kept as-is — SQLite's LOWER() never touches it): SQLite's own
+    // LOWER() folds both to the same string, so this must still collide.
+    const collideEmail = await request(app)
+      .put('/api/auth/me/settings')
+      .set('Cookie', authCookie(user.id))
+      .send({ email: 'JOSÉ-OTHER@X.COM' });
+    expect(collideEmail.status).toBe(409);
+
+    // Renaming self to a non-ASCII spelling that collides with nobody else succeeds.
+    const ownRename = await request(app)
+      .put('/api/auth/me/settings')
+      .set('Cookie', authCookie(user.id))
+      .send({ email: 'JOSÉ-SELF@x.com' });
+    expect(ownRename.status).toBe(200);
   });
 });
 

@@ -2,7 +2,18 @@ import { RoadtripSearchService } from '../../src/nest/roadtrip/roadtrip-search.s
 import { GoogleRouteService } from '../../src/nest/roadtrip/google-route.service';
 import { ChargingService } from '../../src/nest/roadtrip/charging.service';
 /**
- * Road trip module e2e — the real guard chain against a temp SQLite db.
+ * Road trip module e2e — the real guard chain against a real migrated-and-
+ * seeded temp SQLite db (`createSnapshotTestDb()`, Plan 3d Task 1 — this used
+ * to hand-roll ten CREATE TABLEs, a second hand-maintained schema copy that
+ * omitted `day_assignments`/`day_accommodations`/most `users`/`trips`/
+ * `places` columns and even LEFT JOINed the inverse 1:1 `roadtrip_day_tracks`
+ * relation `Days` carries — the exact "e2e suites build their schema from
+ * hand-written partial DDL" risk the plan's inventory §15c flagged, and the
+ * same class of failure `days.e2e.test.ts`'s own conversion, Plan 3c Task 2,
+ * fixed for that file). Every service in this module now runs its real SQL
+ * through repositories (DI-injected, no service mock) against the real
+ * request-scoped `EntityManager` `createTestMikroOrmModule` wires in; only
+ * the permission check and the WebSocket broadcast stay mocked.
  *
  * The unit test next door pins the handler bodies. What only a booted container
  * can show is the thing the controller's own comment calls load-bearing: that
@@ -16,76 +27,35 @@ import { ChargingService } from '../../src/nest/roadtrip/charging.service';
  */
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { RoadtripModule } from '../../src/nest/roadtrip/roadtrip.module';
 import { RoadtripHazardsService } from '../../src/nest/roadtrip/roadtrip-hazards.service';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 import { Test } from '@nestjs/testing';
 
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec('PRAGMA foreign_keys = ON');
-  tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
-    avatar TEXT);`);
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, end_date TEXT);');
-  tmp.exec(
-    'CREATE TABLE roadtrip_preferences (trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY(trip_id, key));',
-  );
-  tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
-  tmp.exec(`CREATE TABLE days (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
-    day_number INTEGER, date TEXT, title TEXT, notes TEXT);`);
-  tmp.exec(`CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT,
-    lat REAL, lng REAL, route_geometry TEXT, stop_type TEXT, fill_percent INTEGER);`);
-  tmp.exec(`CREATE TABLE roadtrip_vias (id INTEGER PRIMARY KEY AUTOINCREMENT,
-    day_id INTEGER NOT NULL REFERENCES days(id) ON DELETE CASCADE,
-    after_order_index INTEGER NOT NULL, sequence INTEGER NOT NULL DEFAULT 0,
-    lat REAL NOT NULL, lng REAL NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP);`);
-  tmp.exec(`CREATE TABLE roadtrip_day_tracks (
-    day_id INTEGER PRIMARY KEY REFERENCES days(id) ON DELETE CASCADE,
-    place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE, stray_km REAL);`);
-  // AddonsService reads this; StorageRegistryService reads app_settings at init.
-  tmp.exec(`CREATE TABLE addons (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0,
-    name TEXT, description TEXT, category TEXT, sort_order INTEGER DEFAULT 0);`);
-  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => ({
-  db,
-  canAccessTrip: (tripId: number | string, userId: number) =>
-    db
-      .prepare(
-        `
-      SELECT t.id, t.user_id FROM trips t
-      LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-      WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-    `,
-      )
-      .get(userId, tripId, userId),
-  isOwner: () => false,
-  getPlaceWithTags: () => null,
-  closeDb: () => {},
-  reinitialize: () => {},
-}));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
+
+import { db } from '../../src/db/database';
 
 const ADDON_ID = 'roadtrip';
 
 function setAddon(enabled: boolean): void {
-  db.prepare(
-    'INSERT INTO addons (id, enabled) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled',
-  ).run(ADDON_ID, enabled ? 1 : 0);
+  // The seeder (`AddonSeeder`, run once as part of `createSnapshotTestDb()`'s
+  // migration pass) already inserted this row, disabled — a plain UPDATE,
+  // not an upsert, matching every other addon-toggling e2e in this file set.
+  db.prepare('UPDATE addons SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, ADDON_ID);
 }
 
 describe('Roadtrip e2e (real guard chain + temp SQLite)', () => {
@@ -95,7 +65,7 @@ describe('Roadtrip e2e (real guard chain + temp SQLite)', () => {
 
   async function build() {
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule, RealtimeModule, RoadtripModule],
+      imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, RoadtripModule],
     }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
@@ -106,8 +76,12 @@ describe('Roadtrip e2e (real guard chain + temp SQLite)', () => {
   }
 
   beforeAll(async () => {
-    seedUser(db as never, { id: 1 });
-    seedUser(db as never, { id: 2, email: 'other@example.test' });
+    // harness.ts's seedUser() omits password_hash, which the real migrated
+    // schema requires NOT NULL (days.e2e.test.ts/assignments.e2e.test.ts's
+    // own precedent) — raw inserts here instead, matching the SeededUser
+    // shape id/role/password_version=0 that sessionCookie() needs.
+    db.prepare("INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)").run();
+    db.prepare("INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (2, 'other', 'other@example.test', 'x', 'user', 0)").run();
     db.prepare('INSERT INTO trips (id, user_id, title) VALUES (5, 1, ?)').run('Norway');
     db.prepare('INSERT INTO trips (id, user_id, title) VALUES (6, 2, ?)').run('Somebody else');
     db.prepare('INSERT INTO days (id, trip_id, day_number) VALUES (3, 5, 1)').run();
@@ -146,6 +120,17 @@ describe('Roadtrip e2e (real guard chain + temp SQLite)', () => {
       expect(read).toHaveBeenCalledTimes(1);
     } finally { read.mockRestore(); }
   });
+  // L3 (Plan 3d Task 7 review): unlike every other case in this file,
+  // `ChargingService.read` is NOT mocked here — this is the one place CH1
+  // (`PlacesRepository.findChargingProbe`) runs for real, through the whole
+  // guard chain. Place 11 is a real row, just on trip 6, not trip 5 — the
+  // gate answers "Place not found", the same shape a place that never
+  // existed gets, never a leak of trip 6's row.
+  it('CH1 — a place id that belongs to a DIFFERENT trip is "Place not found", not trip 6\'s row (real findChargingProbe, no service mock)', async () => {
+    const res = await request(server).get('/api/trips/5/roadtrip/charging/11').set('Cookie', cookie());
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Place not found' });
+  });
   it('gates the coordinate lookup like the saved stop and validates before fetching', async () => {
     const lookup = vi.spyOn(app.get(ChargingService), 'lookup').mockResolvedValue({} as never);
     const body = { lat: 48.137, lng: 11.575, name: 'Ladepark Nord' };
@@ -169,7 +154,7 @@ describe('Roadtrip e2e (real guard chain + temp SQLite)', () => {
   it('validates Google route preview and import before executing either service', async () => {
     const routes = app.get(GoogleRouteService);
     const preview = vi.spyOn(routes, 'preview').mockResolvedValue({ stops: [] });
-    const save = vi.spyOn(routes, 'import').mockReturnValue({ imported: 2 });
+    const save = vi.spyOn(routes, 'import').mockResolvedValue({ imported: 2 });
     const input = { dayId: 3, stops: [{ name: 'A', lat: 48, lng: 11 }, { name: 'B', lat: 41, lng: 12 }] };
     try {
       await request(server).post('/api/roadtrip/google-maps-preview').send({ url: 'https://google.com/maps/dir/A/B' }).expect(401);
@@ -410,6 +395,34 @@ describe('Roadtrip e2e (real guard chain + temp SQLite)', () => {
       ).toBe(200);
       const after = await request(server).get('/api/trips/5/roadtrip/days/3/vias').set('Cookie', cookie());
       expect(after.body.vias).toEqual([]);
+    });
+
+    // L1 (Plan 3d Task 7 whole-plan review): `listForDay`/`listForTrip`/
+    // `tracksForTrip` used to bind `Number(tripId)`, which a hex-spelled id
+    // coerces to a real trip — `TripAccessGuard` had already authorised the
+    // SAME id through its own `Number()` (not a leak), but the legacy
+    // raw-bind statement's affinity never converts a hex string, so it
+    // always answered empty. Every one of these three now answers the
+    // legacy empty shape for the same hex id, not the real trip's rows.
+    it('L1 — vias/tracks by a hex-spelled trip id answer the legacy empty shape, not trip 5\'s real rows', async () => {
+      const created = await request(server)
+        .post('/api/trips/5/roadtrip/days/3/vias')
+        .set('Cookie', cookie())
+        .send({ after_order_index: 0, lat: 53, lng: 10 });
+      expect(created.status).toBe(201);
+
+      const hexTripId = '0x' + (5).toString(16);
+      const res = await request(server).get(`/api/trips/${hexTripId}/roadtrip/vias`).set('Cookie', cookie());
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ vias: [], tracks: [] });
+
+      const hexDayId = '0x' + (3).toString(16);
+      const dayRes = await request(server).get(`/api/trips/5/roadtrip/days/${hexDayId}/vias`).set('Cookie', cookie());
+      // `requireDay` (`toRowId`, unrelated to this fix) already 404s a
+      // hex-spelled day id — asserted here only to document that this route
+      // never reaches `listForDay` with one, so `listForDay`'s own fix is
+      // pinned at the service level instead (see roadtrip.service.test.ts).
+      expect(dayRes.status).toBe(404);
     });
 
     it('ROADTRIP-E2E-010: the batch route answers 200 and records the track it was fitted to', async () => {

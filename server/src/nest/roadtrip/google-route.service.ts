@@ -1,18 +1,26 @@
 import { HttpException, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import type { GoogleRouteImport, GoogleRoutePreview } from '@trek/shared';
 import { MapsService, GOOGLE_SHORT_HOSTS, isGoogleMapsHost } from '../maps/maps.service';
 import { isDirectionsUrl, parseDirectionsUrl, MAX_DIR_WAYPOINTS } from '../places/maps-dir.helpers';
 import { safeFetchFollow } from '../../utils/ssrfGuard';
-import { DatabaseService } from '../database/database.service';
+import { UnitOfWork } from '../database/unit-of-work';
 import { PlacesService } from '../places/places.service';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { PermissionsService } from '../permissions/permissions.service';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../db/repositories/Trips.repository';
+import { Users } from '../../db/entities/Users.entity';
+import type { UsersRepository } from '../../db/repositories/Users.repository';
 
 @Injectable()
 export class GoogleRouteService {
-  constructor(private readonly maps: MapsService, private readonly db: DatabaseService,
+  constructor(private readonly maps: MapsService,
     private readonly places: PlacesService, private readonly assignments: AssignmentsService,
-    private readonly permissions: PermissionsService) {}
+    private readonly permissions: PermissionsService,
+    private readonly uow: UnitOfWork,
+    @InjectRepository(Trips) private readonly tripsRepo: TripsRepository,
+    @InjectRepository(Users) private readonly usersRepo: UsersRepository) {}
 
   async preview(raw: string): Promise<GoogleRoutePreview> {
     let url = new URL(raw);
@@ -53,23 +61,35 @@ export class GoogleRouteService {
     return { stops };
   }
 
-  import(tripId: number, userId: number, input: GoogleRouteImport, socketId?: string) {
-    const access = this.db.canAccessTrip(tripId, userId);
+  async import(tripId: number, userId: number, input: GoogleRouteImport, socketId?: string) {
+    // GR0 — `TripsRepository.findAccessible` (keeps the row: `access.user_id` feeds the permission check below).
+    const access = await this.tripsRepo.findAccessible(tripId, userId);
     if (!access) throw new HttpException({ error: 'Trip not found' }, 404);
-    const role = this.db.get<{ role: string }>('SELECT role FROM users WHERE id = ?', userId)?.role ?? 'user';
-    if (!['place_edit', 'day_edit'].every(action => this.permissions.checkPermission(action, role, access.user_id, userId, access.user_id !== userId)))
-      throw new HttpException({ error: 'Permission denied' }, 403);
-    if (!this.assignments.dayExists(String(input.dayId), String(tripId))) throw new HttpException({ error: 'Day not found' }, 404);
-    const imported = this.db.transaction(() => input.stops.map(stop => {
-      const place = this.places.create(String(tripId), { ...stop, transport_mode: 'car', duration_minutes: 0 });
-      const assignment = this.assignments.createAssignment(input.dayId, place.id);
-      return { place, assignment };
-    }));
+    // GR1 — `UsersRepository.getRole`.
+    const role = (await this.usersRepo.getRole(userId)) ?? 'user';
+    // `every` cannot await the permission check, so the same all-of test runs as
+    // an explicit loop — same actions, same order, same short-circuit.
+    for (const action of ['place_edit', 'day_edit']) {
+      if (!(await this.permissions.checkPermission(action, role, access.user_id, userId, access.user_id !== userId)))
+        throw new HttpException({ error: 'Permission denied' }, 403);
+    }
+    if (!(await this.assignments.dayExists(String(input.dayId), String(tripId)))) throw new HttpException({ error: 'Day not found' }, 404);
+    // `map` cannot await the now-async assignment write, so the same per-stop
+    // sequence runs as an explicit loop inside the transaction.
+    const imported = await this.uow.transactional(async () => {
+      const rows: { place: Awaited<ReturnType<PlacesService['create']>>; assignment: Awaited<ReturnType<AssignmentsService['createAssignment']>> }[] = [];
+      for (const stop of input.stops) {
+        const place = await this.places.create(String(tripId), { ...stop, transport_mode: 'car', duration_minutes: 0 });
+        const assignment = await this.assignments.createAssignment(input.dayId, place.id);
+        rows.push({ place, assignment });
+      }
+      return rows;
+    });
     for (const { place, assignment } of imported) {
       this.places.broadcast(String(tripId), 'place:created', { place }, socketId);
       this.assignments.broadcast(String(tripId), 'assignment:created', { assignment }, socketId);
     }
-    this.assignments.reconcile(tripId, socketId);
+    await this.assignments.reconcile(tripId, socketId);
     return { imported: imported.length };
   }
 }

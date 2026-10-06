@@ -30,20 +30,20 @@ export class PushController {
   ) {}
 
   @Get('public-key')
-  publicKey(): PushPublicKeyResult {
-    return { publicKey: this.currentPublicKey() };
+  async publicKey(): Promise<PushPublicKeyResult> {
+    return { publicKey: await this.currentPublicKey() };
   }
 
   @Post('subscriptions')
   @HttpCode(200)
-  subscribe(
+  async subscribe(
     @CurrentUser() user: User,
     @Body() body: PushSubscribeDto,
     @Headers('user-agent') userAgent?: string,
-  ): PushSubscribeResult {
+  ): Promise<PushSubscribeResult> {
     const checked = checkPushSubscription(body.subscription);
     if ('error' in checked) throw new HttpException({ error: checked.error }, 400);
-    const devices = this.subscriptions.upsert(user.id, checked.value, this.currentPublicKey(), userAgent);
+    const devices = await this.subscriptions.upsert(user.id, checked.value, await this.currentPublicKey(), userAgent);
     return { success: true, devices };
   }
 
@@ -55,8 +55,8 @@ export class PushController {
    */
   @Delete('subscriptions')
   @HttpCode(200)
-  unsubscribe(@CurrentUser() user: User, @Body() body: PushUnsubscribeDto): PushUnsubscribeResult {
-    this.subscriptions.removeForUser(user.id, body.endpoint);
+  async unsubscribe(@CurrentUser() user: User, @Body() body: PushUnsubscribeDto): Promise<PushUnsubscribeResult> {
+    await this.subscriptions.removeForUser(user.id, body.endpoint);
     return { success: true };
   }
 
@@ -66,9 +66,9 @@ export class PushController {
    * signed for a new subscription, and the devices already subscribed stay as
    * they are.
    */
-  private currentPublicKey(): string {
+  private async currentPublicKey(): Promise<string> {
     try {
-      return this.keys.getPublicKey();
+      return await this.keys.getPublicKey();
     } catch (err) {
       if (err instanceof PushUnavailableError) throw new HttpException({ error: PUSH_UNAVAILABLE_ERROR }, 503);
       throw err;

@@ -10,7 +10,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockIns
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { Test } from '@nestjs/testing';
 import { seedUser, sessionCookie } from './harness';
@@ -26,8 +25,10 @@ const { db } = vi.hoisted(() => {
     avatar TEXT);`);
   // The note/message notifications read the trip title fire-and-forget; the table
   // must exist so that query doesn't throw after the test has torn down.
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT);');
-  tmp.prepare("INSERT INTO trips (id, title) VALUES (5, 'Trip')").run();
+  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, user_id INTEGER, currency TEXT);');
+  // TripAccessGuard now reads TripsRepository.findAccessible directly
+  // (Plan 3c Task 0b), a real join against trip_members.
+  tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
   // CollabService's real SQL (DI-injected, no mock) — the collab tables as the
   // real schema + migrations shape them (website on notes, deleted on messages,
   // note_id on trip_files).
@@ -62,7 +63,7 @@ const { db } = vi.hoisted(() => {
 
 const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
 vi.mock('../../src/db/database', () => ({
-  db, canAccessTrip, isOwner: vi.fn(() => true), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
+  db, canAccessTrip, getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
@@ -76,13 +77,15 @@ import { CollabModule } from '../../src/nest/collab/collab.module';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { RateLimitService } from '../../src/nest/common/rate-limit.service';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Collab e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, CollabModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, CollabModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
@@ -102,7 +105,12 @@ describe('Collab e2e (real auth guard + temp SQLite)', () => {
   });
 
   beforeEach(() => {
-    canAccessTrip.mockReturnValue({ id: 5, user_id: 1 });
+    // Plan 3c Task 0b: TripAccessGuard reads TripsRepository.findAccessible
+    // directly now, a real query — `canAccessTrip.mockReturnValue(...)` no
+    // longer intercepts it, so trip 5's real row is (re-)seeded every test
+    // instead, owned by user 1, matching what the mock used to fake.
+    db.prepare('DELETE FROM trips WHERE id = 5').run();
+    db.prepare("INSERT INTO trips (id, title, user_id) VALUES (5, 'Trip', 1)").run();
     checkPermission.mockReturnValue(true);
     db.prepare('DELETE FROM collab_message_reactions').run();
     db.prepare('DELETE FROM collab_poll_votes').run();
@@ -130,7 +138,7 @@ describe('Collab e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('404 when the trip is not accessible', async () => {
-    canAccessTrip.mockReturnValue(undefined);
+    db.prepare('DELETE FROM trips WHERE id = 5').run();
     const res = await request(server).get('/api/trips/5/collab/notes').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
@@ -182,7 +190,7 @@ describe('Collab e2e (real auth guard + temp SQLite)', () => {
   // The advisory this route was reported under: it answered anyone with a session,
   // for any trip id, and drove an outbound fetch from that.
   it('404 on link-preview for a trip the caller cannot reach', async () => {
-    canAccessTrip.mockReturnValue(undefined);
+    db.prepare('DELETE FROM trips WHERE id = 5').run();
     const res = await request(server)
       .get('/api/trips/5/collab/link-preview?url=https://example.com/')
       .set('Cookie', sessionCookie(1));
@@ -240,7 +248,7 @@ describe('Collab e2e (real auth guard + temp SQLite)', () => {
     });
 
     it('404 when the trip is not accessible', async () => {
-      canAccessTrip.mockReturnValue(undefined);
+      db.prepare('DELETE FROM trips WHERE id = 5').run();
       const res = await request(server).get('/api/trips/5/collab/links').set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
     });

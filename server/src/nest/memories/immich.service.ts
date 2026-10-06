@@ -1,15 +1,17 @@
 import { Injectable } from '@nestjs/common';
 import { PROVIDER_SELECT_ALL_MAX_PAGES } from '@trek/shared';
 import type { Response } from 'express';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { maybe_encrypt_api_key, decrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { checkSsrf, safeFetch, type SafeFetchOptions } from '../../utils/ssrfGuard';
 import { AuditService } from '../audit/audit.service';
 import { StorageService } from '../storage/storage.service';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
-import { DatabaseService } from '../database/database.service';
 import { MemoriesAccessService } from './memories-access.service';
 import { describeFetchFailure, fail, handleServiceResult, isWithinLocalDayRange, pipeAsset, shiftCalendarDay, sortAssetsByTakenAtDesc, type Selection } from './memories.helpers';
+import { Users } from '../../db/entities/Users.entity';
+import type { UsersRepository } from '../../db/repositories/Users.repository';
 
 const ALBUM_PAGE_SIZE = 1000;
 const ALBUM_MAX_PAGES = 20;
@@ -75,16 +77,14 @@ function tlsOptions(allowInsecureTls: boolean): SafeFetchOptions {
 @Injectable()
 export class ImmichService {
   constructor(
-    private readonly db: DatabaseService,
     private readonly audit: AuditService,
     private readonly access: MemoriesAccessService,
     private readonly storage: StorageService,
+    @InjectRepository(Users) private readonly users: UsersRepository,
   ) {}
 
-  getImmichCredentials(userId: number): ImmichCreds | null {
-    const user = this.db
-      .prepare('SELECT immich_url, immich_api_key, immich_allow_insecure_tls FROM users WHERE id = ?')
-      .get(userId) as { immich_url: string | null; immich_api_key: string | null; immich_allow_insecure_tls: number | null } | undefined;
+  async getImmichCredentials(userId: number): Promise<ImmichCreds | null> {
+    const user = await this.users.getImmichCredentials(userId);
     if (!user?.immich_url || !user?.immich_api_key) return null;
     const apiKey = decrypt_api_key(user.immich_api_key);
     if (!apiKey) return null;
@@ -119,11 +119,9 @@ export class ImmichService {
 
   // ── Connection Settings ────────────────────────────────────────────────────
 
-  getConnectionSettings(userId: number) {
-    const creds = this.getImmichCredentials(userId);
-    const prefs = this.db
-      .prepare('SELECT immich_auto_upload, immich_allow_insecure_tls FROM users WHERE id = ?')
-      .get(userId) as { immich_auto_upload?: number; immich_allow_insecure_tls?: number } | undefined;
+  async getConnectionSettings(userId: number) {
+    const creds = await this.getImmichCredentials(userId);
+    const prefs = await this.users.getImmichConnectionPrefs(userId);
     return {
       immich_url: creds?.immich_url || '',
       connected: !!(creds?.immich_url && creds?.immich_api_key),
@@ -132,8 +130,8 @@ export class ImmichService {
     };
   }
 
-  setImmichAutoUpload(userId: number, enabled: boolean): void {
-    this.db.prepare('UPDATE users SET immich_auto_upload = ? WHERE id = ?').run(enabled ? 1 : 0, userId);
+  async setImmichAutoUpload(userId: number, enabled: boolean): Promise<void> {
+    await this.users.setImmichAutoUpload(userId, enabled ? 1 : 0);
   }
 
   /**
@@ -157,19 +155,11 @@ export class ImmichService {
       if (!ssrf.allowed) {
         return { success: false, error: `Invalid Immich URL: ${ssrf.error}` };
       }
-      const url = immichUrl.trim();
       const insecure = allowInsecureTls === undefined ? null : Number(allowInsecureTls);
-      // SET expressions read the row as it was, so `immich_url IS ?` compares the
-      // stored URL with the new one.
-      this.db
-        .prepare(
-          `UPDATE users SET immich_url = ?, immich_api_key = ?,
-             immich_allow_insecure_tls = CASE WHEN immich_url IS ? THEN COALESCE(?, immich_allow_insecure_tls) ELSE COALESCE(?, 0) END
-           WHERE id = ?`,
-        )
-        .run(url, maybe_encrypt_api_key(immichApiKey), url, insecure, insecure, userId);
+      // The stored URL decides whether an undefined switch keeps its value (IM4).
+      await this.users.setImmichSettings(userId, immichUrl.trim(), maybe_encrypt_api_key(immichApiKey), insecure);
       if (ssrf.isPrivate) {
-        this.audit.writeAudit({
+        await this.audit.writeAudit({
           userId,
           action: 'immich.private_ip_configured',
           ip: clientIp,
@@ -181,11 +171,7 @@ export class ImmichService {
         };
       }
     } else {
-      this.db.prepare('UPDATE users SET immich_url = ?, immich_api_key = ?, immich_allow_insecure_tls = 0 WHERE id = ?').run(
-        null,
-        maybe_encrypt_api_key(immichApiKey),
-        userId
-      );
+      await this.users.clearImmichSettings(userId, maybe_encrypt_api_key(immichApiKey));
     }
     return { success: true };
   }
@@ -234,7 +220,7 @@ export class ImmichService {
   async getConnectionStatus(
     userId: number
   ): Promise<{ connected: boolean; error?: string; user?: { name?: string; email?: string } }> {
-    const creds = this.getImmichCredentials(userId);
+    const creds = await this.getImmichCredentials(userId);
     if (!creds) return { connected: false, error: 'Not configured' };
     try {
       const resp = await safeFetch(`${creds.immich_url}/api/users/me`, {
@@ -254,7 +240,7 @@ export class ImmichService {
   async browseTimeline(
     userId: number
   ): Promise<{ buckets?: any; error?: string; status?: number }> {
-    const creds = this.getImmichCredentials(userId);
+    const creds = await this.getImmichCredentials(userId);
     if (!creds) return { error: 'Immich not configured', status: 400 };
 
     try {
@@ -336,7 +322,7 @@ export class ImmichService {
     page: number = 1,
     size: number = 50,
   ): Promise<{ assets?: any[]; hasMore?: boolean; error?: string; status?: number }> {
-    const creds = this.getImmichCredentials(userId);
+    const creds = await this.getImmichCredentials(userId);
     if (!creds) return { error: 'Immich not configured', status: 400 };
 
     // Once a day filter is in play the raw pages and the answered pages stop
@@ -415,7 +401,7 @@ export class ImmichService {
     ownerUserId?: number
   ): Promise<{ data?: any; error?: string; status?: number }> {
     const effectiveUserId = ownerUserId ?? userId;
-    const creds = this.getImmichCredentials(effectiveUserId);
+    const creds = await this.getImmichCredentials(effectiveUserId);
     if (!creds) return { error: 'Not found', status: 404 };
 
     try {
@@ -458,7 +444,7 @@ export class ImmichService {
     ownerUserId?: number
   ): Promise<{ bytes: Buffer; contentType: string } | { error: string; status: number }> {
     const effectiveUserId = ownerUserId ?? userId;
-    const creds = this.getImmichCredentials(effectiveUserId);
+    const creds = await this.getImmichCredentials(effectiveUserId);
     if (!creds) return { error: 'Not found', status: 404 };
 
     const url = `${creds.immich_url}/api/assets/${assetId}/thumbnail?size=thumbnail`;
@@ -498,7 +484,7 @@ export class ImmichService {
     opts?: { mediaType?: string | null; range?: string },
   ): Promise<void> {
     const effectiveUserId = ownerUserId ?? userId;
-    const creds = this.getImmichCredentials(effectiveUserId);
+    const creds = await this.getImmichCredentials(effectiveUserId);
     if (!creds) {
       handleServiceResult(response, fail('Not found', 404));
       return;
@@ -535,7 +521,7 @@ export class ImmichService {
   async listAlbums(
     userId: number
   ): Promise<{ albums?: any[]; error?: string; status?: number }> {
-    const creds = this.getImmichCredentials(userId);
+    const creds = await this.getImmichCredentials(userId);
     if (!creds) return { error: 'Immich not configured', status: 400 };
 
     try {
@@ -659,7 +645,7 @@ export class ImmichService {
     userId: number,
     albumId: string,
   ): Promise<{ assets?: any[]; error?: string; status?: number }> {
-    const creds = this.getImmichCredentials(userId);
+    const creds = await this.getImmichCredentials(userId);
     if (!creds) return { error: 'Immich not configured', status: 400 };
 
     try {
@@ -707,10 +693,10 @@ export class ImmichService {
     linkId: string,
     userId: number,
   ): Promise<{ selection: Selection; total: number } | { error: string; status: number }> {
-    const response = this.access.getAlbumIdFromLink(tripId, linkId, userId);
+    const response = await this.access.getAlbumIdFromLink(tripId, linkId, userId);
     if (!response.success) return { error: 'Album link not found', status: 404 };
 
-    const creds = this.getImmichCredentials(userId);
+    const creds = await this.getImmichCredentials(userId);
     if (!creds) return { error: 'Immich not configured', status: 400 };
 
     try {
@@ -732,7 +718,7 @@ export class ImmichService {
   // ── Upload to Immich ──────────────────────────────────────────────────────
 
   async uploadToImmich(userId: number, filePath: string, fileName: string): Promise<string | null> {
-    const creds = this.getImmichCredentials(userId);
+    const creds = await this.getImmichCredentials(userId);
     if (!creds) return null;
 
     // Journey uploads store the uploads-relative 'journey/<file>' path; only

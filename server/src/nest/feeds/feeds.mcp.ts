@@ -5,9 +5,11 @@ import {
 } from '../../nest-mcp';
 import { z } from 'zod';
 import { getAppUrl } from '../../app-config';
-import { DatabaseService } from '../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../db/repositories/Trips.repository';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
-import { isDemoUserId } from '../common/demo-write';
+import { DemoService } from '../common/demo.service';
 import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { FeedsService } from './feeds.service';
@@ -35,14 +37,18 @@ import { FeedsService } from './feeds.service';
 export class FeedsMcp {
   constructor(
     private readonly feeds: FeedsService,
-    private readonly db: DatabaseService,
+    // Plan 4 Task 2 — canAccessTrip's own DatabaseService delegation is gone:
+    // this injects TripsRepository directly (same constructor slot) and
+    // calls findAccessible.
+    @InjectRepository(Trips) private readonly trips: TripsRepository,
     private readonly env: RuntimeEnvService,
     private readonly guards: McpToolGuardsService,
+    private readonly demo: DemoService,
   ) {}
 
-  /** The AuthService.isDemoUser check without the auth graph (demo-write.ts). */
-  private isDemoUser(userId: number): boolean {
-    return isDemoUserId(this.env, this.db, userId);
+  /** Plan 3i Task 3: the AuthService.isDemoUser check via the injected DemoService (common/demo.service.ts), not the free-function demo-write.ts helper. */
+  private async isDemoUser(userId: number): Promise<boolean> {
+    return await this.demo.isDemoUserId(userId);
   }
 
   /**
@@ -57,9 +63,9 @@ export class FeedsMcp {
   }
 
   /** Trip access first (404-equivalent), then share_manage, exactly as TripFeedTokenController is gated. */
-  private denyTripFeed(tripId: number, userId: number) {
-    if (!this.db.canAccessTrip(tripId, userId)) return noAccess();
-    if (!this.guards.hasTripPermission('share_manage', tripId, userId)) return permissionDenied();
+  private async denyTripFeed(tripId: number, userId: number) {
+    if (!(await this.trips.findAccessible(tripId, userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('share_manage', tripId, userId))) return permissionDenied();
     return null;
   }
 
@@ -75,9 +81,9 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async getTripCalendarFeed({ tripId }: { tripId: number }, ctx: McpContext) {
-    const denied = this.denyTripFeed(tripId, ctx.userId);
+    const denied = await this.denyTripFeed(tripId, ctx.userId);
     if (denied) return denied;
-    return ok(this.feeds.getTripToken(String(tripId), ctx.userId, this.base()));
+    return ok(await this.feeds.getTripToken(tripId, ctx.userId, this.base()));
   }
 
   @Tool({
@@ -90,10 +96,10 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async enableTripCalendarFeed({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    const denied = this.denyTripFeed(tripId, ctx.userId);
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    const denied = await this.denyTripFeed(tripId, ctx.userId);
     if (denied) return denied;
-    return ok(this.feeds.generateTripToken(String(tripId), ctx.userId, this.base()));
+    return ok(await this.feeds.generateTripToken(tripId, ctx.userId, this.base()));
   }
 
   @Tool({
@@ -106,10 +112,10 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async rotateTripCalendarFeed({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    const denied = this.denyTripFeed(tripId, ctx.userId);
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    const denied = await this.denyTripFeed(tripId, ctx.userId);
     if (denied) return denied;
-    return ok(this.feeds.rotateTripToken(String(tripId), ctx.userId, this.base()));
+    return ok(await this.feeds.rotateTripToken(tripId, ctx.userId, this.base()));
   }
 
   @Tool({
@@ -122,10 +128,10 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async disableTripCalendarFeed({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    const denied = this.denyTripFeed(tripId, ctx.userId);
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    const denied = await this.denyTripFeed(tripId, ctx.userId);
     if (denied) return denied;
-    this.feeds.disableTripToken(String(tripId), ctx.userId);
+    await this.feeds.disableTripToken(tripId, ctx.userId);
     // Matches the route, which answers the cleared token as a null URL.
     return ok({ feed_url: null });
   }
@@ -142,7 +148,7 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async getAllTripsCalendarFeed(_input: Record<string, never>, ctx: McpContext) {
-    return ok(this.feeds.getUserToken(ctx.userId, this.base()));
+    return ok(await this.feeds.getUserToken(ctx.userId, this.base()));
   }
 
   @Tool({
@@ -153,8 +159,8 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async enableAllTripsCalendarFeed(_input: Record<string, never>, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    return ok(this.feeds.generateUserToken(ctx.userId, this.base()));
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    return ok(await this.feeds.generateUserToken(ctx.userId, this.base()));
   }
 
   @Tool({
@@ -165,8 +171,8 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async rotateAllTripsCalendarFeed(_input: Record<string, never>, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    return ok(this.feeds.rotateUserToken(ctx.userId, this.base()));
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    return ok(await this.feeds.rotateUserToken(ctx.userId, this.base()));
   }
 
   @Tool({
@@ -177,8 +183,8 @@ export class FeedsMcp {
     access: { group: 'trips', mode: 'share' },
   })
   async disableAllTripsCalendarFeed(_input: Record<string, never>, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    this.feeds.disableUserToken(ctx.userId);
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    await this.feeds.disableUserToken(ctx.userId);
     return ok({ feed_url: null });
   }
 }

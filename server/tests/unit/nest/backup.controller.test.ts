@@ -172,31 +172,31 @@ describe('BackupController', () => {
     expect(thrown(() => bc(svc(), job({ getAutoSettings: vi.fn(() => { throw new Error('io'); }) })).autoSettings())).toEqual({ status: 500, body: { error: 'Could not load backup settings' } });
   });
 
-  it('PUT /auto-settings maps errors to 500 (with a dev-only detail)', () => {
+  it('PUT /auto-settings maps errors to 500 (with a dev-only detail)', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     process.env.NODE_ENV = 'development';
-    const r = thrown(() => bc(svc(), job({ updateAutoSettings: vi.fn(() => { throw new Error('parse fail'); }) })).updateAutoSettings(user, {}, req));
+    const r = await thrownAsync(() => bc(svc(), job({ updateAutoSettings: vi.fn(() => { throw new Error('parse fail'); }) })).updateAutoSettings(user, {}, req));
     expect(r.status).toBe(500);
     expect(r.body).toEqual({ error: 'Could not save auto-backup settings', detail: 'parse fail' });
   });
 
-  it('PUT /auto-settings hides the detail in production and stringifies non-Error throws', () => {
+  it('PUT /auto-settings hides the detail in production and stringifies non-Error throws', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     process.env.NODE_ENV = 'production';
-    const r = thrown(() => bc(svc(), job({ updateAutoSettings: vi.fn(() => { throw 'plain string'; }) })).updateAutoSettings(user, {}, req));
+    const r = await thrownAsync(() => bc(svc(), job({ updateAutoSettings: vi.fn(() => { throw 'plain string'; }) })).updateAutoSettings(user, {}, req));
     expect(r.status).toBe(500);
     expect(r.body).toEqual({ error: 'Could not save auto-backup settings', detail: undefined });
   });
 
-  it('PUT /auto-settings tolerates a missing body', () => {
+  it('PUT /auto-settings tolerates a missing body', async () => {
     const updateAutoSettings = vi.fn().mockReturnValue({ enabled: false, interval: 'weekly', keep_days: 30 });
-    bc(svc(), job({ updateAutoSettings })).updateAutoSettings(user, undefined as unknown as Record<string, unknown>, req);
+    await bc(svc(), job({ updateAutoSettings })).updateAutoSettings(user, undefined as unknown as Record<string, unknown>, req);
     expect(updateAutoSettings).toHaveBeenCalledWith({});
   });
 
-  it('GET/PUT /auto-settings', () => {
+  it('GET/PUT /auto-settings', async () => {
     expect(bc(svc(), job({ getAutoSettings: vi.fn().mockReturnValue({ settings: { enabled: true }, timezone: 'UTC' }) as never })).autoSettings()).toEqual({ settings: { enabled: true }, timezone: 'UTC' });
-    const res = bc(svc(), job({ updateAutoSettings: vi.fn().mockReturnValue({ enabled: true, interval: 'daily', keep_days: 7 }) as never })).updateAutoSettings(user, { enabled: true }, req);
+    const res = await bc(svc(), job({ updateAutoSettings: vi.fn().mockReturnValue({ enabled: true, interval: 'daily', keep_days: 7 }) as never })).updateAutoSettings(user, { enabled: true }, req);
     expect(res).toEqual({ settings: { enabled: true, interval: 'daily', keep_days: 7 } });
     expect(writeAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'backup.auto_settings' }));
   });
@@ -217,7 +217,7 @@ describe('BackupService (wrapper)', () => {
   const wrapper = new RealBackupService(storage);
 
   it('forwards every call straight to the legacy backup service', async () => {
-    expect(wrapper.listBackups()).toEqual([{ filename: 'svc.zip' }]);
+    expect(await wrapper.listBackups()).toEqual([{ filename: 'svc.zip' }]);
     expect(backupSvc.listBackups).toHaveBeenCalledWith(storage);
 
     await expect(wrapper.createBackup()).resolves.toEqual({ filename: 'svc.zip', size: 5 });
@@ -229,13 +229,13 @@ describe('BackupService (wrapper)', () => {
     await expect(wrapper.restoreBackup('svc.zip')).resolves.toEqual({ success: true });
     expect(backupSvc.restoreBackup).toHaveBeenCalledWith(storage, 'svc.zip');
 
-    wrapper.deleteBackup('svc.zip');
+    await wrapper.deleteBackup('svc.zip');
     expect(backupSvc.deleteBackup).toHaveBeenCalledWith(storage, 'svc.zip');
 
     expect(wrapper.isValidBackupFilename('svc.zip')).toBe(true);
     expect(backupSvc.isValidBackupFilename).toHaveBeenCalledWith('svc.zip');
 
-    expect(wrapper.backupFileExists('svc.zip')).toBe(true);
+    expect(await wrapper.backupFileExists('svc.zip')).toBe(true);
     expect(backupSvc.backupFileExists).toHaveBeenCalledWith(storage, 'svc.zip');
 
     const fakeRes = {} as Response;

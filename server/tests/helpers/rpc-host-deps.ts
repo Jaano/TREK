@@ -43,7 +43,7 @@ export function makeDeps(): HostDeps {
       close: vi.fn(),
     } as unknown as HostDeps['data'],
     callPlugin: vi.fn(async (targetId: string, fn: string) => ({ calledTarget: targetId, calledFn: fn })),
-    emitPluginEvent: vi.fn(),
+    emitPluginEvent: vi.fn(async () => {}),
   };
 }
 
@@ -81,8 +81,14 @@ export function allRpcControllers(): object[] {
     new JournalRpc(anyService(), anyService(), anyService(), anyService(), anyService(), anyService()),
     new CollectionsRpc(anyService(), anyService()),
     new DbRpc(anyService()),
-    new MetaRpc(anyService(), anyService()),
-    new HostSurfaceRpc(anyService(), anyService(), anyService(), anyService(), anyService(), anyService()),
+    // Plan 3j Task 5 — MetaRpc/HostSurfaceRpc's own repository conversions (MR#/HR#).
+    // Plan 4 Task 2 — both classes' own DatabaseService param is gone (canAccessTrip
+    // now reads through the TripsRepository they already inject), one fewer anyService().
+    new MetaRpc(anyService(), anyService(), anyService(), anyService(), anyService(), anyService(), anyService()),
+    new HostSurfaceRpc(
+      anyService(), anyService(), anyService(), anyService(), anyService(), anyService(),
+      anyService(), anyService(), anyService(),
+    ),
     // Owns no wire method, but declares all 18 hook contracts, which requireTotalCoverage checks too.
     new PluginHooks(anyService()),
   ];

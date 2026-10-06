@@ -97,8 +97,8 @@ export class DawarichController {
 
   @Delete('settings')
   @HttpCode(200)
-  disconnect(@CurrentUser() user: User, @Req() req: Request) {
-    this.dawarich.disconnect(user.id, getClientIp(req));
+  async disconnect(@CurrentUser() user: User, @Req() req: Request) {
+    await this.dawarich.disconnect(user.id, getClientIp(req));
     this.tracks.forget(user.id);
     return { success: true };
   }
@@ -138,19 +138,22 @@ export class DawarichController {
     @Body() body: DawarichAcceptDto,
     @Req() req: Request,
   ) {
-    return this.guard(() =>
+    // guardAsync, not guard: accept() is async now, so its AcceptError arrives as
+    // a rejection a synchronous try/catch cannot see — and the domain's own code
+    // would be dropped from the body.
+    return this.guardAsync(() =>
       this.suggestions.accept(user.id, parseId(id), body, socketId(req)),
     );
   }
 
   @Put('suggestions/:id/state')
   @HttpCode(200)
-  setSuggestionState(
+  async setSuggestionState(
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body() body: DawarichSuggestionStateDto,
   ) {
-    const updated = this.suggestions.setState(user.id, parseId(id), body.state);
+    const updated = await this.suggestions.setState(user.id, parseId(id), body.state);
     if (!updated) throw new HttpException({ error: 'Suggestion not found' }, 404);
     return updated;
   }
@@ -166,14 +169,14 @@ export class DawarichController {
 
   @Post('bucket-list/confirm')
   @HttpCode(200)
-  confirmBucketVisits(@CurrentUser() user: User, @Body() body: DawarichBucketConfirmDto) {
-    return { updated: this.suggestions.confirmBucketVisits(user.id, body.itemIds, body.visitedAt) };
+  async confirmBucketVisits(@CurrentUser() user: User, @Body() body: DawarichBucketConfirmDto) {
+    return { updated: await this.suggestions.confirmBucketVisits(user.id, body.itemIds, body.visitedAt) };
   }
 
   @Delete('bucket-list/:itemId/visit')
   @HttpCode(200)
-  clearBucketVisit(@CurrentUser() user: User, @Param('itemId') itemId: string) {
-    const cleared = this.suggestions.clearBucketVisit(user.id, parseId(itemId));
+  async clearBucketVisit(@CurrentUser() user: User, @Param('itemId') itemId: string) {
+    const cleared = await this.suggestions.clearBucketVisit(user.id, parseId(itemId));
     if (!cleared) throw new HttpException({ error: 'Bucket-list entry not found' }, 404);
     return { success: true };
   }
@@ -192,8 +195,8 @@ export class DawarichController {
 
   @Post('atlas/accept')
   @HttpCode(200)
-  acceptAtlasCountries(@CurrentUser() user: User, @Body() body: DawarichAtlasAcceptDto) {
-    return { marked: this.suggestions.acceptAtlasCountries(user.id, body.countryCodes) };
+  async acceptAtlasCountries(@CurrentUser() user: User, @Body() body: DawarichAtlasAcceptDto) {
+    return { marked: await this.suggestions.acceptAtlasCountries(user.id, body.countryCodes) };
   }
 
   // ── Track overlay ──────────────────────────────────────────────────────────

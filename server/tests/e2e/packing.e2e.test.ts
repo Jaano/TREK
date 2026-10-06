@@ -21,7 +21,7 @@ const { db } = vi.hoisted(() => {
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
     display_name TEXT, avatar TEXT);`);
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT);');
+  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, currency TEXT);');
   tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
   // The post-migration shape of the packing tables (schema.ts + migrations.ts).
   tmp.exec(`CREATE TABLE packing_items (
@@ -125,10 +125,11 @@ import { PermissionsService } from '../../src/nest/permissions/permissions.servi
 let checkPermission: MockInstance;
 
 import { PackingModule } from '../../src/nest/packing/packing.module';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 function insertItem(tripId: number, name: string, extra: Partial<{ sort_order: number; category: string; is_private: number; owner_id: number }> = {}): number {
   const res = db
@@ -143,7 +144,7 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
   let tripId: number;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, PackingModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, PackingModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
@@ -278,6 +279,17 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
     expect(res.body).toEqual({ error: 'Item not found' });
   });
 
+  // Plan 4 Task 8b (U6) — :id is now parsed ONCE at the controller gate
+  // (toRowId), so a non-numeric id 404s cleanly through that guard instead
+  // of falling through to the repository and depending on SQLite's
+  // column-affinity CAST to simply not match (the legacy outcome was also a
+  // 404, same status — this pins the gate itself, not just the status).
+  it('404 (not 500) on update with a non-numeric :id', async () => {
+    const res = await request(server).put(`/api/trips/${tripId}/packing/abc`).set('Cookie', sessionCookie(1)).send({ name: 'X' });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Item not found' });
+  });
+
   it('409 with the server row when the x-base-updated-at token is stale (#1135)', async () => {
     const id = insertItem(tripId, 'Original');
     const res = await request(server)
@@ -301,6 +313,13 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
     const missing = await request(server).delete(`/api/trips/${tripId}/packing/${id}`).set('Cookie', sessionCookie(1));
     expect(missing.status).toBe(404);
     expect(missing.body).toEqual({ error: 'Item not found' });
+  });
+
+  // Plan 4 Task 8b (U6) — same single gate-level parse as update above.
+  it('404 (not 500) on delete with a non-numeric :id', async () => {
+    const res = await request(server).delete(`/api/trips/${tripId}/packing/abc`).set('Cookie', sessionCookie(1));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Item not found' });
   });
 
   it('200 on reorder, persisting the new sort_order', async () => {

@@ -13,36 +13,10 @@ import { authenticator } from 'otplib';
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1: Bare in-memory DB — schema applied in beforeAll after mocks register
 // ─────────────────────────────────────────────────────────────────────────────
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`
-        SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon
-        FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?
-      `).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -54,9 +28,8 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, createUserWithMfa, createInviteToken, createTrip, createBudgetItem, createJourney, createJourneyEntry, addJourneyContributor, addTripPhoto, createCategory, createTag, createTodoItem, createMcpToken, createBucketListItem, createVisitedCountry, createCollabNote, addTripMember } from '../helpers/factories';
 import { authCookie, authHeader } from '../helpers/auth';
@@ -65,8 +38,6 @@ let nestApp: INestApplication;
 let app: Application;
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
@@ -224,6 +195,18 @@ describe('Registration', () => {
     expect(res.status).toBe(410);
     expect(res.body.error).toMatch(/fully used/i);
   });
+
+  it('AUTH-013 — GET /api/auth/invite/:token for a never-expiring invite keeps expires_at present and null on the wire (rule 16, task-5-review F1/T1)', async () => {
+    const { user: admin } = createAdmin(testDb);
+    const invite = createInviteToken(testDb, { max_uses: 3, created_by: admin.id });
+    testDb.prepare('UPDATE invite_tokens SET used_count = 1 WHERE id = ?').run(invite.id);
+
+    const res = await request(app).get(`/api/auth/invite/${invite.token}`);
+    expect(res.status).toBe(200);
+    // toEqual cannot see a dropped key (undefined and missing compare equal),
+    // so this asserts on the raw response text, byte for byte.
+    expect(res.text).toBe(JSON.stringify({ valid: true, max_uses: 3, used_count: 1, expires_at: null }));
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -271,6 +254,52 @@ describe('Registration — whitespace normalization', () => {
       password: 'Str0ng!Pass',
     });
     expect(res.status).toBe(409);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Registration / login — non-ASCII case folding (program rule 18, Plan 3b
+// Task 7 review H1: register('JOSÉ@x.com') then login with the exact stored
+// spelling used to 401, and a duplicate registration used to 500 instead of
+// 409, because the repository lowered the column with SQLite's ASCII-only
+// LOWER() and the bound value with JS's full-Unicode toLowerCase().
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Registration / login — non-ASCII case folding (H1)', () => {
+  it('AUTH-NONASCII-1 — register a non-ASCII email, then log in with the exact stored spelling: 201, then 200', async () => {
+    const register = await request(app).post('/api/auth/register').send({
+      username: 'joseuser',
+      email: 'JOSÉ@x.com',
+      password: 'Str0ng!Pass',
+    });
+    expect(register.status).toBe(201);
+
+    const login = await request(app).post('/api/auth/login').send({ email: 'JOSÉ@x.com', password: 'Str0ng!Pass' });
+    expect(login.status).toBe(200);
+    expect(login.body.user.email).toBe('JOSÉ@x.com');
+  });
+
+  it('AUTH-NONASCII-2 — registering the same non-ASCII email again returns 409, not 500', async () => {
+    const first = await request(app).post('/api/auth/register').send({
+      username: 'joseuser2',
+      email: 'JOSÉ2@x.com',
+      password: 'Str0ng!Pass',
+    });
+    expect(first.status).toBe(201);
+
+    const second = await request(app).post('/api/auth/register').send({
+      username: 'differentname',
+      email: 'JOSÉ2@x.com',
+      password: 'Str0ng!Pass',
+    });
+    expect(second.status).toBe(409);
+    expect(second.body.error).toBeDefined();
+  });
+
+  it('AUTH-NONASCII-3 — an ASCII-only account is unaffected (control)', async () => {
+    const { user, password } = createUser(testDb, { email: 'ROOT@example.com' });
+    const login = await request(app).post('/api/auth/login').send({ email: user.email, password });
+    expect(login.status).toBe(200);
   });
 });
 
@@ -918,5 +947,23 @@ describe('MCP token management', () => {
   it('AUTH-039 — unauthenticated GET /auth/mcp-tokens returns 401', async () => {
     const res = await request(app).get('/api/auth/mcp-tokens');
     expect(res.status).toBe(401);
+  });
+
+  it('AUTH-040 — DELETE /auth/mcp-tokens/abc (non-numeric id) returns the legacy 404, not a 500 (Plan 3b Task 2 review, F1)', async () => {
+    const { user } = createUser(testDb);
+    const res = await request(app)
+      .delete('/api/auth/mcp-tokens/abc')
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Token not found' });
+  });
+
+  it('AUTH-041 — DELETE /auth/api-tokens/abc (non-numeric id) returns the legacy 404, not a 500 (Plan 3b Task 2 review, F1)', async () => {
+    const { user } = createUser(testDb);
+    const res = await request(app)
+      .delete('/api/auth/api-tokens/abc')
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Token not found' });
   });
 });

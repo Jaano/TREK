@@ -79,10 +79,10 @@ export class PackingMcp {
     { tripId, name, category, bag_id, quantity, weight_grams, checked, is_private, visibility, recipient_ids }: { tripId: number; name: string; category?: string; bag_id?: number | null; quantity?: number; weight_grams?: number | null; checked?: boolean | number; is_private?: boolean; visibility?: PackingVisibility; recipient_ids?: number[] },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const item = this.packing.createItem(tripId, {
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const item = await this.packing.createItem(tripId, {
       name,
       category: category || 'General',
       bag_id,
@@ -116,10 +116,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async togglePackingItem({ tripId, itemId, checked }: { tripId: number; itemId: number; checked: boolean }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const item = this.packing.updateItem(tripId, itemId, { checked: checked ? 1 : 0 }, ['checked'], undefined, ctx.userId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const item = await this.packing.updateItem(tripId, itemId, { checked: checked ? 1 : 0 }, ['checked'], undefined, ctx.userId);
     if (!item) return errorResult('Packing item not found.');
     // Scoped to the people who may see it, exactly as the REST route does
     // (#858, #1976). A Common item answers null here and goes to the room.
@@ -139,10 +139,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async deletePackingItem({ tripId, itemId }: { tripId: number; itemId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const deleted = this.packing.deleteItem(tripId, itemId, ctx.userId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const deleted = await this.packing.deleteItem(tripId, itemId, ctx.userId);
     if (!deleted) return errorResult('Packing item not found.');
     // deleteItem hands back the row it removed, so the delete can be scoped to
     // the same people the item was ever visible to (#1976).
@@ -175,9 +175,9 @@ export class PackingMcp {
     { tripId, itemId, name, category, bag_id, quantity, packed_quantity, weight_grams, is_private }: { tripId: number; itemId: number; name?: string; category?: string; bag_id?: number | null; quantity?: number; packed_quantity?: number | null; weight_grams?: number | null; is_private?: boolean },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
     const fields = { name, category, bag_id, quantity, packed_quantity, weight_grams, is_private };
     // The service reads presence from bodyKeys, so a field has to be named there
     // for an explicit null to clear it rather than read as "leave it alone".
@@ -185,8 +185,8 @@ export class PackingMcp {
     // Privacy state before the write, so a public↔private flip routes the
     // broadcast the way the REST route does instead of leaking a freshly
     // privatized item (or leaving a stale copy on everyone else's screen).
-    const wasPrivate = !!this.packing.getItemPrivacy(tripId, itemId)?.is_private;
-    const item = this.packing.updateItem(tripId, itemId, fields, bodyKeys, undefined, ctx.userId);
+    const wasPrivate = !!(await this.packing.getItemPrivacy(tripId, itemId))?.is_private;
+    const item = await this.packing.updateItem(tripId, itemId, fields, bodyKeys, undefined, ctx.userId);
     if (!item) return errorResult('Packing item not found.');
     // A referenced bag must exist on this trip (#2154), as on the REST route.
     if (isInvalidBagRef(item)) return errorResult('Bag not found.');
@@ -231,10 +231,10 @@ export class PackingMcp {
     { tripId, itemId, visibility, recipient_ids }: { tripId: number; itemId: number; visibility: PackingVisibility; recipient_ids?: number[] },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const item = this.packing.setItemSharing(tripId, itemId, ctx.userId, visibility, recipient_ids ?? []);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const item = await this.packing.setItemSharing(tripId, itemId, ctx.userId, visibility, recipient_ids ?? []);
     if (!item) return errorResult('Packing item not found.');
     if ((item as { forbidden?: boolean }).forbidden) return errorResult('Only the owner can change sharing.');
     // The viewer set just changed: drop the item from the whole room, then hand
@@ -259,10 +259,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async reorderPackingItems({ tripId, orderedIds }: { tripId: number; orderedIds: number[] }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    this.packing.reorderItems(tripId, orderedIds);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    await this.packing.reorderItems(tripId, orderedIds);
     this.guards.safeBroadcast(tripId, 'packing:reordered', { orderedIds });
     return ok({ success: true });
   }
@@ -278,8 +278,8 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'read' },
   })
   async listPackingBags({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    const bags = this.packing.listBags(tripId);
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    const bags = await this.packing.listBags(tripId);
     return ok({ bags });
   }
 
@@ -297,12 +297,12 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async createPackingBag({ tripId, name, color, weight_limit_grams }: { tripId: number; name: string; color?: string; weight_limit_grams?: number | null }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
     // createBag returns a bare row; hydrate with the empty members array that
     // listBags and the schema always carry, so the client/AI consumer matches.
-    const bag = { ...(this.packing.createBag(tripId, { name, color, weight_limit_grams }) as object), members: [] };
+    const bag = { ...(await this.packing.createBag(tripId, { name, color, weight_limit_grams }) as object), members: [] };
     this.guards.safeBroadcast(tripId, 'packing:bag-created', { bag });
     return ok({ bag });
   }
@@ -326,9 +326,9 @@ export class PackingMcp {
     { tripId, bagId, name, color, weight_limit_grams, user_id }: { tripId: number; bagId: number; name?: string; color?: string; weight_limit_grams?: number | null; user_id?: number | null },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
     const fields: { name?: string; color?: string; weight_limit_grams?: number | null; user_id?: number | null } = {};
     const bodyKeys: string[] = [];
     if (name !== undefined) { fields.name = name; bodyKeys.push('name'); }
@@ -337,10 +337,10 @@ export class PackingMcp {
     // an explicit null clears it.
     if (weight_limit_grams !== undefined) { fields.weight_limit_grams = weight_limit_grams; bodyKeys.push('weight_limit_grams'); }
     if (user_id !== undefined) { fields.user_id = user_id; bodyKeys.push('user_id'); }
-    const updated = this.packing.updateBag(tripId, bagId, fields, bodyKeys);
+    const updated = await this.packing.updateBag(tripId, bagId, fields, bodyKeys);
     if (!updated) return errorResult('Bag not found.');
     // Hydrate with the members array (matches create_packing_bag, listBags, and the schema).
-    const bag = this.packing.listBags(tripId).find(b => b.id === (updated as { id: number }).id) ?? { ...(updated as object), members: [] };
+    const bag = (await this.packing.listBags(tripId)).find(b => b.id === (updated as { id: number }).id) ?? { ...(updated as object), members: [] };
     this.guards.safeBroadcast(tripId, 'packing:bag-updated', { bag });
     return ok({ bag });
   }
@@ -357,10 +357,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async deletePackingBag({ tripId, bagId }: { tripId: number; bagId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    this.packing.deleteBag(tripId, bagId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    await this.packing.deleteBag(tripId, bagId);
     // { bagId } matches the REST route and the plugin host (the legacy
     // registrar's { id } was the odd one out).
     this.guards.safeBroadcast(tripId, 'packing:bag-deleted', { bagId });
@@ -383,10 +383,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async setBagMembers({ tripId, bagId, userIds }: { tripId: number; bagId: number; userIds: number[] }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const members = this.packing.setBagMembers(tripId, bagId, userIds);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const members = await this.packing.setBagMembers(tripId, bagId, userIds);
     if (!members) return errorResult('Bag not found.');
     this.guards.safeBroadcast(tripId, 'packing:bag-members-updated', { bagId, members });
     return ok({ members });
@@ -403,8 +403,8 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'read' },
   })
   async getPackingCategoryAssignees({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    const assignees = this.packing.getCategoryAssignees(tripId);
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    const assignees = await this.packing.getCategoryAssignees(tripId);
     return ok({ assignees });
   }
 
@@ -421,10 +421,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async setPackingCategoryAssignees({ tripId, categoryName, userIds }: { tripId: number; categoryName: string; userIds: number[] }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const assignees = this.packing.updateCategoryAssignees(tripId, categoryName, userIds);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const assignees = await this.packing.updateCategoryAssignees(tripId, categoryName, userIds);
     this.guards.safeBroadcast(tripId, 'packing:assignees', { category: categoryName, assignees });
     return ok({ assignees });
   }
@@ -441,10 +441,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async applyPackingTemplate({ tripId, templateId }: { tripId: number; templateId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const items = this.packing.applyTemplate(tripId, templateId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const items = await this.packing.applyTemplate(tripId, templateId);
     if (items === null) return errorResult('Template not found.');
     this.guards.safeBroadcast(tripId, 'packing:template-applied', { items });
     this.packing.broadcastBagTotals(String(tripId));
@@ -462,8 +462,8 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'read' },
   })
   async listPackingTemplates({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    return ok({ templates: this.packing.listTemplates() });
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    return ok({ templates: await this.packing.listTemplates() });
   }
 
   @Tool({
@@ -478,12 +478,12 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async savePackingTemplate({ tripId, templateName }: { tripId: number; templateName: string }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
     // Templates are global; the REST route restricts saving to admins. Match it.
-    if (!this.guards.isAdminUser(ctx.userId)) return adminRequired();
-    const template = this.packing.saveAsTemplate(tripId, ctx.userId, templateName);
+    if (!(await this.guards.isAdminUser(ctx.userId))) return adminRequired();
+    const template = await this.packing.saveAsTemplate(tripId, ctx.userId, templateName);
     if (!template) return errorResult('Nothing to save — the packing list is empty.');
     return ok({ template });
   }
@@ -499,10 +499,10 @@ export class PackingMcp {
     access: { group: 'packing', mode: 'write' },
   })
   async deletePackingTemplate({ templateId }: { templateId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
     // Templates are global; the REST route restricts management to admins. Match it.
-    if (!this.guards.isAdminUser(ctx.userId)) return adminRequired();
-    const result = this.packing.deletePackingTemplate(String(templateId));
+    if (!(await this.guards.isAdminUser(ctx.userId))) return adminRequired();
+    const result = await this.packing.deletePackingTemplate(String(templateId));
     if ('error' in result) return errorResult(result.error);
     return ok({ success: true, name: result.name });
   }
@@ -529,10 +529,10 @@ export class PackingMcp {
     { tripId, items }: { tripId: number; items: { name: string; category?: string; quantity?: number; bag?: string; weight_grams?: number; checked?: boolean }[] },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
-    const created = this.packing.bulkImport(tripId, items, ctx.userId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('packing_edit', tripId, ctx.userId))) return permissionDenied();
+    const created = await this.packing.bulkImport(tripId, items, ctx.userId);
     for (const item of created) {
       this.guards.safeBroadcast(tripId, 'packing:created', { item }, this.packing.viewersOf(item));
     }
@@ -552,7 +552,7 @@ export class PackingMcp {
   })
   async tripPackingResource(uri: URL, { tripId }: { tripId: string | string[] }, ctx: McpContext) {
     const id = parseId(tripId);
-    if (id === null || !this.packing.verifyTripAccess(id, ctx.userId)) {
+    if (id === null || !(await this.packing.verifyTripAccess(id, ctx.userId))) {
       return {
         contents: [{
           uri: uri.href,
@@ -562,7 +562,7 @@ export class PackingMcp {
       };
     }
     // Hide other members' private items (#858) from the requesting user.
-    const items = this.packing.listItems(id, ctx.userId);
+    const items = await this.packing.listItems(id, ctx.userId);
     return {
       contents: [{
         uri: uri.href,
@@ -582,7 +582,7 @@ export class PackingMcp {
   })
   async tripPackingBagsResource(uri: URL, { tripId }: { tripId: string | string[] }, ctx: McpContext) {
     const id = parseId(tripId);
-    if (id === null || !this.packing.verifyTripAccess(id, ctx.userId)) {
+    if (id === null || !(await this.packing.verifyTripAccess(id, ctx.userId))) {
       return {
         contents: [{
           uri: uri.href,
@@ -591,7 +591,7 @@ export class PackingMcp {
         }],
       };
     }
-    const bags = this.packing.listBags(id);
+    const bags = await this.packing.listBags(id);
     return {
       contents: [{
         uri: uri.href,

@@ -1,5 +1,6 @@
 import { RateLimitModule } from '../common/rate-limit.module';
 import { Module } from '@nestjs/common';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { TripInviteLinkController, TripInviteController } from './trip-invite.controller';
 import { TripInviteService } from './trip-invite.service';
 import { TripInviteMcp } from './trip-invite.mcp';
@@ -9,13 +10,20 @@ import { PermissionsModule } from '../permissions/permissions.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AuditModule } from '../audit/audit.module';
 import { TripMembershipModule } from '../trip-membership/trip-membership.module';
+import { DemoModule } from '../common/demo.module';
+import { TripInviteTokens } from '../../db/entities/TripInviteTokens.entity';
+import { Trips } from '../../db/entities/Trips.entity';
 
 @Module({
-  // The last three carry TripInviteMcp: McpSharedModule for the RBAC check the
-  // controller does inline, and the two @Global modules it injects out of,
-  // which a graph assembled without AppModule (the e2e harness) must
-  // instantiate itself.
-  imports: [RateLimitModule, PermissionsModule, AuditModule, TripMembershipModule, McpSharedModule, AppConfigModule, RealtimeModule],
+  // The last four carry TripInviteMcp: McpSharedModule for the RBAC check the
+  // controller does inline, and the three @Global modules it injects out of
+  // (DemoModule added Plan 3i Task 4 fix wave — TripInviteMcp injects
+  // DemoService), which a graph assembled without AppModule (the e2e harness)
+  // must instantiate itself. TripInviteTokens: Plan 4 Task 1 —
+  // TripInviteService's own TripInviteTokensRepository, replacing its raw
+  // `this.dbs.get/run` statements. Trips: Plan 4 Task 2 — verifyTripAccess's
+  // own canAccessTrip delegate, now TripsRepository directly.
+  imports: [RateLimitModule, PermissionsModule, AuditModule, TripMembershipModule, McpSharedModule, AppConfigModule, RealtimeModule, DemoModule, MikroOrmModule.forFeature([TripInviteTokens, Trips])],
   controllers: [TripInviteLinkController, TripInviteController],
   providers: [TripInviteService, TripInviteMcp],
 })

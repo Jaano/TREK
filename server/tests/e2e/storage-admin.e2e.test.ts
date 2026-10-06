@@ -17,7 +17,6 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Server } from 'http';
 import { APP_GUARD } from '@nestjs/core';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { StorageModule } from '../../src/nest/storage/storage.module';
 import { ManagedGuard } from '../../src/nest/common/managed.guard';
 import { Test } from '@nestjs/testing';
@@ -57,6 +56,8 @@ vi.mock('../../src/config', () => ({ ENCRYPTION_KEY: 'e2e-storage-key', JWT_SECR
 
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLite)', () => {
   let server: Server;
@@ -66,7 +67,7 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
 
   async function build() {
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule, StorageModule],
+      imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), StorageModule],
       providers: [{ provide: APP_GUARD, useClass: ManagedGuard }],
     }).compile();
     const nest = moduleRef.createNestApplication();

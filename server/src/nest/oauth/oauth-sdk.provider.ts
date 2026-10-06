@@ -44,7 +44,7 @@ function assertValidRedirectUris(uris: string[]): void {
 // Row → SDK client info shape
 // ---------------------------------------------------------------------------
 
-function rowToInfo(row: NonNullable<ReturnType<OauthService['getSdkClient']>>): OAuthClientInformationFull {
+function rowToInfo(row: NonNullable<Awaited<ReturnType<OauthService['getSdkClient']>>>): OAuthClientInformationFull {
     return {
         client_id: row.client_id,
         client_name: row.name,
@@ -65,7 +65,7 @@ export class TrekClientsStore implements OAuthRegisteredClientsStore {
     constructor(private readonly oauth: OauthService) {}
 
     async getClient(clientId: string): Promise<OAuthClientInformationFull | undefined> {
-        const row = this.oauth.getSdkClient(clientId);
+        const row = await this.oauth.getSdkClient(clientId);
         return row ? rowToInfo(row) : undefined;
     }
 
@@ -86,7 +86,7 @@ export class TrekClientsStore implements OAuthRegisteredClientsStore {
         const scopes = rawScopes.filter(s => (ALL_SCOPES as string[]).includes(s));
         if (scopes.length === 0) throw new InvalidClientMetadataError('No valid scopes requested');
 
-        const result = this.oauth.createOAuthClient(null, name, uris, scopes, null, { isPublic, createdVia: 'dcr' });
+        const result = await this.oauth.createOAuthClient(null, name, uris, scopes, null, { isPublic, createdVia: 'dcr' });
         if (result.error) throw new InvalidClientMetadataError(result.error);
 
         const c = result.client!;
@@ -178,8 +178,8 @@ export class TrekOAuthProvider implements OAuthServerProvider {
         if (!codeVerifier || !this.oauth.verifyPKCE(codeVerifier, pending.codeChallenge))
             throw new Error('Authorization grant is invalid.');
 
-        const tokens = this.oauth.issueTokens(client.client_id, pending.userId, pending.scopes, null, pending.resource ?? null);
-        this.audit.writeAudit({
+        const tokens = await this.oauth.issueTokens(client.client_id, pending.userId, pending.scopes, null, pending.resource ?? null);
+        await this.audit.writeAudit({
             userId: pending.userId,
             action: 'oauth.token.issue',
             details: { client_id: client.client_id, scopes: pending.scopes, audience: pending.resource ?? null },
@@ -194,13 +194,13 @@ export class TrekOAuthProvider implements OAuthServerProvider {
         _scopes?: string[],
         _resource?: URL,
     ): Promise<OAuthTokens> {
-        const result = this.oauth.refreshTokens(refreshToken, client.client_id, client.client_secret, null);
+        const result = await this.oauth.refreshTokens(refreshToken, client.client_id, client.client_secret, null);
         if (result.error) throw new Error(result.error === 'invalid_client' ? 'Invalid client credentials' : 'Refresh token is invalid or expired');
         return result.tokens!;
     }
 
     async verifyAccessToken(token: string): Promise<AuthInfo> {
-        const info = this.oauth.getUserByAccessToken(token);
+        const info = await this.oauth.getUserByAccessToken(token);
         if (!info) throw new Error('Invalid or expired token');
         return {
             token,
@@ -214,6 +214,6 @@ export class TrekOAuthProvider implements OAuthServerProvider {
         client: OAuthClientInformationFull,
         request: OAuthTokenRevocationRequest,
     ): Promise<void> {
-        this.oauth.revokeToken(request.token, client.client_id, undefined, null);
+        await this.oauth.revokeToken(request.token, client.client_id, undefined, null);
     }
 }

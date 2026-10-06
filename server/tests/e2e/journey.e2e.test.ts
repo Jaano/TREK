@@ -10,7 +10,6 @@ import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import path from 'node:path';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { Test } from '@nestjs/testing';
 import { seedUser, sessionCookie } from './harness';
 
@@ -80,13 +79,15 @@ import { StorageService } from '../../src/nest/storage/storage.service';
 import { AddonsService } from '../../src/nest/addons/addons.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Journey e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, JourneyModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), JourneyModule] })
       .overrideProvider(JourneyDomainService)
       .useValue(jsvc)
       .overrideProvider(JourneyShareService)

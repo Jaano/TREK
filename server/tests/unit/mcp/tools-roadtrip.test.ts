@@ -9,28 +9,13 @@
  * track check on the batch tool.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { db as testDb } from '../../../src/db/database';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: unknown, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: unknown, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -38,26 +23,21 @@ vi.mock('../../../src/config', () => ({
 }));
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb, setAddonEnabled } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 import { ADDON_IDS } from '../../../src/addons';
 import { addTripMember } from '../../helpers/factories';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { DEMO_EMAIL_PRIMARY } from '../../../src/nest/common/demo';
+import { createTestUnitOfWork, createTestAppSettingsRepo } from '../../helpers/test-uow';
 
 // The permissions cache is module-scoped, so a write through any instance is
 // what the tool's own check reads back.
-const savePermissions = new PermissionsService(new DatabaseService(testDb)).savePermissions.bind(
-  new PermissionsService(new DatabaseService(testDb)),
-);
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+let savePermissions: PermissionsService['savePermissions'];
+beforeAll(async () => {
+  const permissionsService = new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb));
+  savePermissions = permissionsService.savePermissions.bind(permissionsService);
 });
 
 beforeEach(() => {
@@ -254,7 +234,7 @@ describe('road-trip MCP tools', () => {
     const { user, trip, day } = scenario();
     const member = createUser(testDb, { email: 'member@example.test' });
     addTripMember(testDb, trip.id, member.user.id);
-    savePermissions({ day_edit: 'trip_owner' });
+    await savePermissions({ day_edit: 'trip_owner' });
 
     try {
       await withHarness(member.user.id, async (h) => {
@@ -276,7 +256,7 @@ describe('road-trip MCP tools', () => {
       });
       expect(testDb.prepare('SELECT COUNT(*) c FROM roadtrip_vias').get()).toEqual({ c: 0 });
     } finally {
-      savePermissions({ day_edit: 'trip_member' });
+      await savePermissions({ day_edit: 'trip_member' });
     }
     // The owner is unaffected.
     await withHarness(user.id, async (h) => {

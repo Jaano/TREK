@@ -9,27 +9,13 @@
  * reservations land in the test DB.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { db as testDb } from '../../../src/db/database';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -39,8 +25,6 @@ vi.mock('../../../src/config', () => ({
 const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb, setAddonEnabled } from '../../helpers/test-db';
 import { createUser, createTrip, addTripMember } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
@@ -48,23 +32,23 @@ import { ADDON_IDS } from '../../../src/addons';
 import { AirtrailClient, AirtrailRequestError, type AirtrailFlightRaw } from '../../../src/nest/integrations/airtrail.client';
 import { AirtrailImportService } from '../../../src/nest/integrations/airtrail-import.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { createTestUnitOfWork, createTestAppSettingsRepo } from '../../helpers/test-uow';
 
 // The permissions cache is module-scoped, so a write through any instance is
 // what the tool's own checkPermission call reads back.
-const permissionsService = new PermissionsService(new DatabaseService(testDb));
-const savePermissions = permissionsService.savePermissions.bind(permissionsService);
+
+let permissionsService: PermissionsService;
+let savePermissions: typeof permissionsService.savePermissions;
+beforeAll(async () => {
+  permissionsService = new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb));
+  savePermissions = permissionsService.savePermissions.bind(permissionsService);
+});
 
 // The registry builds its own AirtrailClient per harness, so the stub goes on
 // the prototype. Everything below listFlights (creds, mapper, dedupe) is real.
 const listFlightsMock = vi.spyOn(AirtrailClient.prototype, 'listFlights');
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
-
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   broadcastMock.mockClear();
   listFlightsMock.mockReset();
@@ -73,7 +57,7 @@ beforeEach(() => {
   // resetTestDb leaves the addons table alone, and both tools are gated on the
   // airtrail addon, so every case restates the toggle it needs.
   setAddonEnabled(testDb, ADDON_IDS.AIRTRAIL, true);
-  savePermissions({ reservation_edit: 'trip_member' });
+  await savePermissions({ reservation_edit: 'trip_member' });
 });
 
 afterAll(() => {
@@ -435,7 +419,7 @@ describe('Tool: import_airtrail_flights', () => {
       expect((result.content as any)[0].text).toContain('access denied');
     });
 
-    savePermissions({ reservation_edit: 'trip_owner' });
+    await savePermissions({ reservation_edit: 'trip_owner' });
     await withHarness(member.id, async (h) => {
       const result = await h.client.callTool({ name: 'import_airtrail_flights', arguments: { tripId: trip.id, flightIds: ['11'] } });
       expect(result.isError).toBe(true);

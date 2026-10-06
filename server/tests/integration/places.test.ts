@@ -13,31 +13,10 @@ import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
 import path from 'path';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -49,14 +28,14 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, createTrip, createPlace, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { PlacesService } from '../../src/nest/places/places.service';
 import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions-cache';
+import { broadcast } from '../../src/websocket';
 
 let nestApp: INestApplication;
 let app: Application;
@@ -73,8 +52,6 @@ const KML_MALFORMED_FIXTURE = path.join(__dirname, '../fixtures/test-malformed.k
 const KMZ_FIXTURE = path.join(__dirname, '../fixtures/test.kmz');
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
@@ -1071,5 +1048,323 @@ describe('Custom place image upload', () => {
       .set('Cookie', authCookie(user.id))
       .attach('image', FIXTURE_PDF);
     expect(res.status).toBe(400);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// H1 (task-4-review.md) — the trip id is parsed ONCE, at the gate, and that
+// value is what every later call uses (rule 21). A hex-spelled trip id whose
+// `Number()` value is a REAL, accessible trip must answer the same not-found
+// every place/day/assignment id already does — not reach the real trip
+// through a `Number(tripId)` gate while a raw-bound write behind it (or vice
+// versa) misses.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('H1 — trip id parsed once at the gate (rule 21)', () => {
+  it('GET by the trip\'s hex-spelled id 404s — it does not read the real trip\'s place', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const place = createPlace(testDb, trip.id, { name: 'Spot' });
+    const hexTripId = '0x' + trip.id.toString(16);
+
+    const res = await request(app)
+      .get(`/api/trips/${hexTripId}/places/${place.id}`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Place not found' });
+  });
+
+  it('PUT with tags by the hex-spelled trip id 404s "Trip not found" (Task 9 fix wave: `verifyTripAccess` now gates BEFORE the place-id read, so the string changed from "Place not found") and leaves the tags untouched (H1 live: they used to be wiped)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const tagResult = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('Original', user.id);
+    const tagId = tagResult.lastInsertRowid as number;
+    const createRes = await request(app)
+      .post(`/api/trips/${trip.id}/places`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name: 'Taggable', tags: [tagId] });
+    expect(createRes.status).toBe(201);
+    const placeId = createRes.body.place.id;
+    const hexTripId = '0x' + trip.id.toString(16);
+
+    const res = await request(app)
+      .put(`/api/trips/${hexTripId}/places/${placeId}`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name: 'Renamed', tags: [] });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Trip not found' });
+
+    const after = await request(app)
+      .get(`/api/trips/${trip.id}/places/${placeId}`)
+      .set('Cookie', authCookie(user.id));
+    expect(after.body.place.name).toBe('Taggable');
+    expect((after.body.place.tags as { id: number }[]).some((t) => t.id === tagId)).toBe(true);
+  });
+
+  it('PUT :id/rating by the hex-spelled trip id 404s "Trip not found" (Task 9 fix wave: was "Place not found" — see the PUT :id case above)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const place = createPlace(testDb, trip.id, { name: 'Rated' });
+    const hexTripId = '0x' + trip.id.toString(16);
+
+    const res = await request(app)
+      .put(`/api/trips/${hexTripId}/places/${place.id}/rating`)
+      .set('Cookie', authCookie(user.id))
+      .send({ rating: 4 });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Trip not found' });
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ?').get(place.id)).toEqual({ n: 0 });
+  });
+
+  it('POST create by the hex-spelled trip id now 404s "Trip not found" (Task 9 fix wave, M1: `verifyTripAccess` gates with `toRowId` before `create()` is ever reached — the base 94c6efbbc 500 this test used to mirror was ruled a defect, not the contract to preserve, once the gate itself refuses the id)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const hexTripId = '0x' + trip.id.toString(16);
+
+    const res = await request(app)
+      .post(`/api/trips/${hexTripId}/places`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name: 'Should not land' });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Trip not found' });
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+  });
+
+  it('DELETE :id by the hex-spelled trip id 404s, deletes nothing and broadcasts nothing, even with a linked expense (#1298)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const place = createPlace(testDb, trip.id, { name: 'Louvre' });
+    testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Tickets', 34, ?)").run(trip.id, place.id);
+    const hexTripId = '0x' + trip.id.toString(16);
+    vi.mocked(broadcast).mockClear();
+
+    const res = await request(app)
+      .delete(`/api/trips/${hexTripId}/places/${place.id}`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Place not found' });
+    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(place.id)).toBeTruthy();
+    expect(testDb.prepare('SELECT id FROM budget_items WHERE place_id = ?').get(place.id)).toBeTruthy();
+    expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it('POST bulk-delete by the hex-spelled trip id now 404s "Trip not found" and deletes nothing (Task 9 fix wave: `verifyTripAccess` gates before `scopedIds`/`removeMany` ever run — was a 200 with `count: 0`)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const place = createPlace(testDb, trip.id, { name: 'Louvre' });
+    testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Tickets', 34, ?)").run(trip.id, place.id);
+    const hexTripId = '0x' + trip.id.toString(16);
+    vi.mocked(broadcast).mockClear();
+
+    const res = await request(app)
+      .post(`/api/trips/${hexTripId}/places/bulk-delete`)
+      .set('Cookie', authCookie(user.id))
+      .send({ ids: [place.id] });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Trip not found' });
+    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(place.id)).toBeTruthy();
+    expect(broadcast).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plan 3c Task 9 fix wave — A-H1 / A-M1 / B-H1: `verifyTripAccess` parses
+// ONCE with `toRowId` (never `Number()`) and answers 404 `Trip not found`
+// before ANY read or write on the 10 `requireTrip`-gated routes above,
+// closing two live regressions at once:
+//   - A-H1: a non-numeric id (`abc`, `1abc`) used to become `NaN` and 500
+//     (`no such column: NaN`) instead of the legacy 404 — every one of
+//     these routes now answers the SAME 404 a stranger's clean miss does.
+//   - A-M1 / B-H1: a numeric-but-non-canonical id (`1.0`, `' 1'`, `'+1'`,
+//     `'1e0'`) used to pass the old loose `Number()` gate and then
+//     manufacture a FRESH 500 at the write (`toRowId(tripId) ?? -1`, an FK
+//     violation on `-1`) — an id the gate itself authorised. It now 404s at
+//     the gate instead: an ACCEPTED rule-15 narrowing (legacy's raw-bind
+//     affinity matched these forms; `toRowId` deliberately does not), named
+//     here rather than claimed as parity.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('A-H1 / A-M1 / B-H1 — verifyTripAccess parses once with toRowId (Task 9 fix wave)', () => {
+  const nonCanonicalShapes: [label: string, spell: (id: number) => string][] = [
+    ['a non-numeric id (abc)', () => 'abc'],
+    ['a numeric-suffixed id (1abc)', (id) => `${id}abc`],
+    ['a decimal-spelled id (1.0) — rule-15 narrowing, base 201', (id) => `${id}.0`],
+    ['a leading-space id (\' 1\') — rule-15 narrowing, base 201', (id) => ` ${id}`],
+    ['a leading-plus id (+1) — rule-15 narrowing, base 201', (id) => `+${id}`],
+    ['an exponent-spelled id (1e0) — rule-15 narrowing, base 201', (id) => `${id}e0`],
+  ];
+
+  describe.each(nonCanonicalShapes)('POST create — %s', (_label, spell) => {
+    it('404s "Trip not found" and creates nothing', async () => {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const spelled = spell(trip.id);
+
+      const res = await request(app)
+        .post(`/api/trips/${spelled}/places`)
+        .set('Cookie', authCookie(user.id))
+        .send({ name: 'Should not land' });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+      expect(testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+    });
+  });
+
+  describe.each(nonCanonicalShapes)('PUT :id — %s', (_label, spell) => {
+    it('404s "Trip not found" and leaves the place untouched', async () => {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const place = createPlace(testDb, trip.id, { name: 'Untouched' });
+      const spelled = spell(trip.id);
+
+      const res = await request(app)
+        .put(`/api/trips/${spelled}/places/${place.id}`)
+        .set('Cookie', authCookie(user.id))
+        .send({ name: 'Renamed' });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+      const row = testDb.prepare('SELECT name FROM places WHERE id = ?').get(place.id) as { name: string };
+      expect(row.name).toBe('Untouched');
+    });
+  });
+
+  describe.each(nonCanonicalShapes)('POST bulk-delete — %s', (_label, spell) => {
+    it('404s "Trip not found" and deletes nothing', async () => {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const place = createPlace(testDb, trip.id, { name: 'Louvre' });
+      const spelled = spell(trip.id);
+      vi.mocked(broadcast).mockClear();
+
+      const res = await request(app)
+        .post(`/api/trips/${spelled}/places/bulk-delete`)
+        .set('Cookie', authCookie(user.id))
+        .send({ ids: [place.id] });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+      expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(place.id)).toBeTruthy();
+      expect(broadcast).not.toHaveBeenCalled();
+    });
+  });
+
+  describe.each(nonCanonicalShapes)('POST bulk-update — %s', (_label, spell) => {
+    it('404s "Trip not found" and updates nothing', async () => {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const place = createPlace(testDb, trip.id, { name: 'Louvre', category_id: null });
+      const spelled = spell(trip.id);
+
+      const res = await request(app)
+        .post(`/api/trips/${spelled}/places/bulk-update`)
+        .set('Cookie', authCookie(user.id))
+        .send({ ids: [place.id], category_id: null });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+    });
+  });
+
+  describe.each(nonCanonicalShapes)('PUT :id/rating — %s', (_label, spell) => {
+    it('404s "Trip not found" and writes no rating', async () => {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const place = createPlace(testDb, trip.id, { name: 'Rated' });
+      const spelled = spell(trip.id);
+
+      const res = await request(app)
+        .put(`/api/trips/${spelled}/places/${place.id}/rating`)
+        .set('Cookie', authCookie(user.id))
+        .send({ rating: 4 });
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+      expect(testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ?').get(place.id)).toEqual({ n: 0 });
+    });
+  });
+
+  describe.each(nonCanonicalShapes)('GET export.gpx — %s', (_label, spell) => {
+    it('404s "Trip not found"', async () => {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const spelled = spell(trip.id);
+
+      const res = await request(app)
+        .get(`/api/trips/${spelled}/places/export.gpx`)
+        .set('Cookie', authCookie(user.id));
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+    });
+  });
+
+  describe.each(nonCanonicalShapes)('POST import/gpx — %s', (_label, spell) => {
+    it('404s "Trip not found" and imports nothing', async () => {
+      const { user } = createUser(testDb);
+      const trip = createTrip(testDb, user.id);
+      const spelled = spell(trip.id);
+
+      const res = await request(app)
+        .post(`/api/trips/${spelled}/places/import/gpx`)
+        .set('Cookie', authCookie(user.id))
+        .attach('file', GPX_FIXTURE);
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+      expect(testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+    });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M1 / program rule 22 (task-4-review.md) — a NUL byte in a user string no
+// longer 500s: the platform override restores the legacy raw-bind's
+// byte-for-byte round-trip (base 94c6efbbc: 200/201; before this fix, every
+// ORM-converted statement 500'd on NUL).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('M1 — NUL-safe value quoting on the SQLite platform (rule 22)', () => {
+  it('GET ?search=%00 is 200, not 500 (status parity — SQLite\'s LIKE pattern matcher itself iterates its RHS as NUL-terminated, an independent SQLite limitation this platform fix does not touch, so a NUL search matches everything on BOTH trees, not nothing)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    createPlace(testDb, trip.id, { name: 'Spot' });
+
+    // A raw, pre-encoded `%00` in the URL — the review's exact literal
+    // request shape (`GET /api/trips/:id/places?search=%00`). `.query({...})`
+    // goes through superagent's own `qs` encoder, which is not guaranteed to
+    // round-trip a NUL character the same way; the literal query string is
+    // what Express/the route actually receives in production.
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/places?search=%00`)
+      .set('Cookie', authCookie(user.id));
+    expect(res.status).toBe(200);
+  });
+
+  it('POST create with a NUL in the name is 201 and the name round-trips byte-for-byte', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const name = 'nul\u0000name';
+
+    const res = await request(app)
+      .post(`/api/trips/${trip.id}/places`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name });
+    expect(res.status).toBe(201);
+    expect(res.body.place.name).toBe(name);
+
+    const stored = testDb.prepare('SELECT name FROM places WHERE id = ?').get(res.body.place.id) as { name: string };
+    expect(stored.name).toBe(name);
+  });
+
+  it('fuzzes every 0x01-0x1F control character in a created place name: none 500 and every one round-trips', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    // 0x00 is covered by its own dedicated test above; this sweeps the rest
+    // of the control-character range the review's fuzz asked for.
+    for (let code = 0x01; code <= 0x1f; code++) {
+      const name = `ctrl${String.fromCharCode(code)}char`;
+      const res = await request(app)
+        .post(`/api/trips/${trip.id}/places`)
+        .set('Cookie', authCookie(user.id))
+        .send({ name });
+      expect(res.status).toBe(201);
+      expect(res.body.place.name).toBe(name);
+    }
   });
 });

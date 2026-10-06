@@ -24,28 +24,23 @@ import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
 import { sessionCookie } from './harness';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec('PRAGMA foreign_keys = ON');
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return {
+    db,
+    closeDb: () => {},
+    reinitialize: () => {},
+    getPlaceWithTags: () => null,
+    canAccessTrip: (tripId: number | string, userId: number) =>
+      db
+        .prepare(
+          'SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)',
+        )
+        .get(userId, tripId, userId),
+    isOwner: () => false,
+  };
 });
-
-vi.mock('../../src/db/database', () => ({
-  db,
-  closeDb: () => {},
-  reinitialize: () => {},
-  getPlaceWithTags: () => null,
-  canAccessTrip: (tripId: number | string, userId: number) =>
-    db
-      .prepare(
-        'SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)',
-      )
-      .get(userId, tripId, userId),
-  isOwner: () => false,
-}));
 
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true) }));
 vi.mock('../../src/websocket', () => ({ broadcastToUser: vi.fn(), broadcast: vi.fn() }));
@@ -68,13 +63,13 @@ vi.mock('../../src/utils/ssrfGuard', async (importOriginal) => {
   };
 });
 
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
+import { db } from '../../src/db/database';
 import { createTrip, createUser } from '../helpers/factories';
 import { DocSyncModule } from '../../src/nest/doc-sync/doc-sync.module';
 import { DocSyncMcp } from '../../src/nest/doc-sync/doc-sync.mcp';
 import type { McpContext } from '../../src/nest-mcp';
-import { DatabaseModule } from '../../src/nest/database/database.module';
+import { MikroORM } from '@mikro-orm/core';
+import { withRequestContext } from '../../src/nest/database/request-context';
 import { AddonsService } from '../../src/nest/addons/addons.service';
 import { DOCUMENT_PROVIDERS } from '../../src/nest/doc-sync/document-provider';
 import { PaperlessDocumentProvider } from '../../src/nest/doc-sync/providers/paperless.provider';
@@ -83,6 +78,8 @@ import { SynologyDriveDocumentProvider } from '../../src/nest/doc-sync/providers
 import { NextcloudDocumentProvider, OpencloudDocumentProvider } from '../../src/nest/doc-sync/providers/webdav.provider';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 /** A provider that answers plausibly but never opens a socket. */
 function fakeProvider(id: string) {
@@ -136,7 +133,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
       [OpencloudDocumentProvider, 'opencloud'],
       [SynologyDriveDocumentProvider, 'synologydrive'],
     ] as const;
-    let builder = Test.createTestingModule({ imports: [DatabaseModule, DocSyncModule] })
+    let builder = Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), DocSyncModule] })
       .overrideProvider(AddonsService)
       .useValue({ isAddonEnabled });
     const fakes = providers.map(([, id]) => fakeProvider(id));
@@ -154,8 +151,6 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
   }
 
   beforeAll(async () => {
-    createTables(db as never);
-    runMigrations(db as never);
     ownerId = createUser(db as never, { username: 'owner', email: 'owner@test.local' }).user.id;
     memberId = createUser(db as never, { username: 'member', email: 'member@test.local' }).user.id;
     strangerId = createUser(db as never, { username: 'stranger', email: 'stranger@test.local' }).user.id;
@@ -399,9 +394,14 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
         .expect(200);
       expect(links.body[0]).toMatchObject({ providerId: 'paperless', providerName: 'Paperless-ngx' });
 
-      // The assistant reads the same bindings through its own tool.
+      // The assistant reads the same bindings through its own tool. Called
+      // directly on the injected controller (not through the real /mcp
+      // transport), which is what forks a request context for a genuine MCP
+      // call (nest-mcp/registry.ts) — wrapped here for the same reason
+      // (Plan 3c Task 0b: `verifyTripAccess` now reaches `TripsRepository`,
+      // which validates one).
       const ctx = { userId: memberId, scopes: null, isStaticToken: false } as McpContext;
-      const result = app.get(DocSyncMcp).getTripDocumentSync({ tripId }, ctx);
+      const result = await withRequestContext(app.get(MikroORM), () => app.get(DocSyncMcp).getTripDocumentSync({ tripId }, ctx));
       const status = JSON.parse(result.content[0].text) as { links: Array<Record<string, unknown>> };
       expect(status.links[0]).toMatchObject({ providerId: 'paperless', providerName: 'Paperless-ngx' });
     } finally {

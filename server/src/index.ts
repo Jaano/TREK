@@ -25,6 +25,7 @@ const tmpDir = path.join(__dirname, '../data/tmp');
 if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
 
 import { getAppUrl, getMcpSafeUrl, readEnv } from './app-config';
+import { resolveDbPath } from './db/db-path';
 
 const PORT = readEnv().app.port;
 const HOST = readEnv().app.host;
@@ -127,7 +128,7 @@ async function restoreBeforeTheDatabaseOpens() {
   const dataDir = path.join(__dirname, '../data');
   return restoreOnFirstBoot({
     archive: env.backup.restoreFromBackup,
-    dbFile: env.db.trekDbFile || path.join(dataDir, 'travel.db'),
+    dbFile: resolveDbPath(),
     dataDir,
   });
 }

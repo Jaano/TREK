@@ -16,7 +16,9 @@ import {
 } from './transit-itinerary.helpers';
 import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { RateLimitService } from '../common/rate-limit.service';
-import { DatabaseService } from '../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../db/repositories/Trips.repository';
 import { DaysService } from '../days/days.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { SCHEDULED_TRANSIT_MODES, type TransitItinerary } from './transit.helpers';
@@ -66,7 +68,10 @@ export class TransitMcp {
     private readonly transit: TransitService,
     private readonly days: DaysService,
     private readonly reservations: ReservationsService,
-    private readonly db: DatabaseService,
+    // Plan 4 Task 2 — canAccessTrip's own DatabaseService delegation is gone:
+    // this injects TripsRepository directly (same constructor slot) and
+    // calls findAccessible.
+    @InjectRepository(Trips) private readonly trips: TripsRepository,
     private readonly auth: AuthService,
     private readonly guards: McpToolGuardsService,
   ) {}
@@ -186,10 +191,10 @@ export class TransitMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
-    const day = this.days.getDay(dayId, tripId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.trips.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
+    const day = await this.days.getDay(dayId, tripId);
     if (!day) {
       return { content: [{ type: 'text' as const, text: 'dayId does not belong to this trip.' }], isError: true };
     }
@@ -231,14 +236,14 @@ export class TransitMcp {
         isError: true,
       };
     }
-    const endDay = this.days.list(tripId).days.find((d) => d.date === arrival.local_date);
+    const endDay = (await this.days.list(tripId)).days.find((d) => d.date === arrival.local_date);
     if (!endDay) {
       return {
         content: [{ type: 'text' as const, text: `No trip day exists for the arrival date ${arrival.local_date}.` }],
         isError: true,
       };
     }
-    const { reservation } = this.reservations.create(tripId, {
+    const { reservation } = await this.reservations.create(tripId, {
       title: `${from.name} → ${to.name}`,
       type: 'transit',
       status: 'confirmed',
@@ -252,7 +257,7 @@ export class TransitMcp {
       needs_review: false,
     });
     this.guards.safeBroadcast(tripId, 'reservation:created', { reservation });
-    this.reservations.notifyBookingChange(tripId, ctx.userId, reservation.title, reservation.type || '');
+    await this.reservations.notifyBookingChange(tripId, ctx.userId, reservation.title, reservation.type || '');
     return ok({ reservation });
   }
 }

@@ -43,7 +43,7 @@ export class RoadtripPlanningMcp {
     when,
   })
   async context({ tripId }: { tripId: number }, ctx: McpContext) {
-    return answeringRefusals(() => ok(this.plans.context(tripId, ctx.userId)));
+    return await answeringRefusals(async () => ok(await this.plans.context(tripId, ctx.userId)));
   }
 
   @Tool({

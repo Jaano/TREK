@@ -48,14 +48,14 @@ export class LlmParseService {
   ) {}
 
   /** True when the addon is enabled AND a usable config resolves for this user. */
-  isAvailable(userId: number): boolean {
-    return this.llmConfig.resolve(userId) !== null;
+  async isAvailable(userId: number): Promise<boolean> {
+    return (await this.llmConfig.resolve(userId)) !== null;
   }
 
   /** Whether a photo this user uploads can be read: AI parsing is set up and its model takes images. */
   async readsImages(userId: number): Promise<boolean> {
-    const config = this.llmConfig.resolve(userId);
-    return config ? this.visionFor(config) : false;
+    const config = await this.llmConfig.resolve(userId);
+    return config ? await this.visionFor(config) : false;
   }
 
   /**
@@ -64,7 +64,7 @@ export class LlmParseService {
    * a warning naming the file.
    */
   async readReceipt(file: { buffer: Buffer; originalName: string }, userId: number): Promise<ReceiptScanResult> {
-    const config = this.llmConfig.resolve(userId);
+    const config = await this.llmConfig.resolve(userId);
     if (!config) return { receipt: null, warnings: ['AI parsing is not configured'] };
     const imageType = imageMimeType(file.originalName);
     if (!imageType) return { receipt: null, warnings: [`${file.originalName}: not a photo`] };
@@ -131,7 +131,7 @@ export class LlmParseService {
   }
 
   async parse(file: { buffer: Buffer; originalName: string }, userId: number): Promise<LlmParseResult> {
-    const config = this.llmConfig.resolve(userId);
+    const config = await this.llmConfig.resolve(userId);
     if (!config) return { kiItems: [], warnings: ['AI parsing is not configured'] };
 
     const warnings: string[] = [];

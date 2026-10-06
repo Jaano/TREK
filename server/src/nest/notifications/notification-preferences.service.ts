@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { NOTIFICATION_DEFAULTS, type NotificationDefault } from '@trek/shared';
-import { DatabaseService } from '../database/database.service';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
+import { NotificationChannelPreferences } from '../../db/entities/NotificationChannelPreferences.entity';
+import type { NotificationChannelPreferencesRepository } from '../../db/repositories/NotificationChannelPreferences.repository';
+import { UnitOfWork } from '../database/unit-of-work';
 import { MailerService } from './mailer/mailer.service';
 import { listChannels } from './channel-registry';
 import {
@@ -42,29 +47,38 @@ const DEFAULT_KEY = (event: string, channel: string) => `notif_default_${event}_
  *
  * It reads the live channel set from the registry but never sends anything —
  * the dispatch loop in NotificationsService applies what is decided here.
+ *
+ * DI-native (Plan 3f Task 3): the `SELECT value FROM app_settings WHERE
+ * key = ?`/`INSERT OR REPLACE INTO app_settings ...` reads/writes (NP1/NP4)
+ * moved onto the shared `AppSettingsRepository.getValue`/`.setValue` pair
+ * (already built, Plan 3a) rather than a new method — this is the first of
+ * six identical `app_settings` single-key sites in this cluster to converge
+ * on it (plan3f-sql-inventory.md §15 surprise 8). `notification_channel_preferences`'s
+ * reads/writes (NP2/NP3/NP5/NP6) go through `NotificationChannelPreferencesRepository`,
+ * whose `upsertPreference`/`deletePreference` target the table's genuine
+ * 3-column composite primary key (`user`, `event_type`, `channel`) via
+ * `em.upsert({ onConflictFields: [...] })`, per Task 0's R5 pin.
  */
 @Injectable()
 export class NotificationPreferencesService {
   constructor(
-    private readonly db: DatabaseService,
     private readonly mailer: MailerService,
+    private readonly uow: UnitOfWork,
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+    @InjectRepository(NotificationChannelPreferences) private readonly channelPrefs: NotificationChannelPreferencesRepository,
   ) {}
-
-  private getAppSetting(key: string): string | null {
-    return this.db.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', key)?.value || null;
-  }
 
   /**
    * Channels implemented for an event. In-app takes everything; external channels
    * decide for themselves (today: everything except `synology_session_cleared`).
    */
-  combosFor(event: NotifEventType): NotifChannel[] {
-    return [INAPP_CHANNEL, ...listChannels().filter(c => c.supportsEvent(event)).map(c => c.id)];
+  async combosFor(event: NotifEventType): Promise<NotifChannel[]> {
+    return [INAPP_CHANNEL, ...(await listChannels()).filter(c => c.supportsEvent(event)).map(c => c.id)];
   }
 
-  private allCombos(): Record<string, NotifChannel[]> {
+  private async allCombos(): Promise<Record<string, NotifChannel[]>> {
     const out: Record<string, NotifChannel[]> = {};
-    for (const event of ALL_EVENT_TYPES) out[event] = this.combosFor(event);
+    for (const event of ALL_EVENT_TYPES) out[event] = await this.combosFor(event);
     return out;
   }
 
@@ -81,16 +95,16 @@ export class NotificationPreferencesService {
    * into this CSV, and the admin toggle rebuilds it from the three built-in booleans, which
    * would silently drop any that were).
    */
-  getActiveChannels(): NotifChannel[] {
-    const raw = this.getAppSetting('notification_channels') || this.getAppSetting('notification_channel') || 'none';
+  async getActiveChannels(): Promise<NotifChannel[]> {
+    const raw = (await this.appSettings.getValue('notification_channels')) || (await this.appSettings.getValue('notification_channel')) || 'none';
     if (raw === 'none') return [];
-    const builtins = new Set(listChannels().filter(c => c.source === 'builtin').map(c => c.id));
+    const builtins = new Set((await listChannels()).filter(c => c.source === 'builtin').map(c => c.id));
     return raw.split(',').map(c => c.trim()).filter(c => builtins.has(c));
   }
 
   /** Is this channel switched on? Plugin channels are on by virtue of being live. */
-  isChannelActive(channel: ExternalChannel): boolean {
-    return channel.source === 'plugin' || this.getActiveChannels().includes(channel.id);
+  async isChannelActive(channel: ExternalChannel): Promise<boolean> {
+    return channel.source === 'plugin' || (await this.getActiveChannels()).includes(channel.id);
   }
 
   /**
@@ -98,9 +112,9 @@ export class NotificationPreferencesService {
    * channel that says so, ready on this instance too: Web Push without a usable
    * key pair is off for everyone, whatever the admin switch says.
    */
-  private isChannelOffered(channel: ExternalChannel): boolean {
-    if (!this.isChannelActive(channel)) return false;
-    return !channel.hiddenWhileInstanceUnconfigured || channel.isInstanceConfigured?.() !== false;
+  private async isChannelOffered(channel: ExternalChannel): Promise<boolean> {
+    if (!(await this.isChannelActive(channel))) return false;
+    return !channel.hiddenWhileInstanceUnconfigured || (await channel.isInstanceConfigured?.()) !== false;
   }
 
   // ── Per-user preference checks ─────────────────────────────────────────────
@@ -109,14 +123,11 @@ export class NotificationPreferencesService {
    * Returns true if the user has this event+channel enabled.
    * Default (no row) = enabled. Only returns false if there's an explicit disabled row.
    */
-  isEnabledForEvent(userId: number, eventType: NotifEventType, channel: NotifChannel): boolean {
-    const fallback = this.instanceDefault(eventType, channel);
+  async isEnabledForEvent(userId: number, eventType: NotifEventType, channel: NotifChannel): Promise<boolean> {
+    const fallback = await this.instanceDefault(eventType, channel);
     if (fallback === 'blocked') return false;
-    const row = this.db.get<{ enabled: number }>(
-      'SELECT enabled FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?',
-      userId, eventType, channel,
-    );
-    return row === undefined ? fallback === 'on' : row.enabled === 1;
+    const row = await this.channelPrefs.findEnabled(userId, eventType, channel);
+    return row === null ? fallback === 'on' : row.enabled === 1;
   }
 
   // ── Instance defaults (#1536) ──────────────────────────────────────────────
@@ -126,9 +137,9 @@ export class NotificationPreferencesService {
    * their own global switches and are never affected; an unknown stored value
    * means the old behaviour, on.
    */
-  instanceDefault(eventType: NotifEventType, channel: NotifChannel): NotificationDefault {
+  async instanceDefault(eventType: NotifEventType, channel: NotifChannel): Promise<NotificationDefault> {
     if (ADMIN_SCOPED_EVENTS.has(eventType)) return 'on';
-    const raw = this.getAppSetting(DEFAULT_KEY(eventType, channel));
+    const raw = await this.appSettings.getValue(DEFAULT_KEY(eventType, channel));
     return (NOTIFICATION_DEFAULTS as readonly string[]).includes(raw ?? '') ? (raw as NotificationDefault) : 'on';
   }
 
@@ -136,28 +147,32 @@ export class NotificationPreferencesService {
     return ALL_EVENT_TYPES.filter(e => !ADMIN_SCOPED_EVENTS.has(e));
   }
 
-  getInstanceDefaults(adminId: number): InstanceDefaultsMatrix {
+  async getInstanceDefaults(adminId: number): Promise<InstanceDefaultsMatrix> {
     const event_types = this.userEventTypes();
-    const implemented_combos = this.allCombos();
+    const implemented_combos = await this.allCombos();
     const defaults: InstanceDefaultsMatrix['defaults'] = {};
     for (const event of event_types) {
       defaults[event] = {};
-      for (const channel of implemented_combos[event]) defaults[event]![channel] = this.instanceDefault(event, channel);
+      for (const channel of implemented_combos[event]) defaults[event]![channel] = await this.instanceDefault(event, channel);
     }
-    return { defaults, channels: this.describeChannels(adminId, 'user'), event_types, implemented_combos };
+    return { defaults, channels: await this.describeChannels(adminId, 'user'), event_types, implemented_combos };
   }
 
   /** Stores the cells given; `on` removes the row, so the table only holds what differs. Unknown cells are skipped. */
-  setInstanceDefaults(defaults: Partial<Record<string, Partial<Record<string, NotificationDefault>>>>): void {
+  async setInstanceDefaults(defaults: Partial<Record<string, Partial<Record<string, NotificationDefault>>>>): Promise<void> {
     const userEvents = new Set<string>(this.userEventTypes());
-    this.db.transaction(() => {
+    // The channel set is read before the transaction opens: listChannels() may
+    // ask the plugin runtime, which is no work to hold the connection for.
+    const combos = await this.allCombos();
+    await this.uow.transactional(async () => {
       for (const [event, channels] of Object.entries(defaults)) {
         if (!userEvents.has(event) || !channels) continue;
-        const allowed = new Set(this.combosFor(event as NotifEventType));
+        const allowed = new Set(combos[event] ?? []);
         for (const [channel, value] of Object.entries(channels)) {
           if (!allowed.has(channel) || !value) continue;
-          if (value === 'on') this.db.run('DELETE FROM app_settings WHERE key = ?', DEFAULT_KEY(event, channel));
-          else this.db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', DEFAULT_KEY(event, channel), value);
+          // `DELETE FROM app_settings WHERE key = ?` / `INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)`
+          if (value === 'on') await this.appSettings.deleteValue(DEFAULT_KEY(event, channel));
+          else await this.appSettings.upsertOrReplace(DEFAULT_KEY(event, channel), value);
         }
       }
     });
@@ -181,17 +196,17 @@ export class NotificationPreferencesService {
    * scope='user'  — a column per channel the admin turned on in `notification_channels`.
    * scope='admin' — a column per channel that has admin-global credentials.
    */
-  private describeChannels(userId: number, scope: 'user' | 'admin'): ChannelDescriptor[] {
+  private async describeChannels(userId: number, scope: 'user' | 'admin'): Promise<ChannelDescriptor[]> {
     const out: ChannelDescriptor[] = [this.inAppDescriptor()];
 
     if (scope === 'admin') {
       // Admin-scoped events go out over the admin's own global credentials, which
       // are independent of the per-user `notification_channels` toggle.
-      const hasSmtp = this.mailer.isSmtpConfigured();
-      const hasAdminWebhook = !!this.getAppSetting('admin_webhook_url');
-      const hasAdminNtfy = !!this.getAppSetting('admin_ntfy_topic');
+      const hasSmtp = await this.mailer.isSmtpConfigured();
+      const hasAdminWebhook = !!(await this.appSettings.getValue('admin_webhook_url'));
+      const hasAdminNtfy = !!(await this.appSettings.getValue('admin_ntfy_topic'));
       const adminActive: Record<string, boolean> = { email: hasSmtp, webhook: hasAdminWebhook, ntfy: hasAdminNtfy };
-      for (const channel of listChannels()) {
+      for (const channel of await listChannels()) {
         // Only the channels with an admin-global copy. Plugin channels and push are
         // user-scoped: they never carry an admin-scoped event, so a column for them
         // here could never be switched on.
@@ -209,7 +224,7 @@ export class NotificationPreferencesService {
       return out;
     }
 
-    for (const channel of listChannels()) {
+    for (const channel of await listChannels()) {
       out.push({
         id: channel.id,
         source: channel.source,
@@ -218,8 +233,8 @@ export class NotificationPreferencesService {
         settingsPath: channel.settingsPath,
         // A live plugin channel is always a column. `configured` tells the user whether
         // they still need to enter credentials — it does not hide the channel from them.
-        active: this.isChannelOffered(channel),
-        configured: channel.isConfiguredFor(userId),
+        active: await this.isChannelOffered(channel),
+        configured: await channel.isConfiguredFor(userId),
       });
     }
     return out;
@@ -230,10 +245,8 @@ export class NotificationPreferencesService {
    * scope='user'  — excludes admin-scoped events (for user settings page)
    * scope='admin' — returns only admin-scoped events (for admin notifications tab)
    */
-  getPreferencesMatrix(userId: number, userRole: string, scope: 'user' | 'admin' = 'user'): PreferencesMatrix {
-    const rows = this.db.all<{ event_type: string; channel: string; enabled: number }>(
-      'SELECT event_type, channel, enabled FROM notification_channel_preferences WHERE user_id = ?', userId,
-    );
+  async getPreferencesMatrix(userId: number, userRole: string, scope: 'user' | 'admin' = 'user'): Promise<PreferencesMatrix> {
+    const rows = await this.channelPrefs.listForUser(userId);
 
     // Build a lookup from stored rows
     const stored: Partial<Record<string, Partial<Record<string, boolean>>>> = {};
@@ -242,7 +255,7 @@ export class NotificationPreferencesService {
       stored[row.event_type]![row.channel] = row.enabled === 1;
     }
 
-    const implemented_combos = this.allCombos();
+    const implemented_combos = await this.allCombos();
 
     // Build the full matrix with defaults: the admin's instance default when no
     // row exists (on unless set otherwise), and off for a cell the admin blocked.
@@ -254,10 +267,10 @@ export class NotificationPreferencesService {
       for (const channel of implemented_combos[eventType]) {
         // Admin-scoped events use global settings for the built-in external channels
         if (scope === 'admin' && ADMIN_SCOPED_EVENTS.has(eventType) && isAdminGlobalChannel(channel)) {
-          preferences[eventType]![channel] = this.getAdminGlobalPref(eventType, channel);
+          preferences[eventType]![channel] = await this.getAdminGlobalPref(eventType, channel);
           continue;
         }
-        const fallback = this.instanceDefault(eventType, channel);
+        const fallback = await this.instanceDefault(eventType, channel);
         if (fallback === 'blocked') {
           preferences[eventType]![channel] = false;
           (locked[eventType] ??= []).push(channel);
@@ -274,10 +287,10 @@ export class NotificationPreferencesService {
 
     return {
       preferences,
-      channels: this.describeChannels(userId, scope),
+      channels: await this.describeChannels(userId, scope),
       event_types,
       implemented_combos,
-      ...(scope === 'user' && { defaults: { ntfyServer: this.getAppSetting('admin_ntfy_server') || null }, locked }),
+      ...(scope === 'user' && { defaults: { ntfyServer: (await this.appSettings.getValue('admin_ntfy_server')) || null }, locked }),
     };
   }
 
@@ -288,41 +301,32 @@ export class NotificationPreferencesService {
    * Stored in app_settings as `admin_notif_pref_{event}_{channel}`.
    * Defaults to true (enabled) when no row exists.
    */
-  getAdminGlobalPref(event: NotifEventType, channel: AdminGlobalChannel): boolean {
-    const val = this.getAppSetting(`admin_notif_pref_${event}_${channel}`);
+  async getAdminGlobalPref(event: NotifEventType, channel: AdminGlobalChannel): Promise<boolean> {
+    const val = await this.appSettings.getValue(`admin_notif_pref_${event}_${channel}`);
     return val !== '0';
   }
 
-  private setAdminGlobalPref(event: NotifEventType, channel: AdminGlobalChannel, enabled: boolean): void {
-    this.db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)',
-      `admin_notif_pref_${event}_${channel}`,
-      enabled ? '1' : '0',
-    );
+  private async setAdminGlobalPref(event: NotifEventType, channel: AdminGlobalChannel, enabled: boolean): Promise<void> {
+    await this.appSettings.setValue(`admin_notif_pref_${event}_${channel}`, enabled ? '1' : '0');
   }
 
   // ── Preferences update ─────────────────────────────────────────────────────
 
   /** Shared helper for per-user channel preference upserts. */
-  private applyUserChannelPrefs(
+  private async applyUserChannelPrefs(
     userId: number,
     prefs: Partial<Record<string, Partial<Record<string, boolean>>>>,
-  ): void {
-    const upsert = this.db.prepare(
-      'INSERT OR REPLACE INTO notification_channel_preferences (user_id, event_type, channel, enabled) VALUES (?, ?, ?, ?)'
-    );
-    const del = this.db.prepare(
-      'DELETE FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?'
-    );
+  ): Promise<void> {
     for (const [eventType, channels] of Object.entries(prefs)) {
       if (!channels) continue;
       for (const [channel, enabled] of Object.entries(channels)) {
-        const fallback = this.instanceDefault(eventType as NotifEventType, channel);
+        const fallback = await this.instanceDefault(eventType as NotifEventType, channel);
         // A cell the admin blocked stays off whatever is sent (#1536).
         if (fallback === 'blocked') continue;
         // A value that matches the instance default is stored as no row, so a later
         // change of the default reaches everybody who never chose otherwise.
-        if (enabled === (fallback === 'on')) del.run(userId, eventType, channel);
-        else upsert.run(userId, eventType, channel, enabled ? 1 : 0);
+        if (enabled === (fallback === 'on')) await this.channelPrefs.deletePreference(userId, eventType, channel);
+        else await this.channelPrefs.upsertPreference(userId, eventType, channel, enabled ? 1 : 0);
       }
     }
   }
@@ -331,11 +335,13 @@ export class NotificationPreferencesService {
    * Bulk-update preferences from the matrix UI.
    * Inserts disabled rows (enabled=0) and removes rows that are enabled (default).
    */
-  setPreferences(
+  async setPreferences(
     userId: number,
     prefs: Partial<Record<string, Partial<Record<string, boolean>>>>
-  ): void {
-    this.db.transaction(() => this.applyUserChannelPrefs(userId, prefs));
+  ): Promise<void> {
+    await this.uow.transactional(async () => {
+      await this.applyUserChannelPrefs(userId, prefs);
+    });
   }
 
   /**
@@ -343,10 +349,10 @@ export class NotificationPreferencesService {
    * email/webhook channels are stored globally in app_settings (not per-user).
    * inapp channel remains per-user in notification_channel_preferences.
    */
-  setAdminPreferences(
+  async setAdminPreferences(
     userId: number,
     prefs: Partial<Record<string, Partial<Record<string, boolean>>>>
-  ): void {
+  ): Promise<void> {
     // Split global (email/webhook) from per-user (inapp) prefs
     const globalPrefs: Partial<Record<string, Partial<Record<string, boolean>>>> = {};
     const userPrefs: Partial<Record<string, Partial<Record<string, boolean>>>> = {};
@@ -364,27 +370,33 @@ export class NotificationPreferencesService {
       }
     }
 
-    // Apply global prefs outside the transaction (they write to app_settings)
+    // Apply global prefs outside the transaction (they write to app_settings).
+    // Mixed atomicity, preserved as-is (plan3f-sql-inventory.md §4b's flag, R10):
+    // these are single-key upserts with no cross-row invariant, so a partial
+    // failure here is low-risk — widening this into the transaction below is a
+    // ruling this task does not make on its own.
     for (const [eventType, channels] of Object.entries(globalPrefs)) {
       if (!channels) continue;
       for (const [channel, enabled] of Object.entries(channels)) {
         if (!isAdminGlobalChannel(channel)) continue;
-        this.setAdminGlobalPref(eventType as NotifEventType, channel, enabled);
+        await this.setAdminGlobalPref(eventType as NotifEventType, channel, enabled);
       }
     }
 
     // Apply per-user (inapp) prefs in a transaction
-    this.db.transaction(() => this.applyUserChannelPrefs(userId, userPrefs));
+    await this.uow.transactional(async () => {
+      await this.applyUserChannelPrefs(userId, userPrefs);
+    });
   }
 
   // ── Instance-level readiness ──────────────────────────────────────────────
 
   /** SMTP set up at all? Kept here because the settings UI asks preferences, not the mailer. */
-  isSmtpConfigured(): boolean {
-    return this.mailer.isSmtpConfigured();
+  async isSmtpConfigured(): Promise<boolean> {
+    return await this.mailer.isSmtpConfigured();
   }
 
-  isWebhookConfigured(): boolean {
-    return this.getActiveChannels().includes('webhook');
+  async isWebhookConfigured(): Promise<boolean> {
+    return (await this.getActiveChannels()).includes('webhook');
   }
 }

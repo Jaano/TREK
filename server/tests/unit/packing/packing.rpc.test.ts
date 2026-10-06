@@ -15,9 +15,10 @@ import { PackingRpc } from '../../../src/nest/packing/packing.rpc';
 import { PackingModule } from '../../../src/nest/packing/packing.module';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import type { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
 import { notificationsStub } from '../../helpers/notifications';
@@ -32,7 +33,10 @@ type Item = { id: number; name?: string; is_private?: number; owner_id?: number 
  */
 function build(opts: { canEdit?: boolean; before?: Item | undefined; updated?: Item | null } = {}) {
   const realtime = { broadcast: vi.fn() } as unknown as RealtimeService & { broadcast: ReturnType<typeof vi.fn> };
-  const packing = new PackingService({} as never, {} as never, realtime, notificationsStub());
+  const packing = new PackingService(
+    {} as never, realtime, notificationsStub(), {} as never,
+    {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never, {} as never,
+  );
   const data = {
     listItems: vi.fn(() => [{ id: 70, name: 'Socks' }]),
     // The bodies here are the boring fixture; the item writes are typed as Item so a
@@ -41,21 +45,23 @@ function build(opts: { canEdit?: boolean; before?: Item | undefined; updated?: I
     createItem: vi.fn((_t: string, i: Record<string, unknown>): Item => ({ id: 70, ...i })),
     getItemPrivacy: vi.fn(() => opts.before),
     updateItem: vi.fn(() => (opts.updated === undefined ? { id: 70, is_private: 0 } : opts.updated)),
-    deleteItem: vi.fn((_t: string, id: string): Item | null => (id === '70' ? { id: 70, is_private: 0 } : null)),
+    // Plan 4 Task 8b (U6) — the id/bagId param is now a real number (num()-parsed
+    // in packing.rpc.ts, no longer String()-wrapped), so the fixture matches on 70/80.
+    deleteItem: vi.fn((_t: string, id: number): Item | null => (id === 70 ? { id: 70, is_private: 0 } : null)),
     listBags: vi.fn(() => [{ id: 80, name: 'Backpack' }]),
     createBag: vi.fn((_t: string, b: Record<string, unknown>) => ({ id: 80, ...b })),
-    updateBag: vi.fn((_t: string, id: string) => (id === '80' ? { id: 80 } : null)),
-    deleteBag: vi.fn((_t: string, id: string) => id === '80'),
-    setBagMembers: vi.fn((_t: string, id: string, ids: number[]) => (id === '80' ? { bagId: 80, members: ids } : null)),
+    updateBag: vi.fn((_t: string, id: number) => (id === 80 ? { id: 80 } : null)),
+    deleteBag: vi.fn((_t: string, id: number) => id === 80),
+    setBagMembers: vi.fn((_t: string, id: number, ids: number[]) => (id === 80 ? { bagId: 80, members: ids } : null)),
   };
   Object.assign(packing, data);
   const guards = new PluginGuards(
     {
-      canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
-      prepare: vi.fn(() => ({ get: () => ({ role: 'user' }) })),
-    } as unknown as DatabaseService,
+      findAccessible: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
+    } as unknown as TripsRepository,
     { checkPermission: vi.fn(() => opts.canEdit ?? true) } as unknown as PermissionsService,
     { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService,
+    { getRole: vi.fn(async () => 'user') } as unknown as UsersRepository,
   );
   const rpc = new PackingRpc(packing, realtime, guards);
   const host = (...grants: string[]) => new PluginRpcHost('p', new Set(grants), makeDeps(), createTestPluginRegistry([rpc]));
@@ -104,7 +110,7 @@ describe('PackingRpc through the router', () => {
     expect((await host.dispatch(req('packing.listBags', { tripId: 1 }), 42)).ok).toBe(true);
     expect((await host.dispatch(req('packing.createBag', { tripId: 1, input: { name: 'Bag' } }), 42)).ok).toBe(true);
     expect((await host.dispatch(req('packing.setBagMembers', { tripId: 1, bagId: 80, userIds: [5, 6] }), 42)).ok).toBe(true);
-    expect(f.data.setBagMembers).toHaveBeenCalledWith('1', '80', [5, 6]);
+    expect(f.data.setBagMembers).toHaveBeenCalledWith('1', 80, [5, 6]);
   });
 
   it('PACKING-RPC-006 a bag name is required, and a missing bag is named', async () => {
@@ -117,7 +123,7 @@ describe('PackingRpc through the router', () => {
   it('PACKING-RPC-007 non-numeric entries in userIds are dropped', async () => {
     const f = build();
     await f.host('db:write:packing').dispatch(req('packing.setBagMembers', { tripId: 1, bagId: 80, userIds: [5, 'six', null, 6] }), 42);
-    expect(f.data.setBagMembers).toHaveBeenCalledWith('1', '80', [5, 6]);
+    expect(f.data.setBagMembers).toHaveBeenCalledWith('1', 80, [5, 6]);
   });
 
   it('PACKING-RPC-007b a non-string bag colour is dropped rather than stored', async () => {
@@ -129,7 +135,7 @@ describe('PackingRpc through the router', () => {
   it('PACKING-RPC-007c a non-array userIds becomes an empty list', async () => {
     const f = build();
     await f.host('db:write:packing').dispatch(req('packing.setBagMembers', { tripId: 1, bagId: 80, userIds: 'nope' }), 42);
-    expect(f.data.setBagMembers).toHaveBeenCalledWith('1', '80', []);
+    expect(f.data.setBagMembers).toHaveBeenCalledWith('1', 80, []);
   });
 
   it('PACKING-RPC-007d a missing bag is refused across every bag write', async () => {

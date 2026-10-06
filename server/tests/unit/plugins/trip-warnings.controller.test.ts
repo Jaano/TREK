@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { canAccessTrip, pluginsEnabled } = vi.hoisted(() => ({
-  canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
+  canAccessTrip: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
   pluginsEnabled: vi.fn(() => true),
 }));
 vi.mock('../../../src/db/database', () => ({ db: {}, canAccessTrip }));
@@ -9,7 +9,7 @@ vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
 import { TripWarningsController } from '../../../src/nest/plugins/contributions/trip-warnings.controller';
 import type { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const req = (id?: number) => ({ user: id === undefined ? undefined : { id } }) as any;
@@ -20,18 +20,18 @@ function controller(over: Partial<PluginHooks> = {}) {
       id === 'p2' ? [{ level: 'error', message: 'Day 3 is overpacked', dayId: 3 }] : [{ level: 'warning', message: 'Museum closed Mon', placeId: 7 }]),
     ...over,
   } as unknown as PluginHooks;
-  return { c: new TripWarningsController(runtime, { canAccessTrip } as unknown as DatabaseService), runtime };
+  return { c: new TripWarningsController(runtime, { findAccessible: canAccessTrip } as unknown as TripsRepository), runtime };
 }
 
 describe('TripWarningsController', () => {
-  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockReturnValue({ id: 1 } as never); });
+  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockResolvedValue({ id: 1 } as never); });
 
   it('returns [] when disabled / no user / no access', async () => {
     pluginsEnabled.mockReturnValue(false);
     expect(await controller().c.get('1', req(5))).toEqual({ warnings: [] });
     pluginsEnabled.mockReturnValue(true);
     expect(await controller().c.get('1', req(undefined))).toEqual({ warnings: [] });
-    canAccessTrip.mockReturnValue(undefined as never);
+    canAccessTrip.mockResolvedValue(undefined as never);
     expect(await controller().c.get('1', req(5))).toEqual({ warnings: [] });
   });
 

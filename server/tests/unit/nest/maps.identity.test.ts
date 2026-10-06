@@ -19,13 +19,11 @@ vi.mock('../../../src/utils/ssrfGuard', () => ({
   SsrfBlockedError: class extends Error {},
 }));
 
-import { db } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { MapsService } from '../../../src/nest/maps/maps.service';
 import { toWikiLang, haversineMetres, namesOverlap } from '../../../src/nest/maps/maps.helpers';
 import { noGoogleQuota } from '../../helpers/google-quota';
 
-const svcOf = () => new MapsService(new DatabaseService(db as never), {} as never, noGoogleQuota);
+const svcOf = () => new MapsService({} as never, {} as never, {} as never, {} as never, {} as never, noGoogleQuota);
 
 // The Brandenburg Gate and the underground station named after it, 250m apart.
 const GATE = { lat: 52.5163, lng: 13.3777 };

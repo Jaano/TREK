@@ -4,46 +4,46 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   // FKs off: this suite only checks media_type persistence, not owner/user integrity.
   db.exec('PRAGMA foreign_keys = OFF');
-  const mock = { db, closeDb: () => {}, reinitialize: () => {}, getPlaceWithTags: () => null, canAccessTrip: () => null, isOwner: () => false };
-  return { testDb: db, dbMock: mock };
+  return { db, closeDb: () => {}, reinitialize: () => {}, getPlaceWithTags: async () => null, canAccessTrip: async () => null, isOwner: async () => false };
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-secret',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
   updateJwtSecret: () => {},
 }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
+import { db as testDb } from '../../../src/db/database';
 import { createUser } from '../../helpers/factories';
-import { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
-import { DatabaseService } from '../../../src/nest/database/database.service';
-import { db as trekDb } from '../../../src/db/database';
+import { TrekPhotoRegistrationService } from '../../../src/nest/photos/trek-photo-registration.service';
+import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
+import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
+import { JourneyPhotos } from '../../../src/db/entities/JourneyPhotos.entity';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 
 // Was photos.bridge, deleted with the other three that had no consumer outside
 // the container. These call the repository directly now.
-const trekPhotos = new TrekPhotosRepository(new DatabaseService(trekDb));
-const getOrCreateTrekPhoto = (...a: Parameters<TrekPhotosRepository['getOrCreate']>) => trekPhotos.getOrCreate(...a);
-const getOrCreateLocalTrekPhoto = (...a: Parameters<TrekPhotosRepository['getOrCreateLocal']>) => trekPhotos.getOrCreateLocal(...a);
+let t: TestOrm;
+let trekPhotos: TrekPhotoRegistrationService;
+const getOrCreateTrekPhoto = (...a: Parameters<TrekPhotoRegistrationService['getOrCreate']>) => trekPhotos.getOrCreate(...a);
+const getOrCreateLocalTrekPhoto = (...a: Parameters<TrekPhotoRegistrationService['getOrCreateLocal']>) => trekPhotos.getOrCreateLocal(...a);
 const resolveTrekPhoto = (id: number) => trekPhotos.resolve(id);
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+beforeAll(async () => {
+  t = await createTestOrm(testDb);
+  trekPhotos = new TrekPhotoRegistrationService(t.repo(TrekPhotos), t.repo(TripPhotos), t.repo(JourneyPhotos));
 });
 
 beforeEach(() => {
   testDb.prepare('DELETE FROM trek_photos').run();
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await t.close();
   testDb.close();
 });
 
@@ -54,22 +54,22 @@ describe('trek_photos media_type', () => {
     expect(cols).toContain('duration_ms');
   });
 
-  it('a local photo defaults to image', () => {
-    const id = getOrCreateLocalTrekPhoto('journey/a.jpg');
-    expect(resolveTrekPhoto(id)!.media_type).toBe('image');
+  it('a local photo defaults to image', async () => {
+    const id = await getOrCreateLocalTrekPhoto('journey/a.jpg');
+    expect((await resolveTrekPhoto(id))!.media_type).toBe('image');
   });
 
-  it('a local video stores media_type=video + duration', () => {
-    const id = getOrCreateLocalTrekPhoto('journey/clip.mp4', 'journey/poster.jpg', null, null, 'video', 4200);
-    const row = resolveTrekPhoto(id)!;
+  it('a local video stores media_type=video + duration', async () => {
+    const id = await getOrCreateLocalTrekPhoto('journey/clip.mp4', 'journey/poster.jpg', null, null, 'video', 4200);
+    const row = (await resolveTrekPhoto(id))!;
     expect(row.media_type).toBe('video');
     expect(row.duration_ms).toBe(4200);
     expect(row.thumbnail_path).toBe('journey/poster.jpg');
   });
 
-  it('a provider photo can be registered as video', () => {
+  it('a provider photo can be registered as video', async () => {
     const { user } = createUser(testDb);
-    const id = getOrCreateTrekPhoto('immich', 'asset-1', user.id, undefined, 'video');
-    expect(resolveTrekPhoto(id)!.media_type).toBe('video');
+    const id = await getOrCreateTrekPhoto('immich', 'asset-1', user.id, undefined, 'video');
+    expect((await resolveTrekPhoto(id))!.media_type).toBe('video');
   });
 });

@@ -55,17 +55,17 @@ export class PlacesRpc {
   ) {}
 
   @PluginMethod('places.create', { permission: 'db:write:places' })
-  create(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async create(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const tripId = num(params.tripId, 'tripId');
     const actor = this.guards.requireActor(ctx, 'place');
     const parsed = placeCreateRequestSchema.safeParse(params.input);
     if (!parsed.success) throw new BadParams(`invalid place: ${schemaMessage(parsed.error)}`);
     this.guards.capStrings(parsed.data as Record<string, unknown>, PLACE_STR_LIMITS);
     capUrls(parsed.data as Record<string, unknown>);
-    this.guards.requireTripEdit(tripId, actor, PLACE_EDIT_ACTION);
-    const place = this.places.create(String(tripId), parsed.data as unknown as PlaceCreateInput);
+    await this.guards.requireTripEdit(tripId, actor, PLACE_EDIT_ACTION);
+    const place = await this.places.create(String(tripId), parsed.data as unknown as PlaceCreateInput);
     this.realtime.broadcast(tripId, 'place:created', { place });
-    this.mirrorJourneys(() => this.journey.onPlaceCreated(tripId, place.id));
+    await this.mirrorJourneys(() => this.journey.onPlaceCreated(tripId, place.id));
     return place;
   }
 
@@ -78,14 +78,14 @@ export class PlacesRpc {
     if (!parsed.success) throw new BadParams(`invalid place: ${schemaMessage(parsed.error)}`);
     this.guards.capStrings(parsed.data as Record<string, unknown>, PLACE_STR_LIMITS);
     capUrls(parsed.data as Record<string, unknown>);
-    this.guards.requireTripEdit(tripId, actor, PLACE_EDIT_ACTION);
+    await this.guards.requireTripEdit(tripId, actor, PLACE_EDIT_ACTION);
     // update is async (it may delete a superseded storage object): await it so the
     // null-refusal check compares against the resolved place, not an always-truthy
     // Promise, and the broadcast below carries the actual place.
     const place = await this.places.update(String(tripId), String(placeId), parsed.data as PlaceUpdateInput);
     if (place === null) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
     this.realtime.broadcast(tripId, 'place:updated', { place });
-    this.mirrorJourneys(() => this.journey.onPlaceUpdated(placeId));
+    await this.mirrorJourneys(() => this.journey.onPlaceUpdated(placeId));
     return place;
   }
 
@@ -94,19 +94,19 @@ export class PlacesRpc {
     const tripId = num(params.tripId, 'tripId');
     const placeId = num(params.placeId, 'placeId');
     const actor = this.guards.requireActor(ctx, 'place');
-    this.guards.requireTripEdit(tripId, actor, PLACE_EDIT_ACTION);
+    await this.guards.requireTripEdit(tripId, actor, PLACE_EDIT_ACTION);
     // Scope the id to the trip before anything else: onPlaceDeleted keys on the place
     // alone, so an id belonging to a foreign trip would detach THAT trip's journey
     // entries even though the delete below refuses it.
-    if (!this.places.get(String(tripId), String(placeId))) {
+    if (!(await this.places.get(String(tripId), String(placeId)))) {
       throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
     }
     // Ahead of the DELETE, like the REST route and the MCP tool:
     // journey_entries.source_place_id is ON DELETE SET NULL, so afterwards the hook
     // finds nothing left to detach and the entries linger as orphans.
-    this.mirrorJourneys(() => this.journey.onPlaceDeleted(placeId));
+    await this.mirrorJourneys(() => this.journey.onPlaceDeleted(placeId));
     // The link is gone once the place is, so read it first (#1298).
-    const expenseIds = this.places.linkedExpenseIds(tripId, [placeId]);
+    const expenseIds = await this.places.linkedExpenseIds(tripId, [placeId]);
     // remove is async (it deletes the place's storage object): await it so the
     // refusal check sees the resolved answer, not an always-truthy Promise.
     const { deleted, cancelled } = await this.places.remove(String(tripId), String(placeId));
@@ -122,10 +122,12 @@ export class PlacesRpc {
     return { deleted: true };
   }
 
-  /** Journey mirroring never fails a write that already succeeded. */
-  private mirrorJourneys(run: () => void): void {
+  /**
+   * Journey mirroring never fails a write that already succeeded.
+   */
+  private async mirrorJourneys(run: () => Promise<void>): Promise<void> {
     try {
-      run();
+      await run();
     } catch {
       /* non-fatal */
     }

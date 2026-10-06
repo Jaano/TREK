@@ -13,29 +13,25 @@ import request from 'supertest';
 import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return {
+    db,
+    canAccessTrip: (tripId: number | string, userId: number) =>
+      db.prepare('SELECT id, user_id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
+    isOwner: () => true,
+    getPlaceWithTags: () => null,
+    closeDb: () => {},
+    reinitialize: () => {},
+  };
 });
 
-vi.mock('../../src/db/database', () => ({
-  db,
-  canAccessTrip: (tripId: number | string, userId: number) =>
-    db.prepare('SELECT id, user_id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  isOwner: () => true,
-  getPlaceWithTags: () => null,
-  closeDb: () => {},
-  reinitialize: () => {},
-}));
-
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { DatabaseModule } from '../../src/nest/database/database.module';
+import { db } from '../../src/db/database';
 import { FeedsModule } from '../../src/nest/feeds/feeds.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Calendar feed visibility e2e (real CalendarService over temp SQLite)', () => {
   let server: Server;
@@ -43,7 +39,7 @@ describe('Calendar feed visibility e2e (real CalendarService over temp SQLite)',
   let feedToken: string;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, FeedsModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), FeedsModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.useGlobalFilters(new TrekExceptionFilter());
     await nest.init();
@@ -51,8 +47,6 @@ describe('Calendar feed visibility e2e (real CalendarService over temp SQLite)',
   }
 
   beforeAll(async () => {
-    createTables(db);
-    runMigrations(db);
     db.prepare(
       "INSERT INTO users (id, username, email, password_hash, role) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user')",
     ).run();

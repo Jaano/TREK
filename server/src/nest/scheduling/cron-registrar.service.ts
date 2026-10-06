@@ -1,8 +1,11 @@
-import { Injectable, type OnApplicationShutdown } from '@nestjs/common';
+import { Injectable, Optional, type OnApplicationShutdown } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
+import { MikroORM } from '@mikro-orm/core';
 import { readEnv } from '../../app-config';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
+import { withRequestContext } from '../database/request-context';
+import { logError } from '../audit/audit-log.logger';
 
 /**
  * The one way TREK code schedules a cron. Job providers register here from
@@ -35,6 +38,18 @@ export class CronRegistrarService implements OnApplicationShutdown {
   constructor(
     private readonly registry: SchedulerRegistry,
     private readonly runtimeEnv: RuntimeEnvService,
+    // D6 (task-2-review.md's controller ruling): a cron tick has no HTTP request
+    // behind it, so every job's onTick is wrapped in a request context here — the
+    // ONE place, rather than in each of the 14 `*.job.ts` providers. `@Optional()`
+    // (not just a `?`, which is TS-only and does not tell Nest's DI the provider
+    // may be absent) because SchedulingModule is deliberately NOT @Global (see
+    // this module's own docstring): the e2e suites boot partial graphs — one
+    // domain module + SchedulingModule, no MikroOrmModule.forRoot — so a hard
+    // MikroORM dependency here would fail every one of them at compile(), the
+    // same class of break `@InjectRepository` would cause. Production (buildApp)
+    // always has it; a hand-built test instance that registers a job touching a
+    // repository must pass one, same as the unit test doubles below.
+    @Optional() private readonly orm?: MikroORM,
   ) {}
 
   /** False under NODE_ENV=test — the single gate keeping the suites timer-free. */
@@ -56,10 +71,57 @@ export class CronRegistrarService implements OnApplicationShutdown {
     this.unregister(name);
     if (!this.isEnabled()) return false;
     const timeZone = opts?.timezone === 'none' ? undefined : readEnv().app.tz || 'UTC';
-    const job = CronJob.from({ cronTime: expression, onTick, start: true, timeZone });
+    const orm = this.orm;
+    // Fail closed (task-6-fix-brief.md item 1): registration itself never
+    // requires an ORM (CRONREG-002..009 register jobs whose onTick never
+    // touches a repository, and the e2e partial harnesses that construct this
+    // service via @Optional() with no MikroORM never tick at all — isEnabled()
+    // is false under NODE_ENV=test). But once a tick DOES fire, it must run
+    // inside a request context or not at all: dispatching it unwrapped used to
+    // let a repository read inside onTick either silently succeed against the
+    // wrong (global) EntityManager or throw MikroORM's own generic
+    // "global EntityManager" error deep inside the job's own try/catch. Throw
+    // OUR OWN clear error instead, so a hand-built double that registers a
+    // job without an ORM but whose tick reaches a repository fails loudly and
+    // distinctly rather than silently degrading.
+    const wrappedTick = async () => {
+      if (!orm) {
+        throw new Error(`CronRegistrarService: no MikroORM available to build a request context for job "${name}"`);
+      }
+      return withRequestContext(orm, () => onTick());
+    };
+    const job = CronJob.from({ cronTime: expression, onTick: wrappedTick, start: true, timeZone });
     this.registry.addCronJob(name, job);
     this.names.add(name);
     return true;
+  }
+
+  /**
+   * Runs a boot-time (`onApplicationBootstrap`) one-off sweep inside the same
+   * request context a registered tick gets from `register()` above — the one
+   * choke point for the whole class of bug task-6-review-parity.md's C1
+   * found: a job's "run once at startup" call is not a scheduled tick, so it
+   * bypassed `register()`'s wrapper entirely; once its dependency graph went
+   * repository-backed (`AddonsService.isAddonEnabled`), the read threw
+   * `cannotUseGlobalContext` on EVERY production boot — silently, because the
+   * job's own try/catch swallowed it into a log line about the sweep's own
+   * domain, never mentioning the missing context. Every
+   * `onApplicationBootstrap` boot sweep goes through this one method now,
+   * whether or not it reaches a repository TODAY, so a job's dependency graph
+   * can grow one later without silently regressing to the same bug.
+   *
+   * Fails closed like every other D6 choke point: no MikroORM means `fn`
+   * never runs at all, and the failure is logged with a message naming THIS
+   * method — never MikroORM's own "global EntityManager" wording — so a
+   * missing-context boot failure is never confused with (or swallowed by) an
+   * ordinary sweep failure the job's own catch already logs.
+   */
+  async runOnBoot(name: string, fn: () => Promise<void> | void): Promise<void> {
+    if (!this.orm) {
+      logError(`CronRegistrarService.runOnBoot: no MikroORM available — boot sweep "${name}" did not run`);
+      return;
+    }
+    await withRequestContext(this.orm, fn);
   }
 
   /** Stop and drop a job by name. A name that was never registered is a no-op. */

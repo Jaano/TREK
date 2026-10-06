@@ -11,12 +11,10 @@ const { pluginsEnabled, getMock } = vi.hoisted(() => ({
   getMock: vi.fn(() => ({ 1: 1 })), // plugin is active by default
 }));
 vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
-vi.mock('../../../src/db/database', () => ({ db: { prepare: () => ({ get: getMock }) } }));
-import { db as dbConn } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 
 import { PluginOAuthController } from '../../../src/nest/plugins/oauth/plugin-oauth.controller';
 import type { PluginOAuthService } from '../../../src/nest/plugins/oauth/plugin-oauth.service';
+import type { PluginsRepository } from '../../../src/db/repositories/Plugins.repository';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const req = (id?: number) => ({ user: id === undefined ? undefined : { id } }) as any;
@@ -26,31 +24,33 @@ function fakeRes() {
 }
 function ctrl(over: Partial<PluginOAuthService> = {}) {
   const svc = {
-    status: vi.fn(() => ({ configured: true, connected: false })),
-    startConnect: vi.fn(() => 'https://provider.example/auth?state=s'),
+    status: vi.fn(async () => ({ configured: true, connected: false })),
+    startConnect: vi.fn(async () => 'https://provider.example/auth?state=s'),
     completeCallback: vi.fn(async () => undefined),
-    disconnect: vi.fn(),
+    disconnect: vi.fn(async () => undefined),
     ...over,
   } as unknown as PluginOAuthService;
-  return { c: new PluginOAuthController(svc, new DatabaseService(dbConn)), svc };
+  // POC1 (Plan 3j Task 5) — the active-plugin guard is now Plugins.repository.ts#existsActive.
+  const plugins = { existsActive: vi.fn(async () => !!getMock()) } as unknown as PluginsRepository;
+  return { c: new PluginOAuthController(svc, plugins), svc };
 }
 
 describe('PluginOAuthController', () => {
   beforeEach(() => { pluginsEnabled.mockReturnValue(true); getMock.mockReturnValue({ 1: 1 }); });
 
-  it('status is gated: runtime off / no user / inactive → not configured', () => {
-    expect(ctrl().c.status('p', req(5))).toEqual({ configured: true, connected: false });
+  it('status is gated: runtime off / no user / inactive → not configured', async () => {
+    expect(await ctrl().c.status('p', req(5))).toEqual({ configured: true, connected: false });
     pluginsEnabled.mockReturnValue(false);
-    expect(ctrl().c.status('p', req(5))).toEqual({ configured: false, connected: false });
+    expect(await ctrl().c.status('p', req(5))).toEqual({ configured: false, connected: false });
     pluginsEnabled.mockReturnValue(true);
-    expect(ctrl().c.status('p', req(undefined))).toEqual({ configured: false, connected: false });
+    expect(await ctrl().c.status('p', req(undefined))).toEqual({ configured: false, connected: false });
     getMock.mockReturnValue(undefined as never); // inactive
-    expect(ctrl().c.status('p', req(5))).toEqual({ configured: false, connected: false });
+    expect(await ctrl().c.status('p', req(5))).toEqual({ configured: false, connected: false });
   });
 
-  it('connect returns the authorize URL for a bound user', () => {
+  it('connect returns the authorize URL for a bound user', async () => {
     const { c, svc } = ctrl();
-    expect(c.connect('p', req(5))).toEqual({ authorizeUrl: 'https://provider.example/auth?state=s' });
+    expect(await c.connect('p', req(5))).toEqual({ authorizeUrl: 'https://provider.example/auth?state=s' });
     expect(svc.startConnect).toHaveBeenCalledWith('p', 5, expect.any(Number));
   });
 
@@ -68,9 +68,9 @@ describe('PluginOAuthController', () => {
     expect(denyRes.redirectedTo).toBe('/settings?oauth=p:denied');
   });
 
-  it('disconnect delegates for a bound user', () => {
+  it('disconnect delegates for a bound user', async () => {
     const { c, svc } = ctrl();
-    expect(c.disconnect('p', req(5))).toEqual({ connected: false });
+    expect(await c.disconnect('p', req(5))).toEqual({ connected: false });
     expect(svc.disconnect).toHaveBeenCalledWith('p', 5);
   });
 });

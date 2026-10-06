@@ -1,6 +1,14 @@
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { TourCreateRequest, TourCreateResponse, TourDetailResponse, TourListItem, TourWaypoint } from '@trek/shared';
-import { DatabaseService } from '../database/database.service';
+import { Places } from '../../db/entities/Places.entity';
+import { Tours } from '../../db/entities/Tours.entity';
+import { TourWaypoints } from '../../db/entities/TourWaypoints.entity';
+import type { PlacesRepository } from '../../db/repositories/Places.repository';
+import type { TourListRow, ToursRepository, TourUpdate } from '../../db/repositories/Tours.repository';
+import type { TourWaypointsRepository } from '../../db/repositories/TourWaypoints.repository';
+import { toRowId } from '../common/row-id';
+import { UnitOfWork } from '../database/unit-of-work';
 import { PlacesService } from '../places/places.service';
 import { computeTourMetrics, parseRouteGeometry, LOW_CONFIDENCE_THRESHOLD, type GeometryPoint } from './tours.helpers';
 
@@ -9,13 +17,6 @@ export interface ImportGpxAsTourResult {
   caution: boolean;
   skipped: number;
 }
-
-type TourJoinRow = {
-  place_id: number; name: string; tour_type: string; distance: number | null;
-  elevation_gain: number | null; elevation_loss: number | null; duration: number | null;
-  difficulty: string | null; wanderer_ref: string | null; match_confidence: number | null;
-  tour_group_id: number | null; max_hiking_difficulty: number | null; planned: number; has_waypoints: number;
-};
 
 /**
  * Tours domain: the `tours` facet table (place_id PK/FK) carries tour-specific
@@ -29,11 +30,14 @@ export class ToursService {
   private readonly logger = new Logger(ToursService.name);
 
   constructor(
-    private readonly dbs: DatabaseService,
+    private readonly uow: UnitOfWork,
     private readonly places: PlacesService,
+    @InjectRepository(Tours) private readonly toursRepo: ToursRepository,
+    @InjectRepository(TourWaypoints) private readonly waypointsRepo: TourWaypointsRepository,
+    @InjectRepository(Places) private readonly placesRepo: PlacesRepository,
   ) {}
 
-  private toItem(r: TourJoinRow): TourListItem {
+  private toItem(r: TourListRow): TourListItem {
     return {
       place_id: r.place_id,
       name: r.name,
@@ -53,50 +57,42 @@ export class ToursService {
     };
   }
 
+  /** The route a create or an update writes: metrics derived from the geometry, duration stored in minutes. */
+  private routeFields(input: TourCreateRequest): TourUpdate {
+    const metrics = computeTourMetrics(input.route_geometry as GeometryPoint[]);
+    return {
+      tour_type: input.tour_type,
+      distance: metrics.distanceKm,
+      elevation_gain: metrics.elevationGainM,
+      elevation_loss: metrics.elevationLossM,
+      duration: input.duration_seconds == null ? null : Math.round(input.duration_seconds / 60),
+      match_confidence: 1,
+      max_hiking_difficulty: input.max_hiking_difficulty,
+    };
+  }
+
   /** All tours (the facet + owning place) for a trip, newest first. */
-  listTours(tripId: string): TourListItem[] {
-    const rows = this.dbs.all<TourJoinRow>(`
-      SELECT p.id AS place_id, p.name, t.tour_type, t.distance, t.elevation_gain,
-             t.elevation_loss, t.duration, t.difficulty, t.wanderer_ref, t.match_confidence,
-             t.tour_group_id, t.max_hiking_difficulty,
-             EXISTS(SELECT 1 FROM day_assignments da WHERE da.place_id = p.id) AS planned,
-             EXISTS(SELECT 1 FROM tour_waypoints tw WHERE tw.place_id = p.id) AS has_waypoints
-        FROM tours t
-        JOIN places p ON p.id = t.place_id
-       WHERE p.trip_id = ?
-       ORDER BY t.created_at DESC
-    `, tripId);
+  async listTours(tripId: string): Promise<TourListItem[]> {
+    const tid = toRowId(tripId);
+    if (tid === null) return [];
+    const rows = await this.toursRepo.listForTrip(tid);
     return rows.map(r => this.toItem(r));
   }
 
   /** One saved tour plus the persisted routing controls needed by the editor. */
-  getTour(tripId: string, placeId: string): TourDetailResponse {
-    const row = this.dbs.get<TourJoinRow>(`
-      SELECT p.id AS place_id, p.name, t.tour_type, t.distance, t.elevation_gain,
-             t.elevation_loss, t.duration, t.difficulty, t.wanderer_ref, t.match_confidence,
-             t.tour_group_id, t.max_hiking_difficulty,
-             EXISTS(SELECT 1 FROM day_assignments da WHERE da.place_id = p.id) AS planned,
-             EXISTS(SELECT 1 FROM tour_waypoints tw WHERE tw.place_id = p.id) AS has_waypoints
-        FROM tours t
-        JOIN places p ON p.id = t.place_id
-       WHERE p.trip_id = ? AND p.id = ?
-    `, tripId, placeId);
+  async getTour(tripId: string, placeId: string): Promise<TourDetailResponse> {
+    const tid = toRowId(tripId);
+    const pid = toRowId(placeId);
+    const row = tid !== null && pid !== null ? await this.toursRepo.findInTrip(tid, pid) : undefined;
     if (!row) throw new NotFoundException('Tour not found');
 
-    let waypoints = this.dbs.all<TourWaypoint>(`
-      SELECT lat, lng, role, sequence
-        FROM tour_waypoints
-       WHERE place_id = ?
-       ORDER BY sequence
-    `, placeId);
+    let waypoints: TourWaypoint[] = await this.waypointsRepo.listForPlace(row.place_id);
     // GPX tours created before tour_waypoints existed still belong in this
     // all-tours rail. A read-only endpoint must not backfill the database, so
     // expose their saved geometry endpoints as controls; the first edit/save
     // replaces them with normal persisted tour_waypoints transactionally.
     if (waypoints.length < 2) {
-      const place = this.dbs.get<{ route_geometry: string | null }>(
-        'SELECT route_geometry FROM places WHERE id = ? AND trip_id = ?', placeId, tripId,
-      );
+      const place = await this.placesRepo.findInTrip(row.place_id, tid!);
       const geometry = parseRouteGeometry(place?.route_geometry);
       if (geometry.length >= 2) {
         const start = geometry[0];
@@ -112,46 +108,25 @@ export class ToursService {
   }
 
   /** Create the owning Place, Tours facet, and ordered control points as one write. */
-  createTour(tripId: string, input: TourCreateRequest, socketId?: string): TourCreateResponse {
-    const geometry = input.route_geometry as GeometryPoint[];
-    const metrics = computeTourMetrics(geometry);
+  async createTour(tripId: string, input: TourCreateRequest, socketId?: string): Promise<TourCreateResponse> {
+    // The controller's TripAccessGuard already resolved this trip id.
+    const tid = toRowId(tripId)!;
     const start = input.route_geometry[0];
-    let placeId = 0;
+    const fields = this.routeFields(input);
 
-    this.dbs.transaction(() => {
-      const place = this.dbs.run(`
-        INSERT INTO places (trip_id, name, lat, lng, transport_mode, route_geometry)
-        VALUES (?, ?, ?, ?, 'walking', ?)
-      `, tripId, input.name, start[0], start[1], JSON.stringify(input.route_geometry));
-      placeId = Number(place.lastInsertRowid);
-
-      this.dbs.run(`
-        INSERT INTO tours (
-          place_id, tour_type, distance, elevation_gain, elevation_loss, duration, match_confidence,
-          max_hiking_difficulty
-        ) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
-      `, placeId, input.tour_type, metrics.distanceKm, metrics.elevationGainM,
-      metrics.elevationLossM, input.duration_seconds == null ? null : Math.round(input.duration_seconds / 60),
-      input.max_hiking_difficulty);
-
-      const insertWaypoint = this.dbs.prepare(`
-        INSERT INTO tour_waypoints (place_id, lat, lng, role, sequence)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-      for (const waypoint of input.waypoints) {
-        insertWaypoint.run(placeId, waypoint.lat, waypoint.lng, waypoint.role, waypoint.sequence);
-      }
+    const placeId = await this.uow.transactional(async () => {
+      const id = await this.placesRepo.insertTourPlace({
+        trip_id: tid, name: input.name, lat: start[0], lng: start[1], route_geometry: JSON.stringify(input.route_geometry),
+      });
+      await this.toursRepo.insertTour({ place_id: id, ...fields });
+      await this.waypointsRepo.insertForPlace(id, input.waypoints);
+      return id;
     });
 
-    const tour = this.listTours(tripId).find(item => item.place_id === placeId);
-    const place = this.dbs.getPlaceWithTags(placeId);
-    if (!tour || !place) throw new Error('Created tour could not be loaded');
-    const waypoints = this.dbs.all<TourWaypoint>(`
-      SELECT lat, lng, role, sequence
-        FROM tour_waypoints
-       WHERE place_id = ?
-       ORDER BY sequence
-    `, placeId);
+    const row = await this.toursRepo.findInTrip(tid, placeId);
+    const place = await this.placesRepo.findWithTagsAndRatings(placeId);
+    if (!row || !place) throw new Error('Created tour could not be loaded');
+    const waypoints = await this.waypointsRepo.listForPlace(placeId);
 
     // Only announce after every row committed. The originating client reloads
     // explicitly because socket-id exclusion intentionally suppresses its echo.
@@ -161,46 +136,36 @@ export class ToursService {
     } catch {
       this.logger.warn(`Committed Tour ${placeId}: place notification failed`);
     }
-    return { tour, waypoints };
+    return { tour: this.toItem(row), waypoints };
   }
 
   /** Replace a saved tour's derived route and routing controls as one write. */
-  updateTour(tripId: string, placeId: string, input: TourCreateRequest, socketId?: string): TourDetailResponse {
-    // The trip predicate is the cross-trip boundary. Do this before any write so
-    // an id from another accessible trip cannot be moved into the current one.
-    this.getTour(tripId, placeId);
-    const geometry = input.route_geometry as GeometryPoint[];
-    const metrics = computeTourMetrics(geometry);
+  async updateTour(tripId: string, placeId: string, input: TourCreateRequest, socketId?: string): Promise<TourDetailResponse> {
+    const tid = toRowId(tripId);
+    const pid = toRowId(placeId);
+    if (tid === null || pid === null) throw new NotFoundException('Tour not found');
     const start = input.route_geometry[0];
+    const fields = this.routeFields(input);
 
-    this.dbs.transaction(() => {
-      this.dbs.run(`
-        UPDATE places
-           SET name = ?, lat = ?, lng = ?, transport_mode = 'walking', route_geometry = ?
-         WHERE id = ? AND trip_id = ?
-      `, input.name, start[0], start[1], JSON.stringify(input.route_geometry), placeId, tripId);
-      this.dbs.run(`
-        UPDATE tours
-             SET tour_type = ?, distance = ?, elevation_gain = ?, elevation_loss = ?,
-               duration = ?, match_confidence = 1, max_hiking_difficulty = ?
-         WHERE place_id = ?
-      `, input.tour_type, metrics.distanceKm, metrics.elevationGainM, metrics.elevationLossM,
-      input.duration_seconds == null ? null : Math.round(input.duration_seconds / 60), input.max_hiking_difficulty, placeId);
-      this.dbs.run('DELETE FROM tour_waypoints WHERE place_id = ?', placeId);
-
-      const insertWaypoint = this.dbs.prepare(`
-        INSERT INTO tour_waypoints (place_id, lat, lng, role, sequence)
-        VALUES (?, ?, ?, ?, ?)
-      `);
-      for (const waypoint of input.waypoints) {
-        insertWaypoint.run(placeId, waypoint.lat, waypoint.lng, waypoint.role, waypoint.sequence);
-      }
+    await this.uow.transactional(async () => {
+      // The trip predicate is the cross-trip boundary. It runs inside the write
+      // so an id from another accessible trip cannot be moved into the current
+      // one, and a place deleted meanwhile answers 404 instead of failing a
+      // waypoint insert on its foreign key.
+      if (!(await this.toursRepo.findInTrip(tid, pid))) throw new NotFoundException('Tour not found');
+      const placeUpdated = await this.placesRepo.updateTourRoute(pid, tid, {
+        name: input.name, lat: start[0], lng: start[1], route_geometry: JSON.stringify(input.route_geometry),
+      });
+      if (!placeUpdated) throw new NotFoundException('Tour not found');
+      if (!(await this.toursRepo.updateInTrip(tid, pid, fields))) throw new NotFoundException('Tour not found');
+      await this.waypointsRepo.deleteForPlace(pid);
+      await this.waypointsRepo.insertForPlace(pid, input.waypoints);
     });
 
-    const result = this.getTour(tripId, placeId);
-    const place = this.dbs.getPlaceWithTags(Number(placeId));
+    const result = await this.getTour(tripId, placeId);
+    const place = await this.placesRepo.findWithTagsAndRatings(pid);
     if (!place) throw new Error('Updated tour could not be loaded');
-    this.broadcastToursChanged(tripId, [Number(placeId)], socketId);
+    this.broadcastToursChanged(tripId, [pid], socketId);
     try {
       this.places.broadcast(tripId, 'place:updated', { place }, socketId);
     } catch {
@@ -218,34 +183,38 @@ export class ToursService {
   }
 
   /**
-  * The tours-mode GPX import prepares rows through PlacesService.prepareGpxRows
-  * with waypoints excluded. PlacesService.importPreparedGpx persists the places
-  * in the same transaction as their `tours` facet rows, whose metrics are
-  * derived from route_geometry.
+   * The tours-mode GPX import prepares rows through PlacesService.prepareGpxRows
+   * with waypoints excluded. PlacesService.importPreparedGpx persists the places
+   * in the same transaction as their `tours` facet rows, whose metrics are
+   * derived from route_geometry.
    *
-  * Missing or implausible metrics do not block import:
+   * Missing or implausible metrics do not block import:
    * a track without elevation still imports, just flagged with a low
    * match_confidence so the client can surface a "with caution" toast.
    */
-  importGpxAsTour(tripId: string, fileBuffer: Buffer, defaultName?: string, socketId?: string): ImportGpxAsTourResult | null {
+  async importGpxAsTour(tripId: string, fileBuffer: Buffer, defaultName?: string, socketId?: string): Promise<ImportGpxAsTourResult | null> {
     const rows = this.places.prepareGpxRows(fileBuffer, {
       importWaypoints: false, importRoutes: true, importTracks: true, defaultName,
     });
     if (rows.length === 0) return null;
 
-    const insertTour = this.dbs.prepare(`
-      INSERT INTO tours (place_id, tour_type, distance, elevation_gain, elevation_loss, duration, match_confidence, max_hiking_difficulty)
-      VALUES (?, 'hike', ?, ?, ?, NULL, ?, 2)
-    `);
-
     const tours: TourListItem[] = [];
-    const result = this.dbs.transaction(() => {
-      const result = this.places.importPreparedGpx(tripId, rows);
-      for (const place of result.places) {
-        const points = parseRouteGeometry(place.route_geometry);
-        const metrics = computeTourMetrics(points);
+    const result = await this.uow.transactional(async () => {
+      // A nested transactional, so the places and their facets commit together.
+      const imported = await this.places.importPreparedGpx(tripId, rows);
+      for (const place of imported.places) {
+        const metrics = computeTourMetrics(parseRouteGeometry(place.route_geometry));
         const matchConfidence = metrics.hasElevation ? 1 : 0.3;
-        insertTour.run(place.id, metrics.distanceKm, metrics.elevationGainM, metrics.elevationLossM, matchConfidence);
+        await this.toursRepo.insertTour({
+          place_id: place.id,
+          tour_type: 'hike',
+          distance: metrics.distanceKm,
+          elevation_gain: metrics.elevationGainM,
+          elevation_loss: metrics.elevationLossM,
+          duration: null,
+          match_confidence: matchConfidence,
+          max_hiking_difficulty: 2,
+        });
         tours.push(this.toItem({
           place_id: place.id,
           name: place.name,
@@ -263,7 +232,7 @@ export class ToursService {
           has_waypoints: 0,
         }));
       }
-      return result;
+      return imported;
     });
 
     if (result.places.length === 0) return { tours: [], caution: false, skipped: result.skipped };

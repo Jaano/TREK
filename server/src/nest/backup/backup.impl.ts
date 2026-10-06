@@ -3,7 +3,10 @@ import path from 'path';
 import { pipeline } from 'node:stream/promises';
 import { readEnv } from '../../app-config';
 import fs from 'fs';
-import { db, closeDb, reinitialize } from '../../db/database';
+import { RequestContext } from '@mikro-orm/core';
+import { closeDb, reinitialize } from '../../db/database';
+import { MaintenanceRepository } from '../../db/repositories/MaintenanceRepository';
+import { logWarn } from '../audit/audit-log.logger';
 import { VALID_INTERVALS } from './auto-backup.settings';
 import { checkBackupDatabase, extractBackupArchive } from './backup-archive';
 import { invalidatePermissionsCache } from '../permissions/permissions-cache';
@@ -172,7 +175,26 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
   const stagingDir = path.join(spoolDir, `staging-${prefix}-${timestamp}`);
 
   try {
-    try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (e) {}
+    // BK1 (R1): PRAGMA wal_checkpoint(TRUNCATE), rendered text pinned,
+    // through the shared MaintenanceRepository.walCheckpoint() — the SAME
+    // method demo-reset.ts's resetDemoUser/saveBaseline use, on the ORM's
+    // own bound driver connection rather than the legacy `db` proxy. Still
+    // best-effort: the swallowing try/catch matches the legacy shape.
+    try {
+      const em = RequestContext.getEntityManager();
+      if (em) {
+        await new MaintenanceRepository(em).walCheckpoint();
+      } else {
+        // Plan 3i Task 4 fix wave (should-land 7): this used to fail
+        // silently exactly like a real checkpoint failure would — no signal
+        // distinguished "no request context around this run" (a
+        // mis-wired caller; legacy always snapshotted) from "the checkpoint
+        // itself errored" (best-effort, fine to swallow). Loud enough to
+        // show up in the backup's own logs, still non-fatal: the fallback
+        // (archive the live file) is unchanged.
+        logWarn('Backup: no EntityManager available, skipping the WAL checkpoint before snapshot');
+      }
+    } catch (e) {}
 
     // Enumerate the archived categories up front (the archiver reads entries
     // lazily during finalize(), so the promise executor below must stay
@@ -207,6 +229,45 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
       }
     }
 
+    // BK2 (R1): VACUUM INTO '<path>', rendered text pinned, through the
+    // shared MaintenanceRepository.vacuumInto() — computed HERE, before the
+    // promise executor below, for the same reason the uploadEntries
+    // enumeration above already is: the archiver reads entries lazily during
+    // finalize(), so the executor itself must stay synchronous, and
+    // `await`ing the snapshot requires an async boundary the executor
+    // (constructed with a plain, non-async callback) cannot have. The
+    // fallback-to-live-file behaviour on failure is unchanged — only WHERE
+    // the async snapshot attempt runs, not what it does.
+    const dbPath = path.join(dataDir, 'travel.db');
+    const dbExists = fs.existsSync(dbPath);
+    let dbToArchive = dbPath;
+    if (dbExists) {
+      // Archive a point-in-time snapshot, not the live file. The archiver reads entries
+      // lazily during finalize(), so a WAL auto-checkpoint writing pages back into
+      // travel.db mid-stream would tear the archived copy — and the -wal that would make
+      // it recoverable isn't in the zip. VACUUM INTO takes a consistent snapshot even
+      // under concurrent writes — the same guarantee the plugin DBs get below.
+      try {
+        if (fs.existsSync(dbSnap)) fs.rmSync(dbSnap, { force: true });
+        const em = RequestContext.getEntityManager();
+        if (!em) {
+          // Plan 3i Task 4 fix wave (should-land 7): same distinction as
+          // BK1 above — without this, a backup silently archiving the LIVE
+          // travel.db (the exact WAL-tear risk this whole snapshot exists to
+          // avoid) left no trace anywhere. The fallback itself is unchanged
+          // (parity with legacy, which always had SOME db to archive).
+          logWarn('Backup: no EntityManager available, archiving the live travel.db instead of a VACUUM INTO snapshot');
+          throw new Error('no EntityManager available for VACUUM INTO');
+        }
+        await new MaintenanceRepository(em).vacuumInto(dbSnap);
+        dbToArchive = dbSnap;
+      } catch (e) {
+        // Snapshot failed (disk/lock/missing context) — fall back to the
+        // checkpointed live file rather than drop the core DB from the
+        // backup entirely.
+      }
+    }
+
     await new Promise<void>((resolve, reject) => {
       const output = fs.createWriteStream(zipSpool);
       const archive = archiver('zip', { zlib: { level: 9 } });
@@ -221,22 +282,7 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
 
       archive.pipe(output);
 
-      const dbPath = path.join(dataDir, 'travel.db');
-      if (fs.existsSync(dbPath)) {
-        // Archive a point-in-time snapshot, not the live file. The archiver reads entries
-        // lazily during finalize(), so a WAL auto-checkpoint writing pages back into
-        // travel.db mid-stream would tear the archived copy — and the -wal that would make
-        // it recoverable isn't in the zip. VACUUM INTO takes a consistent snapshot even
-        // under concurrent writes — the same guarantee the plugin DBs get below.
-        let dbToArchive = dbPath;
-        try {
-          if (fs.existsSync(dbSnap)) fs.rmSync(dbSnap, { force: true });
-          db.exec(`VACUUM INTO '${dbSnap.replaceAll("'", "''")}'`);
-          dbToArchive = dbSnap;
-        } catch (e) {
-          // Snapshot failed (disk/lock) — fall back to the checkpointed live file rather
-          // than drop the core DB from the backup entirely.
-        }
+      if (dbExists) {
         archive.file(dbToArchive, { name: 'travel.db' });
       }
 
@@ -284,7 +330,9 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
         }
       }
 
-      archive.finalize();
+      // finalize() is async: without this catch a failure that never reached the
+      // 'error' listener above would hang this promise and reject unobserved.
+      archive.finalize().catch(reject);
     });
 
     // The commit — and, under a mirror backend, the replica fan-out point.
@@ -413,7 +461,9 @@ export async function restoreFromZip(storage: StorageService, zipPath: string): 
       // files already landed on disk but whose connection failed to reopen
       // needs to be reported as "restart required", not swallowed.
       try {
-        reinitialize();
+        // Awaited: reopening also migrates the restored file, which may be an
+        // older backup, and rebuilds the ORM's cached connection.
+        await reinitialize();
       } catch (reinitErr) {
         reinitFailed = reinitErr;
       }
@@ -422,6 +472,11 @@ export async function restoreFromZip(storage: StorageService, zipPath: string): 
       // still holds the pre-restore state. Any request using a cached
       // permission would decide against the wrong grants until the
       // next restart. Dropping the cache forces a fresh read.
+      // D6: no repository read happens on this path today — invalidation is a
+      // plain function, not a DB call — so no withRequestContext is owed here yet.
+      // The domain phase that gives this restore path a repository read (Plan 3's
+      // admin/backup cluster) must wrap it then; see task-2-review.md's non-HTTP
+      // caller table.
       invalidatePermissionsCache();
     }
 
@@ -433,7 +488,7 @@ export async function restoreFromZip(storage: StorageService, zipPath: string): 
       // entirely when reopen failed: with no live DB handle the registry has
       // nothing to read, and the restore is already reported as "restart
       // required" below — rehydrating into a stale/guessed config would be worse.
-      storage.reloadConfig();
+      await storage.reloadConfig();
 
       const extractedUploads = path.join(extractDir, 'uploads');
       if (fs.existsSync(extractedUploads)) {
@@ -488,6 +543,8 @@ export async function restoreFromZip(storage: StorageService, zipPath: string): 
     // stale anyway. Invalidating here too costs nothing and guarantees
     // we never serve cached permissions that don't match the DB state
     // we leave the process in after a failed restore.
+    // D6: same no-repository-read note as the other invalidatePermissionsCache()
+    // call above — nothing to wrap yet.
     try { invalidatePermissionsCache(); } catch { /* best-effort */ }
     throw err;
   }

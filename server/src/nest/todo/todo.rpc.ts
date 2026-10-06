@@ -27,42 +27,46 @@ export class TodoRpc {
   ) {}
 
   @PluginMethod('todos.list', { permission: 'db:read:todos' })
-  list(params: Record<string, unknown>, ctx: PluginRpcContext): unknown[] {
-    return this.guards.tripRead(params, ctx, () => this.todos.listItems(String(num(params.tripId, 'tripId'))) as unknown[]);
+  async list(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown[]> {
+    return await this.guards.tripRead(
+      params,
+      ctx,
+      async () => (await this.todos.listItems(String(num(params.tripId, 'tripId')))) as unknown[],
+    );
   }
 
   @PluginMethod('todos.create', { permission: 'db:write:todos' })
-  create(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async create(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const tripId = num(params.tripId, 'tripId');
     const actor = this.guards.requireActor(ctx, 'todo');
     const input = asPayload(params.input);
     if (typeof input.name !== 'string' || input.name.trim() === '') throw new BadParams('todo name is required');
-    this.guards.requireTripEdit(tripId, actor, TODO_EDIT_ACTION);
-    const item = this.todos.createItem(String(tripId), input as never);
+    await this.guards.requireTripEdit(tripId, actor, TODO_EDIT_ACTION);
+    const item = await this.todos.createItem(String(tripId), input as never);
     this.realtime.broadcast(tripId, 'todo:created', { item }, undefined);
     return item;
   }
 
   @PluginMethod('todos.update', { permission: 'db:write:todos' })
-  update(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async update(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const tripId = num(params.tripId, 'tripId');
     const todoId = num(params.todoId, 'todoId');
     const actor = this.guards.requireActor(ctx, 'todo');
-    this.guards.requireTripEdit(tripId, actor, TODO_EDIT_ACTION);
+    await this.guards.requireTripEdit(tripId, actor, TODO_EDIT_ACTION);
     const input = asPayload(params.input);
-    const updated = this.todos.updateItem(String(tripId), String(todoId), input as never, Object.keys(input));
+    const updated = await this.todos.updateItem(String(tripId), todoId, input as never, Object.keys(input));
     if (!updated) throw new ForbiddenResource(`no todo ${todoId} on trip ${tripId}`);
     this.realtime.broadcast(tripId, 'todo:updated', { item: updated }, undefined);
     return updated;
   }
 
   @PluginMethod('todos.delete', { permission: 'db:write:todos' })
-  delete(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async delete(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const tripId = num(params.tripId, 'tripId');
     const todoId = num(params.todoId, 'todoId');
     const actor = this.guards.requireActor(ctx, 'todo');
-    this.guards.requireTripEdit(tripId, actor, TODO_EDIT_ACTION);
-    if (!this.todos.deleteItem(String(tripId), String(todoId))) {
+    await this.guards.requireTripEdit(tripId, actor, TODO_EDIT_ACTION);
+    if (!(await this.todos.deleteItem(String(tripId), todoId))) {
       throw new ForbiddenResource(`no todo ${todoId} on trip ${tripId}`);
     }
     this.realtime.broadcast(tripId, 'todo:deleted', { itemId: todoId }, undefined);

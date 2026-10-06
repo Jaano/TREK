@@ -6,9 +6,8 @@ import {
 import { z } from 'zod';
 import { getAppUrl } from '../../app-config';
 import { AuditService } from '../audit/audit.service';
-import { DatabaseService } from '../database/database.service';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
-import { isDemoUserId } from '../common/demo-write';
+import { DemoService } from '../common/demo.service';
 import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { canShareTrips, canWrite } from '../../mcp/scopes';
 import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
@@ -34,21 +33,21 @@ import { TripInviteService, type TripInviteInfo } from './trip-invite.service';
 export class TripInviteMcp {
   constructor(
     private readonly invites: TripInviteService,
-    private readonly db: DatabaseService,
     private readonly env: RuntimeEnvService,
     private readonly guards: McpToolGuardsService,
     private readonly audit: AuditService,
+    private readonly demo: DemoService,
   ) {}
 
-  /** The AuthService.isDemoUser check without the auth graph (demo-write.ts). */
-  private isDemoUser(userId: number): boolean {
-    return isDemoUserId(this.env, this.db, userId);
+  /** Plan 3i Task 3: the AuthService.isDemoUser check via the injected DemoService (common/demo.service.ts), not the free-function demo-write.ts helper. */
+  private async isDemoUser(userId: number): Promise<boolean> {
+    return await this.demo.isDemoUserId(userId);
   }
 
   /** Trip access first (404-equivalent), then share_manage, which is requireManage() in the controller. */
-  private denyManage(tripId: number, userId: number) {
-    if (!this.invites.verifyTripAccess(String(tripId), userId)) return noAccess();
-    if (!this.guards.hasTripPermission('share_manage', tripId, userId)) return permissionDenied();
+  private async denyManage(tripId: number, userId: number) {
+    if (!(await this.invites.verifyTripAccess(String(tripId), userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('share_manage', tripId, userId))) return permissionDenied();
     return null;
   }
 
@@ -67,9 +66,9 @@ export class TripInviteMcp {
     access: (ctx) => canShareTrips(ctx.scopes) && canWrite(ctx.scopes, 'trips'),
   })
   async getTripInviteLink({ tripId }: { tripId: number }, ctx: McpContext) {
-    const denied = this.denyManage(tripId, ctx.userId);
-    if (denied) return denied;
-    const info = this.invites.get(tripId);
+    const denied = await this.denyManage(tripId, ctx.userId);
+    if ((await denied)) return denied;
+    const info = await this.invites.get(tripId);
     return ok({ invite_link: info ? this.describe(info) : null });
   }
 
@@ -88,9 +87,9 @@ export class TripInviteMcp {
     { tripId, expires_in_days }: { tripId: number } & TripInviteLinkCreateRequest,
     ctx: McpContext,
   ) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    const denied = this.denyManage(tripId, ctx.userId);
-    if (denied) return denied;
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    const denied = await this.denyManage(tripId, ctx.userId);
+    if ((await denied)) return denied;
     // The route's own coercion, kept verbatim: the shared contract admits a
     // digits-only string as well as a number, and anything that does not parse
     // to a finite value means no expiry rather than an error.
@@ -98,11 +97,11 @@ export class TripInviteMcp {
       ? Number.parseInt(String(expires_in_days))
       : null;
     const days = Number.isFinite(parsed as number) ? parsed : null;
-    const info = this.invites.createOrRotate(tripId, ctx.userId, days);
+    const info = await this.invites.createOrRotate(tripId, ctx.userId, days);
     // Minting a membership credential is audited wherever it happens, so an
     // admin reading the log sees the same row for a link made through an
     // assistant as for one made in the planner. No request here, hence no ip.
-    this.audit.writeAudit({
+    await this.audit.writeAudit({
       userId: ctx.userId,
       action: 'trip.invite_link_create',
       resource: String(tripId),
@@ -122,11 +121,11 @@ export class TripInviteMcp {
     access: (ctx) => canShareTrips(ctx.scopes) && canWrite(ctx.scopes, 'trips'),
   })
   async deleteTripInviteLink({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    const denied = this.denyManage(tripId, ctx.userId);
-    if (denied) return denied;
-    this.invites.remove(tripId);
-    this.audit.writeAudit({
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    const denied = await this.denyManage(tripId, ctx.userId);
+    if ((await denied)) return denied;
+    await this.invites.remove(tripId);
+    await this.audit.writeAudit({
       userId: ctx.userId,
       action: 'trip.invite_link_delete',
       resource: String(tripId),

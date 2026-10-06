@@ -3,11 +3,13 @@ import {
   errorResult, ok, type McpContext,
 } from '../../nest-mcp';
 import { z } from 'zod';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { ADDON_IDS } from '../../addons';
 import { AddonsService } from '../addons/addons.service';
-import { DatabaseService } from '../database/database.service';
 import { ImmichService } from './immich.service';
 import { SynologyService } from './synology.service';
+import { PhotoProviders } from '../../db/entities/PhotoProviders.entity';
+import type { PhotoProvidersRepository } from '../../db/repositories/PhotoProviders.repository';
 
 /**
  * The photo backends TREK can talk to, named rather than taken as a free
@@ -38,8 +40,8 @@ const SYNOLOGY_DEFAULT_LIMIT = 100;
  * provider counts as on, whatever its row says. Which of the two providers is
  * on is a per-call question, answered by providerRefusal().
  */
-const anyPhotoProviderEnabled = (_ctx: McpContext, self: MemoriesMcp): boolean =>
-  self.enabledProviderIds().length > 0;
+const anyPhotoProviderEnabled = async (_ctx: McpContext, self: MemoriesMcp): Promise<boolean> =>
+  (await self.enabledProviderIds()).length > 0;
 
 /**
  * Memories MCP surface: finding photos in a connected Immich or Synology Photos
@@ -65,17 +67,17 @@ export class MemoriesMcp {
   constructor(
     private readonly immich: ImmichService,
     private readonly synology: SynologyService,
-    private readonly db: DatabaseService,
     private readonly addons: AddonsService,
+    @InjectRepository(PhotoProviders) private readonly photoProviders: PhotoProvidersRepository,
   ) {}
 
   /**
    * Public because the `when:` gate above is a module-level function rather than
    * a method, the same reason the addon gates need a public `addons`.
    */
-  enabledProviderIds(): string[] {
-    if (!this.addons.isAddonEnabled(ADDON_IDS.JOURNEY)) return [];
-    return this.db.all<{ id: string }>('SELECT id FROM photo_providers WHERE enabled = 1').map((row) => row.id);
+  async enabledProviderIds(): Promise<string[]> {
+    if (!(await this.addons.isAddonEnabled(ADDON_IDS.JOURNEY))) return [];
+    return await this.photoProviders.listEnabledIds();
   }
 
   /**
@@ -84,10 +86,10 @@ export class MemoriesMcp {
    * disabled provider refuses the same way on both surfaces. The browse routes
    * themselves never checked it, so this only ever narrows what REST allows.
    */
-  private providerRefusal(provider: ProviderId) {
-    const row = this.db.get<{ enabled: number }>('SELECT enabled FROM photo_providers WHERE id = ?', provider);
+  private async providerRefusal(provider: ProviderId) {
+    const row = await this.photoProviders.findEnabled(provider);
     if (!row) return errorResult(`Provider: "${provider}" is not supported`);
-    if (row.enabled !== 1 || !this.addons.isAddonEnabled(ADDON_IDS.JOURNEY))
+    if (row.enabled !== 1 || !(await this.addons.isAddonEnabled(ADDON_IDS.JOURNEY)))
       return errorResult(`Provider: "${provider}" is not enabled, contact server administrator`);
     return null;
   }
@@ -111,8 +113,8 @@ export class MemoriesMcp {
     { provider, from, to, page, size, utc_offset_minutes }: { provider: ProviderId; from?: string; to?: string; page?: number; size?: number; utc_offset_minutes?: number },
     ctx: McpContext,
   ) {
-    const refused = this.providerRefusal(provider);
-    if (refused) return refused;
+    const refused = await this.providerRefusal(provider);
+    if ((await refused)) return refused;
 
     if (provider === 'immich') {
       // Same coercion the REST route performs on the body before calling.
@@ -144,8 +146,8 @@ export class MemoriesMcp {
     access: { group: 'journey', mode: 'read' },
   })
   async listProviderAlbums({ provider }: { provider: ProviderId }, ctx: McpContext) {
-    const refused = this.providerRefusal(provider);
-    if (refused) return refused;
+    const refused = await this.providerRefusal(provider);
+    if ((await refused)) return refused;
 
     if (provider === 'immich') {
       const result = await this.immich.listAlbums(ctx.userId);
@@ -177,8 +179,8 @@ export class MemoriesMcp {
     { provider, album_id, passphrase }: { provider: ProviderId; album_id: string; passphrase?: string },
     ctx: McpContext,
   ) {
-    const refused = this.providerRefusal(provider);
-    if (refused) return refused;
+    const refused = await this.providerRefusal(provider);
+    if ((await refused)) return refused;
 
     if (provider === 'immich') {
       const result = await this.immich.getAlbumPhotos(ctx.userId, album_id);

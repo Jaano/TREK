@@ -60,8 +60,6 @@ vi.mock('../../../src/nest/maps/trek-places.client', async (importOriginal) => (
   trekPlacesSearch: vi.fn(async (): Promise<unknown[]> => []),
 }));
 
-import { db } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { MapsService } from '../../../src/nest/maps/maps.service';
 import { trekPlacesSearch } from '../../../src/nest/maps/trek-places.client';
 import {
@@ -76,6 +74,48 @@ import {
 import { isGooglePlaceId } from '../../../src/nest/maps/maps.helpers';
 import type { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-photo-cache.service';
 import { noGoogleQuota } from '../../helpers/google-quota';
+import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
+import type { PlaceDetailsCacheRepository } from '../../../src/db/repositories/PlaceDetailsCache.repository';
+import type { PlacesRepository } from '../../../src/db/repositories/Places.repository';
+
+// resolveMapsKey/resolveAmapKey (maps.service.ts) now read AppSettingsRepository/
+// UsersRepository directly (Plan 3a Task 5's instance-api-keys.ts conversion)
+// instead of raw SQL through the mocked db module above — these two stubs wire
+// the SAME mockInstanceGet/mockDbGet seams the rest of this file already
+// controls into the new repository methods, so every existing keys()/
+// mockInstanceGet/mockProviderGet call below keeps its meaning unchanged.
+// `places_provider` keeps its own dedicated mockProviderGet seam, per the
+// pre-conversion raw-SQL mock's own `args[0] === 'places_provider'` branch —
+// MAP2 (`placesProviderChoice`) reads that key through this stub now.
+const appSettingsStub = {
+  getValue: async (key: string) =>
+    (key === 'places_provider' ? mockProviderGet(key) : (mockInstanceGet(key) as { value: string | null } | undefined))?.value ?? null,
+} as unknown as AppSettingsRepository;
+const usersStub = {
+  getApiKeyColumn: async (userId: number, name: 'maps_api_key' | 'amap_api_key') => {
+    const row = mockDbGet(userId) as { maps_api_key: string | null; amap_api_key: string | null } | undefined;
+    return row?.[name] ?? null;
+  },
+} as unknown as UsersRepository;
+
+// Plan 3h Task 4 (R8/MAP9): the SAME mockDbGet/mockDbRun-preserving shape
+// maps.service.test.ts's own stubs use for `place_details_cache`/`places`.
+const placeDetailsCacheStub = {
+  findEntry: async (placeId: string, lang: string, _kind: number) => {
+    const row = mockDbGet(placeId, lang) as { payload_json: string; fetched_at: number } | undefined;
+    return row ? { payload_json: row.payload_json, fetched_at: row.fetched_at } : null;
+  },
+  upsertEntry: async (row: { place_id: string; lang: string; expanded: number; payload_json: string; fetched_at: number }) => {
+    mockDbRun(row.place_id, row.lang, row.payload_json, row.fetched_at);
+  },
+} as unknown as PlaceDetailsCacheRepository;
+const placesStub = {
+  setImageUrlIfUnset: async (google_place_id: string, image_url: string) => {
+    mockDbRun(image_url, google_place_id);
+    return 1;
+  },
+} as unknown as PlacesRepository;
 
 const photoCacheStub = {
   get: vi.fn(() => null),
@@ -87,7 +127,7 @@ const photoCacheStub = {
   serveKey: vi.fn(() => null),
 } as unknown as PlacePhotoCacheService;
 
-const svc = new MapsService(new DatabaseService(db as never), photoCacheStub, noGoogleQuota);
+const svc = new MapsService(photoCacheStub, appSettingsStub, usersStub, placeDetailsCacheStub, placesStub, noGoogleQuota);
 
 /** A provider over a fixed key, which is all these cases need. */
 function provider(tips = new AmapTipStash()): AmapPlacesProvider {
@@ -669,48 +709,48 @@ function keys(opts: { google?: string; amap?: string }) {
 }
 
 describe('MapsService.keyedProvider', () => {
-  it('AMAP-070: auto keeps Google when a Google key is configured', () => {
+  it('AMAP-070: auto keeps Google when a Google key is configured', async () => {
     keys({ google: 'gkey', amap: 'akey' });
-    expect(svc.keyedProvider(1)).toMatchObject({ id: 'google', key: 'gkey', source: 'user-row' });
-    expect(svc.resolvePlacesProvider(1)).toBeNull();
+    expect(await svc.keyedProvider(1)).toMatchObject({ id: 'google', key: 'gkey', source: 'user-row' });
+    expect(await svc.resolvePlacesProvider(1)).toBeNull();
   });
 
-  it('AMAP-071: auto falls to Amap only when there is no Google key', () => {
+  it('AMAP-071: auto falls to Amap only when there is no Google key', async () => {
     keys({ amap: 'akey' });
-    expect(svc.keyedProvider(1)?.id).toBe('amap');
-    expect(svc.resolvePlacesProvider(1)).toBeInstanceOf(AmapPlacesProvider);
+    expect((await svc.keyedProvider(1))?.id).toBe('amap');
+    expect(await svc.resolvePlacesProvider(1)).toBeInstanceOf(AmapPlacesProvider);
   });
 
-  it('AMAP-072: auto with no key at all means the OpenStreetMap stack', () => {
+  it('AMAP-072: auto with no key at all means the OpenStreetMap stack', async () => {
     keys({});
-    expect(svc.keyedProvider(1)).toBeNull();
-    expect(svc.resolvePlacesProvider(1)).toBeNull();
+    expect(await svc.keyedProvider(1)).toBeNull();
+    expect(await svc.resolvePlacesProvider(1)).toBeNull();
   });
 
-  it('AMAP-073: an explicit amap choice wins over a configured Google key', () => {
+  it('AMAP-073: an explicit amap choice wins over a configured Google key', async () => {
     mockProviderGet.mockReturnValue({ value: 'amap' });
     keys({ google: 'gkey', amap: 'akey' });
-    expect(svc.resolvePlacesProvider(1)).toBeInstanceOf(AmapPlacesProvider);
+    expect(await svc.resolvePlacesProvider(1)).toBeInstanceOf(AmapPlacesProvider);
   });
 
-  it('AMAP-074: an explicit google choice never silently uses Amap instead', () => {
+  it('AMAP-074: an explicit google choice never silently uses Amap instead', async () => {
     mockProviderGet.mockReturnValue({ value: 'google' });
     keys({ amap: 'akey' });
     // Misconfigured means "answer with OSM", not "bill somebody else's provider".
-    expect(svc.keyedProvider(1)).toBeNull();
+    expect(await svc.keyedProvider(1)).toBeNull();
   });
 
-  it('AMAP-075: openstreetmap ignores both keys', () => {
+  it('AMAP-075: openstreetmap ignores both keys', async () => {
     mockProviderGet.mockReturnValue({ value: 'openstreetmap' });
     keys({ google: 'gkey', amap: 'akey' });
-    expect(svc.keyedProvider(1)).toBeNull();
+    expect(await svc.keyedProvider(1)).toBeNull();
   });
 
-  it('AMAP-076: a hand-edited nonsense value degrades to auto instead of failing', () => {
+  it('AMAP-076: a hand-edited nonsense value degrades to auto instead of failing', async () => {
     mockProviderGet.mockReturnValue({ value: 'not-a-provider' });
     keys({ google: 'gkey' });
-    expect(svc.placesProviderChoice()).toBe('auto');
-    expect(svc.keyedProvider(1)?.id).toBe('google');
+    expect(await svc.placesProviderChoice()).toBe('auto');
+    expect((await svc.keyedProvider(1))?.id).toBe('google');
   });
 
   it('AMAP-077: an Amap place stays with Amap even while Google is selected', async () => {

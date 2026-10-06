@@ -65,15 +65,15 @@ export class DaysMcp {
     { tripId, dayId, ...fields }: { tripId: number; dayId: number } & DayUpdateRequest,
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
-    const current = this.days.getDay(dayId, tripId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.days.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('day_edit', tripId, ctx.userId))) return permissionDenied();
+    const current = await this.days.getDay(dayId, tripId);
     if (!current) return errorResult('Day not found.');
     // The rest spread carries only the keys the caller actually sent, which is
     // what update()'s presence sentinels need: naming the two fields here would
     // hand it an undefined notes on a title-only call and wipe the day's notes.
-    const updated = this.days.update(dayId, current, fields);
+    const updated = await this.days.update(dayId, current, fields);
     this.guards.safeBroadcast(tripId, 'day:updated', { day: updated });
     return ok({ day: updated });
   }
@@ -95,22 +95,22 @@ export class DaysMcp {
     { tripId, date, notes, position, dated }: { tripId: number } & DayCreateRequest,
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
-    if (dated) return this.appendDated(tripId, notes, date, position, ctx);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.days.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('day_edit', tripId, ctx.userId))) return permissionDenied();
+    if (dated) return await this.appendDated(tripId, notes, date, position, ctx);
     if (position === undefined) {
-      const day = this.days.create(tripId, date, notes);
+      const day = await this.days.create(tripId, date, notes);
       this.guards.safeBroadcast(tripId, 'day:created', { day });
       return ok({ day });
     }
     try {
-      const day = this.days.insert(tripId, position);
+      const day = await this.days.insert(tripId, position);
       // An insert renumbers and re-dates every later day, so collaborators get
       // the list-wide event and refetch, the same one the REST create route sends.
       this.guards.safeBroadcast(tripId, 'day:reordered', { day });
       // The trip grew by a day, and on a dated trip its end date moved.
-      const trip = this.days.getTripForViewer(tripId, ctx.userId);
+      const trip = await this.days.getTripForViewer(tripId, ctx.userId);
       if (trip) this.guards.safeBroadcast(tripId, 'trip:updated', { trip });
       return ok({ day });
     } catch (err) {
@@ -125,13 +125,13 @@ export class DaysMcp {
    * from the contract's fields alone, so the refusal the contract's refine gives
    * for `dated` next to `date` or `position` is repeated here, word for word.
    */
-  private appendDated(
+  private async appendDated(
     tripId: number, notes: string | undefined, date: string | undefined, position: number | undefined, ctx: McpContext,
   ) {
     if (date !== undefined || position !== undefined) return errorResult(`${DAY_CREATE_DATED_CONFLICT}.`);
     let append: DatedDayAppend;
     try {
-      append = this.days.appendDated(tripId, ctx.userId, notes);
+      append = await this.days.appendDated(tripId, ctx.userId, notes);
     } catch (err) {
       if (err instanceof DayAppendError) return errorResult(err.message);
       throw err;
@@ -156,11 +156,11 @@ export class DaysMcp {
     { tripId, orderedIds }: { tripId: number } & DayReorderRequest,
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.days.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('day_edit', tripId, ctx.userId))) return permissionDenied();
     try {
-      this.days.reorder(tripId, orderedIds);
+      await this.days.reorder(tripId, orderedIds);
     } catch (err) {
       // A non-permutation and an inverted stay are both the caller's input, so
       // they come back as tool errors rather than a throw the SDK has to dress up.
@@ -183,13 +183,13 @@ export class DaysMcp {
     access: { group: 'trips', mode: 'write' },
   })
   async deleteDay({ tripId, dayId }: { tripId: number; dayId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
-    if (!this.days.getDay(dayId, tripId)) return errorResult('Day not found.');
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.days.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('day_edit', tripId, ctx.userId))) return permissionDenied();
+    if (!(await this.days.getDay(dayId, tripId))) return errorResult('Day not found.');
     let removal: DayRemoval;
     try {
-      removal = this.removal.remove(tripId, dayId, { userId: ctx.userId });
+      removal = await this.removal.remove(tripId, dayId, { userId: ctx.userId });
     } catch (err) {
       // The last day stays, and the caller can act on the sentence.
       if (err instanceof DayDeleteError) return errorResult(err.message);
@@ -198,7 +198,7 @@ export class DaysMcp {
     // The same fan-out as REST, day:deleted ({ dayId }, the shape the client reads)
     // first. A tool has no socket of its own, so every screen hears all of it.
     const send: MirrorSender = (event, payload) => this.guards.safeBroadcast(tripId, event, payload as Record<string, unknown>);
-    this.removal.announce(tripId, removal, { all: send, others: send });
+    await this.removal.announce(tripId, removal, { all: send, others: send });
     return ok({ success: true });
   }
 
@@ -217,11 +217,11 @@ export class DaysMcp {
     { tripId, dayId, transport_mode }: { tripId: number; dayId: number; transport_mode?: string | null },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
-    if (!this.days.getDay(dayId, tripId)) return errorResult('Day not found.');
-    const day = this.days.setDefaultTransportMode(dayId, transport_mode ?? null);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.days.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('day_edit', tripId, ctx.userId))) return permissionDenied();
+    if (!(await this.days.getDay(dayId, tripId))) return errorResult('Day not found.');
+    const day = await this.days.setDefaultTransportMode(dayId, transport_mode ?? null);
     this.guards.safeBroadcast(tripId, 'day:updated', { day });
     return ok({ day });
   }
@@ -235,7 +235,7 @@ export class DaysMcp {
   })
   async tripDaysResource(uri: URL, { tripId }: { tripId: string | string[] }, ctx: McpContext) {
     const id = parseId(tripId);
-    if (id === null || !this.days.verifyTripAccess(id, ctx.userId)) {
+    if (id === null || !(await this.days.verifyTripAccess(id, ctx.userId))) {
       return {
         contents: [{
           uri: uri.href,
@@ -244,7 +244,7 @@ export class DaysMcp {
         }],
       };
     }
-    const { days } = this.days.list(id);
+    const { days } = await this.days.list(id);
     return {
       contents: [{
         uri: uri.href,

@@ -1,13 +1,35 @@
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// The migrated snapshot, so the #2527 trigger on places is there like on a real install.
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  return { db: createSnapshotTestDb(), closeDb: () => {}, reinitialize: () => {} };
+});
+
+import { db } from '../../../src/db/database';
+import { PlaceRegionsRepository } from '../../../src/db/repositories/PlaceRegions.repository';
 import { reverseGeocodeRegion } from '../../../src/nest/atlas/atlas-geo';
 import { AtlasService } from '../../../src/nest/atlas/atlas.service';
 import { PLACE_REGIONS_REPAIR_DONE_KEY, PlaceRegionsRepairJob } from '../../../src/nest/atlas/place-regions-repair.job';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import type { CronRegistrarService } from '../../../src/nest/scheduling/cron-registrar.service';
 import { createTrip, createUser } from '../../helpers/factories';
-import { createTestDb } from '../../helpers/test-db';
+import { resetTestDb } from '../../helpers/test-db';
+import {
+  createTestAppSettingsRepo, createTestPlacesRepo, createTestReservationEndpointsRepo, createTestTripsRepo, createTestUnitOfWork, sharedTestOrm,
+} from '../../helpers/test-uow';
+import {
+  createTestBucketListRepo, createTestHiddenCountriesRepo, createTestHiddenRegionsRepo, createTestPlaceRegionsRepo,
+  createTestVisitedCountriesRepo, createTestVisitedRegionsRepo,
+} from '../../helpers/atlas-repos';
 
-import type Database from 'better-sqlite3';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+async function buildAtlas(): Promise<AtlasService> {
+  return new AtlasService(
+    await createTestBucketListRepo(db), await createTestHiddenCountriesRepo(db), await createTestHiddenRegionsRepo(db),
+    await createTestVisitedCountriesRepo(db), await createTestVisitedRegionsRepo(db), await createTestPlaceRegionsRepo(db),
+    await createTestTripsRepo(db), await createTestPlacesRepo(db), await createTestReservationEndpointsRepo(db),
+    await createTestUnitOfWork(db), (await sharedTestOrm(db)).orm,
+  );
+}
 
 // An install that upgrades to the #2527 fix still holds the place_regions rows its
 // corrected places were cached with before it. The trigger only stops new ones from
@@ -32,7 +54,6 @@ const SYLT_BEACH = { lat: 54.9, lng: 8.29, address: 'Westerland, Sylt, Germany' 
 type Location = { lat: number | null; lng: number | null; address: string | null };
 
 describe('the one time repair of place_regions rows cached before #2527', () => {
-  let db: Database.Database;
   let atlas: AtlasService;
   let job: PlaceRegionsRepairJob;
   let userId: number;
@@ -55,13 +76,14 @@ describe('the one time repair of place_regions rows cached before #2527', () => 
       | { country_code: string; region_code: string }
       | undefined;
   const markedDone = () => db.prepare('SELECT 1 FROM app_settings WHERE key = ?').get(PLACE_REGIONS_REPAIR_DONE_KEY);
-  const registrar = (enabled: boolean) => ({ isEnabled: () => enabled }) as unknown as CronRegistrarService;
+  // runOnBoot is where the real registrar opens the request context; here it just runs the pass.
+  const registrar = (enabled: boolean) =>
+    ({ isEnabled: () => enabled, runOnBoot: async (_name: string, fn: () => Promise<void>) => fn() }) as unknown as CronRegistrarService;
 
-  beforeEach(() => {
-    db = createTestDb();
-    const dbService = new DatabaseService(db);
-    atlas = new AtlasService(dbService);
-    job = new PlaceRegionsRepairJob(atlas, registrar(true), dbService);
+  beforeEach(async () => {
+    resetTestDb(db);
+    atlas = await buildAtlas();
+    job = new PlaceRegionsRepairJob(atlas, registrar(true), await createTestAppSettingsRepo(db));
     userId = createUser(db).user.id;
     tripId = createTrip(db, userId, { title: 'Rhine', start_date: '2025-05-01', end_date: '2025-05-05' }).id;
     fetchMock.mockReset();
@@ -71,6 +93,9 @@ describe('the one time repair of place_regions rows cached before #2527', () => 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  afterAll(() => {
     db.close();
   });
 
@@ -86,8 +111,8 @@ describe('the one time repair of place_regions rows cached before #2527', () => 
     expect(cachedRow(rhine)).toEqual({ country_code: 'DE', region_code: 'DE-BW' });
     expect((await atlas.stats(userId)).countries.map((c) => c.code)).toEqual(['DE']);
     expect(Object.keys((await atlas.visitedRegions(userId)).regions)).toEqual(['DE']);
-    expect(atlas.getTravelStats(userId).countries).toEqual(['DE']);
-    expect(atlas.lastTrip(userId)?.countries).toEqual(['DE']);
+    expect((await atlas.getTravelStats(userId)).countries).toEqual(['DE']);
+    expect((await atlas.lastTrip(userId))?.countries).toEqual(['DE']);
     expect(markedDone()).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -121,27 +146,40 @@ describe('the one time repair of place_regions rows cached before #2527', () => 
     expect(cachedRow(beach)).toBeUndefined();
     expect(cachedRow(cleared)).toBeUndefined();
     // The dashboard, which reads only the cache, no longer counts France.
-    expect(atlas.getTravelStats(userId).countries).toEqual([]);
+    expect((await atlas.getTravelStats(userId)).countries).toEqual([]);
   });
 
   it('does not write over a place that is edited while the pass runs', async () => {
     const hotel = addPlace('Hotel Adlon', BERLIN, ['FR', 'FR-IDF', 'Ile-de-France']);
     const beach = addPlace('Beach hut', SYLT_BEACH, ['FR', 'FR-BRE', 'Bretagne']);
 
-    // The pass has read both rows before it gives way for the first time.
-    const pass = atlas.repairStaleRegionCache();
-    db.prepare('UPDATE places SET lat = ?, lng = ?, address = ? WHERE id = ?').run(
-      MUNICH.lat,
-      MUNICH.lng,
-      MUNICH.address,
-      hotel,
-    );
-    db.prepare("UPDATE places SET address = 'Westerland, Germany' WHERE id = ?").run(beach);
-    db.prepare(
-      "INSERT INTO place_regions (place_id, country_code, region_code, region_name) VALUES (?, 'DE', 'DE-SH', 'Schleswig-Holstein')",
-    ).run(beach);
+    // Both places are edited once the pass has read their rows, before it writes.
+    const read = PlaceRegionsRepository.prototype.listWithPlaceLocation;
+    vi.spyOn(PlaceRegionsRepository.prototype, 'listWithPlaceLocation').mockImplementationOnce(async function (
+      this: PlaceRegionsRepository,
+    ) {
+      const rows = await read.call(this);
+      db.prepare('UPDATE places SET lat = ?, lng = ?, address = ? WHERE id = ?').run(
+        MUNICH.lat,
+        MUNICH.lng,
+        MUNICH.address,
+        hotel,
+      );
+      db.prepare("UPDATE places SET address = 'Westerland, Germany' WHERE id = ?").run(beach);
+      db.prepare(
+        "INSERT INTO place_regions (place_id, country_code, region_code, region_name) VALUES (?, 'DE', 'DE-SH', 'Schleswig-Holstein')",
+      ).run(beach);
+      return rows;
+    });
+    const upsert = vi.spyOn(PlaceRegionsRepository.prototype, 'upsertRegionWhileUnmoved');
+    const drop = vi.spyOn(PlaceRegionsRepository.prototype, 'deleteRegionWhileUnmoved');
 
-    expect(await pass).toEqual({ replaced: 0, dropped: 0 });
+    expect(await atlas.repairStaleRegionCache()).toEqual({ replaced: 0, dropped: 0 });
+    // The pass still meant to move the hotel to Berlin and drop the beach row; both writes were refused.
+    expect(upsert).toHaveBeenCalledTimes(1);
+    await expect(upsert.mock.results[0].value).resolves.toBe(false);
+    expect(drop).toHaveBeenCalledTimes(1);
+    await expect(drop.mock.results[0].value).resolves.toBe(false);
     // The trigger dropped the moved place's row and nothing wrote Berlin back.
     expect(cachedRow(hotel)).toBeUndefined();
     // The row a fresh lookup wrote for the edited place stays.
@@ -178,10 +216,10 @@ describe('the one time repair of place_regions rows cached before #2527', () => 
     expect(cachedRow(hotel)?.country_code).toBe('DE');
   });
 
-  it('starts from the boot hook, but not where the scheduler is off', () => {
-    const dbService = new DatabaseService(db);
-    const offJob = new PlaceRegionsRepairJob(atlas, registrar(false), dbService);
-    const onJob = new PlaceRegionsRepairJob(atlas, registrar(true), dbService);
+  it('starts from the boot hook, but not where the scheduler is off', async () => {
+    const appSettings = await createTestAppSettingsRepo(db);
+    const offJob = new PlaceRegionsRepairJob(atlas, registrar(false), appSettings);
+    const onJob = new PlaceRegionsRepairJob(atlas, registrar(true), appSettings);
     const offRun = vi.spyOn(offJob, 'runOnce').mockResolvedValue();
     const onRun = vi.spyOn(onJob, 'runOnce').mockResolvedValue();
 

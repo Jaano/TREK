@@ -68,13 +68,13 @@ export class AccommodationsController {
   }
 
   @Get()
-  list(@CurrentUser() user: User, @Param('tripId') tripId: string) {
-    return { accommodations: this.accommodations.list(tripId) };
+  async list(@CurrentUser() user: User, @Param('tripId') tripId: string) {
+    return { accommodations: await this.accommodations.list(tripId) };
   }
 
   @RequirePermission('day_edit')
   @Post()
-  create(
+  async create(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Body() rawBody: AccommodationCreateDto,
@@ -85,14 +85,14 @@ export class AccommodationsController {
     if (!place_id || !start_day_id || !end_day_id) {
       throw new HttpException({ error: 'place_id, start_day_id, and end_day_id are required' }, 400);
     }
-    const errors = this.accommodations.validateRefs(tripId, place_id, start_day_id, end_day_id);
+    const errors = await this.accommodations.validateRefs(tripId, place_id, start_day_id, end_day_id);
     if (errors.length > 0) {
       throw new HttpException({ error: errors[0].message }, 404);
     }
-    const { accommodation, mirror } = this.accommodations.create(tripId, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes } as never);
+    const { accommodation, mirror } = await this.accommodations.create(tripId, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes } as never);
     this.accommodations.broadcast(tripId, 'accommodation:created', { accommodation }, socketId);
     this.accommodations.broadcast(tripId, 'reservation:created', {}, socketId);
-    this.accommodations.announceMirror(tripId, mirror, this.mirrorSender(tripId), socketId);
+    await this.accommodations.announceMirror(tripId, mirror, this.mirrorSender(tripId), socketId);
     // The stop rides in the answer as well, for the session that booked the night
     // with its socket down: over the socket it would already have it.
     return { accommodation, assignment: mirror.created };
@@ -100,7 +100,7 @@ export class AccommodationsController {
 
   @RequirePermission('day_edit')
   @Put(':id')
-  update(
+  async update(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
@@ -108,38 +108,38 @@ export class AccommodationsController {
     @Headers('x-socket-id') socketId?: string,
   ) {
     const body = rawBody as AccommodationBody;
-    const existing = this.accommodations.get(id, tripId);
+    const existing = await this.accommodations.get(id, tripId);
     if (!existing) {
       throw new HttpException({ error: 'Accommodation not found' }, 404);
     }
     const { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes } = body;
-    const errors = this.accommodations.validateRefs(tripId, place_id, start_day_id, end_day_id);
+    const errors = await this.accommodations.validateRefs(tripId, place_id, start_day_id, end_day_id);
     if (errors.length > 0) {
       throw new HttpException({ error: errors[0].message }, 404);
     }
-    const { accommodation, mirror } = this.accommodations.update(id, existing as never, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes } as never);
+    const { accommodation, mirror } = await this.accommodations.update(id, existing as never, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes } as never);
     this.accommodations.broadcast(tripId, 'accommodation:updated', { accommodation }, socketId);
-    this.accommodations.announceMirror(tripId, mirror, this.mirrorSender(tripId), socketId);
+    await this.accommodations.announceMirror(tripId, mirror, this.mirrorSender(tripId), socketId);
     return { accommodation, assignment: mirror.created, movedAssignment: mirror.moved, removedAssignments: mirror.removed };
   }
 
   @RequirePermission('day_edit')
   @Delete(':id')
-  remove(
+  async remove(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
     @Headers('x-socket-id') socketId?: string,
     @Query('keepStop') keepStop?: string,
   ) {
-    if (!this.accommodations.get(id, tripId)) {
+    if (!(await this.accommodations.get(id, tripId))) {
       throw new HttpException({ error: 'Accommodation not found' }, 404);
     }
     // Turning a night back into a pause in road trip mode: the booking goes, the
     // stop stays and becomes the traveller's. Everywhere else a cancelled booking
     // takes the stop it brought with it.
-    const { linkedReservationIds, deletedBudgetItemIds, mirror } = this.accommodations.remove(id, { keepStop: keepStop === 'true' });
-    this.accommodations.announceMirror(tripId, mirror, this.mirrorSender(tripId), socketId);
+    const { linkedReservationIds, deletedBudgetItemIds, mirror } = await this.accommodations.remove(id, { keepStop: keepStop === 'true' });
+    await this.accommodations.announceMirror(tripId, mirror, this.mirrorSender(tripId), socketId);
     for (const reservationId of linkedReservationIds) {
       this.accommodations.broadcast(tripId, 'reservation:deleted', { reservationId }, socketId);
     }

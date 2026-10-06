@@ -14,9 +14,10 @@ import { CostsRpc } from '../../../src/nest/budget/costs.rpc';
 import { BudgetModule } from '../../../src/nest/budget/budget.module';
 import type { BudgetService } from '../../../src/nest/budget/budget.service';
 import type { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { TripMembershipService } from '../../../src/nest/trip-membership/trip-membership.service';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
@@ -33,7 +34,7 @@ function build(opts: { addonOn?: boolean; canEdit?: boolean; missing?: boolean; 
     listBudgetItems: vi.fn((tripId: number) => [{ id: 5, trip_id: tripId }]),
     create: vi.fn(async (tripId: string, i: Record<string, unknown>) => ({ id: 9, trip_id: tripId, ...i })),
     // The row after the write: a link in the body moves it, otherwise it keeps its booking.
-    update: vi.fn(async (_id: string, _tripId: string, i: Record<string, unknown>) => (opts.missing
+    update: vi.fn(async (_id: number, _tripId: string, i: Record<string, unknown>) => (opts.missing
       ? null
       : { id: 5, name: 'Hotel', reservation_id: 'reservation_id' in i ? i.reservation_id : (opts.linkedTo ?? null) })),
     remove: vi.fn(() => !opts.missing),
@@ -44,13 +45,13 @@ function build(opts: { addonOn?: boolean; canEdit?: boolean; missing?: boolean; 
   } as unknown as BudgetService & Record<string, ReturnType<typeof vi.fn>>;
   const realtime = { broadcast: vi.fn() } as unknown as RealtimeService & { broadcast: ReturnType<typeof vi.fn> };
   const db = {
-    canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
-    prepare: vi.fn(() => ({ get: () => ({ role: 'user' }) })),
-  } as unknown as DatabaseService;
+    findAccessible: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
+  } as unknown as TripsRepository;
   const guards = new PluginGuards(
     db,
     { checkPermission: vi.fn(() => opts.canEdit ?? true) } as unknown as PermissionsService,
     { isAddonEnabled: vi.fn(() => opts.addonOn ?? true) } as unknown as AddonsService,
+    { getRole: vi.fn(async () => 'user') } as unknown as UsersRepository,
   );
   // The leaf membership read replaced the deleted trips.bridge for listMine.
   const membership = { listAccessibleTripIds: vi.fn(() => [1, 2]) } as unknown as TripMembershipService;
