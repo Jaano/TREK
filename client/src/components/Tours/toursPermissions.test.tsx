@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, renderHook, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TourListItem } from '@trek/shared'
 
@@ -141,18 +141,22 @@ describe('Tours permissions without database setup', () => {
     } as unknown as TourPlannerController
     const assign = vi.fn()
     render(<><TourPlannerRail planner={planner} canEdit={canEdit} canAssign={canAssign} /><TourPlannerToursRail planner={planner} tours={[tour]} days={days} loading={false} onAssignToDay={assign} onViewGpxTour={vi.fn()} canEdit={canEdit} canAssign={canAssign} /></>)
+    const saveBanner = screen.getByText('tours.planner.saved').closest('[role="status"]')!
+    expect(within(saveBanner).getByRole('button', { name: 'tours.planner.planAnother' })).toBeInTheDocument()
+    expect(within(saveBanner).queryByRole('button', { name: 'tours.planner.assignToDay' })).not.toBeInTheDocument()
     const save = screen.getByRole('button', { name: 'tours.planner.save' }) as HTMLButtonElement
     expect(save.disabled).toBe(!canEdit)
     fireEvent.click(save)
     expect(planner.save).toHaveBeenCalledTimes(canEdit ? 1 : 0)
-    expect((screen.getByRole('button', { name: 'tours.planner.assignToDay' }) as HTMLButtonElement).disabled).toBe(!canAssign)
     const picker = screen.queryByRole('button', { name: 'tours.addToDay: Ridge' })
     expect(Boolean(picker)).toBe(canAssign)
     if (picker) {
+      expect(picker).toBeEnabled()
       fireEvent.click(picker)
       fireEvent.click(screen.getByRole('button', { name: /Summit/ }))
     }
     expect(assign).toHaveBeenCalledTimes(canAssign ? 1 : 0)
+    if (canAssign) expect(assign).toHaveBeenCalledWith(tour.place_id, 3)
     fireEvent.click(screen.getByRole('option', { name: /Ridge/ }))
     expect(planner.openTour).toHaveBeenCalledWith(tour)
   })

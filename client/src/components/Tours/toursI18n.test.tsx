@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { within } from '@testing-library/react'
 import en from '@trek/shared/i18n/en'
 import de from '@trek/shared/i18n/de'
 import fr from '@trek/shared/i18n/fr'
@@ -119,10 +120,16 @@ describe('Tours English and German copy', () => {
     seedStore(useSettingsStore, { settings: { language: 'de' } })
     const { rerender } = render(<TourListRow tour={tour} onSelect={() => {}} />)
     await waitFor(() => expect(screen.getByLabelText(toursText(de, 'tours.planner.difficulty.t2'))).toBeInTheDocument())
-    rerender(<TourPlannerToursRail planner={planner({ saveOutcome: tour, mode: { type: 'edit-saved', placeId: 42 } })} tours={[tour]} days={[{ id: 7, title: 'Gipfeltag', date: '2026-05-15' } as never]} loading={false} onAssignToDay={vi.fn()} onViewGpxTour={vi.fn()} />)
-    expect(screen.getByText(toursText(de, 'tours.planner.saved'))).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: toursText(de, 'tours.planner.assignToDay') }))
-    expect(screen.getByRole('button', { name: /Tag 1.*Gipfeltag/ })).toBeInTheDocument()
+    const onAssignToDay = vi.fn()
+    rerender(<TourPlannerToursRail planner={planner({ saveOutcome: tour, mode: { type: 'edit-saved', placeId: 42 } })} tours={[tour]} days={[{ id: 7, title: 'Gipfeltag', date: '2026-05-15' } as never]} loading={false} onAssignToDay={onAssignToDay} onViewGpxTour={vi.fn()} />)
+    const saveBanner = screen.getByText(toursText(de, 'tours.planner.saved')).closest('[role="status"]')!
+    expect(within(saveBanner).getByRole('button', { name: toursText(de, 'tours.planner.planAnother') })).toBeInTheDocument()
+    expect(within(saveBanner).queryByRole('button', { name: toursText(de, 'tours.planner.assignToDay') })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: `${toursText(de, 'tours.addToDay')}: ${tour.name}` }))
+    const dayOption = screen.getByRole('button', { name: /Gipfeltag/ })
+    expect(dayOption).toHaveTextContent(/Tag 1/)
+    fireEvent.click(dayOption)
+    await waitFor(() => expect(onAssignToDay).toHaveBeenCalledWith(42, 7))
     assertNoRawToursKeys()
   })
 
