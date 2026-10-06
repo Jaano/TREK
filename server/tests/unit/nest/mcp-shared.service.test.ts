@@ -6,38 +6,39 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
-const { testDb, dbMock, broadcastMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  return { testDb: db, dbMock: { db, closeDb: () => {}, reinitialize: () => {} }, broadcastMock: vi.fn() };
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
+const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
+import { db as testDb } from '../../../src/db/database';
+
 import { createUser } from '../../helpers/factories';
 import { McpToolGuardsService } from '../../../src/nest/mcp-shared/mcp-tool-guards.service';
 import { McpSharedModule } from '../../../src/nest/mcp-shared/mcp-shared.module';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, createTestUsersRepo } from '../../helpers/test-uow';
 
-const dbs = new DatabaseService(testDb);
-const svc = new McpToolGuardsService(dbs, new PermissionsService(dbs), new RealtimeService());
+let svc: McpToolGuardsService;
+beforeAll(async () => {
+  // Plan 4 Task 1 constructor-ripple: the trip `user_id` and user `role`
+  // reads moved off `DatabaseService` onto `TripsRepository`/`UsersRepository`.
+  svc = new McpToolGuardsService(
+    await createTestTripsRepo(testDb),
+    await createTestUsersRepo(testDb),
+    new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)),
+    new RealtimeService(),
+  );
+});
 
 function createTrip(ownerId: number): number {
   const r = testDb.prepare("INSERT INTO trips (user_id, title) VALUES (?, 'T')").run(ownerId);
   return Number(r.lastInsertRowid);
 }
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -47,41 +48,41 @@ beforeEach(() => {
 });
 
 describe('hasTripPermission', () => {
-  it('GRD-001: false for a missing trip', () => {
+  it('GRD-001: false for a missing trip', async () => {
     const { user } = createUser(testDb);
-    expect(svc.hasTripPermission('trip_edit', 99999, user.id)).toBe(false);
+    expect(await svc.hasTripPermission('trip_edit', 99999, user.id)).toBe(false);
   });
 
-  it('GRD-002: the owner passes owner-level actions; a stranger does not', () => {
+  it('GRD-002: the owner passes owner-level actions; a stranger does not', async () => {
     const { user: owner } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
     const tripId = createTrip(owner.id);
-    expect(svc.hasTripPermission('trip_delete', tripId, owner.id)).toBe(true);
-    expect(svc.hasTripPermission('trip_delete', tripId, stranger.id)).toBe(false);
+    expect(await svc.hasTripPermission('trip_delete', tripId, owner.id)).toBe(true);
+    expect(await svc.hasTripPermission('trip_delete', tripId, stranger.id)).toBe(false);
   });
 
-  it('GRD-003: an unknown user falls back to the plain user role', () => {
+  it('GRD-003: an unknown user falls back to the plain user role', async () => {
     const { user: owner } = createUser(testDb);
     const tripId = createTrip(owner.id);
-    expect(svc.hasTripPermission('trip_delete', tripId, 424242)).toBe(false);
+    expect(await svc.hasTripPermission('trip_delete', tripId, 424242)).toBe(false);
   });
 
-  it('GRD-004: a global admin passes regardless of membership', () => {
+  it('GRD-004: a global admin passes regardless of membership', async () => {
     const { user: owner } = createUser(testDb);
     const { user: admin } = createUser(testDb);
     testDb.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
     const tripId = createTrip(owner.id);
-    expect(svc.hasTripPermission('trip_delete', tripId, admin.id)).toBe(true);
+    expect(await svc.hasTripPermission('trip_delete', tripId, admin.id)).toBe(true);
   });
 });
 
 describe('isAdminUser', () => {
-  it('GRD-010: reflects the users.role column and is false for unknown ids', () => {
+  it('GRD-010: reflects the users.role column and is false for unknown ids', async () => {
     const { user } = createUser(testDb);
-    expect(svc.isAdminUser(user.id)).toBe(false);
+    expect(await svc.isAdminUser(user.id)).toBe(false);
     testDb.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
-    expect(svc.isAdminUser(user.id)).toBe(true);
-    expect(svc.isAdminUser(424242)).toBe(false);
+    expect(await svc.isAdminUser(user.id)).toBe(true);
+    expect(await svc.isAdminUser(424242)).toBe(false);
   });
 });
 

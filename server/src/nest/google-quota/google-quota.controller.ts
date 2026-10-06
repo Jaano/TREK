@@ -20,14 +20,14 @@ export class GoogleQuotaController {
   ) {}
 
   @Get()
-  status(): GoogleQuotaStatus {
+  async status(): Promise<GoogleQuotaStatus> {
     return this.quota.status();
   }
 
   @Put()
-  update(@CurrentUser() user: User, @Body() body: GoogleQuotaUpdateDto, @Req() req: Request): GoogleQuotaStatus {
-    const result = this.quota.setDailyLimit(body.daily_limit);
-    this.audit.writeAudit({ userId: user.id, action: 'admin.google_daily_limit', ip: getClientIp(req), details: { daily_limit: result.daily_limit } });
+  async update(@CurrentUser() user: User, @Body() body: GoogleQuotaUpdateDto, @Req() req: Request): Promise<GoogleQuotaStatus> {
+    const result = await this.quota.setDailyLimit(body.daily_limit);
+    await this.audit.writeAudit({ userId: user.id, action: 'admin.google_daily_limit', ip: getClientIp(req), details: { daily_limit: result.daily_limit } });
     return result;
   }
 }

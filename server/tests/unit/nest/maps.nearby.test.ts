@@ -25,7 +25,8 @@ import {
   nearestFirst,
   overpassNearbyRecords,
 } from '../../../src/nest/maps/maps-nearby.helpers';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-photo-cache.service';
 import { noGoogleQuota } from '../../helpers/google-quota';
 
@@ -60,10 +61,12 @@ function nextPoint() {
 function make(opts: { index?: boolean; google?: boolean } = {}) {
   if (opts.index === false) process.env.TREK_PLACES_ENABLED = 'false';
   else delete process.env.TREK_PLACES_ENABLED;
-  const database = { get: vi.fn(() => undefined) } as unknown as DatabaseService;
-  const svc = new MapsService(database, {} as PlacePhotoCacheService, noGoogleQuota);
-  vi.spyOn(svc, 'keyedProvider').mockReturnValue(
-    opts.google ? ({ id: 'google', key: 'test-key', source: 'user-row' } as ReturnType<MapsService['keyedProvider']>) : null,
+  // No app_settings row and no per-user key: every setting reads as absent.
+  const noAppSettings = { getValue: async () => null } as unknown as AppSettingsRepository;
+  const noUsers = { getApiKeyColumn: async () => null } as unknown as UsersRepository;
+  const svc = new MapsService({} as PlacePhotoCacheService, noAppSettings, noUsers, {} as never, {} as never, noGoogleQuota);
+  vi.spyOn(svc, 'keyedProvider').mockResolvedValue(
+    opts.google ? ({ id: 'google', key: 'test-key', source: 'user-row' } as Awaited<ReturnType<MapsService['keyedProvider']>>) : null,
   );
   return svc;
 }

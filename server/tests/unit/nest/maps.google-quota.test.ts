@@ -11,18 +11,33 @@ vi.mock('../../../src/db/database', () => ({
 
 vi.mock('../../../src/config', () => ({ JWT_SECRET: 'test-secret', ENCRYPTION_KEY: '0'.repeat(64) }));
 
-import { db } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { MapsService } from '../../../src/nest/maps/maps.service';
 import { GoogleTransitProvider } from '../../../src/nest/transit/google-transit.provider';
 import type { GoogleQuotaService } from '../../../src/nest/google-quota/google-quota.service';
+import type { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-photo-cache.service';
+import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
+import type { PlaceDetailsCacheRepository } from '../../../src/db/repositories/PlaceDetailsCache.repository';
+import type { PlacesRepository } from '../../../src/db/repositories/Places.repository';
 
 function quota(exhausted: boolean) {
-  return { exhausted: vi.fn(() => exhausted), record: vi.fn() };
+  return { exhausted: vi.fn(async () => exhausted), record: vi.fn(async () => {}) };
 }
 
+/** No instance or per-user key in the store, so the operator's env key is what resolves. */
+const appSettingsStub = (settings: Record<string, string> = {}) =>
+  ({ getValue: async (key: string) => settings[key] ?? null }) as unknown as AppSettingsRepository;
+const usersStub = { getApiKeyColumn: async () => null } as unknown as UsersRepository;
+
 const svcWith = (q: ReturnType<typeof quota>) =>
-  new MapsService(new DatabaseService(db as never), {} as never, q as unknown as GoogleQuotaService);
+  new MapsService(
+    {} as PlacePhotoCacheService,
+    appSettingsStub(),
+    usersStub,
+    {} as PlaceDetailsCacheRepository,
+    {} as PlacesRepository,
+    q as unknown as GoogleQuotaService,
+  );
 
 beforeEach(() => {
   process.env.PLACES_API_KEY = 'operator-key';
@@ -34,18 +49,18 @@ afterEach(() => {
 });
 
 describe('Google daily ceiling in MapsService', () => {
-  it('MAPS-QUOTA-001: below the ceiling the key is spent as before', () => {
+  it('MAPS-QUOTA-001: below the ceiling the key is spent as before', async () => {
     const svc = svcWith(quota(false));
-    expect(svc.getMapsKey(1)).toBe('operator-key');
-    expect(svc.keyedProvider(1)).toMatchObject({ id: 'google', key: 'operator-key' });
+    expect(await svc.getMapsKey(1)).toBe('operator-key');
+    expect(await svc.keyedProvider(1)).toMatchObject({ id: 'google', key: 'operator-key' });
   });
 
-  it('MAPS-QUOTA-002: past the ceiling there is no key and no keyed Google provider', () => {
+  it('MAPS-QUOTA-002: past the ceiling there is no key and no keyed Google provider', async () => {
     const svc = svcWith(quota(true));
-    expect(svc.getMapsKey(1)).toBeNull();
-    expect(svc.keyedProvider(1)).toBeNull();
+    expect(await svc.getMapsKey(1)).toBeNull();
+    expect(await svc.keyedProvider(1)).toBeNull();
     // The settings view still learns that a key exists.
-    expect(svc.resolveMapsKey(1).key).toBe('operator-key');
+    expect((await svc.resolveMapsKey(1)).key).toBe('operator-key');
   });
 
   it('MAPS-QUOTA-003: every Places call is counted against the day', async () => {
@@ -58,9 +73,9 @@ describe('Google daily ceiling in MapsService', () => {
 });
 
 describe('Google daily ceiling in the transit provider', () => {
-  it('MAPS-QUOTA-004: past the ceiling the Google transit backend is inactive', () => {
-    const stubDb = { get: () => ({ value: 'google' }) } as unknown as DatabaseService;
-    expect(new GoogleTransitProvider(stubDb, quota(false) as unknown as GoogleQuotaService).isActive(1)).toBe(true);
-    expect(new GoogleTransitProvider(stubDb, quota(true) as unknown as GoogleQuotaService).isActive(1)).toBe(false);
+  it('MAPS-QUOTA-004: past the ceiling the Google transit backend is inactive', async () => {
+    const settings = appSettingsStub({ transit_provider: 'google' });
+    expect(await new GoogleTransitProvider(settings, usersStub, quota(false) as unknown as GoogleQuotaService).isActive(1)).toBe(true);
+    expect(await new GoogleTransitProvider(settings, usersStub, quota(true) as unknown as GoogleQuotaService).isActive(1)).toBe(false);
   });
 });

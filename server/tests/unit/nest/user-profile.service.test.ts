@@ -11,17 +11,15 @@
 // vi.hoisted: build the real in-memory DB and the module mock before any import
 // ---------------------------------------------------------------------------
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   const mock = { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: () => undefined, isOwner: () => false };
-  return { testDb: db, dbMock: mock };
+    return mock;
 });
 
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/nest/common/crypto/apiKeyCrypto', () => ({
   decrypt_api_key: vi.fn((v) => v),
   maybe_encrypt_api_key: vi.fn((v) => v),
@@ -33,24 +31,27 @@ vi.mock('../../../src/nest/common/crypto/apiKeyCrypto', () => ({
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 
+import { db as testDb } from '../../../src/db/database';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin } from '../../helpers/factories';
 import fs from 'node:fs';
 import path from 'node:path';
 import { UserProfileService } from '../../../src/nest/auth/user-profile.service';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo } from '../../helpers/test-uow';
 import { SEARCH_TEXT_FIELD_MASK } from '../../../src/nest/maps/maps.helpers';
 
 const avatarsFx = makeStorageFixture('avatars/');
-const profile = new UserProfileService(new DatabaseService(testDb), avatarsFx.storage);
+let profile: UserProfileService;
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+beforeAll(async () => {
+  profile = new UserProfileService(
+    avatarsFx.storage,
+    await createTestUnitOfWork(testDb),
+    await createTestAppSettingsRepo(testDb),
+    await createTestUsersRepo(testDb),
+  );
 });
 
 beforeEach(() => {
@@ -67,60 +68,60 @@ afterAll(() => {
 // ---------------------------------------------------------------------------
 
 describe('updateSettings', () => {
-  it('AUTH-DB-001: updates username successfully', () => {
+  it('AUTH-DB-001: updates username successfully', async () => {
     const { user } = createUser(testDb);
-    const result = profile.updateSettings(user.id, { username: 'newname' });
+    const result = await profile.updateSettings(user.id, { username: 'newname' });
     expect(result.success).toBe(true);
     expect(result.user?.username).toBe('newname');
   });
 
-  it('AUTH-DB-002: returns 400 when username is too short (< 2 chars)', () => {
+  it('AUTH-DB-002: returns 400 when username is too short (< 2 chars)', async () => {
     const { user } = createUser(testDb);
-    const result = profile.updateSettings(user.id, { username: 'x' });
+    const result = await profile.updateSettings(user.id, { username: 'x' });
     expect(result.status).toBe(400);
     expect(result.error).toMatch(/between 2 and 50/i);
   });
 
-  it('AUTH-DB-003: returns 400 when username has invalid characters (spaces)', () => {
+  it('AUTH-DB-003: returns 400 when username has invalid characters (spaces)', async () => {
     const { user } = createUser(testDb);
-    const result = profile.updateSettings(user.id, { username: 'bad name' });
+    const result = await profile.updateSettings(user.id, { username: 'bad name' });
     expect(result.status).toBe(400);
     expect(result.error).toMatch(/only contain/i);
   });
 
-  it('AUTH-DB-004: returns 409 when username is already taken by another user', () => {
+  it('AUTH-DB-004: returns 409 when username is already taken by another user', async () => {
     const { user: user1 } = createUser(testDb, { username: 'alice' });
     const { user: user2 } = createUser(testDb, { username: 'bob' });
-    const result = profile.updateSettings(user2.id, { username: user1.username });
+    const result = await profile.updateSettings(user2.id, { username: user1.username });
     expect(result.status).toBe(409);
     expect(result.error).toMatch(/already taken/i);
   });
 
-  it('AUTH-DB-005: updates email successfully', () => {
+  it('AUTH-DB-005: updates email successfully', async () => {
     const { user } = createUser(testDb);
-    const result = profile.updateSettings(user.id, { email: 'new@example.com' });
+    const result = await profile.updateSettings(user.id, { email: 'new@example.com' });
     expect(result.success).toBe(true);
     expect(result.user?.email).toBe('new@example.com');
   });
 
-  it('AUTH-DB-006: returns 400 for invalid email format', () => {
+  it('AUTH-DB-006: returns 400 for invalid email format', async () => {
     const { user } = createUser(testDb);
-    const result = profile.updateSettings(user.id, { email: 'not-an-email' });
+    const result = await profile.updateSettings(user.id, { email: 'not-an-email' });
     expect(result.status).toBe(400);
     expect(result.error).toMatch(/invalid email/i);
   });
 
-  it('AUTH-DB-007: returns 409 when email is already taken by another user', () => {
+  it('AUTH-DB-007: returns 409 when email is already taken by another user', async () => {
     const { user: user1 } = createUser(testDb, { email: 'taken@example.com' });
     const { user: user2 } = createUser(testDb);
-    const result = profile.updateSettings(user2.id, { email: user1.email });
+    const result = await profile.updateSettings(user2.id, { email: user1.email });
     expect(result.status).toBe(409);
     expect(result.error).toMatch(/already taken/i);
   });
 
-  it('AUTH-DB-008: returns success with no field changes when empty body is passed', () => {
+  it('AUTH-DB-008: returns success with no field changes when empty body is passed', async () => {
     const { user } = createUser(testDb);
-    const result = profile.updateSettings(user.id, {});
+    const result = await profile.updateSettings(user.id, {});
     expect(result.success).toBe(true);
   });
 });
@@ -130,41 +131,41 @@ describe('updateSettings', () => {
 // ---------------------------------------------------------------------------
 
 describe('getSettings', () => {
-  it('AUTH-DB-009: returns 403 for non-admin user', () => {
+  it('AUTH-DB-009: returns 403 for non-admin user', async () => {
     const { user } = createUser(testDb);
-    const result = profile.getSettings(user.id);
+    const result = await profile.getSettings(user.id);
     expect(result.status).toBe(403);
     expect(result.error).toMatch(/admin/i);
   });
 
-  it('AUTH-DB-010: returns maps_api_key and openweather_api_key for admin', () => {
+  it('AUTH-DB-010: returns maps_api_key and openweather_api_key for admin', async () => {
     const { user } = createAdmin(testDb);
     testDb
       .prepare('UPDATE users SET maps_api_key = ?, openweather_api_key = ? WHERE id = ?')
       .run('maps-key-value', 'weather-key-value', user.id);
-    const result = profile.getSettings(user.id);
+    const result = await profile.getSettings(user.id);
     expect(result.status).toBeUndefined();
     expect(result.settings).toBeDefined();
     expect(result.settings).toHaveProperty('maps_api_key');
     expect(result.settings).toHaveProperty('openweather_api_key');
   });
 
-  it('AUTH-DB-010b: round-trips unsplash_api_key through updateApiKeys — masked to the client, readable via getSettings', () => {
+  it('AUTH-DB-010b: round-trips unsplash_api_key through updateApiKeys — masked to the client, readable via getSettings', async () => {
     const { user } = createAdmin(testDb);
-    const result = profile.updateApiKeys(user.id, { unsplash_api_key: 'unsplash-secret-key' });
+    const result = await profile.updateApiKeys(user.id, { unsplash_api_key: 'unsplash-secret-key' });
     // Returned to the client masked, never in plaintext.
     expect(result.user.unsplash_api_key).toBe('-----key');
     // getSettings returns the stored key to the admin.
-    expect(profile.getSettings(user.id).settings?.unsplash_api_key).toBe('unsplash-secret-key');
+    expect((await profile.getSettings(user.id)).settings?.unsplash_api_key).toBe('unsplash-secret-key');
   });
 
-  it('AUTH-DB-010c: a key set in the environment comes back as its variable name, not a value (#1881)', () => {
+  it('AUTH-DB-010c: a key set in the environment comes back as its variable name, not a value (#1881)', async () => {
     const prev = process.env.PLACES_API_KEY;
     process.env.PLACES_API_KEY = 'google-from-env';
     try {
       const { user } = createAdmin(testDb);
-      profile.updateApiKeys(user.id, { maps_api_key: 'stored-but-overridden', unsplash_api_key: 'stored-unsplash' });
-      const settings = profile.getSettings(user.id).settings;
+      await profile.updateApiKeys(user.id, { maps_api_key: 'stored-but-overridden', unsplash_api_key: 'stored-unsplash' });
+      const settings = (await profile.getSettings(user.id)).settings;
       // Neither the stored value nobody searches with nor the operator's own.
       expect(settings?.maps_api_key).toBeNull();
       expect(settings?.env_keys).toEqual({ maps_api_key: 'PLACES_API_KEY' });
@@ -177,9 +178,9 @@ describe('getSettings', () => {
     }
   });
 
-  it('AUTH-DB-010d: without a variable env_keys is empty', () => {
+  it('AUTH-DB-010d: without a variable env_keys is empty', async () => {
     const { user } = createAdmin(testDb);
-    expect(profile.getSettings(user.id).settings?.env_keys).toEqual({});
+    expect((await profile.getSettings(user.id)).settings?.env_keys).toEqual({});
   });
 });
 
@@ -188,21 +189,21 @@ describe('getSettings', () => {
 // ---------------------------------------------------------------------------
 
 describe('listUsers', () => {
-  it('AUTH-DB-011: returns all users except self, sorted by username', () => {
+  it('AUTH-DB-011: returns all users except self, sorted by username', async () => {
     const { user: self } = createUser(testDb, { username: 'zzself' });
     createUser(testDb, { username: 'alice' });
     createUser(testDb, { username: 'charlie' });
     createUser(testDb, { username: 'bob' });
-    const result = profile.listUsers(self.id);
+    const result = await profile.listUsers(self.id);
     expect(result).toHaveLength(3);
     const names = result.map((u) => u.username);
     expect(names).toEqual([...names].sort());
     expect(names).not.toContain('zzself');
   });
 
-  it('AUTH-DB-012: returns empty array when only one user exists', () => {
+  it('AUTH-DB-012: returns empty array when only one user exists', async () => {
     const { user } = createUser(testDb);
-    const result = profile.listUsers(user.id);
+    const result = await profile.listUsers(user.id);
     expect(result).toHaveLength(0);
   });
 });
@@ -334,9 +335,9 @@ describe('validateKeys', () => {
 });
 
 describe('updateMapsKey / avatar', () => {
-  it('AUTH-DB-068: updateMapsKey stores and answers the masked key', () => {
+  it('AUTH-DB-068: updateMapsKey stores and answers the masked key', async () => {
     const { user } = createUser(testDb);
-    const result = profile.updateMapsKey(user.id, 'maps-key-123456');
+    const result = await profile.updateMapsKey(user.id, 'maps-key-123456');
     expect(result.success).toBe(true);
     expect(result.maps_api_key).toBe('----3456');
   });
@@ -391,9 +392,9 @@ describe('updateMapsKey / avatar', () => {
 });
 
 describe('profile quirk fixes', () => {
-  it('AUTH-DB-093: updateApiKeys degrades gracefully when the user row is gone (no TypeError/500)', () => {
-    expect(() => profile.updateApiKeys(999999, { maps_api_key: 'k' })).not.toThrow();
-    const result = profile.updateApiKeys(999999, { openweather_api_key: 'w' });
+  it('AUTH-DB-093: updateApiKeys degrades gracefully when the user row is gone (no TypeError/500)', async () => {
+    await expect(profile.updateApiKeys(999999, { maps_api_key: 'k' })).resolves.not.toThrow();
+    const result = await profile.updateApiKeys(999999, { openweather_api_key: 'w' });
     expect(result.success).toBe(true);
   });
 });
@@ -410,9 +411,9 @@ const instanceRow = (key: string) =>
   (testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
 
 describe('instance-wide API keys', () => {
-  it('AUTH-DB-102: an admin save lands in app_settings AND in their own column', () => {
+  it('AUTH-DB-102: an admin save lands in app_settings AND in their own column', async () => {
     const { user } = createAdmin(testDb);
-    profile.updateApiKeys(user.id, { maps_api_key: 'instance-google-key', unsplash_api_key: 'instance-unsplash-key' });
+    await profile.updateApiKeys(user.id, { maps_api_key: 'instance-google-key', unsplash_api_key: 'instance-unsplash-key' });
     expect(instanceRow('maps_api_key')).toBe('instance-google-key');
     expect(instanceRow('unsplash_api_key')).toBe('instance-unsplash-key');
     // The column stays in step so clearing the field clears both.
@@ -420,46 +421,46 @@ describe('instance-wide API keys', () => {
     expect(row.maps_api_key).toBe('instance-google-key');
   });
 
-  it('AUTH-DB-103: a non-admin save never touches the instance value', () => {
+  it('AUTH-DB-103: a non-admin save never touches the instance value', async () => {
     const { user: admin } = createAdmin(testDb);
-    profile.updateApiKeys(admin.id, { maps_api_key: 'admin-set' });
+    await profile.updateApiKeys(admin.id, { maps_api_key: 'admin-set' });
     const { user } = createUser(testDb);
-    profile.updateApiKeys(user.id, { maps_api_key: 'members-own' });
+    await profile.updateApiKeys(user.id, { maps_api_key: 'members-own' });
     expect(instanceRow('maps_api_key')).toBe('admin-set');
     const row = testDb.prepare('SELECT maps_api_key FROM users WHERE id = ?').get(user.id) as { maps_api_key: string };
     expect(row.maps_api_key).toBe('members-own');
   });
 
-  it('AUTH-DB-104: clearing the field stores an empty instance value rather than dropping the row', () => {
+  it('AUTH-DB-104: clearing the field stores an empty instance value rather than dropping the row', async () => {
     const { user } = createAdmin(testDb);
-    profile.updateApiKeys(user.id, { maps_api_key: 'to-be-removed' });
-    profile.updateApiKeys(user.id, { maps_api_key: '' });
+    await profile.updateApiKeys(user.id, { maps_api_key: 'to-be-removed' });
+    await profile.updateApiKeys(user.id, { maps_api_key: '' });
     // '' and not a missing row: a missing row would fall through to whatever
     // still sat in the admin's own column.
     expect(instanceRow('maps_api_key')).toBe('');
   });
 
-  it('AUTH-DB-105: getSettings reads the instance value, not the admin own column', () => {
+  it('AUTH-DB-105: getSettings reads the instance value, not the admin own column', async () => {
     const { user } = createAdmin(testDb);
     testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('stale-personal-key', user.id);
     testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('maps_api_key', 'live-instance-key')").run();
-    expect(profile.getSettings(user.id).settings?.maps_api_key).toBe('live-instance-key');
+    expect((await profile.getSettings(user.id)).settings?.maps_api_key).toBe('live-instance-key');
     // openweather is per-user and unaffected.
-    expect(profile.getSettings(user.id).settings?.openweather_api_key).toBeNull();
+    expect((await profile.getSettings(user.id)).settings?.openweather_api_key).toBeNull();
   });
 
-  it('AUTH-DB-106: updateMapsKey mirrors for an admin and stays personal for a member', () => {
+  it('AUTH-DB-106: updateMapsKey mirrors for an admin and stays personal for a member', async () => {
     const { user: admin } = createAdmin(testDb);
-    expect(profile.updateMapsKey(admin.id, 'via-maps-key-route').changedKeys).toEqual(['maps_api_key']);
+    expect((await profile.updateMapsKey(admin.id, 'via-maps-key-route')).changedKeys).toEqual(['maps_api_key']);
     expect(instanceRow('maps_api_key')).toBe('via-maps-key-route');
     const { user } = createUser(testDb);
-    profile.updateMapsKey(user.id, 'members-own');
+    await profile.updateMapsKey(user.id, 'members-own');
     expect(instanceRow('maps_api_key')).toBe('via-maps-key-route');
   });
 
-  it('AUTH-DB-107: updateSettings mirrors the key half without touching name/email handling', () => {
+  it('AUTH-DB-107: updateSettings mirrors the key half without touching name/email handling', async () => {
     const { user } = createAdmin(testDb);
-    const result = profile.updateSettings(user.id, { maps_api_key: 'from-settings-route', username: 'renamed' });
+    const result = await profile.updateSettings(user.id, { maps_api_key: 'from-settings-route', username: 'renamed' });
     expect(result.success).toBe(true);
     expect(result.user?.username).toBe('renamed');
     expect(instanceRow('maps_api_key')).toBe('from-settings-route');
@@ -468,36 +469,36 @@ describe('instance-wide API keys', () => {
 });
 
 describe('changedKeys', () => {
-  it('AUTH-DB-108: only the names in the body count, and clearing counts as a change', () => {
+  it('AUTH-DB-108: only the names in the body count, and clearing counts as a change', async () => {
     const { user } = createAdmin(testDb);
-    profile.updateApiKeys(user.id, { maps_api_key: 'k1', openweather_api_key: 'w1' });
+    await profile.updateApiKeys(user.id, { maps_api_key: 'k1', openweather_api_key: 'w1' });
     // unsplash was never sent, so it can never be reported.
-    expect(profile.updateApiKeys(user.id, { openweather_api_key: 'w2' }).changedKeys).toEqual(['openweather_api_key']);
-    expect(profile.updateApiKeys(user.id, { maps_api_key: '' }).changedKeys).toEqual(['maps_api_key']);
+    expect((await profile.updateApiKeys(user.id, { openweather_api_key: 'w2' })).changedKeys).toEqual(['openweather_api_key']);
+    expect((await profile.updateApiKeys(user.id, { maps_api_key: '' })).changedKeys).toEqual(['maps_api_key']);
   });
 
-  it('AUTH-DB-109: an unchanged value reports nothing, whitespace included', () => {
+  it('AUTH-DB-109: an unchanged value reports nothing, whitespace included', async () => {
     const { user } = createAdmin(testDb);
-    profile.updateApiKeys(user.id, { maps_api_key: 'unchanged-key' });
-    expect(profile.updateApiKeys(user.id, { maps_api_key: 'unchanged-key' }).changedKeys).toEqual([]);
+    await profile.updateApiKeys(user.id, { maps_api_key: 'unchanged-key' });
+    expect((await profile.updateApiKeys(user.id, { maps_api_key: 'unchanged-key' })).changedKeys).toEqual([]);
     // maybe_encrypt_api_key trims on the way in, so the comparison has to too.
-    expect(profile.updateApiKeys(user.id, { maps_api_key: '  unchanged-key  ' }).changedKeys).toEqual([]);
+    expect((await profile.updateApiKeys(user.id, { maps_api_key: '  unchanged-key  ' })).changedKeys).toEqual([]);
     // A member is measured against their own column, not the instance value.
     const { user: member } = createUser(testDb);
-    expect(profile.updateApiKeys(member.id, { maps_api_key: 'unchanged-key' }).changedKeys).toEqual(['maps_api_key']);
+    expect((await profile.updateApiKeys(member.id, { maps_api_key: 'unchanged-key' })).changedKeys).toEqual(['maps_api_key']);
   });
 
-  it('AUTH-DB-110: a managed install reports no change for the names it refuses to write', () => {
+  it('AUTH-DB-110: a managed install reports no change for the names it refuses to write', async () => {
     const prev = process.env.TREK_MANAGED;
     process.env.TREK_MANAGED = 'true';
     try {
       const { user } = createAdmin(testDb);
-      const result = profile.updateApiKeys(user.id, { maps_api_key: 'operator-owns-this' });
+      const result = await profile.updateApiKeys(user.id, { maps_api_key: 'operator-owns-this' });
       expect(result.managed_keys).toEqual(['maps_api_key']);
       expect(result.changedKeys).toEqual([]);
       expect(instanceRow('maps_api_key')).toBeUndefined();
-      expect(profile.updateMapsKey(user.id, 'operator-owns-this').changedKeys).toEqual([]);
-      expect(profile.updateSettings(user.id, { maps_api_key: 'operator-owns-this' }).changedKeys).toEqual([]);
+      expect((await profile.updateMapsKey(user.id, 'operator-owns-this')).changedKeys).toEqual([]);
+      expect((await profile.updateSettings(user.id, { maps_api_key: 'operator-owns-this' })).changedKeys).toEqual([]);
     } finally {
       if (prev === undefined) delete process.env.TREK_MANAGED;
       else process.env.TREK_MANAGED = prev;

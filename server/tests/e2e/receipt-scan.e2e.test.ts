@@ -15,21 +15,18 @@ import { Test } from '@nestjs/testing';
 import { Jimp } from 'jimp';
 import { sessionCookie } from './harness';
 
-const { canAccessTrip, safeFetchLlm } = vi.hoisted(() => ({ canAccessTrip: vi.fn(), safeFetchLlm: vi.fn() }));
+const { safeFetchLlm } = vi.hoisted(() => ({ safeFetchLlm: vi.fn() }));
+// A copy of the migrated + seeded snapshot, so the schema is the MikroORM
+// chain's. Trip access is the real TripsRepository lookup against it.
 vi.mock('../../src/db/database', async () => {
-  const { default: Database } = await import('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec('PRAGMA foreign_keys = ON');
-  return { db: tmp, canAccessTrip, isOwner: vi.fn(() => true), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {} };
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const tmp = createSnapshotTestDb();
+  return { db: tmp, canAccessTrip: () => undefined, isOwner: () => false, getPlaceWithTags: () => null, closeDb: () => {}, reinitialize: () => {} };
 });
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 vi.mock('../../src/utils/ssrfGuard', async (orig) => ({ ...(await orig<Record<string, unknown>>()), safeFetchLlm }));
 
 import { db } from '../../src/db/database';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { ReservationImportModule } from '../../src/nest/reservation-import/reservation-import.module';
 import { ReceiptScanModule } from '../../src/nest/receipt-scan/receipt-scan.module';
@@ -39,6 +36,8 @@ import { NotificationsService } from '../../src/nest/notifications/notifications
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 function setVision(vision: string) {
   db.prepare("UPDATE addons SET config = ? WHERE id = 'llm_parsing'").run(
@@ -62,10 +61,11 @@ describe('Photos through AI Parsing e2e', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
   let tripId: number;
+  let foreignTripId: number;
   let photo: Buffer;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, LlmParseModule, ReservationImportModule, ReceiptScanModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, LlmParseModule, ReservationImportModule, ReceiptScanModule] })
       .overrideProvider(KitineraryExtractorService)
       .useValue({ onModuleInit: () => {}, isAvailable: () => false, extract: vi.fn(), describe: () => ({ available: false }) })
       .overrideProvider(NotificationsService)
@@ -80,12 +80,15 @@ describe('Photos through AI Parsing e2e', () => {
   }
 
   beforeAll(async () => {
-    createTables(db);
-    runMigrations(db);
     db.prepare(
       "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
     ).run();
     tripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (1, 'Lyon')").run().lastInsertRowid);
+    // A trip user 1 is no member of: the real access lookup answers 404 for it.
+    db.prepare(
+      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (2, 'e2e-other', 'e2e-other@example.test', 'x', 'user', 0)",
+    ).run();
+    foreignTripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (2, 'Elsewhere')").run().lastInsertRowid);
     db.prepare(
       `INSERT INTO addons (id, name, type, enabled, config) VALUES ('llm_parsing', 'AI Parsing', 'integration', 1, '{}')
        ON CONFLICT(id) DO UPDATE SET enabled = 1`,
@@ -96,12 +99,11 @@ describe('Photos through AI Parsing e2e', () => {
     ).run();
     photo = Buffer.from(await new Jimp({ width: 40, height: 60, color: 0xffffffff }).getBuffer('image/png'));
     app = await build();
-    vi.spyOn(app.get(PermissionsService), 'checkPermission').mockReturnValue(true);
+    vi.spyOn(app.get(PermissionsService), 'checkPermission').mockResolvedValue(true);
     server = app.getHttpServer();
   });
 
   beforeEach(() => {
-    canAccessTrip.mockImplementation((id: unknown) => db.prepare('SELECT * FROM trips WHERE id = ?').get(id));
     safeFetchLlm.mockReset();
     setVision('on');
   });
@@ -152,16 +154,15 @@ describe('Photos through AI Parsing e2e', () => {
   });
 
   describe('POST /api/trips/:tripId/budget/receipt-scan', () => {
-    const scan = (name = 'bill.png') =>
+    const scan = (name = 'bill.png', trip = tripId) =>
       request(server)
-        .post(`/api/trips/${tripId}/budget/receipt-scan`)
+        .post(`/api/trips/${trip}/budget/receipt-scan`)
         .set('Cookie', sessionCookie(1))
         .attach('file', photo, { filename: name, contentType: name.endsWith('.png') ? 'image/png' : 'application/pdf' });
 
     it('401 without a cookie, 404 for a trip out of reach', async () => {
       expect((await request(server).post(`/api/trips/${tripId}/budget/receipt-scan`)).status).toBe(401);
-      canAccessTrip.mockReturnValue(undefined);
-      expect((await scan()).status).toBe(404);
+      expect((await scan('bill.png', foreignTripId)).status).toBe(404);
     });
 
     it('reads the receipt in a job whose status answers what was read', async () => {

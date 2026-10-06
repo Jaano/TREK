@@ -28,6 +28,7 @@ import { DiscoveryController, McpResourceDiscoveryController } from '../../../sr
 import { PlatformModule } from '../../../src/nest/platform/platform.module';
 import { ALL_SCOPES } from '../../../src/mcp/scopes';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { MikroORM } from '@mikro-orm/core';
 
 function makeRes() {
   const res = {
@@ -45,6 +46,19 @@ function makeRes() {
 
 function addons(enabled: boolean) {
   return { isAddonEnabled: vi.fn(() => enabled) } as unknown as AddonsService;
+}
+
+/**
+ * createMcpMetadataMiddleware wraps the addon check in withRequestContext
+ * (Plan 3a Task 4: this pathless pre-init mount runs before
+ * @mikro-orm/nestjs's per-request EM fork, so once isAddonEnabled became
+ * repository-backed it needed its own context). The mocked AddonsService
+ * above never touches the ORM, so this fake only needs to satisfy
+ * RequestContext.create's em.fork()/em.name contract.
+ */
+function fakeOrm(): MikroORM {
+  const em = { name: 'default', fork: () => ({ name: 'default' }) };
+  return { em } as unknown as MikroORM;
 }
 
 beforeEach(() => {
@@ -93,37 +107,49 @@ describe('DiscoveryMetadataService', () => {
   });
 });
 
+/**
+ * createMcpMetadataMiddleware resolves the addon gate inside an async IIFE
+ * (Express cannot await a middleware), so on a /.well-known path the 404 or the
+ * router delegation lands a microtask after mw() returns. Drain the microtask
+ * queue — no timer is involved, so there is nothing to sleep for.
+ */
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
 describe('createMcpMetadataMiddleware', () => {
-  it('DISC-010: 404s a /.well-known path with an empty body when MCP is disabled', () => {
-    const mw = createMcpMetadataMiddleware(new DiscoveryMetadataService(), addons(false));
+  it('DISC-010: 404s a /.well-known path with an empty body when MCP is disabled', async () => {
+    const mw = createMcpMetadataMiddleware(new DiscoveryMetadataService(), addons(false), fakeOrm());
     const res = makeRes();
     const next = vi.fn();
     mw({ path: '/.well-known/oauth-authorization-server' } as never, res as never, next);
+    await flushMicrotasks();
     expect(res.statusCode).toBe(404);
     expect(res.ended).toBe(true);
     expect(next).not.toHaveBeenCalled();
     expect(h.metaRouter).not.toHaveBeenCalled();
   });
 
-  it('DISC-011: delegates a /.well-known path to the SDK router when MCP is enabled', () => {
-    const mw = createMcpMetadataMiddleware(new DiscoveryMetadataService(), addons(true));
+  it('DISC-011: delegates a /.well-known path to the SDK router when MCP is enabled', async () => {
+    const mw = createMcpMetadataMiddleware(new DiscoveryMetadataService(), addons(true), fakeOrm());
     const next = vi.fn();
     mw({ path: '/.well-known/oauth-authorization-server' } as never, makeRes() as never, next);
+    await flushMicrotasks();
     expect(h.metaRouter).toHaveBeenCalled();
   });
 
   it('DISC-012: delegates non-well-known paths without consulting the addon gate', () => {
     const gate = addons(false);
-    const mw = createMcpMetadataMiddleware(new DiscoveryMetadataService(), gate);
+    const mw = createMcpMetadataMiddleware(new DiscoveryMetadataService(), gate, fakeOrm());
     mw({ path: '/api/trips' } as never, makeRes() as never, vi.fn());
     expect(gate.isAddonEnabled).not.toHaveBeenCalled();
     expect(h.metaRouter).toHaveBeenCalled();
   });
 
-  it('DISC-013: the factory provider wires the token to the factory with its two deps', () => {
+  it('DISC-013: the factory provider wires the token to the factory with its three deps (MikroORM added — Plan 3a Task 4)', () => {
     expect(mcpMetadataMiddlewareProvider.provide).toBe(MCP_METADATA_MIDDLEWARE);
     expect(mcpMetadataMiddlewareProvider.useFactory).toBe(createMcpMetadataMiddleware);
-    expect(mcpMetadataMiddlewareProvider.inject.length).toBe(2);
+    expect(mcpMetadataMiddlewareProvider.inject.length).toBe(3);
   });
 });
 
@@ -150,16 +176,16 @@ describe('DiscoveryController', () => {
     expect(body.userinfo_endpoint).toBe('https://trek.example.test/oauth/userinfo');
   });
 
-  it('DISC-031: flat oauth-protected-resource 404s empty when MCP is disabled', () => {
+  it('DISC-031: flat oauth-protected-resource 404s empty when MCP is disabled', async () => {
     const res = makeRes();
-    controller(false).protectedResource(res as never);
+    await controller(false).protectedResource(res as never);
     expect(res.statusCode).toBe(404);
     expect(res.ended).toBe(true);
   });
 
-  it('DISC-032: flat oauth-protected-resource serves the PRM document when enabled', () => {
+  it('DISC-032: flat oauth-protected-resource serves the PRM document when enabled', async () => {
     const res = makeRes();
-    controller().protectedResource(res as never);
+    await controller().protectedResource(res as never);
     expect(res.body).toEqual({
       resource:                 'https://trek.example.test/mcp',
       authorization_servers:    ['https://trek.example.test'],
@@ -211,7 +237,7 @@ describe('McpResourceDiscoveryController', () => {
     return new McpResourceDiscoveryController(new DiscoveryController(new DiscoveryMetadataService(), addons(enabled)));
   }
 
-  it('DISC-038: serves the three documents under the resource URL, never SPA HTML', () => {
+  it('DISC-038: serves the three documents under the resource URL, never SPA HTML', async () => {
     const oidc = makeRes();
     resourceController().openidConfiguration(oidc as never);
     expect((oidc.body as { userinfo_endpoint: string }).userinfo_endpoint).toBe('https://trek.example.test/oauth/userinfo');
@@ -221,18 +247,18 @@ describe('McpResourceDiscoveryController', () => {
     expect((as.body as { registration_endpoint: string }).registration_endpoint).toBe('https://trek.example.test/oauth/register');
 
     const prm = makeRes();
-    resourceController().protectedResource(prm as never);
+    await resourceController().protectedResource(prm as never);
     expect((prm.body as { resource: string }).resource).toBe('https://trek.example.test/mcp');
   });
 
-  it('DISC-039: an unknown path under the resource URL answers 404 JSON, and the PRM follows the addon switch', () => {
+  it('DISC-039: an unknown path under the resource URL answers 404 JSON, and the PRM follows the addon switch', async () => {
     const res = makeRes();
     resourceController().fallback(res as never);
     expect(res.statusCode).toBe(404);
     expect(res.body).toEqual({ error: 'not_found' });
 
     const off = makeRes();
-    resourceController(false).protectedResource(off as never);
+    await resourceController(false).protectedResource(off as never);
     expect(off.statusCode).toBe(404);
     expect(off.ended).toBe(true);
   });

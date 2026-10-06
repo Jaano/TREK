@@ -9,11 +9,10 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   const mock = {
     db,
     closeDb: () => {},
@@ -22,10 +21,10 @@ const { testDb, dbMock } = vi.hoisted(() => {
     canAccessTrip: () => null,
     isOwner: () => false,
   };
-  return { testDb: db, dbMock: mock };
+    return mock;
 });
 
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -88,11 +87,9 @@ vi.mock('../../../src/utils/ssrfGuard', () => {
   };
 });
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
+import { db as testDb } from '../../../src/db/database';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, setAppSetting, setNotificationChannels, disableNotificationPref } from '../../helpers/factories';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { NotificationsService, type NotificationPayload } from '../../../src/nest/notifications/notifications.service';
 import { setPluginChannelSource } from '../../../src/nest/notifications/channel-registry';
@@ -101,7 +98,8 @@ import { setPluginChannelSource } from '../../../src/nest/notifications/channel-
 import type { ExternalChannel } from '../../../src/nest/notifications/notification-events';
 import { makeNotificationsService, makeNotificationPreferencesService } from '../../helpers/notifications';
 
-const notifications = makeNotificationsService(new DatabaseService(testDb));
+// Built in beforeAll: the service now takes a UnitOfWork, which is async to build.
+let notifications: NotificationsService;
 const send = (payload: NotificationPayload) => notifications.send(payload);
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -138,9 +136,8 @@ function countAllNotifications(): number {
 
 // ── Setup ──────────────────────────────────────────────────────────────────
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+beforeAll(async () => {
+  notifications = await makeNotificationsService(testDb);
 });
 
 beforeEach(() => {
@@ -308,6 +305,24 @@ describe('send() — recipient resolution', () => {
     await send({ event: 'vacay_invite', actorId: owner.id, scope: 'user', targetId: guestId, params: { actor: 'owner@test.com', planId: '1' } });
     recipients = (testDb.prepare('SELECT recipient_id FROM notifications').all() as { recipient_id: number }[]).map(r => r.recipient_id);
     expect(recipients).not.toContain(guestId);
+  });
+
+  it('NSVC-007c — guest-exclusion (#1362), the direct call: resolveRecipients itself never returns a guest for trip or user scope (Plan 3f Task 3 — the NT2 chokepoint, R8)', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: member } = createUser(testDb);
+
+    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', owner.id)).lastInsertRowid as number;
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member.id);
+    const guestId = (testDb.prepare("INSERT INTO users (username, email, password_hash, role, is_guest) VALUES ('Guest', 'guest-y@guests.invalid', '', 'user', 1)").run()).lastInsertRowid as number;
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, guestId);
+
+    const tripRecipients = await notifications.resolveRecipients('trip', tripId);
+    expect(tripRecipients).toContain(owner.id);
+    expect(tripRecipients).toContain(member.id);
+    expect(tripRecipients).not.toContain(guestId);
+
+    const userRecipients = await notifications.resolveRecipients('user', guestId);
+    expect(userRecipients).toEqual([]);
   });
 
   it('NSVC-008 — user scope sends to exactly one user', async () => {

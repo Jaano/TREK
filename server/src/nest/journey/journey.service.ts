@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { JourneyDomainService } from './journey-domain.service';
 import { JourneyShareService } from './journey-share.service';
 import { ImmichService } from '../memories/immich.service';
@@ -7,6 +7,8 @@ import { PhotoProviderRegistry } from '../memories/photo-provider.registry';
 import { PhotoResolverService } from '../memories/photo-resolver.service';
 import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
+import { Users } from '../../db/entities/Users.entity';
+import type { UsersRepository } from '../../db/repositories/Users.repository';
 import type { Response } from 'express';
 
 /**
@@ -18,20 +20,16 @@ import type { Response } from 'express';
 @Injectable()
 export class JourneyService {
   constructor(
-    private readonly dbs: DatabaseService,
     private readonly addons: AddonsService,
     private readonly immich: ImmichService,
     private readonly providers: PhotoProviderRegistry,
     private readonly photoResolver: PhotoResolverService,
     private readonly journey: JourneyDomainService,
     private readonly share: JourneyShareService,
+    @InjectRepository(Users) private readonly usersRepo: UsersRepository,
   ) {}
 
-  private get db() {
-    return this.dbs.connection;
-  }
-
-  journeyAddonEnabled(): boolean {
+  async journeyAddonEnabled(): Promise<boolean> {
     return this.addons.isAddonEnabled(ADDON_IDS.JOURNEY);
   }
 
@@ -88,14 +86,14 @@ export class JourneyService {
   deleteJourneyShareLink(id: number, userId: number) { return this.share.deleteJourneyShareLink(id, userId); }
 
   // Immich mirror (only when the user opted in via integration settings)
-  immichAutoUploadEnabled(userId: number): boolean {
-    const prefs = this.db.prepare('SELECT immich_auto_upload FROM users WHERE id = ?').get(userId) as { immich_auto_upload?: number } | undefined;
-    return !!prefs?.immich_auto_upload;
+  // JV1 — `UsersRepository.getImmichAutoUpload`.
+  async immichAutoUploadEnabled(userId: number): Promise<boolean> {
+    return !!(await this.usersRepo.getImmichAutoUpload(userId));
   }
   uploadToImmich(userId: number, relativePath: string, originalName: string) { return this.immich.uploadToImmich(userId, relativePath, originalName); }
 
   // Public (share-token) access — no auth, validated by token.
-  getPublicJourney(token: string) { return this.share.getPublicJourney(token); }
+  async getPublicJourney(token: string) { return this.share.getPublicJourney(token); }
   validateShareTokenForPhoto(token: string, photoId: number) { return this.share.validateShareTokenForPhoto(token, photoId); }
   validateShareTokenForAsset(token: string, assetId: string) { return this.share.validateShareTokenForAsset(token, assetId); }
   streamPhoto(res: Response, ownerId: number, photoId: number, kind: 'thumbnail' | 'original') { return this.photoResolver.streamPhoto(res, ownerId, photoId, kind); }

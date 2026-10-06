@@ -3,27 +3,13 @@
  * list_help_topics, get_help_page, search_help, list_addons.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { db as testDb } from '../../../src/db/database';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -55,13 +41,10 @@ const { wiki } = vi.hoisted(() => {
 });
 vi.mock('../../../src/nest/help/wiki', () => wiki);
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb, setAddonEnabled } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
-import { AddonsService } from '../../../src/nest/addons/addons.service';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { createTestAddonsService } from '../../helpers/test-addons';
 import { ADDON_IDS } from '../../../src/addons';
 
 const SECTIONS = [
@@ -113,11 +96,6 @@ function toolText(result: unknown): string {
   const { content } = result as { content: { type: string; text?: string }[] };
   return content.find((c) => c.type === 'text')?.text ?? '';
 }
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -387,6 +365,9 @@ describe('Tool: list_addons', () => {
     const { user } = createUser(testDb);
     // Providers ride the journey addon now; migration 84 seeds it off.
     setAddonEnabled(testDb, ADDON_IDS.JOURNEY, true);
+    // PhotoProviderSeeder seeds immich disabled by default (enabled: 0) — flip
+    // it on the way the admin panel would, same idiom as setAddonEnabled above.
+    testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'immich'").run();
     const row = testDb.prepare('SELECT name FROM photo_providers WHERE id = ?').get('immich') as {
       name: string;
     };
@@ -418,17 +399,17 @@ describe('Tool: list_addons', () => {
     // Written through the same service the admin panel writes through rather
     // than through a hand-rolled app_settings row, so the tool is checked
     // against the real writer and not against a restatement of it.
-    const addonsService = new AddonsService(new DatabaseService(testDb));
+    const addonsService = await createTestAddonsService(testDb);
     const { user } = createUser(testDb);
     await withHarness(user.id, async (h) => {
-      addonsService.updateCollabFeatures({ polls: false });
+      await addonsService.updateCollabFeatures({ polls: false });
       const off = parseToolResult(
         await h.client.callTool({ name: 'list_addons', arguments: {} }),
       ) as AddonsPayload;
       expect(off.collabFeatures.polls).toBe(false);
       expect(off.collabFeatures.chat).toBe(true);
 
-      addonsService.updateCollabFeatures({ polls: true });
+      await addonsService.updateCollabFeatures({ polls: true });
       const on = parseToolResult(
         await h.client.callTool({ name: 'list_addons', arguments: {} }),
       ) as AddonsPayload;

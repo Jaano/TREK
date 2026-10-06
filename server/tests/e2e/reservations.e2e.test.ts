@@ -2,7 +2,7 @@
  * Reservations + accommodations module e2e — exercises both migrated mounts
  * through the real JwtAuthGuard against a temp SQLite db. Reservation SQL runs
  * for real (ReservationsService is DI-native, no mock — the temp db carries the
- * full schema via createTables + runMigrations), and so does the accommodation
+ * full, real migrated schema via createSnapshotTestDb), and so does the accommodation
  * SQL (the injected DaysService is DI-native too); the budget service, the
  * permission check and the WebSocket broadcast stay mocked.
  */
@@ -13,7 +13,6 @@ import { ReservationsModule } from '../../src/nest/reservations/reservations.mod
 // to assemble both or the /accommodations cases below 404 while production serves them.
 import { AccommodationsModule } from '../../src/nest/accommodations/accommodations.module';
 import { sessionCookie } from './harness';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { Test } from '@nestjs/testing';
 
@@ -22,27 +21,21 @@ import type { Server } from 'http';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  // What production runs (db/database.ts) and what createTestDb gives every
-  // unit suite. Without it the reservation foreign keys are inert here, and an
-  // id that resolves to nothing passes the mount unnoticed.
-  tmp.exec('PRAGMA foreign_keys = ON');
-  return { db: tmp };
+// Task 9 fix wave (B-L11): `src/db/database.ts` no longer exports
+// `canAccessTrip` (Plan 3c Task 0b moved it onto `TripsRepository` behind
+// `TripAccessGuard`'s own `EntityManager`), so mocking it here was a dead
+// no-op — the "404 when trip not accessible" cases below already delete/
+// restore the real row instead (see their own comments).
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return {
+    db,
+    getPlaceWithTags: vi.fn(),
+    closeDb: () => {},
+    reinitialize: () => {},
+  };
 });
-
-const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
-vi.mock('../../src/db/database', () => ({
-  db,
-  canAccessTrip,
-  isOwner: vi.fn(() => true),
-  getPlaceWithTags: vi.fn(),
-  closeDb: () => {},
-  reinitialize: () => {},
-}));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 const { notificationSend } = vi.hoisted(() => ({ notificationSend: vi.fn().mockResolvedValue(undefined) }));
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
@@ -54,9 +47,10 @@ let checkPermission: MockInstance;
 // The budget-sync seam runs the real injected BudgetService (BudgetModule is
 // imported by ReservationsModule since the budget fold) over the same temp db.
 
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
+import { db } from '../../src/db/database';
 import { NotificationsService } from '../../src/nest/notifications/notifications.service';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
 
 describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real reservation SQL)', () => {
@@ -65,7 +59,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   let tripId: number;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, ReservationsModule, AccommodationsModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, ReservationsModule, AccommodationsModule] })
       .overrideProvider(NotificationsService)
       .useValue({ send: notificationSend })
       // A price quoted in a foreign currency freezes the rate of the day; this is that
@@ -82,8 +76,6 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   }
 
   beforeAll(async () => {
-    createTables(db);
-    runMigrations(db);
     // The temp db carries the real schema (password_hash NOT NULL), so seed the
     // auth user directly instead of via the trimmed-DDL seedUser helper.
     db.prepare(
@@ -96,7 +88,6 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   });
 
   beforeEach(() => {
-    canAccessTrip.mockImplementation((id: unknown) => db.prepare('SELECT * FROM trips WHERE id = ?').get(id));
     checkPermission.mockReturnValue(true);
     notificationSend.mockClear();
   });
@@ -132,10 +123,19 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   });
 
   it('404 when trip not accessible (reservations)', async () => {
-    canAccessTrip.mockReturnValue(undefined);
-    const res = await request(server).get(`/api/trips/${tripId}/reservations`).set('Cookie', sessionCookie(1));
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Trip not found' });
+    // Plan 3c Task 0b: TripAccessGuard reads TripsRepository.findAccessible
+    // directly now, a real query — `canAccessTrip.mockReturnValue(...)` no
+    // longer intercepts it. The trip row is seeded once in `beforeAll` (not
+    // re-seeded per test), so it is removed and restored around this one
+    // assertion instead.
+    db.prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+    try {
+      const res = await request(server).get(`/api/trips/${tripId}/reservations`).set('Cookie', sessionCookie(1));
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+    } finally {
+      db.prepare("INSERT INTO trips (id, user_id, title) VALUES (?, 1, 'E2E Trip')").run(tripId);
+    }
   });
 
   it('201 create keeps an imported price in the currency it was quoted in, at a frozen rate (#2525)', async () => {
@@ -277,10 +277,16 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   });
 
   it('404 when trip not accessible (accommodations)', async () => {
-    canAccessTrip.mockReturnValue(undefined);
-    const res = await request(server).get(`/api/trips/${tripId}/accommodations`).set('Cookie', sessionCookie(1));
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Trip not found' });
+    // See the reservations 404 case above for why this deletes/restores the
+    // real row instead of mocking canAccessTrip.
+    db.prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+    try {
+      const res = await request(server).get(`/api/trips/${tripId}/accommodations`).set('Cookie', sessionCookie(1));
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+    } finally {
+      db.prepare("INSERT INTO trips (id, user_id, title) VALUES (?, 1, 'E2E Trip')").run(tripId);
+    }
   });
 
   it('400 accommodation create without refs', async () => {

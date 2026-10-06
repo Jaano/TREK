@@ -7,11 +7,19 @@
  */
 import { db } from '../../../src/db/database';
 import type { McpContext } from '../../../src/nest-mcp';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RoadtripPlanService } from '../../../src/nest/roadtrip/roadtrip-plan.service';
 import { RoadtripPlanningMcp } from '../../../src/nest/roadtrip/roadtrip-planning.mcp';
 import { createDay, createDayAccommodation, createDayAssignment, createPlace, createTrip, createUser } from '../../helpers/factories';
 import { resetTestDb } from '../../helpers/test-db';
+import {
+  createTestTripsRepo,
+  createTestDaysRepo,
+  createTestDayAssignmentsRepo,
+  createTestDayAccommodationsRepo,
+  createTestReservationsRepo,
+  createTestReservationEndpointsRepo,
+  createTestReservationDayPositionsRepo,
+} from '../../helpers/test-uow';
 import type { RoadtripPreferences } from '@trek/shared';
 import { bookendAssignmentId, type RoadtripStop } from '@trek/shared/roadtrip';
 
@@ -43,7 +51,20 @@ function hourlyRouter() {
   };
 }
 
-function setup() {
+/** The repositories the service reads through, all on the worker's one test handle. */
+async function planRepos() {
+  return [
+    await createTestTripsRepo(db),
+    await createTestDaysRepo(db),
+    await createTestDayAssignmentsRepo(db),
+    await createTestDayAccommodationsRepo(db),
+    await createTestReservationsRepo(db),
+    await createTestReservationEndpointsRepo(db),
+    await createTestReservationDayPositionsRepo(db),
+  ] as const;
+}
+
+async function setup() {
   const { user } = createUser(db);
   const trip = createTrip(db, user.id);
   const day = createDay(db, trip.id);
@@ -54,12 +75,12 @@ function setup() {
   });
   db.prepare("UPDATE day_assignments SET assignment_time = '09:00' WHERE id = ?").run(visits[0].id);
   const plans = new RoadtripPlanService(
-    new DatabaseService(db),
     { getUserSettings: () => ({}) } as never,
     { read: () => ({}) } as never,
     hourlyRouter() as never,
     { listForTrip: () => [], tracksForTrip: () => [] } as never,
     { list: () => [] } as never,
+    ...(await planRepos()),
   );
   return { user, trip, visits, plans };
 }
@@ -69,14 +90,14 @@ beforeEach(() => {
 });
 
 describe('a visit end time on the road trip', () => {
-  it('is read from the visit, and from the place when the visit has none', () => {
-    const { user, trip, visits, plans } = setup();
+  it('is read from the visit, and from the place when the visit has none', async () => {
+    const { user, trip, visits, plans } = await setup();
     db.prepare("UPDATE day_assignments SET assignment_end_time = '14:00' WHERE id = ?").run(visits[1].id);
     db.prepare(
       "UPDATE places SET end_time = '18:00' WHERE id = (SELECT place_id FROM day_assignments WHERE id = ?)",
     ).run(visits[2].id);
 
-    const context = plans.context(trip.id, user.id);
+    const context = await plans.context(trip.id, user.id);
 
     expect(context.visits.map((v) => [v.name, v.end_time])).toEqual([
       ['Hamburg', null],
@@ -86,7 +107,7 @@ describe('a visit end time on the road trip', () => {
   });
 
   it('is when the drive leaves the stop, in place of its stay', async () => {
-    const { user, trip, visits, plans } = setup();
+    const { user, trip, visits, plans } = await setup();
     db.prepare("UPDATE day_assignments SET assignment_end_time = '14:00' WHERE id = ?").run(visits[1].id);
 
     const { calculated } = await plans.calculate(trip.id, user.id);
@@ -102,7 +123,7 @@ describe('a visit end time on the road trip', () => {
   });
 
   it('is reported when the drive gets there after it', async () => {
-    const { user, trip, visits, plans } = setup();
+    const { user, trip, visits, plans } = await setup();
     db.prepare("UPDATE day_assignments SET assignment_end_time = '09:30' WHERE id = ?").run(visits[1].id);
 
     const { calculated } = await plans.calculate(trip.id, user.id);
@@ -112,7 +133,7 @@ describe('a visit end time on the road trip', () => {
   });
 
   it('leaves a stop without one to its stay', async () => {
-    const { user, trip, plans } = setup();
+    const { user, trip, plans } = await setup();
 
     const { calculated } = await plans.calculate(trip.id, user.id);
 
@@ -126,7 +147,7 @@ describe('a booked night on the road trip (#2410)', () => {
   // hand the service, so a column dropped from the statement would flip every stop
   // to a night here and nowhere else.
   it('marks the stop the night is booked at, and a day that is only its night stands among the days', async () => {
-    const { user, trip, plans } = setup();
+    const { user, trip, plans } = await setup();
     const arrival = createDay(db, trip.id);
     const hotel = createPlace(db, trip.id, { name: 'Rostock', lat: 54.09, lng: 12.1 });
     createDayAssignment(db, arrival.id, hotel.id);
@@ -149,7 +170,7 @@ describe('a booked night on the road trip (#2410)', () => {
   });
 
   it('files a lone stop that is no night under the quiet days', async () => {
-    const { user, trip, plans } = setup();
+    const { user, trip, plans } = await setup();
     const quiet = createDay(db, trip.id);
     const museum = createPlace(db, trip.id, { name: 'Museum', lat: 54.09, lng: 12.1 });
     createDayAssignment(db, quiet.id, museum.id);
@@ -179,7 +200,7 @@ describe('a booking the traveller rides (#2428)', () => {
   }
 
   it('seats the terminals in the day and never asks the router for the ride', async () => {
-    const { user, trip, visits, plans } = setup();
+    const { user, trip, visits, plans } = await setup();
     db.prepare("UPDATE day_assignments SET assignment_time = '10:00' WHERE id = ?").run(visits[1].id);
     // Pinned to the minute the drive reaches it anyway, so the clock alone seats the
     // flight here. Untimed, Celle lies south of Lueneburg with the airport north of both,
@@ -221,7 +242,7 @@ describe('a booking the traveller rides (#2428)', () => {
   });
 
   it('lets a booking without located terminals fall through, a hire car without a desk among them', async () => {
-    const { user, trip, visits, plans } = setup();
+    const { user, trip, visits, plans } = await setup();
     const day = db.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(visits[0].id) as { day_id: number };
     db.prepare("INSERT INTO reservations (trip_id, title, type, day_id) VALUES (?, 'Hire car', 'car', ?)").run(trip.id, day.day_id);
     db.prepare("INSERT INTO reservations (trip_id, title, type, day_id, reservation_time) VALUES (?, 'Somewhere', 'train', ?, '11:00')").run(trip.id, day.day_id);
@@ -234,7 +255,7 @@ describe('a booking the traveller rides (#2428)', () => {
   });
 
   it("puts a hire car's desks on the road: the pick-up opens the day, the return closes it, one run through both", async () => {
-    const { user, trip, visits, plans } = setup();
+    const { user, trip, visits, plans } = await setup();
     db.prepare("UPDATE day_assignments SET assignment_time = '10:00' WHERE id = ?").run(visits[1].id);
     db.prepare("UPDATE day_assignments SET assignment_time = '12:00' WHERE id = ?").run(visits[2].id);
     const day = db.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(visits[0].id) as { day_id: number };
@@ -252,12 +273,12 @@ describe('a booking the traveller rides (#2428)', () => {
     endpoint.run(carId, 'to', 1, 'Sixt Airport', 'HAM', 53.63, 9.99);
     const router = hourlyRouter();
     const service = new RoadtripPlanService(
-      new DatabaseService(db),
       { getUserSettings: () => ({}) } as never,
       { read: () => ({}) } as never,
       router as never,
       { listForTrip: () => [], tracksForTrip: () => [] } as never,
       { list: () => [] } as never,
+      ...(await planRepos()),
     );
 
     const { calculated } = await service.calculate(trip.id, user.id);
@@ -281,7 +302,7 @@ describe('a booking the traveller rides (#2428)', () => {
  * drive on from the far pier ends before midnight and the one-day trip stays one card.
  */
 describe('a ferry across the day, and one on no day (#2461)', () => {
-  function crossing() {
+  async function crossing() {
     const { user } = createUser(db);
     const trip = createTrip(db, user.id);
     const day = createDay(db, trip.id);
@@ -293,12 +314,12 @@ describe('a ferry across the day, and one on no day (#2461)', () => {
     }
     const router = hourlyRouter();
     const plans = new RoadtripPlanService(
-      new DatabaseService(db),
       { getUserSettings: () => ({}) } as never,
       { read: () => ({}) } as never,
       router as never,
       { listForTrip: () => [], tracksForTrip: () => [] } as never,
       { list: () => [] } as never,
+      ...(await planRepos()),
     );
     return { user, trip, day, router, plans };
   }
@@ -323,7 +344,7 @@ describe('a ferry across the day, and one on no day (#2461)', () => {
   }
 
   it('drives to the pier and on from the far one, and never overland between the two shores', async () => {
-    const { user, trip, day, router, plans } = crossing();
+    const { user, trip, day, router, plans } = await crossing();
     withFerry(trip.id, day.id, 'IJmuiden to Newcastle');
 
     const { calculated, undatedRides } = await plans.calculate(trip.id, user.id);
@@ -340,7 +361,7 @@ describe('a ferry across the day, and one on no day (#2461)', () => {
   });
 
   it('names a located ride on no day, and the tool answers with the same list', async () => {
-    const { user, trip, day, plans } = crossing();
+    const { user, trip, day, plans } = await crossing();
     const undated = withFerry(trip.id, null, 'Ferry without a date');
     withFerry(trip.id, day.id, 'Ferry on the day');
     withFerry(trip.id, null, 'Ferry without terminals', false);
@@ -374,17 +395,17 @@ describe('a booked night at both ends of its days', () => {
   const WALLINGA = { lat: -34.1, lng: 150.9 };
   const HOTEL = { lat: 45.07, lng: 7.68 };
 
-  function trip(settings: RoadtripPreferences = { roadtrip_hotel_bookends: true }) {
+  async function trip(settings: RoadtripPreferences = { roadtrip_hotel_bookends: true }) {
     const { user } = createUser(db);
     const created = createTrip(db, user.id);
     const router = hourlyRouter();
     const plans = new RoadtripPlanService(
-      new DatabaseService(db),
       { getUserSettings: () => ({}) } as never,
       { read: () => settings } as never,
       router as never,
       { listForTrip: () => [], tracksForTrip: () => [] } as never,
       { list: () => [] } as never,
+      ...(await planRepos()),
     );
     return { user, trip: created, router, plans };
   }
@@ -405,8 +426,8 @@ describe('a booked night at both ends of its days', () => {
     router.route.mock.calls.map((call) => call[3].map((p: { lat: number }) => p.lat));
 
   /** A check-in with two places, then a transfer day that is only the next check-in. */
-  function cam(settings?: RoadtripPreferences) {
-    const t = trip(settings);
+  async function cam(settings?: RoadtripPreferences) {
+    const t = await trip(settings);
     const [d1, d2, d3] = [createDay(db, t.trip.id), createDay(db, t.trip.id), createDay(db, t.trip.id)];
     const getaway = visit(t.trip.id, d1.id, 'Getaway', GETAWAY);
     visit(t.trip.id, d1.id, 'Lookout', { lat: -33.73, lng: 150.35 });
@@ -421,8 +442,8 @@ describe('a booked night at both ends of its days', () => {
   }
 
   /** Three nights in one hotel with two places on every day before the check-out. */
-  function simeon(settings?: RoadtripPreferences) {
-    const t = trip(settings);
+  async function simeon(settings?: RoadtripPreferences) {
+    const t = await trip(settings);
     const days = [1, 2, 3, 4].map(() => createDay(db, t.trip.id));
     const h = visit(t.trip.id, days[0].id, 'H', HOTEL);
     (
@@ -440,7 +461,7 @@ describe('a booked night at both ends of its days', () => {
   }
 
   it('seats the check-in day back at the stay and starts the transfer day there, as the rule in shared does', async () => {
-    const { user, trip: created, router, plans, days, stayA } = cam();
+    const { user, trip: created, router, plans, days, stayA } = await cam();
     const reservationId = linkBooking(created.id, stayA.id);
     linkBooking(created.id, stayA.id);
 
@@ -485,7 +506,7 @@ describe('a booked night at both ends of its days', () => {
   });
 
   it('asks the router nothing for a night spent at one hotel when the days are connected', async () => {
-    const { user, trip: created, router, plans } = cam({ roadtrip_hotel_bookends: true, roadtrip_connect_days: true });
+    const { user, trip: created, router, plans } = await cam({ roadtrip_hotel_bookends: true, roadtrip_connect_days: true });
 
     const { calculated } = await plans.calculate(created.id, user.id);
 
@@ -496,7 +517,7 @@ describe('a booked night at both ends of its days', () => {
   });
 
   it('starts and ends every day between the nights at the hotel, and leaves the check-out day undriven', async () => {
-    const { user, trip: created, router, plans, days, stay } = simeon();
+    const { user, trip: created, router, plans, days, stay } = await simeon();
 
     const { calculated } = await plans.calculate(created.id, user.id);
 
@@ -514,7 +535,7 @@ describe('a booked night at both ends of its days', () => {
   });
 
   it('drives out of the morning hotel the way the first place is reached from it, as the browser and the day plan do', async () => {
-    const { user, trip: created, router, plans } = simeon();
+    const { user, trip: created, router, plans } = await simeon();
     db.prepare(
       "UPDATE day_assignments SET incoming_leg_transport_mode = 'walking' WHERE place_id = (SELECT id FROM places WHERE trip_id = ? AND name = 'P3')",
     ).run(created.id);
@@ -531,7 +552,7 @@ describe('a booked night at both ends of its days', () => {
   });
 
   it('drops the stop tonight’s booking put first on its check-in day, as the browser does, and keeps it while off (#2546)', async () => {
-    const t = trip();
+    const t = await trip();
     const [d1, d2, d3] = [createDay(db, t.trip.id), createDay(db, t.trip.id), createDay(db, t.trip.id)];
     const getaway = visit(t.trip.id, d1.id, 'Getaway', GETAWAY);
     visit(t.trip.id, d1.id, 'Lookout', { lat: -33.73, lng: 150.35 });
@@ -553,7 +574,7 @@ describe('a booked night at both ends of its days', () => {
   });
 
   it('drives the stored days while the trip has it off, and a preview can switch it either way', async () => {
-    const off = simeon({});
+    const off = await simeon({});
     const stored = await off.plans.calculate(off.trip.id, off.user.id);
     expect(stored.calculated.days.map((d) => shape(d.stops))).toEqual([
       ['H', 'P1', 'P2'],
@@ -565,17 +586,17 @@ describe('a booked night at both ends of its days', () => {
     expect(preview.calculated.days[1].stops.map((s) => s.bookend?.phase ?? null)).toEqual(['morning', null, null, 'evening']);
     expect(preview.preferences.roadtrip_hotel_bookends).toBe(true);
 
-    const on = simeon();
+    const on = await simeon();
     const without = await on.plans.calculate(on.trip.id, on.user.id, { roadtrip_hotel_bookends: false });
     expect(without.calculated.days.flatMap((d) => d.stops).some((s) => s.bookend)).toBe(false);
   });
 
-  it('reads every stay with its place, its nights and its earliest booking into the context', () => {
-    const { user, trip: created, plans, days, stayA, stayB } = cam();
+  it('reads every stay with its place, its nights and its earliest booking into the context', async () => {
+    const { user, trip: created, plans, days, stayA, stayB } = await cam();
     const first = linkBooking(created.id, stayA.id);
     linkBooking(created.id, stayA.id);
 
-    const context = plans.context(created.id, user.id);
+    const context = await plans.context(created.id, user.id);
 
     expect(context.stays).toEqual([
       {
@@ -595,7 +616,7 @@ describe('a booked night at both ends of its days', () => {
   });
 
   it('names the hotel in the failures of a run it pushes past the router’s waypoint limit', async () => {
-    const t = trip({});
+    const t = await trip({});
     const [d1, d2] = [createDay(db, t.trip.id), createDay(db, t.trip.id)];
     for (let i = 0; i < 100; i++) visit(t.trip.id, d1.id, `Stop ${i}`, { lat: 40 + i * 0.01, lng: 5 });
     const hotel = createPlace(db, t.trip.id, { name: 'Tonight', ...HOTEL });
@@ -619,8 +640,8 @@ describe('a booked night at both ends of its days', () => {
    * Trip 45 on the dev instance: a night in Hamburg, then LH 2078 to Munich at 15:15 on the
    * day the Munich hotel is checked into from 15:00, the booking's slot seeded behind it.
    */
-  function trip45(settings?: RoadtripPreferences) {
-    const t = trip(settings);
+  async function trip45(settings?: RoadtripPreferences) {
+    const t = await trip(settings);
     const days = [1, 2, 3, 4, 5].map(() => createDay(db, t.trip.id));
     const atlantic = visit(t.trip.id, days[0].id, 'Hotel Atlantic Hamburg', { lat: 53.5573, lng: 10.0056 });
     const munich = visit(t.trip.id, days[2].id, 'Hotel Bayerischer Hof', { lat: 48.1403, lng: 11.5732 });
@@ -648,7 +669,7 @@ describe('a booked night at both ends of its days', () => {
     const oneCity = (router: ReturnType<typeof hourlyRouter>) =>
       lats(router).every((run) => run.every((lat: number) => lat > 53) || run.every((lat: number) => lat < 49));
 
-    const off = trip45({});
+    const off = await trip45({});
     const stored = await off.plans.calculate(off.trip.id, off.user.id);
     const offDay = stored.calculated.days.find((d) => d.dayId === off.flightDay.id)!;
     expect(shape(offDay.stops)).toEqual(['Hamburg (HAM)', 'Munich (MUC)', 'Hotel Bayerischer Hof']);
@@ -657,7 +678,7 @@ describe('a booked night at both ends of its days', () => {
     expect(offDay.schedule.warnings).toEqual([]);
     expect(oneCity(off.router)).toBe(true);
 
-    const on = trip45();
+    const on = await trip45();
     const seated = await on.plans.calculate(on.trip.id, on.user.id);
     const onDay = seated.calculated.days.find((d) => d.dayId === on.flightDay.id)!;
     expect(shape(onDay.stops)).toEqual([
@@ -671,7 +692,7 @@ describe('a booked night at both ends of its days', () => {
   });
 
   it('drives no road between two stays on a day a flight saved without its airports moves the traveller (#2476)', async () => {
-    const { user, trip: created, router, plans, days, stayA } = cam();
+    const { user, trip: created, router, plans, days, stayA } = await cam();
     db.prepare(
       "INSERT INTO reservations (trip_id, title, type, day_id, end_day_id, reservation_time) VALUES (?, 'Flight', 'flight', ?, ?, '12:00')",
     ).run(created.id, days[1].id, days[1].id);

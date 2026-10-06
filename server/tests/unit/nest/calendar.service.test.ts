@@ -9,12 +9,10 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 
 // ── DB setup ──────────────────────────────────────────────
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   const mock = {
     db,
     closeDb: () => {},
@@ -29,10 +27,10 @@ const { testDb, dbMock } = vi.hoisted(() => {
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
-  return { testDb: db, dbMock: mock };
+    return mock;
 });
 
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-secret',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -41,15 +39,13 @@ vi.mock('../../../src/config', () => ({
 const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
+import { db as testDb } from '../../../src/db/database';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createReservation, createPlace, createDay, createDayAssignment, createDayNote } from '../../helpers/factories';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
-import { ReservationsReadRepository } from '../../../src/nest/reservations/reservations-read.repository';
+import { ReservationsReadService } from '../../../src/nest/reservations/reservations-read.service';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { CalendarService, foldICS } from '../../../src/nest/calendar/calendar.service';
@@ -57,19 +53,19 @@ import { CalendarModule } from '../../../src/nest/calendar/calendar.module';
 import { expectRegisteredProvider } from '../../helpers/module-providers';
 import { notificationsStub } from '../../helpers/notifications';
 import { accommodationsOver } from '../../helpers/accommodations-service';
-
-const dbs = () => new DatabaseService(testDb);
-const budgetSvc = new BudgetService(dbs(), new PermissionsService(dbs()), new ExchangeRatesService(), new RealtimeService());
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestReservationsRepo, createTestReservationEndpointsRepo, createTestReservationTravelersRepo, createTestReservationDayPositionsRepo, createTestDayAccommodationsRepo, createTestDaysRepo, createTestDayNotesRepo, createTestPlacesRepo, createTestDayAssignmentsRepo, createTestTripMembersRepo, createTestUsersRepo, createTestTripsRepo } from '../../helpers/test-uow';
+import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
+import { budgetRepoArgs } from '../../helpers/budget-repos';
 
 // Named `svc` so the moved cases below read exactly as they did on TripsService.
-const svc = new CalendarService(
-  dbs(),
-  new ReservationsService(dbs(), new PermissionsService(dbs()), budgetSvc, new RealtimeService(), notificationsStub(), new ReservationsReadRepository(dbs()), accommodationsOver(dbs())),
+let budgetSvc: BudgetService;
+let svc: CalendarService;
+beforeAll(async () => {
+  budgetSvc = new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb)));
+  svc = new CalendarService(
+  new ReservationsService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), budgetSvc, new RealtimeService(), notificationsStub(), new ReservationsReadService(await createTestReservationsRepo(testDb), await createTestReservationEndpointsRepo(testDb), await createTestReservationTravelersRepo(testDb)), await accommodationsOver(testDb), await createTestUnitOfWork(testDb), await createTestReservationsRepo(testDb), await createTestReservationEndpointsRepo(testDb), await createTestReservationTravelersRepo(testDb), await createTestReservationDayPositionsRepo(testDb), await createTestDayAccommodationsRepo(testDb), await createTestDaysRepo(testDb), await createTestPlacesRepo(testDb), await createTestDayAssignmentsRepo(testDb), await createTestTripMembersRepo(testDb), await createTestUsersRepo(testDb), await createTestTripsRepo(testDb), await createTestBudgetItemsRepo(testDb)),
+  await createTestTripsRepo(testDb), await createTestDaysRepo(testDb), await createTestDayNotesRepo(testDb), await createTestReservationsRepo(testDb),
 );
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
 });
 
 beforeEach(() => {
@@ -81,7 +77,7 @@ afterAll(() => {
 });
 
 describe('exportICS', () => {
-  it('TRIP-SVC-001: returns VCALENDAR wrapper', () => {
+  it('TRIP-SVC-001: returns VCALENDAR wrapper', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, {
       title: 'My Vacation',
@@ -89,13 +85,13 @@ describe('exportICS', () => {
       end_date: '2025-06-07',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('BEGIN:VCALENDAR');
     expect(ics).toContain('END:VCALENDAR');
   });
 
-  it('TRIP-SVC-002: trip with start_date + end_date includes all-day VEVENT', () => {
+  it('TRIP-SVC-002: trip with start_date + end_date includes all-day VEVENT', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, {
       title: 'Summer Holiday',
@@ -103,7 +99,7 @@ describe('exportICS', () => {
       end_date: '2025-06-07',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20250601');
     // DTEND is exclusive — the day *after* the last day, or the trip loses a day.
@@ -123,7 +119,7 @@ describe('exportICS', () => {
     // lands a day early, and since DTEND is exclusive the trip's last day was dropped.
     // Only invisible in CI because containers default to TZ=UTC.
     for (const tz of ['Europe/Berlin', 'Asia/Tokyo', 'Pacific/Kiritimati', 'America/New_York', 'UTC']) {
-      it(`TRIP-SVC-002b: DTEND is the day after the last day under TZ=${tz}`, () => {
+      it(`TRIP-SVC-002b: DTEND is the day after the last day under TZ=${tz}`, async () => {
         process.env.TZ = tz;
         const { user } = createUser(testDb);
         const trip = createTrip(testDb, user.id, {
@@ -132,28 +128,28 @@ describe('exportICS', () => {
           end_date: '2026-03-30',
         });
 
-        const { ics } = svc.exportICS(trip.id);
+        const { ics } = await svc.exportICS(trip.id);
 
         expect(ics).toContain('DTSTART;VALUE=DATE:20260328');
         expect(ics).toContain('DTEND;VALUE=DATE:20260331');
       });
     }
 
-    it('TRIP-SVC-002c: a per-day all-day summary event has the same exclusive DTEND', () => {
+    it('TRIP-SVC-002c: a per-day all-day summary event has the same exclusive DTEND', async () => {
       process.env.TZ = 'Asia/Tokyo';
       const { user } = createUser(testDb);
       const trip = createTrip(testDb, user.id, { title: 'Day Note Trip' });
       const day = createDay(testDb, trip.id, { date: '2026-03-30', day_number: 1 });
       createDayNote(testDb, day.id, trip.id, { text: 'Pack the bags' });
 
-      const { ics } = svc.exportICS(trip.id);
+      const { ics } = await svc.exportICS(trip.id);
 
       expect(ics).toContain('DTSTART;VALUE=DATE:20260330');
       expect(ics).toContain('DTEND;VALUE=DATE:20260331');
     });
   });
 
-  it('TRIP-SVC-003: reservation with full datetime (includes T) → DTSTART without VALUE=DATE', () => {
+  it('TRIP-SVC-003: reservation with full datetime (includes T) → DTSTART without VALUE=DATE', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
     const reservation = createReservation(testDb, trip.id, {
@@ -164,13 +160,13 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=? WHERE id=?')
       .run('2025-06-02T09:00', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART:20250602T090000');
     expect(ics).not.toContain('DTSTART;VALUE=DATE');
   });
 
-  it('TRIP-SVC-004: reservation with date-only → DTSTART;VALUE=DATE', () => {
+  it('TRIP-SVC-004: reservation with date-only → DTSTART;VALUE=DATE', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
     const reservation = createReservation(testDb, trip.id, {
@@ -181,12 +177,12 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=? WHERE id=?')
       .run('2025-06-02', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20250602');
   });
 
-  it('TRIP-SVC-005: reservation metadata with flight info appears in DESCRIPTION', () => {
+  it('TRIP-SVC-005: reservation metadata with flight info appears in DESCRIPTION', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
     const reservation = createReservation(testDb, trip.id, {
@@ -206,51 +202,51 @@ describe('exportICS', () => {
         reservation.id
       );
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('Airline: Air Test');
     expect(ics).toContain('Flight: AT100');
   });
 
-  it('TRIP-SVC-006: special characters in title are escaped', () => {
+  it('TRIP-SVC-006: special characters in title are escaped', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip; First, Best' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('Trip\\; First\\, Best');
   });
 
-  it('TRIP-SVC-007: throws NotFoundError for non-existent trip', () => {
-    expect(() => svc.exportICS(99999)).toThrow();
+  it('TRIP-SVC-007: throws NotFoundError for non-existent trip', async () => {
+    await expect(svc.exportICS(99999)).rejects.toThrow();
   });
 
-  it('TRIP-SVC-008: returns a filename derived from trip title', () => {
+  it('TRIP-SVC-008: returns a filename derived from trip title', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'My Trip 2025' });
 
-    const { filename } = svc.exportICS(trip.id);
+    const { filename } = await svc.exportICS(trip.id);
 
     expect(filename).toMatch(/My.Trip.2025\.ics/);
   });
 
   // JS \s admitted U+3000 (and \v/\f) into the filename, and Node's header
   // validation then threw ERR_INVALID_CHAR on the export route (#2165).
-  it('TRIP-SVC-008b: ideographic whitespace in the title folds to _ in the filename', () => {
+  it('TRIP-SVC-008b: ideographic whitespace in the title folds to _ in the filename', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: '沖縄　4泊5日' });
 
-    expect(svc.exportICS(trip.id).filename).toBe('___4_5_.ics');
+    expect((await svc.exportICS(trip.id)).filename).toBe('___4_5_.ics');
   });
 
-  it('TRIP-SVC-008c: vertical tab and form feed fold too', () => {
+  it('TRIP-SVC-008c: vertical tab and form feed fold too', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'A\vB\fC' });
 
-    expect(svc.exportICS(trip.id).filename).toBe('A_B_C.ics');
+    expect((await svc.exportICS(trip.id)).filename).toBe('A_B_C.ics');
   });
 
-  it('TRIP-SVC-009: reservation with end time includes DTEND', () => {
+  it('TRIP-SVC-009: reservation with end time includes DTEND', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
     const reservation = createReservation(testDb, trip.id, {
@@ -261,12 +257,12 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2025-06-02T14:00', '2025-06-02T16:00', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTEND:20250602T160000');
   });
 
-  it('TRIP-SVC-024: flight with endpoint times but no reservation_time is included', () => {
+  it('TRIP-SVC-024: flight with endpoint times but no reservation_time is included', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
     const reservation = createReservation(testDb, trip.id, {
@@ -281,7 +277,7 @@ describe('exportICS', () => {
     insertEp.run(reservation.id, 'from', 0, 'Paris CDG', 'CDG', 49.0, 2.5, 'Europe/Paris', '09:00', '2025-06-02');
     insertEp.run(reservation.id, 'to', 1, 'New York JFK', 'JFK', 40.6, -73.8, 'America/New_York', '12:00', '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:CDG → JFK');
     // Departure endpoint zone drives DTSTART, arrival zone drives DTEND, so the
@@ -295,7 +291,7 @@ describe('exportICS', () => {
     expect(ics).toContain('Route: CDG → JFK');
   });
 
-  it('TRIP-SVC-024a: a flight that also carries reservation_time still uses per-side endpoint zones', () => {
+  it('TRIP-SVC-024a: a flight that also carries reservation_time still uses per-side endpoint zones', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
     const reservation = createReservation(testDb, trip.id, {
@@ -313,7 +309,7 @@ describe('exportICS', () => {
     insertEp.run(reservation.id, 'from', 0, 'Paris CDG', 'CDG', 49.0, 2.5, 'Europe/Paris', '09:00', '2025-06-02');
     insertEp.run(reservation.id, 'to', 1, 'New York JFK', 'JFK', 40.6, -73.8, 'America/New_York', '12:00', '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20250602T090000');
     expect(ics).toContain('DTEND;TZID=America/New_York:20250602T120000');
@@ -322,7 +318,7 @@ describe('exportICS', () => {
     expect(ics).not.toContain('DTEND:20250602T120000');
   });
 
-  it('TRIP-SVC-024c: a one-sided transport keeps the multi-day DTEND from reservation_end_time', () => {
+  it('TRIP-SVC-024c: a one-sided transport keeps the multi-day DTEND from reservation_end_time', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Rental Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'Rental car', type: 'car_rental' });
@@ -335,13 +331,13 @@ describe('exportICS', () => {
       'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(reservation.id, 'from', 0, 'Berlin', null, 52.5, 13.4, 'Europe/Berlin', '10:00', '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20250602T100000');
     expect(ics).toContain('DTEND;TZID=Europe/Berlin:20250609T100000');
   });
 
-  it('TRIP-SVC-024d: an untimed arrival endpoint still takes its DTEND from reservation_end_time', () => {
+  it('TRIP-SVC-024d: an untimed arrival endpoint still takes its DTEND from reservation_end_time', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Train Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'ICE 1234', type: 'train' });
@@ -355,13 +351,13 @@ describe('exportICS', () => {
     // on the reservation itself.
     insertEp.run(reservation.id, 'to', 1, 'Wien Hbf', null, 48.2, 16.4, 'Europe/Vienna', null, '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20250602T080000');
     expect(ics).toContain('DTEND;TZID=Europe/Berlin:20250602T143000');
   });
 
-  it('TRIP-SVC-024e: a lone timed endpoint without reservation_end_time stays a DTSTART', () => {
+  it('TRIP-SVC-024e: a lone timed endpoint without reservation_end_time stays a DTSTART', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Ferry Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'Ferry', type: 'ferry' });
@@ -371,7 +367,7 @@ describe('exportICS', () => {
       'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(reservation.id, 'from', 0, 'Dover', null, 51.1, 1.3, 'Europe/London', '07:00', '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/London:20250602T070000');
     // Nothing to end it with, so no DTEND may be invented (the trip's own all-day
@@ -379,7 +375,7 @@ describe('exportICS', () => {
     expect(ics).not.toContain('DTEND;TZID=');
   });
 
-  it('TRIP-SVC-024b: an invalid endpoint timezone degrades to floating time instead of crashing the export', () => {
+  it('TRIP-SVC-024b: an invalid endpoint timezone degrades to floating time instead of crashing the export', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Bad TZ Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'CDG → JFK', type: 'flight' });
@@ -392,15 +388,14 @@ describe('exportICS', () => {
     insertEp.run(reservation.id, 'from', 0, 'Paris CDG', 'CDG', 49.0, 2.5, 'Not/AZone', '09:00', '2025-06-02');
     insertEp.run(reservation.id, 'to', 1, 'New York JFK', 'JFK', 40.6, -73.8, 'garbage', '12:00', '2025-06-02');
 
-    let ics = '';
-    expect(() => { ics = svc.exportICS(trip.id).ics; }).not.toThrow();
+    const ics = (await svc.exportICS(trip.id)).ics;
     // Falls back to a floating local time (no TZID) and never emits a bogus VTIMEZONE.
     expect(ics).toContain('DTSTART:20250602T090000');
     expect(ics).not.toContain('TZID=Not/AZone');
     expect(ics).not.toContain('garbage');
   });
 
-  it('TRIP-SVC-025: flight endpoint with no local_date is skipped (relative Day-N trips)', () => {
+  it('TRIP-SVC-025: flight endpoint with no local_date is skipped (relative Day-N trips)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Relative Trip' });
     const reservation = createReservation(testDb, trip.id, {
@@ -412,12 +407,12 @@ describe('exportICS', () => {
       'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(reservation.id, 'from', 0, 'Origin', 'AAA', 1.0, 1.0, null, '09:00', null);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).not.toContain('SUMMARY:Timeless Flight');
   });
 
-  it('TRIP-SVC-026: timed assignment gets a TZID derived from the place coordinates', () => {
+  it('TRIP-SVC-026: timed assignment gets a TZID derived from the place coordinates', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Tokyo Trip' });
     const day = createDay(testDb, trip.id, { date: '2025-06-02' });
@@ -428,14 +423,14 @@ describe('exportICS', () => {
       .prepare('UPDATE day_assignments SET assignment_time=? WHERE id=?')
       .run('09:00', assignment.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Asia/Tokyo:20250602T090000');
     expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Asia/Tokyo');
     expect(ics).not.toContain('DTSTART:20250602T090000');
   });
 
-  it('CAL-011: a reservation_time with seconds is kept as is and a date-only end time emits no DTEND', () => {
+  it('CAL-011: a reservation_time with seconds is kept as is and a date-only end time emits no DTEND', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Second Precision' });
     const reservation = createReservation(testDb, trip.id, { title: 'Guided Walk', type: 'activity' });
@@ -446,7 +441,7 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2025-06-02T14:00:00', '2025-06-03', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART:20250602T140000');
     // The end value carries no clock time, so it cannot be a DTEND for a timed
@@ -455,7 +450,7 @@ describe('exportICS', () => {
     expect(ics).not.toContain('DTEND');
   });
 
-  it('CAL-012: reservations with no placeable time are dropped instead of emitting a broken VEVENT', () => {
+  it('CAL-012: reservations with no placeable time are dropped instead of emitting a broken VEVENT', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Timeless' });
     // Relative "Day N" trips store a clock time without a date; there is nothing
@@ -466,7 +461,7 @@ describe('exportICS', () => {
     const noEndpoints = createReservation(testDb, trip.id, { title: 'Endpointless Train', type: 'transport' });
     testDb.prepare('UPDATE reservations SET reservation_time=NULL WHERE id=?').run(noEndpoints.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).not.toContain('SUMMARY:Floating Dinner');
     expect(ics).not.toContain('SUMMARY:Endpointless Train');
@@ -475,7 +470,7 @@ describe('exportICS', () => {
     expect(ics).not.toContain('BEGIN:VEVENT');
   });
 
-  it('CAL-013: endpoints without a stored timezone fall back to their coordinates', () => {
+  it('CAL-013: endpoints without a stored timezone fall back to their coordinates', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'No Stored Zone' });
     const reservation = createReservation(testDb, trip.id, { title: 'CDG to JFK', type: 'flight' });
@@ -489,13 +484,13 @@ describe('exportICS', () => {
     insertEp.run(reservation.id, 'from', 0, 'Paris CDG', 'CDG', 49.0, 2.5, null, '09:00', '2025-06-02');
     insertEp.run(reservation.id, 'to', 1, 'New York JFK', 'JFK', 40.6, -73.8, null, '12:00', '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20250602T090000');
     expect(ics).toContain('DTEND;TZID=America/New_York:20250602T120000');
   });
 
-  it('CAL-014: a single-endpoint transport emits DTSTART only', () => {
+  it('CAL-014: a single-endpoint transport emits DTSTART only', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'One Way' });
     const reservation = createReservation(testDb, trip.id, { title: 'Airport Transfer', type: 'transport' });
@@ -506,13 +501,13 @@ describe('exportICS', () => {
       'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(reservation.id, 'from', 0, 'Paris CDG', 'CDG', 49.0, 2.5, 'Europe/Paris', '09:00', '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20250602T090000');
     expect(ics).not.toContain('DTEND');
   });
 
-  it('CAL-015: a timed assignment carries its notes and address into DESCRIPTION and LOCATION', () => {
+  it('CAL-015: a timed assignment carries its notes and address into DESCRIPTION and LOCATION', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Guided Day' });
     const day = createDay(testDb, trip.id, { date: '2025-06-02' });
@@ -523,7 +518,7 @@ describe('exportICS', () => {
     const withoutNotes = createDayAssignment(testDb, day.id, place.id);
     testDb.prepare('UPDATE day_assignments SET assignment_time=? WHERE id=?').run('11:00', withoutNotes.id);
 
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     // Notes come first and the address is appended on its own line; dropping the
     // separator would glue them into one unreadable run.
@@ -533,7 +528,7 @@ describe('exportICS', () => {
     expect(ics).toContain('LOCATION:Rue de Rivoli');
   });
 
-  it('CAL-016: a day without a date is skipped and a titled day uses its own title', () => {
+  it('CAL-016: a day without a date is skipped and a titled day uses its own title', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Mixed Days' });
     // Days of a relative "Day N" trip have no date; they cannot be placed on a
@@ -544,7 +539,7 @@ describe('exportICS', () => {
     const place = createPlace(testDb, trip.id, { name: 'Bare Spot' });
     createDayAssignment(testDb, named.id, place.id);
 
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     expect(ics).not.toContain('Ghost Day');
     expect(ics).not.toContain('never exported');
@@ -554,7 +549,7 @@ describe('exportICS', () => {
     expect(ics).toContain('DESCRIPTION:• Bare Spot\r\n');
   });
 
-  it('CAL-017: a reservation with no type, metadata or notes emits no empty DESCRIPTION', () => {
+  it('CAL-017: a reservation with no type, metadata or notes emits no empty DESCRIPTION', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Bare' });
     const reservation = createReservation(testDb, trip.id, { title: 'Bare Booking', type: 'hotel' });
@@ -564,13 +559,13 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET type=NULL, reservation_time=? WHERE id=?')
       .run('2025-06-02', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Bare Booking');
     expect(ics).not.toContain('DESCRIPTION');
   });
 
-  it('CAL-018: flight metadata with only one airport emits only that side of the route', () => {
+  it('CAL-018: flight metadata with only one airport emits only that side of the route', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Half Routes' });
     const inbound = createReservation(testDb, trip.id, { title: 'Inbound', type: 'flight' });
@@ -581,13 +576,13 @@ describe('exportICS', () => {
     setMeta.run('2025-06-02T09:00', JSON.stringify({ arrival_airport: 'JFK' }), inbound.id);
     setMeta.run('2025-06-09T09:00', JSON.stringify({ departure_airport: 'CDG' }), outbound.id);
 
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     expect(ics).toContain('DESCRIPTION:Type: flight\\nTo: JFK\r\n');
     expect(ics).toContain('DESCRIPTION:Type: flight\\nFrom: CDG\r\n');
   });
 
-  it('CAL-019: legs and endpoints without names produce no Route line', () => {
+  it('CAL-019: legs and endpoints without names produce no Route line', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Nameless' });
     const legs = createReservation(testDb, trip.id, { title: 'Codeless Legs', type: 'flight' });
@@ -605,14 +600,14 @@ describe('exportICS', () => {
     insertEp.run(ferry.id, 'from', 0, '', null, 1.0, 1.0, null, null, '2025-06-03');
     insertEp.run(ferry.id, 'to', 1, '', null, 1.1, 1.1, null, null, '2025-06-03');
 
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     expect(ics).toContain('SUMMARY:Codeless Legs');
     expect(ics).toContain('SUMMARY:Nameless Ferry');
     expect(ics).not.toContain('Route:');
   });
 
-  it('CAL-043: a segment with its own booking reference gets its own Confirmation line (#1943)', () => {
+  it('CAL-043: a segment with its own booking reference gets its own Confirmation line (#1943)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Layover' });
     const flight = createReservation(testDb, trip.id, { title: 'FRA to HND', type: 'flight' });
@@ -625,7 +620,7 @@ describe('exportICS', () => {
       flight.id,
     );
 
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     expect(ics).toContain(
       'DESCRIPTION:Type: flight\\nConfirmation: BOOK1\\nRoute: FRA → BER → HND'
@@ -633,7 +628,7 @@ describe('exportICS', () => {
     );
   });
 
-  it('CAL-044: a multi-leg flight without per-segment references reads exactly as before', () => {
+  it('CAL-044: a multi-leg flight without per-segment references reads exactly as before', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Layover' });
     const flight = createReservation(testDb, trip.id, { title: 'FRA to HND', type: 'flight' });
@@ -643,14 +638,14 @@ describe('exportICS', () => {
       flight.id,
     );
 
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     // Byte parity for every feed that exists today: the description ends after
     // the route line, so no subscriber sees a changed event.
     expect(ics).toContain('DESCRIPTION:Type: flight\\nConfirmation: BOOK1\\nRoute: FRA → BER → HND\r\n');
   });
 
-  it('CAL-045: a connecting flight with times on every leg becomes one event per leg (#2389)', () => {
+  it('CAL-045: a connecting flight with times on every leg becomes one event per leg (#2389)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Layover' });
     const d1 = createDay(testDb, trip.id, { date: '2025-06-02' });
@@ -665,7 +660,7 @@ describe('exportICS', () => {
       flight.id,
     );
 
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     expect(ics).toContain(`UID:trek-res-leg1-${flight.id}@trek`);
     expect(ics).toContain(`UID:trek-res-leg2-${flight.id}@trek`);
@@ -677,7 +672,7 @@ describe('exportICS', () => {
     expect(ics).toContain('LOCATION:BER\r\n');
   });
 
-  it('CAL-1807: a cruise with ports of call is one event per sailing', () => {
+  it('CAL-1807: a cruise with ports of call is one event per sailing', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Baltic' });
     const d1 = createDay(testDb, trip.id, { date: '2025-06-02' });
@@ -691,13 +686,13 @@ describe('exportICS', () => {
       ] }),
       cruise.id,
     );
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
     expect(ics).toContain('SUMMARY:Baltic cruise: Kiel → Tallinn');
     expect(ics).toContain('SUMMARY:Baltic cruise: Tallinn → Kiel');
     expect(ics).toContain(`UID:trek-res-leg2-${cruise.id}@trek`);
   });
 
-  it('CAL-2389b: legs take their zones and names from one endpoint per airport (#2389)', () => {
+  it('CAL-2389b: legs take their zones and names from one endpoint per airport (#2389)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Layover' });
     const d1 = createDay(testDb, trip.id, { date: '2025-06-02' });
@@ -718,7 +713,7 @@ describe('exportICS', () => {
     insertEp.run(flight.id, 'stop', 1, 'Frankfurt', 'FRA', 50.03, 8.57, null, '12:00', '2025-06-02');
     insertEp.run(flight.id, 'to', 2, 'London LHR', 'LHR', 51.47, -0.45, 'Europe/London', '15:00', '2025-06-02');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20250602T090000');
     expect(ics).toContain('DTEND;TZID=Europe/Berlin:20250602T100000');
@@ -728,7 +723,7 @@ describe('exportICS', () => {
     expect(ics).toContain('SUMMARY:Via Frankfurt: FRA → LHR');
   });
 
-  it('CAL-046: a leg without a departure clock keeps the single event', () => {
+  it('CAL-046: a leg without a departure clock keeps the single event', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Layover' });
     const d1 = createDay(testDb, trip.id, { date: '2025-06-02' });
@@ -742,25 +737,25 @@ describe('exportICS', () => {
       flight.id,
     );
 
-    const ics = svc.exportICS(trip.id).ics;
+    const ics = (await svc.exportICS(trip.id)).ics;
     expect(ics).toContain(`UID:trek-res-${flight.id}@trek`);
     expect(ics).not.toContain('res-leg');
   });
 
-  it('CAL-020: an empty trip title falls back for SUMMARY, X-WR-CALNAME and the filename', () => {
+  it('CAL-020: an empty trip title falls back for SUMMARY, X-WR-CALNAME and the filename', async () => {
     const { user } = createUser(testDb);
     // The title is only NOT NULL, not non-empty; an empty one used to produce
     // "SUMMARY:" and a filename of ".ics".
     const trip = createTrip(testDb, user.id, { title: '', start_date: '2025-06-01', end_date: '2025-06-02' });
 
-    const { ics, filename } = svc.exportICS(trip.id);
+    const { ics, filename } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('X-WR-CALNAME:TREK Trip');
     expect(ics).toContain('SUMMARY:Trip');
     expect(filename).toBe('trek-trip.ics');
   });
 
-  it('CAL-021: a corrupt day date degrades the VTIMEZONE offset instead of throwing', () => {
+  it('CAL-021: a corrupt day date degrades the VTIMEZONE offset instead of throwing', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Corrupt Date' });
     // days.date is free-form TEXT; a legacy/imported row can hold a date that no
@@ -772,8 +767,7 @@ describe('exportICS', () => {
     const assignment = createDayAssignment(testDb, day.id, place.id);
     testDb.prepare('UPDATE day_assignments SET assignment_time=? WHERE id=?').run('09:00', assignment.id);
 
-    let ics = '';
-    expect(() => { ics = svc.exportICS(trip.id).ics; }).not.toThrow();
+    const ics = (await svc.exportICS(trip.id)).ics;
 
     expect(ics).toContain('DTSTART;TZID=Asia/Tokyo:20251345T090000');
     expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Asia/Tokyo');
@@ -781,7 +775,7 @@ describe('exportICS', () => {
     expect(ics).toContain('TZOFFSETTO:+0000');
   });
 
-  it('CAL-022: the timezone cache stays correct after it hits its 1000-entry bound', () => {
+  it('CAL-022: the timezone cache stays correct after it hits its 1000-entry bound', async () => {
     const { user } = createUser(testDb);
     const bulkTrip = createTrip(testDb, user.id, { title: 'Cache Filler' });
     const realTrip = createTrip(testDb, user.id, { title: 'After The Bound' });
@@ -800,7 +794,7 @@ describe('exportICS', () => {
       }
     })();
 
-    const bulk = svc.exportICS(bulkTrip.id).ics;
+    const bulk = (await svc.exportICS(bulkTrip.id)).ics;
     // Every one of them has to reach the zone check — otherwise the bound is never
     // approached and this case would pass without exercising anything.
     expect(bulk).toContain('SUMMARY:Bulk 0');
@@ -815,12 +809,12 @@ describe('exportICS', () => {
     // Clearing the cache must make later zones be re-checked. A regression that
     // evicted by writing `false` instead would silently strip the TZID from every
     // export after the thousandth distinct zone string.
-    const { ics } = svc.exportICS(realTrip.id);
+    const { ics } = await svc.exportICS(realTrip.id);
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20250602T090000');
     expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Paris');
   });
 
-  it('CAL-032: an all-day booking with an end date spans the whole range', () => {
+  it('CAL-032: an all-day booking with an end date spans the whole range', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Festival Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'Music Festival', type: 'event' });
@@ -831,13 +825,13 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2026-08-26', '2026-08-30', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // DTEND is exclusive, so the day after the last day of the booking.
     expect(ics).toContain('DTSTART;VALUE=DATE:20260826\r\nDTEND;VALUE=DATE:20260831');
   });
 
-  it('CAL-033: a timed end time on an all-day booking still yields a VALUE=DATE DTEND', () => {
+  it('CAL-033: a timed end time on an all-day booking still yields a VALUE=DATE DTEND', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Mixed Precision' });
     const reservation = createReservation(testDb, trip.id, { title: 'Cottage', type: 'other' });
@@ -847,13 +841,13 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2026-08-26', '2026-08-30T11:00', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20260826\r\nDTEND;VALUE=DATE:20260831');
     expect(ics).not.toContain('DTEND:20260830T110000');
   });
 
-  it('CAL-034: an end date before the start date emits no DTEND', () => {
+  it('CAL-034: an end date before the start date emits no DTEND', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Backwards' });
     const reservation = createReservation(testDb, trip.id, { title: 'Swapped Dates', type: 'event' });
@@ -863,13 +857,13 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2026-08-26', '2026-08-20', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20260826');
     expect(ics).not.toContain('DTEND');
   });
 
-  it('CAL-035: a clock-only end time on an all-day booking emits no DTEND', () => {
+  it('CAL-035: a clock-only end time on an all-day booking emits no DTEND', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Half Timed' });
     const reservation = createReservation(testDb, trip.id, { title: 'Workshop', type: 'other' });
@@ -879,7 +873,7 @@ describe('exportICS', () => {
       .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2026-08-26', '11:00', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20260826');
     expect(ics).not.toContain('DTEND');
@@ -940,19 +934,19 @@ describe('accommodations', () => {
     return { stayId, placeId: place.id };
   };
 
-  it('CAL-025: a stay covers every night as one all-day event, not just the arrival day', () => {
+  it('CAL-025: a stay covers every night as one all-day event, not just the arrival day', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: '2026-07-12' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // DTEND is exclusive, so the day after checkout.
     expect(ics).toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260713');
     expect(ics).toContain('SUMMARY:Hotel Bellevue');
   });
 
-  it('CAL-025b: a stay that records both ends of its clock drops the all-day block (#2136)', () => {
+  it('CAL-025b: a stay that records both ends of its clock drops the all-day block (#2136)', async () => {
     // The two markers already say when to arrive and when to leave, which is the
     // part a subscriber can act on. Keeping the block as well buries the week
     // under a bar that repeats what the markers say.
@@ -963,7 +957,7 @@ describe('accommodations', () => {
       check_in: '15:00', check_out: '11:00',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).not.toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260713');
     expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue');
@@ -974,7 +968,7 @@ describe('accommodations', () => {
     expect(ics).toContain('DTEND;TZID=Europe/Paris:20260712T120000');
   });
 
-  it('CAL-025d: a second room on the same stay keeps its block, since no marker names it', () => {
+  it('CAL-025d: a second room on the same stay keeps its block, since no marker names it', async () => {
     // The markers are emitted once per stay and titled from its lowest-id
     // booking, so dropping every block would leave the second one with nothing.
     const { user } = createUser(testDb);
@@ -989,13 +983,13 @@ describe('accommodations', () => {
       VALUES (?, ?, 'Bellevue second room', NULL, 'confirmed', 'hotel', ?)
     `).run(trip.id, day.id, String(stayId));
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Bellevue second room');
     expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue');
   });
 
-  it('CAL-025e: the markers of a fully timed stay carry what the dropped block said (#2136)', () => {
+  it('CAL-025e: the markers of a fully timed stay carry what the dropped block said (#2136)', async () => {
     // Losing the block must not lose the confirmation number and the notes with
     // it, the same handover the split window bookings do (#2068).
     const { user } = createUser(testDb);
@@ -1006,7 +1000,7 @@ describe('accommodations', () => {
       confirmation: 'HTL-77291', notes: 'Key box code 4711',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     const unfolded = ics.replaceAll('\r\n ', '');
     const descriptions = unfolded.split('\r\n').filter(l => l.startsWith('DESCRIPTION:Type: hotel'));
@@ -1015,7 +1009,7 @@ describe('accommodations', () => {
     expect(descriptions[0]).toContain('Key box code 4711');
   });
 
-  it('CAL-025f: a stay whose place has no address takes the booking location instead', () => {
+  it('CAL-025f: a stay whose place has no address takes the booking location instead', async () => {
     // place_id is nullable (ON DELETE SET NULL) and an address is optional, so
     // without the fallback the only two events left name no address at all.
     const { user } = createUser(testDb);
@@ -1026,12 +1020,12 @@ describe('accommodations', () => {
       address: null, location: '12 Hotel Street',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics.match(/LOCATION:12 Hotel Street/g)).toHaveLength(2);
   });
 
-  it('CAL-025g: a stay that keeps its block does not repeat the description on its markers', () => {
+  it('CAL-025g: a stay that keeps its block does not repeat the description on its markers', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, {
@@ -1039,7 +1033,7 @@ describe('accommodations', () => {
       check_in: '15:00', confirmation: 'HTL-77291',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // The block is still emitted and still says it; saying it a second time on
     // the check-in marker would change a feed that already went out.
@@ -1047,19 +1041,19 @@ describe('accommodations', () => {
     expect(unfolded.split('\r\n').filter(l => l.startsWith('DESCRIPTION:Type: hotel'))).toHaveLength(1);
   });
 
-  it('CAL-025c: knowing only one end keeps the block, since nothing else carries the other', () => {
+  it('CAL-025c: knowing only one end keeps the block, since nothing else carries the other', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: '2026-07-12', check_in: '15:00' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260713');
     expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue');
     expect(ics).not.toContain('SUMMARY:Check-out');
   });
 
-  it('CAL-026: check-in and check-out become their own timed events in the stay zone', () => {
+  it('CAL-026: check-in and check-out become their own timed events in the stay zone', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, {
@@ -1067,7 +1061,7 @@ describe('accommodations', () => {
       check_in: '15:00', check_in_end: '22:00', check_out: '11:00',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue');
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T150000');
@@ -1078,12 +1072,12 @@ describe('accommodations', () => {
     expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Paris');
   });
 
-  it('CAL-026b: a check-in without an until-clock reads as one hour, not a point (#2136)', () => {
+  it('CAL-026b: a check-in without an until-clock reads as one hour, not a point (#2136)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: '2026-07-12', check_in: '15:00' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // Reporter variant 2: the lone timed end becomes a one-hour slot AND the
     // all-day block stays, since it is the only carrier of the other end's date.
@@ -1092,23 +1086,23 @@ describe('accommodations', () => {
     expect(ics).toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260713');
   });
 
-  it('CAL-026c: the check-out marker carries the same default hour', () => {
+  it('CAL-026c: the check-out marker carries the same default hour', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: '2026-07-12', check_out: '11:00' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260712T110000');
     expect(ics).toContain('DTEND;TZID=Europe/Paris:20260712T120000');
   });
 
-  it('CAL-026d: a late check-out rolls the DTEND over midnight', () => {
+  it('CAL-026d: a late check-out rolls the DTEND over midnight', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: '2026-07-12', check_out: '23:30' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // Without the day shift the DTEND would land before its DTSTART, and clients
     // drop an event whose end precedes its start.
@@ -1116,7 +1110,7 @@ describe('accommodations', () => {
     expect(ics).toContain('DTEND;TZID=Europe/Paris:20260713T003000');
   });
 
-  it('CAL-026e: a check-in window that ends before it starts runs past midnight (#2136)', () => {
+  it('CAL-026e: a check-in window that ends before it starts runs past midnight (#2136)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, {
@@ -1124,7 +1118,7 @@ describe('accommodations', () => {
       check_in: '22:00', check_in_end: '02:00', check_out: '11:00',
     });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // A late-arrival window, and nothing on the way in (REST, MCP, plugin SDK)
     // orders the two clocks. Emitted as recorded the DTEND precedes the DTSTART,
@@ -1133,35 +1127,35 @@ describe('accommodations', () => {
     expect(ics).toContain('DTEND;TZID=Europe/Paris:20260708T020000');
   });
 
-  it('CAL-027: a stay without times emits the all-day range and nothing else', () => {
+  it('CAL-027: a stay without times emits the all-day range and nothing else', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: '2026-07-12' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).not.toContain('Check-in');
     expect(ics).not.toContain('Check-out');
   });
 
-  it('CAL-028: a stay whose end day lost its date falls back to the arrival day', () => {
+  it('CAL-028: a stay whose end day lost its date falls back to the arrival day', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: null, check_out: '11:00' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260708');
     expect(ics).toContain('SUMMARY:Check-out: Hotel Bellevue');
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T110000');
   });
 
-  it('CAL-029: a stay with no reservation still contributes its check-in event', () => {
+  it('CAL-029: a stay with no reservation still contributes its check-in event', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     createStay(trip.id, { start: '2026-07-07', end: '2026-07-09', check_in: '15:00', withReservation: false });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue');
     // No stay event without a reservation to carry it — the accommodation itself
@@ -1169,31 +1163,31 @@ describe('accommodations', () => {
     expect(ics).not.toContain('DTEND;VALUE=DATE:20260710');
   });
 
-  it('CAL-030: a hotel reservation without a stay keeps its old single-day event', () => {
+  it('CAL-030: a hotel reservation without a stay keeps its old single-day event', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     const reservation = createReservation(testDb, trip.id, { title: 'Airbnb', type: 'hotel' });
     testDb.prepare('UPDATE reservations SET reservation_time=? WHERE id=?').run('2026-07-07', reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20260707');
     expect(ics).not.toContain('DTEND;VALUE=DATE');
   });
 
-  it('CAL-031: a dateless stay is skipped instead of emitting a broken event', () => {
+  it('CAL-031: a dateless stay is skipped instead of emitting a broken event', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Someday' });
     createStay(trip.id, { start: null, end: null, check_in: '15:00', check_out: '11:00' });
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).not.toContain('Check-in');
     expect(ics).not.toContain('Check-out');
     expect(ics).not.toContain('DTSTART;VALUE=DATE:');
   });
 
-  it('CAL-036: two bookings on one stay emit the check-in/check-out markers once', () => {
+  it('CAL-036: two bookings on one stay emit the check-in/check-out markers once', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     const { stayId } = createStay(trip.id, {
@@ -1208,7 +1202,7 @@ describe('accommodations', () => {
       VALUES (?, 'Bellevue second room', NULL, 'confirmed', 'hotel', ?)
     `).run(trip.id, String(stayId));
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics.match(/UID:trek-checkin-\d+@trek/g)).toHaveLength(1);
     expect(ics.match(/UID:trek-checkout-\d+@trek/g)).toHaveLength(1);
@@ -1219,7 +1213,7 @@ describe('accommodations', () => {
     expect(ics).toContain('SUMMARY:Bellevue second room');
   });
 
-  it('CAL-060: the stop a booking puts on its check-in day does not list the hotel a second time', () => {
+  it('CAL-060: the stop a booking puts on its check-in day does not list the hotel a second time', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });
     const { stayId, placeId } = createStay(trip.id, { start: '2026-07-07', end: '2026-07-12' });
@@ -1234,7 +1228,7 @@ describe('accommodations', () => {
     const museum = createPlace(testDb, trip.id, { name: 'Louvre' });
     createDayAssignment(testDb, stay.start_day_id, museum.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260713');
     expect(ics.match(/Hotel Bellevue/g)).toHaveLength(1);
@@ -1262,7 +1256,7 @@ describe('car rentals', () => {
     ).run(reservationId, role, sequence, name, null, lat, lng, timezone, local_time, local_date);
   };
 
-  it('CAL-037: a rental with from/to endpoints produces a pickup and a drop-off event at the right local times and zones', () => {
+  it('CAL-037: a rental with from/to endpoints produces a pickup and a drop-off event at the right local times and zones', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'Hertz Rental', type: 'car' });
@@ -1271,7 +1265,7 @@ describe('car rentals', () => {
     insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
     insertEndpoint(reservation.id, 'to', 1, 'Berlin Office', 52.5, 13.4, 'Europe/Berlin', '10:30', '2026-07-14');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Pickup: Hertz Rental');
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
@@ -1282,7 +1276,7 @@ describe('car rentals', () => {
     expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Berlin');
   });
 
-  it('CAL-038: role-less endpoints fall back to first/last by sequence', () => {
+  it('CAL-038: role-less endpoints fall back to first/last by sequence', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'Avis Rental', type: 'car' });
@@ -1291,7 +1285,7 @@ describe('car rentals', () => {
     insertEndpoint(reservation.id, 'stop', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
     insertEndpoint(reservation.id, 'stop', 1, 'Berlin Office', 52.5, 13.4, 'Europe/Berlin', '10:30', '2026-07-14');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Pickup: Avis Rental');
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
@@ -1299,7 +1293,7 @@ describe('car rentals', () => {
     expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20260714T103000');
   });
 
-  it('CAL-039: a rental with only reservation_time/reservation_end_time still produces both events', () => {
+  it('CAL-039: a rental with only reservation_time/reservation_end_time still produces both events', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const place = createPlace(testDb, trip.id, { name: 'Rental Desk', lat: 48.8566, lng: 2.3522 });
@@ -1307,7 +1301,7 @@ describe('car rentals', () => {
     testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=?, place_id=? WHERE id=?')
       .run('2026-07-07T09:00', '2026-07-14T10:30', place.id, reservation.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Pickup: Budget Rental');
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
@@ -1315,7 +1309,7 @@ describe('car rentals', () => {
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260714T103000');
   });
 
-  it('CAL-040: a rental with a single endpoint does not emit a bogus second event', () => {
+  it('CAL-040: a rental with a single endpoint does not emit a bogus second event', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'Sixt Rental', type: 'car' });
@@ -1324,13 +1318,13 @@ describe('car rentals', () => {
     // booking. The lone endpoint must not be reused as the drop-off too.
     insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Pickup: Sixt Rental');
     expect(ics).not.toContain('Drop-off');
   });
 
-  it('CAL-041: a rental with no usable clock emits no window events and its existing behaviour is unchanged', () => {
+  it('CAL-041: a rental with no usable clock emits no window events and its existing behaviour is unchanged', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const reservation = createReservation(testDb, trip.id, { title: 'Untimed Rental', type: 'car' });
@@ -1339,7 +1333,7 @@ describe('car rentals', () => {
     // fallback still applies and must be unaffected by the new marker events.
     insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', null, '2026-07-07');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).not.toContain('Pickup');
     expect(ics).not.toContain('Drop-off');
@@ -1347,7 +1341,7 @@ describe('car rentals', () => {
     expect(ics).toContain('DTSTART;VALUE=DATE:20260707');
   });
 
-  it('CAL-042: a clock that already carries seconds keeps its zone', () => {
+  it('CAL-042: a clock that already carries seconds keeps its zone', async () => {
     // The booking import stores what KItinerary hands it, which is "10:00:00".
     // fmtDateTime's time-only branch appended "00" regardless, so the value came
     // out 17 characters long, dtLine refused to attach the TZID and the event
@@ -1360,7 +1354,7 @@ describe('car rentals', () => {
     insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00:00', '2026-07-07');
     insertEndpoint(reservation.id, 'to', 1, 'Lyon Office', 45.764, 4.8357, 'Europe/Paris', '18:30:00', '2026-07-07');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T183000');
@@ -1370,14 +1364,14 @@ describe('car rentals', () => {
 
   // ── Window bookings: two hand-overs, not one block (#2068) ─────────────────
 
-  it('CAL-045: multi-day parking becomes a drop-off and a pick-up instead of one block', () => {
+  it('CAL-045: multi-day parking becomes a drop-off and a pick-up instead of one block', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const parking = createReservation(testDb, trip.id, { title: 'Airport P4', type: 'parking' });
     testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2026-07-01T06:30', '2026-07-10T22:15', parking.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // The two hand-overs, an hour each. Parking is dropped off first.
     expect(ics).toContain('SUMMARY:Drop-off: Airport P4');
@@ -1391,14 +1385,14 @@ describe('car rentals', () => {
     expect(ics).not.toContain('DTEND:20260710T221500');
   });
 
-  it('CAL-046: a same-day parking is one sitting and keeps its single event', () => {
+  it('CAL-046: a same-day parking is one sitting and keeps its single event', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const parking = createReservation(testDb, trip.id, { title: 'Garage', type: 'parking' });
     testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2026-07-01T08:00', '2026-07-01T18:30', parking.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Garage\r\n');
     expect(ics).toContain('DTSTART:20260701T080000');
@@ -1407,7 +1401,7 @@ describe('car rentals', () => {
     expect(ics).not.toContain('Pickup: Garage');
   });
 
-  it('CAL-047: a rental typed with days but no clock finally reaches the feed', () => {
+  it('CAL-047: a rental typed with days but no clock finally reaches the feed', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const first = createDay(testDb, trip.id, { date: '2026-07-03' });
@@ -1418,7 +1412,7 @@ describe('car rentals', () => {
     testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL, day_id=?, end_day_id=? WHERE id=?')
       .run(first.id, last.id, rental.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Pickup: Sixt');
     expect(ics).toContain('DTSTART;VALUE=DATE:20260703');
@@ -1426,7 +1420,7 @@ describe('car rentals', () => {
     expect(ics).toContain('DTSTART;VALUE=DATE:20260708');
   });
 
-  it('CAL-048: a split rental keeps its zones and everything the block used to say', () => {
+  it('CAL-048: a split rental keeps its zones and everything the block used to say', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const rental = createReservation(testDb, trip.id, { title: 'Hertz', type: 'car' });
@@ -1435,7 +1429,7 @@ describe('car rentals', () => {
     insertEndpoint(rental.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
     insertEndpoint(rental.id, 'to', 1, 'Berlin Office', 52.5, 13.4, 'Europe/Berlin', '10:30', '2026-07-14');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
     expect(ics).toContain('DTEND;TZID=Europe/Paris:20260707T100000');
@@ -1452,7 +1446,7 @@ describe('car rentals', () => {
 
   // #1453 — the block is the only carrier of the return time when just one side
   // was geocoded, so a one-sided rental must keep it.
-  it('CAL-049: a one-sided rental keeps its block rather than losing the return', () => {
+  it('CAL-049: a one-sided rental keeps its block rather than losing the return', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const place = createPlace(testDb, trip.id, { name: 'Rental Desk', lat: 48.8566, lng: 2.3522 });
@@ -1460,7 +1454,7 @@ describe('car rentals', () => {
     testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=?, place_id=? WHERE id=?')
       .run('2026-07-02T10:00', '2026-07-09T10:00', place.id, rental.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // Both sides resolve off reservation_time/-_end_time, so this one does split,
     // and the return keeps the pickup's zone instead of floating.
@@ -1469,21 +1463,21 @@ describe('car rentals', () => {
     expect(ics).not.toMatch(/DTSTART:20260709T100000/);
   });
 
-  it('CAL-050: a rental with only a pickup endpoint is left exactly as it was', () => {
+  it('CAL-050: a rental with only a pickup endpoint is left exactly as it was', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const rental = createReservation(testDb, trip.id, { title: 'Solo', type: 'car' });
     testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL WHERE id=?').run(rental.id);
     insertEndpoint(rental.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Solo\r\n');
     expect(ics).toContain('SUMMARY:Pickup: Solo');
     expect(ics).not.toContain('Drop-off');
   });
 
-  it('CAL-051: any transport pinned to days without a clock reaches the feed too', () => {
+  it('CAL-051: any transport pinned to days without a clock reaches the feed too', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const first = createDay(testDb, trip.id, { date: '2026-07-03' });
@@ -1492,7 +1486,7 @@ describe('car rentals', () => {
     testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL, day_id=?, end_day_id=? WHERE id=?')
       .run(first.id, last.id, bus.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     // Not a window booking, so it stays one block — it just exists now.
     expect(ics).toContain('SUMMARY:Night Bus');
@@ -1501,7 +1495,7 @@ describe('car rentals', () => {
     expect(ics).not.toContain('Pickup: Night Bus');
   });
 
-  it('CAL-052: a split rental whose endpoints carry no zone falls back to their coordinates', () => {
+  it('CAL-052: a split rental whose endpoints carry no zone falls back to their coordinates', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const rental = createReservation(testDb, trip.id, { title: 'Europcar', type: 'car' });
@@ -1510,7 +1504,7 @@ describe('car rentals', () => {
     insertEndpoint(rental.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, null, '09:00', '2026-07-07');
     insertEndpoint(rental.id, 'to', 1, 'Berlin Office', 52.5, 13.4, null, '10:30', '2026-07-14');
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
     expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20260714T103000');
@@ -1518,21 +1512,21 @@ describe('car rentals', () => {
 
   // reservation_end_time is frequently a bare clock next to the booking's own
   // date, which puts both hand-overs on the same day — so it is one sitting.
-  it('CAL-053: a bare end clock resolves against the start date rather than splitting', () => {
+  it('CAL-053: a bare end clock resolves against the start date rather than splitting', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const parking = createReservation(testDb, trip.id, { title: 'Street Bay', type: 'parking' });
     testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
       .run('2026-07-01T08:00', '18:30', parking.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Street Bay\r\n');
     expect(ics).not.toContain('Drop-off: Street Bay');
     expect(ics).not.toContain('Pickup: Street Bay');
   });
 
-  it('CAL-054: an unsplit rental with a day but no clock emits no hand-over of its own', () => {
+  it('CAL-054: an unsplit rental with a day but no clock emits no hand-over of its own', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
     const day = createDay(testDb, trip.id, { date: '2026-07-03' });
@@ -1542,7 +1536,7 @@ describe('car rentals', () => {
     testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL, day_id=?, end_day_id=NULL WHERE id=?')
       .run(day.id, rental.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Dayless\r\n');
     expect(ics).toContain('DTSTART;VALUE=DATE:20260703');
@@ -1571,7 +1565,7 @@ describe('staged bookings', () => {
     return { stayId, placeId: place.id };
   };
 
-  it('CAL-055: a staged booking is left out of the calendar, confirmation number included', () => {
+  it('CAL-055: a staged booking is left out of the calendar, confirmation number included', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Kyoto' });
     const day = createDay(testDb, trip.id, { date: '2026-09-01' });
@@ -1581,7 +1575,7 @@ describe('staged bookings', () => {
     const live = createReservation(testDb, trip.id, { title: 'Booked Flight', type: 'flight', day_id: day.id });
     testDb.prepare("UPDATE reservations SET reservation_time='2026-09-01T12:00' WHERE id=?").run(live.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Booked Flight');
     expect(ics).not.toContain('Parked Flight');
@@ -1589,7 +1583,7 @@ describe('staged bookings', () => {
     expect(ics).not.toContain('ABC123');
   });
 
-  it('CAL-056: a booking created before the column existed still exports', () => {
+  it('CAL-056: a booking created before the column existed still exports', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Lisbon' });
     const day = createDay(testDb, trip.id, { date: '2026-09-02' });
@@ -1598,24 +1592,24 @@ describe('staged bookings', () => {
     const old = createReservation(testDb, trip.id, { title: 'Legacy Booking', type: 'flight', day_id: day.id });
     testDb.prepare("UPDATE reservations SET reservation_time='2026-09-02T09:00' WHERE id=?").run(old.id);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('SUMMARY:Legacy Booking');
   });
 
-  it('CAL-057: an accommodation whose only booking is staged emits no stay, check-in or check-out', () => {
+  it('CAL-057: an accommodation whose only booking is staged emits no stay, check-in or check-out', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Osaka' });
     stayWith(trip.id, [{ state: 'staged', title: 'Parked Hotel' }]);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).not.toContain('Parked Hotel');
     expect(ics).not.toMatch(/UID:trek-checkin-\d+@trek/);
     expect(ics).not.toMatch(/UID:trek-checkout-\d+@trek/);
   });
 
-  it('CAL-058: an accommodation with no linked booking at all still emits its stay', () => {
+  it('CAL-058: an accommodation with no linked booking at all still emits its stay', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Nara' });
     // The regression this pins: a plain EXISTS(live) instead of
@@ -1623,20 +1617,20 @@ describe('staged bookings', () => {
     // trips that are shared today.
     stayWith(trip.id, []);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('Hotel Bellevue');
     expect(ics).toMatch(/UID:trek-checkin-\d+@trek/);
   });
 
-  it('CAL-059: a stay with both a staged and a live booking takes its title from the live one', () => {
+  it('CAL-059: a stay with both a staged and a live booking takes its title from the live one', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Kobe' });
     // The staged row gets the lower id, so the subquery's ORDER BY r.id ASC
     // would pick it without the predicate.
     stayWith(trip.id, [{ state: 'staged', title: 'Parked Name' }, { state: 'live', title: 'Real Name' }]);
 
-    const { ics } = svc.exportICS(trip.id);
+    const { ics } = await svc.exportICS(trip.id);
 
     expect(ics).toContain('Real Name');
     expect(ics).not.toContain('Parked Name');
@@ -1644,7 +1638,7 @@ describe('staged bookings', () => {
 });
 
 describe('folded quirk branches', () => {
-  it('TRIP-SVC-048: exportICS renders untimed/notes all-day summaries, multi-leg routes, endpoint routes and train/location fields', () => {
+  it('TRIP-SVC-048: exportICS renders untimed/notes all-day summaries, multi-leg routes, endpoint routes and train/location fields', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Branchy' });
     const day = createDay(testDb, trip.id, { date: '2025-06-02' });
@@ -1672,7 +1666,7 @@ describe('folded quirk branches', () => {
     insertEp.run(transport.id, 'to', 1, 'Pier B', 'PB', 1.1, 1.1, null, null, '2025-06-03');
 
     // Unfold the RFC 5545 75-octet folding so substring assertions see whole lines.
-    const ics = svc.exportICS(trip.id).ics.replace(/\r\n /g, '');
+    const ics = (await svc.exportICS(trip.id)).ics.replace(/\r\n /g, '');
 
     expect(ics).toContain('SUMMARY:Day 1');
     expect(ics).toContain('• Untimed Spot (1 Rue Test) — bring hat');
@@ -1688,7 +1682,6 @@ describe('folded quirk branches', () => {
   });
 });
 
-
 // foldICS is the last thing that touches the bytes of both the download and the
 // feed, and it is exported, so it is pinned directly instead of through a trip.
 describe('foldICS', () => {
@@ -1697,7 +1690,7 @@ describe('foldICS', () => {
   const octets = (s: string) => Buffer.from(s, 'utf8').length;
   const unfold = (s: string) => s.replace(/\r\n /g, '');
 
-  it('CAL-023: lines up to 75 octets are untouched and longer ones fold at 75 then 74', () => {
+  it('CAL-023: lines up to 75 octets are untouched and longer ones fold at 75 then 74', async () => {
     const short = 'SUMMARY:' + 'a'.repeat(67); // exactly 75 octets
     expect(foldICS(short)).toBe(short);
 
@@ -1712,7 +1705,7 @@ describe('foldICS', () => {
     expect(unfold(foldICS(long))).toBe(long);
   });
 
-  it('CAL-024: a two-byte codepoint straddling the 75th octet is not split', () => {
+  it('CAL-024: a two-byte codepoint straddling the 75th octet is not split', async () => {
     // The fold boundary lands inside "é": without the backoff the two halves are
     // decoded separately and the title arrives as U+FFFD in every client.
     const line = 'DESCRIPTION:' + 'é'.repeat(60);
@@ -1725,7 +1718,7 @@ describe('foldICS', () => {
     for (const part of folded.split('\r\n')) expect(octets(part)).toBeLessThanOrEqual(75);
   });
 
-  it('CAL-025: a four-byte codepoint backs the split off by more than one octet', () => {
+  it('CAL-025: a four-byte codepoint backs the split off by more than one octet', async () => {
     // An emoji needs the backoff to run several times before it reaches a lead
     // byte; stopping after a single step still cuts the sequence.
     const line = 'SUMMARY:' + '🎌'.repeat(40);
@@ -1737,7 +1730,7 @@ describe('foldICS', () => {
     for (const part of folded.split('\r\n')) expect(octets(part)).toBeLessThanOrEqual(75);
   });
 
-  it('CAL-026: folding is applied per content line, so short lines around a long one survive', () => {
+  it('CAL-026: folding is applied per content line, so short lines around a long one survive', async () => {
     const ics = 'BEGIN:VEVENT\r\nSUMMARY:' + 'ü'.repeat(80) + '\r\nEND:VEVENT';
 
     const folded = foldICS(ics);
@@ -1754,7 +1747,7 @@ describe('foldICS', () => {
 // above pin individual lines, this one pins the whole document including the
 // order of the VTIMEZONE blocks and the folding.
 describe('serialised output', () => {
-  it('CAL-010: a trip with a zoned assignment, a note day and a flight serialises byte for byte', () => {
+  it('CAL-010: a trip with a zoned assignment, a note day and a flight serialises byte for byte', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, {
       title: 'Golden Trip',
@@ -1779,7 +1772,7 @@ describe('serialised output', () => {
     // DTSTAMP is the wall clock and the UID numbers are autoincrement state shared
     // with every case above, so both are normalised: this pins the document, not
     // the minute it ran in or its position in the file.
-    const ics = svc.exportICS(trip.id).ics
+    const ics = (await svc.exportICS(trip.id)).ics
       .replace(/DTSTAMP:\d{8}T\d{6}Z/g, 'DTSTAMP:<stamp>')
       .replace(/UID:trek-([a-z]+)-\d+@trek/g, 'UID:trek-$1-<n>@trek');
 
@@ -1829,7 +1822,7 @@ describe('serialised output', () => {
 });
 
 describe('CalendarService wiring', () => {
-  it('CAL-001: the module registers the service, so injection cannot silently fail', () => {
+  it('CAL-001: the module registers the service, so injection cannot silently fail', async () => {
     expectRegisteredProvider(CalendarModule, CalendarService);
     const exports = Reflect.getMetadata('exports', CalendarModule) as unknown[];
     expect(Array.isArray(exports)).toBe(true);

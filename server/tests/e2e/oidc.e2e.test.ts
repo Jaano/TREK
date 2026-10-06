@@ -47,9 +47,10 @@ const toggles = { oidc_login: true };
 
 import { OidcModule } from '../../src/nest/oidc/oidc.module';
 import { OidcService } from '../../src/nest/oidc/oidc.service';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { AuthService } from '../../src/nest/auth/auth.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('OIDC e2e (real cookie service)', () => {
   let server: Server;
@@ -57,7 +58,7 @@ describe('OIDC e2e (real cookie service)', () => {
   let consumeAuthCode: MockInstance;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, OidcModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), OidcModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
@@ -71,7 +72,7 @@ describe('OIDC e2e (real cookie service)', () => {
     server = app.getHttpServer();
     vi.spyOn(app.get(AuthService), 'resolveAuthToggles').mockImplementation(() => toggles as never);
     const oidc = app.get(OidcService);
-    vi.spyOn(oidc, 'getOidcConfig').mockReturnValue({ issuer: 'https://idp', clientId: 'c', clientSecret: 's', displayName: 'SSO', discoveryUrl: null });
+    vi.spyOn(oidc, 'getOidcConfig').mockResolvedValue({ issuer: 'https://idp', clientId: 'c', clientSecret: 's', displayName: 'SSO', discoveryUrl: null });
     vi.spyOn(oidc, 'discover').mockResolvedValue({ authorization_endpoint: 'https://idp/auth', userinfo_endpoint: 'https://idp/ui', issuer: 'https://idp' } as never);
     vi.spyOn(oidc, 'createState').mockReturnValue({ state: 'st', codeChallenge: 'cc' });
     consumeAuthCode = vi.spyOn(oidc, 'consumeAuthCode').mockReturnValue({ token: 'jwt.value' });

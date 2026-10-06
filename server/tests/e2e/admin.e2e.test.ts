@@ -11,7 +11,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vites
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { Test } from '@nestjs/testing';
 import { seedUser, sessionCookie } from './harness';
@@ -22,12 +21,27 @@ const { db } = vi.hoisted(() => {
   const tmp = new Database(':memory:');
   tmp.exec('PRAGMA journal_mode = WAL');
   // `users` carries the columns listUsers/createUser/updateUser select, plus the
-  // is_guest flag the #1362 COALESCE guards read.
+  // is_guest flag the #1362 COALESCE guards read. Plan 3i Task 1 (admin's
+  // repository conversion) surfaced the SAME class of drift the
+  // `invite_tokens`/`used_count` comment below already documents: `UsersRepository
+  // .insertAdminCreatedUser` writes through entity metadata (MikroORM's native
+  // insert), which — unlike the legacy raw `INSERT INTO users (username, email,
+  // password_hash, role) VALUES (...)` — also applies every OTHER column's
+  // class-level JS default (`mfa_enabled = 0`, `first_seen_version = '0.0.0'`, …),
+  // even though this repository's own method never names them. Fixed at the
+  // source (the fixture, adding the columns the real migrated schema has), not
+  // worked around in the repository. `immich_allow_insecure_tls` (#2475,
+  // Migration20200101040400) is the same drift again: a defaulted column the
+  // entity now carries, so the native insert names it.
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
     password_hash TEXT, avatar TEXT, is_guest INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_login DATETIME);`);
+    last_login DATETIME, mfa_enabled INTEGER DEFAULT 0, mfa_secret TEXT, mfa_backup_codes TEXT,
+    must_change_password INTEGER DEFAULT 0, synology_skip_ssl INTEGER DEFAULT 0,
+    first_seen_version TEXT DEFAULT '0.0.0', login_count INTEGER DEFAULT 0,
+    immich_auto_upload INTEGER DEFAULT 0, airtrail_allow_insecure_tls INTEGER DEFAULT 0,
+    airtrail_write_enabled INTEGER DEFAULT 0, immich_allow_insecure_tls INTEGER NOT NULL DEFAULT 0);`);
   tmp.exec(`CREATE TABLE settings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
     key TEXT NOT NULL, value TEXT, UNIQUE(user_id, key));`);
   tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
@@ -39,8 +53,16 @@ const { db } = vi.hoisted(() => {
   tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, user_id INTEGER);');
   tmp.exec('CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER);');
   tmp.exec('CREATE TABLE trip_files (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, message_id INTEGER);');
+  // `used_count`, not `uses`: this hand-rolled fixture had drifted from the
+  // real migrated `invite_tokens` schema (`Migration20200101003500_create_invite_tokens`)
+  // — the legacy raw-SQL `RegistrationInvitesService` never named the column
+  // explicitly (its INSERT relied on the table's own DEFAULT, its re-select
+  // used `i.*`), so the drift stayed invisible. `InviteTokensRepository
+  // .insertInvite` (Plan 3b) writes through entity metadata, which does
+  // name every column explicitly — surfacing the drift as `no such column:
+  // used_count`. Fixed at the source (the fixture), not worked around.
   tmp.exec(`CREATE TABLE invite_tokens (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT NOT NULL,
-    max_uses INTEGER, uses INTEGER DEFAULT 0, expires_at TEXT, created_by INTEGER NOT NULL,
+    max_uses INTEGER, used_count INTEGER DEFAULT 0, expires_at TEXT, created_by INTEGER NOT NULL,
     trip_id INTEGER, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
   tmp.exec(`CREATE TABLE packing_templates (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
     created_by INTEGER NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
@@ -92,13 +114,15 @@ import { SettingsModule } from '../../src/nest/settings/settings.module';
 import { NotificationsModule } from '../../src/nest/notifications/notifications.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Admin e2e (real auth + admin guard + temp SQLite)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, AdminModule, OidcModule, SettingsModule, NotificationsModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, AdminModule, OidcModule, SettingsModule, NotificationsModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     // Mirror the production APP_PIPE (app.module.ts): DTO-typed bodies validate

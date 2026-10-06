@@ -9,27 +9,14 @@ import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import { createECDH } from 'node:crypto';
 import { Test } from '@nestjs/testing';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 
-// The harness db (users for the guard) plus the two tables push reads, built
-// inside the factory; the test reaches it through the mocked module.
+// The migrated snapshot (users for the guard, app_settings and the
+// push_subscriptions table from legacy step 245), opened inside the factory;
+// the test reaches it through the mocked module.
 vi.mock('../../src/db/database', async () => {
-  const { createTempDb } = await import('./harness');
-  const db = createTempDb();
-  db.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  // Same DDL as migration 245.
-  db.exec(`CREATE TABLE push_subscriptions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    endpoint TEXT NOT NULL UNIQUE,
-    p256dh TEXT NOT NULL,
-    auth TEXT NOT NULL,
-    vapid_public_key TEXT NOT NULL,
-    user_agent TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    last_success_at TEXT,
-    failure_count INTEGER NOT NULL DEFAULT 0
-  );`);
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const db = createSnapshotTestDb();
   return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
@@ -40,11 +27,12 @@ vi.mock('../../src/utils/ssrfGuard', async (importOriginal) => ({
 }));
 
 import { db } from '../../src/db/database';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { NotificationsModule } from '../../src/nest/notifications/notifications.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 const ENDPOINT = 'https://fcm.googleapis.com/fcm/send/e2e-device';
 
@@ -75,7 +63,7 @@ describe('Web Push e2e (real auth guard + temp SQLite)', () => {
 
   async function build() {
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule, RealtimeModule, NotificationsModule],
+      imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, NotificationsModule],
     }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
@@ -86,8 +74,13 @@ describe('Web Push e2e (real auth guard + temp SQLite)', () => {
   }
 
   beforeAll(async () => {
-    seedUser(db, { id: 1, email: 'one@example.test' });
-    seedUser(db, { id: 2, email: 'two@example.test' });
+    // harness.ts's seedUser() omits password_hash, which the migrated schema
+    // requires NOT NULL: a raw insert of the same SeededUser shape instead.
+    const seed = db.prepare(
+      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (?, ?, ?, 'x', 'user', 0)",
+    );
+    seed.run(1, 'e2e-user-1', 'one@example.test');
+    seed.run(2, 'e2e-user-2', 'two@example.test');
     app = await build();
     server = app.getHttpServer();
   });

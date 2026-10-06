@@ -12,12 +12,10 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   const mock = {
     db,
     closeDb: () => {},
@@ -32,10 +30,10 @@ const { testDb, dbMock } = vi.hoisted(() => {
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
-  return { testDb: db, dbMock: mock };
+    return mock;
 });
 
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-secret',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -44,11 +42,9 @@ vi.mock('../../../src/config', () => ({
 const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
+import { db as testDb } from '../../../src/db/database';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, addTripMember } from '../../helpers/factories';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { DaysService } from '../../../src/nest/days/days.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
@@ -56,7 +52,7 @@ import { TodoService } from '../../../src/nest/todo/todo.service';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import { FilesService } from '../../../src/nest/files/files.service';
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
-import { ReservationsReadRepository } from '../../../src/nest/reservations/reservations-read.repository';
+import { ReservationsReadService } from '../../../src/nest/reservations/reservations-read.service';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { CollabService } from '../../../src/nest/collab/collab.service';
@@ -77,45 +73,164 @@ import { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-pho
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
 import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.service';
-import { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
+import { TrekPhotoRegistrationService } from '../../../src/nest/photos/trek-photo-registration.service';
+import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
+import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
+import {
+  createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo, sharedTestOrm,
+  createTestDaysRepo, createTestDayAssignmentsRepo, createTestDayNotesRepo, createTestTripsRepo,
+  createTestTripMembersRepo, createTestTagsRepo, createTestPlaceRatingsRepo, createTestAssignmentParticipantsRepo,
+  createTestGooglePlacePhotoMetaRepo, createTestPlacesRepo, createTestCategoriesRepo, createTestPlaceDetailsCacheRepo,
+  createTestReservationsRepo,
+  createTestReservationEndpointsRepo,
+  createTestReservationTravelersRepo,
+  createTestReservationDayPositionsRepo,
+  createTestDayAccommodationsRepo,
+  createTestRoadtripViasRepo,
+  createTestRoadtripDayBoundariesRepo,
+} from '../../helpers/test-uow';
+import { createTestTripFilesRepo, createTestFileLinksRepo, createTestBudgetItemsRepo } from '../../helpers/files-repos';
+import { budgetRepoArgs } from '../../helpers/budget-repos';
+import {
+  createTestCollabMessageReactionsRepo, createTestCollabNotesRepo, createTestCollabPollsRepo,
+  createTestCollabPollVotesRepo, createTestCollabLinksRepo, createTestCollabMessagesRepo,
+} from '../../helpers/collab-repos';
+import {
+  createTestPackingItemsRepo, createTestPackingItemContributorsRepo, createTestPackingBagsRepo,
+  createTestPackingCategoryAssigneesRepo, createTestPackingTemplatesRepo, createTestPackingTemplateCategoriesRepo,
+  createTestPackingTemplateItemsRepo,
+} from '../../helpers/packing-repos';
+import { createTestTodoItemsRepo, createTestTodoCategoryAssigneesRepo } from '../../helpers/todo-repos';
+import {
+  createTestJourneysRepo, createTestJourneyContributorsRepo, createTestJourneyTripsRepo, createTestJourneyEntriesRepo,
+  createTestJourneyPhotosRepo, createTestJourneyEntryPhotosRepo,
+} from '../../helpers/journey-repos';
+import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
+import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
+import { createTestCollectionPlacesRepo } from '../../helpers/test-uow';
 import { noGoogleQuota } from '../../helpers/google-quota';
 
 // Real sibling services over the same in-memory DB — the aggregation runs the
 // actual SQL of every domain it fans out to, so a shape change downstream shows
 // up here instead of being papered over by a stub.
-const dbs = () => new DatabaseService(testDb);
-const budgetSvc = new BudgetService(dbs(), new PermissionsService(dbs()), new ExchangeRatesService(), new RealtimeService());
-const daysSvc = new DaysService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new QueryHelpersService(dbs()));
+
 // One shared cache instance (the PlacePhotoCacheService rule): the in-flight dedup in
 // PlacePhotoCacheService only works while both consumers hold the same object.
-const photoCache = new PlacePhotoCacheService(dbs(), makeStorageFixture('photos/google/').storage);
-const placesSvc = new PlacesService(
-  dbs(), new PermissionsService(dbs()), new RealtimeService(),
-  new MapsService(dbs(), photoCache, noGoogleQuota), new QueryHelpersService(dbs()),
-  new UnsplashService(dbs(), new RuntimeEnvService(), makeStorageFixture('').storage), photoCache,
-  new JourneyDomainService(dbs(), new RealtimeService(), new TrekPhotosRepository(dbs())),
-  makeStorageFixture('').storage,
-  accommodationsOver(dbs()),
-);
-const accommodationsSvc = makeAccommodationsService(testDb);
-const membersSvc = new TripMembersService(dbs(), budgetSvc, new UserCleanupService(dbs(), budgetSvc), new PermissionsService(dbs()), new RealtimeService(), notificationsStub());
+// Plan 3c Task 1: built inside the async `beforeAll` below now — the
+// constructor needs two repositories, resolved through `createTestOrm`.
+let photoCache: PlacePhotoCacheService;
 
-const buildReadModel = (database: DatabaseService, roster: TripMembersService = membersSvc) =>
+let accommodationsSvc: Awaited<ReturnType<typeof makeAccommodationsService>>;
+beforeAll(async () => {
+  accommodationsSvc = await makeAccommodationsService(testDb);
+});
+let budgetSvc: BudgetService;
+let daysSvc: DaysService;
+let placesSvc: PlacesService;
+let membersSvc: TripMembersService;
+beforeAll(async () => {
+  photoCache = new PlacePhotoCacheService(
+    makeStorageFixture('photos/google/').storage,
+    await createTestGooglePlacePhotoMetaRepo(testDb),
+    await createTestPlacesRepo(testDb),
+    await createTestCollectionPlacesRepo(testDb),
+  );
+  budgetSvc = new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb)));
+  daysSvc = new DaysService(
+    new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)),
+    new RealtimeService(),
+    new QueryHelpersService(await createTestTagsRepo(testDb), await createTestPlaceRatingsRepo(testDb), await createTestAssignmentParticipantsRepo(testDb)),
+    await createTestUnitOfWork(testDb),
+    await createTestDaysRepo(testDb),
+    await createTestDayAssignmentsRepo(testDb),
+    await createTestDayNotesRepo(testDb),
+    await createTestTripsRepo(testDb),
+    await createTestReservationsRepo(testDb),
+    await createTestReservationEndpointsRepo(testDb),
+    await createTestDayAccommodationsRepo(testDb),
+    await createTestRoadtripViasRepo(testDb),
+    await createTestRoadtripDayBoundariesRepo(testDb),
+  );
+  placesSvc = new PlacesService(
+  new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService(),
+  new MapsService(photoCache, await createTestAppSettingsRepo(testDb), await createTestUsersRepo(testDb), await createTestPlaceDetailsCacheRepo(testDb), await createTestPlacesRepo(testDb), noGoogleQuota), new QueryHelpersService(await createTestTagsRepo(testDb), await createTestPlaceRatingsRepo(testDb), await createTestAssignmentParticipantsRepo(testDb)),
+  new UnsplashService(await createTestAppSettingsRepo(testDb), await createTestUsersRepo(testDb), new RuntimeEnvService(), makeStorageFixture('').storage), photoCache,
+  new JourneyDomainService(
+    new RealtimeService(), new TrekPhotoRegistrationService((await sharedTestOrm(testDb)).repo(TrekPhotos), (await sharedTestOrm(testDb)).repo(TripPhotos), await createTestJourneyPhotosRepo(testDb)), await createTestUnitOfWork(testDb),
+    await createTestJourneysRepo(testDb), await createTestJourneyContributorsRepo(testDb),
+    await createTestJourneyTripsRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestTripsRepo(testDb),
+    // Plan 3g Task 2 constructor-ripple: JourneyPhotosRepository/JourneyEntryPhotosRepository/PlacesRepository.
+    await createTestJourneyPhotosRepo(testDb), await createTestJourneyEntryPhotosRepo(testDb), await createTestPlacesRepo(testDb),
+  ),
+  makeStorageFixture('').storage,
+  await accommodationsOver(testDb), await createTestUnitOfWork(testDb),
+  await createTestPlacesRepo(testDb),
+  await createTestTagsRepo(testDb),
+  await createTestPlaceRatingsRepo(testDb),
+  await createTestTripMembersRepo(testDb),
+  await createTestDayAssignmentsRepo(testDb),
+  await createTestCategoriesRepo(testDb),
+  await createTestTripsRepo(testDb),
+  await createTestBudgetItemsRepo(testDb),
+  await createTestCollectionPlacesRepo(testDb),
+);
+  membersSvc = new TripMembersService(budgetSvc, new UserCleanupService((await sharedTestOrm(testDb)).em, budgetSvc, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestTripMembersRepo(testDb), await createTestBudgetItemsRepo(testDb), await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb), await createTestShareTokensRepo(testDb), await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb)), new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService(), notificationsStub(), await createTestUnitOfWork(testDb), await createTestTripsRepo(testDb), await createTestTripMembersRepo(testDb), await createTestUsersRepo(testDb));
+});
+
+const buildReadModel = async (tripsRepo: TripsRepository, roster: TripMembersService = membersSvc) =>
   new TripReadModelService(
-    database, roster, daysSvc, accommodationsSvc, budgetSvc,
-    new PackingService(dbs(), new PermissionsService(dbs()), new RealtimeService(), notificationsStub()),
-    new ReservationsService(dbs(), new PermissionsService(dbs()), budgetSvc, new RealtimeService(), notificationsStub(), new ReservationsReadRepository(dbs()), accommodationsOver(dbs())),
-    new CollabService(dbs(), new PermissionsService(dbs()), new RealtimeService(), notificationsStub(), makeStorageFixture('').storage, new RateLimitService()),
+    tripsRepo, roster, daysSvc, accommodationsSvc, budgetSvc,
+    new PackingService(
+      new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService(), notificationsStub(), await createTestUnitOfWork(testDb),
+      await createTestPackingItemsRepo(testDb), await createTestPackingItemContributorsRepo(testDb), await createTestPackingBagsRepo(testDb),
+      await createTestPackingCategoryAssigneesRepo(testDb), await createTestPackingTemplatesRepo(testDb), await createTestPackingTemplateCategoriesRepo(testDb),
+      await createTestPackingTemplateItemsRepo(testDb), await createTestTripsRepo(testDb), await createTestTripMembersRepo(testDb),
+    ),
+    new ReservationsService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), budgetSvc, new RealtimeService(), notificationsStub(), new ReservationsReadService(await createTestReservationsRepo(testDb), await createTestReservationEndpointsRepo(testDb), await createTestReservationTravelersRepo(testDb)), await accommodationsOver(testDb), await createTestUnitOfWork(testDb), await createTestReservationsRepo(testDb), await createTestReservationEndpointsRepo(testDb), await createTestReservationTravelersRepo(testDb), await createTestReservationDayPositionsRepo(testDb), await createTestDayAccommodationsRepo(testDb), await createTestDaysRepo(testDb), await createTestPlacesRepo(testDb), await createTestDayAssignmentsRepo(testDb), await createTestTripMembersRepo(testDb), await createTestUsersRepo(testDb), await createTestTripsRepo(testDb), await createTestBudgetItemsRepo(testDb)),
+    new CollabService(
+      // Plan 4 Task 2 — CollabService's own DatabaseService param is gone:
+      // canAccessTrip now reads through the TripsRepository at the end.
+      new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService(), notificationsStub(), makeStorageFixture('').storage, new RateLimitService(), await createTestUnitOfWork(testDb),
+      await createTestCollabMessageReactionsRepo(testDb), await createTestCollabNotesRepo(testDb), await createTestCollabPollsRepo(testDb),
+      await createTestCollabPollVotesRepo(testDb), await createTestCollabLinksRepo(testDb), await createTestCollabMessagesRepo(testDb),
+      await createTestTripsRepo(testDb),
+    ),
     placesSvc,
-    new TodoService(dbs(), new PermissionsService(dbs()), new RealtimeService()),
-    new FilesService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new EphemeralTokenService(), makeStorageFixture('').storage),
+    new TodoService(
+      new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService(), await createTestUnitOfWork(testDb),
+      await createTestTodoItemsRepo(testDb), await createTestTodoCategoryAssigneesRepo(testDb),
+      // Plan 4 Task 2 — TodoService's own canAccessTrip delegate is now
+      // TripsRepository.findAccessible, a new trailing constructor param.
+      await createTestTripsRepo(testDb),
+      // Plan 4 Task 3 — DatabaseService.rosterUserIds inlined onto
+      // TripMembersRepository.rosterUserIds directly.
+      await createTestTripMembersRepo(testDb),
+    ),
+    new FilesService(
+      // Plan 4 Task 2 — FilesService's own canAccessTrip delegate is now
+      // TripsRepository.findAccessible, in the same constructor slot.
+      await createTestTripsRepo(testDb),
+      new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)),
+      new RealtimeService(),
+      new EphemeralTokenService(),
+      makeStorageFixture('').storage,
+      (await sharedTestOrm(testDb)).em,
+      await createTestUnitOfWork(testDb),
+      await createTestTripFilesRepo(testDb),
+      await createTestFileLinksRepo(testDb),
+      await createTestReservationsRepo(testDb),
+      await createTestPlacesRepo(testDb),
+      await createTestDayAssignmentsRepo(testDb),
+      await createTestBudgetItemsRepo(testDb),
+    ),
   );
 
-const svc = buildReadModel(dbs());
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+let svc: Awaited<ReturnType<typeof buildReadModel>>;
+let tripsRepo: TripsRepository;
+beforeAll(async () => {
+  tripsRepo = await createTestTripsRepo(testDb);
+  svc = await buildReadModel(tripsRepo);
 });
 
 beforeEach(() => {
@@ -136,24 +251,13 @@ const addPackingItem = (tripId: number, name: string, checked: number) =>
   testDb.prepare('INSERT INTO packing_items (trip_id, name, checked) VALUES (?, ?, ?)')
     .run(tripId, name, checked);
 
-/**
- * A DatabaseService whose connection cannot resolve the owner lookup, standing in
- * for the trip row disappearing between the two SELECTs getTripSummary issues.
- * Only the read model's own two statements go through this connection; the
- * sibling services keep the real one.
- */
-function ownerlessDbs(): DatabaseService {
-  const conn = new Proxy(testDb, {
-    get(target, prop) {
-      if (prop === 'prepare') {
-        return (sql: string) =>
-          (sql.includes('SELECT user_id FROM trips') ? { get: () => undefined } : target.prepare(sql));
-      }
-      const v = (target as any)[prop];
-      return typeof v === 'function' ? v.bind(target) : v;
-    },
-  });
-  return { connection: conn } as unknown as DatabaseService;
+// R8 (Plan 3c program brief item 8): the SQL-text-keyed Proxy fault injection
+// this file used to build (`ownerlessDbs`, keyed on the literal
+// `'SELECT user_id FROM trips'` fragment) is rewritten onto a repository-level
+// fault: TR-A's `getOwnerId` failing while TR-B's `findRaw` still succeeds —
+// the trip row disappearing between the two reads `getTripSummary` issues.
+function forceMissingOwner(): ReturnType<typeof vi.spyOn> {
+  return vi.spyOn(tripsRepo, 'getOwnerId').mockResolvedValueOnce(null);
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -171,14 +275,39 @@ describe('getTripSummary guards', () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
 
-    // Trip row and owner id are two separate SELECTs; if the second one comes back
+    // Trip row and owner id are two separate reads; if the second one comes back
     // empty (trip deleted in between) the guard has to stop. Without it listMembers
     // runs with an undefined owner id and the summary reports an ownerless trip.
-    expect(await buildReadModel(ownerlessDbs()).getTripSummary(trip.id, owner.id)).toBeNull();
+    const spy = forceMissingOwner();
+    try {
+      expect(await svc.getTripSummary(trip.id, owner.id)).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
 
-    // Same trip through the real connection still aggregates — the null above is
+    // Same trip through the real repository still aggregates — the null above is
     // the missing owner row, not a broken fixture.
     expect(await svc.getTripSummary(trip.id, owner.id)).not.toBeNull();
+  });
+});
+
+describe('getTripSummary — feed_token never reaches the wire (TR-B)', () => {
+  it('TRIP-READ-002b: withoutFeedToken strips feed_token even though findRaw hands it back intact', async () => {
+    const { user: owner } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    testDb.prepare('UPDATE trips SET feed_token = ? WHERE id = ?').run('secret-anon-feed-credential', trip.id);
+
+    // TripsRepository.findRaw is a plain `SELECT *` — it hands feed_token back
+    // intact (proven directly, bypassing the service, so this test would fail
+    // if the repository ever started blanking the column itself).
+    expect((await tripsRepo.findRaw(trip.id))?.feed_token).toBe('secret-anon-feed-credential');
+
+    // getTripSummary's own withoutFeedToken() strip is the only thing standing
+    // between that credential and an MCP reader — assert it on the actual
+    // result object, not just that the call succeeds.
+    const summary = (await svc.getTripSummary(trip.id, owner.id))!;
+    expect(summary.trip).not.toHaveProperty('feed_token');
+    expect(JSON.stringify(summary)).not.toContain('secret-anon-feed-credential');
   });
 });
 
@@ -248,7 +377,7 @@ describe('getTripSummary shaping', () => {
 });
 
 describe('bundle shaping', () => {
-  it('TRIP-READ-005: keeps the member list a flat array when the roster has no members', () => {
+  it('TRIP-READ-005: keeps the member list a flat array when the roster has no members', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
 
@@ -260,14 +389,14 @@ describe('bundle shaping', () => {
       owner: { id: owner.id, username: 'solo' }, members: undefined,
     } as never);
     try {
-      const result = svc.bundle(String(trip.id), { user_id: owner.id }, owner.id) as any;
+      const result = (await svc.bundle(String(trip.id), { user_id: owner.id }, owner.id)) as any;
       expect(result.members).toEqual([{ id: owner.id, username: 'solo' }]);
     } finally {
       roster.mockRestore();
     }
   });
 
-  it('TRIP-READ-006: drops a falsy owner rather than shipping a hole in the member list', () => {
+  it('TRIP-READ-006: drops a falsy owner rather than shipping a hole in the member list', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
 
@@ -278,7 +407,7 @@ describe('bundle shaping', () => {
       owner: undefined, members: [{ id: 42, username: 'left-behind' }],
     } as never);
     try {
-      const result = svc.bundle(String(trip.id), { user_id: owner.id }, owner.id) as any;
+      const result = (await svc.bundle(String(trip.id), { user_id: owner.id }, owner.id)) as any;
       expect(result.members).toEqual([{ id: 42, username: 'left-behind' }]);
     } finally {
       roster.mockRestore();
@@ -304,13 +433,13 @@ describe('private packing items stay viewer-scoped (#858)', () => {
     expect(asViewer.packing.items.map((i: any) => i.name)).toEqual(['Tent']);
     expect(asViewer.packing.total).toBe(1);
 
-    const bundled = svc.bundle(String(trip.id), { user_id: owner.id }, viewer.id) as any;
+    const bundled = (await svc.bundle(String(trip.id), { user_id: owner.id }, viewer.id)) as any;
     expect(bundled.packingItems.map((i: any) => i.name)).toEqual(['Tent']);
 
     // The owner still sees their own private item through both paths, so the
     // assertions above are the filter working, not an empty fixture.
     expect((await svc.getTripSummary(trip.id, owner.id))!.packing.items.map((i: any) => i.name)).toEqual(['Ring', 'Tent']);
-    expect((svc.bundle(String(trip.id), { user_id: owner.id }, owner.id) as any)
+    expect(((await svc.bundle(String(trip.id), { user_id: owner.id }, owner.id)) as any)
       .packingItems.map((i: any) => i.name)).toEqual(['Ring', 'Tent']);
   });
 });

@@ -19,7 +19,8 @@ import { FilesRpc } from '../../../src/nest/files/files.rpc';
 import { FilesModule } from '../../../src/nest/files/files.module';
 import { FilesService } from '../../../src/nest/files/files.service';
 import type { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import type { StorageService } from '../../../src/nest/storage/storage.service';
@@ -46,13 +47,19 @@ function build(opts: { file?: Record<string, unknown> | undefined; foreign?: str
     softDeleteFile: vi.fn(),
   } as unknown as FilesService & Record<string, ReturnType<typeof vi.fn>>;
   const db = {
-    canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
-    prepare: vi.fn(() => ({ get: () => ({ role: 'user', email: 'real@example.test' }) })),
-  } as unknown as DatabaseService;
+    findAccessible: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
+  } as unknown as TripsRepository;
+  // FL28 — `SELECT email FROM users WHERE id = ?`, now `UsersRepository.getEmail`.
+  // getRole is PluginGuards' own role lookup (PG3/PG4, Plan 3j Task 1), on the
+  // same double — both are UsersRepository methods now.
+  const usersRepo = {
+    getEmail: vi.fn(async () => 'real@example.test'),
+    getRole: vi.fn(async () => 'user'),
+  } as unknown as UsersRepository;
   const permissions = {
     checkPermission: vi.fn((action: string) => (opts.allow ? opts.allow(action) : true)),
   } as unknown as PermissionsService;
-  const guards = new PluginGuards(db, permissions, { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService);
+  const guards = new PluginGuards(db, permissions, { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService, usersRepo);
   const storage = {
     getStream: vi.fn(async () => ({
       stream: Readable.from(Buffer.from('hi')),
@@ -66,7 +73,7 @@ function build(opts: { file?: Record<string, unknown> | undefined; foreign?: str
   // keep exercising that code rather than a stub of it.
   (files as unknown as { readContent: FilesService['readContent'] }).readContent =
     FilesService.prototype.readContent.bind({ getFileById: files.getFileById, storage } as unknown as FilesService);
-  const rpc = new FilesRpc(files, realtime, db, guards, storage);
+  const rpc = new FilesRpc(files, realtime, usersRepo, guards, storage);
   const host = (...grants: string[]) => new PluginRpcHost('p', new Set(grants), makeDeps(), createTestPluginRegistry([rpc]));
   return { files, realtime, permissions, storage, host };
 }
@@ -196,6 +203,18 @@ describe('FilesRpc writes', () => {
     expect(res.error.message).toBe('file exceeds the 10MB plugin upload cap');
   });
 
+  it('M1: a payload whose DECODED bytes exceed the 10MB cap is refused even though its base64 length is under the 14MB encoded cap', async () => {
+    const f = build();
+    // 10,600,000 decoded bytes (> FILE_CONTENT_MAX's 10,485,760) encodes to
+    // ~14.13M base64 chars — under FILES-RPC-010's 14MB ENCODED-length gate,
+    // so only `writeFile`'s own decoded-length check can catch this one.
+    const oversized = b64('x'.repeat(10_600_000));
+    const res = (await f.host('db:write:files').dispatch(
+      req('files.create', { tripId: 1, input: { name: 'big.pdf', content_base64: oversized } }), 42,
+    )) as RpcError;
+    expect(res.error.message).toBe('file exceeds the 10MB plugin upload cap');
+  });
+
   it('FILES-RPC-011 empty decoded content is refused', async () => {
     const f = build();
     const res = (await f.host('db:write:files').dispatch(req('files.create', { tripId: 1, input: { name: 'a.pdf', content_base64: '====' } }), 42)) as RpcError;
@@ -209,6 +228,22 @@ describe('FilesRpc writes', () => {
     expect(created.error.message).toBe('reservation 9 does not belong to trip 1');
     const updated = (await host.dispatch(req('files.update', { tripId: 1, fileId: 2, input: { reservation_id: 9 } }), 42)) as RpcError;
     expect(updated.error.message).toBe('reservation 9 does not belong to trip 1');
+  });
+
+  it('M1: files.createLink also refuses a link target on another trip', async () => {
+    const f = build({ foreign: 'place 7' });
+    const res = (await f.host('db:write:files').dispatch(req('files.createLink', { tripId: 1, fileId: 2, opts: { place_id: 7 } }), 42)) as RpcError;
+    expect(res.error.message).toBe('place 7 does not belong to trip 1');
+    expect(f.files.createFileLink).not.toHaveBeenCalled();
+  });
+
+  it('M1: files.createLink stringifies a provided place_id and files.update leaves an entirely absent reservation_id as undefined', async () => {
+    const f = build();
+    await f.host('db:write:files').dispatch(req('files.createLink', { tripId: 1, fileId: 2, opts: { place_id: 11 } }), 42);
+    expect(f.files.createFileLink).toHaveBeenCalledWith(2, { reservation_id: null, assignment_id: null, place_id: '11' });
+
+    await f.host('db:write:files').dispatch(req('files.update', { tripId: 1, fileId: 2, input: { description: 'x' } }), 42);
+    expect(f.files.updateFile).toHaveBeenLastCalledWith(2, expect.anything(), expect.objectContaining({ reservation_id: undefined }));
   });
 
   it('FILES-RPC-013 update tells null from undefined, so a link can be cleared', async () => {
@@ -255,22 +290,27 @@ describe('FilesRpc writes', () => {
     process.env.DEMO_MODE = 'true';
     try {
       const f = build();
-      // The demo guard resolves the uploader's email; user 9 is the demo account.
       const db = {
-        canAccessTrip: vi.fn(() => ({ id: 1, user_id: 42 })),
-        prepare: vi.fn(() => ({ get: (id: number) => (id === 9 ? { role: 'user', email: 'demo@trek.app' } : { role: 'user', email: 'real@example.test' }) })),
-      } as unknown as DatabaseService;
+        findAccessible: vi.fn(async () => ({ id: 1, user_id: 42 })),
+      } as unknown as TripsRepository;
       const guards = new PluginGuards(
         db,
         { checkPermission: vi.fn(() => true) } as unknown as PermissionsService,
         { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService,
+        // PluginGuards' own role lookup — unrelated to FL28's `usersRepo` below,
+        // which is used for the demo-uploader email check.
+        { getRole: vi.fn(async () => 'user') } as unknown as UsersRepository,
       );
       const files = {
         findForeignLinkTarget: vi.fn(() => null),
         createFile: vi.fn(() => ({ id: 130 })),
       } as unknown as FilesService;
       const storage = { getStream: vi.fn(), put: vi.fn(async () => undefined) } as unknown as StorageService;
-      const rpc = new FilesRpc(files, { broadcast: vi.fn() } as unknown as RealtimeService, db, guards, storage);
+      // The demo guard resolves the uploader's email; user 9 is the demo account.
+      const usersRepo = {
+        getEmail: vi.fn(async (id: number) => (id === 9 ? 'demo@trek.app' : 'real@example.test')),
+      } as unknown as UsersRepository;
+      const rpc = new FilesRpc(files, { broadcast: vi.fn() } as unknown as RealtimeService, usersRepo, guards, storage);
       const host = new PluginRpcHost('p', new Set(['db:write:files']), makeDeps(), createTestPluginRegistry([rpc]));
       const input = { name: 'a.pdf', content_base64: b64('x') };
       const denied = (await host.dispatch(req('files.create', { tripId: 1, input }), 9)) as RpcError;

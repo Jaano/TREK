@@ -157,7 +157,7 @@ interface LegPlan {
   reservationEndTime?: string;
   // A day row carries an optional date, so the caller cannot promise one. Every
   // read below treats a dateless day as "no date known" rather than stamping undefined.
-  lookupDay: (id: number) => { date?: string | null } | undefined;
+  lookupDay: (id: number) => Promise<{ date?: string | null } | undefined>;
 }
 
 interface LegOutcome {
@@ -175,7 +175,7 @@ interface LegOutcome {
  * Validate the legs against the endpoints and fold them into the metadata.
  * Returns the values the write should use, or the first error as text.
  */
-function applyLegs(plan: LegPlan): LegOutcome | { error: string } {
+async function applyLegs(plan: LegPlan): Promise<LegOutcome | { error: string }> {
   const { legs, lookupDay } = plan;
   const last = legs.length - 1;
 
@@ -191,7 +191,7 @@ function applyLegs(plan: LegPlan): LegOutcome | { error: string } {
   for (let i = 0; i < legs.length; i++) {
     for (const field of ['dep_day_id', 'arr_day_id'] as const) {
       const dayId = legs[i][field];
-      if (dayId != null && !lookupDay(dayId))
+      if (dayId != null && !(await lookupDay(dayId)))
         return { error: `legs[${i}].${field} does not belong to this trip.` };
     }
   }
@@ -205,10 +205,10 @@ function applyLegs(plan: LegPlan): LegOutcome | { error: string } {
 
   const endpoints = plan.endpoints.map(e => ({ ...e }));
   let endpointsChanged = false;
-  const syncEndpoint = (index: number, time: string | null | undefined, dayId: number | null | undefined, label: string): string | null => {
+  const syncEndpoint = async (index: number, time: string | null | undefined, dayId: number | null | undefined, label: string): Promise<string | null> => {
     const ep = endpoints[index];
     if (dayId != null && !ep.local_date) {
-      const day = lookupDay(dayId);
+      const day = await lookupDay(dayId);
       if (day?.date) { ep.local_date = day.date; endpointsChanged = true; }
     }
     if (!time) return null;
@@ -230,7 +230,7 @@ function applyLegs(plan: LegPlan): LegOutcome | { error: string } {
     if (leg.to && arrEp.code && leg.to.toUpperCase() !== arrEp.code.toUpperCase())
       return { error: `legs[${i}].to (${leg.to}) does not match endpoints[${i + 1}] (${arrEp.code}).` };
 
-    const depConflict = syncEndpoint(i, leg.dep_time, leg.dep_day_id, `legs[${i}].dep_time`);
+    const depConflict = await syncEndpoint(i, leg.dep_time, leg.dep_day_id, `legs[${i}].dep_time`);
     if (depConflict) return { error: depConflict };
 
     const entry: MetaRecord = {
@@ -252,7 +252,7 @@ function applyLegs(plan: LegPlan): LegOutcome | { error: string } {
     merged.push(entry);
   }
 
-  const arrConflict = syncEndpoint(legs.length, legs[last].arr_time, lastArrDay, `legs[${last}].arr_time`);
+  const arrConflict = await syncEndpoint(legs.length, legs[last].arr_time, lastArrDay, `legs[${last}].arr_time`);
   if (arrConflict) return { error: arrConflict };
 
   const metadata: MetaRecord = { ...plan.baseMetadata, legs: merged };
@@ -279,9 +279,9 @@ function applyLegs(plan: LegPlan): LegOutcome | { error: string } {
   const endDayId = plan.endDayId ?? lastArrDay ?? undefined;
   // Same fallback as the form's buildTime: date the time when the day is known,
   // otherwise keep the bare 'HH:mm' rather than dropping it.
-  const stamp = (day: number | undefined, time: string | null | undefined) => {
+  const stamp = async (day: number | undefined, time: string | null | undefined) => {
     if (!time) return undefined;
-    const row = day === undefined ? undefined : lookupDay(day);
+    const row = day === undefined ? undefined : await lookupDay(day);
     return row?.date ? `${row.date}T${time}` : time;
   };
 
@@ -291,8 +291,8 @@ function applyLegs(plan: LegPlan): LegOutcome | { error: string } {
     endpointsChanged,
     day_id: dayId,
     end_day_id: endDayId,
-    reservation_time: plan.reservationTime ?? stamp(dayId, legs[0].dep_time),
-    reservation_end_time: plan.reservationEndTime ?? stamp(endDayId, legs[last].arr_time),
+    reservation_time: plan.reservationTime ?? await stamp(dayId, legs[0].dep_time),
+    reservation_end_time: plan.reservationEndTime ?? await stamp(endDayId, legs[last].arr_time),
   };
 }
 
@@ -362,20 +362,20 @@ export class ReservationsMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
 
     // Validate that all referenced IDs belong to this trip
-    if (day_id && !this.days.getDay(day_id, tripId))
+    if (day_id && !(await this.days.getDay(day_id, tripId)))
       return errorResult('day_id does not belong to this trip.');
-    if (place_id && !this.assignments.placeExists(place_id, tripId))
+    if (place_id && !(await this.assignments.placeExists(place_id, tripId)))
       return errorResult('place_id does not belong to this trip.');
-    if (start_day_id && !this.days.getDay(start_day_id, tripId))
+    if (start_day_id && !(await this.days.getDay(start_day_id, tripId)))
       return errorResult('start_day_id does not belong to this trip.');
-    if (end_day_id && !this.days.getDay(end_day_id, tripId))
+    if (end_day_id && !(await this.days.getDay(end_day_id, tripId)))
       return errorResult('end_day_id does not belong to this trip.');
-    if (assignment_id && !this.assignments.getAssignmentForTrip(assignment_id, tripId))
+    if (assignment_id && !(await this.assignments.getAssignmentForTrip(assignment_id, tripId)))
       return errorResult('assignment_id does not belong to this trip.');
 
     const createAccommodation = (type === 'hotel' && place_id && start_day_id && end_day_id)
@@ -384,7 +384,7 @@ export class ReservationsMcp {
 
     const metadata = price != null ? { price: String(price) } : undefined;
 
-    const { reservation, accommodationCreated } = this.reservations.create(tripId, {
+    const { reservation, accommodationCreated } = await this.reservations.create(tripId, {
       title, type, reservation_time, reservation_end_time, url, location, confirmation_number,
       notes, day_id, place_id, assignment_id,
       create_accommodation: createAccommodation,
@@ -396,7 +396,7 @@ export class ReservationsMcp {
     }
 
     if (price != null && price > 0) {
-      const item = this.budget.linkBudgetItemToReservation(tripId, reservation.id, {
+      const item = await this.budget.linkBudgetItemToReservation(tripId, reservation.id, {
         name: title,
         category: budget_category || type,
         total_price: price,
@@ -438,18 +438,18 @@ export class ReservationsMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
-    const existing = this.reservations.getReservation(reservationId, tripId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
+    const existing = await this.reservations.getReservation(reservationId, tripId);
     if (!existing) return errorResult('Reservation not found.');
 
-    if (place_id != null && !this.assignments.placeExists(place_id, tripId))
+    if (place_id != null && !(await this.assignments.placeExists(place_id, tripId)))
       return errorResult('place_id does not belong to this trip.');
-    if (assignment_id != null && !this.assignments.getAssignmentForTrip(assignment_id, tripId))
+    if (assignment_id != null && !(await this.assignments.getAssignmentForTrip(assignment_id, tripId)))
       return errorResult('assignment_id does not belong to this trip.');
 
-    const { reservation } = this.reservations.update(reservationId, tripId, {
+    const { reservation } = await this.reservations.update(reservationId, tripId, {
       title, type, reservation_time, reservation_end_time, url, location, confirmation_number, notes, status,
       place_id: place_id !== undefined ? place_id ?? undefined : undefined,
       assignment_id: assignment_id !== undefined ? assignment_id ?? undefined : undefined,
@@ -469,10 +469,10 @@ export class ReservationsMcp {
     access: { group: 'reservations', mode: 'write' },
   })
   async deleteReservation({ tripId, reservationId }: { tripId: number; reservationId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
-    const { deleted, accommodationDeleted, deletedBudgetItemIds } = this.reservations.remove(reservationId, tripId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
+    const { deleted, accommodationDeleted, deletedBudgetItemIds } = await this.reservations.remove(reservationId, tripId);
     if (!deleted) return errorResult('Reservation not found.');
     if (accommodationDeleted) {
       this.guards.safeBroadcast(tripId, 'accommodation:deleted', { accommodationId: deleted.accommodation_id });
@@ -497,13 +497,13 @@ export class ReservationsMcp {
     { tripId, reservationId, user_ids }: { tripId: number; reservationId: number; user_ids: number[] },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
 
     // The service filters the ids against the trip roster on its own, so an
     // off-trip id cannot be attached; a missing booking is the only failure.
-    const result = this.reservations.setTravelers(String(reservationId), String(tripId), user_ids);
+    const result = await this.reservations.setTravelers(String(reservationId), String(tripId), user_ids);
     if (!result) return errorResult('Reservation not found.');
 
     this.guards.safeBroadcast(tripId, 'reservation:travelers-updated', { reservationId, travelers: result.travelers });
@@ -535,17 +535,17 @@ export class ReservationsMcp {
     { tripId, positions, dayId }: { tripId: number; positions: { id: number; day_plan_position: number }[]; dayId?: number },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
 
     // The service scopes the write to the trip on its own, so a foreign id is
     // already harmless — say so rather than reporting a success that moved
     // nothing, the way the sibling tools above do.
-    if (dayId && !this.days.getDay(dayId, tripId))
+    if (dayId && !(await this.days.getDay(dayId, tripId)))
       return errorResult('dayId does not belong to this trip.');
 
-    this.reservations.updatePositions(tripId, positions, dayId);
+    await this.reservations.updatePositions(tripId, positions, dayId);
     this.guards.safeBroadcast(tripId, 'reservation:positions', { positions, dayId });
     return ok({ success: true });
   }
@@ -572,22 +572,22 @@ export class ReservationsMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
-    const current = this.reservations.getReservation(reservationId, tripId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
+    const current = await this.reservations.getReservation(reservationId, tripId);
     if (!current) return errorResult('Reservation not found.');
     if (current.type !== 'hotel') return errorResult('Reservation is not of type hotel.');
 
-    if (!this.assignments.placeExists(place_id, tripId))
+    if (!(await this.assignments.placeExists(place_id, tripId)))
       return errorResult('place_id does not belong to this trip.');
-    if (!this.days.getDay(start_day_id, tripId))
+    if (!(await this.days.getDay(start_day_id, tripId)))
       return errorResult('start_day_id does not belong to this trip.');
-    if (!this.days.getDay(end_day_id, tripId))
+    if (!(await this.days.getDay(end_day_id, tripId)))
       return errorResult('end_day_id does not belong to this trip.');
 
     const isNewAccommodation = !current.accommodation_id;
-    const { reservation } = this.reservations.update(reservationId, tripId, {
+    const { reservation } = await this.reservations.update(reservationId, tripId, {
       place_id,
       type: current.type,
       status: current.status as string,
@@ -619,7 +619,7 @@ export class ReservationsMcp {
     access: { group: 'reservations', mode: 'read' },
   })
   async listUpcomingReservations({ limit }: { limit?: number }, ctx: McpContext) {
-    return ok({ reservations: this.reservations.listUpcoming(ctx.userId, limit) });
+    return ok({ reservations: await this.reservations.listUpcoming(ctx.userId, limit) });
   }
 
   @ResourceTemplate({
@@ -631,7 +631,7 @@ export class ReservationsMcp {
   })
   async tripReservationsResource(uri: URL, { tripId }: { tripId: string | string[] }, ctx: McpContext) {
     const id = parseId(tripId);
-    if (id === null || !this.reservations.verifyTripAccess(id, ctx.userId)) {
+    if (id === null || !(await this.reservations.verifyTripAccess(id, ctx.userId))) {
       return {
         contents: [{
           uri: uri.href,
@@ -640,7 +640,7 @@ export class ReservationsMcp {
         }],
       };
     }
-    const reservations = this.reservations.list(id);
+    const reservations = await this.reservations.list(id);
     return {
       contents: [{
         uri: uri.href,
@@ -696,15 +696,15 @@ export class ReservationsMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
 
     if (metadata && 'legs' in metadata) return errorResult(LEGS_IN_METADATA_ERROR);
 
-    if (start_day_id && !this.days.getDay(start_day_id, tripId))
+    if (start_day_id && !(await this.days.getDay(start_day_id, tripId)))
       return errorResult('start_day_id does not belong to this trip.');
-    if (end_day_id && !this.days.getDay(end_day_id, tripId))
+    if (end_day_id && !(await this.days.getDay(end_day_id, tripId)))
       return errorResult('end_day_id does not belong to this trip.');
 
     const resolved = resolveEndpointCoords(endpoints);
@@ -718,7 +718,7 @@ export class ReservationsMcp {
     let arrivalTime = reservation_end_time;
 
     if (legs !== undefined) {
-      const applied = applyLegs({
+      const applied = await applyLegs({
         legs,
         type,
         endpoints: resolved.endpoints,
@@ -741,7 +741,7 @@ export class ReservationsMcp {
 
     if (price != null) meta.price = String(price);
 
-    const { reservation } = this.reservations.create(tripId, {
+    const { reservation } = await this.reservations.create(tripId, {
       title,
       type,
       reservation_time: departureTime,
@@ -759,7 +759,7 @@ export class ReservationsMcp {
     });
 
     if (price != null && price > 0) {
-      const item = this.budget.linkBudgetItemToReservation(tripId, reservation.id, {
+      const item = await this.budget.linkBudgetItemToReservation(tripId, reservation.id, {
         name: title,
         category: budget_category || type,
         total_price: price,
@@ -804,22 +804,22 @@ export class ReservationsMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
 
     if (metadata && 'legs' in metadata) return errorResult(LEGS_IN_METADATA_ERROR);
 
-    const existing = this.reservations.getReservation(reservationId, tripId);
+    const existing = await this.reservations.getReservation(reservationId, tripId);
     if (!existing) return errorResult('Transport not found.');
 
     const resolvedType = type ?? existing.type;
     if (!(TRANSPORT_TYPES as readonly string[]).includes(resolvedType))
       return errorResult('Reservation is not a transport type. Use update_reservation instead.');
 
-    if (start_day_id && !this.days.getDay(start_day_id, tripId))
+    if (start_day_id && !(await this.days.getDay(start_day_id, tripId)))
       return errorResult('start_day_id does not belong to this trip.');
-    if (end_day_id && !this.days.getDay(end_day_id, tripId))
+    if (end_day_id && !(await this.days.getDay(end_day_id, tripId)))
       return errorResult('end_day_id does not belong to this trip.');
 
     // Only resolve when endpoints are explicitly provided; undefined leaves them untouched.
@@ -838,12 +838,12 @@ export class ReservationsMcp {
 
     if (legs !== undefined) {
       const stored = parseStoredMetadata(existing.metadata);
-      const applied = applyLegs({
+      const applied = await applyLegs({
         legs,
         type: resolvedType,
         // Endpoints the caller did not replace stay the geometry the legs run
         // over, so read them back (the row carries them) instead of guessing.
-        endpoints: resolvedEndpoints ?? (this.reservations.getReservationWithJoins(reservationId)?.endpoints ?? []).map(e => ({
+        endpoints: resolvedEndpoints ?? ((await this.reservations.getReservationWithJoins(reservationId))?.endpoints ?? []).map(e => ({
           role: e.role, sequence: e.sequence, name: e.name, code: e.code,
           lat: e.lat, lng: e.lng, timezone: e.timezone,
           local_time: e.local_time, local_date: e.local_date,
@@ -870,7 +870,7 @@ export class ReservationsMcp {
       if (applied.endpointsChanged) resolvedEndpoints = applied.endpoints;
     }
 
-    const { reservation } = this.reservations.update(reservationId, tripId, {
+    const { reservation } = await this.reservations.update(reservationId, tripId, {
       title,
       type,
       reservation_time: departureTime,
@@ -900,10 +900,10 @@ export class ReservationsMcp {
     access: { group: 'reservations', mode: 'write' },
   })
   async deleteTransport({ tripId, reservationId }: { tripId: number; reservationId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
-    const { deleted, deletedBudgetItemIds } = this.reservations.remove(reservationId, tripId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.reservations.verifyTripAccess(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId))) return permissionDenied();
+    const { deleted, deletedBudgetItemIds } = await this.reservations.remove(reservationId, tripId);
     if (!deleted) return errorResult('Transport not found.');
     for (const itemId of deletedBudgetItemIds) this.guards.safeBroadcast(tripId, 'budget:deleted', { itemId });
     this.guards.safeBroadcast(tripId, 'reservation:deleted', { reservationId });

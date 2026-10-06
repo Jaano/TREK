@@ -8,31 +8,18 @@
  * cases used to sidestep that by calling the callbacks directly.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
+import { db as testDb } from '../../../src/db/database';
+import { CAN_ACCESS_TRIP_SQL } from '../../helpers/db-mock';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory';
 import { ErrorCode } from '@modelcontextprotocol/sdk/types';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
-});
 
-vi.mock('../../../src/db/database', () => dbMock);
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
+});
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -61,8 +48,6 @@ const { mockGetTripSummary } = vi.hoisted(() => ({
 // The prompts read the summary through the injected read model (readModelStub
 // below wraps the same controllable mock) — trips.bridge is deleted.
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, addTripMember, createPackingItem, createBudgetItem } from '../../helpers/factories';
 import { createTestRegistry } from '../../../src/nest-mcp';
@@ -77,7 +62,7 @@ import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { AuthMcp } from '../../../src/nest/auth/auth.mcp';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { DemoService } from '../../../src/nest/common/demo.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { McpToolGuardsService } from '../../../src/nest/mcp-shared/mcp-tool-guards.service';
@@ -87,21 +72,61 @@ import type { TodoService } from '../../../src/nest/todo/todo.service';
 import type { CollabService } from '../../../src/nest/collab/collab.service';
 import { AddonsService } from '../../../src/nest/addons/addons.service';
 import { notificationsStub } from '../../helpers/notifications';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, createTestTripMembersRepo, createTestUsersRepo, sharedTestOrm, createTestPlacesRepo } from '../../helpers/test-uow';
+import { budgetRepoArgs } from '../../helpers/budget-repos';
+import {
+  createTestPackingItemsRepo,
+  createTestPackingItemContributorsRepo,
+  createTestPackingBagsRepo,
+  createTestPackingCategoryAssigneesRepo,
+  createTestPackingTemplatesRepo,
+  createTestPackingTemplateCategoriesRepo,
+  createTestPackingTemplateItemsRepo,
+} from '../../helpers/packing-repos';
+import type { EntityManager } from '@mikro-orm/core';
 
 // The trip-summary prompt moved to the DI-discovered TripsMcp — its cases below
 // exercise it through a hand-built registry over a stub TripsService whose
 // getTripSummary is the same controllable mock the legacy path used.
 const tripsStub = {
-  canAccessTrip: (tripId: number, userId: number) => dbMock.canAccessTrip(tripId, userId),
-  getRaw: (tripId: number) => testDb.prepare('SELECT * FROM trips WHERE id = ?').get(tripId),
+  canAccessTrip: (tripId: number, userId: number) => testDb.prepare(CAN_ACCESS_TRIP_SQL).get(userId, tripId, userId),
+  getRaw: async (tripId: number) => testDb.prepare('SELECT * FROM trips WHERE id = ?').get(tripId),
 } as unknown as TripsService;
 // getTripSummary moved to TripReadModelService with the trip split; the mock is
 // the same controllable one, one constructor slot further along.
 const readModelStub = {
   getTripSummary: (tripId: number, viewerUserId?: number) => mockGetTripSummary(tripId, viewerUserId),
 } as never;
-const promptGuards = new McpToolGuardsService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
-const tripsMcp = new TripsMcp(
+
+
+
+// The three remaining prompts moved to their domains' @McpController classes:
+// packing-list, budget-overview and the static-token notice. Built over the same
+// in-memory DB so the cases below keep asserting real rows.
+//
+// Plan 3c Task 0b: `promptEm` is resolved once in the first `beforeAll` below —
+// `canAccessTrip`/`isOwner`/`rosterUserIds`/
+// `getPlaceWithTags` resolve `TripsRepository`/`TripMembersRepository`/
+// `PlacesRepository` through it now, not through `db/database.ts`'s deleted
+// free functions this file's `dbMock` used to stand in for.
+let promptEm: EntityManager | undefined;
+const authStub = { isDemoUser: () => false } as unknown as AuthService;
+
+
+
+// The packing-list / budget-overview prompts live here since the trips.bridge
+// fold; the summary rides the same readModelStub the trip-summary prompt uses.
+let promptGuards: McpToolGuardsService;
+let tripsMcp: TripsMcp;
+let promptPackingService: PackingService;
+let packingMcp: PackingMcp;
+let promptBudget: BudgetService;
+let budgetMcp: BudgetMcp;
+let tripPromptsMcp: TripPromptsMcp;
+beforeAll(async () => {
+  promptEm = (await sharedTestOrm(testDb)).em;
+  promptGuards = new McpToolGuardsService(await createTestTripsRepo(testDb), await createTestUsersRepo(testDb), new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService());
+  tripsMcp = new TripsMcp(
   tripsStub,
   { listItems: () => [] } as unknown as TodoService,
   { listPolls: () => [], countMessages: () => 0 } as unknown as CollabService,
@@ -112,33 +137,39 @@ const tripsMcp = new TripsMcp(
   addonsStub,
   promptGuards,
 );
-
-// The three remaining prompts moved to their domains' @McpController classes:
-// packing-list, budget-overview and the static-token notice. Built over the same
-// in-memory DB so the cases below keep asserting real rows.
-const promptDbs = () => new DatabaseService(testDb);
-const authStub = { isDemoUser: () => false } as unknown as AuthService;
-const promptPackingService = new PackingService(promptDbs(), new PermissionsService(promptDbs()), new RealtimeService(), notificationsStub());
-const packingMcp = new PackingMcp(promptPackingService, authStub, addonsStub, promptGuards);
-const promptBudget = new BudgetService(promptDbs(), new PermissionsService(promptDbs()), new ExchangeRatesService(), new RealtimeService());
-const budgetMcp = new BudgetMcp(
+  promptPackingService = new PackingService(
+    new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)),
+    new RealtimeService(),
+    notificationsStub(),
+    await createTestUnitOfWork(testDb),
+    await createTestPackingItemsRepo(testDb),
+    await createTestPackingItemContributorsRepo(testDb),
+    await createTestPackingBagsRepo(testDb),
+    await createTestPackingCategoryAssigneesRepo(testDb),
+    await createTestPackingTemplatesRepo(testDb),
+    await createTestPackingTemplateCategoriesRepo(testDb),
+    await createTestPackingTemplateItemsRepo(testDb),
+    await createTestTripsRepo(testDb),
+    await createTestTripMembersRepo(testDb),
+  );
+  packingMcp = new PackingMcp(promptPackingService, authStub, addonsStub, promptGuards);
+  promptBudget = new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb)));
+  budgetMcp = new BudgetMcp(
   promptBudget,
   new ExchangeRatesService(),
-  promptDbs(),
   new RuntimeEnvService(),
-  new TripMembershipService(promptDbs()),
+  new TripMembershipService(await createTestTripsRepo(testDb), await createTestTripMembersRepo(testDb)),
   addonsStub,
   promptGuards,
+  await createTestUnitOfWork(testDb),
+  await createTestPlacesRepo(testDb),
+  await createTestTripsRepo(testDb),
+  new DemoService(new RuntimeEnvService(), promptEm),
+  await createTestTripMembersRepo(testDb),
 );
-// The packing-list / budget-overview prompts live here since the trips.bridge
-// fold; the summary rides the same readModelStub the trip-summary prompt uses.
-const tripPromptsMcp = new TripPromptsMcp(tripsStub, readModelStub, promptPackingService, addonsStub);
-const authMcp = new AuthMcp();
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+  tripPromptsMcp = new TripPromptsMcp(tripsStub, readModelStub, promptPackingService, addonsStub);
 });
+const authMcp = new AuthMcp();
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -150,7 +181,7 @@ beforeEach(() => {
   // real getTripSummary object shape ({ items, total, ... }) that prompts.ts reads
   // via budget.items/budget.total; packing stays an array (the packing prompt
   // tolerates it).
-  mockGetTripSummary.mockImplementation((tripId: any) => {
+  mockGetTripSummary.mockImplementation(async (tripId: any) => {
     const trip = testDb.prepare('SELECT * FROM trips WHERE id = ?').get(tripId) as any;
     if (!trip) return null;
     const members = testDb.prepare(`
@@ -161,7 +192,7 @@ beforeEach(() => {
     const budgetRows = testDb.prepare('SELECT * FROM budget_items WHERE trip_id = ?').all(tripId) as any[];
     const packingRows = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ?').all(tripId) as any[];
     // The totals come from the same BudgetService.tripTotals the real summary uses.
-    const totals = promptBudget.tripTotals(tripId, trip.currency || 'EUR');
+    const totals = await promptBudget.tripTotals(tripId, trip.currency || 'EUR');
     return {
       trip,
       days: [],
@@ -199,7 +230,7 @@ async function buildServer(userId: number, opts: { isStaticToken?: boolean } = {
   const server = new McpServer({ name: 'trek-test', version: '1.0.0' });
   // Every prompt is DI-discovered now; attach them the way registerTools does in
   // production, including the isStaticToken flag the notice's `when` gate reads.
-  createTestRegistry([tripsMcp, tripPromptsMcp, packingMcp, budgetMcp, authMcp], { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess })
+  await createTestRegistry([tripsMcp, tripPromptsMcp, packingMcp, budgetMcp, authMcp], { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess })
     .attach(server, { userId, scopes: null, isStaticToken: opts.isStaticToken ?? false });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test-client', version: '1.0.0' });
@@ -521,7 +552,7 @@ describe('Prompt: budget-overview', () => {
   it('prints a foreign-currency bill at the rate it was booked at, not as that many euros (#2525)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Dollar Trip' });
-    promptBudget.createBudgetItem(trip.id, {
+    await promptBudget.createBudgetItem(trip.id, {
       name: 'Aparthotel Silver', category: 'Accommodation', currency: 'USD', exchange_rate: 1.17,
       payers: [{ user_id: user.id, amount: 801.76 }], members: [{ user_id: user.id }],
     });
@@ -540,7 +571,7 @@ describe('Prompt: budget-overview', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Dong Trip' });
     // Stored with the "not frozen" rate 1, and no rates to convert it with.
-    promptBudget.createBudgetItem(trip.id, {
+    await promptBudget.createBudgetItem(trip.id, {
       name: 'Pho', category: 'Food', currency: 'VND', total_price: 8920000, members: [{ user_id: user.id }],
     });
     createBudgetItem(testDb, trip.id, { name: 'Dinner', category: 'Food', total_price: 100 });

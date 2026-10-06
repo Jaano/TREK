@@ -62,13 +62,36 @@ vi.mock('../../src/config', () => ({
 }));
 
 import path from 'node:path';
+import type Database from 'better-sqlite3';
 import { AutoBackupJob } from '../../src/nest/backup/auto-backup.job';
 import { createBackup } from '../../src/nest/backup/backup.impl';
 import type { BackupService } from '../../src/nest/backup/backup.service';
 import type { StorageService } from '../../src/nest/storage/storage.service';
 import type { CronRegistrarService } from '../../src/nest/scheduling/cron-registrar.service';
+import { createTestOrm } from '../helpers/test-orm';
+import { withRequestContext } from '../../src/nest/database/request-context';
+import { MaintenanceRepository } from '../../src/db/repositories/MaintenanceRepository';
 
 const liveDb = path.join(__dirname, '../../data', 'travel.db');
+
+/**
+ * `createSnapshotTestDb()` (db-mock.ts) reads the schema snapshot through
+ * schema-snapshot.ts's own `fs` import, which resolves to `fsMock` here — 'fs'/
+ * 'node:fs' are mocked wholesale above for the archiver assertions, so that read
+ * would silently return null instead of the real snapshot. Rather than weaken
+ * the snapshot helper itself, point the three fs calls it needs at the real
+ * filesystem just long enough to build the db: every test in this file sets its
+ * own fsMock.existsSync/readFileSync behaviour before it matters (scheduledRun()
+ * overwrites readFileSync before the job ever ticks), so this doesn't leak.
+ */
+async function testDbFromSnapshot(): Promise<Database.Database> {
+  const realFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+  fsMock.existsSync.mockImplementation(realFs.existsSync as never);
+  fsMock.readdirSync.mockImplementation(realFs.readdirSync as never);
+  fsMock.readFileSync.mockImplementation(realFs.readFileSync as never);
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  return createSnapshotTestDb();
+}
 
 // createBackup receives StorageService as a parameter (BackupService injects
 // it). fs is mocked wholesale here, so a plain stub stands in for the backups
@@ -154,16 +177,47 @@ describe('auto-backup run', () => {
   });
 
   it('archives a VACUUM INTO snapshot, never the live travel.db', async () => {
+    // Plan 3i Task 4 fix wave: BK2 now runs through
+    // `MaintenanceRepository.vacuumInto()` on a resolved `RequestContext`
+    // EntityManager (backup.impl.ts), not the raw `db.exec` this test used
+    // to spy on — that assertion went stale and silently stopped proving
+    // anything the moment BK2 moved off the legacy `db` proxy: with no
+    // request context around the tick, `RequestContext.getEntityManager()`
+    // returned null, createBackup silently fell back to archiving the LIVE
+    // file (the exact bug this suite's own header describes), and
+    // `dbMock.db.exec` was simply never called — a false green.
+    // A real (throwaway) ORM over a real test DB supplies that
+    // EntityManager; `vacuumInto` itself is spied and stubbed so no real
+    // VACUUM INTO touches disk (fs is mocked wholesale above, but
+    // better-sqlite3's native VACUUM INTO would bypass that mock).
+    //
+    // Built before the test's own fsMock.existsSync stub below: building the
+    // snapshot db temporarily points fsMock's fs calls at the real
+    // filesystem (see testDbFromSnapshot's own comment), so this test's stub
+    // has to land after, not be clobbered by it.
+    const maintDb: Database.Database = await testDbFromSnapshot();
     fsMock.existsSync.mockImplementation((p: string) => String(p).endsWith('travel.db') || String(p).endsWith('backup-settings.json'));
     stubArchiver();
+    const testOrm = await createTestOrm(maintDb);
+    const vacuumIntoSpy = vi.spyOn(MaintenanceRepository.prototype, 'vacuumInto').mockResolvedValue(undefined);
+    const walCheckpointSpy = vi.spyOn(MaintenanceRepository.prototype, 'walCheckpoint').mockResolvedValue(undefined);
+    try {
+      await withRequestContext(testOrm.orm, () => scheduledRun()());
 
-    await scheduledRun()();
-
-    expect(dbMock.db.exec).toHaveBeenCalledWith(expect.stringContaining('VACUUM INTO'));
-    const dbEntry = archiveMock.file.mock.calls.find(([, opts]) => opts?.name === 'travel.db');
-    expect(dbEntry).toBeDefined();
-    expect(dbEntry?.[0]).toContain('/stub/spool/travel-snap-auto-backup-');
-    expect(dbEntry?.[0]).not.toBe(liveDb);
+      // Assertions run BEFORE the spies are restored: `mockRestore()` also
+      // clears recorded calls (same as `mockReset()`), so checking after
+      // cleanup would always read an empty call list.
+      expect(vacuumIntoSpy).toHaveBeenCalledWith(expect.stringContaining('/stub/spool/travel-snap-auto-backup-'));
+      const dbEntry = archiveMock.file.mock.calls.find(([, opts]) => opts?.name === 'travel.db');
+      expect(dbEntry).toBeDefined();
+      expect(dbEntry?.[0]).toContain('/stub/spool/travel-snap-auto-backup-');
+      expect(dbEntry?.[0]).not.toBe(liveDb);
+    } finally {
+      vacuumIntoSpy.mockRestore();
+      walCheckpointSpy.mockRestore();
+      await testOrm.close();
+      maintDb.close();
+    }
   });
 
   it('bundles the at-rest encryption key', async () => {

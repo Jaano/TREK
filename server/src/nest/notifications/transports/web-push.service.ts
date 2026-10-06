@@ -142,8 +142,8 @@ export class WebPushService {
     private readonly subscriptions: PushSubscriptionsService,
   ) {}
 
-  hasDevices(userId: number): boolean {
-    return this.subscriptions.hasAny(userId);
+  async hasDevices(userId: number): Promise<boolean> {
+    return await this.subscriptions.hasAny(userId);
   }
 
   /**
@@ -152,8 +152,8 @@ export class WebPushService {
    * everyone (every device stays subscribed) and the user's settings drop the
    * Push card and column instead of offering a switch that could only fail.
    */
-  isAvailable(): boolean {
-    return this.keys.isAvailable();
+  async isAvailable(): Promise<boolean> {
+    return await this.keys.isAvailable();
   }
 
   /** True when at least one of the user's browsers accepted the message. */
@@ -164,16 +164,16 @@ export class WebPushService {
 
   /** The Send test button: a short fixed message to every browser the user turned push on in. */
   async sendTest(userId: number): Promise<ChannelTestResult> {
-    if (!this.isAvailable()) return { success: false, error: PUSH_UNAVAILABLE_ERROR };
+    if (!(await this.isAvailable())) return { success: false, error: PUSH_UNAVAILABLE_ERROR };
     const sent = await this.deliver(userId, TEST_PAYLOAD, 'normal', 'test');
     return sent ? { success: true } : { success: false, error: 'Failed to send push notification' };
   }
 
   private async deliver(userId: number, payload: PushPayload, urgency: Urgency, event: string): Promise<boolean> {
     try {
-      const rows = this.subscriptions.listForUser(userId);
+      const rows = await this.subscriptions.listForUser(userId);
       if (rows.length === 0) return false;
-      const keys = this.keys.getKeys();
+      const keys = await this.keys.getKeys();
       const sign = createVapidSigner(keys, this.keys.getSubject());
       const plaintext = Buffer.from(JSON.stringify(payload), 'utf8');
       const results = await Promise.all(
@@ -199,12 +199,12 @@ export class WebPushService {
       // Subscribed against a key this server no longer signs with, so the push
       // service would refuse every message. Until the browser subscribes again
       // with the current key there is nothing to send to.
-      this.subscriptions.deleteById(row.id);
+      await this.subscriptions.deleteById(row.id);
       logInfo(`Web Push dropped a device subscribed with a previous server key user=${row.user_id} host=${host}`);
       return false;
     }
     if (!isPushServiceEndpoint(row.endpoint)) {
-      this.subscriptions.deleteById(row.id);
+      await this.subscriptions.deleteById(row.id);
       logError(`Web Push dropped a device whose endpoint is not a known push service user=${row.user_id} host=${host}`);
       return false;
     }
@@ -236,7 +236,7 @@ export class WebPushService {
       );
       return await this.settle(row, res, host, event);
     } catch (err) {
-      this.subscriptions.recordFailure(row.id);
+      await this.subscriptions.recordFailure(row.id);
       if (err instanceof SsrfBlockedError) {
         logError(
           `Web Push blocked by SSRF guard event=${event} user=${row.user_id} host=${host} reason=${err.message}`,
@@ -253,14 +253,14 @@ export class WebPushService {
   private async settle(row: PushSubscriptionRow, res: Response, host: string, event: string): Promise<boolean> {
     if (res.ok) {
       discardBody(res);
-      this.subscriptions.recordSuccess(row.id);
+      await this.subscriptions.recordSuccess(row.id);
       logInfo(`Web Push sent event=${event} user=${row.user_id} host=${host}`);
       return true;
     }
 
     const { text } = await readCappedText(res, ERROR_BODY_MAX_BYTES).catch(() => ({ text: '' }));
     if (res.status === 404 || res.status === 410) {
-      this.subscriptions.deleteById(row.id);
+      await this.subscriptions.deleteById(row.id);
       logInfo(`Web Push removed an expired device (HTTP ${res.status}) user=${row.user_id} host=${host}`);
       return false;
     }
@@ -270,9 +270,9 @@ export class WebPushService {
       // configuration problem and not the device's. Only a run of refusals
       // with no success between them removes the row; the reason is logged
       // every time so the second case can be told apart.
-      const failures = this.subscriptions.recordFailure(row.id);
+      const failures = await this.subscriptions.recordFailure(row.id);
       if (failures >= FORBIDDEN_FAILURES_BEFORE_REMOVAL) {
-        this.subscriptions.deleteById(row.id);
+        await this.subscriptions.deleteById(row.id);
         logError(
           `Web Push removed a device after ${failures} failed sends in a row ending in HTTP 403 ` +
             `user=${row.user_id} host=${host}: ${text}`,
@@ -285,7 +285,7 @@ export class WebPushService {
       }
       return false;
     }
-    this.subscriptions.recordFailure(row.id);
+    await this.subscriptions.recordFailure(row.id);
     logError(`Web Push HTTP ${res.status} event=${event} user=${row.user_id} host=${host}: ${text}`);
     return false;
   }

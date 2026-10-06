@@ -12,25 +12,29 @@
  *   - it is always the ADMIN, never an end user, who widens it;
  *   - changing the set RE-SPAWNS the plugin, because the child's guard is install-once.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  return { testDb: db, dbMock: { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: () => null } };
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: async () => null };
 });
-vi.mock('../../../src/db/database', () => dbMock);
-import { db as dbConn } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { db as testDb } from '../../../src/db/database';
 vi.mock('../../../src/config', () => ({ JWT_SECRET: 'x'.repeat(40), ENCRYPTION_KEY: 'a'.repeat(64), updateJwtSecret: () => {} }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { PluginRuntimeService } from '../../../src/nest/plugins/plugin-runtime.service';
 import { createPluginRuntime } from '../../helpers/plugin-host';
 import { parseManifest, ManifestError } from '../../../src/nest/plugins/install/manifest';
 import { makeHostAllow } from '../../../src/nest/plugins/runtime/egress-policy';
-import { AddonsService } from '../../../src/nest/addons/addons.service';
+import { createTestAddonsService } from '../../helpers/test-addons';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { Plugins } from '../../../src/db/entities/Plugins.entity';
+import { PluginErrorLog } from '../../../src/db/entities/PluginErrorLog.entity';
+import { PluginEgressHosts } from '../../../src/db/entities/PluginEgressHosts.entity';
+import { PluginSettingsFields } from '../../../src/db/entities/PluginSettingsFields.entity';
+import { PluginActions } from '../../../src/db/entities/PluginActions.entity';
+import { PluginUserConfig } from '../../../src/db/entities/PluginUserConfig.entity';
+import { PluginCapabilityAudit } from '../../../src/db/entities/PluginCapabilityAudit.entity';
 
 function install(id: string, operatorEgress: boolean, perms: string[] = ['http:outbound:gotify.net']) {
   testDb.prepare(
@@ -41,29 +45,28 @@ function install(id: string, operatorEgress: boolean, perms: string[] = ['http:o
 
 let rt: PluginRuntimeService;
 
-beforeAll(() => { createTables(testDb); runMigrations(testDb); });
-beforeEach(() => {
+beforeEach(async () => {
   testDb.prepare('DELETE FROM plugins').run();
   testDb.prepare('DELETE FROM plugin_egress_hosts').run();
   testDb.prepare('DELETE FROM plugin_actions').run();
-  rt = createPluginRuntime(new DatabaseService(dbConn));
+  rt = await createPluginRuntime(testDb);
 });
 
 describe('operator-supplied egress hosts', () => {
   it('OEG-001 — an admin can add hosts to a plugin that declared operatorEgress', async () => {
     install('gotify', true);
-    expect(rt.wantsOperatorEgress('gotify')).toBe(true);
+    expect(await rt.wantsOperatorEgress('gotify')).toBe(true);
     expect(await rt.setOperatorEgressHosts('gotify', ['gotify.mydomain.com'])).toEqual(['gotify.mydomain.com']);
-    expect(rt.operatorEgressHosts('gotify')).toEqual(['gotify.mydomain.com']);
+    expect(await rt.operatorEgressHosts('gotify')).toEqual(['gotify.mydomain.com']);
   });
 
   it('OEG-002 — a plugin that did NOT declare it can never have hosts added', async () => {
     install('sneaky', false);
-    expect(rt.wantsOperatorEgress('sneaky')).toBe(false);
+    expect(await rt.wantsOperatorEgress('sneaky')).toBe(false);
     // This is the load-bearing check: without it an admin could silently widen egress for
     // ANY plugin, and the install-time consent would stop bounding what's possible.
     await expect(rt.setOperatorEgressHosts('sneaky', ['evil.example.com'])).rejects.toThrow(/did not declare operatorEgress/);
-    expect(rt.operatorEgressHosts('sneaky')).toEqual([]);
+    expect(await rt.operatorEgressHosts('sneaky')).toEqual([]);
   });
 
   it('OEG-003 — hosts are validated exactly like manifest egress', async () => {
@@ -86,7 +89,7 @@ describe('operator-supplied egress hosts', () => {
     install('gotify', true);
     await rt.setOperatorEgressHosts('gotify', ['a.example.com', 'b.example.com']);
     await rt.setOperatorEgressHosts('gotify', ['b.example.com']);
-    expect(rt.operatorEgressHosts('gotify')).toEqual(['b.example.com']);
+    expect(await rt.operatorEgressHosts('gotify')).toEqual(['b.example.com']);
   });
 
   it('OEG-006 — the manifest rejects operatorEgress without an outbound permission', () => {
@@ -113,7 +116,7 @@ describe('operator-supplied egress hosts', () => {
     // It ACTIVATES (it may have useful offline features), but the child's allow-list is the
     // union of its http:outbound:<host> grants and the admin's hosts — both empty here.
     install('gotify', true, ['http:outbound']);
-    expect(rt.operatorEgressHosts('gotify')).toEqual([]);
+    expect(await rt.operatorEgressHosts('gotify')).toEqual([]);
     expect(makeHostAllow([])('gotify.mydomain.com')).toBe(false);
   });
 
@@ -122,7 +125,7 @@ describe('operator-supplied egress hosts', () => {
     await rt.setOperatorEgressHosts('gotify', ['gotify.mydomain.com']);
     await rt.uninstall('gotify', false);
     // A LATER plugin reusing this id must not silently inherit hosts approved for another.
-    expect(rt.operatorEgressHosts('gotify')).toEqual([]);
+    expect(await rt.operatorEgressHosts('gotify')).toEqual([]);
   });
 });
 
@@ -132,12 +135,12 @@ describe('settings-page actions (runtime)', () => {
       .run(id, key, key, scope);
   }
 
-  it('ACT-001 — actionsOf returns the declared descriptors of ONE scope', () => {
+  it('ACT-001 — actionsOf returns the declared descriptors of ONE scope', async () => {
     install('p', false);
     declareAction('p', 'testConnection');
     declareAction('p', 'purge', 'instance');
-    expect(rt.actionsOf('p', 'user')).toEqual([{ key: 'testConnection', label: 'testConnection', hint: undefined, danger: false, scope: 'user' }]);
-    expect(rt.actionsOf('p', 'instance')).toEqual([{ key: 'purge', label: 'purge', hint: undefined, danger: false, scope: 'instance' }]);
+    expect(await rt.actionsOf('p', 'user')).toEqual([{ key: 'testConnection', label: 'testConnection', hint: undefined, danger: false, scope: 'user' }]);
+    expect(await rt.actionsOf('p', 'instance')).toEqual([{ key: 'purge', label: 'purge', hint: undefined, danger: false, scope: 'instance' }]);
   });
 
   it('ACT-002 — invoking an action the plugin never declared is REFUSED', async () => {
@@ -172,18 +175,28 @@ describe('the admin list surfaces operator egress (so the chip can be shown)', (
 
     // list() resolves required-addon dependencies through AddonsService, so it gets a real
     // one over the same DB. These fixtures declare no dependencies, so it is never consulted.
-    const listPlugins = () => {
-      const dbs = new DatabaseService(dbConn);
-      return new PluginsService(dbs, new AddonsService(dbs)).list().plugins;
+    const listPlugins = async () => {
+      const orm = await sharedTestOrm(testDb);
+      const service = new PluginsService(
+        await createTestAddonsService(testDb),
+        orm.repo(Plugins),
+        orm.repo(PluginEgressHosts),
+        orm.repo(PluginSettingsFields),
+        orm.repo(PluginActions),
+        orm.repo(PluginUserConfig),
+        orm.repo(PluginErrorLog),
+        orm.repo(PluginCapabilityAudit),
+      );
+      return (await service.list()).plugins;
     };
 
-    const before = listPlugins();
+    const before = await listPlugins();
     expect(before.find(p => p.id === 'gotify')).toMatchObject({ operatorEgress: true, egressHostCount: 0 });
     // A plugin that never asked for it must never invite the admin to add hosts.
     expect(before.find(p => p.id === 'plain')).toMatchObject({ operatorEgress: false, egressHostCount: 0 });
 
     await rt.setOperatorEgressHosts('gotify', ['a.example.com', 'b.example.com']);
-    const after = listPlugins();
+    const after = await listPlugins();
     expect(after.find(p => p.id === 'gotify')!.egressHostCount).toBe(2);
     delete process.env.TREK_PLUGINS_ENABLED;
   });

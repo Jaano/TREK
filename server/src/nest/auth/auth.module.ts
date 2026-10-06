@@ -1,5 +1,25 @@
+import { BudgetItems } from '../../db/entities/BudgetItems.entity';
 import { RateLimitModule } from '../common/rate-limit.module';
 import { Module } from '@nestjs/common';
+import { MikroOrmModule } from '@mikro-orm/nestjs';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import { Users } from '../../db/entities/Users.entity';
+import { WebauthnCredentials } from '../../db/entities/WebauthnCredentials.entity';
+import { WebauthnChallenges } from '../../db/entities/WebauthnChallenges.entity';
+import { InviteTokens } from '../../db/entities/InviteTokens.entity';
+import { McpTokens } from '../../db/entities/McpTokens.entity';
+import { OauthTokens } from '../../db/entities/OauthTokens.entity';
+import { PasswordResetTokens } from '../../db/entities/PasswordResetTokens.entity';
+import { JourneyShareTokens } from '../../db/entities/JourneyShareTokens.entity';
+import { Journeys } from '../../db/entities/Journeys.entity';
+import { JourneyEntries } from '../../db/entities/JourneyEntries.entity';
+import { JourneyContributors } from '../../db/entities/JourneyContributors.entity';
+import { ShareTokens } from '../../db/entities/ShareTokens.entity';
+import { Trips } from '../../db/entities/Trips.entity';
+import { TripMembers } from '../../db/entities/TripMembers.entity';
+import { Plugins } from '../../db/entities/Plugins.entity';
+import { PluginUserErasureQueue } from '../../db/entities/PluginUserErasureQueue.entity';
+import { PushSubscriptions } from '../../db/entities/PushSubscriptions.entity';
 import { TokensModule } from '../tokens/tokens.module';
 import { AuthPublicController } from './auth-public.controller';
 import { AuthController } from './auth.controller';
@@ -62,7 +82,39 @@ import { AllowedFileTypesModule } from '../files/allowed-file-types.module';
     }),
     StorageModule,
     AllowedFileTypesModule,
-    EphemeralTokenModule, RateLimitModule, AuditModule, PermissionsModule, TripMembershipModule, MailerModule, AppConfigModule, TokensModule, BudgetModule],
+    EphemeralTokenModule, RateLimitModule, AuditModule, PermissionsModule, TripMembershipModule, MailerModule, AppConfigModule, TokensModule, BudgetModule,
+    // AppSettings/Users: AuthService/UserProfileService each pass their own
+    // AppSettingsRepository/UsersRepository to instance-api-keys.ts's
+    // resolveApiKey/readInstanceApiKey/writeInstanceApiKey now (Plan 3a Task
+    // 5). WebauthnCredentials/WebauthnChallenges: PasskeyService (Plan 3b
+    // Task 3). InviteTokens: RegistrationInvitesService (Plan 3b Tasks 0/3).
+    // McpTokens/OauthTokens: AuthService's cross-domain session-revocation
+    // writes on password change/reset (AU17/AU18/AU45/AU46) — the entities
+    // are owned by TokensModule/OauthModule, but `@InjectRepository`
+    // resolves from THIS module's own `forFeature` graph regardless of who
+    // else also registers it (`tokens.module.ts`'s own docstring explains
+    // why). PasswordResetTokens: AuthService's own table (Plan 3b Task 5).
+    // JourneyShareTokens/Journeys/JourneyEntries/JourneyContributors: Plan
+    // 3g Task 4's own addition — `UserCleanupService.cleanupUserReferences`'s
+    // UC7-10 GDPR-erasure deletes, reached the same cross-domain way as
+    // McpTokens/OauthTokens above (owned by `nest/journey`, registered here
+    // for THIS module's own `@InjectRepository` params). ShareTokens: Plan
+    // 3h Task 6's own addition, the SAME cross-domain shape — UC6's
+    // `share_tokens` erasure delete (owned by `nest/share`). Trips: Plan 4
+    // Task 1 — `RegistrationInvitesService`'s RI2/RI3 reads, converted off
+    // `DatabaseService` onto `TripsRepository` now that it exists (Plan 3c).
+    // TripMembers: Plan 4 Task 1, the SAME cross-domain shape as
+    // JourneyShareTokens/ShareTokens above — `UserCleanupService
+    // .cleanupUserReferences`'s UC4 erasure update (owned by
+    // `nest/trip-membership`). Plugins/PluginUserErasureQueue: Plan 4 Task
+    // 8a, the SAME cross-domain shape again — `UserCleanupService
+    // .erasePluginUserData`'s UC2/UC3 erasure-enqueue half (owned by
+    // `nest/plugins`), narrowed off the Plan 3b Task 5 "stays raw" ruling to
+    // share `enqueueHookUserDataErasures` with `PluginRuntimeService
+    // .enqueueUserErasure` rather than re-implementing the same filter twice.
+    // PushSubscriptions: AuthService drops every Web Push device of the user
+    // on password change/reset (Web Push, #894), owned by `nest/notifications`.
+    MikroOrmModule.forFeature([AppSettings, Users, WebauthnCredentials, WebauthnChallenges, InviteTokens, McpTokens, OauthTokens, PasswordResetTokens, BudgetItems, JourneyShareTokens, Journeys, JourneyEntries, JourneyContributors, ShareTokens, Trips, TripMembers, Plugins, PluginUserErasureQueue, PushSubscriptions])],
   controllers: [AuthPublicController, AuthController, PasskeyController],
   providers: [AuthService, UserProfileService, RegistrationInvitesService, PasskeyService, UserCleanupService, WebauthnConfigService, AuthMcp],
   exports: [AuthService, RegistrationInvitesService, PasskeyService, UserCleanupService],

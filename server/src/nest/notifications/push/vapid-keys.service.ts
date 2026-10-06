@@ -1,8 +1,13 @@
 import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { decodeBase64Url, isVapidSubject, readEnv, stripTrailingSlashes } from '../../../app-config';
+import { AppSettings } from '../../../db/entities/AppSettings.entity';
+import type { AppSettingsRepository } from '../../../db/repositories/AppSettings.repository';
 import { logError, logInfo } from '../../audit/audit-log.logger';
 import { decrypt_api_key, encrypt_api_key } from '../../common/crypto/apiKeyCrypto';
-import { DatabaseService } from '../../database/database.service';
+import { withRequestContext } from '../../database/request-context';
+import { UnitOfWork } from '../../database/unit-of-work';
 import { generateVapidKeyPair, isVapidKeyPair, type VapidKeyPair } from './web-push-crypto';
 
 /** app_settings rows holding the generated pair. The private half is stored encrypted. */
@@ -107,17 +112,22 @@ export class VapidKeysService implements OnApplicationBootstrap {
   /** The decrypted stored pair, keyed by the ciphertext it came from. */
   private stored: { ciphertext: string; keys: VapidKeyPair } | null = null;
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+    private readonly uow: UnitOfWork,
+    private readonly orm: MikroORM,
+  ) {}
 
   /**
    * Make sure the pair exists before the first request. The public-key GET is
    * the first thing a browser asks for, and a GET must not write; creating the
    * pair here keeps that route a read. The lazy path in getKeys() covers
    * instances built without the Nest lifecycle and a database restored under a
-   * running server.
+   * running server. No HTTP request wraps a lifecycle hook, so it opens its own
+   * request context (the StorageHealthNotifierService shape).
    */
-  onApplicationBootstrap(): void {
-    this.succeeds(() => this.getKeys());
+  async onApplicationBootstrap(): Promise<void> {
+    await withRequestContext(this.orm, () => this.succeeds(() => this.getKeys()));
   }
 
   /**
@@ -127,22 +137,22 @@ export class VapidKeysService implements OnApplicationBootstrap {
    * next send or subscribe creates the pair through getKeys(). Never throws;
    * the reason for a no is in the log.
    */
-  isAvailable(): boolean {
-    return this.succeeds(() => this.checkUsable());
+  async isAvailable(): Promise<boolean> {
+    return await this.succeeds(() => this.checkUsable());
   }
 
   /**
    * The pair to sign with, creating the stored one first while neither row
    * exists. Throws PushUnavailableError while the pair it would use cannot be.
    */
-  getKeys(): ResolvedVapidKeys {
+  async getKeys(): Promise<ResolvedVapidKeys> {
     const fromEnv = this.envKeys();
     if (fromEnv) return { ...fromEnv, source: 'env' };
-    return { ...this.usableStored(this.readOrCreateStored()), source: 'database' };
+    return { ...this.usableStored(await this.readOrCreateStored()), source: 'database' };
   }
 
-  getPublicKey(): string {
-    return this.getKeys().publicKey;
+  async getPublicKey(): Promise<string> {
+    return (await this.getKeys()).publicKey;
   }
 
   /**
@@ -162,15 +172,15 @@ export class VapidKeysService implements OnApplicationBootstrap {
   }
 
   /** getKeys() without the create: the same refusals, and a missing stored pair counts as usable. */
-  private checkUsable(): void {
+  private async checkUsable(): Promise<void> {
     if (this.envKeys()) return;
-    const stored = this.readStored();
+    const stored = await this.readStored();
     if (stored.state !== 'absent') this.usableStored(stored);
   }
 
-  private succeeds(attempt: () => unknown): boolean {
+  private async succeeds(attempt: () => Promise<unknown>): Promise<boolean> {
     try {
-      attempt();
+      await attempt();
       return true;
     } catch (err) {
       // An unusable pair has already been explained where it was found.
@@ -226,23 +236,20 @@ export class VapidKeysService implements OnApplicationBootstrap {
     return { state: 'usable', keys: { publicKey: canonical(vapidPublicKey), privateKey: canonical(vapidPrivateKey) } };
   }
 
-  private setting(key: string): string | null {
-    return this.db.get<{ value: string | null }>('SELECT value FROM app_settings WHERE key = ?', key)?.value || null;
+  /** `SELECT value FROM app_settings WHERE key = ?`; an empty value reads as absent. */
+  private async setting(key: string): Promise<string | null> {
+    return (await this.appSettings.getValue(key)) || null;
   }
 
-  private writeSetting(key: string, value: string): void {
-    this.db.run(
-      `INSERT INTO app_settings (key, value) VALUES (?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      key,
-      value,
-    );
+  /** `INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value` */
+  private async writeSetting(key: string, value: string): Promise<void> {
+    await this.appSettings.setValue(key, value);
   }
 
   /** What app_settings holds right now. The fingerprint only tells one broken state from the next. */
-  private readStored(): StoredPair {
-    const publicKey = this.setting(VAPID_PUBLIC_KEY_SETTING);
-    const ciphertext = this.setting(VAPID_PRIVATE_KEY_SETTING);
+  private async readStored(): Promise<StoredPair> {
+    const publicKey = await this.setting(VAPID_PUBLIC_KEY_SETTING);
+    const ciphertext = await this.setting(VAPID_PRIVATE_KEY_SETTING);
     if (!publicKey && !ciphertext) return { state: 'absent' };
     const fingerprint = `${publicKey ?? ''}\n${ciphertext ?? ''}`;
     if (!publicKey || !ciphertext) return { state: 'incomplete', fingerprint };
@@ -262,13 +269,13 @@ export class VapidKeysService implements OnApplicationBootstrap {
    * inside the transaction and written in it, both rows or neither, so the
    * pair is created exactly once.
    */
-  private readOrCreateStored(): PresentPair {
-    const first = this.readStored();
+  private async readOrCreateStored(): Promise<PresentPair> {
+    const first = await this.readStored();
     if (first.state !== 'absent') return first;
-    return this.db.transaction((): PresentPair => {
-      const again = this.readStored();
+    return await this.uow.transactional(async (): Promise<PresentPair> => {
+      const again = await this.readStored();
       if (again.state !== 'absent') return again;
-      return { state: 'usable', keys: this.generateAndStore() };
+      return { state: 'usable', keys: await this.generateAndStore() };
     });
   }
 
@@ -289,11 +296,11 @@ export class VapidKeysService implements OnApplicationBootstrap {
     logError(`Web Push is off: ${UNUSABLE_MESSAGES[reason]}`);
   }
 
-  private generateAndStore(): VapidKeyPair {
+  private async generateAndStore(): Promise<VapidKeyPair> {
     const keys = generateVapidKeyPair();
     const ciphertext = encrypt_api_key(keys.privateKey);
-    this.writeSetting(VAPID_PUBLIC_KEY_SETTING, keys.publicKey);
-    this.writeSetting(VAPID_PRIVATE_KEY_SETTING, ciphertext);
+    await this.writeSetting(VAPID_PUBLIC_KEY_SETTING, keys.publicKey);
+    await this.writeSetting(VAPID_PRIVATE_KEY_SETTING, ciphertext);
     this.stored = { ciphertext, keys };
     logInfo('Web Push: generated the VAPID key pair for this instance.');
     return keys;

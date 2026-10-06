@@ -63,19 +63,28 @@ import { MetaRpc } from '../../../src/nest/plugins/host/rpc/meta.rpc';
 import { HostSurfaceRpc } from '../../../src/nest/plugins/host/rpc/host-surface.rpc';
 import { UnreadableLlmResponse } from '../../../src/nest/llm-parse/clients/openai-compatible.client';
 import { getPluginDataDb, closePluginDataDb } from '../../../src/nest/plugins/host/plugin-host-state';
+import { verifyChain } from '../../../src/nest/plugins/host/plugin-audit';
 import { db as mockDb } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import type { LlmConfigResolver } from '../../../src/nest/llm-parse/llm-config.resolver';
 import type { PluginOAuthService } from '../../../src/nest/plugins/oauth/plugin-oauth.service';
 import type { RpcError, RpcResponse } from '../../../src/nest/plugins/protocol/envelope';
+import type { PluginCapabilityAuditRepository } from '../../../src/db/repositories/PluginCapabilityAudit.repository';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
+import type { PlacesRepository } from '../../../src/db/repositories/Places.repository';
+import type { DaysRepository } from '../../../src/db/repositories/Days.repository';
+import type { ReservationsRepository } from '../../../src/db/repositories/Reservations.repository';
+import type { DayAccommodationsRepository } from '../../../src/db/repositories/DayAccommodations.repository';
+import type { PluginEntityMetadataRepository } from '../../../src/db/repositories/PluginEntityMetadata.repository';
+import type { PluginScheduledTasksRepository } from '../../../src/db/repositories/PluginScheduledTasks.repository';
 
 // Typed from the real method rather than from the always-true body below, so a case that
 // swaps in an implementation reading the action key (HOSTRPC-015) still type-checks.
-const checkPermission = vi.fn<PermissionsService['checkPermission']>(() => true);
+const checkPermission = vi.fn<PermissionsService['checkPermission']>(() => Promise.resolve(true));
 const permissions = { checkPermission } as unknown as PermissionsService;
 const addons = { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService;
 const notifications = { send: notifySend } as unknown as NotificationsService;
@@ -95,15 +104,223 @@ const userSettings = {
   readOne: vi.fn((_pid: string, uid: number, key: string) => (uid === 5 && key === 'apiKey' ? 'k-5' : undefined)),
 } as unknown as PluginUserSettingsService;
 
-const dbs = new DatabaseService(mockDb);
-const guards = new PluginGuards(dbs, permissions, addons);
+// Plan 3j Task 3: `budgetFor`/`appendAudit` now take `PluginCapabilityAuditRepository`,
+// not a raw connection. `plugin_capability_audit`'s hand-rolled table above (unlike
+// `trips`/`users`) matches the real entity's full column set, so a real MikroORM
+// repository would work here too — but every other cross-cutting dependency in this
+// file (`canAccessTrip`, `getRole`) is a synchronous stub against this same `mockDb`
+// for the same reason (no top-level await in this file), so this stays consistent:
+// real raw SQL against `mockDb`, wrapped in the repository's own method shapes.
+// HOSTRPC-031 seeds real rows through `mockDb.prepare(...)` and reads them back
+// through `budgetSeed`, so this must be backed by the real table, not a canned stub.
+const pluginAuditRepo = {
+  async budgetSeed(pluginId: string, since: string) {
+    return (mockDb as unknown as { prepare(s: string): { all(...a: unknown[]): unknown[] } })
+      .prepare(
+        "SELECT method, COUNT(*) AS n FROM plugin_capability_audit WHERE plugin_id = ? AND code = 'ok' AND ts >= ? AND method IN ('ai.complete','ai.extract','notify.send') GROUP BY method",
+      )
+      .all(pluginId, since) as Array<{ method: string; n: number }>;
+  },
+  async lastHash(pluginId: string) {
+    const row = (mockDb as unknown as { prepare(s: string): { get(...a: unknown[]): unknown } })
+      .prepare('SELECT hash FROM plugin_capability_audit WHERE plugin_id = ? ORDER BY id DESC LIMIT 1')
+      .get(pluginId) as { hash: string } | undefined;
+    return row?.hash ?? null;
+  },
+  async insertRow(entry: { plugin_id: string; acting_user_id: number | null; method: string; resource: string | null; code: string; ts: string; prev_hash: string | null; hash: string }) {
+    (mockDb as unknown as { prepare(s: string): { run(...a: unknown[]): unknown } })
+      .prepare('INSERT INTO plugin_capability_audit (plugin_id, acting_user_id, method, resource, code, ts, prev_hash, hash) VALUES (?,?,?,?,?,?,?,?)')
+      .run(entry.plugin_id, entry.acting_user_id, entry.method, entry.resource, entry.code, entry.ts, entry.prev_hash, entry.hash);
+  },
+  async pruneKeepingNewest() {
+    // Not exercised in this suite (PRUNE_EVERY = 500 appends/plugin) — a no-op stub.
+  },
+} as unknown as PluginCapabilityAuditRepository;
+
+/**
+ * Plan 3j Task 5: `MetaRpc`/`HostSurfaceRpc`'s own repository conversions
+ * (MR#/HR#). Same reasoning as `pluginAuditRepo` above — this file's
+ * hand-trimmed `:memory:` schema (no top-level await here) means a real
+ * MikroORM repository isn't reachable, so every converted method is
+ * reproduced as real raw SQL against `mockDb`, wrapped in the repository's
+ * own method shape, rather than a canned stub — HOSTRPC-014/028/029/030
+ * read the real table state back out through `mockDb.prepare(...)`
+ * directly, so this HAS to be the real table.
+ */
+type RawDb = {
+  prepare(sql: string): { get(...a: unknown[]): unknown; all(...a: unknown[]): unknown[]; run(...a: unknown[]): { changes: number } };
+};
+const raw = mockDb as unknown as RawDb;
+
+const tripsRepo = {
+  // Plan 4 Task 2 — PluginGuards' own canAccessTrip delegate is now this
+  // repository's findAccessible directly (same access rule the old
+  // `db/database` mock factory above encoded: trip 1 belongs to user 5,
+  // user 6 is a member).
+  async findAccessible(tripId: number | string, userId: number) {
+    return Number(tripId) === 1 && (userId === 5 || userId === 6) ? { id: 1, user_id: 5, currency: null } : undefined;
+  },
+  async sharesTripWith(userIdA: number, userIdB: number) {
+    return !!raw
+      .prepare(
+        `SELECT 1 FROM trips t
+           LEFT JOIN trip_members m1 ON m1.trip_id = t.id AND m1.user_id = ?
+           LEFT JOIN trip_members m2 ON m2.trip_id = t.id AND m2.user_id = ?
+          WHERE (t.user_id = ? OR m1.user_id IS NOT NULL)
+            AND (t.user_id = ? OR m2.user_id IS NOT NULL)
+          LIMIT 1`,
+      )
+      .get(userIdA, userIdB, userIdA, userIdB);
+  },
+  async existsById(id: number) {
+    return !!raw.prepare('SELECT id FROM trips WHERE id = ?').get(id);
+  },
+} as unknown as TripsRepository;
+
+const placesRepo = {
+  async findTripId(id: number) {
+    return (raw.prepare('SELECT trip_id FROM places WHERE id = ?').get(id) as { trip_id: number } | undefined)?.trip_id;
+  },
+} as unknown as PlacesRepository;
+
+const daysRepo = {
+  async findTripId(id: number) {
+    return (raw.prepare('SELECT trip_id FROM days WHERE id = ?').get(id) as { trip_id: number } | undefined)?.trip_id;
+  },
+} as unknown as DaysRepository;
+
+const reservationsRepo = {
+  async findTripId(id: number) {
+    return (raw.prepare('SELECT trip_id FROM reservations WHERE id = ?').get(id) as { trip_id: number } | undefined)?.trip_id;
+  },
+} as unknown as ReservationsRepository;
+
+const dayAccommodationsRepo = {
+  async getTripId(id: number) {
+    return (raw.prepare('SELECT trip_id FROM day_accommodations WHERE id = ?').get(id) as { trip_id: number } | undefined)?.trip_id;
+  },
+} as unknown as DayAccommodationsRepository;
+
+const metaRepo = {
+  async findValue(pluginId: string, entityType: string, entityId: number, key: string) {
+    const row = raw
+      .prepare('SELECT value FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?')
+      .get(pluginId, entityType, entityId, key) as { value: string } | undefined;
+    return row?.value ?? null;
+  },
+  async countForEntity(pluginId: string, entityType: string, entityId: number) {
+    return (
+      raw
+        .prepare('SELECT COUNT(*) AS n FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=?')
+        .get(pluginId, entityType, entityId) as { n: number }
+    ).n;
+  },
+  async upsertValue(pluginId: string, entityType: string, entityId: number, key: string, value: string) {
+    raw
+      .prepare(
+        `INSERT INTO plugin_entity_metadata (plugin_id, entity_type, entity_id, key, value, updated_at)
+             VALUES (?, ?, ?, ?, ?, datetime('now'))
+             ON CONFLICT(plugin_id, entity_type, entity_id, key)
+             DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      )
+      .run(pluginId, entityType, entityId, key, value);
+  },
+  async listForEntity(pluginId: string, entityType: string, entityId: number) {
+    return raw
+      .prepare('SELECT key, value FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? ORDER BY key')
+      .all(pluginId, entityType, entityId) as Array<{ key: string; value: string }>;
+  },
+  async deleteValue(pluginId: string, entityType: string, entityId: number, key: string) {
+    return raw.prepare('DELETE FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?').run(pluginId, entityType, entityId, key).changes > 0;
+  },
+  // Plan 3j Task 7 fix (must-land 2) — `meta.rpc.ts#set` now calls this ONE method
+  // instead of `findValue`+`countForEntity`+`upsertValue` separately. One synchronous
+  // better-sqlite3 statement (no `await` gap between the cap check and the write),
+  // the same atomicity property the real `PluginEntityMetadataRepository
+  // .upsertValueCapped` gets from `getEntityManager().transactional`.
+  async upsertValueCapped(pluginId: string, entityType: string, entityId: number, key: string, value: string, maxKeys: number) {
+    const result = raw
+      .prepare(
+        `INSERT INTO plugin_entity_metadata (plugin_id, entity_type, entity_id, key, value, updated_at)
+             SELECT ?, ?, ?, ?, ?, datetime('now')
+             WHERE EXISTS (SELECT 1 FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?)
+                OR (SELECT COUNT(*) FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=?) < ?
+             ON CONFLICT(plugin_id, entity_type, entity_id, key)
+             DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      )
+      .run(pluginId, entityType, entityId, key, value, pluginId, entityType, entityId, key, pluginId, entityType, entityId, maxKeys);
+    return result.changes > 0;
+  },
+} as unknown as PluginEntityMetadataRepository;
+
+const scheduledTasksRepo = {
+  async existsForPluginAndName(pluginId: string, name: string) {
+    return !!raw.prepare('SELECT id FROM plugin_scheduled_tasks WHERE plugin_id = ? AND name = ?').get(pluginId, name);
+  },
+  async countForPlugin(pluginId: string) {
+    return (raw.prepare('SELECT COUNT(*) AS c FROM plugin_scheduled_tasks WHERE plugin_id = ?').get(pluginId) as { c: number }).c;
+  },
+  async upsertTask(input: { plugin_id: string; name: string; due_at: number; payload: string; every_ms: number | null }) {
+    raw
+      .prepare(
+        `INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at, payload, every_ms) VALUES (?, ?, ?, ?, ?)
+             ON CONFLICT (plugin_id, name) DO UPDATE SET due_at = excluded.due_at, payload = excluded.payload, every_ms = excluded.every_ms`,
+      )
+      .run(input.plugin_id, input.name, input.due_at, input.payload, input.every_ms);
+  },
+  async deleteByPluginAndName(pluginId: string, name: string) {
+    return raw.prepare('DELETE FROM plugin_scheduled_tasks WHERE plugin_id = ? AND name = ?').run(pluginId, name).changes > 0;
+  },
+  // Plan 3j Task 7 fix (must-land 3) — `host-surface.rpc.ts#schedulerSet` now calls
+  // this ONE method instead of `existsForPluginAndName`+`countForPlugin`+`upsertTask`
+  // separately. Same one-statement atomicity shape as `metaRepo.upsertValueCapped`
+  // above, mirroring the real `PluginScheduledTasksRepository.upsertTaskCapped`.
+  async upsertTaskCapped(input: { plugin_id: string; name: string; due_at: number; payload: string; every_ms: number | null }, maxTasks: number) {
+    const result = raw
+      .prepare(
+        `INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at, payload, every_ms)
+             SELECT ?, ?, ?, ?, ?
+             WHERE EXISTS (SELECT 1 FROM plugin_scheduled_tasks WHERE plugin_id=? AND name=?)
+                OR (SELECT COUNT(*) FROM plugin_scheduled_tasks WHERE plugin_id=?) < ?
+             ON CONFLICT (plugin_id, name) DO UPDATE SET due_at = excluded.due_at, payload = excluded.payload, every_ms = excluded.every_ms`,
+      )
+      .run(input.plugin_id, input.name, input.due_at, input.payload, input.every_ms, input.plugin_id, input.name, input.plugin_id, maxTasks);
+    return result.changes > 0;
+  },
+} as unknown as PluginScheduledTasksRepository;
+
+// Plan 3j Task 1: PluginGuards' own role lookup (PG3/PG4) now goes through
+// UsersRepository.getRole, not `dbs.prepare(...)`. Same reasoning as the
+// canAccessTrip spy above — a real UsersRepository would need a real
+// MikroORM over this file's hand-trimmed `:memory:` schema (async init, no
+// top-level await here) for no benefit: checkPermission is a blanket stub
+// in this file, so no case depends on which role value flows through it.
+// Stubbed against the exact seeded rows (users.ts INSERTs above) so it stays
+// accurate if a future case ever does start asserting on the role argument.
+const seededRoles: Record<number, string> = { 5: 'trip_owner', 6: 'user', 9: 'user' };
+const usersRepo = {
+  getRole: vi.fn(async (id: number) => seededRoles[id] ?? null),
+  // HR1 (Plan 3j Task 5) — same "real SQL against mockDb" reasoning as the
+  // repository stubs above; HOSTRPC-019 asserts the exact returned shape.
+  async findPublicIdentity(id: number) {
+    return (
+      (raw.prepare('SELECT id, username, display_name, avatar FROM users WHERE id = ?').get(id) as
+        | { id: number; username: string; display_name: string | null; avatar: string | null }
+        | undefined) ?? null
+    );
+  },
+} as unknown as UsersRepository;
+// Plan 4 Task 2 — PluginGuards'/MetaRpc's/HostSurfaceRpc's own DatabaseService
+// params are gone: canAccessTrip now reads through the TripsRepository each
+// already injects (`tripsRepo` above, findAccessible-only).
+const guards = new PluginGuards(tripsRepo, permissions, addons, usersRepo);
 const registry = createTestPluginRegistry([
   new DbRpc(userSettings),
-  new MetaRpc(dbs, guards),
-  new HostSurfaceRpc(dbs, new RealtimeService(), notifications, llmConfig, oauth, guards),
+  new MetaRpc(guards, metaRepo, tripsRepo, placesRepo, daysRepo, reservationsRepo, dayAccommodationsRepo),
+  new HostSurfaceRpc(new RealtimeService(), notifications, llmConfig, oauth, guards, pluginAuditRepo, usersRepo, tripsRepo, scheduledTasksRepo),
 ]);
-const factory = new PluginRpcHostFactory(dbs, registry as unknown as PluginRpcRegistryService);
-const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
+const factory = new PluginRpcHostFactory(pluginAuditRepo, registry as unknown as PluginRpcRegistryService);
+const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: async () => {} };
 const makeHost = (id: string, ...perms: string[]) => factory.create(id, new Set(perms), stubRouter);
 /**
  * A response read loosely, on purpose.
@@ -224,7 +441,7 @@ describe('DbRpc — the unconditional three', () => {
         calls.push({ callerId, targetId, fn, args, uid });
         return { echoed: true };
       },
-      emitPluginEvent: (sourceId, event, payload) => {
+      emitPluginEvent: async (sourceId, event, payload) => {
         emits.push({ sourceId, event, payload });
       },
     };
@@ -255,7 +472,7 @@ describe('DbRpc — the unconditional three', () => {
 describe('MetaRpc — namespaced entity metadata', () => {
   beforeEach(() => {
     checkPermission.mockReset();
-    checkPermission.mockReturnValue(true);
+    checkPermission.mockResolvedValue(true);
   });
   afterAll(() => closePluginDataDb('meta'));
 
@@ -315,7 +532,7 @@ describe('MetaRpc — namespaced entity metadata', () => {
     const seen: string[] = [];
     checkPermission.mockImplementation((action) => {
       seen.push(action);
-      return true;
+      return Promise.resolve(true);
     });
     for (const [entityType, entityId] of [['trip', 1], ['place', 7], ['day', 3], ['reservation', 40], ['accommodation', 11]] as const) {
       expect((await call(host, 'meta.set', { entityType, entityId, key: 'k', value: 1 })).ok).toBe(true);
@@ -323,7 +540,7 @@ describe('MetaRpc — namespaced entity metadata', () => {
     // Accommodations deliberately ride on day_edit, like the accommodation write path.
     expect(seen).toEqual(['trip_edit', 'place_edit', 'day_edit', 'reservation_edit', 'day_edit']);
 
-    checkPermission.mockReturnValue(false);
+    checkPermission.mockResolvedValue(false);
     const write = await call(host, 'meta.set', { entityType: 'trip', entityId: 1, key: 'k', value: 2 });
     expect(write.error?.code).toBe('RESOURCE_FORBIDDEN');
     // …but a READ is only access-gated, so it still works for the same user.
@@ -359,7 +576,7 @@ describe('MetaRpc — namespaced entity metadata', () => {
 describe('HostSurfaceRpc — users, broadcasts, notify, ai, oauth, scheduler', () => {
   beforeEach(() => {
     checkPermission.mockReset();
-    checkPermission.mockReturnValue(true);
+    checkPermission.mockResolvedValue(true);
     notifySend.mockClear();
     llmExtract.mockClear();
     broadcast.mockClear();
@@ -376,6 +593,30 @@ describe('HostSurfaceRpc — users, broadcasts, notify, ai, oauth, scheduler', (
     // A stranger is refused, which is what stops id enumeration.
     expect((await call(host, 'users.getById', { id: 9 }, 5)).error?.code).toBe('RESOURCE_FORBIDDEN');
     expect((await call(host, 'users.getById', { id: 6 }, undefined)).error?.code).toBe('RESOURCE_FORBIDDEN');
+  });
+
+  it('HOSTRPC-033 a burst of concurrent auditable RPC calls for the SAME plugin never forks the capability-audit hash chain (Plan 3j Task 7 fix, must-land 1)', async () => {
+    // The REAL production path, not a direct `appendAudit` unit call: `dispatch()`
+    // audits every `isAuditable` method AFTER computing its answer (`users.getById`
+    // here, permission `db:read:users` != `db:own`), through the SAME per-plugin
+    // promise-tail `appendAudit` now serializes on — task-7-review.md's SDK default of
+    // 16 in-flight RPCs is what made this reachable live.
+    const host = makeHost('auditburst', 'db:read:users');
+    const N = 20;
+    const results = await Promise.all(Array.from({ length: N }, () => call(host, 'users.getById', { id: 5 }, 5)));
+    expect(results.every((r) => r.ok)).toBe(true);
+    const rows = (
+      mockDb as unknown as {
+        prepare(s: string): { all(...a: unknown[]): Array<{ plugin_id: string; acting_user_id: number | null; method: string; resource: string | null; code: string; ts: string; prev_hash: string | null; hash: string }> };
+      }
+    )
+      .prepare("SELECT plugin_id, acting_user_id, method, resource, code, ts, prev_hash, hash FROM plugin_capability_audit WHERE plugin_id = 'auditburst' ORDER BY id ASC")
+      .all();
+    expect(rows).toHaveLength(N);
+    expect(verifyChain(rows)).toBe(true);
+    const prevHashes = rows.map((r) => r.prev_hash ?? '');
+    expect(new Set(prevHashes).size).toBe(prevHashes.length); // no two rows read the same "previous" tip
+    closePluginDataDb('auditburst');
   });
 
   it('HOSTRPC-020 trip broadcasts are force-namespaced and membership-gated', async () => {

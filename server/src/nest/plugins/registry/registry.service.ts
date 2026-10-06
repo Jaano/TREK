@@ -1,6 +1,5 @@
 import { readEnv } from '../../../app-config';
-import { DatabaseService } from '../../database/database.service';
-import { discoverPlugins } from '../install/discovery';
+import { discoverPlugins, type DiscoveryRepos } from '../install/discovery';
 import { bypassedRange, hostSatisfies, hostVersion, normalizedHost, trekRangeBypassed, warnRangeBypass } from '../install/host-compat';
 import type { TrekRangeBypass } from '../install/host-compat';
 import type { PluginDependency } from '../install/manifest';
@@ -11,7 +10,17 @@ import { safeDownload, sha256Matches } from '../install/safe-fetch';
 import { verifyAuthorSignature, SignatureError } from '../install/verify-signature';
 import { pluginCodeDir, pluginsCodeRoot, pluginsDataRoot } from '../paths';
 import { clearUpdateBlock, isSignatureCode, setUpdateBlock, RETRUSTABLE_CODE } from '../signature-status';
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Plugins } from '../../../db/entities/Plugins.entity';
+import type { PluginsRepository } from '../../../db/repositories/Plugins.repository';
+import { PluginActions } from '../../../db/entities/PluginActions.entity';
+import type { PluginActionsRepository } from '../../../db/repositories/PluginActions.repository';
+import { PluginSettingsFields } from '../../../db/entities/PluginSettingsFields.entity';
+import type { PluginSettingsFieldsRepository } from '../../../db/repositories/PluginSettingsFields.repository';
+import { PluginErrorLog } from '../../../db/entities/PluginErrorLog.entity';
+import type { PluginErrorLogRepository } from '../../../db/repositories/PluginErrorLog.repository';
+import { UnitOfWork } from '../../database/unit-of-work';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -173,10 +182,26 @@ export class RegistryError extends Error {
 
 @Injectable()
 export class PluginRegistryService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    @InjectRepository(Plugins) private readonly plugins: PluginsRepository,
+    // The remaining three are needed only to compose `DiscoveryRepos` for the
+    // `discoverPlugins` calls below (install()'s post-download register, commitUpload's
+    // sideload register) — this service issues no statement of its own against any of
+    // these three tables.
+    @InjectRepository(PluginActions) private readonly pluginActions: PluginActionsRepository,
+    @InjectRepository(PluginSettingsFields) private readonly pluginSettingsFields: PluginSettingsFieldsRepository,
+    @InjectRepository(PluginErrorLog) private readonly pluginErrorLog: PluginErrorLogRepository,
+    // Plan 4 Task 8a: DiscoveryRepos now needs a `UnitOfWork` so `discoverPlugins`'s
+    // own upsert can wrap its delete-then-reinsert pairs atomically (DI5-DI8).
+    // `@Optional()` matches `PluginRuntimeService`'s own precedent for the same
+    // reason: a hand-built test instance that never exercises discovery need not
+    // construct one — `discoveryRepos` below throws if one is actually needed.
+    @Optional() private readonly uow?: UnitOfWork,
+  ) {}
 
-  private get db() {
-    return this.dbs.connection;
+  private get discoveryRepos(): DiscoveryRepos {
+    if (!this.uow) throw new Error('UnitOfWork not provided — tests that exercise plugin discovery must pass one');
+    return { plugins: this.plugins, actions: this.pluginActions, settingsFields: this.pluginSettingsFields, errorLog: this.pluginErrorLog, uow: this.uow };
   }
 
   /**
@@ -454,9 +479,9 @@ export class PluginRegistryService {
     // A refusal is REMEMBERED (the plugin keeps running on its old code, so the
     // reason must outlive the toast) and re-thrown untouched.
     try {
-      this.verifySignatureAndTofu(id, bytes, entry, ver, opts?.retrustKey);
+      await this.verifySignatureAndTofu(id, bytes, entry, ver, opts?.retrustKey);
     } catch (e) {
-      if (e instanceof RegistryError && isSignatureCode(e.code)) setUpdateBlock(this.dbs.connection, id, e.code, e.message, ver.version);
+      if (e instanceof RegistryError && isSignatureCode(e.code)) await setUpdateBlock(this.plugins, id, e.code, e.message, ver.version);
       throw e;
     }
 
@@ -488,24 +513,18 @@ export class PluginRegistryService {
       fs.renameSync(pluginRoot, dest);
 
       // 7. register INACTIVE (record provenance)
-      discoverPlugins(this.db);
-      this.db.prepare('UPDATE plugins SET source_repo = ?, source_commit = ?, sha256 = ?, reviewed_at = ? WHERE id = ?').run(
-        entry.repo,
-        ver.commitSha,
-        ver.sha256,
-        entry.reviewedAt ?? null,
-        id,
-      );
+      await discoverPlugins(this.discoveryRepos);
+      await this.plugins.setInstallProvenance(id, entry.repo, ver.commitSha, ver.sha256, entry.reviewedAt ?? null);
       // Pin the author key on first successful install of a signed plugin (TOFU) —
       // and, after a re-trust, re-pin to the new key the admin blessed. Only ever set
       // to a key the artifact just verified under; NEVER cleared to NULL, because a
       // NULL pin re-opens the "was never signed" path that accepts an unsigned update.
       if (entry.authorPublicKey) {
-        this.db.prepare('UPDATE plugins SET author_pubkey = ? WHERE id = ?').run(entry.authorPublicKey, id);
+        await this.plugins.setAuthorPubkey(id, entry.authorPublicKey);
       }
       // The plugin is now on new code that passed every check — whatever refusal was
       // recorded before no longer describes reality.
-      clearUpdateBlock(this.dbs.connection, id);
+      await clearUpdateBlock(this.plugins, id);
       return { id, version: ver.version, trekRangeBypassed };
     } finally {
       fs.rmSync(staging, { recursive: true, force: true });
@@ -524,9 +543,7 @@ export class PluginRegistryService {
     constraint?: string,
   ): Promise<{ installed: string[]; requiredAddons: string[]; trekRangeBypassed: TrekRangeBypass | null }> {
     let trekRangeBypassed: TrekRangeBypass | null = null;
-    const installedNow = new Set(
-      (this.db.prepare('SELECT id FROM plugins').all() as Array<{ id: string }>).map((r) => r.id),
-    );
+    const installedNow = new Set(await this.plugins.listAllIds());
     const done = new Set<string>();
     const installed: string[] = [];
     const requiredAddons = new Set<string>();
@@ -574,7 +591,7 @@ export class PluginRegistryService {
         hold = false;
       }
     }
-    this.db.prepare('UPDATE plugins SET update_hold = ? WHERE id = ?').run(hold ? 1 : 0, id);
+    await this.plugins.setUpdateHold(id, hold);
     return hold;
   }
 
@@ -611,13 +628,13 @@ export class PluginRegistryService {
    * the UI flags it and offers no auto-update. The caller MUST have stopped any
    * running child of this id first (the code dir is replaced).
    */
-  commitUpload(staged: { id: string; root: string; stagingDir: string }): void {
+  async commitUpload(staged: { id: string; root: string; stagingDir: string }): Promise<void> {
     try {
       const dest = pluginCodeDir(staged.id);
       fs.mkdirSync(pluginsCodeRoot(), { recursive: true });
       fs.rmSync(dest, { recursive: true, force: true });
       fs.renameSync(staged.root, dest);
-      discoverPlugins(this.db);
+      await discoverPlugins(this.discoveryRepos);
       // Provenance for a sideload, plus a hard INACTIVE floor: discoverPlugins keeps
       // an existing row's status, so replacing a plugin that was active must not
       // leave the new code marked active — the admin re-activates (and re-consents
@@ -627,12 +644,7 @@ export class PluginRegistryService {
       // plugin has just left the registry trust model entirely — the code is now whatever
       // the admin uploaded. Leaving the block would have the row insist an update was
       // blocked over a signing key that no longer applies to the code that is running.
-      this.db.prepare(
-        `UPDATE plugins SET source_repo = ?, source_commit = ?, sha256 = ?, reviewed_at = ?, author_pubkey = NULL,
-                            update_block_code = NULL, update_block_detail = NULL, update_block_version = NULL,
-                            status = 'inactive', enabled = 0
-         WHERE id = ?`,
-      ).run('local:upload', null, null, null, staged.id);
+      await this.plugins.clearForSideload(staged.id, 'local:upload');
     } finally {
       fs.rmSync(staged.stagingDir, { recursive: true, force: true });
     }
@@ -658,16 +670,14 @@ export class PluginRegistryService {
    * key, over the artifact bytes. A key an admin blesses must still sign the code it
    * ships — a re-trust moves the pin from one VERIFIED key to another verified key.
    */
-  private verifySignatureAndTofu(
+  private async verifySignatureAndTofu(
     id: string,
     bytes: Buffer,
     entry: RegistryEntry,
     ver: RegistryVersion,
     retrustKey?: string,
-  ): void {
-    const pinned =
-      (this.db.prepare('SELECT author_pubkey FROM plugins WHERE id = ?').get(id) as { author_pubkey?: string } | undefined)
-        ?.author_pubkey ?? null;
+  ): Promise<void> {
+    const pinned = await this.plugins.findAuthorPubkey(id);
 
     if (!entry.authorPublicKey && !ver.signature) {
       if (pinned) {
@@ -718,9 +728,7 @@ export class PluginRegistryService {
    * rendered, the admin would be blessing a key they never saw.
    */
   async assertRetrustable(id: string, publicKey: string): Promise<RegistryEntry> {
-    const row = this.db.prepare('SELECT source_repo, author_pubkey FROM plugins WHERE id = ?').get(id) as
-      | { source_repo?: string | null; author_pubkey?: string | null }
-      | undefined;
+    const row = await this.plugins.findSourceRepoAndAuthorPubkey(id);
     if (!row) throw new RegistryError(`plugin ${id} not found`, 'NOT_FOUND');
     if (!row.source_repo || row.source_repo === 'local:upload' || row.source_repo === 'local:link') {
       throw new RegistryError('only a registry-installed plugin can be re-trusted', 'RETRUST_NOT_APPLICABLE');

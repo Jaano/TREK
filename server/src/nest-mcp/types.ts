@@ -103,7 +103,7 @@ interface McpEntryOptionsBase {
    * so a predicate written against its own controller class stays assignable
    * here. The registry always passes the instance that declared the entry.
    */
-  when?(ctx: McpContext, self: object): boolean;
+  when?(ctx: McpContext, self: object): boolean | Promise<boolean>;
   /** Omitted ⇒ the entry is always registered (subject to `when`). */
   access?: McpAccess;
 }
@@ -221,7 +221,7 @@ export interface McpDynamicTool {
  * creation. A source that needs to ask something slow what tools exist should
  * answer from state it already holds.
  */
-export type McpDynamicToolSource = (ctx: McpContext) => readonly McpDynamicTool[];
+export type McpDynamicToolSource = (ctx: McpContext) => readonly McpDynamicTool[] | Promise<readonly McpDynamicTool[]>;
 
 export type McpEntry =
   | { kind: 'tool'; methodName: string; options: ToolOptions }

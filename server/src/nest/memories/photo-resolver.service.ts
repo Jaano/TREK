@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
 import type { TrekPhoto } from '../../types';
 import { decrypt_api_key } from '../common/crypto/apiKeyCrypto';
-import { TrekPhotosRepository } from '../photos/trek-photos.repository';
+import { TrekPhotoRegistrationService } from '../photos/trek-photo-registration.service';
 import { ThumbnailService } from './thumbnail.service';
 import { TrekPhotoCacheService } from './trek-photo-cache.service';
 import { fail, success, type AssetInfo, type ServiceResult } from './memories.helpers';
@@ -13,7 +13,7 @@ import { StorageService } from '../storage/storage.service';
 /**
  * Resolves a stored trek_photo to bytes or metadata by asking whichever provider
  * owns it. The storage half of the old photoResolverService lives in
- * nest/photos/trek-photos.repository.ts; this is the dispatch half.
+ * nest/photos/trek-photo-registration.service.ts; this is the dispatch half.
  *
  * It no longer knows WHICH providers exist (#584). It held ImmichService and
  * SynologyService and a `switch` over their ids; it holds the registry now, so
@@ -23,7 +23,7 @@ import { StorageService } from '../storage/storage.service';
 @Injectable()
 export class PhotoResolverService {
   constructor(
-    private readonly photos: TrekPhotosRepository,
+    private readonly photos: TrekPhotoRegistrationService,
     private readonly thumbnails: ThumbnailService,
     private readonly cache: TrekPhotoCacheService,
     private readonly providers: PhotoProviderRegistry,
@@ -76,7 +76,7 @@ export class PhotoResolverService {
     kind: 'thumbnail' | 'original',
     range?: string,
   ): Promise<void> {
-    const photo = this.photos.resolve(photoId);
+    const photo = await this.photos.resolve(photoId);
     if (!photo) {
       res.status(404).json({ error: 'Photo not found' });
       return;
@@ -92,7 +92,7 @@ export class PhotoResolverService {
           const result = await this.thumbnails.ensureLocalThumbnail(photo.file_path);
           if (result) {
             thumbRel = result.thumbnailRelPath;
-            this.photos.recordLocalThumbnail(photo.id, thumbRel, result.width, result.height);
+            await this.photos.recordLocalThumbnail(photo.id, thumbRel, result.width, result.height);
           }
         }
         if (thumbRel) {
@@ -169,7 +169,7 @@ export class PhotoResolverService {
     userId: number,
     photoId: number,
   ): Promise<ServiceResult<AssetInfo>> {
-    const photo = this.photos.resolve(photoId);
+    const photo = await this.photos.resolve(photoId);
     if (!photo) return fail('Photo not found', 404);
 
     // Local rows answer from the row itself — nothing to ask.

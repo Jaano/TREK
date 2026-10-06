@@ -1,6 +1,6 @@
 /**
  * /api/admin/google-quota e2e (#1582): the real JwtAuthGuard, AdminGuard and
- * Zod pipe against a temp SQLite db. Admin only, a validated body, and the
+ * Zod pipe against the migrated snapshot db. Admin only, a validated body, and the
  * status reflecting what was stored.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -8,29 +8,20 @@ import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
-import { APP_PIPE } from '@nestjs/core';
-import { ZodValidationPipe } from 'nestjs-zod';
-import { DatabaseModule } from '../../src/nest/database/database.module';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0);`);
-  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  tmp.exec('CREATE TABLE google_api_usage (day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0);');
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
 
-vi.mock('../../src/db/database', () => ({
-  db, canAccessTrip: vi.fn(), isOwner: vi.fn(), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
-}));
-
+import { db } from '../../src/db/database';
 import { GoogleQuotaModule } from '../../src/nest/google-quota/google-quota.module';
 import { AuditService } from '../../src/nest/audit/audit.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 const USER = 1;
 const ADMIN = 2;
@@ -42,19 +33,26 @@ describe('/api/admin/google-quota e2e (real guards + temp SQLite)', () => {
 
   async function build() {
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule, GoogleQuotaModule],
-      providers: [{ provide: APP_PIPE, useClass: ZodValidationPipe }],
+      imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), GoogleQuotaModule],
     }).overrideProvider(AuditService).useValue({ writeAudit }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
+    // Mirror the production APP_PIPE (app.module.ts): DTO-typed bodies validate by metatype.
+    nest.useGlobalPipes(new ZodValidationPipe());
     await nest.init();
     return nest;
   }
 
   beforeAll(async () => {
-    seedUser(db as never, { id: USER });
-    seedUser(db as never, { id: ADMIN, email: 'admin@example.com', role: 'admin' });
+    // harness.ts's seedUser() omits password_hash, which the migrated schema
+    // requires NOT NULL, so the two accounts are inserted here directly.
+    const insertUser = db.prepare(
+      'INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (?, ?, ?, ?, ?, 0)',
+    );
+    insertUser.run(USER, 'e2e-user', 'e2e@example.test', 'x', 'user');
+    insertUser.run(ADMIN, 'e2e-admin', 'admin@example.com', 'x', 'admin');
+    db.prepare("DELETE FROM app_settings WHERE key = 'google_daily_limit'").run();
     app = await build();
     server = app.getHttpServer();
   });

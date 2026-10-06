@@ -7,31 +7,10 @@ import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -43,9 +22,8 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip, createPackingItem, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
@@ -54,8 +32,6 @@ let nestApp: INestApplication;
 let app: Application;
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
@@ -445,6 +421,58 @@ describe('Bags', () => {
     expect(res.body.bag.name).toBe('New Name');
   });
 
+  it('PACK-009b — H2 regression: PUT /bags/:bagId with an empty body no-ops (200, not 500)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const createRes = await request(app)
+      .post(`/api/trips/${trip.id}/packing/bags`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name: 'Untouched Name', color: '#abcdef' });
+    const bagId = createRes.body.bag.id;
+
+    const res = await request(app)
+      .put(`/api/trips/${trip.id}/packing/bags/${bagId}`)
+      .set('Cookie', authCookie(user.id))
+      .send({});
+    expect(res.status).toBe(200);
+    expect(res.body.bag.name).toBe('Untouched Name');
+    expect(res.body.bag.color).toBe('#abcdef');
+  });
+
+  it('PACK-009c — H2 regression: PUT /bags/:bagId with an empty name no-ops (200, not 500)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const createRes = await request(app)
+      .post(`/api/trips/${trip.id}/packing/bags`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name: 'Untouched Name', color: '#abcdef' });
+    const bagId = createRes.body.bag.id;
+
+    const res = await request(app)
+      .put(`/api/trips/${trip.id}/packing/bags/${bagId}`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name: '' });
+    expect(res.status).toBe(200);
+    expect(res.body.bag.name).toBe('Untouched Name');
+  });
+
+  it('PACK-009d — H2 regression: PUT /bags/:bagId with an empty color no-ops (200, not 500)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const createRes = await request(app)
+      .post(`/api/trips/${trip.id}/packing/bags`)
+      .set('Cookie', authCookie(user.id))
+      .send({ name: 'Untouched Name', color: '#abcdef' });
+    const bagId = createRes.body.bag.id;
+
+    const res = await request(app)
+      .put(`/api/trips/${trip.id}/packing/bags/${bagId}`)
+      .set('Cookie', authCookie(user.id))
+      .send({ color: '' });
+    expect(res.status).toBe(200);
+    expect(res.body.bag.color).toBe('#abcdef');
+  });
+
   it('PACK-010 — DELETE /bags/:bagId removes bag', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
@@ -479,6 +507,24 @@ describe('Category assignees', () => {
       .send({ user_ids: [user.id, member.id] });
     expect(res.status).toBe(200);
     expect(res.body.assignees).toBeDefined();
+  });
+
+  it('PACK-012b — H1 regression: a string trip id (the real REST shape) with a non-empty roster does not 500', async () => {
+    const { user } = createUser(testDb);
+    const { user: member } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    addTripMember(testDb, trip.id, member.id);
+
+    // `trip.id` is a number in the fixture, but the route param — like every
+    // real REST call — arrives as a string; `insertIgnore` used to hand that
+    // raw string to `upsertMany`, which threw on the post-write re-match
+    // (task-8-review.md H1) instead of the 200 base returned.
+    const res = await request(app)
+      .put(`/api/trips/${String(trip.id)}/packing/category-assignees/Clothing`)
+      .set('Cookie', authCookie(user.id))
+      .send({ user_ids: [user.id, member.id] });
+    expect(res.status).toBe(200);
+    expect(res.body.assignees).toHaveLength(2);
   });
 
   it('PACK-013 — GET /category-assignees returns all category assignments', async () => {

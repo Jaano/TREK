@@ -1,13 +1,34 @@
 import { Injectable } from '@nestjs/common';
 import crypto from 'crypto';
-import { DatabaseService } from '../database/database.service';
-import type { TripAccess } from '../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { PermissionsService } from '../permissions/permissions.service';
 import { QueryHelpersService } from '../query-helpers/query-helpers.service';
 import { PlacePhotoCacheService } from '../place-photos/place-photo-cache.service';
-import { publicReservationSql, publicStaySql } from '../reservations/reservation-visibility';
 import { SettingsService } from '../settings/settings.service';
+import { UnitOfWork } from '../database/unit-of-work';
 import type { User } from '../../types';
+import { Reservations } from '../../db/entities/Reservations.entity';
+import type { ReservationsRepository } from '../../db/repositories/Reservations.repository';
+import { ShareTokens } from '../../db/entities/ShareTokens.entity';
+import type { ShareTokensRepository } from '../../db/repositories/ShareTokens.repository';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository, TripAccess } from '../../db/repositories/Trips.repository';
+import { Days } from '../../db/entities/Days.entity';
+import type { DaysRepository } from '../../db/repositories/Days.repository';
+import { DayAssignments } from '../../db/entities/DayAssignments.entity';
+import type { DayAssignmentsRepository } from '../../db/repositories/DayAssignments.repository';
+import { DayNotes } from '../../db/entities/DayNotes.entity';
+import type { DayNotesRepository } from '../../db/repositories/DayNotes.repository';
+import { Places } from '../../db/entities/Places.entity';
+import type { PlacesRepository } from '../../db/repositories/Places.repository';
+import { PackingItems } from '../../db/entities/PackingItems.entity';
+import type { PackingItemsRepository } from '../../db/repositories/PackingItems.repository';
+import { BudgetItems } from '../../db/entities/BudgetItems.entity';
+import type { BudgetItemsRepository } from '../../db/repositories/BudgetItems.repository';
+import { Categories } from '../../db/entities/Categories.entity';
+import type { CategoriesRepository } from '../../db/repositories/Categories.repository';
+import { CollabMessages } from '../../db/entities/CollabMessages.entity';
+import type { CollabMessagesRepository } from '../../db/repositories/CollabMessages.repository';
 import { travelOnly, withoutImages } from './share-view.helpers';
 
 type Trip = TripAccess;
@@ -52,9 +73,10 @@ export interface ShareTokenInfo {
 }
 
 /**
- * Public share links — the legacy shareService SQL folded in over the injected
- * DatabaseService. Trip access and the 'share_manage' permission gate
- * create/delete; the shared read is public.
+ * Public share links — `share_tokens` and its cross-domain public reads
+ * through repositories (Plan 3h Task 6; 3d Task 4 already converted the
+ * reservations-related reads). Trip access and the 'share_manage' permission
+ * gate create/delete; the shared read is public.
  */
 /**
  * What a place shows the public: where it is, what it is, how to reach it.
@@ -63,27 +85,19 @@ export interface ShareTokenInfo {
  * Google identifiers, the routing bookkeeping and the fill figures a road trip
  * keeps for itself. `notes` stays — it is the note somebody wrote to be read
  * on the plan, and the plan is what a link shares.
+ *
+ * The exact column list now lives as {@link PlacesRepository.listPublicForShare}'s
+ * own docstring (Plan 3h Task 6) — this file no longer spells the SQL, so
+ * keeping a second copy of the allow-list here would drift from the one the
+ * query actually runs.
  */
-const PUBLIC_PLACE_COLUMNS = [
-  'id', 'trip_id', 'name', 'description', 'lat', 'lng', 'address', 'category_id', 'price', 'currency',
-  'place_time', 'end_time', 'duration_minutes', 'notes', 'image_url', 'website', 'phone',
-  'transport_mode', 'created_at', 'updated_at',
-].map(c => `p.${c}`).join(', ');
 
-/**
- * What a booking shows the public: when, where, what kind, and the note and
- * link the owner attached to it. Never the confirmation number, never the
- * import trail, never who is travelling on it.
- */
-const PUBLIC_RESERVATION_COLUMNS = [
-  'id', 'trip_id', 'day_id', 'end_day_id', 'place_id', 'accommodation_id', 'title', 'type', 'status', 'location',
-  'reservation_time', 'reservation_end_time', 'notes', 'url', 'metadata', 'created_at',
-].map(c => `r.${c}`).join(', ');
-
-/** A stay: which place, which nights, when the desk opens. Not the confirmation. */
-const PUBLIC_ACCOMMODATION_COLUMNS = [
-  'id', 'trip_id', 'place_id', 'start_day_id', 'end_day_id', 'check_in', 'check_in_end', 'check_out', 'notes',
-].map(c => `a.${c}`).join(', ');
+// What a booking/stay shows the public — never the confirmation number, the
+// import trail, or who is travelling — now lives as the exact column list in
+// `ReservationsRepository.listPublicForShare`/`listPublicAccommodationsForShare`'s
+// own docstrings (Plan 3d Task 4): this file no longer spells the SQL, so
+// keeping a second copy of the allow-list here would drift from the one the
+// query actually runs.
 
 /**
  * The parts of a booking's metadata that describe the journey rather than the
@@ -155,18 +169,30 @@ export function publicHttpUrl(value: unknown): string | null {
 @Injectable()
 export class ShareService {
   constructor(
-    private readonly dbs: DatabaseService,
     private readonly settings: SettingsService,
     private readonly permissions: PermissionsService,
     private readonly queryHelpers: QueryHelpersService,
     private readonly photoCache: PlacePhotoCacheService,
+    private readonly uow: UnitOfWork,
+    @InjectRepository(Reservations) private readonly reservationsRepo: ReservationsRepository,
+    @InjectRepository(ShareTokens) private readonly shareTokens: ShareTokensRepository,
+    @InjectRepository(Trips) private readonly trips: TripsRepository,
+    @InjectRepository(Days) private readonly days: DaysRepository,
+    @InjectRepository(DayAssignments) private readonly dayAssignments: DayAssignmentsRepository,
+    @InjectRepository(DayNotes) private readonly dayNotes: DayNotesRepository,
+    @InjectRepository(Places) private readonly places: PlacesRepository,
+    @InjectRepository(PackingItems) private readonly packingItems: PackingItemsRepository,
+    @InjectRepository(BudgetItems) private readonly budgetItems: BudgetItemsRepository,
+    @InjectRepository(Categories) private readonly categories: CategoriesRepository,
+    @InjectRepository(CollabMessages) private readonly collabMessages: CollabMessagesRepository,
   ) {}
 
-  verifyTripAccess(tripId: string, userId: number) {
-    return this.dbs.canAccessTrip(tripId, userId);
+  /** SH-AP1 — the same `TripsRepository.findAccessible` every other access-primitive call in this plan reuses. */
+  async verifyTripAccess(tripId: string, userId: number): Promise<Trip | undefined> {
+    return await this.trips.findAccessible(tripId, userId);
   }
 
-  canManage(trip: Trip, user: User): boolean {
+  async canManage(trip: Trip, user: User): Promise<boolean> {
     return this.permissions.checkPermission('share_manage', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
@@ -179,7 +205,7 @@ export class ShareService {
    * before the expires_at migration keep NULL until touched and remain valid
    * indefinitely; an explicit update moves them onto the TTL.
    */
-  createOrUpdate(tripId: string, userId: number, permissions: SharePermissions): { token: string; created: boolean } {
+  async createOrUpdate(tripId: string, userId: number, permissions: SharePermissions): Promise<{ token: string; created: boolean }> {
     const {
       share_map = true,
       share_bookings = true,
@@ -189,24 +215,38 @@ export class ShareService {
       share_travel_only = false,
       share_hide_images = false,
     } = permissions;
-    const flags = [share_map, share_bookings, share_packing, share_budget, share_collab, share_travel_only, share_hide_images].map(f => (f ? 1 : 0));
 
     const expiresAt = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
-    return this.dbs.transaction(() => {
-      const existing = this.dbs.get<{ token: string }>('SELECT token FROM share_tokens WHERE trip_id = ?', tripId);
+    return await this.uow.transactional(async () => {
+      const existing = await this.shareTokens.findTokenByTrip(tripId);
       if (existing) {
-        this.dbs.run(
-          'UPDATE share_tokens SET share_map = ?, share_bookings = ?, share_packing = ?, share_budget = ?, share_collab = ?, share_travel_only = ?, share_hide_images = ?, expires_at = ? WHERE trip_id = ?',
-          ...flags, expiresAt, tripId,
-        );
+        await this.shareTokens.updateFlagsByTrip(tripId, {
+          share_map: share_map ? 1 : 0,
+          share_bookings: share_bookings ? 1 : 0,
+          share_packing: share_packing ? 1 : 0,
+          share_budget: share_budget ? 1 : 0,
+          share_collab: share_collab ? 1 : 0,
+          share_travel_only: share_travel_only ? 1 : 0,
+          share_hide_images: share_hide_images ? 1 : 0,
+          expires_at: expiresAt,
+        });
         return { token: existing.token, created: false };
       }
 
       const token = crypto.randomBytes(24).toString('base64url');
-      this.dbs.run(
-        'INSERT INTO share_tokens (trip_id, token, created_by, share_map, share_bookings, share_packing, share_budget, share_collab, share_travel_only, share_hide_images, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        tripId, token, userId, ...flags, expiresAt,
-      );
+      await this.shareTokens.insertNew({
+        trip_id: tripId,
+        token,
+        created_by: userId,
+        share_map: share_map ? 1 : 0,
+        share_bookings: share_bookings ? 1 : 0,
+        share_packing: share_packing ? 1 : 0,
+        share_budget: share_budget ? 1 : 0,
+        share_collab: share_collab ? 1 : 0,
+        share_travel_only: share_travel_only ? 1 : 0,
+        share_hide_images: share_hide_images ? 1 : 0,
+        expires_at: expiresAt,
+      });
       return { token, created: true };
     });
   }
@@ -214,12 +254,12 @@ export class ShareService {
   /**
    * Returns share token info for a trip, or null if no share link exists.
    */
-  get(tripId: string): ShareTokenInfo | null {
-    const row = this.dbs.get<any>('SELECT * FROM share_tokens WHERE trip_id = ?', tripId);
+  async get(tripId: string): Promise<ShareTokenInfo | null> {
+    const row = await this.shareTokens.findRawByTrip(tripId);
     if (!row) return null;
     return {
       token: row.token,
-      created_at: row.created_at,
+      created_at: row.created_at ?? '',
       share_map: !!row.share_map,
       share_bookings: !!row.share_bookings,
       share_packing: !!row.share_packing,
@@ -233,8 +273,8 @@ export class ShareService {
   /**
    * Deletes the share token for a trip.
    */
-  remove(tripId: string): void {
-    this.dbs.run('DELETE FROM share_tokens WHERE trip_id = ?', tripId);
+  async remove(tripId: string): Promise<void> {
+    await this.shareTokens.deleteByTrip(tripId);
   }
 
   /**
@@ -253,13 +293,8 @@ export class ShareService {
    * route from these, and a trip with forty bookings is not forty round trips
    * to the database.
    */
-  private publicEndpointsByReservation(tripId: number): Map<number, Array<Record<string, unknown>>> {
-    const rows = this.dbs.all<{ reservation_id: number } & Record<string, unknown>>(
-      `SELECT e.reservation_id, e.role, e.sequence, e.name, e.code, e.lat, e.lng, e.timezone, e.local_date, e.local_time
-         FROM reservation_endpoints e JOIN reservations r ON r.id = e.reservation_id
-        WHERE r.trip_id = ? ORDER BY e.reservation_id ASC, e.sequence ASC`,
-      tripId,
-    );
+  private async publicEndpointsByReservation(tripId: number): Promise<Map<number, Array<Record<string, unknown>>>> {
+    const rows = await this.reservationsRepo.listEndpointsForShare(tripId);
     const out = new Map<number, Array<Record<string, unknown>>>();
     for (const { reservation_id, ...endpoint } of rows) {
       if (!out.has(reservation_id)) out.set(reservation_id, []);
@@ -268,20 +303,14 @@ export class ShareService {
     return out;
   }
 
-  getSharedTripData(token: string): Record<string, any> | null {
-    const shareRow = this.dbs.get<any>(
-      "SELECT * FROM share_tokens WHERE token = ? AND (expires_at IS NULL OR expires_at > datetime('now'))",
-      token,
-    );
+  async getSharedTripData(token: string): Promise<Record<string, any> | null> {
+    const shareRow = await this.shareTokens.findValidByToken(token);
     if (!shareRow) return null;
 
     const tripId = shareRow.trip_id;
 
     // Trip
-    const trip = this.dbs.get(
-      'SELECT id, title, description, start_date, end_date, cover_image, currency FROM trips WHERE id = ?',
-      tripId,
-    );
+    const trip = await this.trips.findPublicForShare(tripId);
     if (!trip) return null;
 
     const permissions = {
@@ -300,31 +329,17 @@ export class ShareService {
     let dayNotes: Record<number, any[]> = {};
     let places: any[] = [];
     if (permissions.share_map) {
-      days = this.dbs.all<any>('SELECT * FROM days WHERE trip_id = ? ORDER BY day_number ASC', tripId);
+      days = await this.days.listByTrip(tripId);
       const dayIds = days.map(d => d.id);
 
       if (dayIds.length > 0) {
-        const ph = dayIds.map(() => '?').join(',');
-        const allAssignments = this.dbs.all<any>(`
-          SELECT da.*, p.id as place_id, p.name as place_name, p.description as place_description,
-            p.lat, p.lng, p.address, p.category_id, p.price, p.currency as place_currency,
-            COALESCE(da.assignment_time, p.place_time) as place_time,
-            COALESCE(da.assignment_end_time, p.end_time) as end_time,
-            p.duration_minutes, p.notes as place_notes, p.image_url, p.transport_mode,
-            p.website, p.phone,
-            c.name as category_name, c.color as category_color, c.icon as category_icon
-          FROM day_assignments da
-          JOIN places p ON da.place_id = p.id
-          LEFT JOIN categories c ON p.category_id = c.id
-          WHERE da.day_id IN (${ph})
-          ORDER BY da.order_index ASC, da.created_at ASC
-        `, ...dayIds);
+        const allAssignments = await this.dayAssignments.listPublicForShare(dayIds);
 
-        const placeIds = [...new Set(allAssignments.map((a: any) => a.place_id))];
-        const tagsByPlace = this.queryHelpers.loadTagsByPlaceIds(placeIds, { compact: true });
+        const placeIds = [...new Set(allAssignments.map((a) => a.place_id))];
+        const tagsByPlace = await this.queryHelpers.loadTagsByPlaceIds(placeIds, { compact: true });
 
         const byDay: Record<number, any[]> = {};
-        for (const a of allAssignments as any[]) {
+        for (const a of allAssignments) {
           if (!byDay[a.day_id]) byDay[a.day_id] = [];
           byDay[a.day_id].push({
             id: a.id, day_id: a.day_id, order_index: a.order_index, notes: a.notes,
@@ -345,9 +360,9 @@ export class ShareService {
         }
         assignments = byDay;
 
-        const allNotes = this.dbs.all<any>(`SELECT * FROM day_notes WHERE day_id IN (${ph}) ORDER BY sort_order ASC, created_at ASC`, ...dayIds);
+        const allNotes = await this.dayNotes.listByDayIds(dayIds);
         const notesByDay: Record<number, any[]> = {};
-        for (const n of allNotes as any[]) {
+        for (const n of allNotes) {
           if (!notesByDay[n.day_id]) notesByDay[n.day_id] = [];
           notesByDay[n.day_id].push(n);
         }
@@ -357,11 +372,7 @@ export class ShareService {
       // Named columns, not p.*: the pool used to travel whole, which put the
       // owner's booking notes on the place, the Google ids and the import
       // bookkeeping in front of anybody holding the link (#2320).
-      places = this.dbs.all<any>(`
-        SELECT ${PUBLIC_PLACE_COLUMNS}, c.name as category_name, c.color as category_color, c.icon as category_icon
-        FROM places p LEFT JOIN categories c ON p.category_id = c.id
-        WHERE p.trip_id = ? ORDER BY p.created_at DESC
-      `, tripId).map((p) => ({
+      places = (await this.places.listPublicForShare(tripId)).map((p) => ({
         ...p,
         image_url: rewritePlacePhotoUrl(p.image_url, token),
         website: publicHttpUrl(p.website),
@@ -373,12 +384,7 @@ export class ShareService {
     let reservations: any[] = [];
     let accommodations: unknown[] = [];
     if (permissions.share_bookings) {
-      const dayPositions = this.dbs.all<{ reservation_id: number; day_id: number; position: number }>(`
-        SELECT rdp.reservation_id, rdp.day_id, rdp.position
-        FROM reservation_day_positions rdp
-        JOIN reservations r ON rdp.reservation_id = r.id
-        WHERE r.trip_id = ?
-      `, tripId);
+      const dayPositions = await this.reservationsRepo.listDayPositionsForShare(tripId);
 
       const posMap = new Map<number, Record<number, number>>();
       for (const dp of dayPositions) {
@@ -392,11 +398,8 @@ export class ShareService {
       // an imported ticket keeps its seat and its record locator. A public
       // link shows what the booking is, not what it would take to change it
       // (#2320). The endpoints ride along, since the map draws from them.
-      const endpoints = this.publicEndpointsByReservation(tripId);
-      reservations = this.dbs.all<any>(
-        `SELECT ${PUBLIC_RESERVATION_COLUMNS} FROM reservations r
-         WHERE r.trip_id = ? AND ${publicReservationSql('r')}
-         ORDER BY r.reservation_time ASC`, tripId)
+      const endpoints = await this.publicEndpointsByReservation(tripId);
+      reservations = (await this.reservationsRepo.listPublicForShare(tripId))
         .map((r) => ({
           ...r,
           url: publicHttpUrl(r.url),
@@ -405,32 +408,27 @@ export class ShareService {
           day_positions: posMap.get(r.id) ?? null,
         }));
 
-      accommodations = this.dbs.all(`
-        SELECT ${PUBLIC_ACCOMMODATION_COLUMNS},
-          p.name as place_name, p.address as place_address, p.lat as place_lat, p.lng as place_lng
-        FROM day_accommodations a JOIN places p ON a.place_id = p.id
-        WHERE a.trip_id = ? AND ${publicStaySql('a')}
-      `, tripId);
+      accommodations = await this.reservationsRepo.listPublicAccommodationsForShare(tripId);
     }
 
     // Packing — a public viewer is neither owner nor recipient, so only Common items
     // may surface; never a co-member's private/personal packing items (#858).
     const packing = permissions.share_packing
-      ? this.dbs.all('SELECT * FROM packing_items WHERE trip_id = ? AND is_private = 0 ORDER BY sort_order ASC', tripId)
+      ? await this.packingItems.listPublicForShare(tripId)
       : [];
 
     // Budget
     const budget = permissions.share_budget
-      ? this.dbs.all('SELECT * FROM budget_items WHERE trip_id = ? ORDER BY category ASC', tripId)
+      ? await this.budgetItems.listPublicForShare(tripId)
       : [];
 
     // Categories are a shared global pool (the authed /api/categories list is
     // equally unscoped), so the public payload returns them all too.
-    const categories = this.dbs.all('SELECT * FROM categories');
+    const categories = await this.categories.listAllUnordered();
 
     // Collab messages (only if owner chose to share)
     const collabMessages = permissions.share_collab
-      ? this.dbs.all('SELECT m.*, u.username, u.avatar FROM collab_messages m JOIN users u ON m.user_id = u.id WHERE m.trip_id = ? AND m.deleted = 0 ORDER BY m.created_at', tripId)
+      ? await this.collabMessages.listPublicForShare(tripId)
       : [];
 
     // Display currency the share owner sees in their Costs view. A public viewer has
@@ -443,7 +441,7 @@ export class ShareService {
     // (`||` on purpose: an empty-string trip currency also falls back).
     let baseCurrency = (trip as { currency?: string }).currency || 'EUR';
     const ownerSettings: Record<string, unknown> = shareRow.created_by != null
-      ? this.settings.getUserSettings(shareRow.created_by)
+      ? await this.settings.getUserSettings(shareRow.created_by)
       : {};
     const ownerDefault = ownerSettings['default_currency'];
     if (typeof ownerDefault === 'string' && ownerDefault.trim()) {
@@ -465,9 +463,7 @@ export class ShareService {
     // above already let through.
     let view = { assignments, dayNotes, places, reservations };
     if (permissions.share_travel_only) {
-      const stayPlaceIds = new Set(this.dbs.all<{ place_id: number }>(
-        `SELECT DISTINCT a.place_id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')}`, tripId,
-      ).map(r => r.place_id));
+      const stayPlaceIds = new Set(await this.reservationsRepo.listPublicStayPlaceIdsForShare(tripId));
       view = travelOnly(view, stayPlaceIds);
     }
     if (permissions.share_hide_images) view = withoutImages(view);
@@ -490,10 +486,7 @@ export class ShareService {
    * mirroring the authenticated bytes endpoint.
    */
   async getSharedPlacePhotoKey(token: string, placeId: string): Promise<string | null> {
-    const shareRow = this.dbs.get<{ trip_id: string; share_map: number; share_hide_images?: number }>(
-      "SELECT trip_id, share_map, share_hide_images FROM share_tokens WHERE token = ? AND (expires_at IS NULL OR expires_at > datetime('now'))",
-      token,
-    );
+    const shareRow = await this.shareTokens.findTripAndShareMapByToken(token);
     if (!shareRow) return null;
     // A link that leaves the photos out (#1712) does not serve them either.
     if (shareRow.share_hide_images) return null;
@@ -503,8 +496,8 @@ export class ShareService {
     if (!shareRow.share_map) return null;
 
     const expectedUrl = `${PLACE_PHOTO_PROXY_PREFIX}${encodeURIComponent(placeId)}/bytes`;
-    const place = this.dbs.get('SELECT 1 FROM places WHERE trip_id = ? AND image_url = ?', shareRow.trip_id, expectedUrl);
-    if (!place) return null;
+    const exists = await this.places.existsByTripAndImageUrl(shareRow.trip_id, expectedUrl);
+    if (!exists) return null;
 
     return this.photoCache.serveKey(placeId);
   }

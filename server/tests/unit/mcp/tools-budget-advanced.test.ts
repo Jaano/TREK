@@ -4,27 +4,13 @@
  * Resources: trek://trips/{tripId}/budget/per-person, trek://trips/{tripId}/budget/settlement.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
+import { db as testDb } from '../../../src/db/database';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -34,24 +20,18 @@ vi.mock('../../../src/config', () => ({
 const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createBudgetItem, addTripMember } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 import { BudgetController } from '../../../src/nest/budget/budget.controller';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import type { TripAccess } from '../../../src/nest/database/database.service';
+import type { TripAccess } from '../../../src/db/repositories/Trips.repository';
 import type { User } from '../../../src/types';
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
+import { createTestUnitOfWork, createTestAppSettingsRepo } from '../../helpers/test-uow';
+import { budgetRepoArgs } from '../../helpers/budget-repos';
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -354,9 +334,8 @@ describe('Settlement tools', () => {
     testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, 0)')
       .run(unpaid.id, other.id);
 
-    const dbService = new DatabaseService(testDb);
     const controller = new BudgetController(
-      new BudgetService(dbService, new PermissionsService(dbService), new ExchangeRatesService(), new RealtimeService()),
+      new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb))),
     );
     const rest = await controller.settlement(
       { id: user.id } as User,
@@ -391,9 +370,8 @@ describe('Settlement tools', () => {
       testDb.prepare('INSERT INTO budget_item_payers (budget_item_id, user_id, amount) VALUES (?, ?, ?)')
         .run(item.id, user.id, 12345.67);
 
-      const dbService = new DatabaseService(testDb);
       const controller = new BudgetController(
-        new BudgetService(dbService, new PermissionsService(dbService), new ExchangeRatesService(), new RealtimeService()),
+        new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb))),
       );
       const rest = await controller.settlement(
         { id: user.id } as User,

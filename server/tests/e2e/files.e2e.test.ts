@@ -25,7 +25,10 @@ const { db } = vi.hoisted(() => {
   // FilesService runs its real SQL against these (FILE_SELECT joins reservations
   // and users; the link batch reads file_links; findForeignLinkTarget probes
   // reservations/places/day_assignments).
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT);');
+  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, currency TEXT);');
+  // TripAccessGuard now reads TripsRepository.findAccessible directly
+  // (Plan 3c Task 0b), a real join against trip_members.
+  tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
   tmp.exec(`CREATE TABLE trip_files (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
     place_id INTEGER, reservation_id INTEGER, message_id INTEGER, filename TEXT NOT NULL,
     original_name TEXT NOT NULL, file_size INTEGER, mime_type TEXT, description TEXT,
@@ -47,7 +50,7 @@ const { db } = vi.hoisted(() => {
 
 const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
 vi.mock('../../src/db/database', () => ({
-  db, canAccessTrip, isOwner: vi.fn(() => true), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
+  db, canAccessTrip, getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/nest/common/demo', () => ({ isDemoEmail: vi.fn(() => false) }));
@@ -76,18 +79,19 @@ vi.mock('../../src/nest/memories/memories-access.service', async (importOriginal
   return actual;
 });
 
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { FilesModule } from '../../src/nest/files/files.module';
 import { PhotosModule } from '../../src/nest/photos/photos.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, FilesModule, PhotosModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, FilesModule, PhotosModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
@@ -106,7 +110,8 @@ describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
   });
 
   beforeEach(() => {
-    canAccessTrip.mockReturnValue({ id: 5, user_id: 1 });
+    // 0b review L2 / security review F-B7: dead mock scaffolding — see
+    // budget.e2e.test.ts's identical comment.
     checkPermission.mockReturnValue(true);
     helperSvc.canAccessTrekPhoto.mockReturnValue(true);
   });
@@ -130,10 +135,19 @@ describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('404 when the trip is not accessible', async () => {
-    canAccessTrip.mockReturnValue(undefined);
-    const res = await request(server).get('/api/trips/5/files').set('Cookie', sessionCookie(1));
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'Trip not found' });
+    // Plan 3c Task 0b: TripAccessGuard reads TripsRepository.findAccessible
+    // directly now, a real query — `canAccessTrip.mockReturnValue(...)` no
+    // longer intercepts it. Trip 5 is a persistent row seeded once in
+    // `beforeAll` (not re-seeded per test), so it is removed and restored
+    // around this one assertion instead.
+    db.prepare('DELETE FROM trips WHERE id = 5').run();
+    try {
+      const res = await request(server).get('/api/trips/5/files').set('Cookie', sessionCookie(1));
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Trip not found' });
+    } finally {
+      db.prepare("INSERT INTO trips (id, user_id, title) VALUES (5, 1, 'Trip')").run();
+    }
   });
 
   it('200 toggling a star with permission (real UPDATE + re-select)', async () => {

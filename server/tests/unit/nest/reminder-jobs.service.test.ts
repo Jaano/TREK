@@ -7,21 +7,16 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  return {
-    testDb: db,
-    dbMock: { db, closeDb: () => {}, reinitialize: () => {}, getPlaceWithTags: () => null, canAccessTrip: () => undefined, isOwner: () => false },
-  };
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
+    return { db, closeDb: () => {}, reinitialize: () => {}, getPlaceWithTags: () => null, canAccessTrip: () => undefined, isOwner: () => false };
 });
+
 
 const logMock = vi.hoisted(() => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logError: vi.fn(), logWarn: vi.fn(), logDebug: vi.fn() }));
 
-vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 vi.mock('../../../src/nest/audit/audit-log.logger', () => logMock);
 vi.mock('../../../src/config', () => ({
@@ -30,20 +25,27 @@ vi.mock('../../../src/config', () => ({
   updateJwtSecret: () => {},
 }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
+import { db as testDb } from '../../../src/db/database';
 import { createUser, createTrip, createTodoItem, setAppSetting, setNotificationChannels } from '../../helpers/factories';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { ReminderJobsService } from '../../../src/nest/notifications/reminder-jobs.service';
 import { notificationsStub } from '../../helpers/notifications';
 import type { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import type { CronRegistrarService } from '../../../src/nest/scheduling/cron-registrar.service';
+import { createTestAppSettingsRepo, createTestTripsRepo } from '../../helpers/test-uow';
+import { createTestTodoItemsRepo } from '../../helpers/todo-repos';
+import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
+import type { TodoItemsRepository } from '../../../src/db/repositories/TodoItems.repository';
 
 interface Registered {
   name: string;
   expr: string;
   onTick: () => Promise<void> | void;
 }
+
+let appSettingsRepo: AppSettingsRepository;
+let tripsRepo: TripsRepository;
+let todoItemsRepo: TodoItemsRepository;
 
 function makeJobs(overrides: { notifications?: NotificationsService } = {}) {
   const registered: Registered[] = [];
@@ -54,10 +56,17 @@ function makeJobs(overrides: { notifications?: NotificationsService } = {}) {
       return true;
     }),
     unregister: vi.fn(),
+    // task-6-fix-brief.md item 7: the boot-time banner block now runs through
+    // CronRegistrarService.runOnBoot instead of directly inline — this
+    // double just runs fn immediately, reproducing the pre-fix behaviour
+    // exactly, so every existing assertion below is unaffected.
+    runOnBoot: vi.fn(async (_name: string, fn: () => void | Promise<void>) => { await fn(); }),
   };
   const send = vi.fn().mockResolvedValue(undefined);
   const svc = new ReminderJobsService(
-    new DatabaseService(testDb),
+    appSettingsRepo,
+    tripsRepo,
+    todoItemsRepo,
     overrides.notifications ?? notificationsStub(send),
     registrar as unknown as CronRegistrarService,
   );
@@ -71,9 +80,10 @@ function tripWithReminder(userId: number, days: number, title = 'Lisbon'): numbe
   return trip.id;
 }
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+beforeAll(async () => {
+  appSettingsRepo = await createTestAppSettingsRepo(testDb);
+  tripsRepo = await createTestTripsRepo(testDb);
+  todoItemsRepo = await createTestTodoItemsRepo(testDb);
 });
 
 beforeEach(() => {
@@ -88,26 +98,32 @@ beforeEach(() => {
 });
 
 describe('ReminderJobsService bootstrap', () => {
-  it('RJOB-001 — registers both 9 AM crons under their names', () => {
+  it('RJOB-001 — registers both 9 AM crons under their names', async () => {
     const { svc, registered } = makeJobs();
-    svc.onApplicationBootstrap();
+    await svc.onApplicationBootstrap();
     expect(registered.map(r => [r.name, r.expr])).toEqual([
       ['trip-reminders', '0 9 * * *'],
       ['todo-reminders', '0 9 * * *'],
     ]);
   });
 
-  it('RJOB-002 — does nothing under the test gate (no crons, no banners)', () => {
+  it('RJOB-002 — does nothing under the test gate (no crons, no banners)', async () => {
     const { svc, registered, registrar } = makeJobs();
     registrar.isEnabled.mockReturnValue(false);
-    svc.onApplicationBootstrap();
+    await svc.onApplicationBootstrap();
     expect(registered).toHaveLength(0);
     expect(logMock.logInfo).not.toHaveBeenCalled();
   });
 
-  it('RJOB-003 — logs the enabled banners by default and the disabled ones when toggled off', () => {
+  it('RJOB-002b — the boot banner block goes through CronRegistrarService.runOnBoot (task-6-review-parity.md C1 — the boot-sweep choke point)', async () => {
+    const { svc, registrar } = makeJobs();
+    await svc.onApplicationBootstrap();
+    expect(registrar.runOnBoot).toHaveBeenCalledWith('reminder-jobs-boot', expect.any(Function));
+  });
+
+  it('RJOB-003 — logs the enabled banners by default and the disabled ones when toggled off', async () => {
     const { svc } = makeJobs();
-    svc.onApplicationBootstrap();
+    await svc.onApplicationBootstrap();
     expect(logMock.logInfo).toHaveBeenCalledWith('Trip reminders: enabled via []');
     expect(logMock.logInfo).toHaveBeenCalledWith('Todo due reminders: enabled (lead 3d)');
 
@@ -115,17 +131,17 @@ describe('ReminderJobsService bootstrap', () => {
     setAppSetting(testDb, 'notify_trip_reminder', 'false');
     setAppSetting(testDb, 'notify_todo_due', 'false');
     const { svc: svc2 } = makeJobs();
-    svc2.onApplicationBootstrap();
+    await svc2.onApplicationBootstrap();
     expect(logMock.logInfo).toHaveBeenCalledWith('Trip reminders: disabled in settings');
     expect(logMock.logInfo).toHaveBeenCalledWith('Todo due reminders: disabled in settings');
   });
 
-  it('RJOB-004 — the trip banner carries the active channels and the reminder-trip count', () => {
+  it('RJOB-004 — the trip banner carries the active channels and the reminder-trip count', async () => {
     const { user } = createUser(testDb);
     setNotificationChannels(testDb, 'email');
     tripWithReminder(user.id, 5);
     const { svc } = makeJobs();
-    svc.onApplicationBootstrap();
+    await svc.onApplicationBootstrap();
     expect(logMock.logInfo).toHaveBeenCalledWith('Trip reminders: enabled via [email], 1 trip(s) with active reminders');
   });
 });
@@ -161,8 +177,11 @@ describe('trip reminder tick', () => {
 
   it('RJOB-007 — a failing tick is contained to the check-failed log line', async () => {
     const broken = { send: vi.fn() } as unknown as NotificationsService;
+    const throwGone = () => { throw new Error('db gone'); };
     const svc = new ReminderJobsService(
-      { get: () => { throw new Error('db gone'); }, all: () => { throw new Error('db gone'); }, run: () => { throw new Error('db gone'); } } as unknown as DatabaseService,
+      { getValue: throwGone } as unknown as AppSettingsRepository,
+      { listReminderCandidates: throwGone, countActiveWithReminders: throwGone } as unknown as TripsRepository,
+      { listDueForReminder: throwGone, markReminded: throwGone } as unknown as TodoItemsRepository,
       broken,
       { isEnabled: () => true, register: () => true, unregister: () => {} } as unknown as CronRegistrarService,
     );

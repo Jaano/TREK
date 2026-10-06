@@ -10,7 +10,6 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockIns
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { Test } from '@nestjs/testing';
 import { seedUser, sessionCookie } from './harness';
 
@@ -21,7 +20,10 @@ const { db } = vi.hoisted(() => {
   tmp.exec('PRAGMA journal_mode = WAL');
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0);`);
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT);');
+  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, user_id INTEGER, currency TEXT);');
+  // TripAccessGuard/TripOwnerGuard now read TripsRepository.findAccessible
+  // directly (Plan 3c Task 0b), a real join against trip_members.
+  tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
   // TripInviteService now runs its real SQL (DI-injected, no mock) — mirror of
   // the trip_invite_tokens DDL from migration 153.
   tmp.exec(`CREATE TABLE trip_invite_tokens (
@@ -41,7 +43,7 @@ const { db } = vi.hoisted(() => {
 
 const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
 vi.mock('../../src/db/database', () => ({
-  db, canAccessTrip, isOwner: vi.fn(() => true), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
+  db, canAccessTrip, getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
 }));
 
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
@@ -62,13 +64,15 @@ import { TripInviteModule } from '../../src/nest/trip-invite/trip-invite.module'
 import { TripMembershipService } from '../../src/nest/trip-membership/trip-membership.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 describe('Trip invite-link e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, TripInviteModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), TripInviteModule] })
       .overrideProvider(TripMembershipService).useValue({ joinTripAsMember })
       .compile();
     const nest = moduleRef.createNestApplication();
@@ -79,8 +83,8 @@ describe('Trip invite-link e2e (real auth guard + temp SQLite)', () => {
     return nest;
   }
 
-  function seedTrip(id: number, title: string) {
-    db.prepare('INSERT INTO trips (id, title) VALUES (?, ?)').run(id, title);
+  function seedTrip(id: number, title: string, ownerId = 1) {
+    db.prepare('INSERT INTO trips (id, title, user_id) VALUES (?, ?, ?)').run(id, title, ownerId);
   }
   function seedToken(tripId: number, token: string, expiresAt: string | null = null) {
     db.prepare('INSERT INTO trip_invite_tokens (trip_id, token, created_by, expires_at) VALUES (?, ?, 1, ?)')
@@ -98,7 +102,8 @@ describe('Trip invite-link e2e (real auth guard + temp SQLite)', () => {
   beforeEach(() => {
     db.prepare('DELETE FROM trip_invite_tokens').run();
     db.prepare('DELETE FROM trips').run();
-    canAccessTrip.mockReturnValue({ user_id: 1 });
+    // 0b review L2 / security review F-B7: dead mock scaffolding — see
+    // budget.e2e.test.ts's identical comment.
     checkPermission.mockReturnValue(true);
     joinTripAsMember.mockReset();
   });
@@ -157,19 +162,24 @@ describe('Trip invite-link e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('403 to create without share_manage', async () => {
+    seedTrip(5, 'Lisbon');
     checkPermission.mockReturnValue(false);
     const res = await request(server).post('/api/trips/5/invite-link').set('Cookie', sessionCookie(1)).send({});
     expect(res.status).toBe(403);
   });
 
   it('403 to READ the link without share_manage (token grants membership)', async () => {
+    seedTrip(5, 'Lisbon');
     checkPermission.mockReturnValue(false);
     const res = await request(server).get('/api/trips/5/invite-link').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(403);
   });
 
   it('404 when the trip is not accessible', async () => {
-    canAccessTrip.mockReturnValue(undefined);
+    // Plan 3c Task 0b: TripAccessGuard reads TripsRepository.findAccessible
+    // directly now, a real query — no trip 5 row exists (nothing in this
+    // test seeded one, and `beforeEach` clears the table), so the guard's
+    // real 404 fires without a `canAccessTrip` mock to fake it.
     const res = await request(server).get('/api/trips/5/invite-link').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(404);
   });

@@ -4,6 +4,7 @@ import {
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, errorResult, ok,
 } from '../../nest-mcp';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import {
   mapsSearchRequestSchema,
@@ -23,16 +24,21 @@ import { AuthService } from '../auth/auth.service';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { JourneyDomainService } from '../journey/journey-domain.service';
 import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
-import { DatabaseService } from '../database/database.service';
+import { UnitOfWork } from '../database/unit-of-work';
 import { MapsService } from '../maps/maps.service';
 import { PlacesService } from './places.service';
 import { isUpdateConflict } from '../common/conflictResult';
 import { isDirectionsUrl } from './maps-dir.helpers';
+import { Trips } from '../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../db/repositories/Trips.repository';
 
 function parseId(value: string | string[]): number | null {
   const n = Number(Array.isArray(value) ? value[0] : value);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
+
+/** Hours as the column keeps them: JSON text, or null to clear (#2472). */
+const hoursText = (hours: PlaceOpeningHours | null | undefined): string | null => (hours ? JSON.stringify(hours) : null);
 
 /**
  * Places MCP surface — ported 1:1 from the legacy registrar
@@ -51,19 +57,17 @@ function parseId(value: string | string[]): number | null {
  * DaysService), but the service itself never did, so its own module stays off
  * the loop and PlacesModule can import it.
  */
-/** Hours as the column keeps them: JSON text, or null to clear (#2472). */
-const hoursText = (hours: PlaceOpeningHours | null | undefined): string | null => (hours ? JSON.stringify(hours) : null);
-
 @McpController()
 export class PlacesMcp {
   constructor(
     private readonly places: PlacesService,
     private readonly maps: MapsService,
-    private readonly db: DatabaseService,
+    @InjectRepository(Trips) private readonly tripsRepo: TripsRepository,
     private readonly auth: AuthService,
     private readonly journey: JourneyDomainService,
     private readonly assignments: AssignmentsService,
     private readonly guards: McpToolGuardsService,
+    private readonly uow: UnitOfWork,
   ) {}
 
   @Tool({
@@ -104,10 +108,10 @@ export class PlacesMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
-    const place = this.places.create(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, amap_poi_id, notes, website, phone, email, opening_hours: hoursText(opening_hours), image_url, price, currency, stop_type });
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
+    const place = await this.places.create(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, amap_poi_id, notes, website, phone, email, opening_hours: hoursText(opening_hours), image_url, price, currency, stop_type });
     this.guards.safeBroadcast(tripId, 'place:created', { place });
     return ok({ place });
   }
@@ -152,19 +156,19 @@ export class PlacesMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
-    if (!this.assignments.dayExists(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
+    if (!(await this.assignments.dayExists(dayId, tripId))) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
     try {
-      const result = this.db.transaction(() => {
-        const place = this.places.create(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, amap_poi_id, notes: place_notes, website, phone, email, opening_hours: hoursText(opening_hours), image_url, price, currency, stop_type });
-        const assignment = this.assignments.createAssignment(dayId, place.id, assignment_notes ?? null);
+      const result = await this.uow.transactional(async () => {
+        const place = await this.places.create(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, amap_poi_id, notes: place_notes, website, phone, email, opening_hours: hoursText(opening_hours), image_url, price, currency, stop_type });
+        const assignment = await this.assignments.createAssignment(dayId, place.id, assignment_notes ?? null);
         return { place, assignment };
       });
       this.guards.safeBroadcast(tripId, 'place:created', { place: result.place });
       this.guards.safeBroadcast(tripId, 'assignment:created', { assignment: result.assignment });
-      try { this.journey.reconcileTripSkeletons(tripId); } catch { /* non-fatal */ }
+      try { await this.journey.reconcileTripSkeletons(tripId); } catch { /* non-fatal */ }
       return ok(result);
     } catch {
       return { content: [{ type: 'text' as const, text: 'Failed to create place and assignment.' }], isError: true };
@@ -218,9 +222,9 @@ export class PlacesMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
     const place = await this.places.update(String(tripId), String(placeId), { name, description, lat, lng, address, category_id, price, currency, place_time, end_time, duration_minutes, notes, website, phone, email, opening_hours: opening_hours === undefined ? undefined : hoursText(opening_hours), image_url, transport_mode, osm_id, google_place_id, google_ftid, amap_poi_id, stop_type, fill_percent });
     if (!place) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
     this.guards.safeBroadcast(tripId, 'place:updated', { place });
@@ -242,9 +246,9 @@ export class PlacesMcp {
     { tripId, placeId, fileId }: { tripId: number; placeId: number; fileId: number },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
     const result = await this.places.setImageFromFile(String(tripId), String(placeId), fileId);
     if (result === 'not_found') return errorResult('File not found.');
     if (result === 'not_image') return errorResult('That file is not a jpg, png, gif or webp image.');
@@ -269,10 +273,10 @@ export class PlacesMcp {
     { tripId, placeId, rating }: { tripId: number; placeId: number; rating?: number | null },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
     // Rating is a personal vote — any trip member may cast one, place_edit not required.
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    const place = this.places.rate(String(tripId), String(placeId), ctx.userId, rating ?? null);
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    const place = await this.places.rate(String(tripId), String(placeId), ctx.userId, rating ?? null);
     if (!place) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
     this.guards.safeBroadcast(tripId, 'place:updated', { place });
     return ok({ place });
@@ -289,18 +293,18 @@ export class PlacesMcp {
     access: { group: 'places', mode: 'write' },
   })
   async deletePlace({ tripId, placeId }: { tripId: number; placeId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
     // Scope the id to the trip before the hook: onPlaceDeleted keys on the place
     // id alone, so a foreign id would detach that trip's journey entries even
     // though the delete below refuses it.
-    if (!this.places.get(String(tripId), String(placeId))) {
+    if (!(await this.places.get(String(tripId), String(placeId)))) {
       return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
     }
-    try { this.journey.onPlaceDeleted(placeId); } catch { /* non-fatal */ } // sync journeys before the row is gone
+    try { await this.journey.onPlaceDeleted(placeId); } catch { /* non-fatal */ } // sync journeys before the row is gone
     // The link is gone once the place is, so read it first (#1298).
-    const expenseIds = this.places.linkedExpenseIds(tripId, [placeId]);
+    const expenseIds = await this.places.linkedExpenseIds(tripId, [placeId]);
     const { deleted, cancelled } = await this.places.remove(String(tripId), String(placeId));
     if (!deleted) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
     this.guards.safeBroadcast(tripId, 'place:deleted', { placeId });
@@ -332,8 +336,8 @@ export class PlacesMcp {
     },
     ctx: McpContext,
   ) {
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    const places = this.places.list(String(tripId), { search, category, tag, assignment });
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    const places = await this.places.list(String(tripId), { search, category, tag, assignment });
     return ok({ places });
   }
 
@@ -384,9 +388,9 @@ export class PlacesMcp {
     { tripId, url, source, enrich }: { tripId: number; url: string; source: 'google-list' | 'naver-list'; enrich?: boolean },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
 
     // Same opts the REST route builds: the enrichment pass is keyed on the calling
     // user because it spends that user's Places credential.
@@ -415,12 +419,12 @@ export class PlacesMcp {
     access: { group: 'places', mode: 'write' },
   })
   async importGpx(input: RoadtripGpxImport, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(input.tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', input.tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(input.tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', input.tripId, ctx.userId))) return permissionDenied();
     if (!input.importWaypoints && !input.importRoutes && !input.importTracks) return errorResult('No import types selected.');
     try {
-      const imported = this.places.importGpx(String(input.tripId), Buffer.from(input.gpx, 'utf8'), { importWaypoints: input.importWaypoints, importRoutes: input.importRoutes, importTracks: input.importTracks, defaultName: input.name });
+      const imported = await this.places.importGpx(String(input.tripId), Buffer.from(input.gpx, 'utf8'), { importWaypoints: input.importWaypoints, importRoutes: input.importRoutes, importTracks: input.importTracks, defaultName: input.name });
       if (!imported) return errorResult('No matching places found in GPX.');
       for (const place of imported.places) this.guards.safeBroadcast(input.tripId, 'place:created', { place });
       if (input.enrich) this.places.enrichImportedFilePlaces(String(input.tripId), ctx.userId, imported.places);
@@ -449,9 +453,9 @@ export class PlacesMcp {
     ctx: McpContext,
   ) {
     // A read, like the REST route: seeing the trip is enough, no place_edit.
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
     if (!waypoints && !tracks && !dayRoutes) return errorResult('No export types selected.');
-    const result = this.places.exportGpx(String(tripId), { waypoints, tracks, dayRoutes });
+    const result = await this.places.exportGpx(String(tripId), { waypoints, tracks, dayRoutes });
     if (!result) return errorResult('Nothing to export.');
     return ok({ gpx: result.gpx, filename: result.filename });
   }
@@ -467,19 +471,19 @@ export class PlacesMcp {
     access: { group: 'places', mode: 'write' },
   })
   async bulkDeletePlaces({ tripId, placeIds }: { tripId: number; placeIds: number[] }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
 
     // Trip-scoped, and ahead of the DELETE: journey_entries.source_place_id is
     // ON DELETE SET NULL, so a hook that ran afterwards found nothing left to
     // detach and left the entries as orphans.
-    const scoped = this.places.scopedIds(String(tripId), placeIds);
+    const scoped = await this.places.scopedIds(String(tripId), placeIds);
     for (const id of scoped) {
-      try { this.journey.onPlaceDeleted(id); } catch { /* non-fatal */ }
+      try { await this.journey.onPlaceDeleted(id); } catch { /* non-fatal */ }
     }
     // The link is gone once the places are, so read it first (#1298).
-    const expenseIds = this.places.linkedExpenseIds(tripId, scoped);
+    const expenseIds = await this.places.linkedExpenseIds(tripId, scoped);
     const { deleted, cancelled } = await this.places.removeMany(String(tripId), placeIds);
     for (const id of deleted) this.guards.safeBroadcast(tripId, 'place:deleted', { placeId: id });
     // A night booked at this place went with it, and took its partner booking and
@@ -524,9 +528,9 @@ export class PlacesMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tripsRepo.findAccessible(tripId, ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('place_edit', tripId, ctx.userId))) return permissionDenied();
 
     const fields = { category_id, price, currency, transport_mode, place_time, end_time, duration_minutes, notes, website, phone, image_url, description, stop_type, fill_percent };
     if (Object.values(fields).every(v => v === undefined)) {
@@ -547,7 +551,7 @@ export class PlacesMcp {
   })
   async tripPlacesResource(uri: URL, { tripId }: { tripId: string | string[] }, ctx: McpContext) {
     const id = parseId(tripId);
-    if (id === null || !this.db.canAccessTrip(id, ctx.userId)) {
+    if (id === null || !(await this.tripsRepo.findAccessible(id, ctx.userId))) {
       return {
         contents: [{
           uri: uri.href,
@@ -557,7 +561,7 @@ export class PlacesMcp {
       };
     }
     const assignment = uri.searchParams.get('assignment') as 'all' | 'unassigned' | 'assigned' | null;
-    const places = this.places.list(String(id), { assignment: assignment ?? undefined });
+    const places = await this.places.list(String(id), { assignment: assignment ?? undefined });
     return {
       contents: [{
         uri: uri.href,

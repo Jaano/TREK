@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 import { randomUUID } from 'node:crypto';
+import { withRequestContext } from '../database/request-context';
 import { RealtimeService } from '../realtime/realtime.service';
 import { BookingImportService } from './booking-import.service';
 import { LlmParseService } from '../llm-parse/llm-parse.service';
@@ -43,6 +45,7 @@ export class ImportJobsService {
     private readonly bookingImport: BookingImportService,
     private readonly realtime: RealtimeService,
     private readonly llmParse: LlmParseService,
+    private readonly orm: MikroORM,
   ) {}
 
   /** Create a job and queue it behind the user's other parses; returns the job id at once. */
@@ -75,8 +78,22 @@ export class ImportJobsService {
     this.jobs.set(id, job);
     // Chain onto the user's previous parse so they run sequentially (one CPU-heavy
     // inference at a time), while the request returns immediately.
+    //
+    // R9 (Plan 3h Task 4, per 3f's own `StorageHealthNotifierService`
+    // precedent): `run()` executes fully detached from the original HTTP
+    // request — the controller has already returned by the time this
+    // `.then()` continuation even starts — so it gets its own fresh
+    // `withRequestContext` fork here, independent of whatever context (if
+    // any) was live at the caller (`start()` / `startReceipt()`). The receipt
+    // read (`LlmParseService.readReceipt` -> `llmConfig.resolve`) reaches the
+    // ORM as well and relies on the same fork. Insurance, not a fix for
+    // an observed failure: `BookingImportService.preview` has no
+    // `EntityManager` to lose before this task's own conversion (raw
+    // `better-sqlite3` calls have no request-scoping concept at all) — the
+    // risk only exists AFTER BI1/BI2 convert, which is why the wrap lands
+    // in this SAME commit.
     const prev = this.chains.get(userId) ?? Promise.resolve();
-    const next = prev.then(() => this.run(job, work)).catch(() => {});
+    const next = prev.then(() => withRequestContext(this.orm, () => this.run(job, work))).catch(() => {});
     this.chains.set(userId, next);
     void next.finally(() => {
       if (this.chains.get(userId) === next) this.chains.delete(userId);

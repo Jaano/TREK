@@ -15,26 +15,10 @@ import type { INestApplication } from '@nestjs/common';
 
 // ── Hoisted DB mock ──────────────────────────────────────────────────────────
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
-  db.exec('PRAGMA busy_timeout = 5000');
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-  return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -196,9 +180,8 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
   };
 });
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits, setAddonEnabled } from '../helpers/test-db';
 import { createUser, createTrip, addTripMember, addTripPhoto, setSynologyCredentials } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
@@ -210,8 +193,6 @@ let app: Application;
 const SYNO = '/api/integrations/memories/synologyphotos';
 
 beforeAll(async () => {
-  createTables(testDb);
-  runMigrations(testDb);
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
@@ -1189,29 +1170,41 @@ describe('Synology SSRF blocked error handling', () => {
 
 // ── Passphrase persistence fixes ─────────────────────────────────────────────
 
-import { TrekPhotosRepository } from '../../src/nest/photos/trek-photos.repository';
-import { DatabaseService } from '../../src/nest/database/database.service';
-import { db as trekDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
+import { withRequestContext } from '../../src/nest/database/request-context';
+import { TrekPhotoRegistrationService } from '../../src/nest/photos/trek-photo-registration.service';
 
 // Was photos.bridge, which existed for consumers outside the container and had
-// none left. The repository is what it delegated to.
-const trekPhotos = new TrekPhotosRepository(new DatabaseService(trekDb));
-const getOrCreateTrekPhoto = (...a: Parameters<TrekPhotosRepository['getOrCreate']>) => trekPhotos.getOrCreate(...a);
-const deleteTrekPhotoIfOrphan = (id: number) => trekPhotos.deleteIfOrphan(id);
+// none left. The repository is what it delegated to. Resolved off the real,
+// DI-wired container (`nestApp`, built in the file's own `beforeAll` above)
+// rather than hand-constructed — `TrekPhotoRegistrationService` now takes ORM
+// repositories, not a bare `DatabaseService` (Plan 3e Task 6). These helpers
+// call it directly, with no HTTP request around them (unlike the real
+// `syncSynologyAlbum` call chain this pins, which always runs inside one) —
+// `withRequestContext` supplies the same per-call EntityManager fork a real
+// request's `mikroOrmRequestContext` middleware (bootstrap.ts) would.
+let trekPhotos: TrekPhotoRegistrationService;
+let orm: MikroORM;
+beforeAll(() => {
+  trekPhotos = nestApp.get(TrekPhotoRegistrationService);
+  orm = nestApp.get(MikroORM);
+});
+const getOrCreateTrekPhoto = (...a: Parameters<TrekPhotoRegistrationService['getOrCreate']>) => withRequestContext(orm, () => trekPhotos.getOrCreate(...a));
+const deleteTrekPhotoIfOrphan = (id: number) => withRequestContext(orm, () => trekPhotos.deleteIfOrphan(id));
 import { decrypt_api_key } from '../../src/nest/common/crypto/apiKeyCrypto';
 
 describe('trek_photos passphrase healing (SYNO-090)', () => {
-  it('SYNO-090 — getOrCreateTrekPhoto overwrites an existing bad passphrase when a new one is supplied', () => {
+  it('SYNO-090 — getOrCreateTrekPhoto overwrites an existing bad passphrase when a new one is supplied', async () => {
     const { user } = createUser(testDb);
 
     const wrongPass = 'wrong-passphrase';
     const correctPass = 'correct-passphrase';
 
-    const id1 = getOrCreateTrekPhoto('synologyphotos', 'asset-heal-test', user.id, wrongPass);
+    const id1 = await getOrCreateTrekPhoto('synologyphotos', 'asset-heal-test', user.id, wrongPass);
     const row1 = testDb.prepare('SELECT passphrase FROM trek_photos WHERE id = ?').get(id1) as { passphrase: string };
     expect(decrypt_api_key(row1.passphrase)).toBe(wrongPass);
 
-    const id2 = getOrCreateTrekPhoto('synologyphotos', 'asset-heal-test', user.id, correctPass);
+    const id2 = await getOrCreateTrekPhoto('synologyphotos', 'asset-heal-test', user.id, correctPass);
     expect(id2).toBe(id1);
     const row2 = testDb.prepare('SELECT passphrase FROM trek_photos WHERE id = ?').get(id2) as { passphrase: string };
     expect(decrypt_api_key(row2.passphrase)).toBe(correctPass);
@@ -1219,28 +1212,28 @@ describe('trek_photos passphrase healing (SYNO-090)', () => {
 });
 
 describe('trek_photos orphan cleanup (SYNO-091)', () => {
-  it('SYNO-091 — deleteTrekPhotoIfOrphan removes the trek_photos row when no trip_photos or journey_photos reference it', () => {
+  it('SYNO-091 — deleteTrekPhotoIfOrphan removes the trek_photos row when no trip_photos or journey_photos reference it', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'synologyphotos'").run();
 
-    const trekPhotoId = getOrCreateTrekPhoto('synologyphotos', 'asset-orphan-test', user.id, 'pass-A');
+    const trekPhotoId = await getOrCreateTrekPhoto('synologyphotos', 'asset-orphan-test', user.id, 'pass-A');
 
     testDb.prepare(
       'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 1)'
     ).run(trip.id, user.id, trekPhotoId);
 
     // Still referenced — must not be deleted.
-    deleteTrekPhotoIfOrphan(trekPhotoId);
+    await deleteTrekPhotoIfOrphan(trekPhotoId);
     expect(testDb.prepare('SELECT id FROM trek_photos WHERE id = ?').get(trekPhotoId)).toBeDefined();
 
     // Remove the reference, then orphan-cleanup should delete the trek_photos row.
     testDb.prepare('DELETE FROM trip_photos WHERE photo_id = ?').run(trekPhotoId);
-    deleteTrekPhotoIfOrphan(trekPhotoId);
+    await deleteTrekPhotoIfOrphan(trekPhotoId);
     expect(testDb.prepare('SELECT id FROM trek_photos WHERE id = ?').get(trekPhotoId)).toBeUndefined();
   });
 
-  it('SYNO-092 — re-adding a previously removed Synology photo stores the new passphrase correctly', () => {
+  it('SYNO-092 — re-adding a previously removed Synology photo stores the new passphrase correctly', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'synologyphotos'").run();
@@ -1249,18 +1242,18 @@ describe('trek_photos orphan cleanup (SYNO-091)', () => {
     const secondPass = 'second-passphrase';
 
     // Add with wrong passphrase, then remove (simulating the bug scenario).
-    const id1 = getOrCreateTrekPhoto('synologyphotos', 'asset-readd-test', user.id, firstPass);
+    const id1 = await getOrCreateTrekPhoto('synologyphotos', 'asset-readd-test', user.id, firstPass);
     testDb.prepare(
       'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 1)'
     ).run(trip.id, user.id, id1);
     testDb.prepare('DELETE FROM trip_photos WHERE photo_id = ?').run(id1);
-    deleteTrekPhotoIfOrphan(id1);
+    await deleteTrekPhotoIfOrphan(id1);
 
     // trek_photos row should be gone.
     expect(testDb.prepare('SELECT id FROM trek_photos WHERE id = ?').get(id1)).toBeUndefined();
 
     // Re-add with the correct passphrase.
-    const id2 = getOrCreateTrekPhoto('synologyphotos', 'asset-readd-test', user.id, secondPass);
+    const id2 = await getOrCreateTrekPhoto('synologyphotos', 'asset-readd-test', user.id, secondPass);
     const row = testDb.prepare('SELECT passphrase FROM trek_photos WHERE id = ?').get(id2) as { passphrase: string };
     expect(decrypt_api_key(row.passphrase)).toBe(secondPass);
   });

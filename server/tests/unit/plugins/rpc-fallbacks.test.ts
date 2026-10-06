@@ -23,9 +23,11 @@ import { ReservationsRpc } from '../../../src/nest/reservations/reservations.rpc
 import { DaysRpc } from '../../../src/nest/days/days.rpc';
 import { VacayRpc } from '../../../src/nest/vacay/vacay.rpc';
 import { NotFoundError, ValidationError } from '../../../src/nest/trips/trips.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { EntityManager } from '@mikro-orm/core';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
 import { schemaMessage } from '../../../src/nest/plugins/host/rpc-params';
@@ -40,15 +42,31 @@ const ALL = new Set([
 
 function guardsFor() {
   const db = {
-    canAccessTrip: vi.fn(() => ({ id: 1, user_id: 42 })),
+    findAccessible: vi.fn(async () => ({ id: 1, user_id: 42 })),
     prepare: vi.fn(() => ({ get: () => ({ role: 'user' }), all: () => [] })),
-  } as unknown as DatabaseService;
+  } as unknown as TripsRepository;
+  // Plan 3c Task 7: TripsRpc's RP1-RP6 resolve `EntityManager.getRepository(...)`
+  // now, not `db.prepare(...)` — a generic fake repository (same shape regardless
+  // of which entity class was requested) covers every RP method these fallback
+  // cases exercise, none of which assert on the repository's specific return value.
+  const em = {
+    getRepository: () => ({
+      getRole: vi.fn(async () => 'user'),
+      findIdAndEmail: vi.fn(async () => ({ id: 2, email: 'x@example.test' })),
+      getOwnerId: vi.fn(async () => 1),
+      findRaw: vi.fn(async () => ({ id: 1, title: 'Japan', feed_token: null })),
+      listForTripOrdered: vi.fn(async () => []),
+      listRawUsernameAndDisplayName: vi.fn(async () => []),
+    }),
+  } as unknown as EntityManager;
   return {
     db,
+    em,
     guards: new PluginGuards(
       db,
       { checkPermission: vi.fn(() => true) } as unknown as PermissionsService,
       { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService,
+      { getRole: vi.fn(async () => 'user') } as unknown as UsersRepository,
     ),
   };
 }
@@ -77,19 +95,19 @@ describe('optional fields fall back rather than reaching the service as undefine
   });
 
   it('FALLBACK-003 a file link with no targets stores three nulls', async () => {
-    const { guards, db } = guardsFor();
+    const { guards } = guardsFor();
     const createFileLink = vi.fn(() => []);
     const files = { getFileById: vi.fn(() => ({})), findForeignLinkTarget: vi.fn(() => null), createFileLink } as never;
-    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), db, guards, {} as never)]));
+    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), {} as never, guards, {} as never)]));
     await host.dispatch(req('files.createLink', { tripId: 1, fileId: 2, opts: {} }), 42);
     expect(createFileLink).toHaveBeenCalledWith(2, { reservation_id: null, assignment_id: null, place_id: null });
   });
 
   it('FALLBACK-004 a file update tells an omitted link from one cleared with null', async () => {
-    const { guards, db } = guardsFor();
+    const { guards } = guardsFor();
     const updateFile = vi.fn((id: number) => ({ id }));
     const files = { getFileById: vi.fn(() => ({})), findForeignLinkTarget: vi.fn(() => null), updateFile } as never;
-    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), db, guards, {} as never)]));
+    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), {} as never, guards, {} as never)]));
     await host.dispatch(req('files.update', { tripId: 1, fileId: 2, input: { reservation_id: null, place_id: 7 } }), 42);
     expect(updateFile).toHaveBeenLastCalledWith(2, expect.anything(), expect.objectContaining({ reservation_id: null, place_id: '7' }));
   });
@@ -141,14 +159,14 @@ describe('a service that says no becomes a refusal, not a crash', () => {
 
 describe('service errors are translated into the RPC taxonomy', () => {
   function tripsHost(updateThrows?: Error, createThrows?: Error) {
-    const { guards, db } = guardsFor();
+    const { guards, em } = guardsFor();
     const trips = {
       list: vi.fn(() => []),
       updateTrip: vi.fn(() => { if (updateThrows) throw updateThrows; return { updatedTrip: { id: 1 } }; }),
       create: vi.fn(() => { if (createThrows) throw createThrows; return { trip: { id: 99 } }; }),
       removeMember: vi.fn(),
     } as never;
-    const rpc = new TripsRpc(trips, {} as never, {} as never, {} as never, db, realtime(), guards, {} as never, {} as never);
+    const rpc = new TripsRpc(trips, {} as never, {} as never, {} as never, realtime(), guards, {} as never, {} as never, em);
     return new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([rpc]));
   }
 
@@ -245,13 +263,13 @@ const SCHEMA_REJECTS: Array<[string, Record<string, unknown>]> = [
 
 describe('every schema-validated method rejects a payload its schema refuses', () => {
   function everything() {
-    const { guards, db } = guardsFor();
+    const { guards, em } = guardsFor();
     const anything = new Proxy({}, { get: () => vi.fn(() => ({ id: 1, trip: { id: 1 }, updatedTrip: { id: 1 }, reservation: { id: 1 } })) }) as never;
     const registry = createTestPluginRegistry([
       new PlacesRpc(anything, anything, realtime(), guards),
       new DaysRpc(anything, realtime(), guards, anything),
       new PackingRpc(anything, realtime(), guards),
-      new TripsRpc(anything, anything, anything, anything, db, realtime(), guards, anything, anything),
+      new TripsRpc(anything, anything, anything, anything, realtime(), guards, anything, anything, em),
       new AccommodationsRpc(anything, realtime(), guards),
       new ReservationsRpc(anything, realtime(), guards),
     ]);

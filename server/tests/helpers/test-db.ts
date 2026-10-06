@@ -1,129 +1,62 @@
 /**
  * In-memory SQLite test database helper.
  *
- * Usage in an integration test file:
+ * Usage in a `buildApp()` integration test file — `createSnapshotTestDb`/
+ * `buildDbMock` come through the `db-mock.ts` leaf module directly, not
+ * through this file, so the mock factory doesn't re-enter `src/db/database`
+ * while it is still being built (see db-mock.ts's header comment):
  *
- *   import { createTestDb, resetTestDb } from '../helpers/test-db';
- *   import { buildDbMock } from '../helpers/test-db';
- *
- *   // Declare at module scope (before vi.mock so it's available in factory)
- *   const testDb = createTestDb();
- *
- *   vi.mock('../../src/db/database', () => buildDbMock(testDb));
+ *   vi.mock('../../src/db/database', async () => {
+ *     const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+ *     return buildDbMock(createSnapshotTestDb());
+ *   });
  *   vi.mock('../../src/config', () => TEST_CONFIG);
+ *
+ *   import { db as testDb } from '../../src/db/database';
+ *   import { resetTestDb, resetRateLimits } from '../helpers/test-db';
  *
  *   beforeEach(() => resetTestDb(testDb));
  *   afterAll(() => testDb.close());
+ *
+ * MikroORM's migrations are the only schema source, including for tests —
+ * `createSnapshotTestDb()` above is the one way any suite gets a schema; the
+ * legacy `createTestDb()` that built one by hand via `db/schema.ts` +
+ * `db/migrations.ts` is gone along with those two files (Plan 4 Task 6).
  */
 
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import type { INestApplication } from '@nestjs/common';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { AuthPublicController } from '../../src/nest/auth/auth-public.controller';
 import type { RateLimitService } from '../../src/nest/common/rate-limit.service';
 
-// Tables to clear on reset, child-before-parent to be safe (FK checks are OFF during reset).
-// Keep in sync with schema.ts + migrations.ts. Intentionally excluded: categories, addons,
-// photo_providers, photo_provider_fields, schema_version (seed/config data, not user data).
-const RESET_TABLES = [
-  'school_holiday_periods',
-  'school_holiday_regions',
-  'school_holiday_countries',
-  // Collab
-  'file_links',
-  'collab_message_reactions',
-  'collab_poll_votes',
-  'collab_messages',
-  'collab_polls',
-  'collab_notes',
-  // Road trip (#1797). Both hang off days, so they go before it like the rest
-  // of the day content; a new domain's tables belong here or its rows leak from
-  // one case into the next.
-  'roadtrip_day_tracks',
-  'roadtrip_vias',
-  'roadtrip_day_boundaries',
-  // Dawarich (#2279). The suggestions reference places and bucket_list, so they
-  // are cleared before both; the connection row hangs off the user.
-  'dawarich_visit_suggestions',
-  'dawarich_connections',
-  // Day content
-  'day_notes',
-  'todo_category_assignees',
-  'todo_items',
-  'assignment_participants',
-  'day_assignments',
-  // Places
-  'place_regions',
-  'place_tags',
-  'places',
-  // Packing
-  'packing_category_assignees',
-  'packing_bag_members',
-  'packing_bags',
-  'packing_template_items',
-  'packing_template_categories',
-  'packing_templates',
-  'packing_items',
-  // Budget
-  'budget_item_members',
-  'budget_items',
-  // Photos & files
-  'trip_photos',
-  'trip_album_links',
-  'trip_files',
-  'photos',
-  // Reservations
-  'reservation_day_positions',
-  'reservations',
-  // Accommodations & days
-  'day_accommodations',
-  'days',
-  // Trip
-  'share_tokens',
-  'trip_invite_tokens',
-  'trip_members',
-  'trips',
-  // Journey
-  'journey_books',
-  'journey_share_tokens',
-  'journey_photos',
-  'journey_entries',
-  'journey_contributors',
-  'journey_trips',
-  'journeys',
-  // Vacay
-  'vacay_user_settings',
-  'vacay_shares',
-  'vacay_entries',
-  'vacay_company_holidays',
-  'vacay_holiday_calendars',
-  'vacay_plan_members',
-  'vacay_user_colors',
-  'vacay_user_years',
-  'vacay_years',
-  'vacay_plans',
-  // Atlas
-  'visited_regions',
-  'visited_countries',
-  'bucket_list',
-  // Notifications & audit
-  'push_subscriptions',
-  'notification_channel_preferences',
-  'notifications',
-  'audit_log',
-  // System notices
-  'user_notice_dismissals',
-  // User data
-  'settings',
-  'mcp_tokens',
-  'invite_tokens',
-  'tags',
-  'app_settings',
-  'webauthn_challenges',
-  'webauthn_credentials',
-  'users',
-];
+// createSnapshotTestDb / buildDbMock / CAN_ACCESS_TRIP_SQL live in db-mock.ts, a
+// leaf module with no src/nest imports — see its header comment for why. This
+// file imports AuthPublicController (for resetRateLimits below), so a vi.mock
+// factory MUST import from db-mock.ts directly, never from here, or it
+// re-enters src/db/database while its own mock for that module is still being
+// built and captures the real one.
+export { CAN_ACCESS_TRIP_SQL, buildDbMock } from './db-mock';
+
+/**
+ * Tables `resetTestDb` must NOT clear: seed and config data every test assumes
+ * is present (categories, addons, the provider catalogues) plus the two
+ * migration bookkeeping tables. Everything else in the schema is user data and
+ * is derived from `sqlite_master` at reset time — see `resetTestDb`.
+ */
+const KEEP_TABLES = new Set([
+  // Seeded reference data (`seedDefaults` below re-seeds the first three).
+  'categories',
+  'addons',
+  'photo_providers',
+  'photo_provider_fields',
+  'document_providers',
+  'document_provider_fields',
+  // Migration bookkeeping: clearing these would make the next boot replay the
+  // whole history over a schema that already has it.
+  'schema_version',
+  'migrations',
+  'mikro_orm_migrations',
+]);
 
 const DEFAULT_CATEGORIES = [
   { name: 'Hotel', color: '#3b82f6', icon: '🏨' },
@@ -187,8 +120,14 @@ export function setCollabFeature(
 }
 
 function seedDefaults(db: Database.Database): void {
-  const insertCat = db.prepare('INSERT OR IGNORE INTO categories (name, color, icon) VALUES (?, ?, ?)');
-  for (const cat of DEFAULT_CATEGORIES) insertCat.run(cat.name, cat.color, cat.icon);
+  // Not INSERT OR IGNORE: categories.name has no unique constraint, and the
+  // migrated snapshot (createSnapshotTestDb) already holds the same ten rows —
+  // IGNORE only dedupes on a conflicting constraint, so it would insert a
+  // second copy of each. Absence-of-name is what both callers actually want.
+  const insertCat = db.prepare(
+    'INSERT INTO categories (name, color, icon) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM categories WHERE name = ?)',
+  );
+  for (const cat of DEFAULT_CATEGORIES) insertCat.run(cat.name, cat.color, cat.icon, cat.name);
 
   const insertAddon = db.prepare('INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
   for (const a of DEFAULT_ADDONS) insertAddon.run(a.id, a.name, a.description, a.type, a.icon, a.enabled, a.sort_order);
@@ -200,107 +139,33 @@ function seedDefaults(db: Database.Database): void {
 }
 
 /**
- * Creates a fresh in-memory SQLite database with the full schema and migrations applied.
- * Default categories and addons are seeded. No users are created.
- */
-export function createTestDb(): Database.Database {
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA busy_timeout = 5000');
-  db.exec('PRAGMA foreign_keys = ON');
-  createTables(db);
-  runMigrations(db);
-  seedDefaults(db);
-  return db;
-}
-
-/**
  * Clears all user-generated data from the test DB and re-seeds defaults.
  * Call in beforeEach() for test isolation within a file.
  */
 export function resetTestDb(db: Database.Database): void {
   db.exec('PRAGMA foreign_keys = OFF');
-  const existingTables = new Set(
-    (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(r => r.name)
-  );
-  for (const table of RESET_TABLES) {
-    if (existingTables.has(table)) {
-      db.exec(`DELETE FROM "${table}"`);
-    }
+  // Derived from the live schema, not from a list. This used to be a
+  // hand-mirrored `RESET_TABLES` array kept "in sync with schema.ts +
+  // migrations.ts" — by the time it was replaced it had drifted by ~51 tables
+  // (collections, oauth, plugins, settlements, …), every one of which leaked
+  // its rows from one test into the next. Deletion order does not matter:
+  // foreign_keys is OFF for the duration.
+  const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[])
+    .map(r => r.name)
+    // sqlite_* are SQLite's own (sqlite_sequence, sqlite_stat1) — never ours.
+    .filter(name => !name.startsWith('sqlite_') && !KEEP_TABLES.has(name));
+  for (const table of tables) {
+    db.exec(`DELETE FROM "${table}"`);
   }
+  // No sqlite_sequence reset here, on purpose: the legacy helper never reset
+  // sequences either, so ids keep growing across tests within a file. Several
+  // suites (oauth.test.ts's per-user client cap, mcp.test.ts's in-memory
+  // session registry keyed by user id, memories-synology.test.ts's
+  // insert-once fixtures) rely on that to stay disjoint from one test to the
+  // next. The snapshot's one seeded row (the first-run `admin` user) is
+  // normalised away once, in createSnapshotTestDb() (db-mock.ts), not here.
   db.exec('PRAGMA foreign_keys = ON');
   seedDefaults(db);
-}
-
-/**
- * Byte-for-byte the statement in src/db/database.ts.
- *
- * Exported because the same query is copied into ~90 test files, and every one
- * of those copies had dropped `t.currency` — so the budget domain, which reads
- * exactly that column off the access row, was only ever exercising its 'EUR'
- * fallback. Import this instead of retyping it.
- */
-export const CAN_ACCESS_TRIP_SQL = `
-        SELECT t.id, t.user_id, t.currency FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `;
-
-/**
- * Returns the mock factory for vi.mock('../../src/db/database', ...).
- * The returned object mirrors the shape of database.ts exports.
- *
- * @example
- *   const testDb = createTestDb();
- *   vi.mock('../../src/db/database', () => buildDbMock(testDb));
- */
-export function buildDbMock(testDb: Database.Database) {
-  return {
-    db: testDb,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: number | string) => {
-      interface PlaceRow {
-        id: number;
-        category_id: number | null;
-        category_name: string | null;
-        category_color: string | null;
-        category_icon: string | null;
-        [key: string]: unknown;
-      }
-      const place = testDb.prepare(`
-        SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon
-        FROM places p
-        LEFT JOIN categories c ON p.category_id = c.id
-        WHERE p.id = ?
-      `).get(placeId) as PlaceRow | undefined;
-
-      if (!place) return null;
-
-      const tags = testDb.prepare(`
-        SELECT t.* FROM tags t
-        JOIN place_tags pt ON t.id = pt.tag_id
-        WHERE pt.place_id = ?
-      `).all(placeId);
-
-      return {
-        ...place,
-        category: place.category_id ? {
-          id: place.category_id,
-          name: place.category_name,
-          color: place.category_color,
-          icon: place.category_icon,
-        } : null,
-        tags,
-      };
-    },
-    canAccessTrip: (tripId: number | string, userId: number) => {
-      return testDb.prepare(CAN_ACCESS_TRIP_SQL).get(userId, tripId, userId);
-    },
-    isOwner: (tripId: number | string, userId: number) => {
-      return !!testDb.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId);
-    },
-  };
 }
 
 /**

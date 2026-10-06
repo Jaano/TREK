@@ -9,29 +9,56 @@
  * field with such a name reported as configured for a user who had configured nothing —
  * which for a notification channel meant being dispatched to everyone with no credentials.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  return { testDb: db, dbMock: { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: () => null } };
+vi.mock('../../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return { db, closeDb: () => {}, reinitialize: () => {}, canAccessTrip: async () => null };
 });
-vi.mock('../../../src/db/database', () => dbMock);
-import { db as dbConn } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { db as testDb } from '../../../src/db/database';
+import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { AuditService } from '../../../src/nest/audit/audit.service';
-import { AddonsService } from '../../../src/nest/addons/addons.service';
+import { createTestAddonsService } from '../../helpers/test-addons';
 vi.mock('../../../src/config', () => ({ JWT_SECRET: 'x'.repeat(40), ENCRYPTION_KEY: 'a'.repeat(64), updateJwtSecret: () => {} }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
 import { createUser } from '../../helpers/factories';
 import { PluginUserSettingsService } from '../../../src/nest/plugins/plugin-user-settings.service';
 import { parseManifest, ManifestError } from '../../../src/nest/plugins/install/manifest';
-/** The host-side settings reads, over the same connection the test seeded. */
-const userSettings = () => new PluginUserSettingsService(new DatabaseService(dbConn));
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
+import { Plugins } from '../../../src/db/entities/Plugins.entity';
+import { PluginErrorLog } from '../../../src/db/entities/PluginErrorLog.entity';
+import { PluginScheduledTasks } from '../../../src/db/entities/PluginScheduledTasks.entity';
+import { PluginUserErasureQueue } from '../../../src/db/entities/PluginUserErasureQueue.entity';
+import { PluginEgressHosts } from '../../../src/db/entities/PluginEgressHosts.entity';
+import { PluginSettingsFields } from '../../../src/db/entities/PluginSettingsFields.entity';
+import { PluginActions } from '../../../src/db/entities/PluginActions.entity';
+import { PluginUserConfig } from '../../../src/db/entities/PluginUserConfig.entity';
+import { PluginEntityMetadata } from '../../../src/db/entities/PluginEntityMetadata.entity';
+import { PluginOauthTokens } from '../../../src/db/entities/PluginOauthTokens.entity';
+import { PluginOauthState } from '../../../src/db/entities/PluginOauthState.entity';
+import { PluginMetaMigrations } from '../../../src/db/entities/PluginMetaMigrations.entity';
+import { PluginCapabilityAudit } from '../../../src/db/entities/PluginCapabilityAudit.entity';
+import { Settings } from '../../../src/db/entities/Settings.entity';
+import { NotificationChannelPreferences } from '../../../src/db/entities/NotificationChannelPreferences.entity';
+/**
+ * The host-side settings reads, over the same connection the test seeded. `t` is
+ * initialized in `beforeAll` (below) before any test runs — this reaches for
+ * `PluginSettingsFieldsRepository`/`PluginUserConfigRepository` through it, matching
+ * PSET-007's own `PluginRuntimeService` construction further down, which reuses the
+ * SAME `t` rather than a second ORM over the same connection.
+ */
+const userSettings = () =>
+  new PluginUserSettingsService((t as TestOrm).repo(PluginSettingsFields), (t as TestOrm).repo(PluginUserConfig));
 
 let uid: number;
+let t: TestOrm | undefined;
+
+afterAll(async () => {
+  await t?.close();
+});
 
 function declareField(pluginId: string, key: string, opts: { required?: boolean; secret?: boolean } = {}) {
   testDb.prepare(
@@ -43,7 +70,12 @@ function setUserConfig(pluginId: string, config: Record<string, unknown>) {
   testDb.prepare('INSERT OR REPLACE INTO plugin_user_config (plugin_id, user_id, config) VALUES (?, ?, ?)').run(pluginId, uid, JSON.stringify(config));
 }
 
-beforeAll(() => { createTables(testDb); runMigrations(testDb); });
+beforeAll(async () => {
+  // Plan 3j Task 4 — `userSettings()` above now needs repositories, so the ORM this
+  // file eventually built only inside PSET-007 is built here instead, before any
+  // test runs (PSET-001..006 call `userSettings()` with no ORM of their own).
+  t = await createTestOrm(testDb);
+});
 beforeEach(() => {
   testDb.prepare('DELETE FROM plugin_settings_fields').run();
   testDb.prepare('DELETE FROM plugin_user_config').run();
@@ -53,7 +85,7 @@ beforeEach(() => {
 });
 
 describe('plugin settings are isolated from core and from each other', () => {
-  it('PSET-001 — a plugin declaring "webhook_url" cannot touch the CORE settings row', () => {
+  it('PSET-001 — a plugin declaring "webhook_url" cannot touch the CORE settings row', async () => {
     testDb.prepare("INSERT INTO settings (user_id, key, value) VALUES (?, 'webhook_url', 'https://core.example.com/real')").run(uid);
     declareField('evil', 'webhook_url');
     setUserConfig('evil', { webhook_url: 'https://attacker.example.com' });
@@ -62,43 +94,43 @@ describe('plugin settings are isolated from core and from each other', () => {
     // its own blob, in its own table. The namespacing is structural, not by key naming.
     const core = testDb.prepare("SELECT value FROM settings WHERE user_id = ? AND key = 'webhook_url'").get(uid) as { value: string };
     expect(core.value).toBe('https://core.example.com/real');
-    expect(userSettings().readAll('evil', uid)).toEqual({ webhook_url: 'https://attacker.example.com' });
+    expect(await userSettings().readAll('evil', uid)).toEqual({ webhook_url: 'https://attacker.example.com' });
   });
 
-  it('PSET-002 — plugin A cannot read plugin B’s config, even with the same key name', () => {
+  it('PSET-002 — plugin A cannot read plugin B’s config, even with the same key name', async () => {
     declareField('a', 'token', { secret: true });
     declareField('b', 'token', { secret: true });
     setUserConfig('b', { token: 'B-SECRET' });
 
-    expect(userSettings().readAll('a', uid)).toEqual({});
-    expect(userSettings().readOne('a', uid, 'token')).toBeUndefined();
-    expect(userSettings().readOne('b', uid, 'token')).toBe('B-SECRET');
+    expect(await userSettings().readAll('a', uid)).toEqual({});
+    expect(await userSettings().readOne('a', uid, 'token')).toBeUndefined();
+    expect(await userSettings().readOne('b', uid, 'token')).toBe('B-SECRET');
   });
 
-  it('PSET-003 — a plugin only ever sees its own DECLARED keys', () => {
+  it('PSET-003 — a plugin only ever sees its own DECLARED keys', async () => {
     declareField('p', 'declared');
     // An undeclared key that somehow reached the blob is not handed to the plugin.
     setUserConfig('p', { declared: 'yes', sneaked: 'no' });
-    expect(userSettings().readAll('p', uid)).toEqual({ declared: 'yes' });
+    expect(await userSettings().readAll('p', uid)).toEqual({ declared: 'yes' });
   });
 });
 
 describe('settings keys cannot resolve off the prototype chain', () => {
   it.each(['__proto__', 'constructor', 'prototype'])(
     'PSET-004 — a REQUIRED field named "%s" is NOT reported as configured',
-    (key) => {
+    async (key) => {
       declareField('evil', key, { required: true });
       // The user has configured nothing at all.
-      expect(userSettings().hasRequired('evil', uid)).toBe(false);
-      expect(userSettings().readAll('evil', uid)).toEqual({});
+      expect(await userSettings().hasRequired('evil', uid)).toBe(false);
+      expect(await userSettings().readAll('evil', uid)).toEqual({});
     },
   );
 
-  it('PSET-005 — a genuinely configured required field still reports configured', () => {
+  it('PSET-005 — a genuinely configured required field still reports configured', async () => {
     declareField('good', 'appToken', { required: true, secret: true });
-    expect(userSettings().hasRequired('good', uid)).toBe(false);
+    expect(await userSettings().hasRequired('good', uid)).toBe(false);
     setUserConfig('good', { appToken: 'T' });
-    expect(userSettings().hasRequired('good', uid)).toBe(true);
+    expect(await userSettings().hasRequired('good', uid)).toBe(true);
   });
 
   it('PSET-006 — the manifest rejects such a key at install', () => {
@@ -126,13 +158,34 @@ describe('a plugin channel label is bounded by the host', () => {
        VALUES ('loud', 'Loud', 'active', 1, '1.0.0', '[]', '[]', ?, '{}')`,
     ).run(JSON.stringify({ notificationChannel: { title: '🎉'.repeat(5) + 'A'.repeat(500) } }));
 
-    const rt = new PluginRuntimeService(new DatabaseService(dbConn), new AuditService(new DatabaseService(dbConn)), new AddonsService(new DatabaseService(dbConn)), userSettings());
+    const rt = new PluginRuntimeService(
+      new AuditService(t.repo(AuditLog), t.repo(Users)),
+      await createTestAddonsService(testDb),
+      userSettings(),
+      t.repo(Plugins),
+      t.repo(PluginErrorLog),
+      t.repo(PluginScheduledTasks),
+      t.repo(PluginUserErasureQueue),
+      t.repo(PluginEgressHosts),
+      t.repo(PluginSettingsFields),
+      t.repo(PluginActions),
+      t.repo(PluginUserConfig),
+      t.repo(PluginEntityMetadata),
+      t.repo(PluginOauthTokens),
+      t.repo(PluginOauthState),
+      t.repo(PluginMetaMigrations),
+      t.repo(PluginCapabilityAudit),
+      t.repo(Settings),
+      t.repo(NotificationChannelPreferences),
+      // Plan 4 Task 4: `uow` is no longer `@Optional()`.
+      new UnitOfWork(t.em),
+    );
     // Stand the plugin up as a granted, active notificationChannel provider.
     (rt as unknown as { supervisor: { running: Map<string, unknown> } }).supervisor.running.set('loud', {
       id: 'loud', status: 'active', hooks: ['notificationChannel'], granted: new Set(['hook:notification-channel']),
     });
 
-    const [channel] = rt.notificationChannels();
+    const [channel] = await rt.notificationChannels();
     expect(channel.id).toBe('plugin:loud');
     expect(channel.label!.length).toBeLessThanOrEqual(40);
     expect(channel.label).not.toMatch(/\p{Extended_Pictographic}/u);

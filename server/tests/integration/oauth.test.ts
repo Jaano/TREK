@@ -9,31 +9,10 @@ import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
 import crypto from 'crypto';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-    const Database = require('better-sqlite3');
-    const db = new Database(':memory:');
-    db.exec('PRAGMA journal_mode = WAL');
-    db.exec('PRAGMA foreign_keys = ON');
-    db.exec('PRAGMA busy_timeout = 5000');
-    const mock = {
-        db,
-        closeDb: () => {},
-        reinitialize: () => {},
-        getPlaceWithTags: (placeId: number) => {
-            const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
-            if (!place) return null;
-            const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-            return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-        },
-        canAccessTrip: (tripId: any, userId: number) =>
-            db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-        isOwner: (tripId: any, userId: number) =>
-            !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-    };
-    return { testDb: db, dbMock: mock };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => dbMock);
 vi.mock('../../src/config', () => ({
     JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
     ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -52,31 +31,37 @@ vi.mock('../../src/app-config', async (importOriginal) => {
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 vi.mock('../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn(), revokeUserSessionsForClient: vi.fn(), sessions: new Map() }));
 
+import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { ALL_SCOPES } from '../../src/mcp/scopes';
 import { OauthService } from '../../src/nest/oauth/oauth.service';
-import { DatabaseService } from '../../src/nest/database/database.service';
-import { AddonsService } from '../../src/nest/addons/addons.service';
+import { createTestAddonsService } from '../helpers/test-addons';
 import { AuditService } from '../../src/nest/audit/audit.service';
+import { createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { Users } from '../../src/db/entities/Users.entity';
+import { OauthClients } from '../../src/db/entities/OauthClients.entity';
+import { OauthTokens } from '../../src/db/entities/OauthTokens.entity';
+import { OauthConsents } from '../../src/db/entities/OauthConsents.entity';
 
 // In production the consent controller writes pending codes through the
 // container instance and the SDK routes read them back through the same
 // injected singleton. These tests write codes the way the consent controller
 // does: through a service instance. The pending-code map is module-scoped in
 // oauth.pending-codes.ts, so the routes under test see every code written here.
-const oauthDbs = new DatabaseService(testDb);
-const containerSideOauth = new OauthService(oauthDbs, new AddonsService(oauthDbs), new AuditService(oauthDbs));
-const createAuthCode = containerSideOauth.createAuthCode.bind(containerSideOauth);
-const createOAuthClient = containerSideOauth.createOAuthClient.bind(containerSideOauth);
-const getUserByAccessToken = containerSideOauth.getUserByAccessToken.bind(containerSideOauth);
+let containerSideOauth: OauthService;
+// Arrow wrappers rather than `.bind`: with `strictBindCallApply: false` a bound
+// alias is typed `any`, which hides a missing `await` on the now-async methods.
+const createAuthCode = (...args: Parameters<OauthService['createAuthCode']>) => containerSideOauth.createAuthCode(...args);
+const createOAuthClient = (...args: Parameters<OauthService['createOAuthClient']>) => containerSideOauth.createOAuthClient(...args);
+const getUserByAccessToken = (...args: Parameters<OauthService['getUserByAccessToken']>) => containerSideOauth.getUserByAccessToken(...args);
 
 let nestApp: INestApplication;
 let app: Application;
+let t: TestOrm;
 
 // PKCE helpers
 function makePkce() {
@@ -96,10 +81,10 @@ function setMcpEnabled(enabled: boolean) {
 }
 
 beforeAll(async () => {
-    createTables(testDb);
-    runMigrations(testDb);
     nestApp = await buildApp();
     app = nestApp.getHttpAdapter().getInstance();
+    t = await createTestOrm(testDb);
+    containerSideOauth = new OauthService(t.repo(OauthClients), t.repo(OauthTokens), t.repo(OauthConsents), await createTestAddonsService(testDb), new AuditService(t.repo(AuditLog), t.repo(Users)));
 });
 
 beforeEach(() => {
@@ -110,6 +95,7 @@ beforeEach(() => {
 
 afterAll(async () => {
     await nestApp.close();
+    await t.close();
     testDb.close();
 });
 
@@ -314,7 +300,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
 
     it('OAUTH-005 — invalid auth code returns 400 invalid_grant', async () => {
         const { user } = createUser(testDb);
-        const clientResult = createOAuthClient(user.id, 'TestApp', ['https://app.example.com/cb'], ['trips:read']);
+        const clientResult = await createOAuthClient(user.id, 'TestApp', ['https://app.example.com/cb'], ['trips:read']);
         const client = clientResult.client!;
 
         const res = await request(app)
@@ -333,8 +319,8 @@ describe('POST /oauth/token — authorization_code grant', () => {
 
     it('OAUTH-006 — client_id mismatch returns 400 invalid_grant', async () => {
         const { user } = createUser(testDb);
-        const r1 = createOAuthClient(user.id, 'App1', ['https://app1.example.com/cb'], ['trips:read']);
-        const r2 = createOAuthClient(user.id, 'App2', ['https://app2.example.com/cb'], ['trips:read']);
+        const r1 = await createOAuthClient(user.id, 'App1', ['https://app1.example.com/cb'], ['trips:read']);
+        const r2 = await createOAuthClient(user.id, 'App2', ['https://app2.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         // Create code for client1
@@ -365,7 +351,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
 
     it('OAUTH-007 — redirect_uri mismatch returns 400 invalid_grant', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -394,7 +380,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
 
     it('OAUTH-008 — wrong client_secret returns 401 invalid_client (timing-safe check)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -423,7 +409,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
 
     it('OAUTH-009 — PKCE failure returns 400 invalid_grant', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const code = createAuthCode({
@@ -452,7 +438,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
 
     it('OAUTH-010 — happy path: exchange auth code for tokens', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -499,7 +485,7 @@ describe('POST /oauth/token — refresh_token grant', () => {
 
     it('OAUTH-012 — invalid refresh token returns 400 invalid_grant', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
 
         const res = await request(app)
             .post('/oauth/token')
@@ -515,7 +501,7 @@ describe('POST /oauth/token — refresh_token grant', () => {
 
     it('OAUTH-013 — happy path: issue then refresh tokens', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -586,7 +572,7 @@ describe('POST /oauth/revoke', () => {
 
     it('OAUTH-016 — wrong client_secret returns 401 invalid_client', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
 
         const res = await request(app)
             .post('/oauth/revoke')
@@ -597,7 +583,7 @@ describe('POST /oauth/revoke', () => {
 
     it('OAUTH-017 — valid revoke returns 200 even for unknown token (RFC 7009)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
 
         const res = await request(app)
             .post('/oauth/revoke')
@@ -607,7 +593,7 @@ describe('POST /oauth/revoke', () => {
 
     it('OAUTH-018 — happy path: issue token, revoke it, verify refresh no longer works', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -755,7 +741,7 @@ describe('GET /api/oauth/authorize/validate', () => {
 
     it('OAUTH-023 — returns 200 with valid:false for mismatched redirect_uri (authenticated)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -776,7 +762,7 @@ describe('GET /api/oauth/authorize/validate', () => {
 
     it('OAUTH-024 — returns 200 with valid:false for empty scope (authenticated)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -797,7 +783,7 @@ describe('GET /api/oauth/authorize/validate', () => {
 
     it('OAUTH-025a — narrows scope to allowed intersection when client lacks some requested scopes (authenticated)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -819,7 +805,7 @@ describe('GET /api/oauth/authorize/validate', () => {
 
     it('OAUTH-025b — returns 200 with valid:false when no requested scope is allowed (authenticated)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -840,7 +826,7 @@ describe('GET /api/oauth/authorize/validate', () => {
 
     it('OAUTH-026 — unauthenticated valid request returns loginRequired=true (H3: minimal response, no client info)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -863,7 +849,7 @@ describe('GET /api/oauth/authorize/validate', () => {
 
     it('OAUTH-027 — authenticated with no prior consent returns consentRequired=true with client details', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -911,7 +897,7 @@ describe('POST /api/oauth/authorize', () => {
 
     it('OAUTH-030 — user denied returns redirect with error=access_denied', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -931,7 +917,7 @@ describe('POST /api/oauth/authorize', () => {
 
     it('OAUTH-030b — a denial for an unregistered redirect_uri is refused, not redirected', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -969,7 +955,7 @@ describe('POST /api/oauth/authorize', () => {
 
     it('OAUTH-032 — happy path: approve returns redirect with code', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const res = await request(app)
@@ -1007,7 +993,7 @@ describe('Client CRUD — /api/oauth/clients', () => {
 
     it('OAUTH-034 — GET returns 200 with clients list', async () => {
         const { user } = createUser(testDb);
-        createOAuthClient(user.id, 'MyApp', ['https://app.example.com/cb'], ['trips:read']);
+        await createOAuthClient(user.id, 'MyApp', ['https://app.example.com/cb'], ['trips:read']);
 
         const res = await request(app)
             .get('/api/oauth/clients')
@@ -1045,7 +1031,7 @@ describe('Client CRUD — /api/oauth/clients', () => {
 
     it('OAUTH-037 — POST /clients/:id/rotate rotates secret', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
 
         const res = await request(app)
             .post(`/api/oauth/clients/${r.client!.id}/rotate`)
@@ -1057,7 +1043,7 @@ describe('Client CRUD — /api/oauth/clients', () => {
 
     it('OAUTH-038 — DELETE /clients/:id deletes client', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
 
         const res = await request(app)
             .delete(`/api/oauth/clients/${r.client!.id}`)
@@ -1104,7 +1090,7 @@ describe('Sessions — /api/oauth/sessions', () => {
 
     it('OAUTH-042 — DELETE /sessions/:id revokes session', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -1151,6 +1137,15 @@ describe('Sessions — /api/oauth/sessions', () => {
         expect(res.status).toBe(404);
     });
 
+    it('OAUTH-043B — DELETE /sessions/abc (non-numeric id) returns the legacy 404, not a 500 (Plan 3b Task 4 controller addendum, per Task 2 review F1)', async () => {
+        const { user } = createUser(testDb);
+        const res = await request(app)
+            .delete('/api/oauth/sessions/abc')
+            .set('Cookie', authCookie(user.id));
+        expect(res.status).toBe(404);
+        expect(res.body).toEqual({ error: 'Session not found' });
+    });
+
     it('OAUTH-044 — DELETE /sessions/:id returns 403 when addon disabled', async () => {
         setMcpEnabled(false);
         const { user } = createUser(testDb);
@@ -1194,7 +1189,7 @@ describe('M2 — 404 when MCP disabled on discovery + revoke endpoints', () => {
 describe('H1 — PKCE format validation', () => {
     it('OAUTH-SEC-004 — short code_challenge (<43 chars) rejected on /authorize/validate', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const res = await request(app)
             .get('/api/oauth/authorize/validate')
             .set('Cookie', authCookie(user.id))
@@ -1213,7 +1208,7 @@ describe('H1 — PKCE format validation', () => {
 
     it('OAUTH-SEC-005 — wrong code_verifier format rejected on /oauth/token (invalid_grant)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         const code = createAuthCode({
@@ -1245,7 +1240,7 @@ describe('H1 — PKCE format validation', () => {
 describe('H3 — Unauthenticated /authorize/validate returns minimal response', () => {
     it('OAUTH-SEC-006 — invalid request by unauthenticated caller returns generic error (no oracle)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
         // Deliberately wrong redirect_uri — should get generic error, not invalid_redirect_uri
@@ -1271,7 +1266,7 @@ describe('H3 — Unauthenticated /authorize/validate returns minimal response', 
 describe('H5 — All invalid_grant cases return identical response body', () => {
     it('OAUTH-SEC-007 — expired/bad code, client_id mismatch, redirect_uri mismatch all return same body', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -1325,7 +1320,7 @@ describe('H5 — All invalid_grant cases return identical response body', () => 
 describe('M5 — Consent scope union (re-authorize adds to existing consent)', () => {
     it('OAUTH-SEC-008 — second consent adds new scope without losing old scope', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read', 'places:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read', 'places:read']);
         const { challenge: ch1 } = makePkce();
         const { challenge: ch2 } = makePkce();
 
@@ -1429,7 +1424,7 @@ describe('C3 — Refresh token replay detection', () => {
 
     it('OAUTH-SEC-012 — replaying a rotated (old) refresh token returns invalid_grant', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -1477,7 +1472,7 @@ describe('C3 — Refresh token replay detection', () => {
 
     it('OAUTH-SEC-012b — two clients refreshing the same token at once both keep working (#1007)', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -1517,7 +1512,7 @@ describe('C3 — Refresh token replay detection', () => {
 
     it('OAUTH-SEC-013 — replaying old token also invalidates the new chain', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
         const code = createAuthCode({
@@ -1577,7 +1572,7 @@ describe('C3 — Refresh token replay detection', () => {
 describe('POST /oauth/token — client_credentials grant', () => {
     it('OAUTH-CC-001 — happy path: issues access token with no refresh_token', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
+        const r = await createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
 
         const res = await request(app)
             .post('/oauth/token')
@@ -1597,7 +1592,7 @@ describe('POST /oauth/token — client_credentials grant', () => {
 
     it('OAUTH-CC-002 — issued token resolves to the client owner user', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
+        const r = await createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
 
         const res = await request(app)
             .post('/oauth/token')
@@ -1608,7 +1603,7 @@ describe('POST /oauth/token — client_credentials grant', () => {
             });
 
         expect(res.status).toBe(200);
-        const info = getUserByAccessToken(res.body.access_token);
+        const info = await getUserByAccessToken(res.body.access_token);
         expect(info).not.toBeNull();
         expect(info!.user.id).toBe(user.id);
         expect(info!.scopes).toEqual(['trips:read']);
@@ -1616,7 +1611,7 @@ describe('POST /oauth/token — client_credentials grant', () => {
 
     it('OAUTH-CC-003 — wrong client_secret returns 401 invalid_client', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
+        const r = await createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
 
         const res = await request(app)
             .post('/oauth/token')
@@ -1632,7 +1627,7 @@ describe('POST /oauth/token — client_credentials grant', () => {
 
     it('OAUTH-CC-004 — missing client_secret returns 401 invalid_client', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
+        const r = await createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
 
         const res = await request(app)
             .post('/oauth/token')
@@ -1647,7 +1642,7 @@ describe('POST /oauth/token — client_credentials grant', () => {
 
     it('OAUTH-CC-005 — non-machine client returns 400 unauthorized_client', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'BrowserApp', ['https://app.example.com/cb'], ['trips:read']);
+        const r = await createOAuthClient(user.id, 'BrowserApp', ['https://app.example.com/cb'], ['trips:read']);
 
         const res = await request(app)
             .post('/oauth/token')
@@ -1663,7 +1658,7 @@ describe('POST /oauth/token — client_credentials grant', () => {
 
     it('OAUTH-CC-006 — scope narrowing: requested subset is honoured', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'Machine', [], ['trips:read', 'places:read'], null, { allowsClientCredentials: true });
+        const r = await createOAuthClient(user.id, 'Machine', [], ['trips:read', 'places:read'], null, { allowsClientCredentials: true });
 
         const res = await request(app)
             .post('/oauth/token')
@@ -1680,7 +1675,7 @@ describe('POST /oauth/token — client_credentials grant', () => {
 
     it('OAUTH-CC-007 — scope outside allowed_scopes returns 400 invalid_scope', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
+        const r = await createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
 
         const res = await request(app)
             .post('/oauth/token')
@@ -1695,9 +1690,9 @@ describe('POST /oauth/token — client_credentials grant', () => {
         expect(res.body.error).toBe('invalid_scope');
     });
 
-    it('OAUTH-CC-008 — createOAuthClient with allowsClientCredentials succeeds without redirect URIs', () => {
+    it('OAUTH-CC-008 — createOAuthClient with allowsClientCredentials succeeds without redirect URIs', async () => {
         const { user } = createUser(testDb);
-        const r = createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
+        const r = await createOAuthClient(user.id, 'Machine', [], ['trips:read'], null, { allowsClientCredentials: true });
 
         expect(r.error).toBeUndefined();
         expect(r.client).toBeDefined();

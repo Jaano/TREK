@@ -172,17 +172,65 @@ const photoCacheStub = {
   serveKey: (placeId: string) => mockServeFilePath(placeId),
 } as unknown as PlacePhotoCacheService;
 
-import { db } from '../../../src/db/database';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { MapsService, withPhotoFetchSlot, readWikiIdentity } from '../../../src/nest/maps/maps.service';
 import type { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-photo-cache.service';
+import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
+import type { PlaceDetailsCacheRepository } from '../../../src/db/repositories/PlaceDetailsCache.repository';
+import type { PlacesRepository } from '../../../src/db/repositories/Places.repository';
 // Type-only, so the module stays mocked: this import is erased at runtime.
 import type { SsrfResult } from '../../../src/utils/ssrfGuard';
 
-// The service under test, constructed over the mocked db stub — DatabaseService
-// routes get/run through the stubbed prepare(), so mockDbGet/mockDbRun keep
-// flowing exactly as they did for the legacy module.
-const svc = new MapsService(new DatabaseService(db as never), photoCacheStub, noGoogleQuota);
+// resolveMapsKey/resolveAmapKey (maps.service.ts) now read AppSettingsRepository/
+// UsersRepository directly (Plan 3a Task 5) instead of raw SQL through the
+// mocked db module above — these two stubs wire the SAME mockInstanceGet/
+// mockDbGet seams the rest of this file already controls into the new
+// repository methods, so every existing mockInstanceGet/mockDbGet call below
+// keeps its meaning unchanged. `places_provider` keeps its own dedicated
+// mockProviderGet seam (mirroring the pre-conversion raw-SQL mock's own
+// `args[0] === 'places_provider'` branch) — MAP2 (`placesProviderChoice`)
+// reads that key through this SAME stub now, and the amap-provider-choice
+// suite (`mockProviderGet.mockReturnValue(...)`) still drives it.
+const appSettingsStub = {
+  getValue: async (key: string) =>
+    (key === 'places_provider' ? mockProviderGet(key) : (mockInstanceGet(key) as { value: string | null } | undefined))?.value ?? null,
+} as unknown as AppSettingsRepository;
+const usersStub = {
+  getApiKeyColumn: async (userId: number, name: 'maps_api_key' | 'amap_api_key') => {
+    const row = mockDbGet(userId) as { maps_api_key?: string | null; amap_api_key?: string | null } | undefined;
+    return row?.[name] ?? null;
+  },
+} as unknown as UsersRepository;
+
+// Plan 3h Task 4 (R8/MAP9): MAP3-8 (`place_details_cache`) and MAP9
+// (`places.image_url`) used to be raw `this.database.get`/`.run` calls,
+// intercepted by the SAME mockDbGet/mockDbRun seams every other bare `db.get`/
+// `db.run` call in this file already flows through. These stubs preserve that
+// exact positional-argument shape (the SQL text itself was never bound, so
+// dropping it costs nothing) so every existing mockDbGet/mockDbRun
+// configuration and assertion below keeps its meaning unchanged.
+const placeDetailsCacheStub = {
+  findEntry: async (placeId: string, lang: string, _kind: number) => {
+    const row = mockDbGet(placeId, lang) as { payload_json: string; fetched_at: number } | undefined;
+    return row ? { payload_json: row.payload_json, fetched_at: row.fetched_at } : null;
+  },
+  upsertEntry: async (row: { place_id: string; lang: string; expanded: number; payload_json: string; fetched_at: number }) => {
+    mockDbRun(row.place_id, row.lang, row.payload_json, row.fetched_at);
+  },
+} as unknown as PlaceDetailsCacheRepository;
+const placesStub = {
+  setImageUrlIfUnset: async (google_place_id: string, image_url: string) => {
+    mockDbRun(image_url, google_place_id);
+    return 1;
+  },
+} as unknown as PlacesRepository;
+
+// The service under test, constructed over the mocked seams above — every
+// collaborator that used to reach the mocked db module directly now routes
+// through a repository stub that flows into the SAME mockDbGet/mockDbRun/
+// mockInstanceGet/mockProviderGet functions, so they keep firing exactly as
+// they did for the legacy module.
+const svc = new MapsService(photoCacheStub, appSettingsStub, usersStub, placeDetailsCacheStub, placesStub, noGoogleQuota);
 
 /**
  * Switch the TREK Places index off for one case.
@@ -483,38 +531,40 @@ describe('resolveMapsKey', () => {
     else process.env.PLACES_API_KEY = ORIGINAL_PLACES_KEY;
   });
 
-  it('MAPS-015: returns the caller own row key when nothing above it is set', () => {
+  it('MAPS-015: returns the caller own row key when nothing above it is set', async () => {
     mockDbGet.mockReturnValue({ maps_api_key: 'user-api-key' });
-    expect(svc.resolveMapsKey(1)).toEqual({ key: 'user-api-key', source: 'user-row' });
-    expect(svc.getMapsKey(1)).toBe('user-api-key'); // the wrapper reads the same chain
+    expect(await svc.resolveMapsKey(1)).toEqual({ key: 'user-api-key', source: 'user-row' });
+    expect(await svc.getMapsKey(1)).toBe('user-api-key'); // the wrapper reads the same chain
   });
 
-  it('MAPS-016: the instance-wide key wins over the caller own row (#1939)', () => {
+  it('MAPS-016: the instance-wide key wins over the caller own row (#1939)', async () => {
     mockInstanceGet.mockReturnValueOnce({ value: 'instance-api-key' });
     mockDbGet.mockReturnValueOnce({ maps_api_key: 'user-api-key' });
-    expect(svc.resolveMapsKey(1)).toEqual({ key: 'instance-api-key', source: 'instance' });
+    expect(await svc.resolveMapsKey(1)).toEqual({ key: 'instance-api-key', source: 'instance' });
   });
 
-  it('MAPS-017: returns null with no source when nothing is set anywhere', () => {
-    expect(svc.resolveMapsKey(1)).toEqual({ key: null, source: null });
-    expect(svc.getMapsKey(1)).toBeNull();
+  it('MAPS-017: returns null with no source when nothing is set anywhere', async () => {
+    expect(await svc.resolveMapsKey(1)).toEqual({ key: null, source: null });
+    expect(await svc.getMapsKey(1)).toBeNull();
   });
 
-  it('MAPS-017b: the operator env key wins and the database is never asked', () => {
+  it('MAPS-017b: the operator env key wins and the database is never asked', async () => {
     process.env.PLACES_API_KEY = 'operator-key';
-    expect(svc.resolveMapsKey(1)).toEqual({ key: 'operator-key', source: 'operator-env' });
+    expect(await svc.resolveMapsKey(1)).toEqual({ key: 'operator-key', source: 'operator-env' });
     expect(mockInstanceGet).not.toHaveBeenCalled();
     expect(mockDbGet).not.toHaveBeenCalled();
   });
 
-  it("MAPS-017c: never reads another user's row — the admin fallback is gone (#1939)", () => {
-    svc.resolveMapsKey(1);
-    // Two statements, both scoped: the instance row and this caller's own row.
-    // The old chain ended in "WHERE role = 'admin' ... LIMIT 1", which handed a
-    // stranger's credential to every non-admin.
-    expect(preparedSql).toHaveLength(2);
-    expect(preparedSql.join(' ')).not.toContain("role = 'admin'");
-    expect(preparedSql.some((sql) => sql.includes('WHERE id = ?'))).toBe(true);
+  it("MAPS-017c: never reads another user's row — the admin fallback is gone (#1939)", async () => {
+    await svc.resolveMapsKey(1);
+    // Two reads, both scoped: the instance row and this caller's own row. The
+    // old chain ended in "WHERE role = 'admin' ... LIMIT 1", which handed a
+    // stranger's credential to every non-admin — UsersRepository.getApiKeyColumn
+    // (instance-api-keys.ts's resolveApiKey, Plan 3a Task 5) is scoped to
+    // exactly the userId given, never a role-based lookup.
+    expect(mockInstanceGet).toHaveBeenCalledTimes(1);
+    expect(mockDbGet).toHaveBeenCalledTimes(1);
+    expect(mockDbGet).toHaveBeenCalledWith(1);
   });
 });
 
@@ -2700,57 +2750,57 @@ describe('searchOverpassPois all-endpoints-down', () => {
 
 // ── Wrapper surface (kept from the pre-fold wrapper suite) ────────────────────
 
-/** A DatabaseService stub whose get() returns the row the test wants. */
-function makeSettingsDb(row?: { value: string }) {
-  const get = vi.fn(() => row);
-  return { db: { get } as unknown as DatabaseService, get };
+/** An AppSettingsRepository stub whose getValue() returns the row's value the test wants. */
+function makeSettingsRepo(row?: { value: string }) {
+  const getValue = vi.fn(async (_key: string) => row?.value ?? null);
+  return { repo: { getValue } as unknown as AppSettingsRepository, getValue };
 }
 
 function settingsSvc(row?: { value: string }) {
-  return new MapsService(makeSettingsDb(row).db, photoCacheStub, noGoogleQuota);
+  return new MapsService(photoCacheStub, makeSettingsRepo(row).repo, usersStub, placeDetailsCacheStub, placesStub, noGoogleQuota);
 }
 
 describe('kill-switch settings reads', () => {
-  it('reports a switch disabled when the stored value is exactly "false"', () => {
-    expect(settingsSvc({ value: 'false' }).autocompleteDisabled()).toBe(true);
-    expect(settingsSvc({ value: 'false' }).detailsDisabled()).toBe(true);
-    expect(settingsSvc({ value: 'false' }).photosDisabled()).toBe(true);
+  it('reports a switch disabled when the stored value is exactly "false"', async () => {
+    expect(await settingsSvc({ value: 'false' }).autocompleteDisabled()).toBe(true);
+    expect(await settingsSvc({ value: 'false' }).detailsDisabled()).toBe(true);
+    expect(await settingsSvc({ value: 'false' }).photosDisabled()).toBe(true);
   });
 
-  it('reports enabled when the value is "true"', () => {
-    expect(settingsSvc({ value: 'true' }).autocompleteDisabled()).toBe(false);
-    expect(settingsSvc({ value: 'true' }).detailsDisabled()).toBe(false);
-    expect(settingsSvc({ value: 'true' }).photosDisabled()).toBe(false);
+  it('reports enabled when the value is "true"', async () => {
+    expect(await settingsSvc({ value: 'true' }).autocompleteDisabled()).toBe(false);
+    expect(await settingsSvc({ value: 'true' }).detailsDisabled()).toBe(false);
+    expect(await settingsSvc({ value: 'true' }).photosDisabled()).toBe(false);
   });
 
-  it('reports enabled when the setting row is absent', () => {
-    expect(settingsSvc(undefined).autocompleteDisabled()).toBe(false);
-    expect(settingsSvc(undefined).detailsDisabled()).toBe(false);
-    expect(settingsSvc(undefined).photosDisabled()).toBe(false);
+  it('reports enabled when the setting row is absent', async () => {
+    expect(await settingsSvc(undefined).autocompleteDisabled()).toBe(false);
+    expect(await settingsSvc(undefined).detailsDisabled()).toBe(false);
+    expect(await settingsSvc(undefined).photosDisabled()).toBe(false);
   });
 
-  it('queries the matching app_settings key', () => {
-    const { db: settingsDb, get } = makeSettingsDb({ value: 'true' });
-    const s = new MapsService(settingsDb, photoCacheStub, noGoogleQuota);
-    s.autocompleteDisabled();
-    expect(get).toHaveBeenCalledWith(expect.stringContaining('app_settings'), 'places_autocomplete_enabled');
-    s.detailsDisabled();
-    expect(get).toHaveBeenCalledWith(expect.any(String), 'places_details_enabled');
-    s.photosDisabled();
-    expect(get).toHaveBeenCalledWith(expect.any(String), 'places_photos_enabled');
+  it('queries the matching app_settings key', async () => {
+    const { repo: settingsRepo, getValue } = makeSettingsRepo({ value: 'true' });
+    const s = new MapsService(photoCacheStub, settingsRepo, usersStub, placeDetailsCacheStub, placesStub, noGoogleQuota);
+    await s.autocompleteDisabled();
+    expect(getValue).toHaveBeenCalledWith('places_autocomplete_enabled');
+    await s.detailsDisabled();
+    expect(getValue).toHaveBeenCalledWith('places_details_enabled');
+    await s.photosDisabled();
+    expect(getValue).toHaveBeenCalledWith('places_photos_enabled');
   });
 });
 
 describe('photoBytesKey', () => {
-  it('returns the cached storage name from placePhotoCache', () => {
+  it('returns the cached storage name from placePhotoCache', async () => {
     mockServeFilePath.mockReturnValue('abc.jpg');
-    expect(svc.photoBytesKey('p1')).toBe('abc.jpg');
+    expect(await svc.photoBytesKey('p1')).toBe('abc.jpg');
     expect(mockServeFilePath).toHaveBeenCalledWith('p1');
   });
 
-  it('returns null when nothing is cached', () => {
+  it('returns null when nothing is cached', async () => {
     mockServeFilePath.mockReturnValue(null);
-    expect(svc.photoBytesKey('p1')).toBeNull();
+    expect(await svc.photoBytesKey('p1')).toBeNull();
   });
 });
 
@@ -3431,7 +3481,7 @@ describe('readWikiIdentity', () => {
 describe('brandLogo', () => {
   // A fresh service per case: the logo cache lives on the instance, and a hit from
   // one case would answer the next one's question before its fetch stub ran.
-  const service = (): MapsService => new MapsService(new DatabaseService(db as never), photoCacheStub, noGoogleQuota);
+  const service = (): MapsService => new MapsService(photoCacheStub, appSettingsStub, usersStub, placeDetailsCacheStub, placesStub, noGoogleQuota);
 
   const claimResponse = (file: string | null) => ({
     ok: true,

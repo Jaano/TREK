@@ -20,9 +20,10 @@ import { VacayRpc } from '../../../src/nest/vacay/vacay.rpc';
 import { JournalRpc } from '../../../src/nest/journey/journal.rpc';
 import { CollectionsRpc } from '../../../src/nest/collections/collections.rpc';
 import { CostsRpc } from '../../../src/nest/budget/costs.rpc';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
 
@@ -58,13 +59,14 @@ function spyService(calls: string[], name: string) {
 function build(addonOn: boolean) {
   const calls: string[] = [];
   const db = {
-    canAccessTrip: vi.fn(() => ({ id: 1, user_id: 42 })),
+    findAccessible: vi.fn(async () => ({ id: 1, user_id: 42 })),
     prepare: vi.fn(() => ({ get: () => ({ role: 'user' }), all: () => [] })),
-  } as unknown as DatabaseService;
+  } as unknown as TripsRepository;
   const guards = new PluginGuards(
     db,
     { checkPermission: vi.fn(() => true) } as unknown as PermissionsService,
     { isAddonEnabled: vi.fn(() => addonOn) } as unknown as AddonsService,
+    { getRole: vi.fn(async () => 'user') } as unknown as UsersRepository,
   );
   const registry = createTestPluginRegistry([
     new CollabRpc(spyService(calls, 'collab'), { broadcast: vi.fn() } as never, guards),
@@ -76,7 +78,8 @@ function build(addonOn: boolean) {
       { put: async () => undefined, delete: async () => undefined } as never,
       { get: () => '*' } as never,
       { scheduleUpload: () => undefined } as never,
-      { prepare: () => ({ get: () => ({ email: 'u@example.test' }) }) } as never),
+      // SV8 — Plan 3i: DemoService.isDemoUserId, the shared demo-gate primitive.
+      { isDemoUserId: async () => false } as never),
     new CollectionsRpc(spyService(calls, 'collections'), guards),
     new CostsRpc(spyService(calls, 'budget'), db, { broadcast: vi.fn() } as never, guards, spyService(calls, 'membership')),
   ]);

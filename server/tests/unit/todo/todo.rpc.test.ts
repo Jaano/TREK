@@ -12,9 +12,10 @@ import { TodoRpc } from '../../../src/nest/todo/todo.rpc';
 import { TodoModule } from '../../../src/nest/todo/todo.module';
 import type { TodoService } from '../../../src/nest/todo/todo.service';
 import type { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
 
@@ -25,18 +26,18 @@ function build(canEdit = true) {
   const todos = {
     listItems: vi.fn(() => [{ id: 90, name: 'Pack' }]),
     createItem: vi.fn((tripId: string, input: Record<string, unknown>) => ({ id: 91, trip_id: tripId, ...input })),
-    updateItem: vi.fn((_t: string, id: string) => (id === '90' ? { id: 90, checked: 1 } : undefined)),
-    deleteItem: vi.fn((_t: string, id: string) => id === '90'),
+    updateItem: vi.fn((_t: string, id: number) => (id === 90 ? { id: 90, checked: 1 } : undefined)),
+    deleteItem: vi.fn((_t: string, id: number) => id === 90),
   } as unknown as TodoService & Record<string, ReturnType<typeof vi.fn>>;
   const realtime = { broadcast: vi.fn() } as unknown as RealtimeService & { broadcast: ReturnType<typeof vi.fn> };
   const permissions = { checkPermission: vi.fn(() => canEdit) } as unknown as PermissionsService;
   const guards = new PluginGuards(
     {
-      canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
-      prepare: vi.fn(() => ({ get: () => ({ role: 'user' }) })),
-    } as unknown as DatabaseService,
+      findAccessible: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
+    } as unknown as TripsRepository,
     permissions,
     { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService,
+    { getRole: vi.fn(async () => 'user') } as unknown as UsersRepository,
   );
   const rpc = new TodoRpc(todos, realtime, guards);
   const host = (...grants: string[]) =>

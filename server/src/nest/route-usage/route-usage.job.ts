@@ -25,9 +25,9 @@ export class RouteUsageRetentionJob implements OnApplicationBootstrap {
     this.registrar.register('route-usage-retention', '45 3 * * *', () => this.tick());
   }
 
-  tick(): void {
+  async tick(): Promise<void> {
     try {
-      const removed = this.usage.purgeExpired();
+      const removed = await this.usage.purgeExpired();
       if (removed > 0) {
         logInfo(`Route usage retention: removed ${removed} expired row(s)`);
       }

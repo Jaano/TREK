@@ -8,13 +8,12 @@
  * the plugins row, so a category the manifest never declared is a 404 however
  * willing the plugin would be to answer it.
  */
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { PluginContributionsModule } from '../../src/nest/plugins/contributions/plugin-contributions.module';
 import { PluginHooks } from '../../src/nest/plugins/plugin-hooks.service';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 import { Test } from '@nestjs/testing';
 
 import cookieParser from 'cookie-parser';
@@ -22,34 +21,28 @@ import type { Server } from 'http';
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 
-const { db, pluginsEnabled } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec('PRAGMA foreign_keys = ON');
-  tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
-    avatar TEXT);`);
-  tmp.exec(`CREATE TABLE plugins (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT, icon TEXT,
-    status TEXT NOT NULL DEFAULT 'inactive', sort_order INTEGER NOT NULL DEFAULT 0,
-    capabilities TEXT, permissions TEXT DEFAULT '[]', granted_permissions TEXT DEFAULT '[]');`);
-  tmp.exec('CREATE TABLE addons (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 0, name TEXT, description TEXT, category TEXT, sort_order INTEGER DEFAULT 0);');
-  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  // Off while the app boots, so the runtime does not go looking for plugins on disk;
-  // the tests switch it on.
-  return { db: tmp, pluginsEnabled: { value: false } };
-});
+// Off while the app boots, so the runtime does not go looking for plugins on disk;
+// the tests switch it on.
+const { pluginsEnabled } = vi.hoisted(() => ({ pluginsEnabled: { value: false } }));
 
-vi.mock('../../src/db/database', () => ({
-  db,
-  canAccessTrip: () => undefined,
-  isOwner: () => false,
-  getPlaceWithTags: () => null,
-  closeDb: () => {},
-  reinitialize: () => {},
-}));
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return {
+    db,
+    canAccessTrip: () => undefined,
+    isOwner: () => false,
+    getPlaceWithTags: () => null,
+    closeDb: () => {},
+    reinitialize: () => {},
+  };
+});
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled: () => pluginsEnabled.value }));
+
+import { db } from '../../src/db/database';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 const trailheads = { id: 'trailheads', label: 'Trailheads', icon: 'Signpost', color: '#2f855a' };
 const query = { pluginId: 'trail-finder', category: 'trailheads', south: '47', west: '11', north: '47.5', east: '11.5', lang: 'de' };
@@ -62,7 +55,7 @@ describe('Plugin POIs e2e (real guard chain + temp SQLite)', () => {
 
   async function build() {
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule, RealtimeModule, PluginContributionsModule],
+      imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, PluginContributionsModule],
     }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
@@ -73,7 +66,12 @@ describe('Plugin POIs e2e (real guard chain + temp SQLite)', () => {
   }
 
   beforeAll(async () => {
-    seedUser(db as never, { id: 1 });
+    // harness.ts's seedUser() omits password_hash, which the migrated schema
+    // requires NOT NULL (addons.e2e.test.ts does the same) — the same SeededUser
+    // shape sessionCookie(1) needs, with the hash filled in.
+    db.prepare(
+      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
+    ).run();
     db.prepare("INSERT INTO plugins (id, name, status, capabilities, granted_permissions) VALUES (?, ?, 'active', ?, ?)")
       .run('trail-finder', 'Trail Finder', JSON.stringify({ poiCategories: [trailheads] }), JSON.stringify(['hook:poi-category-provider']));
     app = await build();

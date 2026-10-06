@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { fork, type ChildProcess } from 'node:child_process';
+import type { EntityManager } from '@mikro-orm/core';
 import { readEnv } from '../../../app-config';
 import { resolveChildEntry, pluginCodeDir, pluginRealCodeDir, pluginPermissionArgs, ensurePluginModuleType } from '../paths';
 import { HOOK_PERMISSION, USER_DATA_PERMISSION, EVENTS_PERMISSION, type Envelope, type RpcError, type RpcRequest } from '../protocol/envelope';
@@ -8,6 +9,7 @@ import type { PluginRpcHost } from '../host/rpc-host';
 import { scheduleJobs, stopJobs, type ScheduledJob } from '../host/plugin-jobs';
 import { SNAPSHOT_GRANT, type PluginEventMeta } from '../../../plugin-event-sink';
 import { RpcRateLimiter, DEFAULT_RPC_LIMIT, TokenBucket, DEFAULT_LOG_LIMIT } from '../host/rate-limit';
+import { withRequestContext } from '../../database/request-context';
 
 export interface PluginRouteInfo {
   i: number;
@@ -129,6 +131,20 @@ export class PluginSupervisor {
     private readonly createRpcHost: (id: string, granted: ReadonlySet<string>) => PluginRpcHost,
     private readonly hooks: SupervisorHooks = {},
     tuning: SupervisorTuning = {},
+    // D6: every `ctx.*` call from a plugin child arrives over IPC, not an HTTP
+    // request, so nothing has forked an EntityManager for it. A THUNK, not a value:
+    // PluginRuntimeService's own `orm` field is not assigned yet when its `supervisor`
+    // field initializer runs (constructor params are assigned after field
+    // initializers — see that file's comment), so this is read lazily, once per
+    // dispatch. Optional at the type level only for the hand-built doubles in
+    // provider-hook-grant.test.ts / event-subscriptions.test.ts, neither of
+    // which ever dispatches a `'req'` message through onMessage — a double
+    // that DOES dispatch (supervisor-lifecycle.test.ts's rate-limit case,
+    // tests/integration/plugins/supervisor.test.ts's real child IPC) must
+    // pass one, because onMessage now THROWS when this returns undefined
+    // (task-6-fix-brief.md item 1 — no more silent unwrapped dispatch).
+    // PluginRuntimeService always passes the real MikroORM (OrmModule is global).
+    private readonly resolveOrm?: () => { em: EntityManager } | undefined,
   ) {
     this.tuning = { ...DEFAULTS, ...tuning };
   }
@@ -572,7 +588,38 @@ export class PluginSupervisor {
       const inv = req.params as { _inv?: unknown } | undefined;
       const actingUserId = typeof inv?._inv === 'string' ? sup.invocations.get(inv._inv) : undefined;
       try {
-        const res = await sup.rpcHost.dispatch(req, actingUserId);
+        // The single choke point every plugin RPC passes through (D6): wrap it here,
+        // not inside rpc-host.ts::dispatch, so the context also spans plugin-guards'
+        // trip/permission reads and any *.rpc.ts handler's repository calls, not just
+        // dispatch's own audit write. Without this, PermissionsService.checkPermission
+        // ran outside any context, threw on a cold cache, and the catch served
+        // defaults — fail-open on a tightened flag (task-2-review.md C3).
+        //
+        // Fail closed (task-6-fix-brief.md item 1, task-6-review-template.md
+        // Important 1 / M-B): an absent `resolveOrm` used to fall through to
+        // an UNWRAPPED dispatch — silent degrade, the exact shape D6 forbids
+        // at a choke point. It only failed closed downstream, and only
+        // because two OTHER switches happened to hold (production's
+        // `allowGlobalContext: false` and `loadPermissions` rethrowing a
+        // MikroORM `ValidationError`) — nothing here said so. Throw instead:
+        // the dispatch never runs without a context, full stop, regardless of
+        // what those other switches do. The three hand-built test doubles
+        // that dispatch through this path now pass a thunk (`sharedTestOrm`).
+        const orm = this.resolveOrm?.();
+        if (!orm) {
+          // task-6-rereview.md §5 RULING: the child's `pending` map
+          // (plugin-host-entry.ts) has no timeout, so leaving this 'req'
+          // unanswered hangs the plugin's ctx.* promise forever — and
+          // handleChildMessage above downgrades the throw below to one
+          // plugin-scoped log line, never surfacing it as a host-wiring
+          // failure. Answer the child first, same shape as the rate-limiter
+          // refusal a few lines up, THEN throw for host-side visibility. The
+          // dispatch still never runs either way — this only changes whether
+          // the caller ever hears back.
+          sup.child?.send({ k: 'res', id: req.id, ok: false, error: { code: 'HOST_ERROR', message: 'no ORM available to build a request context' } } satisfies RpcError);
+          throw new Error('PluginSupervisor: no ORM available to build a request context for this RPC dispatch');
+        }
+        const res = await withRequestContext(orm, () => sup.rpcHost.dispatch(req, actingUserId));
         sup.child?.send(res);
       } finally {
         sup.rpcLimiter.release();

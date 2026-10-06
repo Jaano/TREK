@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import unzipper from 'unzipper';
-import type Database from 'better-sqlite3';
 import { readEnv } from '../../app-config';
 import { openDatabase } from '../../db/connection';
 
@@ -95,7 +94,7 @@ export function checkBackupDatabase(extractDir: string): ArchiveRefusal | null {
     return { error: 'Invalid backup: travel.db not found', status: 400 };
   }
 
-  let uploadedDb: InstanceType<typeof Database> | null = null;
+  let uploadedDb: ReturnType<typeof openDatabase> | null = null;
   try {
     uploadedDb = openDatabase(extractedDb, { readonly: true });
 

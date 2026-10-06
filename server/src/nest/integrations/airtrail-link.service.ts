@@ -1,9 +1,15 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { ADDON_IDS } from '../../addons';
-import { DatabaseService } from '../database/database.service';
+import { Reservations } from '../../db/entities/Reservations.entity';
+import { ReservationsRepository } from '../../db/repositories/Reservations.repository';
+import { ReservationEndpoints } from '../../db/entities/ReservationEndpoints.entity';
+import { ReservationEndpointsRepository } from '../../db/repositories/ReservationEndpoints.repository';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
 import { RealtimeService } from '../realtime/realtime.service';
 import { AddonsService } from '../addons/addons.service';
-import { ReservationsReadRepository } from '../reservations/reservations-read.repository';
+import { ReservationsReadService } from '../reservations/reservations-read.service';
 import { logError } from '../audit/audit-log.logger';
 import { AirtrailAuthError, type AirtrailCreds, type AirtrailFlightRaw } from './airtrail.client';
 import { AirtrailClient } from './airtrail.client';
@@ -15,7 +21,7 @@ import { buildSavePayload } from './airtrail-sync.helpers';
  * The AirTrail link lifecycle — the enablement gate, the detach policy, the
  * multi-leg guard (#1535) and the TREK → AirTrail write-back (#1240) — split
  * out of AirtrailSyncService so ReservationsModule can inject it: it reads
- * reservations through the leaf ReservationsReadRepository, never through
+ * reservations through the leaf ReservationsReadService, never through
  * ReservationsService, so AirtrailCoreModule stays off the
  * ReservationsModule → AirtrailModule → ReservationsModule loop that used to
  * force airtrail.bridge. The pull half stays in AirtrailSyncService, which
@@ -25,33 +31,35 @@ import { buildSavePayload } from './airtrail-sync.helpers';
 @Injectable()
 export class AirtrailLinkService {
   constructor(
-    private readonly db: DatabaseService,
+    @InjectRepository(Reservations) private readonly reservationsRepo: ReservationsRepository,
+    @InjectRepository(ReservationEndpoints) private readonly endpointsRepo: ReservationEndpointsRepository,
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
     private readonly realtime: RealtimeService,
     private readonly addons: AddonsService,
-    private readonly reads: ReservationsReadRepository,
+    private readonly reads: ReservationsReadService,
     private readonly client: AirtrailClient,
     private readonly airtrail: AirtrailService,
   ) {}
 
   /** Global on/off: the addon must be enabled and sync not explicitly turned off. */
-  syncGloballyEnabled(): boolean {
-    if (!this.addons.isAddonEnabled(ADDON_IDS.AIRTRAIL)) return false;
-    const row = this.db.get<{ value: string }>("SELECT value FROM app_settings WHERE key = 'airtrail_sync_enabled'");
-    return row?.value !== 'false';
+  async syncGloballyEnabled(): Promise<boolean> {
+    if (!(await this.addons.isAddonEnabled(ADDON_IDS.AIRTRAIL))) return false;
+    const value = await this.appSettings.getValue('airtrail_sync_enabled');
+    return value !== 'false';
   }
 
-  broadcastUpdated(tripId: number, reservationId: number): void {
+  async broadcastUpdated(tripId: number, reservationId: number): Promise<void> {
     try {
-      const reservation = this.reads.getReservationWithJoins(reservationId);
+      const reservation = await this.reads.getReservationWithJoins(reservationId);
       if (reservation) this.realtime.broadcast(String(tripId), 'reservation:updated', { reservation } as never, undefined);
     } catch {
       /* broadcast failure is non-fatal */
     }
   }
 
-  detach(tripId: number, reservationId: number): void {
-    this.db.run('UPDATE reservations SET sync_enabled = 0 WHERE id = ?', reservationId);
-    this.broadcastUpdated(tripId, reservationId);
+  async detach(tripId: number, reservationId: number): Promise<void> {
+    await this.reservationsRepo.setAirtrailSyncDisabled(reservationId);
+    await this.broadcastUpdated(tripId, reservationId);
   }
 
   /**
@@ -61,18 +69,15 @@ export class AirtrailLinkService {
    * side: a pull flattens the layover chain back to from→to, a push rewrites the
    * AirTrail flight to span the whole route (#1535).
    */
-  hasLocalMultiLegShape(reservationId: number, metadataJson: string | null | undefined): boolean {
+  async hasLocalMultiLegShape(reservationId: number, metadataJson: string | null | undefined): Promise<boolean> {
     try {
       const meta = metadataJson ? JSON.parse(metadataJson) : {};
       if (Array.isArray(meta?.legs) && meta.legs.length > 1) return true;
     } catch {
       /* malformed metadata — fall through to the endpoint count */
     }
-    const row = this.db.get<{ n: number }>(
-      'SELECT COUNT(*) AS n FROM reservation_endpoints WHERE reservation_id = ?',
-      reservationId,
-    ) as { n: number };
-    return row.n > 2;
+    const n = await this.endpointsRepo.count({ reservation: reservationId });
+    return n > 2;
   }
 
   /**
@@ -82,35 +87,30 @@ export class AirtrailLinkService {
    * next pull's AirTrail-wins policy can't silently revert the local edit.
    */
   async pushReservationToAirtrail(reservationId: number, tripId: number): Promise<void> {
-    if (!this.syncGloballyEnabled()) return;
+    if (!(await this.syncGloballyEnabled())) return;
 
-    const row = this.db.get<{
-      id: number; trip_id: number; external_id: string; external_owner_user_id: number | null; sync_enabled: number;
-    }>(
-      "SELECT id, trip_id, external_id, external_owner_user_id, sync_enabled FROM reservations WHERE id = ? AND external_source = 'airtrail'",
-      reservationId,
-    );
+    const row = await this.reservationsRepo.findAirtrailLinked(reservationId);
     if (!row || !row.sync_enabled) return;
 
     // An edit that turned this linked flight into a multi-leg booking severs the
     // 1:1 mapping to the AirTrail flight: pushing would rewrite that flight to the
     // full span, and the next pull would flatten the layover again. Detach — the
     // merge is a deliberate local restructuring, like a joined import (#1535).
-    const reservation = this.reads.getReservationWithJoins(row.id);
+    const reservation = await this.reads.getReservationWithJoins(row.id);
     if (!reservation) return;
-    if (this.hasLocalMultiLegShape(row.id, (reservation as { metadata?: string | null }).metadata)) {
-      this.detach(tripId, row.id);
+    if (await this.hasLocalMultiLegShape(row.id, (reservation as { metadata?: string | null }).metadata)) {
+      await this.detach(tripId, row.id);
       return;
     }
 
     // AirTrail is read-only by default (#1240). Only push when the flight's owner has
     // explicitly opted in. A no-op skip (not a detach): the link stays active so the
     // inbound, AirTrail-wins pull keeps the reservation up to date.
-    if (!row.external_owner_user_id || !this.airtrail.isAirtrailWriteEnabled(row.external_owner_user_id)) return;
+    if (!row.external_owner_user_id || !(await this.airtrail.isAirtrailWriteEnabled(row.external_owner_user_id))) return;
 
-    const creds: AirtrailCreds | null = this.airtrail.getAirtrailCredentials(row.external_owner_user_id);
+    const creds: AirtrailCreds | null = await this.airtrail.getAirtrailCredentials(row.external_owner_user_id);
     if (!creds) {
-      this.detach(tripId, row.id); // owner disconnected — cannot push, so stop syncing
+      await this.detach(tripId, row.id); // owner disconnected — cannot push, so stop syncing
       return;
     }
 
@@ -118,12 +118,12 @@ export class AirtrailLinkService {
     try {
       existing = await this.client.getFlight(creds, Number(row.external_id));
     } catch (err) {
-      if (err instanceof AirtrailAuthError) this.detach(tripId, row.id);
+      if (err instanceof AirtrailAuthError) await this.detach(tripId, row.id);
       else logError(`AirTrail push: get failed for reservation ${row.id}: ${err instanceof Error ? err.message : err}`);
       return;
     }
     if (!existing) {
-      this.detach(tripId, row.id); // gone in AirTrail → treat like a remote delete
+      await this.detach(tripId, row.id); // gone in AirTrail → treat like a remote delete
       return;
     }
 
@@ -136,12 +136,7 @@ export class AirtrailLinkService {
       // next poll doesn't treat our own write as an inbound change.
       const saved = await this.client.getFlight(creds, Number(row.external_id));
       if (saved) {
-        this.db.run(
-          'UPDATE reservations SET external_hash = ?, external_synced_at = ? WHERE id = ?',
-          canonicalHash(saved),
-          new Date().toISOString(),
-          row.id,
-        );
+        await this.reservationsRepo.setAirtrailSyncStamp(row.id, canonicalHash(saved), new Date().toISOString());
       }
     } catch (err) {
       logError(`AirTrail push failed for reservation ${row.id}: ${err instanceof Error ? err.message : err}`);

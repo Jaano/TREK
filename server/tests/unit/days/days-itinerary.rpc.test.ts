@@ -18,9 +18,10 @@ import { DayAppendError, NO_DATES_MESSAGE, type DatedDayAppend, type DaysService
 import { DayDeleteError, type DayRemoval, type DayRemovalService } from '../../../src/nest/days/day-removal.service';
 import type { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
 import type { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
 
@@ -66,11 +67,11 @@ function build(opts: { canEdit?: boolean } = {}) {
   const realtime = { broadcast: vi.fn() } as unknown as RealtimeService & { broadcast: ReturnType<typeof vi.fn> };
   const guards = new PluginGuards(
     {
-      canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
-      prepare: vi.fn(() => ({ get: () => ({ role: 'user' }) })),
-    } as unknown as DatabaseService,
+      findAccessible: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined)),
+    } as unknown as TripsRepository,
     { checkPermission: vi.fn(() => opts.canEdit ?? true) } as unknown as PermissionsService,
     { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService,
+    { getRole: vi.fn(async () => 'user') } as unknown as UsersRepository,
   );
   const registry = createTestPluginRegistry([new DaysRpc(days, realtime, guards, removal), new ItineraryRpc(assignments, realtime, guards)]);
   const host = (...grants: string[]) => new PluginRpcHost('p', new Set(grants), makeDeps(), registry);

@@ -23,14 +23,6 @@ function svc(o: Partial<PlacesService> = {}): PlacesService {
   } as unknown as PlacesService;
 }
 
-function thrown(fn: () => unknown): { status: number; body: unknown } {
-  try { fn(); } catch (err) {
-    expect(err).toBeInstanceOf(HttpException);
-    const e = err as HttpException;
-    return { status: e.getStatus(), body: e.getResponse() };
-  }
-  throw new Error('expected throw');
-}
 async function thrownAsync(fn: () => Promise<unknown>): Promise<{ status: number; body: unknown }> {
   try { await fn(); } catch (err) {
     expect(err).toBeInstanceOf(HttpException);
@@ -46,16 +38,16 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
   // The trip 404 for this handler is TripAccessGuard's now (see
   // trip-access.guard.test.ts and the places e2e), so it is no longer reachable
   // by calling the method directly.
-  it('GET / lists with filters', () => {
+  it('GET / lists with filters', async () => {
     const list = vi.fn().mockReturnValue([{ id: 1 }]);
-    expect(new PlacesController(svc({ list } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).list(user, '5', 'beach', 'cat', 'tag')).toEqual({ places: [{ id: 1 }] });
+    expect(await new PlacesController(svc({ list } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).list(user, '5', 'beach', 'cat', 'tag')).toEqual({ places: [{ id: 1 }] });
     expect(list).toHaveBeenCalledWith('5', { search: 'beach', category: 'cat', tag: 'tag' });
   });
 
   describe('POST / (create)', () => {
-    it('400 on an over-long name (length guard before permission)', () => {
+    it('400 on an over-long name (length guard before permission)', async () => {
       const canEdit = vi.fn().mockReturnValue(false); // would 403 if reached
-      expect(thrown(() => new PlacesController(svc({ canEdit }), new RuntimeEnvService(), storageStub).create(user, '5', { name: 'x'.repeat(201) }))).toEqual({
+      expect(await thrownAsync(() => new PlacesController(svc({ canEdit }), new RuntimeEnvService(), storageStub).create(user, '5', { name: 'x'.repeat(201) }))).toEqual({
         status: 400, body: { error: 'name must be 200 characters or less' },
       });
       expect(canEdit).not.toHaveBeenCalled();
@@ -64,11 +56,11 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     // The legacy 'Place name is required' 400 is gone: placeCreateRequestSchema
     // pins `name`, so the ZodValidationPipe rejects a nameless body before the
     // handler runs (see the e2e suite for the envelope it produces).
-    it('403 without place_edit, then creates + hooks', () => {
-      expect(thrown(() => new PlacesController(svc({ canEdit: vi.fn().mockReturnValue(false) }), new RuntimeEnvService(), storageStub).create(user, '5', { name: 'Spot' }))).toEqual({ status: 403, body: { error: 'No permission' } });
+    it('403 without place_edit, then creates + hooks', async () => {
+      expect(await thrownAsync(() => new PlacesController(svc({ canEdit: vi.fn().mockReturnValue(false) }), new RuntimeEnvService(), storageStub).create(user, '5', { name: 'Spot' }))).toEqual({ status: 403, body: { error: 'No permission' } });
       const create = vi.fn().mockReturnValue({ id: 9 }); const broadcast = vi.fn(); const onCreated = vi.fn();
       const s = svc({ create, broadcast, onCreated } as Partial<PlacesService>);
-      expect(new PlacesController(s, new RuntimeEnvService(), storageStub).create(user, '5', { name: 'Spot' }, 'sock')).toEqual({ place: { id: 9 } });
+      expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).create(user, '5', { name: 'Spot' }, 'sock')).toEqual({ place: { id: 9 } });
       expect(broadcast).toHaveBeenCalledWith('5', 'place:created', { place: { id: 9 } }, 'sock');
       expect(onCreated).toHaveBeenCalledWith('5', 9);
     });
@@ -76,23 +68,23 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
 
   describe('POST /import/gpx', () => {
     const file = { buffer: Buffer.from('gpx'), originalname: 'r.gpx' } as Express.Multer.File;
-    it('400 without a file', () => {
-      expect(thrown(() => new PlacesController(svc(), new RuntimeEnvService(), storageStub).importGpx(user, '5', undefined, {}))).toEqual({ status: 400, body: { error: 'No file uploaded' } });
+    it('400 without a file', async () => {
+      expect(await thrownAsync(() => new PlacesController(svc(), new RuntimeEnvService(), storageStub).importGpx(user, '5', undefined, {}))).toEqual({ status: 400, body: { error: 'No file uploaded' } });
     });
-    it('400 when all import types are disabled', () => {
-      expect(thrown(() => new PlacesController(svc(), new RuntimeEnvService(), storageStub).importGpx(user, '5', file, { importWaypoints: 'false', importRoutes: 'false', importTracks: 'false' }))).toEqual({
+    it('400 when all import types are disabled', async () => {
+      expect(await thrownAsync(() => new PlacesController(svc(), new RuntimeEnvService(), storageStub).importGpx(user, '5', file, { importWaypoints: 'false', importRoutes: 'false', importTracks: 'false' }))).toEqual({
         status: 400, body: { error: 'No import types selected' },
       });
     });
-    it('400 when the GPX yields nothing', () => {
-      expect(thrown(() => new PlacesController(svc({ importGpx: vi.fn().mockReturnValue(null) } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).importGpx(user, '5', file, {}))).toEqual({
+    it('400 when the GPX yields nothing', async () => {
+      expect(await thrownAsync(() => new PlacesController(svc({ importGpx: vi.fn().mockReturnValue(null) } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).importGpx(user, '5', file, {}))).toEqual({
         status: 400, body: { error: 'No matching places found in GPX file' },
       });
     });
-    it('imports and broadcasts per place', () => {
+    it('imports and broadcasts per place', async () => {
       const broadcast = vi.fn();
       const s = svc({ importGpx: vi.fn().mockReturnValue({ places: [{ id: 1 }, { id: 2 }], count: 2, skipped: 0 }), broadcast } as Partial<PlacesService>);
-      expect(new PlacesController(s, new RuntimeEnvService(), storageStub).importGpx(user, '5', file, {}, 'sock')).toEqual({ places: [{ id: 1 }, { id: 2 }], count: 2, skipped: 0 });
+      expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).importGpx(user, '5', file, {}, 'sock')).toEqual({ places: [{ id: 1 }, { id: 2 }], count: 2, skipped: 0 });
       expect(broadcast).toHaveBeenCalledTimes(2);
     });
   });
@@ -107,9 +99,9 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
         broadcast: vi.fn(), enrichImportedFilePlaces,
       } as Partial<PlacesService>);
       const c = new PlacesController(s, new RuntimeEnvService(), storageStub);
-      c.importGpx(user, '5', file, {});
+      await c.importGpx(user, '5', file, {});
       expect(enrichImportedFilePlaces).not.toHaveBeenCalled();
-      c.importGpx(user, '5', file, { enrich: 'true' });
+      await c.importGpx(user, '5', file, { enrich: 'true' });
       await c.importMap(user, '5', file, { enrich: 'true' });
       expect(enrichImportedFilePlaces.mock.calls).toEqual([['5', user.id, [{ id: 1 }]], ['5', user.id, [{ id: 2 }]]]);
     });
@@ -169,18 +161,18 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     const makeRes = () => ({ setHeader: vi.fn(), send: vi.fn() });
     const exportQuery = {} as never;
 
-    it('an ASCII filename keeps the exact legacy header', () => {
+    it('an ASCII filename keeps the exact legacy header', async () => {
       const res = makeRes();
       const s = svc({ exportGpx: vi.fn().mockReturnValue({ gpx: '<gpx/>', filename: 'Alpine-week.gpx' }) } as Partial<PlacesService>);
-      new PlacesController(s, new RuntimeEnvService(), storageStub).exportGpx(user, '5', exportQuery, res as never);
+      await new PlacesController(s, new RuntimeEnvService(), storageStub).exportGpx(user, '5', exportQuery, res as never);
       expect(res.setHeader).toHaveBeenCalledWith('Content-Disposition', 'attachment; filename="Alpine-week.gpx"');
       expect(res.send).toHaveBeenCalledWith('<gpx/>');
     });
 
-    it('a non-ASCII filename no longer reaches setHeader raw: ASCII fallback + filename*', () => {
+    it('a non-ASCII filename no longer reaches setHeader raw: ASCII fallback + filename*', async () => {
       const res = makeRes();
       const s = svc({ exportGpx: vi.fn().mockReturnValue({ gpx: '<gpx/>', filename: '沖縄-4泊5日.gpx' }) } as Partial<PlacesService>);
-      new PlacesController(s, new RuntimeEnvService(), storageStub).exportGpx(user, '5', exportQuery, res as never);
+      await new PlacesController(s, new RuntimeEnvService(), storageStub).exportGpx(user, '5', exportQuery, res as never);
       expect(res.setHeader).toHaveBeenCalledWith(
         'Content-Disposition',
         'attachment; filename="__-4_5_.gpx"; filename*=UTF-8\'\'%E6%B2%96%E7%B8%84-4%E6%B3%8A5%E6%97%A5.gpx',
@@ -282,6 +274,26 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
       expect(onDeleted.mock.invocationCallOrder[0]).toBeLessThan(removeMany.mock.invocationCallOrder[0]);
     });
 
+    // invocationCallOrder above only proves the hook was CALLED first — a mock
+    // that resolves synchronously can't tell an awaited hook from a detached
+    // (fire-and-forget) one, since both invoke onDeleted() before removeMany() is
+    // invoked either way. A hook stubbed with a real macrotask hop, and a delete
+    // that records when it actually RUNS, catches a regression to detached.
+    it('the journey hook actually finishes before the delete runs, not just gets called first', async () => {
+      const order: string[] = [];
+      const onDeleted = vi.fn(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        order.push('hook');
+      });
+      const removeMany = vi.fn(async () => {
+        order.push('delete');
+        return { deleted: [1], cancelled: { reservationIds: [], budgetItemIds: [] } };
+      });
+      const s = svc({ removeMany, onDeleted, scopedIds: vi.fn().mockReturnValue([1]), broadcast: vi.fn() } as Partial<PlacesService>);
+      await new PlacesController(s, new RuntimeEnvService(), storageStub).bulkDelete(user, '5', { ids: [1] });
+      expect(order).toEqual(['hook', 'delete']);
+    });
+
     // #1298: the link is gone once the place is, so the ids have to be read first.
     it('announces the expenses the deleted places took with them', async () => {
       const removeMany = vi.fn().mockReturnValue({ deleted: [1, 2], cancelled: { reservationIds: [], budgetItemIds: [] } });
@@ -343,10 +355,10 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     });
   });
 
-  it('GET /:id returns the place when found, 404 when missing', () => {
-    expect(thrown(() => new PlacesController(svc({ get: vi.fn().mockReturnValue(undefined) } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).get(user, '5', '9'))).toEqual({ status: 404, body: { error: 'Place not found' } });
+  it('GET /:id returns the place when found, 404 when missing', async () => {
+    expect(await thrownAsync(() => new PlacesController(svc({ get: vi.fn().mockReturnValue(undefined) } as Partial<PlacesService>), new RuntimeEnvService(), storageStub).get(user, '5', '9'))).toEqual({ status: 404, body: { error: 'Place not found' } });
     const s = svc({ get: vi.fn().mockReturnValue({ id: 9 }) } as Partial<PlacesService>);
-    expect(new PlacesController(s, new RuntimeEnvService(), storageStub).get(user, '5', '9')).toEqual({ place: { id: 9 } });
+    expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).get(user, '5', '9')).toEqual({ place: { id: 9 } });
   });
 
   it('PUT /:id 404 when missing, else updates + hooks', async () => {
@@ -364,7 +376,7 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
       expect(await thrownAsync(() => new PlacesController(svc({ canEdit }), new RuntimeEnvService(), storageStub).update(user, '5', '9', { route_color: 'red' }))).toEqual(err);
       expect(await thrownAsync(() => new PlacesController(svc({ canEdit }), new RuntimeEnvService(), storageStub).update(user, '5', '9', { route_color: '#12345' }))).toEqual(err);
       expect(await thrownAsync(() => new PlacesController(svc({ canEdit }), new RuntimeEnvService(), storageStub).update(user, '5', '9', { route_color: 123 }))).toEqual(err);
-      expect(thrown(() => new PlacesController(svc({ canEdit }), new RuntimeEnvService(), storageStub).create(user, '5', { name: 'T', route_color: 'red' }))).toEqual(err);
+      expect(await thrownAsync(() => new PlacesController(svc({ canEdit }), new RuntimeEnvService(), storageStub).create(user, '5', { name: 'T', route_color: 'red' }))).toEqual(err);
       expect(canEdit).not.toHaveBeenCalled();
     });
 
@@ -409,7 +421,7 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
       ]) {
         expect(await thrownAsync(() => ctl({ canEdit }).update(user, '5', '9', { image_url }))).toEqual(imageErr);
       }
-      expect(thrown(() => ctl({ canEdit }).create(user, '5', { name: 'T', image_url: 'javascript:alert(1)' }))).toEqual(imageErr);
+      expect(await thrownAsync(() => ctl({ canEdit }).create(user, '5', { name: 'T', image_url: 'javascript:alert(1)' }))).toEqual(imageErr);
       expect(canEdit).not.toHaveBeenCalled();
     });
 
@@ -450,7 +462,7 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     it('PLACES-CTRL-2483-01: hands the service a bare host with https, on create and on update', async () => {
       const site = 'fr.wikipedia.org/wiki/Chapelle_Sainte-Barbe_du_Faouët';
       const create = vi.fn().mockReturnValue({ id: 9 });
-      ctl({ create } as Partial<PlacesService>).create(user, '5', { name: 'Chapelle', website: site });
+      await ctl({ create } as Partial<PlacesService>).create(user, '5', { name: 'Chapelle', website: site });
       expect(create).toHaveBeenCalledWith('5', { name: 'Chapelle', website: `https://${site}` });
 
       const update = vi.fn().mockReturnValue({ id: 9 });
@@ -479,6 +491,26 @@ describe('PlacesController (parity with the legacy /api/trips/:tripId/places rou
     expect(onDeleted.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
     const s = svc({ remove: vi.fn().mockReturnValue({ deleted: true, cancelled: { reservationIds: [], budgetItemIds: [] } }), broadcast: vi.fn() } as Partial<PlacesService>);
     expect(await new PlacesController(s, new RuntimeEnvService(), storageStub).remove(user, '5', '9')).toEqual({ success: true });
+  });
+
+  // invocationCallOrder in the case above only proves the hook was CALLED
+  // first — a synchronously-resolving mock can't tell an awaited hook from a
+  // detached (fire-and-forget) one. A hook stubbed with a real macrotask hop,
+  // and a delete that records when it actually RUNS, catches a regression to
+  // detached (the trap this pins: onDeleted must finish before the DELETE).
+  it('DELETE /:id — the journey hook actually finishes before the delete runs, not just gets called first', async () => {
+    const order: string[] = [];
+    const onDeleted = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      order.push('hook');
+    });
+    const remove = vi.fn(async () => {
+      order.push('delete');
+      return { deleted: true, cancelled: { reservationIds: [], budgetItemIds: [] } };
+    });
+    const s = svc({ remove, onDeleted, broadcast: vi.fn() } as Partial<PlacesService>);
+    await new PlacesController(s, new RuntimeEnvService(), storageStub).remove(user, '5', '9');
+    expect(order).toEqual(['hook', 'delete']);
   });
 
   it('DELETE /:id announces the booking and the expense a cancelled night took down', async () => {
@@ -574,14 +606,13 @@ describe('PUT /:id/image/from-file (#1242)', () => {
     expect(await thrownAsync(() => make('not_image').imageFromFile(user, '5', '9', { file_id: 3 }))).toEqual({ status: 400, body: { error: 'Only jpg, png, gif, webp images allowed' } });
     expect(await thrownAsync(() => make('too_large').imageFromFile(user, '5', '9', { file_id: 3 }))).toEqual({ status: 400, body: { error: 'Image too large' } });
     expect(await thrownAsync(() => make(null).imageFromFile(user, '5', '9', { file_id: 3 }))).toEqual({ status: 404, body: { error: 'Place not found' } });
-    const broadcast = vi.fn(); const onUpdated = vi.fn()
+    const broadcast = vi.fn(); const onUpdated = vi.fn();
     expect(await make({ id: 9 }, { broadcast, onUpdated } as Partial<PlacesService>).imageFromFile(user, '5', '9', { file_id: 3 }, 'sock')).toEqual({ place: { id: 9 } })
-    expect(broadcast).toHaveBeenCalledWith('5', 'place:updated', { place: { id: 9 } }, 'sock')
-    expect(onUpdated).toHaveBeenCalledWith(9)
+    expect(broadcast).toHaveBeenCalledWith('5', 'place:updated', { place: { id: 9 } }, 'sock');
+    expect(onUpdated).toHaveBeenCalledWith(9);
   });
 
   it('403 without place_edit', async () => {
     expect(await thrownAsync(() => new PlacesController(svc({ canEdit: vi.fn().mockReturnValue(false) }), new RuntimeEnvService(), storageStub).imageFromFile(user, '5', '9', { file_id: 3 }))).toEqual({ status: 403, body: { error: 'No permission' } });
   });
 });
-

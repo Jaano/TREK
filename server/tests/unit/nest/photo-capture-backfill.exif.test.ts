@@ -13,7 +13,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { PhotoCaptureBackfillService } from '../../../src/nest/memories/photo-capture-backfill.service';
 import type { PhotoResolverService } from '../../../src/nest/memories/photo-resolver.service';
-import type { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
+import type { TrekPhotoRegistrationService } from '../../../src/nest/photos/trek-photo-registration.service';
 import { jpegWithExif, type ExifJpegTags } from '../../helpers/exif-jpeg';
 import { makeStorageFixture, type StorageFixture } from '../../helpers/storage-fixture';
 
@@ -43,7 +43,7 @@ async function backfill(bytes: Buffer): Promise<unknown[][]> {
   const photos = {
     resolve: (id: number) => ({ id, provider: 'local', file_path: `journey/${name}`, taken_at: null, lat: null, lng: null }),
     recordCaptureMetadata,
-  } as unknown as TrekPhotosRepository;
+  } as unknown as TrekPhotoRegistrationService;
   const svc = new PhotoCaptureBackfillService({} as PhotoResolverService, photos, fx.storage);
   await svc.run([7], 1);
   return recordCaptureMetadata.mock.calls;

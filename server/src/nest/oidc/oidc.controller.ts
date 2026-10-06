@@ -41,11 +41,11 @@ export class OidcController {
 
   @Get('login')
   async login(@Req() req: Request, @Res() res: Response): Promise<void> {
-    if (!this.oidc.oidcLoginEnabled()) {
+    if (!(await this.oidc.oidcLoginEnabled())) {
       res.status(403).json({ error: 'SSO login is disabled.' });
       return;
     }
-    const config = this.oidc.getOidcConfig();
+    const config = await this.oidc.getOidcConfig();
     if (!config) {
       res.status(400).json({ error: 'OIDC not configured' });
       return;
@@ -107,7 +107,7 @@ export class OidcController {
     const boundState = (req.cookies as Record<string, string> | undefined)?.[OIDC_STATE_COOKIE];
     res.clearCookie(OIDC_STATE_COOKIE, cookieOptions(true, req));
 
-    if (!this.oidc.oidcLoginEnabled()) return f('/login?oidc_error=sso_disabled');
+    if (!(await this.oidc.oidcLoginEnabled())) return f('/login?oidc_error=sso_disabled');
     if (oidcError) {
       console.error('[OIDC] Provider error:', oidcError);
       return f('/login?oidc_error=' + encodeURIComponent(oidcError));
@@ -120,7 +120,7 @@ export class OidcController {
     const pending = this.oidc.consumeState(state);
     if (!pending) return f('/login?oidc_error=invalid_state');
 
-    const config = this.oidc.getOidcConfig();
+    const config = await this.oidc.getOidcConfig();
     if (!config) return f('/login?oidc_error=not_configured');
     if (config.issuer && !config.issuer.startsWith('https://') && readEnv().app.isProduction) {
       return f('/login?oidc_error=issuer_not_https');
@@ -165,14 +165,14 @@ export class OidcController {
         userInfo.picture = idVerify.claims.picture;
       }
 
-      const result = this.oidc.findOrCreateUser(userInfo, config, pending.inviteToken);
+      const result = await this.oidc.findOrCreateUser(userInfo, config, pending.inviteToken);
       if ('error' in result) return f('/login?oidc_error=' + result.error);
       if (result.created) {
         // An account the callback just made is a registration, the way a password
         // signup is (auth-public.controller): the same row, plus the way in. Without
         // it an admin reading user.register for who got an account never sees the
         // SSO ones, and the log looks complete while it is not.
-        this.audit.writeAudit({
+        await this.audit.writeAudit({
           userId: result.user.id,
           action: 'user.register',
           ip: getClientIp(req),
@@ -184,7 +184,7 @@ export class OidcController {
         // the row is written here because this is where the client IP is. The claim
         // NAME goes in the details, never its value: that column is readable by
         // every admin and a claim can carry group memberships and worse.
-        this.audit.writeAudit({
+        await this.audit.writeAudit({
           userId: result.user.id,
           action: 'oidc.role_change',
           resource: String(result.user.id),
@@ -193,16 +193,16 @@ export class OidcController {
         });
       }
 
-      this.oidc.touchLastLogin(result.user.id);
+      await this.oidc.touchLastLogin(result.user.id);
       // The login row every other method writes (#2417). Here rather than at
       // /exchange, because this is where the provider has vouched for the user
       // and where the client IP is, the same place the role change is recorded;
       // `method` names the way in, as the passkey login does.
-      this.audit.writeAudit({ userId: result.user.id, action: 'user.login', ip: getClientIp(req), details: { method: 'oidc' } });
+      await this.audit.writeAudit({ userId: result.user.id, action: 'user.login', ip: getClientIp(req), details: { method: 'oidc' } });
       // Pass the flag through untouched: `undefined` must reach the token as
       // "absent", not `false`, or the sliding renewal would later downgrade the
       // default persistent cookie to a browser-session one (remember-me, #1927).
-      const jwtToken = this.oidc.generateToken(result.user, pending.remember);
+      const jwtToken = await this.oidc.generateToken(result.user, pending.remember);
       const { code: authCode, binding } = this.oidc.createAuthCode(jwtToken, pending.remember);
       // Bind the code to THIS browser, the way the state cookie binds the callback.
       // The code rides home in a URL, so it is readable from history, from a
@@ -268,14 +268,14 @@ export class AdminOidcController {
 
   @ManagedForbidden('an instance-supplied issuer could assert any address as verified')
   @Put()
-  update(@CurrentUser() user: User, @Body() body: AdminOidcUpdateDto, @Req() req: Request) {
-    const result = this.oidc.updateOidcSettings(body);
+  async update(@CurrentUser() user: User, @Body() body: AdminOidcUpdateDto, @Req() req: Request) {
+    const result = await this.oidc.updateOidcSettings(body);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status || 400);
     }
     // Only whether an issuer was set, never the value: the details column is readable
     // by every admin and the issuer identifies the customer's IdP tenant.
-    this.audit.writeAudit({
+    await this.audit.writeAudit({
       userId: user.id,
       action: 'admin.oidc_update',
       ip: getClientIp(req),

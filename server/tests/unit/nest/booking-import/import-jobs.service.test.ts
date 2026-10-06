@@ -1,14 +1,34 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 
 const { broadcastToUser } = vi.hoisted(() => ({ broadcastToUser: vi.fn() }));
 vi.mock('../../../../src/websocket', () => ({ broadcastToUser }));
 
 import { ImportJobsService } from '../../../../src/nest/booking-import/import-jobs.service';
 import { RealtimeService } from '../../../../src/nest/realtime/realtime.service';
+import { createSnapshotTestDb } from '../../../helpers/db-mock';
+import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { Users } from '../../../../src/db/entities/Users.entity';
+
+// R9 (Plan 3h Task 4): `run()` now forks its own `withRequestContext`, so the
+// service needs a real `MikroORM` — the `StorageHealthNotifierService`
+// precedent (`storage-health-notifier.service.test.ts`) for a hand-built
+// double that still needs one.
+const testDb = createSnapshotTestDb();
+let t: TestOrm;
+beforeAll(async () => {
+  // Global context disallowed — the production setting — so a passing suite
+  // genuinely proves `run()`'s own `withRequestContext` wrap is load-bearing,
+  // not merely harmless (the `airports.service.test.ts` precedent).
+  t = await createTestOrm(testDb, { allowGlobalContext: false });
+});
+afterAll(async () => {
+  await t.close();
+  testDb.close();
+});
 
 type Preview = ReturnType<typeof vi.fn>;
 function makeService(preview: Preview, readReceipt: Preview = vi.fn()) {
-  return new ImportJobsService({ preview } as never, new RealtimeService(), { readReceipt } as never);
+  return new ImportJobsService({ preview } as never, new RealtimeService(), { readReceipt } as never, t.orm);
 }
 const files = (n: number) => Array.from({ length: n }, (_, i) => ({ originalname: `f${i}.pdf` })) as never;
 const eventsFor = (jobId: string) => broadcastToUser.mock.calls.map((c) => c[1]).filter((p) => p.jobId === jobId);
@@ -36,6 +56,28 @@ describe('ImportJobsService', () => {
     expect(types).toContain('import:progress');
     expect(types).toContain('import:done');
     expect(eventsFor(id).every((p) => p.tripId === '7')).toBe(true);
+  });
+
+  it('IMPORTJOBS-CTX-001 (R9 ratchet): start() is called from a bare, non-request context (like every test above) and the detached run() still resolves cleanly — the withRequestContext wrap around it means the missing ambient context never reaches BookingImportService.preview as cannotUseGlobalContext', async () => {
+    // Plan 3h Task 7 review, M3: a plain `vi.fn` double for `preview` never
+    // touches the ORM at all, so this ratchet stayed green even with the
+    // wrap removed (the mutation log's MD4). `preview` now does a REAL read
+    // through `t`'s `allowGlobalContext: false` EntityManager — the same
+    // instance `beforeAll` built specifically so a passing suite proves the
+    // wrap load-bearing, not merely harmless — so it throws
+    // "global EntityManager"/`cannotUseGlobalContext` unless `run()`'s own
+    // `withRequestContext` fork is actually live when this executes.
+    const preview = vi.fn(async () => {
+      await t.repo(Users).findOne({ id: -1 });
+      return { items: [{ id: 'ctx' }] };
+    });
+    const svc = makeService(preview);
+
+    const id = svc.start('7', files(1), 'no-ai', 42);
+    await vi.waitFor(() => expect(svc.get(id, 42)?.status).toBe('done'));
+    const job = svc.get(id, 42)!;
+    expect(job.error).toBeUndefined();
+    expect(job.result).toEqual({ items: [{ id: 'ctx' }] });
   });
 
   it('records an error and pushes import:error when the parse throws', async () => {

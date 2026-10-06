@@ -1,6 +1,8 @@
 import { Controller, Get, Query, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { DatabaseService } from '../../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { Trips } from '../../../db/entities/Trips.entity';
+import type { TripsRepository } from '../../../db/repositories/Trips.repository';
 import { JwtAuthGuard } from '../../auth/jwt-auth.guard';
 import { pluginsEnabled } from '../kill-switch';
 import { PluginHooks } from '../plugin-hooks.service';
@@ -84,7 +86,7 @@ function normalize(pluginId: string, raw: unknown, allowed: Set<number>): TripCa
 export class TripCardContributionsController {
   constructor(
     private readonly hooks: PluginHooks,
-    private readonly dbs: DatabaseService,
+    @InjectRepository(Trips) private readonly trips: TripsRepository,
   ) {}
 
   @Get()
@@ -103,7 +105,19 @@ export class TripCardContributionsController {
       .map((s) => Number(s.trim()))
       .filter((n) => Number.isInteger(n) && n > 0)
       .slice(0, MAX_TRIP_IDS);
-    const accessible = [...new Set(requested)].filter((id) => this.dbs.canAccessTrip(id, userId));
+    const uniqueRequested = [...new Set(requested)];
+    // Sequential, not `Promise.all` (Plan 3c Task 0b, task-0a-review-security.md
+    // F-A5): the 0a async sweep's `Promise.all` was a runtime no-op then (every
+    // read settled on the SAME synchronous free function), but `canAccessTrip`
+    // is a genuine repository read now — dispatching `uniqueRequested.length`
+    // of them concurrently would run up to `MAX_TRIP_IDS` queries against one
+    // forked EntityManager at once, which MikroORM does not support. `accessible`
+    // is passed positionally to `hooks.tripCards` below, so the order this
+    // produces (the filtered `uniqueRequested` order) is load-bearing.
+    const accessible: number[] = [];
+    for (const id of uniqueRequested) {
+      if (await this.trips.findAccessible(id, userId)) accessible.push(id);
+    }
     if (accessible.length === 0) return { contributions: [] };
     const allowed = new Set(accessible);
 

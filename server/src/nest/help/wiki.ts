@@ -390,7 +390,7 @@ async function getIndex(): Promise<IndexedPage[]> {
   // The bundled wiki is pinned to this build, so its index never goes stale;
   // the GitHub fallback refreshes on the same hourly TTL as the pages.
   if (indexCache && (useLocalWiki || fresh(indexCache.ts))) return indexCache.pages;
-  if (!indexBuild) {
+  if (indexBuild === null) {
     indexBuild = buildIndex()
       .then((pages) => {
         indexCache = { pages, ts: Date.now() };

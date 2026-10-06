@@ -51,7 +51,7 @@ export class NotificationsMcp {
     { limit, offset, unread_only }: { limit?: number; offset?: number; unread_only?: boolean },
     ctx: McpContext,
   ) {
-    const result = this.notifications.listInApp(ctx.userId, { limit: limit ?? 20, offset: offset ?? 0, unreadOnly: unread_only ?? false });
+    const result = await this.notifications.listInApp(ctx.userId, { limit: limit ?? 20, offset: offset ?? 0, unreadOnly: unread_only ?? false });
     return ok(result);
   }
 
@@ -63,7 +63,7 @@ export class NotificationsMcp {
     access: { group: 'notifications', mode: 'read' },
   })
   async getUnreadNotificationCount(_input: Record<string, never>, ctx: McpContext) {
-    const count = this.notifications.unreadCount(ctx.userId);
+    const count = await this.notifications.unreadCount(ctx.userId);
     return ok({ count });
   }
 
@@ -77,8 +77,8 @@ export class NotificationsMcp {
     access: { group: 'notifications', mode: 'write' },
   })
   async markNotificationRead({ notificationId }: { notificationId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    const success = this.notifications.markRead(notificationId, ctx.userId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    const success = await this.notifications.markRead(notificationId, ctx.userId);
     if (!success) return { content: [{ type: 'text' as const, text: 'Notification not found.' }], isError: true };
     return ok({ success: true });
   }
@@ -93,8 +93,8 @@ export class NotificationsMcp {
     access: { group: 'notifications', mode: 'write' },
   })
   async markNotificationUnread({ notificationId }: { notificationId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    const success = this.notifications.markUnread(notificationId, ctx.userId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    const success = await this.notifications.markUnread(notificationId, ctx.userId);
     if (!success) return { content: [{ type: 'text' as const, text: 'Notification not found.' }], isError: true };
     return ok({ success: true });
   }
@@ -107,8 +107,8 @@ export class NotificationsMcp {
     access: { group: 'notifications', mode: 'write' },
   })
   async markAllNotificationsRead(_input: Record<string, never>, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    const count = this.notifications.markAllRead(ctx.userId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    const count = await this.notifications.markAllRead(ctx.userId);
     return ok({ success: true, count });
   }
 
@@ -120,7 +120,7 @@ export class NotificationsMcp {
     access: { group: 'notifications', mode: 'read' },
   })
   async inAppNotificationsResource(uri: URL, ctx: McpContext) {
-    const result = this.notifications.listInApp(ctx.userId, { limit: 50 });
+    const result = await this.notifications.listInApp(ctx.userId, { limit: 50 });
     return jsonContent(uri.href, result);
   }
 }

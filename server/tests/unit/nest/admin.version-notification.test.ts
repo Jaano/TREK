@@ -6,19 +6,16 @@
  * case, which would leak into the ADMIN-SVC-* suite. The notification path runs
  * for real against the temp db's notifications table.
  */
-import { runMigrations } from '../../../src/db/migrations';
-import { createTables } from '../../../src/db/schema';
 import { __clearVersionCacheForTests } from '../../../src/nest/admin/admin.helpers';
 import { createAdmin } from '../../helpers/factories';
 import { resetTestDb } from '../../helpers/test-db';
 
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   const mock = {
     db,
     closeDb: () => {},
@@ -27,10 +24,10 @@ const { testDb, dbMock } = vi.hoisted(() => {
     canAccessTrip: () => null,
     isOwner: () => false,
   };
-  return { testDb: db, dbMock: mock };
+    return mock;
 });
 
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -41,9 +38,9 @@ vi.mock('../../../src/websocket', () => ({ broadcastToUser: vi.fn() }));
 vi.mock('../../../src/mcp', () => ({ revokeUserSessions: vi.fn(), invalidateMcpSessions: vi.fn() }));
 vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn(), revokeUserSessionsForClient: vi.fn() }));
 
-import { DatabaseService } from '../../../src/nest/database/database.service';
+import { db as testDb } from '../../../src/db/database';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import { AddonsService } from '../../../src/nest/addons/addons.service';
+import { createTestAddonsService } from '../../helpers/test-addons';
 import { SettingsService } from '../../../src/nest/settings/settings.service';
 import { TripMembershipService } from '../../../src/nest/trip-membership/trip-membership.service';
 import { UserCleanupService } from '../../../src/nest/auth/user-cleanup.service';
@@ -60,27 +57,84 @@ import { AdminService } from '../../../src/nest/admin/admin.service';
 import { makeNotificationsService, makeNotificationPreferencesService } from '../../helpers/notifications';
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 import { AllowedFileTypesService } from '../../../src/nest/files/allowed-file-types.service';
+import {
+  createTestUnitOfWork,
+  createTestAppSettingsRepo,
+  createTestUsersRepo,
+  createTestWebauthnCredentialsRepo,
+  createTestWebauthnChallengesRepo,
+  createTestInviteTokensRepo,
+  createTestMcpTokensRepo,
+  createTestOauthTokensRepo,
+  createTestPasswordResetTokensRepo,
+  createTestTripsRepo,
+  createTestTripMembersRepo,
+  createTestSettingsRepo,
+  createTestPlacesRepo,
+  sharedTestOrm,
+} from '../../helpers/test-uow';
+import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
+import { Addons } from '../../../src/db/entities/Addons.entity';
+import { PhotoProviders } from '../../../src/db/entities/PhotoProviders.entity';
+import { PhotoProviderFields } from '../../../src/db/entities/PhotoProviderFields.entity';
+import { DocumentProviders } from '../../../src/db/entities/DocumentProviders.entity';
+import { TripFiles } from '../../../src/db/entities/TripFiles.entity';
+import { PushSubscriptions } from '../../../src/db/entities/PushSubscriptions.entity';
+import { budgetRepoArgs } from '../../helpers/budget-repos';
+import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
+import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
+import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourneyContributorsRepo } from '../../helpers/journey-repos';
+import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
+import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-repos';
 
-const dbs = new DatabaseService(testDb);
 const realtime = new RealtimeService();
-const permissions = new PermissionsService(dbs);
-const webauthn = new WebauthnConfigService(dbs);
-const userCleanup = new UserCleanupService(dbs, new BudgetService(dbs, permissions, new ExchangeRatesService(), realtime));
+
+let webauthn: WebauthnConfigService;
+
 // Positional and previously wrong: an AtlasService sat in the membership slot
 // and the mailer was missing entirely, so `auth` was built with its last four
 // collaborators shifted by one. Nothing failed, because the version-check path
 // below never reaches them.
-const auth = new AuthService(dbs, permissions, new TripMembershipService(dbs), webauthn, userCleanup, new MailerService(dbs), new EphemeralTokenService(), new AllowedFileTypesService(dbs));
-const svc = new AdminService(
-  dbs,
-  new AddonsService(dbs),
-  new PasskeyService(dbs, auth, webauthn),
+
+let permissions: PermissionsService;
+let userCleanup: UserCleanupService;
+let auth: AuthService;
+let svc: AdminService;
+beforeAll(async () => {
+  webauthn = new WebauthnConfigService(await createTestAppSettingsRepo(testDb));
+  permissions = new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb));
+  userCleanup = new UserCleanupService((await sharedTestOrm(testDb)).em, new BudgetService(permissions, new ExchangeRatesService(), realtime, await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb))), await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestTripMembersRepo(testDb), await createTestBudgetItemsRepo(testDb), await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb), await createTestShareTokensRepo(testDb), await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb));
+  auth = new AuthService(
+    permissions, new TripMembershipService(await createTestTripsRepo(testDb), await createTestTripMembersRepo(testDb)), webauthn, userCleanup, new MailerService(await createTestUsersRepo(testDb), await createTestSettingsRepo(testDb), await createTestAppSettingsRepo(testDb)), new EphemeralTokenService(), new AllowedFileTypesService(await createTestAppSettingsRepo(testDb)), await createTestUnitOfWork(testDb),
+    await createTestAppSettingsRepo(testDb), await createTestUsersRepo(testDb), await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb),
+    await createTestOauthTokensRepo(testDb), await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
+    await createTestPushSubscriptionsRepo(testDb),
+  );
+  const t = await sharedTestOrm(testDb);
+  svc = new AdminService(
+  await createTestUsersRepo(testDb),
+  t.repo(AuditLog),
+  await createTestAppSettingsRepo(testDb),
+  t.repo(Addons),
+  t.repo(PhotoProviders),
+  t.repo(PhotoProviderFields),
+  t.repo(DocumentProviders),
+  await createTestMcpTokensRepo(testDb),
+  await createTestOauthTokensRepo(testDb),
+  await createTestTripsRepo(testDb),
+  await createTestPlacesRepo(testDb),
+  t.repo(TripFiles),
+  t.repo(PushSubscriptions),
+  await createTestAddonsService(testDb),
+  new PasskeyService(auth, webauthn, await createTestUnitOfWork(testDb), await createTestWebauthnCredentialsRepo(testDb), await createTestWebauthnChallengesRepo(testDb), await createTestUsersRepo(testDb)),
   auth,
   permissions,
-  makeNotificationsService(dbs, realtime),
+  await makeNotificationsService(testDb, realtime),
   userCleanup,
   realtime,
+  await createTestUnitOfWork(testDb),
 );
+});
 const checkAndNotifyVersion = () => svc.checkAndNotifyVersion();
 
 // Helper: mock the GitHub releases/latest endpoint
@@ -111,11 +165,6 @@ function getLastNotifiedVersion(): string | undefined {
 function getNotificationCount(): number {
   return (testDb.prepare('SELECT COUNT(*) as c FROM notifications').get() as { c: number }).c;
 }
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
 
 beforeEach(() => {
   resetTestDb(testDb);

@@ -7,11 +7,10 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
-const { testDb, dbMock } = vi.hoisted(() => {
-  const Database = require('better-sqlite3');
-  const db = new Database(':memory:');
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA foreign_keys = ON');
+vi.mock('../../../src/db/database', async () => {
+
+  const { createSnapshotTestDb } = await import('../../helpers/db-mock');
+  const db = createSnapshotTestDb();
   const mock = {
     db,
     closeDb: () => {},
@@ -20,10 +19,10 @@ const { testDb, dbMock } = vi.hoisted(() => {
     canAccessTrip: () => null,
     isOwner: () => false,
   };
-  return { testDb: db, dbMock: mock };
+    return mock;
 });
 
-vi.mock('../../../src/db/database', () => dbMock);
+
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-jwt-secret-for-trek-testing-only',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
@@ -37,24 +36,26 @@ const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
 // export both even though only broadcastToUser is asserted here.
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: broadcastMock }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
+import { db as testDb } from '../../../src/db/database';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, disableNotificationPref } from '../../helpers/factories';
 import { registerAction } from '../../../src/nest/notifications/in-app-actions';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import { makeNotificationsService, makeNotificationPreferencesService } from '../../helpers/notifications';
 
-const notifications = makeNotificationsService(new DatabaseService(testDb));
-const createNotification = notifications.createNotification.bind(notifications);
-const createNotificationForRecipient = notifications.createNotificationForRecipient.bind(notifications);
-const respondToBoolean = notifications.respond.bind(notifications);
+// Built in beforeAll: the service now takes a UnitOfWork, which is async to build.
+let notifications: NotificationsService;
+// Arrow forwarders rather than `.bind(notifications)`: under `strictBindCallApply: false`
+// a bound alias is typed `any`, which hides a missing `await` from tsc AND from the
+// type-aware lint rules (recipe R4).
+type Svc = NotificationsService;
+const createNotification = (...a: Parameters<Svc['createNotification']>) => notifications.createNotification(...a);
+const createNotificationForRecipient = (...a: Parameters<Svc['createNotificationForRecipient']>) => notifications.createNotificationForRecipient(...a);
+const respondToBoolean = (...a: Parameters<Svc['respond']>) => notifications.respond(...a);
 
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
+beforeAll(async () => {
+  notifications = await makeNotificationsService(testDb);
 });
 
 beforeEach(() => {
@@ -71,14 +72,14 @@ afterAll(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('createNotification — preference filtering', () => {
-  it('INOTIF-001 — notification without event_type is delivered to all recipients (backward compat)', () => {
+  it('INOTIF-001 — notification without event_type is delivered to all recipients (backward compat)', async () => {
     const { user: admin } = createAdmin(testDb);
     const { user: recipient } = createUser(testDb);
     // The admin scope targets all admins — create a second admin as the sender
     const { user: sender } = createAdmin(testDb);
 
     // Send to a specific user (user scope) without event_type
-    const ids = createNotification({
+    const ids = await createNotification({
       type: 'simple',
       scope: 'user',
       target: recipient.id,
@@ -94,7 +95,7 @@ describe('createNotification — preference filtering', () => {
     // Also verify the admin who disabled all prefs still gets messages without event_type
     disableNotificationPref(testDb, admin.id, 'trip_invite', 'inapp');
     // admin still gets this since no event_type check
-    const adminIds = createNotification({
+    const adminIds = await createNotification({
       type: 'simple',
       scope: 'user',
       target: admin.id,
@@ -105,7 +106,7 @@ describe('createNotification — preference filtering', () => {
     expect(adminIds.length).toBe(1);
   });
 
-  it('INOTIF-002 — notification with event_type skips recipients who have disabled that event on inapp', () => {
+  it('INOTIF-002 — notification with event_type skips recipients who have disabled that event on inapp', async () => {
     const { user: sender } = createAdmin(testDb);
     const { user: recipient1 } = createUser(testDb);
     const { user: recipient2 } = createUser(testDb);
@@ -118,7 +119,7 @@ describe('createNotification — preference filtering', () => {
     testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, recipient1.id);
     testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, recipient2.id);
 
-    const ids = createNotification({
+    const ids = await createNotification({
       type: 'simple',
       scope: 'trip',
       target: tripId,
@@ -136,12 +137,12 @@ describe('createNotification — preference filtering', () => {
     expect(r2).toBeUndefined();
   });
 
-  it('INOTIF-003 — notification with event_type delivers to recipients with no stored preferences', () => {
+  it('INOTIF-003 — notification with event_type delivers to recipients with no stored preferences', async () => {
     const { user: sender } = createAdmin(testDb);
     const { user: recipient } = createUser(testDb);
 
     // No preferences stored for recipient — should default to enabled
-    const ids = createNotification({
+    const ids = await createNotification({
       type: 'simple',
       scope: 'user',
       target: recipient.id,
@@ -156,11 +157,11 @@ describe('createNotification — preference filtering', () => {
     expect(row).toBeDefined();
   });
 
-  it('INOTIF-003b — createNotificationForRecipient inserts a single notification and broadcasts via WS', () => {
+  it('INOTIF-003b — createNotificationForRecipient inserts a single notification and broadcasts via WS', async () => {
     const { user: sender } = createAdmin(testDb);
     const { user: recipient } = createUser(testDb);
 
-    const id = createNotificationForRecipient(
+    const id = await createNotificationForRecipient(
       {
         type: 'navigate',
         scope: 'user',
@@ -185,14 +186,14 @@ describe('createNotification — preference filtering', () => {
     expect(broadcastMock.mock.calls[0][0]).toBe(recipient.id);
   });
 
-  it('INOTIF-004 — admin-scope version_available only reaches admins with enabled pref', () => {
+  it('INOTIF-004 — admin-scope version_available only reaches admins with enabled pref', async () => {
     const { user: admin1 } = createAdmin(testDb);
     const { user: admin2 } = createAdmin(testDb);
 
     // admin2 disables version_available inapp notifications
     disableNotificationPref(testDb, admin2.id, 'version_available', 'inapp');
 
-    const ids = createNotification({
+    const ids = await createNotification({
       type: 'navigate',
       scope: 'admin',
       target: 0,
@@ -381,10 +382,10 @@ describe('respondToBoolean', () => {
     expect(broadcastPayload?.notification.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   });
 
-  it('INOTIF-014 — createNotification broadcast carries an ISO-UTC created_at (was the un-patched #1149 path)', () => {
+  it('INOTIF-014 — createNotification broadcast carries an ISO-UTC created_at (was the un-patched #1149 path)', async () => {
     const { user } = createUser(testDb);
 
-    createNotification({
+    await createNotification({
       type: 'simple',
       scope: 'user',
       target: user.id,

@@ -26,7 +26,7 @@ export class TagsMcp {
     access: { group: 'places', mode: 'read' },
   })
   async listTags(_args: Record<string, never>, ctx: McpContext) {
-    const tags = this.tags.list(ctx.userId);
+    const tags = await this.tags.list(ctx.userId);
     return ok({ tags });
   }
 
@@ -41,8 +41,8 @@ export class TagsMcp {
     access: { group: 'places', mode: 'write' },
   })
   async createTag({ name, color }: { name: string; color?: string }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    const tag = this.tags.create(ctx.userId, name, color);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    const tag = await this.tags.create(ctx.userId, name, color);
     return ok({ tag });
   }
 
@@ -58,10 +58,10 @@ export class TagsMcp {
     access: { group: 'places', mode: 'write' },
   })
   async updateTag({ tagId, name, color }: { tagId: number; name?: string; color?: string }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.tags.getByIdAndUser(tagId, ctx.userId)) return errorResult('Tag not found.');
-    const tag = this.tags.update(tagId, name, color);
-    if (!tag) return errorResult('Tag not found.');
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tags.getByIdAndUser(tagId, ctx.userId))) return errorResult('Tag not found.');
+    const tag = await this.tags.update(tagId, name, color);
+    if (!(await tag)) return errorResult('Tag not found.');
     return ok({ tag });
   }
 
@@ -75,9 +75,9 @@ export class TagsMcp {
     access: { group: 'places', mode: 'write' },
   })
   async deleteTag({ tagId }: { tagId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.tags.getByIdAndUser(tagId, ctx.userId)) return errorResult('Tag not found.');
-    this.tags.remove(tagId);
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.tags.getByIdAndUser(tagId, ctx.userId))) return errorResult('Tag not found.');
+    await this.tags.remove(tagId);
     return ok({ success: true });
   }
 }

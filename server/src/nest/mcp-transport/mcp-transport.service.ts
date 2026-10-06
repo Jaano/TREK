@@ -125,7 +125,19 @@ export class McpTransportService {
     private readonly registry: McpRegistryService,
   ) {}
 
-  verifyToken(authHeader: string | undefined): VerifyTokenResult | null {
+  /**
+   * D6 (Plan 3b Task 0): this bearer-token verification step already runs
+   * inside a per-request EntityManager fork — no wrapper needed here. `/mcp`
+   * is an ordinary (`@Public()`) Nest-routed controller, so the pathless
+   * `mikroOrmRequestContext` middleware `buildApp()` mounts in bootstrap.ts
+   * (for every request, ahead of the Nest router) forks a context before any
+   * guard — and therefore before this method — ever runs. Verified, not
+   * assumed: see
+   * `tests/integration/mcp.test.ts`'s "MCP bearer-token verification runs
+   * inside the HTTP request context" suite (MCP-CTX-001/002), which forces a
+   * genuine repository read at this exact point and confirms it succeeds.
+   */
+  async verifyToken(authHeader: string | undefined): Promise<VerifyTokenResult | null> {
     if (!authHeader) return null;
     // M8: strictly require "Bearer" scheme (RFC 6750)
     const spaceIdx = authHeader.indexOf(' ');
@@ -136,7 +148,7 @@ export class McpTransportService {
 
     // OAuth 2.1 access token (trekoa_...)
     if (token.startsWith('trekoa_')) {
-      const result = this.oauth.getUserByAccessToken(token);
+      const result = await this.oauth.getUserByAccessToken(token);
       if (!result) return null;
       // RFC 8707: audience must always match this resource endpoint.
       // Pre-audit tokens with audience=null are revoked by the SEC-H6 migration.
@@ -147,24 +159,24 @@ export class McpTransportService {
 
     // Long-lived static MCP token (trek_...) — full access + deprecation notice
     if (token.startsWith('trek_')) {
-      const user = this.tokens.verifyMcpToken(token);
+      const user = await this.tokens.verifyMcpToken(token);
       if (!user) return null;
       return { user, scopes: null, clientId: null, isStaticToken: true };
     }
 
     // Short-lived JWT (TREK web session used directly) — full access, no notice
-    const user = this.auth.verifyJwtToken(token);
+    const user = await this.auth.verifyJwtToken(token);
     if (!user) return null;
     return { user, scopes: null, clientId: null, isStaticToken: false };
   }
 
   async handle(req: Request, res: Response): Promise<void> {
-    if (!this.addons.isAddonEnabled(ADDON_IDS.MCP)) {
+    if (!(await this.addons.isAddonEnabled(ADDON_IDS.MCP))) {
       res.status(403).json({ error: 'MCP is not enabled' });
       return;
     }
 
-    const tokenResult = this.verifyToken(req.headers['authorization']);
+    const tokenResult = await this.verifyToken(req.headers['authorization']);
     if (!tokenResult) {
       setAuthChallenge(res);
       res.status(401).json({ error: 'Access token required' });
@@ -281,22 +293,25 @@ export class McpTransportService {
     const transportHolder: { current: StreamableHTTPServerTransport | null } = { current: null };
     const onInvoke = (info: { kind: string; name: string }): void => {
       if (info.kind !== 'tool') return;
-      try {
+      // The registry fires this from the SDK's tool callback and cannot await it,
+      // so the now-async write runs on its own and reports its own failure —
+      // which is what the try/catch here always did (recipe R1.5).
+      void (async () => {
         const sid = transportHolder.current?.sessionId;
         const ip = (sid ? sessions.get(sid)?.lastClientIp : null) ?? createIp;
-        this.audit.writeAudit({
+        await this.audit.writeAudit({
           userId: user.id,
           action: 'mcp.tool_call',
           resource: info.name,
           details: { clientId: clientId ?? 'native' },
           ip,
         });
-      } catch (err) {
+      })().catch((err: unknown) => {
         console.error('[MCP] tool-call audit failed:', (err as Error | undefined)?.message ?? err);
-      }
+      });
     };
 
-    registerTools(this.registry, server, user.id, scopes, isStaticToken, getDeprecationNotice, onInvoke);
+    await registerTools(this.registry, server, user.id, scopes, isStaticToken, getDeprecationNotice, onInvoke);
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),

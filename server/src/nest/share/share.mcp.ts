@@ -40,9 +40,9 @@ export class ShareMcp {
     // requires share_manage on every verb including this one: the payload is the
     // token itself, and a token is an anonymous copy of the trip. Leaving this
     // one on membership alone would just move the same hole to MCP.
-    if (!this.share.verifyTripAccess(String(tripId), ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('share_manage', tripId, ctx.userId)) return permissionDenied();
-    const link = this.share.get(String(tripId));
+    if (!(await this.share.verifyTripAccess(String(tripId), ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('share_manage', tripId, ctx.userId))) return permissionDenied();
+    const link = await this.share.get(String(tripId));
     return ok({ link });
   }
 
@@ -69,12 +69,12 @@ export class ShareMcp {
     },
     ctx: McpContext,
   ) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.share.verifyTripAccess(String(tripId), ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('share_manage', tripId, ctx.userId)) return permissionDenied();
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.share.verifyTripAccess(String(tripId), ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('share_manage', tripId, ctx.userId))) return permissionDenied();
     // The zod .default()s above fill omitted flags, and ShareService applies
     // the same defaults again for undefined — no re-defaulting needed here.
-    const { token, created } = this.share.createOrUpdate(String(tripId), ctx.userId, {
+    const { token, created } = await this.share.createOrUpdate(String(tripId), ctx.userId, {
       share_map, share_bookings, share_packing, share_budget, share_collab, share_travel_only, share_hide_images,
     });
     return ok({ token, created });
@@ -90,10 +90,10 @@ export class ShareMcp {
     access: (ctx) => canShareTrips(ctx.scopes),
   })
   async deleteShareLink({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.share.verifyTripAccess(String(tripId), ctx.userId)) return noAccess();
-    if (!this.guards.hasTripPermission('share_manage', tripId, ctx.userId)) return permissionDenied();
-    this.share.remove(String(tripId));
+    if (await this.auth.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.share.verifyTripAccess(String(tripId), ctx.userId))) return noAccess();
+    if (!(await this.guards.hasTripPermission('share_manage', tripId, ctx.userId))) return permissionDenied();
+    await this.share.remove(String(tripId));
     return ok({ success: true });
   }
 }

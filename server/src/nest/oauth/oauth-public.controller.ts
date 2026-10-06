@@ -33,8 +33,8 @@ export class OauthPublicController {
 
   @Post('token')
   @HttpCode(200) // token success uses res.json without an explicit status; Express defaults to 200 (Nest POST would default to 201).
-  token(@Req() req: Request, @Res() res: Response): void {
-    if (!this.oauth.mcpEnabled()) { res.status(404).end(); return; }
+  async token(@Req() req: Request, @Res() res: Response): Promise<void> {
+    if (!(await this.oauth.mcpEnabled())) { res.status(404).end(); return; }
 
     const body: Record<string, string> = typeof req.body === 'object' && req.body ? req.body : {};
     if (!this.rl.check('oauth_token', `${req.ip}|${body.client_id ?? ''}`, 30, MIN, Date.now())) {
@@ -59,23 +59,23 @@ export class OauthPublicController {
         return;
       }
       const pending = this.oauth.consumeAuthCode(code);
-      const invalidGrant = (reason: string, userId: number | null) => {
-        this.audit.writeAudit({ userId, action: 'oauth.token.grant_failed', details: { client_id, reason }, ip });
+      const invalidGrant = async (reason: string, userId: number | null) => {
+        await this.audit.writeAudit({ userId, action: 'oauth.token.grant_failed', details: { client_id, reason }, ip });
         res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid.' });
       };
       if (!pending) return invalidGrant('code_invalid_or_expired', null);
       if (pending.clientId !== client_id) return invalidGrant('client_id_mismatch', pending.userId);
       if (pending.redirectUri !== redirect_uri) return invalidGrant('redirect_uri_mismatch', pending.userId);
       if (pending.resource && resource && pending.resource !== stripTrailingSlashes(resource)) return invalidGrant('resource_mismatch', pending.userId);
-      if (!this.oauth.authenticateClient(client_id, client_secret)) {
+      if (!(await this.oauth.authenticateClient(client_id, client_secret))) {
         logWarn(`[OAuth] Invalid client credentials for client_id=${client_id} ip=${ip ?? '-'}`);
-        this.audit.writeAudit({ userId: pending.userId, action: 'oauth.token.client_auth_failed', details: { client_id }, ip });
+        await this.audit.writeAudit({ userId: pending.userId, action: 'oauth.token.client_auth_failed', details: { client_id }, ip });
         res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client credentials' });
         return;
       }
       if (!this.oauth.verifyPKCE(code_verifier, pending.codeChallenge)) return invalidGrant('pkce_failed', pending.userId);
-      const tokens = this.oauth.issueTokens(client_id, pending.userId, pending.scopes, null, pending.resource ?? null);
-      this.audit.writeAudit({ userId: pending.userId, action: 'oauth.token.issue', details: { client_id, scopes: pending.scopes, audience: pending.resource ?? null }, ip });
+      const tokens = await this.oauth.issueTokens(client_id, pending.userId, pending.scopes, null, pending.resource ?? null);
+      await this.audit.writeAudit({ userId: pending.userId, action: 'oauth.token.issue', details: { client_id, scopes: pending.scopes, audience: pending.resource ?? null }, ip });
       res.json(tokens);
       return;
     }
@@ -85,7 +85,7 @@ export class OauthPublicController {
         res.status(400).json({ error: 'invalid_request', error_description: 'refresh_token is required' });
         return;
       }
-      const result = this.oauth.refreshTokens(refresh_token, client_id, client_secret, ip);
+      const result = await this.oauth.refreshTokens(refresh_token, client_id, client_secret, ip);
       if (result.error) {
         if (result.error === 'invalid_client') logWarn(`[OAuth] Invalid client credentials on refresh for client_id=${client_id} ip=${ip ?? '-'}`);
         res.status(result.status || 400).json({ error: result.error, error_description: result.error === 'invalid_client' ? 'Invalid client credentials' : 'Refresh token is invalid or expired' });
@@ -100,15 +100,15 @@ export class OauthPublicController {
         res.status(401).json({ error: 'invalid_client', error_description: 'client_secret is required for client_credentials grant' });
         return;
       }
-      const client = this.oauth.authenticateClient(client_id, client_secret);
+      const client = await this.oauth.authenticateClient(client_id, client_secret);
       if (!client) {
         logWarn(`[OAuth] Invalid client credentials for client_id=${client_id} ip=${ip ?? '-'}`);
-        this.audit.writeAudit({ userId: null, action: 'oauth.token.client_auth_failed', details: { client_id }, ip });
+        await this.audit.writeAudit({ userId: null, action: 'oauth.token.client_auth_failed', details: { client_id }, ip });
         res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client credentials' });
         return;
       }
       if (client.is_public || !client.allows_client_credentials || client.user_id == null) {
-        this.audit.writeAudit({ userId: client.user_id ?? null, action: 'oauth.token.grant_failed', details: { client_id, reason: 'unauthorized_client' }, ip });
+        await this.audit.writeAudit({ userId: client.user_id ?? null, action: 'oauth.token.grant_failed', details: { client_id, reason: 'unauthorized_client' }, ip });
         res.status(400).json({ error: 'unauthorized_client', error_description: 'This client is not authorized for the client_credentials grant' });
         return;
       }
@@ -126,8 +126,8 @@ export class OauthPublicController {
         grantedScopes = allowedScopes;
       }
       const audience = resource ? stripTrailingSlashes(resource) : `${stripTrailingSlashes(this.oauth.mcpSafeUrl())}/mcp`;
-      const tokens = this.oauth.issueClientCredentialsToken(client_id, client.user_id, grantedScopes, audience);
-      this.audit.writeAudit({ userId: client.user_id, action: 'oauth.token.issue', details: { client_id, scopes: grantedScopes, audience, grant: 'client_credentials' }, ip });
+      const tokens = await this.oauth.issueClientCredentialsToken(client_id, client.user_id, grantedScopes, audience);
+      await this.audit.writeAudit({ userId: client.user_id, action: 'oauth.token.issue', details: { client_id, scopes: grantedScopes, audience, grant: 'client_credentials' }, ip });
       res.json(tokens);
       return;
     }
@@ -136,14 +136,14 @@ export class OauthPublicController {
   }
 
   @Get('userinfo')
-  userinfo(@Headers('authorization') auth: string | undefined, @Res() res: Response): void {
-    if (!this.oauth.mcpEnabled()) { res.status(404).end(); return; }
+  async userinfo(@Headers('authorization') auth: string | undefined, @Res() res: Response): Promise<void> {
+    if (!(await this.oauth.mcpEnabled())) { res.status(404).end(); return; }
     if (!auth || !auth.toLowerCase().startsWith('bearer ')) {
       res.set('WWW-Authenticate', 'Bearer realm="TREK MCP"');
       res.status(401).json({ error: 'invalid_token' });
       return;
     }
-    const info = this.oauth.getUserByAccessToken(auth.slice(7));
+    const info = await this.oauth.getUserByAccessToken(auth.slice(7));
     if (!info) {
       res.set('WWW-Authenticate', 'Bearer realm="TREK MCP", error="invalid_token"');
       res.status(401).json({ error: 'invalid_token' });
@@ -153,8 +153,8 @@ export class OauthPublicController {
   }
 
   @Post('revoke')
-  revoke(@Req() req: Request, @Res() res: Response): void {
-    if (!this.oauth.mcpEnabled()) { res.status(404).end(); return; }
+  async revoke(@Req() req: Request, @Res() res: Response): Promise<void> {
+    if (!(await this.oauth.mcpEnabled())) { res.status(404).end(); return; }
     if (!this.rl.check('oauth_revoke', req.ip || 'unknown', 10, MIN, Date.now())) {
       res.status(429).json({ error: 'too_many_requests', error_description: 'Too many attempts. Please try again later.' });
       return;
@@ -166,13 +166,13 @@ export class OauthPublicController {
       res.status(400).json({ error: 'invalid_request', error_description: 'token and client_id are required' });
       return;
     }
-    if (!this.oauth.authenticateClient(client_id, client_secret)) {
+    if (!(await this.oauth.authenticateClient(client_id, client_secret))) {
       logWarn(`[OAuth] Invalid client credentials on revoke for client_id=${client_id} ip=${ip ?? '-'}`);
-      this.audit.writeAudit({ userId: null, action: 'oauth.token.client_auth_failed', details: { client_id, endpoint: 'revoke' }, ip });
+      await this.audit.writeAudit({ userId: null, action: 'oauth.token.client_auth_failed', details: { client_id, endpoint: 'revoke' }, ip });
       res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client credentials' });
       return;
     }
-    this.oauth.revokeToken(token, client_id, undefined, ip);
+    await this.oauth.revokeToken(token, client_id, undefined, ip);
     res.status(200).json({});
   }
 }

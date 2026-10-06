@@ -1,10 +1,12 @@
 import { Body, Controller, Get, HttpCode, HttpException, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { pluginsEnabled } from './kill-switch';
 import { PluginsService, MissingRequiredSettingError } from './plugins.service';
 import { PluginRuntimeService } from './plugin-runtime.service';
-import { DatabaseService } from '../database/database.service';
+import { Plugins } from '../../db/entities/Plugins.entity';
+import type { PluginsRepository } from '../../db/repositories/Plugins.repository';
 import { PluginUserSettingsUpdateDto } from './plugins.dto';
 import type { PluginActionDescriptor, PluginActionResult } from '@trek/shared';
 
@@ -25,26 +27,26 @@ export class PluginUserSettingsController {
   constructor(
     private readonly plugins: PluginsService,
     private readonly runtime: PluginRuntimeService,
-    private readonly dbs: DatabaseService,
+    // PUC1 (Plan 3j Task 5) — shared with oauth/plugin-oauth.controller.ts's isActive.
+    @InjectRepository(Plugins) private readonly pluginsRepo: PluginsRepository,
   ) {}
 
-  private activeWithUserFields(id: string): boolean {
-    const row = this.dbs.connection.prepare("SELECT 1 FROM plugins WHERE id = ? AND status = 'active'").get(id);
-    return !!row;
+  private async activeWithUserFields(id: string): Promise<boolean> {
+    return await this.pluginsRepo.existsActive(id);
   }
 
   @Get(':id')
-  get(@Param('id') id: string, @Req() req: Request & { user?: { id: number } }): {
+  async get(@Param('id') id: string, @Req() req: Request & { user?: { id: number } }): Promise<{
     fields: unknown[];
     config: Record<string, unknown>;
     actions: PluginActionDescriptor[];
-  } {
+  }> {
     const userId = req.user?.id;
-    if (!pluginsEnabled() || userId == null || !this.activeWithUserFields(id)) return { fields: [], config: {}, actions: [] };
+    if (!pluginsEnabled() || userId == null || !(await this.activeWithUserFields(id))) return { fields: [], config: {}, actions: [] };
     return {
-      fields: this.plugins.userSettingsFields(id),
-      config: this.plugins.getUserConfig(id, userId),
-      actions: this.runtime.actionsOf(id, 'user'),
+      fields: await this.plugins.userSettingsFields(id),
+      config: await this.plugins.getUserConfig(id, userId),
+      actions: await this.runtime.actionsOf(id, 'user'),
     };
   }
 
@@ -62,7 +64,7 @@ export class PluginUserSettingsController {
     @Req() req: Request & { user?: { id: number } },
   ): Promise<PluginActionResult> {
     const userId = req.user?.id;
-    if (!pluginsEnabled() || userId == null || !this.activeWithUserFields(id)) {
+    if (!pluginsEnabled() || userId == null || !(await this.activeWithUserFields(id))) {
       throw new HttpException({ error: 'Plugin is not active' }, 404);
     }
     try {
@@ -74,16 +76,16 @@ export class PluginUserSettingsController {
   }
 
   @Post(':id')
-  update(
+  async update(
     @Param('id') id: string,
     @Body() body: PluginUserSettingsUpdateDto,
     @Req() req: Request & { user?: { id: number } },
-  ): { config: Record<string, unknown> } {
+  ): Promise<{ config: Record<string, unknown> }> {
     const userId = req.user?.id;
-    if (!pluginsEnabled() || userId == null || !this.activeWithUserFields(id)) return { config: {} };
+    if (!pluginsEnabled() || userId == null || !(await this.activeWithUserFields(id))) return { config: {} };
     const patch = body?.config && typeof body.config === 'object' ? (body.config as Record<string, unknown>) : {};
     try {
-      return { config: this.plugins.updateUserConfig(id, userId, patch) };
+      return { config: await this.plugins.updateUserConfig(id, userId, patch) };
     } catch (e) {
       if (e instanceof MissingRequiredSettingError) throw new HttpException({ error: e.message }, 400);
       throw e;

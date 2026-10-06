@@ -1,7 +1,12 @@
 import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import type { Airport } from '@trek/shared';
 import { searchAirports, findByIata, load } from './airports.data';
-import { DatabaseService } from '../database/database.service';
+import { Reservations } from '../../db/entities/Reservations.entity';
+import { ReservationsRepository } from '../../db/repositories/Reservations.repository';
+import { ReservationEndpoints } from '../../db/entities/ReservationEndpoints.entity';
+import { ReservationEndpointsRepository } from '../../db/repositories/ReservationEndpoints.repository';
+import { CronRegistrarService } from '../scheduling/cron-registrar.service';
 
 /**
  * The in-container face of the airport dataset, plus the flight-endpoint
@@ -11,14 +16,43 @@ import { DatabaseService } from '../database/database.service';
  * require() back into services/ — a cycle that only held because `db` happened
  * to be initialised by then. It runs on application bootstrap now: it repairs
  * rows, nothing boots on it, and the container is fully built by that point.
+ *
+ * task-6-rereview.md M1: raw SQL only today, but this is the same boot-sweep
+ * shape C1 found repository-backed elsewhere, so it goes through the one
+ * choke point (`CronRegistrarService.runOnBoot`) every other one-off boot
+ * sweep uses now, rather than running outside a request context directly.
+ * `runOnBoot` has no `isEnabled()` gate (unlike `register()`), so — parity
+ * with the pre-existing behavior — the backfill still runs in every test
+ * harness that boots this service with a MikroORM, exactly as it did before.
+ *
+ * task-6-rereview2.md M3: the pre-change code could never reject —
+ * `onApplicationBootstrap` awaited one `try`/`catch` around the whole thing.
+ * Putting the `try`/`catch` only INSIDE the `runOnBoot` callback left a gap:
+ * `runOnBoot` itself (its `RequestContext.create`/context machinery) has no
+ * catch of its own, so anything it throws before the callback runs would
+ * propagate out of `onApplicationBootstrap` and abort `app.init()` — a total
+ * boot refusal where the old code swallowed everything. The outer
+ * `try`/`catch` below restores that parity while the inner one stays for its
+ * own reason: `backfillFlightEndpoints` failing must not surface as a
+ * `runOnBoot`-level error.
  */
 @Injectable()
 export class AirportsService implements OnApplicationBootstrap {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    @InjectRepository(Reservations) private readonly reservationsRepo: ReservationsRepository,
+    @InjectRepository(ReservationEndpoints) private readonly endpointsRepo: ReservationEndpointsRepository,
+    private readonly registrar: CronRegistrarService,
+  ) {}
 
-  onApplicationBootstrap(): void {
+  async onApplicationBootstrap(): Promise<void> {
     try {
-      this.backfillFlightEndpoints();
+      await this.registrar.runOnBoot('airports-flight-endpoints-boot', async () => {
+        try {
+          await this.backfillFlightEndpoints();
+        } catch (err) {
+          console.error('[DB] Flight endpoint backfill failed:', err);
+        }
+      });
     } catch (err) {
       console.error('[DB] Flight endpoint backfill failed:', err);
     }
@@ -32,34 +66,24 @@ export class AirportsService implements OnApplicationBootstrap {
     return findByIata(code) as Airport | null;
   }
 
-  backfillFlightEndpoints(): void {
-    const pending = this.db.prepare(`
-      SELECT r.id, r.metadata, r.reservation_time, r.reservation_end_time
-      FROM reservations r
-      WHERE r.type = 'flight'
-        AND NOT EXISTS (SELECT 1 FROM reservation_endpoints e WHERE e.reservation_id = r.id)
-    `).all() as { id: number; metadata: string | null; reservation_time: string | null; reservation_end_time: string | null }[];
+  async backfillFlightEndpoints(): Promise<void> {
+    const pending = await this.reservationsRepo.listFlightsMissingEndpoints();
 
     if (pending.length === 0) return;
 
     load();
-    const insert = this.db.prepare(`
-      INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    const markReview = this.db.prepare('UPDATE reservations SET needs_review = 1 WHERE id = ?');
 
     let filled = 0;
     let flagged = 0;
     for (const r of pending) {
-      if (!r.metadata) { markReview.run(r.id); flagged++; continue; }
+      if (!r.metadata) { await this.reservationsRepo.markNeedsReview(r.id); flagged++; continue; }
       let meta: any;
-      try { meta = JSON.parse(r.metadata); } catch { markReview.run(r.id); flagged++; continue; }
+      try { meta = JSON.parse(r.metadata); } catch { await this.reservationsRepo.markNeedsReview(r.id); flagged++; continue; }
 
       const dep = meta.departure_airport ? findByIata(String(meta.departure_airport).slice(0, 3)) : null;
       const arr = meta.arrival_airport ? findByIata(String(meta.arrival_airport).slice(0, 3)) : null;
 
-      if (!dep || !arr) { markReview.run(r.id); flagged++; continue; }
+      if (!dep || !arr) { await this.reservationsRepo.markNeedsReview(r.id); flagged++; continue; }
 
       const split = (iso: string | null) => {
         if (!iso) return { date: null as string | null, time: null as string | null };
@@ -69,8 +93,16 @@ export class AirportsService implements OnApplicationBootstrap {
       const depParts = split(r.reservation_time);
       const arrParts = split(r.reservation_end_time);
 
-      insert.run(r.id, 'from', 0, dep.city ? `${dep.city} (${dep.iata})` : dep.name, dep.iata, dep.lat, dep.lng, dep.tz, depParts.time, depParts.date);
-      insert.run(r.id, 'to', 1, arr.city ? `${arr.city} (${arr.iata})` : arr.name, arr.iata, arr.lat, arr.lng, arr.tz, arrParts.time, arrParts.date);
+      await this.endpointsRepo.insertEndpoint({
+        reservation_id: r.id, role: 'from', sequence: 0,
+        name: dep.city ? `${dep.city} (${dep.iata})` : dep.name, code: dep.iata,
+        lat: dep.lat, lng: dep.lng, timezone: dep.tz, local_time: depParts.time, local_date: depParts.date,
+      });
+      await this.endpointsRepo.insertEndpoint({
+        reservation_id: r.id, role: 'to', sequence: 1,
+        name: arr.city ? `${arr.city} (${arr.iata})` : arr.name, code: arr.iata,
+        lat: arr.lat, lng: arr.lng, timezone: arr.tz, local_time: arrParts.time, local_date: arrParts.date,
+      });
       filled++;
     }
 

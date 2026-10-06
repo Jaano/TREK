@@ -6,9 +6,8 @@ import {
 } from '../../nest-mcp';
 import { z } from 'zod';
 import { createCategoryRequestSchema, updateCategoryRequestSchema } from '@trek/shared';
-import { DatabaseService } from '../database/database.service';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
-import { isDemoUserId } from '../common/demo-write';
+import { DemoService } from '../common/demo.service';
 import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { adminRequired } from '../../mcp/tools/_shared';
 import { CategoriesService } from './categories.service';
@@ -33,14 +32,19 @@ import { CategoriesService } from './categories.service';
 export class CategoriesMcp {
   constructor(
     private readonly categories: CategoriesService,
-    private readonly db: DatabaseService,
+    // Plan 3i Task 3: `isDemoUser` now goes through the injected
+    // `DemoService` below, not `DatabaseService`/`RuntimeEnvService`
+    // directly — this domain's own reads/writes are all repository-backed
+    // (unrelated to `env`). Plan 4 Task 4 dropped the now-unused
+    // `DatabaseService` injection.
     private readonly env: RuntimeEnvService,
     private readonly guards: McpToolGuardsService,
+    private readonly demo: DemoService,
   ) {}
 
-  /** The AuthService.isDemoUser check without the auth graph (demo-write.ts). */
-  private isDemoUser(userId: number): boolean {
-    return isDemoUserId(this.env, this.db, userId);
+  /** Plan 3i Task 3: the AuthService.isDemoUser check via the injected DemoService (common/demo.service.ts), not the free-function demo-write.ts helper. */
+  private async isDemoUser(userId: number): Promise<boolean> {
+    return await this.demo.isDemoUserId(userId);
   }
 
   @Tool({
@@ -51,7 +55,7 @@ export class CategoriesMcp {
     access: { group: 'places', mode: 'read' },
   })
   async listCategories(_args: Record<string, never>, _ctx: McpContext) {
-    const categories = this.categories.list();
+    const categories = await this.categories.list();
     return ok({ categories });
   }
 
@@ -67,10 +71,10 @@ export class CategoriesMcp {
     access: { group: 'places', mode: 'write' },
   })
   async createCategory({ name, color, icon }: { name: string; color?: string; icon?: string }, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
     // The palette is instance-wide; the REST route restricts management to admins. Match it.
-    if (!this.guards.isAdminUser(ctx.userId)) return adminRequired();
-    const category = this.categories.create(ctx.userId, name, color, icon);
+    if (!(await this.guards.isAdminUser(ctx.userId))) return adminRequired();
+    const category = await this.categories.create(ctx.userId, name, color, icon);
     return ok({ category });
   }
 
@@ -87,10 +91,10 @@ export class CategoriesMcp {
     access: { group: 'places', mode: 'write' },
   })
   async updateCategory({ categoryId, name, color, icon }: { categoryId: number; name?: string; color?: string; icon?: string }, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.guards.isAdminUser(ctx.userId)) return adminRequired();
-    if (!this.categories.getById(categoryId)) return errorResult('Category not found');
-    const category = this.categories.update(categoryId, name, color, icon);
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.guards.isAdminUser(ctx.userId))) return adminRequired();
+    if (!(await this.categories.getById(categoryId))) return errorResult('Category not found');
+    const category = await this.categories.update(categoryId, name, color, icon);
     return ok({ category });
   }
 
@@ -104,10 +108,10 @@ export class CategoriesMcp {
     access: { group: 'places', mode: 'write' },
   })
   async deleteCategory({ categoryId }: { categoryId: number }, ctx: McpContext) {
-    if (this.isDemoUser(ctx.userId)) return demoDenied();
-    if (!this.guards.isAdminUser(ctx.userId)) return adminRequired();
-    if (!this.categories.getById(categoryId)) return errorResult('Category not found');
-    this.categories.remove(categoryId);
+    if (await this.isDemoUser(ctx.userId)) return demoDenied();
+    if (!(await this.guards.isAdminUser(ctx.userId))) return adminRequired();
+    if (!(await this.categories.getById(categoryId))) return errorResult('Category not found');
+    await this.categories.remove(categoryId);
     return ok({ success: true });
   }
 
@@ -118,7 +122,7 @@ export class CategoriesMcp {
     mimeType: 'application/json',
   })
   async categoriesResource(uri: URL, _ctx: McpContext) {
-    const categories = this.categories.list();
+    const categories = await this.categories.list();
     return {
       contents: [{
         uri: uri.href,

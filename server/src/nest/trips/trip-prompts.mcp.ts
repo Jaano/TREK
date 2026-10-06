@@ -40,14 +40,14 @@ export class TripPromptsMcp {
     when: budgetAddonOn,
   })
   async budgetOverviewPrompt({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (!this.trips.canAccessTrip(tripId, ctx.userId)) {
+    if (!(await this.trips.canAccessTrip(tripId, ctx.userId))) {
       return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'Trip not found or access denied.' } }] };
     }
     const summary = await this.readModel.getTripSummary(tripId, ctx.userId);
     if (!summary) {
       return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'Trip not found.' } }] };
     }
-    const { trip, budget } = summary;
+    const { trip, budget } = await summary;
     const currency = trip?.currency || 'EUR';
     // The summary's own totals, each row in the trip currency at the rate it was booked
     // at (#2525). Adding total_price up here printed a dollar bill as that many euros.
@@ -83,11 +83,11 @@ export class TripPromptsMcp {
     when: packingAddonOn,
   })
   async packingListPrompt({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (!this.packing.verifyTripAccess(tripId, ctx.userId)) {
+    if (!(await this.packing.verifyTripAccess(tripId, ctx.userId))) {
       return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'Trip not found or access denied.' } }] };
     }
     // Hide other members' private items (#858) from the requesting user.
-    const items = this.packing.listItems(tripId, ctx.userId);
+    const items = await this.packing.listItems(tripId, ctx.userId);
     if (!items.length) {
       return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'No packing items found for this trip.' } }] };
     }
@@ -102,7 +102,7 @@ export class TripPromptsMcp {
     ).join('\n\n');
     // Only the title is needed. The whole summary also adds up the budget, which can
     // wait on a rates fetch for a row that never froze its rate.
-    const trip = this.trips.getRaw(tripId);
+    const trip = await this.trips.getRaw(tripId);
     return {
       description: `Packing list for "${trip?.title || tripId}"`,
       messages: [{ role: 'user' as const, content: { type: 'text' as const, text: `# Packing List: ${trip?.title || 'Trip'}\n\n${lines}\n\n_${items.length} items across ${Object.keys(grouped).length} categories_` } }],

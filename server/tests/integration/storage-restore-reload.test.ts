@@ -21,30 +21,19 @@
  * accepted precedent from storage-registry.service.test.ts, harmless (mkdir
  * -p on an existing dir), and orthogonal to what this test actually exercises.
  */
-import { describe, it, expect, beforeAll, afterEach } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const Database = require('better-sqlite3');
 
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { DatabaseService } from '../../src/nest/database/database.service';
+import { createSnapshotTestDb } from '../helpers/db-mock';
 import type { RuntimeEnvService } from '../../src/nest/app-config/runtime-env.service';
 import { StorageEventsService } from '../../src/nest/storage/storage-events.service';
 import { BACKENDS_KEY, CATEGORIES_KEY, StorageRegistryService } from '../../src/nest/storage/storage-registry.service';
 import { StorageService } from '../../src/nest/storage/storage.service';
+import { createTestUnitOfWork, createTestAppSettingsRepo, sharedTestOrm } from '../helpers/test-uow';
 
-const testDb = new Database(':memory:');
-testDb.exec('PRAGMA journal_mode = WAL');
-testDb.exec('PRAGMA foreign_keys = ON');
-const db = new DatabaseService(testDb);
-
-beforeAll(() => {
-  createTables(testDb);
-  runMigrations(testDb);
-});
+const testDb = createSnapshotTestDb();
 
 const tmpDirs: string[] = [];
 function makeTmpDir(): string {
@@ -80,8 +69,14 @@ describe('C6 — restore reloads the storage registry (audit #4)', () => {
     ]);
     setSetting(CATEGORIES_KEY, { files: 'nas-a' });
 
-    const registry = new StorageRegistryService(db, envStub(), new StorageEventsService());
-    registry.onModuleInit();
+    const registry = new StorageRegistryService(
+      await createTestAppSettingsRepo(testDb),
+      envStub(),
+      new StorageEventsService(),
+      await createTestUnitOfWork(testDb),
+      (await sharedTestOrm(testDb)).orm,
+    );
+    await registry.onModuleInit();
     const storage = new StorageService(registry);
 
     expect(registry.resolve('files').backendName).toBe('nas-a');
@@ -105,7 +100,7 @@ describe('C6 — restore reloads the storage registry (audit #4)', () => {
     // The fix under test: StorageService.reloadConfig(), the narrow passthrough
     // restoreFromZip now calls right after reinitialize() and right before
     // rehydration (see backup.impl.ts).
-    storage.reloadConfig();
+    await storage.reloadConfig();
 
     expect(registry.resolve('files').backendName).toBe('nas-b');
 

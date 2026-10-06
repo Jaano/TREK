@@ -111,7 +111,7 @@ export class ReservationImportController {
     if (!modeResult.success) throw new HttpException({ error: 'Invalid mode' }, 400);
     const mode = modeResult.data;
 
-    if (mode === 'force-ai' && !this.bookingImport.aiAvailable(user.id)) {
+    if (mode === 'force-ai' && !(await this.bookingImport.aiAvailable(user.id))) {
       throw new HttpException({ error: 'AI parsing is not configured' }, 409);
     }
     if (mode === 'no-ai' && !this.bookingImport.isAvailable()) {

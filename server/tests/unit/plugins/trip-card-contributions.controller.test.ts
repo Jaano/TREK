@@ -9,7 +9,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { canAccessTrip, pluginsEnabled } = vi.hoisted(() => ({
   // trips 1 and 2 are accessible to user 5; everything else is not.
-  canAccessTrip: vi.fn((tripId: number, userId: number) => (userId === 5 && (tripId === 1 || tripId === 2) ? { id: tripId } : undefined)),
+  canAccessTrip: vi.fn(async (tripId: number, userId: number) => (userId === 5 && (tripId === 1 || tripId === 2) ? { id: tripId } : undefined)),
   pluginsEnabled: vi.fn(() => true),
 }));
 vi.mock('../../../src/db/database', () => ({ db: { prepare: () => ({ get: () => undefined }) }, canAccessTrip }));
@@ -17,7 +17,7 @@ vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
 import { TripCardContributionsController } from '../../../src/nest/plugins/contributions/trip-card-contributions.controller';
 import type { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const req = (id?: number) => ({ user: id === undefined ? undefined : { id } }) as any;
@@ -26,7 +26,7 @@ function controller(invoke: (id: string, args: unknown[]) => unknown, providers 
     providersOf: vi.fn(() => providers),
     tripCards: vi.fn(async (id: string, _h: string, _fn: string, args: unknown[]) => invoke(id, args)),
   } as unknown as PluginHooks;
-  return { c: new TripCardContributionsController(runtime, { canAccessTrip } as unknown as DatabaseService), runtime };
+  return { c: new TripCardContributionsController(runtime, { findAccessible: canAccessTrip } as unknown as TripsRepository), runtime };
 }
 const badge = (over: Record<string, unknown> = {}) => ({ tripId: 1, id: 'b1', label: 'Visa', ...over });
 

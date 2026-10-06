@@ -21,6 +21,7 @@ import { RequireTripOwner, TripOwnerGuard } from '../permissions/trip-owner.guar
 import { getClientIp } from '../audit/client-ip';
 import { AuditService } from '../audit/audit.service';
 import { NotFoundError, ValidationError } from '../common/domain-errors';
+import { toRowId } from '../common/row-id';
 import { TripAddMemberDto, TripTransferOwnershipDto, TripCreateGuestDto, TripRenameGuestDto } from '../trips/trips.dto';
 
 /**
@@ -47,28 +48,28 @@ export class TripMembersController {
   constructor(private readonly roster: TripMembersService, private readonly audit: AuditService) {}
 
   @Get(':id/members')
-  members(@CurrentUser() user: User, @Param('id') id: string) {
-    const access = this.roster.canAccessTrip(id, user.id);
+  async members(@CurrentUser() user: User, @Param('id') id: string) {
+    const access = await this.roster.canAccessTrip(id, user.id);
     if (!access) {
       throw new HttpException({ error: 'Trip not found' }, 404);
     }
-    const { owner, members } = this.roster.listMembers(id, access.user_id);
+    const { owner, members } = await this.roster.listMembers(id, access.user_id);
     return { owner, members, current_user_id: user.id };
   }
 
   @Post(':id/members')
   @HttpCode(201)
-  addMember(@CurrentUser() user: User, @Param('id') id: string, @Body() body: TripAddMemberDto) {
+  async addMember(@CurrentUser() user: User, @Param('id') id: string, @Body() body: TripAddMemberDto) {
     const { identifier } = body;
-    const access = this.roster.canAccessTrip(id, user.id);
+    const access = await this.roster.canAccessTrip(id, user.id);
     if (!access) {
       throw new HttpException({ error: 'Trip not found' }, 404);
     }
-    if (!this.roster.can('member_manage', user.role, access.user_id, user.id, access.user_id !== user.id)) {
+    if (!(await this.roster.can('member_manage', user.role, access.user_id, user.id, access.user_id !== user.id))) {
       throw new HttpException({ error: 'No permission to manage members' }, 403);
     }
     try {
-      const result = this.roster.addMember(id, identifier, access.user_id, user.id);
+      const result = await this.roster.addMember(id, identifier, access.user_id, user.id);
       this.roster.notifyInvite(id, user, result.targetUserId, result.tripTitle, result.member.email);
       return { member: result.member };
     } catch (e: unknown) {
@@ -79,23 +80,32 @@ export class TripMembersController {
   }
 
   @Delete(':id/members/:userId')
-  removeMember(@CurrentUser() user: User, @Param('id') id: string, @Param('userId') userId: string) {
-    const access = this.roster.canAccessTrip(id, user.id);
+  async removeMember(@CurrentUser() user: User, @Param('id') id: string, @Param('userId') userId: string) {
+    // Plan 4 Task 8a — parsed ONCE here (toRowId, not Number(): rule 15's
+    // NaN-into-SQL trap), and the parsed number is what both the access
+    // check and the removal itself use below — this route has no class-level
+    // TripAccessGuard (this controller's own docstring explains why), so it
+    // owns this parse itself rather than inheriting the guard's.
+    const tripId = toRowId(id);
+    if (tripId === null) {
+      throw new HttpException({ error: 'Trip not found' }, 404);
+    }
+    const access = await this.roster.canAccessTrip(tripId, user.id);
     if (!access) {
       throw new HttpException({ error: 'Trip not found' }, 404);
     }
     const targetId = Number.parseInt(userId);
-    if (targetId !== user.id && !this.roster.can('member_manage', user.role, access.user_id, user.id, access.user_id !== user.id)) {
+    if (targetId !== user.id && !(await this.roster.can('member_manage', user.role, access.user_id, user.id, access.user_id !== user.id))) {
       throw new HttpException({ error: 'No permission to remove members' }, 403);
     }
-    this.roster.removeMember(id, targetId);
+    await this.roster.removeMember(tripId, targetId);
     return { success: true };
   }
 
   @Post(':id/transfer')
   @UseGuards(TripOwnerGuard)
   @RequireTripOwner('Only the owner can transfer ownership', { param: 'id' })
-  transferOwnership(
+  async transferOwnership(
     @CurrentUser() user: User,
     @Param('id') id: string,
     @Body() body: TripTransferOwnershipDto,
@@ -104,11 +114,11 @@ export class TripMembersController {
   ) {
     const { newOwnerId } = body;
     try {
-      const result = this.roster.transferOwnership(id, newOwnerId, user.id);
-      this.audit.writeAudit({ userId: user.id, action: 'trip.transfer_ownership', ip: getClientIp(req), details: { tripId: Number(id), trip: result.tripTitle, from: result.fromEmail, to: result.toEmail } });
+      const result = await this.roster.transferOwnership(id, newOwnerId, user.id);
+      await this.audit.writeAudit({ userId: user.id, action: 'trip.transfer_ownership', ip: getClientIp(req), details: { tripId: Number(id), trip: result.tripTitle, from: result.fromEmail, to: result.toEmail } });
       // Nudge everyone viewing the trip to re-read it so the new ownership and the
       // recomputed permissions take effect live.
-      const updatedTrip = this.roster.getTripForViewer(id, user.id);
+      const updatedTrip = await this.roster.getTripForViewer(id, user.id);
       this.roster.broadcast(id, 'trip:updated', { trip: updatedTrip }, socketId);
       return { success: true };
     } catch (e: unknown) {
@@ -122,12 +132,12 @@ export class TripMembersController {
   @HttpCode(201)
   @UseGuards(TripOwnerGuard)
   @RequireTripOwner('Only the owner can manage guests', { param: 'id' })
-  createGuest(@CurrentUser() user: User, @Param('id') id: string, @Body() body: TripCreateGuestDto) {
+  async createGuest(@CurrentUser() user: User, @Param('id') id: string, @Body() body: TripCreateGuestDto) {
     // Whitespace-only names still 400 with the legacy body — the service throws
     // ValidationError('Guest name is required') after trimming.
     try {
       // No notifyInvite: a guest has no inbox.
-      return this.roster.createGuest(id, body.name, user.id);
+      return await this.roster.createGuest(id, body.name, user.id);
     } catch (e: unknown) {
       if (e instanceof ValidationError) throw new HttpException({ error: e.message }, 400);
       throw e;
@@ -137,9 +147,9 @@ export class TripMembersController {
   @Put(':id/guests/:userId')
   @UseGuards(TripOwnerGuard)
   @RequireTripOwner('Only the owner can manage guests', { param: 'id' })
-  renameGuest(@CurrentUser() user: User, @Param('id') id: string, @Param('userId') userId: string, @Body() body: TripRenameGuestDto) {
+  async renameGuest(@CurrentUser() user: User, @Param('id') id: string, @Param('userId') userId: string, @Body() body: TripRenameGuestDto) {
     try {
-      if (!this.roster.renameGuest(id, Number.parseInt(userId), body.name)) {
+      if (!(await this.roster.renameGuest(id, Number.parseInt(userId), body.name))) {
         throw new HttpException({ error: 'Guest not found' }, 404);
       }
       return { success: true };
@@ -153,8 +163,8 @@ export class TripMembersController {
   @Delete(':id/guests/:userId')
   @UseGuards(TripOwnerGuard)
   @RequireTripOwner('Only the owner can manage guests', { param: 'id' })
-  deleteGuest(@CurrentUser() user: User, @Param('id') id: string, @Param('userId') userId: string) {
-    if (!this.roster.deleteGuest(id, Number.parseInt(userId))) {
+  async deleteGuest(@CurrentUser() user: User, @Param('id') id: string, @Param('userId') userId: string) {
+    if (!(await this.roster.deleteGuest(id, Number.parseInt(userId)))) {
       throw new HttpException({ error: 'Guest not found' }, 404);
     }
     return { success: true };

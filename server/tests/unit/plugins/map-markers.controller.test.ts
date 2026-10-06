@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { canAccessTrip, pluginsEnabled } = vi.hoisted(() => ({
-  canAccessTrip: vi.fn((tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
+  canAccessTrip: vi.fn(async (tripId: number, userId: number) => (tripId === 1 && userId === 5 ? { id: 1 } : undefined)),
   pluginsEnabled: vi.fn(() => true),
 }));
 vi.mock('../../../src/db/database', () => ({ db: { prepare: () => ({ get: () => undefined }) }, canAccessTrip }));
@@ -15,7 +15,7 @@ vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
 import { MapMarkersController } from '../../../src/nest/plugins/contributions/map-markers.controller';
 import type { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const req = (id?: number) => ({ user: id === undefined ? undefined : { id } }) as any;
@@ -24,12 +24,12 @@ function controller(invoke: (id: string) => unknown, providers = ['p1']) {
     providersOf: vi.fn(() => providers),
     mapMarkers: vi.fn(async (id: string) => invoke(id)),
   } as unknown as PluginHooks;
-  return { c: new MapMarkersController(runtime, { canAccessTrip } as unknown as DatabaseService), runtime };
+  return { c: new MapMarkersController(runtime, { findAccessible: canAccessTrip } as unknown as TripsRepository), runtime };
 }
 const mk = (over: Record<string, unknown> = {}) => ({ id: 'm1', lat: 48.85, lng: 2.35, ...over });
 
 describe('MapMarkersController', () => {
-  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockReturnValue({ id: 1 } as never); });
+  beforeEach(() => { pluginsEnabled.mockReturnValue(true); canAccessTrip.mockResolvedValue({ id: 1 } as never); });
 
   it('gates: disabled / no user / non-member all return [] (no plugin calls on the first)', async () => {
     pluginsEnabled.mockReturnValue(false);
@@ -39,7 +39,7 @@ describe('MapMarkersController', () => {
     pluginsEnabled.mockReturnValue(true);
 
     expect((await controller(() => [mk()]).c.get('1', req(undefined))).markers).toEqual([]);
-    canAccessTrip.mockReturnValue(undefined as never);
+    canAccessTrip.mockResolvedValue(undefined as never);
     expect((await controller(() => [mk()]).c.get('1', req(5))).markers).toEqual([]);
   });
 

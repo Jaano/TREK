@@ -18,18 +18,18 @@ import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
 import { sessionCookie } from './harness';
 
-const { canAccessTrip, safeFetchLlm } = vi.hoisted(() => ({ canAccessTrip: vi.fn(), safeFetchLlm: vi.fn() }));
+const { safeFetchLlm } = vi.hoisted(() => ({ safeFetchLlm: vi.fn() }));
 // The temp db is born inside the factory, which runs before anything imports it,
-// and read back below through the mocked module itself.
+// and read back below through the mocked module itself. It is a copy of the
+// migrated + seeded snapshot, so the schema is the MikroORM chain's. Trip access
+// is the real TripsRepository lookup against it.
 vi.mock('../../src/db/database', async () => {
-  const { default: Database } = await import('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec('PRAGMA foreign_keys = ON');
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const tmp = createSnapshotTestDb();
   return {
     db: tmp,
-    canAccessTrip,
-    isOwner: vi.fn(() => true),
+    canAccessTrip: () => undefined,
+    isOwner: () => false,
     getPlaceWithTags: vi.fn(),
     closeDb: () => {},
     reinitialize: () => {},
@@ -39,9 +39,6 @@ vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.
 vi.mock('../../src/utils/ssrfGuard', async (orig) => ({ ...(await orig<Record<string, unknown>>()), safeFetchLlm }));
 
 import { db } from '../../src/db/database';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { ReservationImportModule } from '../../src/nest/reservation-import/reservation-import.module';
 import { KitineraryExtractorService } from '../../src/nest/booking-import/kitinerary-extractor.service';
@@ -49,6 +46,8 @@ import { NotificationsService } from '../../src/nest/notifications/notifications
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 /** A one-page PDF whose text layer holds `lines`, in the standard Helvetica. */
 function pdfWithText(lines: string[]): Buffer {
@@ -108,7 +107,7 @@ describe('Booking import e2e (#2477): a schema-bound provider on the upload rout
   let tripId: number;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, RealtimeModule, ReservationImportModule] })
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, ReservationImportModule] })
       .overrideProvider(KitineraryExtractorService)
       .useValue({ onModuleInit: () => {}, isAvailable: () => false, extract: vi.fn(), describe: () => ({ available: false }) })
       .overrideProvider(NotificationsService)
@@ -135,8 +134,6 @@ describe('Booking import e2e (#2477): a schema-bound provider on the upload rout
   };
 
   beforeAll(async () => {
-    createTables(db);
-    runMigrations(db);
     db.prepare(
       "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
     ).run();
@@ -147,12 +144,11 @@ describe('Booking import e2e (#2477): a schema-bound provider on the upload rout
        ON CONFLICT(id) DO UPDATE SET enabled = 1, config = excluded.config`,
     ).run(JSON.stringify({ provider: 'openai', model: 'gemini-3.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' }));
     app = await build();
-    vi.spyOn(app.get(PermissionsService), 'checkPermission').mockReturnValue(true);
+    vi.spyOn(app.get(PermissionsService), 'checkPermission').mockResolvedValue(true);
     server = app.getHttpServer();
   });
 
   beforeEach(() => {
-    canAccessTrip.mockImplementation((id: unknown) => db.prepare('SELECT * FROM trips WHERE id = ?').get(id));
     safeFetchLlm.mockReset();
   });
 

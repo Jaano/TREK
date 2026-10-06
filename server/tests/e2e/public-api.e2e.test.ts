@@ -78,7 +78,6 @@ vi.mock('../../src/db/database', async (importActual) => {
   };
 });
 
-import { DatabaseModule } from '../../src/nest/database/database.module';
 import { RateLimitModule } from '../../src/nest/common/rate-limit.module';
 import { PublicApiModule } from '../../src/nest/public-api/public-api.module';
 import { ApiTokenGuard } from '../../src/nest/public-api/api-token.guard';
@@ -86,6 +85,8 @@ import { TokensModule } from '../../src/nest/tokens/tokens.module';
 import { PublicStatsController } from '../../src/nest/atlas/public-stats.controller';
 import { AtlasService } from '../../src/nest/atlas/atlas.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 
 /** Mints a token the way TokenService does, so the guard's hash lookup is real. */
 function seedToken(userId: number, raw: string, kind: 'api' | 'mcp' = 'api'): string {
@@ -152,7 +153,7 @@ describe('Public API v1 e2e (real guard + real SQL)', () => {
 
   async function build() {
     const moduleRef = await Test.createTestingModule({
-      imports: [DatabaseModule, RateLimitModule, TokensModule, PublicApiModule],
+      imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RateLimitModule, TokensModule, PublicApiModule],
       // `/api/v1/stats` lives in atlas/ because its figures do, but it is guarded
       // and scoped by this directory's code — so it is mounted here with the real
       // guard and a stubbed AtlasService. Importing AtlasModule instead would pull

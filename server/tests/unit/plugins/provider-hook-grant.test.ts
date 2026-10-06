@@ -11,7 +11,6 @@
 import { describe, it, expect } from 'vitest';
 import { PluginSupervisor } from '../../../src/nest/plugins/supervisor/plugin-supervisor';
 import { createPluginRuntime } from '../../helpers/plugin-host';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { db } from '../../../src/db/database';
 
 function makeSupervisor(): PluginSupervisor {
@@ -154,7 +153,7 @@ describe('providersOf narrowed to one optional function (#2221)', () => {
 
 describe('runtime.invokeHook defense-in-depth', () => {
   it('refuses a plugin id that is not a granted provider of the hook, even if passed directly', async () => {
-    const rt = createPluginRuntime(new DatabaseService(db));
+    const rt = await createPluginRuntime(db);
     // one legitimate granted provider exists, so providersOf('placeDetailProvider') = ['ok']
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (rt as any).supervisor.running.set('ok', { id: 'ok', status: 'active', hooks: ['placeDetailProvider'], events: [], granted: new Set(['hook:place-detail-provider']) });

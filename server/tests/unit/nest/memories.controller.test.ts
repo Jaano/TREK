@@ -50,19 +50,19 @@ function makeRes(): MockRes {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('UnifiedMemoriesController (parity with /api/integrations/memories/unified)', () => {
   describe('GET /trips/:tripId/photos', () => {
-    it('returns the photos on success', () => {
+    it('returns the photos on success', async () => {
       const svc = makeService({ listTripPhotos: vi.fn().mockReturnValue({ data: [{ id: 1 }] }) });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).listPhotos(user, '5', res);
+      await new UnifiedMemoriesController(svc).listPhotos(user, '5', res);
       expect(svc.listTripPhotos).toHaveBeenCalledWith('5', 7);
       expect(res.json).toHaveBeenCalledWith({ photos: [{ id: 1 }] });
       expect(res.status).not.toHaveBeenCalled();
     });
 
-    it('maps the error envelope to its status + message', () => {
+    it('maps the error envelope to its status + message', async () => {
       const svc = makeService({ listTripPhotos: vi.fn().mockReturnValue({ error: { status: 404, message: 'Trip not found' } }) });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).listPhotos(user, '5', res);
+      await new UnifiedMemoriesController(svc).listPhotos(user, '5', res);
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Trip not found' });
     });
@@ -128,47 +128,47 @@ describe('UnifiedMemoriesController (parity with /api/integrations/memories/unif
   });
 
   describe('DELETE /trips/:tripId/photos', () => {
-    it('removes the photo on success', () => {
+    it('removes the photo on success', async () => {
       const removeTripPhoto = vi.fn().mockReturnValue({ data: {} });
       const svc = makeService({ removeTripPhoto });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).removePhoto(user, '5', { photo_id: 11 }, res);
+      await new UnifiedMemoriesController(svc).removePhoto(user, '5', { photo_id: 11 }, res);
       expect(removeTripPhoto).toHaveBeenCalledWith('5', 7, 11);
       expect(res.json).toHaveBeenCalledWith({ success: true });
     });
 
-    it('maps the error envelope', () => {
+    it('maps the error envelope', async () => {
       const svc = makeService({ removeTripPhoto: vi.fn().mockReturnValue({ error: { status: 404, message: 'Photo not found' } }) });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).removePhoto(user, '5', { photo_id: 11 }, res);
+      await new UnifiedMemoriesController(svc).removePhoto(user, '5', { photo_id: 11 }, res);
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Photo not found' });
     });
   });
 
   describe('GET /trips/:tripId/album-links', () => {
-    it('returns the links on success', () => {
+    it('returns the links on success', async () => {
       const svc = makeService({ listTripAlbumLinks: vi.fn().mockReturnValue({ data: [{ id: 'l1' }] }) });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).listAlbumLinks(user, '5', res);
+      await new UnifiedMemoriesController(svc).listAlbumLinks(user, '5', res);
       expect(res.json).toHaveBeenCalledWith({ links: [{ id: 'l1' }] });
     });
 
-    it('maps the error envelope', () => {
+    it('maps the error envelope', async () => {
       const svc = makeService({ listTripAlbumLinks: vi.fn().mockReturnValue({ error: { status: 404, message: 'Trip not found' } }) });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).listAlbumLinks(user, '5', res);
+      await new UnifiedMemoriesController(svc).listAlbumLinks(user, '5', res);
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Trip not found' });
     });
   });
 
   describe('POST /trips/:tripId/album-links', () => {
-    it('forwards a coerced passphrase when present', () => {
+    it('forwards a coerced passphrase when present', async () => {
       const createTripAlbumLink = vi.fn().mockReturnValue({ data: {} });
       const svc = makeService({ createTripAlbumLink });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).createAlbumLink(
+      await new UnifiedMemoriesController(svc).createAlbumLink(
         user,
         '5',
         { provider: 'synologyphotos', album_id: 'a1', album_name: 'Trip', passphrase: 123 },
@@ -178,36 +178,36 @@ describe('UnifiedMemoriesController (parity with /api/integrations/memories/unif
       expect(res.json).toHaveBeenCalledWith({ success: true });
     });
 
-    it('passes undefined when the passphrase is absent or empty', () => {
+    it('passes undefined when the passphrase is absent or empty', async () => {
       const createTripAlbumLink = vi.fn().mockReturnValue({ data: {} });
       const svc = makeService({ createTripAlbumLink });
-      new UnifiedMemoriesController(svc).createAlbumLink(user, '5', { provider: 'immich', album_id: 'a1', album_name: 'Trip', passphrase: '' }, makeRes());
+      await new UnifiedMemoriesController(svc).createAlbumLink(user, '5', { provider: 'immich', album_id: 'a1', album_name: 'Trip', passphrase: '' }, makeRes());
       expect(createTripAlbumLink).toHaveBeenCalledWith('5', 7, 'immich', 'a1', 'Trip', undefined);
     });
 
-    it('maps the error envelope', () => {
+    it('maps the error envelope', async () => {
       const svc = makeService({ createTripAlbumLink: vi.fn().mockReturnValue({ error: { status: 400, message: 'Invalid provider' } }) });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).createAlbumLink(user, '5', {}, res);
+      await new UnifiedMemoriesController(svc).createAlbumLink(user, '5', {}, res);
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({ error: 'Invalid provider' });
     });
   });
 
   describe('DELETE /trips/:tripId/album-links/:linkId', () => {
-    it('removes the link on success', () => {
+    it('removes the link on success', async () => {
       const removeAlbumLink = vi.fn().mockReturnValue({ data: {} });
       const svc = makeService({ removeAlbumLink });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).removeAlbumLink(user, '5', 'l1', res);
+      await new UnifiedMemoriesController(svc).removeAlbumLink(user, '5', 'l1', res);
       expect(removeAlbumLink).toHaveBeenCalledWith('5', 'l1', 7);
       expect(res.json).toHaveBeenCalledWith({ success: true });
     });
 
-    it('maps the error envelope', () => {
+    it('maps the error envelope', async () => {
       const svc = makeService({ removeAlbumLink: vi.fn().mockReturnValue({ error: { status: 404, message: 'Link not found' } }) });
       const res = makeRes();
-      new UnifiedMemoriesController(svc).removeAlbumLink(user, '5', 'l1', res);
+      await new UnifiedMemoriesController(svc).removeAlbumLink(user, '5', 'l1', res);
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({ error: 'Link not found' });
     });
@@ -217,10 +217,10 @@ describe('UnifiedMemoriesController (parity with /api/integrations/memories/unif
 // ─────────────────────────────────────────────────────────────────────────────
 describe('ImmichMemoriesController (parity with /api/integrations/memories/immich)', () => {
   describe('GET /settings', () => {
-    it('delegates to the service', () => {
+    it('delegates to the service', async () => {
       const immichGetConnectionSettings = vi.fn().mockReturnValue({ immich_url: 'u' });
       const svc = makeService({ immichGetConnectionSettings });
-      expect(new ImmichMemoriesController(svc).getSettings(user)).toEqual({ immich_url: 'u' });
+      expect(await new ImmichMemoriesController(svc).getSettings(user)).toEqual({ immich_url: 'u' });
       expect(immichGetConnectionSettings).toHaveBeenCalledWith(7);
     });
   });

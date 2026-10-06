@@ -15,23 +15,18 @@ import request from 'supertest';
 import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec('PRAGMA foreign_keys = ON');
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb } = await import('../helpers/db-mock');
+  const db = createSnapshotTestDb();
+  return {
+    db,
+    closeDb: () => {},
+    reinitialize: () => {},
+    getPlaceWithTags: () => null,
+    canAccessTrip: () => undefined,
+    isOwner: () => false,
+  };
 });
-
-vi.mock('../../src/db/database', () => ({
-  db,
-  closeDb: () => {},
-  reinitialize: () => {},
-  getPlaceWithTags: () => null,
-  canAccessTrip: () => undefined,
-  isOwner: () => false,
-}));
 vi.mock('../../src/websocket', () => ({ broadcastToUser: vi.fn(), broadcast: vi.fn() }));
 vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
 vi.mock('../../src/app-config', async (importOriginal) => {
@@ -59,11 +54,11 @@ vi.mock('nodemailer', async (importOriginal) => {
   };
 });
 
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
+import { db } from '../../src/db/database';
 import { createUser } from '../helpers/factories';
 import { AuthModule } from '../../src/nest/auth/auth.module';
-import { DatabaseModule } from '../../src/nest/database/database.module';
+import { TestUnitOfWorkModule } from '../helpers/test-uow';
+import { createTestMikroOrmModule } from '../helpers/test-orm';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 
@@ -100,7 +95,7 @@ describe('Mailer e2e: the header logo in a mail on the wire (#2507)', () => {
   let email: string;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, AuthModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), AuthModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.useGlobalFilters(new TrekExceptionFilter());
     nest.useGlobalPipes(new ZodValidationPipe());
@@ -109,8 +104,6 @@ describe('Mailer e2e: the header logo in a mail on the wire (#2507)', () => {
   }
 
   beforeAll(async () => {
-    createTables(db as never);
-    runMigrations(db as never);
     email = createUser(db as never, { username: 'mail-e2e', email: 'mail-e2e@example.test' }).user.email;
     const setting = db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
     setting.run('smtp_host', 'mail.internal.example');

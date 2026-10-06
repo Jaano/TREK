@@ -1,8 +1,12 @@
 import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@mikro-orm/nestjs';
 import { readEnv } from '../../app-config';
-import { DatabaseService } from '../database/database.service';
 import { toApiLang } from '../maps/maps.helpers';
 import { resolveApiKey, type ApiKeySource } from '../settings/instance-api-keys';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
+import { Users } from '../../db/entities/Users.entity';
+import type { UsersRepository } from '../../db/repositories/Users.repository';
 import { GoogleQuotaService } from '../google-quota/google-quota.service';
 import { readTransitProvider } from './transit-provider';
 import {
@@ -236,14 +240,15 @@ function stopFrom(stop: GoogleStop | undefined, fallback: GoogleLatLng | undefin
 @Injectable()
 export class GoogleTransitProvider {
   constructor(
-    private readonly database: DatabaseService,
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+    @InjectRepository(Users) private readonly usersRepo: UsersRepository,
     private readonly googleQuota: GoogleQuotaService,
   ) {}
 
-  private resolveKey(userId: number): { key: string | null; source: ApiKeySource | null } {
+  private async resolveKey(userId: number): Promise<{ key: string | null; source: ApiKeySource | null }> {
     // Past the admin's daily ceiling (#1582) the key is spent until tomorrow.
-    if (this.googleQuota.exhausted()) return { key: null, source: null };
-    return resolveApiKey(this.database, 'maps_api_key', userId, readEnv().maps.placesApiKey);
+    if (await this.googleQuota.exhausted()) return { key: null, source: null };
+    return resolveApiKey(this.appSettings, this.usersRepo, 'maps_api_key', userId, readEnv().maps.placesApiKey);
   }
 
   /**
@@ -252,14 +257,14 @@ export class GoogleTransitProvider {
    * behaviour and the safe one: the alternative is every transit search 403ing
    * on an install that flipped the switch before pasting a key.
    */
-  isActive(userId: number): boolean {
-    if (readTransitProvider(this.database) !== 'google') return false;
-    return !!this.resolveKey(userId).key;
+  async isActive(userId: number): Promise<boolean> {
+    if ((await readTransitProvider(this.appSettings)) !== 'google') return false;
+    return !!(await this.resolveKey(userId)).key;
   }
 
   private async call(endpoint: string, label: string, apiKey: string, body: unknown, fieldMask: string): Promise<unknown> {
     console.debug(`[Google API] ${label} → ${endpoint}`);
-    this.googleQuota.record();
+    await this.googleQuota.record();
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -291,7 +296,7 @@ export class GoogleTransitProvider {
 
   /** Station/place search for the from/to pickers. `near` biases results. */
   async geocode(text: string, language: string | undefined, near: string | undefined, userId: number): Promise<{ results: TransitPlace[] }> {
-    const { key: apiKey, source } = this.resolveKey(userId);
+    const { key: apiKey, source } = await this.resolveKey(userId);
     if (!apiKey) {
       const err = new Error('Transit provider error (no Google API key configured)') as Error & { status: number };
       err.status = 502;
@@ -340,7 +345,7 @@ export class GoogleTransitProvider {
 
   /** Route search between two coordinates. Returns the same compact shape MOTIS is mapped to. */
   async plan(q: PlanQuery, language: string | undefined, userId: number): Promise<{ itineraries: TransitItinerary[] }> {
-    const { key: apiKey, source } = this.resolveKey(userId);
+    const { key: apiKey, source } = await this.resolveKey(userId);
     if (!apiKey) {
       const err = new Error('Transit provider error (no Google API key configured)') as Error & { status: number };
       err.status = 502;

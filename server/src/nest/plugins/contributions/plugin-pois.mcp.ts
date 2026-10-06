@@ -27,8 +27,8 @@ export class PluginPoisMcp {
     annotations: TOOL_ANNOTATIONS_READONLY,
     access: { group: 'geo', mode: 'read' },
   })
-  listCategories({ lang }: { lang?: string }, _ctx: McpContext) {
-    return ok({ categories: this.pois.available(lang) });
+  async listCategories({ lang }: { lang?: string }, _ctx: McpContext) {
+    return ok({ categories: await this.pois.available(lang) });
   }
 
   @Tool({

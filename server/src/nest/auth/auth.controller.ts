@@ -98,8 +98,8 @@ export class AuthController {
 
   @Get('me')
   @MfaExempt('the client needs to know who it is to render the setup screen')
-  me(@CurrentUser() user: User) {
-    const loaded = this.auth.getCurrentUser(user.id);
+  async me(@CurrentUser() user: User) {
+    const loaded = await this.auth.getCurrentUser(user.id);
     if (!loaded) {
       throw new HttpException({ error: 'User not found' }, 404);
     }
@@ -107,30 +107,30 @@ export class AuthController {
   }
 
   @Put('me/password')
-  changePassword(@CurrentUser() user: User, @Body() body: ChangePasswordDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async changePassword(@CurrentUser() user: User, @Body() body: ChangePasswordDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     this.limit('login', req, 5);
     // Carry the session's remember choice into the re-issued token/cookie so a
     // "remember me" login survives a password change (#1927). Bearer callers
     // have no cookie → undefined → the historical default duration.
     const remember = decodeSessionClaims((req.cookies as Record<string, string> | undefined)?.trek_session)?.remember;
-    const result = this.auth.changePassword(user.id, user.email, body, remember);
+    const result = await this.auth.changePassword(user.id, user.email, body, remember);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
     // Refresh this device's cookie with the new password_version so the user
     // stays logged in here while all other sessions are invalidated.
     if (result.token) this.auth.setAuthCookie(res, result.token, req, remember);
-    this.audit.writeAudit({ userId: user.id, action: 'user.password_change', ip: getClientIp(req) });
+    await this.audit.writeAudit({ userId: user.id, action: 'user.password_change', ip: getClientIp(req) });
     return { success: true };
   }
 
   @Delete('me')
-  deleteAccount(@CurrentUser() user: User, @Req() req: Request) {
-    const result = this.auth.deleteAccount(user.id, user.email, user.role);
+  async deleteAccount(@CurrentUser() user: User, @Req() req: Request) {
+    const result = await this.auth.deleteAccount(user.id, user.email, user.role);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
-    this.audit.writeAudit({ userId: user.id, action: 'user.account_delete', ip: getClientIp(req) });
+    await this.audit.writeAudit({ userId: user.id, action: 'user.account_delete', ip: getClientIp(req) });
     return { success: true };
   }
 
@@ -145,9 +145,9 @@ export class AuthController {
    * Nothing is written when nothing changed — the panel saves before every test
    * click, and each click would otherwise cost a log line.
    */
-  private auditApiKeys(userId: number, changed: string[], req: Request): void {
+  private async auditApiKeys(userId: number, changed: string[], req: Request): Promise<void> {
     if (!changed.length) return;
-    this.audit.writeAudit({
+    await this.audit.writeAudit({
       userId,
       action: 'settings.api_keys_update',
       resource: 'api_keys',
@@ -157,34 +157,34 @@ export class AuthController {
   }
 
   @Put('me/maps-key')
-  mapsKey(@CurrentUser() user: User, @Body() body: MapsKeyUpdateDto, @Req() req: Request) {
+  async mapsKey(@CurrentUser() user: User, @Body() body: MapsKeyUpdateDto, @Req() req: Request) {
     // changedKeys is for the audit line, not for the client: destructured off so
     // the response body stays what it always was.
-    const { changedKeys = [], ...result } = this.profile.updateMapsKey(user.id, body.maps_api_key);
-    this.auditApiKeys(user.id, changedKeys, req);
+    const { changedKeys = [], ...result } = await this.profile.updateMapsKey(user.id, body.maps_api_key);
+    await this.auditApiKeys(user.id, changedKeys, req);
     return result;
   }
 
   @Put('me/api-keys')
-  apiKeys(@CurrentUser() user: User, @Body() body: ApiKeysUpdateDto, @Req() req: Request) {
-    const { changedKeys = [], ...result } = this.profile.updateApiKeys(user.id, body);
-    this.auditApiKeys(user.id, changedKeys, req);
+  async apiKeys(@CurrentUser() user: User, @Body() body: ApiKeysUpdateDto, @Req() req: Request) {
+    const { changedKeys = [], ...result } = await this.profile.updateApiKeys(user.id, body);
+    await this.auditApiKeys(user.id, changedKeys, req);
     return result;
   }
 
   @Put('me/settings')
-  updateSettings(@CurrentUser() user: User, @Body() body: SettingsUpdateDto, @Req() req: Request) {
-    const result = this.profile.updateSettings(user.id, body);
+  async updateSettings(@CurrentUser() user: User, @Body() body: SettingsUpdateDto, @Req() req: Request) {
+    const result = await this.profile.updateSettings(user.id, body);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
-    this.auditApiKeys(user.id, result.changedKeys ?? [], req);
+    await this.auditApiKeys(user.id, result.changedKeys ?? [], req);
     return { success: result.success, user: result.user };
   }
 
   @Get('me/settings')
-  getSettings(@CurrentUser() user: User) {
-    const result = this.profile.getSettings(user.id);
+  async getSettings(@CurrentUser() user: User) {
+    const result = await this.profile.getSettings(user.id);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -213,8 +213,8 @@ export class AuthController {
   }
 
   @Get('users')
-  users(@CurrentUser() user: User) {
-    return { users: this.profile.listUsers(user.id) };
+  async users(@CurrentUser() user: User) {
+    return { users: await this.profile.listUsers(user.id) };
   }
 
   @ManagedForbidden('validating a key spends the operator quota on a test click')
@@ -229,8 +229,8 @@ export class AuthController {
 
   @Get('app-settings')
   @MfaExempt('the setup screen reads the policy it is asking the user to satisfy')
-  getAppSettings(@CurrentUser() user: User) {
-    const result = this.auth.getAppSettings(user.id);
+  async getAppSettings(@CurrentUser() user: User) {
+    const result = await this.auth.getAppSettings(user.id);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -239,12 +239,12 @@ export class AuthController {
 
   @Put('app-settings')
   @MfaExempt('an admin locked out by their own policy must still be able to lift it')
-  updateAppSettings(@CurrentUser() user: User, @Body() body: AppSettingsUpdateDto, @Req() req: Request) {
-    const result = this.auth.updateAppSettings(user.id, body);
+  async updateAppSettings(@CurrentUser() user: User, @Body() body: AppSettingsUpdateDto, @Req() req: Request) {
+    const result = await this.auth.updateAppSettings(user.id, body);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
-    this.audit.writeAudit({ userId: user.id, action: 'settings.app_update', ip: getClientIp(req), details: result.auditSummary, debugDetails: result.auditDebugDetails });
+    await this.audit.writeAudit({ userId: user.id, action: 'settings.app_update', ip: getClientIp(req), details: result.auditSummary, debugDetails: result.auditDebugDetails });
     // Named so the settings tab can say which fields the operator holds rather
     // than showing a saved value that silently did not save.
     return { success: true, ...(result.managedKeys?.length ? { managed_keys: result.managedKeys } : {}) };
@@ -258,7 +258,7 @@ export class AuthController {
   @MfaExempt('completing setup is the way out of the policy')
   @HttpCode(200)
   async mfaSetup(@CurrentUser() user: User) {
-    const result = this.auth.setupMfa(user.id, user.email);
+    const result = await this.auth.setupMfa(user.id, user.email);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -274,39 +274,39 @@ export class AuthController {
   @Post('mfa/enable')
   @MfaExempt('completing setup is the way out of the policy')
   @HttpCode(200)
-  mfaEnable(@CurrentUser() user: User, @Body() body: MfaEnableDto, @Req() req: Request) {
+  async mfaEnable(@CurrentUser() user: User, @Body() body: MfaEnableDto, @Req() req: Request) {
     this.limit('mfa', req, 5);
-    const result = this.auth.enableMfa(user.id, body.code);
+    const result = await this.auth.enableMfa(user.id, body.code);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
-    this.audit.writeAudit({ userId: user.id, action: 'user.mfa_enable', ip: getClientIp(req) });
+    await this.audit.writeAudit({ userId: user.id, action: 'user.mfa_enable', ip: getClientIp(req) });
     return { success: true, mfa_enabled: result.mfa_enabled, backup_codes: result.backup_codes };
   }
 
   @Post('mfa/disable')
   @HttpCode(200)
-  mfaDisable(@CurrentUser() user: User, @Body() body: MfaDisableDto, @Req() req: Request) {
+  async mfaDisable(@CurrentUser() user: User, @Body() body: MfaDisableDto, @Req() req: Request) {
     this.limit('login', req, 5);
-    const result = this.auth.disableMfa(user.id, user.email, body);
+    const result = await this.auth.disableMfa(user.id, user.email, body);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
-    this.audit.writeAudit({ userId: user.id, action: 'user.mfa_disable', ip: getClientIp(req) });
+    await this.audit.writeAudit({ userId: user.id, action: 'user.mfa_disable', ip: getClientIp(req) });
     return { success: true, mfa_enabled: result.mfa_enabled };
   }
 
   @Get('mcp-tokens')
-  listMcpTokens(@CurrentUser() user: User) {
-    return { tokens: this.tokens.listMcpTokens(user.id) };
+  async listMcpTokens(@CurrentUser() user: User) {
+    return { tokens: await this.tokens.listMcpTokens(user.id) };
   }
 
   @ManagedForbidden('a static token never expires and carries every scope; OAuth covers the same ground')
   @Post('mcp-tokens')
   @HttpCode(201)
-  createMcpToken(@CurrentUser() user: User, @Body() body: McpTokenCreateDto, @Req() req: Request) {
+  async createMcpToken(@CurrentUser() user: User, @Body() body: McpTokenCreateDto, @Req() req: Request) {
     this.limit('login', req, 5);
-    const result = this.tokens.createMcpToken(user.id, body.name);
+    const result = await this.tokens.createMcpToken(user.id, body.name);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -314,8 +314,8 @@ export class AuthController {
   }
 
   @Delete('mcp-tokens/:id')
-  deleteMcpToken(@CurrentUser() user: User, @Param('id') id: string) {
-    const result = this.tokens.deleteMcpToken(user.id, id);
+  async deleteMcpToken(@CurrentUser() user: User, @Param('id') id: string) {
+    const result = await this.tokens.deleteMcpToken(user.id, id);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -335,18 +335,18 @@ export class AuthController {
    * whole reason it exists.
    */
   @Get('api-tokens')
-  listApiTokens(@CurrentUser() user: User) {
-    return { tokens: this.tokens.listApiTokens(user.id) };
+  async listApiTokens(@CurrentUser() user: User) {
+    return { tokens: await this.tokens.listApiTokens(user.id) };
   }
 
   @Post('api-tokens')
   @HttpCode(201)
-  createApiToken(@CurrentUser() user: User, @Body() body: ApiTokenCreateDto, @Req() req: Request) {
+  async createApiToken(@CurrentUser() user: User, @Body() body: ApiTokenCreateDto, @Req() req: Request) {
     this.limit('login', req, 5);
     // No `scopes` means the key reads everything, which is what every key minted
     // before this field existed does. Narrowing stays opt-in so the change
     // cannot break an integration that is already running.
-    const result = this.tokens.createApiToken(user.id, body.name, body.scopes);
+    const result = await this.tokens.createApiToken(user.id, body.name, body.scopes);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -354,8 +354,8 @@ export class AuthController {
   }
 
   @Delete('api-tokens/:id')
-  deleteApiToken(@CurrentUser() user: User, @Param('id') id: string) {
-    const result = this.tokens.deleteApiToken(user.id, id);
+  async deleteApiToken(@CurrentUser() user: User, @Param('id') id: string) {
+    const result = await this.tokens.deleteApiToken(user.id, id);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -364,14 +364,14 @@ export class AuthController {
 
   @Post('ws-token')
   @HttpCode(200)
-  wsToken(@CurrentUser() user: User) {
+  async wsToken(@CurrentUser() user: User) {
     // Own bucket, not 'login': a client that reconnects its socket in a loop
     // must not be able to lock itself out of signing in. The ceiling is far
     // above any real client, which mints one token per socket connect, but it
     // stops a single account from filling the process-wide ephemeral store and
     // 503-ing every other user's ws and download tokens.
     this.limitUser('ws_token', user.id, 120);
-    const result = this.tokens.createWsToken(user.id);
+    const result = await this.tokens.createWsToken(user.id);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }

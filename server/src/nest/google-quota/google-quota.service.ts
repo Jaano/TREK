@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import type { GoogleQuotaStatus } from '@trek/shared';
-import { DatabaseService } from '../database/database.service';
+import { InjectRepository } from '@mikro-orm/nestjs';
+import { todayUtc, type GoogleQuotaStatus } from '@trek/shared';
+import { AppSettings } from '../../db/entities/AppSettings.entity';
+import { GoogleApiUsage } from '../../db/entities/GoogleApiUsage.entity';
+import { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
+import { GoogleApiUsageRepository } from '../../db/repositories/GoogleApiUsage.repository';
 
 /** The app_settings row holding the admin's ceiling. Absent or 0 means no ceiling. */
 export const GOOGLE_DAILY_LIMIT_SETTING = 'google_daily_limit';
@@ -18,34 +22,38 @@ const RETENTION_DAYS = 400;
  * is the same state as an install without a key, so search, details and photos
  * fall back to OpenStreetMap on their own instead of failing.
  *
- * Days are UTC days (SQLite's `date('now')`), like the routing counters next
- * door. A call already in flight when the ceiling is reached still lands, so
- * the count can end a call or two above it.
+ * Days are UTC days (`todayUtc()`, the same calendar date as SQLite's
+ * `date('now')`), like the routing counters next door. A call already in
+ * flight when the ceiling is reached still lands, so the count can end a call
+ * or two above it.
  */
 @Injectable()
 export class GoogleQuotaService {
   /** The UTC day the "ceiling reached" line was last logged, so it is logged once. */
   private warnedDay: string | null = null;
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+    @InjectRepository(GoogleApiUsage) private readonly usage: GoogleApiUsageRepository,
+  ) {}
 
-  dailyLimit(): number | null {
-    const raw = this.db.get<{ value: string }>('SELECT value FROM app_settings WHERE key = ?', GOOGLE_DAILY_LIMIT_SETTING)?.value;
+  async dailyLimit(): Promise<number | null> {
+    const raw = await this.appSettings.getValue(GOOGLE_DAILY_LIMIT_SETTING);
     const limit = Number.parseInt(raw ?? '', 10);
     return Number.isFinite(limit) && limit > 0 ? limit : null;
   }
 
-  usedToday(): number {
-    return this.db.get<{ calls: number }>("SELECT calls FROM google_api_usage WHERE day = date('now')")?.calls ?? 0;
+  async usedToday(): Promise<number> {
+    return this.usage.callsOn(todayUtc()); // GQ1
   }
 
   /** True once today's calls have reached the admin's ceiling. */
-  exhausted(): boolean {
-    const limit = this.dailyLimit();
+  async exhausted(): Promise<boolean> {
+    const limit = await this.dailyLimit();
     if (limit === null) return false;
-    const reached = this.usedToday() >= limit;
+    const reached = (await this.usedToday()) >= limit;
     if (reached) {
-      const today = this.db.get<{ day: string }>("SELECT date('now') AS day")?.day ?? null;
+      const today = todayUtc();
       if (today !== this.warnedDay) {
         this.warnedDay = today;
         console.warn(`[Google API] Daily limit of ${limit} calls reached; Google stays off until the next UTC day.`);
@@ -55,25 +63,22 @@ export class GoogleQuotaService {
   }
 
   /** Counts one call against today. */
-  record(): void {
-    this.db.run(
-      `INSERT INTO google_api_usage (day, calls) VALUES (date('now'), 1)
-       ON CONFLICT(day) DO UPDATE SET calls = calls + 1`,
-    );
+  async record(): Promise<void> {
+    await this.usage.recordCall(todayUtc()); // GQ2
   }
 
-  status(): GoogleQuotaStatus {
-    this.db.run("DELETE FROM google_api_usage WHERE day < date('now', ?)", `-${RETENTION_DAYS} days`);
-    const limit = this.dailyLimit();
-    const used = this.usedToday();
+  async status(): Promise<GoogleQuotaStatus> {
+    await this.usage.purgeExpired(RETENTION_DAYS); // GQ3
+    const limit = await this.dailyLimit();
+    const used = await this.usedToday();
     return { daily_limit: limit, used_today: used, exhausted: limit !== null && used >= limit };
   }
 
-  setDailyLimit(limit: number | null): GoogleQuotaStatus {
+  async setDailyLimit(limit: number | null): Promise<GoogleQuotaStatus> {
     if (limit === null || limit <= 0) {
-      this.db.run('DELETE FROM app_settings WHERE key = ?', GOOGLE_DAILY_LIMIT_SETTING);
+      await this.appSettings.deleteValue(GOOGLE_DAILY_LIMIT_SETTING);
     } else {
-      this.db.run('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)', GOOGLE_DAILY_LIMIT_SETTING, String(Math.floor(limit)));
+      await this.appSettings.upsertOrReplace(GOOGLE_DAILY_LIMIT_SETTING, String(Math.floor(limit)));
     }
     this.warnedDay = null;
     return this.status();

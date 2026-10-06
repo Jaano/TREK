@@ -63,7 +63,7 @@ export class PasskeyController {
   async registerVerify(@CurrentUser() user: User, @Body() body: PasskeyRegisterVerifyDto, @Req() req: Request) {
     const result = await this.passkeys.passkeyRegisterVerify(user.id, body);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
-    this.audit.writeAudit({ userId: user.id, action: 'user.passkey_register', ip: getClientIp(req) });
+    await this.audit.writeAudit({ userId: user.id, action: 'user.passkey_register', ip: getClientIp(req) });
     return { success: true, credential: result.credential };
   }
 
@@ -88,14 +88,14 @@ export class PasskeyController {
     const started = Date.now();
     const result = await this.passkeys.passkeyLoginVerify(body);
     if (result.auditAction) {
-      this.audit.writeAudit({ userId: result.auditUserId ?? null, action: result.auditAction, ip: getClientIp(req) });
+      await this.audit.writeAudit({ userId: result.auditUserId ?? null, action: result.auditAction, ip: getClientIp(req) });
     }
     // Pad to the same floor as password login so timing can't distinguish a
     // known credential from an unknown one.
     const elapsed = Date.now() - started;
     if (elapsed < LOGIN_MIN_LATENCY_MS) await delay(LOGIN_MIN_LATENCY_MS - elapsed);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
-    this.audit.writeAudit({ userId: result.auditUserId!, action: 'user.login', ip: getClientIp(req), details: { method: 'passkey' } });
+    await this.audit.writeAudit({ userId: result.auditUserId!, action: 'user.login', ip: getClientIp(req), details: { method: 'passkey' } });
     setAuthCookie(res, result.token!, req);
     return { token: result.token, user: result.user };
   }
@@ -104,25 +104,25 @@ export class PasskeyController {
   @Get('credentials')
   @MfaExempt('the setup screen lists what the user already has')
   @UseGuards(JwtAuthGuard)
-  list(@CurrentUser() user: User) {
-    return { credentials: this.passkeys.listPasskeys(user.id) };
+  async list(@CurrentUser() user: User) {
+    return { credentials: await this.passkeys.listPasskeys(user.id) };
   }
 
   @Patch('credentials/:id')
   @UseGuards(JwtAuthGuard)
-  rename(@CurrentUser() user: User, @Param('id') id: string, @Body() body: PasskeyRenameDto) {
-    const result = this.passkeys.renamePasskey(user.id, id, body?.name);
+  async rename(@CurrentUser() user: User, @Param('id') id: string, @Body() body: PasskeyRenameDto) {
+    const result = await this.passkeys.renamePasskey(user.id, id, body?.name);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
     return { success: true };
   }
 
   @Delete('credentials/:id')
   @UseGuards(JwtAuthGuard)
-  remove(@CurrentUser() user: User, @Param('id') id: string, @Body() body: PasskeyDeleteDto, @Req() req: Request) {
+  async remove(@CurrentUser() user: User, @Param('id') id: string, @Body() body: PasskeyDeleteDto, @Req() req: Request) {
     this.limit('login', req, 5);
-    const result = this.passkeys.deletePasskey(user.id, id, body?.password);
+    const result = await this.passkeys.deletePasskey(user.id, id, body?.password);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
-    this.audit.writeAudit({ userId: user.id, action: 'user.passkey_delete', resource: String(id), ip: getClientIp(req) });
+    await this.audit.writeAudit({ userId: user.id, action: 'user.passkey_delete', resource: String(id), ip: getClientIp(req) });
     return { success: true };
   }
 }

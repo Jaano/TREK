@@ -33,9 +33,20 @@ vi.mock('cron', () => ({
   },
 }));
 
+const logErrorMock = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
+  logInfo: vi.fn(),
+  logDebug: vi.fn(),
+  logError: logErrorMock,
+  logWarn: vi.fn(),
+}));
+
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronRegistrarService } from '../../../src/nest/scheduling/cron-registrar.service';
 import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
+import { createSnapshotTestDb } from '../../helpers/db-mock';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 function makeRegistrar(isTest: boolean) {
   const registry = new SchedulerRegistry();
@@ -149,5 +160,113 @@ describe('CronRegistrarService', () => {
     expect(h.jobs[0].stopped).toBe(true);
     expect(registry.getCronJobs().size).toBe(0);
     expect(registrar.jobCount).toBe(0);
+  });
+
+  describe('D6 request context (task-2-review.md C3 ruling)', () => {
+    // Global context disallowed on purpose — the production setting, like
+    // tests/unit/nest/database/request-context.test.ts — so a repository read
+    // with no wrapper around it genuinely throws, the way it would outside any
+    // HTTP request in production.
+    const testDb = createSnapshotTestDb();
+    let t: TestOrm;
+
+    beforeEach(async () => {
+      t = await createTestOrm(testDb, { allowGlobalContext: false });
+    });
+
+    afterEach(async () => {
+      await t.close();
+    });
+
+    it('CRONREG-010 — without MikroORM injected, a fired tick throws rather than running the onTick body unwrapped (task-6-fix-brief.md item 1: fail closed at the choke point)', async () => {
+      const registry = new SchedulerRegistry();
+      const registrar = new CronRegistrarService(registry, { isTest: () => false } as RuntimeEnvService); // no orm arg
+      let bodyRan = false;
+      registrar.register('job', '0 2 * * *', () => {
+        bodyRan = true;
+      });
+      await expect(h.jobs[0].onTick()).rejects.toThrow(/no MikroORM available/i);
+      // The wrapper throws BEFORE calling onTick at all — the whole point is
+      // that a repository read inside the body never runs unwrapped.
+      expect(bodyRan).toBe(false);
+    });
+
+    it('CRONREG-011 — with MikroORM injected, the SAME repository read inside onTick succeeds — the wrapper is load-bearing', async () => {
+      const registry = new SchedulerRegistry();
+      const registrar = new CronRegistrarService(registry, { isTest: () => false } as RuntimeEnvService, t.orm);
+      let result: unknown;
+      let caught: unknown;
+      registrar.register('job', '0 2 * * *', async () => {
+        try {
+          result = await t.orm.em.find(Users, {});
+        } catch (e) {
+          caught = e;
+        }
+      });
+      await h.jobs[0].onTick();
+      expect(caught).toBeUndefined();
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    // Plan 3b interlude B mutation proof (b): the SAME wrapper, but through a
+    // real TrekRepository-backed call rather than a bare `em.find` — proving
+    // the wrapper is load-bearing for the base class's write paths too
+    // (`count`/`nativeUpdate`/`nativeDelete`/`insert`/`upsert`), which never
+    // validated their own context before this class existed
+    // (task-1-review.md F7 INFO) and so would NOT have failed this way on
+    // the pre-interlude-B tree.
+    it('CRONREG-011B — with MikroORM injected, a TrekRepository-backed count() inside onTick succeeds; dropping the wrapper (mutation, not committed) makes it throw cannotUseGlobalContext', async () => {
+      const registry = new SchedulerRegistry();
+      const registrar = new CronRegistrarService(registry, { isTest: () => false } as RuntimeEnvService, t.orm);
+      const users = t.repo(Users);
+      let result: unknown;
+      let caught: unknown;
+      registrar.register('job', '0 2 * * *', async () => {
+        try {
+          result = await users.count({});
+        } catch (e) {
+          caught = e;
+        }
+      });
+      await h.jobs[0].onTick();
+      expect(caught).toBeUndefined();
+      expect(typeof result).toBe('number');
+    });
+  });
+
+  describe('runOnBoot (task-6-fix-brief.md item 7 — the boot-sweep choke point)', () => {
+    const testDb = createSnapshotTestDb();
+    let t: TestOrm;
+
+    beforeEach(async () => {
+      t = await createTestOrm(testDb, { allowGlobalContext: false });
+    });
+
+    afterEach(async () => {
+      await t.close();
+    });
+
+    it('CRONREG-012 — with MikroORM injected, fn runs inside a request context and a repository read succeeds', async () => {
+      const registry = new SchedulerRegistry();
+      const registrar = new CronRegistrarService(registry, { isTest: () => false } as RuntimeEnvService, t.orm);
+      let result: unknown;
+      await registrar.runOnBoot('boot-sweep', async () => {
+        result = await t.orm.em.find(Users, {});
+      });
+      expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('CRONREG-013 — without MikroORM injected, fn never runs and the failure is logged with a distinct message, not swallowed', async () => {
+      const registry = new SchedulerRegistry();
+      const registrar = new CronRegistrarService(registry, { isTest: () => false } as RuntimeEnvService); // no orm
+      let fnRan = false;
+      await registrar.runOnBoot('boot-sweep', () => {
+        fnRan = true;
+      });
+      expect(fnRan).toBe(false);
+      expect(logErrorMock).toHaveBeenCalledWith(
+        expect.stringMatching(/runOnBoot: no MikroORM available.*boot-sweep/),
+      );
+    });
   });
 });

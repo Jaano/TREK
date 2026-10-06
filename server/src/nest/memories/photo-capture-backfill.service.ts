@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import exifr from 'exifr';
 import { PhotoResolverService } from './photo-resolver.service';
 import { StorageService } from '../storage/storage.service';
-import { TrekPhotosRepository } from '../photos/trek-photos.repository';
+import { TrekPhotoRegistrationService } from '../photos/trek-photo-registration.service';
 import { exifCaptureInstant } from './memories.helpers';
 
 /**
@@ -102,7 +102,7 @@ export class PhotoCaptureBackfillService {
 
   constructor(
     private readonly resolver: PhotoResolverService,
-    private readonly photos: TrekPhotosRepository,
+    private readonly photos: TrekPhotoRegistrationService,
     private readonly storage: StorageService,
   ) {}
 
@@ -185,7 +185,7 @@ export class PhotoCaptureBackfillService {
   /** One photo; answers whether its row changed. */
   private async fillOne(id: number, userId: number): Promise<boolean> {
     try {
-      const photo = this.photos.resolve(id);
+      const photo = await this.photos.resolve(id);
       // A row that already knows both has nothing to gain, and a provider call
       // per photo is the expensive part of an album import.
       if (!photo || (photo.taken_at && photo.lat != null && photo.lng != null)) return false;
@@ -196,13 +196,13 @@ export class PhotoCaptureBackfillService {
       // not wait behind the same user's provider import.
       if (photo.provider === 'local') {
         const meta = await this.readLocalExif(photo.file_path);
-        return meta ? this.photos.recordCaptureMetadata(id, meta) : false;
+        return meta ? await this.photos.recordCaptureMetadata(id, meta) : false;
       }
 
       const info = await this.withLookupSlot(userId, () => this.resolver.getPhotoInfo(userId, id));
       if (!info.success) return false;
 
-      return this.photos.recordCaptureMetadata(id, {
+      return await this.photos.recordCaptureMetadata(id, {
         takenAt: info.data.takenAt ?? null,
         lat: info.data.lat ?? null,
         lng: info.data.lng ?? null,

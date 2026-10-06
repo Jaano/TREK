@@ -17,7 +17,8 @@ import type { RealtimeService } from '../../../src/nest/realtime/realtime.servic
 import { TripsRpc } from '../../../src/nest/trips/trips.rpc';
 import { DbRpc } from '../../../src/nest/plugins/host/rpc/db.rpc';
 import { PluginGuards } from '../../../src/nest/plugins/host/plugin-guards.service';
-import type { DatabaseService } from '../../../src/nest/database/database.service';
+import type { EntityManager } from '@mikro-orm/core';
+import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import type { PluginUserSettingsService } from '../../../src/nest/plugins/plugin-user-settings.service';
 
 const req = (method: string, params: Record<string, unknown>): RpcRequest => ({ k: 'req', id: 'x', method, params });
@@ -35,12 +36,17 @@ const dbRegistry = () => {
 /** trips.getById lives on the decorators now, so the audit cases bind it through them. */
 const tripsRegistry = () => {
   const db = {
-    canAccessTrip: (tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined),
+    findAccessible: async (tripId: number, userId: number) => (tripId === 1 && userId === 42 ? { id: 1, user_id: 42 } : undefined),
     prepare: () => ({ get: () => ({ id: 1, title: 'Japan' }), all: () => [] }),
-  } as unknown as DatabaseService;
-  const guards = new PluginGuards(db, {} as never, {} as never);
+  } as unknown as TripsRepository;
+  const guards = new PluginGuards(db, {} as never, {} as never, {} as never);
+  // Plan 3c Task 7: trips.getById (RP1) now reads through
+  // `EntityManager.getRepository(Trips).findRaw(...)`, not `db.prepare(...)`.
+  const em = {
+    getRepository: () => ({ findRaw: async () => ({ id: 1, title: 'Japan', feed_token: null }) }),
+  } as unknown as EntityManager;
   return createTestPluginRegistry([
-    new TripsRpc({} as never, {} as never, {} as never, {} as never, db, {} as never, guards, {} as never, {} as never),
+    new TripsRpc({} as never, {} as never, {} as never, {} as never, {} as never, guards, {} as never, {} as never, em),
   ]);
 };
 
@@ -108,7 +114,7 @@ describe('dispatch strips the supervisor _inv marker', () => {
       createTestPluginRegistry([new PackingRpc(packing, realtime, guards)]),
     );
     await host.dispatch(req('packing.setBagMembers', { tripId: 1, bagId: 80, userIds: [3], _inv: 'req-7' }), 42);
-    expect(setBagMembers).toHaveBeenCalledWith('1', '80', [3]);
+    expect(setBagMembers).toHaveBeenCalledWith('1', 80, [3]);
   });
 
   /**

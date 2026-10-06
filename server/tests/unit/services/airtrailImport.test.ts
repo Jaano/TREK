@@ -12,17 +12,19 @@ import { db } from '../../../src/db/database';
 import { createUser, createTrip } from '../../helpers/factories';
 import type { AirtrailAirport, AirtrailFlightRaw } from '../../../src/nest/integrations/airtrail.client';
 import { AirtrailImportService } from '../../../src/nest/integrations/airtrail-import.service';
-import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
-import { ReservationsReadRepository } from '../../../src/nest/reservations/reservations-read.repository';
+import { ReservationsReadService } from '../../../src/nest/reservations/reservations-read.service';
 import type { AirtrailClient } from '../../../src/nest/integrations/airtrail.client';
 import type { AirtrailService } from '../../../src/nest/integrations/airtrail.service';
 import { notificationsStub } from '../../helpers/notifications';
 import { accommodationsOver } from '../../helpers/accommodations-service';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestReservationsRepo, createTestReservationEndpointsRepo, createTestReservationTravelersRepo, createTestReservationDayPositionsRepo, createTestDayAccommodationsRepo, createTestDaysRepo, createTestPlacesRepo, createTestDayAssignmentsRepo, createTestTripMembersRepo, createTestUsersRepo, createTestTripsRepo } from '../../helpers/test-uow';
+import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
+import { budgetRepoArgs } from '../../helpers/budget-repos';
 
 // The client and the per-user credentials are the only stubs; the reservation
 // writes go through the real service against the real test DB, as before. They
@@ -30,21 +32,26 @@ import { accommodationsOver } from '../../helpers/accommodations-service';
 const listFlights = vi.fn();
 const broadcast = vi.fn();
 
-function makeImportService(): AirtrailImportService {
-  const dbs = () => new DatabaseService(db);
-  const permissions = new PermissionsService(dbs());
+async function makeImportService(): Promise<AirtrailImportService> {
+  const permissions = new PermissionsService(await createTestAppSettingsRepo(db), await createTestUnitOfWork(db));
   const realtime = { broadcast } as unknown as RealtimeService;
   return new AirtrailImportService(
-    dbs(),
+    await createTestReservationsRepo(db),
+    await createTestReservationEndpointsRepo(db),
+    await createTestDaysRepo(db),
     realtime,
     new ReservationsService(
-      dbs(),
       permissions,
-      new BudgetService(dbs(), permissions, new ExchangeRatesService(), realtime),
+      new BudgetService(permissions, new ExchangeRatesService(), realtime, await createTestUnitOfWork(db), ...(await budgetRepoArgs(db))),
       realtime,
       notificationsStub(),
-      new ReservationsReadRepository(dbs()),
-      accommodationsOver(dbs()),
+      new ReservationsReadService(await createTestReservationsRepo(db), await createTestReservationEndpointsRepo(db), await createTestReservationTravelersRepo(db)),
+      await accommodationsOver(db), await createTestUnitOfWork(db),
+      await createTestReservationsRepo(db), await createTestReservationEndpointsRepo(db), await createTestReservationTravelersRepo(db),
+      await createTestReservationDayPositionsRepo(db), await createTestDayAccommodationsRepo(db),
+      await createTestDaysRepo(db), await createTestPlacesRepo(db), await createTestDayAssignmentsRepo(db),
+      await createTestTripMembersRepo(db), await createTestUsersRepo(db), await createTestTripsRepo(db),
+      await createTestBudgetItemsRepo(db),
     ),
     { listFlights } as unknown as AirtrailClient,
     {
@@ -53,9 +60,9 @@ function makeImportService(): AirtrailImportService {
   );
 }
 
-const importAirtrailFlights = (
+const importAirtrailFlights = async (
   ...args: Parameters<AirtrailImportService['importAirtrailFlights']>
-) => makeImportService().importAirtrailFlights(...args);
+) => (await makeImportService()).importAirtrailFlights(...args);
 
 const BRU: AirtrailAirport = { id: 1, icao: 'EBBR', iata: 'BRU', name: 'Brussels', lat: 50.9014, lon: 4.4844, tz: 'Europe/Brussels', country: 'BE' };
 const HEL: AirtrailAirport = { id: 2, icao: 'EFHK', iata: 'HEL', name: 'Helsinki-Vantaa', lat: 60.3172, lon: 24.9633, tz: 'Europe/Helsinki', country: 'FI' };
