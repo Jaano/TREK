@@ -398,7 +398,6 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
   const toast = useToast()
   const distanceUnit = useSettingsStore(state => state.settings.distance_unit)
   const [pendingTour, setPendingTour] = useState<TourListItem | null>(null)
-  const [assigning, setAssigning] = useState(false)
   const isSaving = planner.isSaving
   const hasRoute = (planner.mode.type === 'new-draft' || planner.mode.type === 'edit-saved') && planner.route !== null
   const routeAnalysis = planner.routeAnalysis
@@ -420,17 +419,6 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
       return
     }
     selectTour(tour)
-  }
-
-  const assignSavedTour = async (dayId: number) => {
-    const savedTour = planner.saveOutcome
-    if (!canAssign || !savedTour) return
-    setAssigning(true)
-    try {
-      await onAssignToDay(savedTour.place_id, dayId)
-    } finally {
-      setAssigning(false)
-    }
   }
 
   const walkingTime = { label: t('tours.planner.inspector.duration'), value: t('tours.durationMinutes', { count: Math.max(1, Math.round((planner.durationSeconds ?? 0) / 60)) }) }
@@ -464,20 +452,9 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
               <CheckCircle2 size={16} strokeWidth={2} className="flex-none text-success" />
               {t('tours.planner.saved')}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <DialogButton onClick={() => { if (canEdit && !isSaving) planner.startNewTour() }} disabled={!canEdit || isSaving}>
-                {t('tours.planner.planAnother')}
-              </DialogButton>
-              <TourDayMenu
-                variant="button"
-                primary
-                days={days}
-                placeId={planner.saveOutcome.place_id}
-                label={t('tours.planner.assignToDay')}
-                disabled={!canAssign || assigning}
-                onPick={day => { void assignSavedTour(day.id) }}
-              />
-            </div>
+            <DialogButton onClick={() => { if (canEdit && !isSaving) planner.startNewTour() }} disabled={!canEdit || isSaving}>
+              {t('tours.planner.planAnother')}
+            </DialogButton>
           </div>
         )}
 

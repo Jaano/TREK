@@ -146,16 +146,18 @@ describe('TourPlannerToursRail', () => {
     expect(controller.openTour).toHaveBeenCalledWith(tour)
   })
 
-  it('TOUR-PLANNER-RAIL-003: assigns the saved tour immediately when a day is picked', async () => {
+  it('keeps the post-save confirmation compact and assigns through the saved TOUR-PLANNER row action', async () => {
     const controller = planner({ saveOutcome: tour, editingPlaceId: tour.place_id })
     const onAssignToDay = vi.fn().mockResolvedValue(undefined)
     render(<TourPlannerToursRail planner={controller} tours={[tour]} {...railProps} onAssignToDay={onAssignToDay} />)
 
     expect(screen.getByRole('status')).toHaveTextContent('Tour saved')
+    expect(screen.queryByRole('button', { name: 'Assign to a day' })).not.toBeInTheDocument()
+    expect(onAssignToDay).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Plan another' }))
     expect(controller.startNewTour).toHaveBeenCalledOnce()
     expect(controller.discard).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Assign to a day' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add to day: Saved ridge walk' }))
     const dayOption = screen.getByRole('button', { name: /Summit day/ })
     expect(dayOption).toHaveTextContent(/Day 1/i)
     expect(dayOption).toHaveTextContent(/May 15/i)
@@ -164,16 +166,17 @@ describe('TourPlannerToursRail', () => {
     await waitFor(() => expect(onAssignToDay).toHaveBeenCalledWith(42, 7))
   })
 
-  it('keeps the saved outcome and its day action when assignment fails', async () => {
+  it('keeps the save confirmation and row assignment action available when row assignment fails', async () => {
     const controller = planner({ saveOutcome: tour, editingPlaceId: tour.place_id })
     const onAssignToDay = vi.fn().mockResolvedValue(false)
     render(<TourPlannerToursRail planner={controller} tours={[tour]} {...railProps} onAssignToDay={onAssignToDay} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Assign to a day' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add to day: Saved ridge walk' }))
     fireEvent.click(screen.getByRole('button', { name: /Summit day/ }))
 
     await waitFor(() => expect(onAssignToDay).toHaveBeenCalledWith(42, 7))
     expect(screen.getByRole('status')).toHaveTextContent('Tour saved')
-    expect(screen.getByRole('button', { name: 'Assign to a day' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Assign to a day' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add to day: Saved ridge walk' })).toBeEnabled()
   })
 
   it('TOUR-PLANNER-RAIL-004: protects a dirty draft before selecting a GPX Tour', () => {

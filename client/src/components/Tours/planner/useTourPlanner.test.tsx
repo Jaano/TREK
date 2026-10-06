@@ -1101,4 +1101,27 @@ describe('useTourPlanner', () => {
     await act(async () => { expect(await result.current.save()).toBeNull() })
     expect(updateTour).not.toHaveBeenCalled()
   })
+
+  it('keeps the existing save-failure notice and draft when a Tour update fails', async () => {
+    detailTour.mockResolvedValue({
+      tour: savedTour,
+      waypoints: [
+        { lat: 48, lng: 11, role: 'start', sequence: 0 },
+        { lat: 48.01, lng: 11.02, role: 'end', sequence: 1 },
+      ],
+    })
+    updateTour.mockRejectedValue(new Error('Tour update failed'))
+    const { result } = renderHook(() => useTourPlanner({ tripId: 29 }))
+    await act(async () => { expect(await result.current.openTour(savedTour)).toBe(true) })
+    act(() => result.current.setName('Keep this draft'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(450) })
+    const view = render(<TourPlannerRail planner={result.current} />)
+
+    await act(async () => { expect(await result.current.save()).toBeNull() })
+    view.rerender(<TourPlannerRail planner={result.current} />)
+
+    expect(result.current.editingPlaceId).toBe(savedTour.place_id)
+    expect(result.current.name).toBe('Keep this draft')
+    expect(screen.getByText('Tour could not be saved. Your draft is still here.')).toBeInTheDocument()
+  })
 })
