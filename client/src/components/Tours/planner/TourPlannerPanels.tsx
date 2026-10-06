@@ -485,16 +485,17 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
                           />
                         )}
                         {canEdit && onDeleteTour && (
-                          <button
-                            type="button"
-                            aria-label={`${t('common.delete')} ${tour.name}`}
-                            title={`${t('common.delete')}: ${tour.name}`}
-                            disabled={isSaving}
-                            onClick={event => { event.stopPropagation(); if (!isSaving) onDeleteTour(tour.place_id) }}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-content-muted hover:text-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
-                          >
-                            <Trash2 size={16} strokeWidth={1.9} aria-hidden="true" />
-                          </button>
+                          <Tooltip label={`${t('common.delete')}: ${tour.name}`}>
+                            <button
+                              type="button"
+                              aria-label={`${t('common.delete')} ${tour.name}`}
+                              disabled={isSaving}
+                              onClick={event => { event.stopPropagation(); if (!isSaving) onDeleteTour(tour.place_id) }}
+                              className="grid h-[26px] w-[26px] flex-none place-items-center rounded-full bg-surface-card text-content-muted shadow-sm ring-1 ring-edge-faint transition-colors enabled:hover:bg-danger-soft enabled:hover:text-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-default disabled:opacity-40"
+                            >
+                              <Trash2 size={13} strokeWidth={2.2} aria-hidden="true" />
+                            </button>
+                          </Tooltip>
                         )}
                       </>
                     ) : undefined}
