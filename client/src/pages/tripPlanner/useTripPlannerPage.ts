@@ -60,7 +60,10 @@ export function useTripPlannerPage() {
 
   const focusPoints = useMemo<[number, number][]>(() => {
     if (tourPlanner.mode.type === 'view-gpx') return tourPlanner.readOnlyGpxAnalysis?.routeCoordinates ?? []
-    if ((tourPlanner.mode.type === 'new-draft' || tourPlanner.mode.type === 'edit-saved') && tourPlanner.waypoints.length) {
+    if (tourPlanner.mode.type === 'new-draft') {
+      return tourPlanner.waypoints.map(point => [point.lat, point.lng])
+    }
+    if (tourPlanner.mode.type === 'edit-saved' && tourPlanner.waypoints.length) {
       return tourPlanner.waypoints.map(point => [point.lat, point.lng])
     }
     return plannerFallbackFocusPoints

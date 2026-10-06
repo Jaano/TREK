@@ -31,6 +31,7 @@ const glMap = vi.hoisted(() => ({
   flyTo: vi.fn(),
   jumpTo: vi.fn(),
   getZoom: vi.fn().mockReturnValue(10),
+  getCenter: vi.fn(() => ({ lng: 0, lat: 0 })),
   addControl: vi.fn(),
   removeControl: vi.fn(),
   remove: vi.fn(),
@@ -938,19 +939,6 @@ describe('MapViewGL', () => {
         route={null}
         followSelection={false}
         focusKey={1}
-        focusPoints={[]}
-        glProvider="maplibre-gl"
-      />,
-    )
-    await act(async () => {})
-    expect(glMap.fitBounds).not.toHaveBeenCalled()
-
-    rerender(
-      <MapViewGL
-        places={[]}
-        route={[[[48, 11], [48.2, 11.3]]]}
-        followSelection={false}
-        focusKey={1}
         focusPoints={[[48, 11], [48.2, 11.3]]}
         glProvider="maplibre-gl"
       />,
@@ -958,26 +946,35 @@ describe('MapViewGL', () => {
     await act(async () => {})
     expect(glMap.fitBounds).toHaveBeenCalledOnce()
     glMap.fitBounds.mockClear()
-
-    rerender(
-      <MapViewGL
-        places={[]}
-        route={[[[48, 11], [48.2, 11.3], [48.4, 11.6]]]}
-        followSelection={false}
-        focusKey={1}
-        focusPoints={[[48, 11], [48.2, 11.3], [48.4, 11.6]]}
-        glProvider="maplibre-gl"
-      />,
-    )
-    await act(async () => {})
-    expect(glMap.fitBounds).not.toHaveBeenCalled()
+    const mapConstructions = (maplibregl.Map as any).mock.calls.length
+    const retainedCenter = { lng: 135.8, lat: 35.2 }
+    glMap.getCenter.mockReturnValue(retainedCenter)
+    glMap.getZoom.mockReturnValue(12)
 
     rerender(
       <MapViewGL
         places={[]}
         followSelection={false}
         focusKey={2}
-        focusPoints={[[48, 11], [48.5, 11.8]]}
+        focusPoints={[]}
+        glProvider="maplibre-gl"
+      />,
+    )
+    await act(async () => {})
+    expect(glMap.fitBounds).not.toHaveBeenCalled()
+    expect(glMap.flyTo).not.toHaveBeenCalled()
+    expect(glMap.jumpTo).not.toHaveBeenCalled()
+    expect(glMap.easeTo).not.toHaveBeenCalled()
+    expect((maplibregl.Map as any).mock.calls).toHaveLength(mapConstructions)
+    expect(glMap.getCenter()).toEqual(retainedCenter)
+    expect(glMap.getZoom()).toBe(12)
+
+    rerender(
+      <MapViewGL
+        places={[]}
+        followSelection={false}
+        focusKey={2}
+        focusPoints={[[35.01, 135.76]]}
         glProvider="maplibre-gl"
       />,
     )

@@ -463,6 +463,23 @@ describe('MapView', () => {
     )
     expect(mapMock.fitBounds).not.toHaveBeenCalled()
 
+    const mapContainer = screen.getByTestId('map-container')
+    const retainedCenter = { lat: 35.2, lng: 135.8 }
+    mapMock.getCenter.mockReturnValue(retainedCenter)
+    mapMock.getZoom.mockReturnValue(12)
+    mapMock.setView([retainedCenter.lat, retainedCenter.lng], 12)
+    mapMock.fitBounds.mockClear()
+    mapMock.setView.mockClear()
+    mapMock.panTo.mockClear()
+
+    rerender(<MapView places={[]} followSelection={false} focusKey={2} focusPoints={[]} />)
+    expect(screen.getByTestId('map-container')).toBe(mapContainer)
+    expect(mapMock.fitBounds).not.toHaveBeenCalled()
+    expect(mapMock.setView).not.toHaveBeenCalled()
+    expect(mapMock.panTo).not.toHaveBeenCalled()
+    expect(mapMock.getCenter()).toEqual(retainedCenter)
+    expect(mapMock.getZoom()).toBe(12)
+
     rerender(
       <MapView places={[]} followSelection={false} focusKey={2} focusPoints={[[48, 11], [48.5, 11.8]]} />,
     )

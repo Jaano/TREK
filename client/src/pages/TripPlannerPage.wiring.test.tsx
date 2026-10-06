@@ -26,7 +26,11 @@ const plannerActions = vi.hoisted(() => ({
   viewGpxTour: vi.fn(),
   addWaypoint: vi.fn(),
   openTour: vi.fn(),
+  startNewTour: vi.fn(),
   forgetDeletedTour: vi.fn((_placeId: number) => undefined),
+  saveOutcome: null as unknown,
+  mapFocusKey: 0,
+  newDraftGeneration: 0,
   mode: { type: 'neutral' } as unknown,
   isSaving: false,
   waypoints: [] as unknown,
@@ -106,17 +110,18 @@ vi.mock('../components/Tours/planner/useTourPlanner', () => ({
     waypoints: plannerActions.waypoints,
     routeProfileFocus: plannerActions.routeProfileFocus,
     name: '',
-    startNewTour: vi.fn(),
+    startNewTour: plannerActions.startNewTour,
     newTourConfirmationOpen: false,
     cancelNewTour: vi.fn(),
     elevationProfileExpanded: true,
     toggleElevationProfile: vi.fn(),
-    newDraftGeneration: 0,
+    newDraftGeneration: plannerActions.newDraftGeneration,
+    mapFocusKey: plannerActions.mapFocusKey,
     mode: plannerActions.mode,
     isSaving: plannerActions.isSaving,
     selectedWaypointId: null,
     editingPlaceId: null,
-    saveOutcome: null,
+    saveOutcome: plannerActions.saveOutcome,
     hasUnsavedChanges: false,
     setSelectedWaypointId: vi.fn(),
     mapBaseLayer: 'map',
@@ -430,6 +435,16 @@ function renderPage(overrides: HookState = {}) {
   return render(<TripPlannerPage />)
 }
 
+function mockStartNewTourTransition() {
+  plannerActions.startNewTour.mockImplementation(() => {
+    plannerActions.mode = { type: 'new-draft' }
+    plannerActions.waypoints = []
+    plannerActions.saveOutcome = null
+    plannerActions.mapFocusKey += 1
+    plannerActions.newDraftGeneration += 1
+  })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   resetAllStores()
@@ -438,7 +453,11 @@ beforeEach(() => {
   plannerActions.viewGpxTour.mockReset()
   plannerActions.addWaypoint.mockReset()
   plannerActions.openTour.mockReset()
+  plannerActions.startNewTour.mockReset()
   plannerActions.forgetDeletedTour.mockReset()
+  plannerActions.saveOutcome = null
+  plannerActions.mapFocusKey = 0
+  plannerActions.newDraftGeneration = 0
   plannerActions.mode = { type: 'neutral' }
   plannerActions.isSaving = false
   plannerActions.waypoints = []
@@ -542,7 +561,83 @@ describe('TripPlannerPage — shell', () => {
     expect(plannerActions.openTour).not.toHaveBeenCalled()
   })
 
-  it('FE-PAGE-TPW-063: uses the last normal Plan viewport before falling back to trip Places', () => {
+  it('preserves the visible TOUR-PLANNER camera when the Plan a Tour button starts an empty draft', async () => {
+    const place = buildPlace({ id: 81, lat: 35.01, lng: 135.76 })
+    mockStartNewTourTransition()
+    const view = renderPage({
+      activeTab: 'tour-planner',
+      enabledAddons: { packing: true, budget: true, documents: true, collab: true, tours: true },
+      toursEnabled: true,
+      places: [place],
+    })
+    const mapElement = screen.getByTestId('map-view')
+
+    expect(props('map').focusPoints).toEqual([[place.lat, place.lng]])
+    fireEvent.click(await screen.findByRole('button', { name: 'Plan new tour' }))
+    expect(plannerActions.startNewTour).toHaveBeenCalledOnce()
+    view.rerender(<TripPlannerPage />)
+
+    expect(screen.getByRole('heading', { name: 'New tour' })).toBeInTheDocument()
+    expect(props('map').focusPoints).toEqual([])
+    expect(props('map').route).toBeNull()
+    expect(props('map').plannerWaypoints).toEqual([])
+    expect(props('map').focusKey).toBe(1)
+    expect(screen.getByTestId('map-view')).toBe(mapElement)
+    expect(props('map').onMapClick).toBeTypeOf('function')
+    act(() => props('map').onMapClick({ latlng: { lat: 35.02, lng: 135.77 } }))
+    expect(plannerActions.addWaypoint).toHaveBeenCalledWith(35.02, 135.77)
+  })
+
+  it('preserves the visible TOUR-PLANNER camera when Plan another starts a new Tour', async () => {
+    const savedTour = {
+      place_id: 82,
+      name: 'Saved Kyoto tour',
+      tour_type: 'hike',
+      distance: 6,
+      elevation_gain: 300,
+      elevation_loss: 290,
+      duration: 120,
+      difficulty: null,
+      wanderer_ref: null,
+      match_confidence: 1,
+      tour_group_id: null,
+      max_hiking_difficulty: 2,
+      planned: false,
+      caution: false,
+      has_waypoints: true,
+    }
+    mockStartNewTourTransition()
+    plannerActions.mode = { type: 'edit-saved', placeId: savedTour.place_id }
+    plannerActions.waypoints = [
+      { id: 'start', lat: 35.01, lng: 135.76, role: 'start' },
+      { id: 'end', lat: 35.02, lng: 135.77, role: 'end' },
+    ]
+    plannerActions.mapFocusKey = 8
+    plannerActions.saveOutcome = savedTour
+    const view = renderPage({
+      activeTab: 'tour-planner',
+      enabledAddons: { packing: true, budget: true, documents: true, collab: true, tours: true },
+      toursEnabled: true,
+      tours: [savedTour],
+      places: [buildPlace({ id: savedTour.place_id, lat: 35.01, lng: 135.76 })],
+    })
+    const mapElement = screen.getByTestId('map-view')
+
+    expect(props('map').focusPoints).toEqual([[35.01, 135.76], [35.02, 135.77]])
+    fireEvent.click(await screen.findByRole('button', { name: 'Plan another' }))
+    expect(plannerActions.startNewTour).toHaveBeenCalledOnce()
+    view.rerender(<TripPlannerPage />)
+
+    expect(screen.getByRole('heading', { name: 'New tour' })).toBeInTheDocument()
+    expect(props('map').focusPoints).toEqual([])
+    expect(props('map').route).toBeNull()
+    expect(props('map').plannerWaypoints).toEqual([])
+    expect(props('map').focusKey).toBe(9)
+    expect(screen.getByTestId('map-view')).toBe(mapElement)
+    expect(props('map').onMapClick).toBeTypeOf('function')
+  })
+
+  it('FE-PAGE-TPW-063: uses the last TRIP-PLAN viewport for neutral TOUR-PLANNER fallback', () => {
     const first = buildPlace({ id: 81, lat: 47.1, lng: 11.2 })
     const second = buildPlace({ id: 82, lat: 47.3, lng: 11.6 })
     const view = renderPage({ activeTab: 'tour-planner', enabledAddons: { packing: true, budget: true, documents: true, collab: true, tours: true }, toursEnabled: true, places: [first, second] })
@@ -566,6 +661,8 @@ describe('TripPlannerPage — shell', () => {
     hookState = { ...hookState, activeTab: 'plan' }
     view.rerender(<TripPlannerPage />)
     act(() => props('map').onViewportChange({ south: 46.9, west: 10.8, north: 47.5, east: 12.1 }))
+    plannerActions.mode = { type: 'neutral' }
+    plannerActions.waypoints = []
     hookState = { ...hookState, activeTab: 'tour-planner' }
     view.rerender(<TripPlannerPage />)
 
