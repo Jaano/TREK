@@ -40,7 +40,7 @@ export default function TourListRow({ tour, selected = false, disabled = false, 
           <TourFactPills tour={tour} className="mt-1.5" />
         </div>
         {action && (
-          <div data-testid="tour-action-row" role="presentation" className="flex flex-none items-center pt-1" onClick={event => event.stopPropagation()}>
+          <div data-testid="tour-action-row" role="presentation" className="flex flex-none items-center gap-1.5 pt-1" onClick={event => event.stopPropagation()}>
             {action}
           </div>
         )}
