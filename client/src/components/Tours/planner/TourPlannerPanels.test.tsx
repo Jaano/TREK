@@ -124,6 +124,16 @@ describe('TourPlannerToursRail', () => {
     expect(screen.queryByText('Routing is planning assistance, not a safety guarantee.')).not.toBeInTheDocument()
   })
 
+  it('exposes permanent deletion in the visible TOUR-PLANNER Tours rail', () => {
+    const onDeleteTour = vi.fn()
+    render(<TourPlannerToursRail planner={planner()} tours={[tour]} {...railProps} canEdit onDeleteTour={onDeleteTour} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Saved ridge walk' }))
+
+    expect(onDeleteTour).toHaveBeenCalledOnce()
+    expect(onDeleteTour).toHaveBeenCalledWith(tour.place_id)
+  })
+
   it('TOUR-PLANNER-RAIL-002: guards a saved-tour open while the current draft is unsaved', () => {
     const controller = planner({ hasUnsavedChanges: true })
     render(<TourPlannerToursRail planner={controller} tours={[tour]} {...railProps} />)

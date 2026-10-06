@@ -26,6 +26,7 @@ const plannerActions = vi.hoisted(() => ({
   viewGpxTour: vi.fn(),
   addWaypoint: vi.fn(),
   openTour: vi.fn(),
+  forgetDeletedTour: vi.fn((_placeId: number) => undefined),
   mode: { type: 'neutral' } as unknown,
   isSaving: false,
   waypoints: [] as unknown,
@@ -127,6 +128,7 @@ vi.mock('../components/Tours/planner/useTourPlanner', () => ({
     readOnlyGpxTour: plannerActions.readOnlyGpxTour,
     readOnlyGpxAnalysis: plannerActions.readOnlyGpxAnalysis,
     discard: vi.fn(),
+    forgetDeletedTour: plannerActions.forgetDeletedTour,
   }),
 }))
 
@@ -383,6 +385,7 @@ function baseState(): HookState {
     handleSavePlace: vi.fn(async () => undefined),
     openPlaceEditor: vi.fn(),
     handleDeletePlace: vi.fn(),
+    handleDeleteTour: vi.fn(),
     confirmDeletePlace: vi.fn(async () => undefined),
     confirmDeletePlaces: vi.fn(async () => undefined),
     confirmChangeCategory: vi.fn(async () => undefined),
@@ -435,6 +438,7 @@ beforeEach(() => {
   plannerActions.viewGpxTour.mockReset()
   plannerActions.addWaypoint.mockReset()
   plannerActions.openTour.mockReset()
+  plannerActions.forgetDeletedTour.mockReset()
   plannerActions.mode = { type: 'neutral' }
   plannerActions.isSaving = false
   plannerActions.waypoints = []
@@ -619,6 +623,137 @@ describe('TripPlannerPage — shell', () => {
 
     expect(screen.getByTestId('map-view')).toBeInTheDocument()
     expect(screen.queryByTestId('tour-planner-rail')).not.toBeInTheDocument()
+  })
+
+  it('does not offer permanent Tour Delete from the desktop TRIP-PLAN detail', () => {
+    const tourPlace = buildPlace({ id: 91, name: 'Ridge walk', tour_place_id: 91 })
+    const selectedTour = {
+      place_id: 91,
+      name: tourPlace.name,
+      tour_type: 'hike',
+      distance: 8,
+      elevation_gain: 420,
+      elevation_loss: 390,
+      duration: null,
+      difficulty: null,
+      wanderer_ref: null,
+      match_confidence: null,
+      tour_group_id: null,
+      max_hiking_difficulty: 2,
+      planned: true,
+      caution: false,
+      has_waypoints: true,
+    }
+    renderPage({
+      toursEnabled: true,
+      selectedPlace: tourPlace,
+      selectedPlaceId: tourPlace.id,
+      selectedTour,
+    })
+    expect(props('tourDetail').onDelete).toBeUndefined()
+  })
+
+  it('routes visible TOUR-PLANNER Tours-rail deletion through the existing confirmation', async () => {
+    const savedTour = {
+      place_id: 91,
+      name: 'Ridge walk',
+      tour_type: 'hike',
+      distance: 8,
+      elevation_gain: 420,
+      elevation_loss: 390,
+      duration: null,
+      difficulty: null,
+      wanderer_ref: null,
+      match_confidence: null,
+      tour_group_id: null,
+      max_hiking_difficulty: 2,
+      planned: false,
+      caution: false,
+      has_waypoints: true,
+    }
+    const handleDeleteTour = vi.fn((placeId: number) => {
+      hookState = { ...hookState, deletePlaceId: placeId, deletePlaceIsTour: true }
+    })
+    const setDeletePlaceId = vi.fn((placeId: number | null) => {
+      hookState = { ...hookState, deletePlaceId: placeId }
+    })
+    const confirmDeletePlace = vi.fn(async (): Promise<number | null> => savedTour.place_id)
+    plannerActions.mode = { type: 'edit-saved', placeId: savedTour.place_id }
+    plannerActions.forgetDeletedTour.mockImplementation(placeId => {
+      const mode = plannerActions.mode as { placeId?: number }
+      if (mode.placeId === placeId) plannerActions.mode = { type: 'neutral' }
+    })
+    const view = renderPage({
+      activeTab: 'tour-planner',
+      enabledAddons: { packing: true, budget: true, documents: true, collab: true, tours: true },
+      toursEnabled: true,
+      tours: [savedTour],
+      handleDeleteTour,
+      setDeletePlaceId,
+      confirmDeletePlace,
+    })
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete Ridge walk' }))
+    expect(handleDeleteTour).toHaveBeenCalledWith(savedTour.place_id)
+    view.rerender(<TripPlannerPage />)
+    let confirmation = [...confirmDialogs].reverse().find(dialog => dialog.isOpen)
+    expect(confirmation).toMatchObject({ title: 'common.delete', confirmLabel: 'tours.delete.confirmAction' })
+    expect(screen.getByRole('heading', { name: 'Edit tour' })).toBeInTheDocument()
+
+    const onClose = confirmation?.onClose as (() => void) | undefined
+    onClose?.()
+    expect(setDeletePlaceId).toHaveBeenCalledWith(null)
+    expect(confirmDeletePlace).not.toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'Edit tour' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Ridge walk' }))
+    view.rerender(<TripPlannerPage />)
+    confirmation = [...confirmDialogs].reverse().find(dialog => dialog.isOpen)
+    const onConfirm = confirmation?.onConfirm as (() => void | Promise<void>) | undefined
+    await act(async () => { await onConfirm?.() })
+    expect(confirmDeletePlace).toHaveBeenCalledOnce()
+    expect(plannerActions.forgetDeletedTour).toHaveBeenCalledWith(savedTour.place_id)
+    view.rerender(<TripPlannerPage />)
+    expect(screen.getByText('Plan a tour')).toBeInTheDocument()
+
+    confirmDeletePlace.mockResolvedValue(null)
+    plannerActions.forgetDeletedTour.mockClear()
+    plannerActions.mode = { type: 'edit-saved', placeId: savedTour.place_id }
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Ridge walk' }))
+    view.rerender(<TripPlannerPage />)
+    confirmation = [...confirmDialogs].reverse().find(dialog => dialog.isOpen)
+    const failedConfirm = confirmation?.onConfirm as (() => void | Promise<void>) | undefined
+    await act(async () => { await failedConfirm?.() })
+    expect(plannerActions.forgetDeletedTour).not.toHaveBeenCalled()
+    expect(screen.getByRole('option', { name: /Ridge walk/ })).toBeInTheDocument()
+    view.rerender(<TripPlannerPage />)
+    expect(screen.getByRole('heading', { name: 'Edit tour' })).toBeInTheDocument()
+  })
+
+  it('excludes Tours from the mobile TRIP-PLAN Places pool when the addon is enabled', () => {
+    const tourPlace = buildPlace({ id: 92, name: 'Mobile ridge', tour_place_id: 92 })
+    const tourPlaceIds = new Set([tourPlace.id])
+    renderPage({
+      isMobile: true,
+      mobileSidebarOpen: 'right',
+      toursEnabled: true,
+      tourPlaceIds,
+      places: [tourPlace],
+    })
+
+    expect(props('places').toursEnabled).toBe(true)
+    expect(props('places').excludePlaceIds).toBe(tourPlaceIds)
+  })
+
+  it('passes Tour facet identity to desktop and mobile TRIP-PLAN day cards', () => {
+    const tourPlaceIds = new Set([92])
+    const view = renderPage({ activeTab: 'plan', toursEnabled: true, tourPlaceIds })
+
+    expect(props('dayPlan').tourPlaceIds).toBe(tourPlaceIds)
+
+    hookState = { ...hookState, isMobile: true, mobileSidebarOpen: 'left' }
+    view.rerender(<TripPlannerPage />)
+    expect(props('dayPlan').tourPlaceIds).toBe(tourPlaceIds)
   })
 
   it('FE-PAGE-TPW-062: opens GPX geometry in the read-only Planner path without mounting the general detail dialog', async () => {

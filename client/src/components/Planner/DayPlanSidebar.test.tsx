@@ -1490,6 +1490,55 @@ describe('DayPlanSidebar', () => {
     expect(onDeletePlace).toHaveBeenCalledWith(42)
   })
 
+  it('hides permanent Tour Delete from the TRIP-PLAN day card while retaining edit, route, view, and remove-from-day', async () => {
+    const user = userEvent.setup()
+    useAddonStore.setState({ addons: [{ id: 'tours', name: 'Tours', type: 'trip', icon: '', enabled: true }] })
+    const place = buildPlace({ id: 42, name: 'Ridge walk' })
+    const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
+    const assignment = buildAssignment({ id: 99, day_id: 10, order_index: 0, place })
+    const onPlaceClick = vi.fn()
+    const onRemoveAssignment = vi.fn()
+    const onDeletePlace = vi.fn()
+    render(
+      <DayPlanSidebar
+        {...makeDefaultProps({
+          days: [day],
+          places: [place],
+          tourPlaceIds: new Set([place.id]),
+          assignments: { '10': [assignment] },
+          onPlaceClick,
+          onRemoveAssignment,
+          onDeletePlace,
+        })}
+      />
+    )
+
+    await user.click(screen.getByText('Ridge walk'))
+    expect(onPlaceClick).toHaveBeenCalled()
+    fireEvent.contextMenu(screen.getByText('Ridge walk'))
+    expect(screen.getByText(/Edit/i)).toBeInTheDocument()
+    expect(screen.getByText(/Leave out of route/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Delete/i)).not.toBeInTheDocument()
+    await user.click(screen.getByText(/Remove from day/i))
+    expect(onRemoveAssignment).toHaveBeenCalledWith(10, 99)
+    expect(onDeletePlace).not.toHaveBeenCalled()
+  })
+
+  it('TRIP-PLAN preserves legacy route-backed Place Delete when Tours is disabled', async () => {
+    const user = userEvent.setup()
+    useAddonStore.setState({ addons: [{ id: 'tours', name: 'Tours', type: 'trip', icon: '', enabled: false }] })
+    const place = buildPlace({ id: 43, name: 'Old trail', route_geometry: '[[48,11],[48.01,11.02]]', tour_place_id: 43 })
+    const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
+    const assignment = buildAssignment({ id: 100, day_id: 10, order_index: 0, place })
+    const onDeletePlace = vi.fn()
+    render(<DayPlanSidebar {...makeDefaultProps({ days: [day], places: [place], tourPlaceIds: new Set([place.id]), assignments: { '10': [assignment] }, onDeletePlace })} />)
+
+    fireEvent.contextMenu(screen.getByText('Old trail'))
+    await user.click(screen.getByText(/Delete/i))
+
+    expect(onDeletePlace).toHaveBeenCalledWith(place.id)
+  })
+
   // ── Note card editing (#2249) ─────────────────────────
 
   it('FE-PLANNER-DAYPLAN-064: clicking a note row opens its edit modal', async () => {

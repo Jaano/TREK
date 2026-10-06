@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen } from '../../../../tests/helpers/render'
 
 vi.mock('../../../../../server/src/config', () => { throw new Error('Config initialization is forbidden in client tests') })
 vi.mock('../../../../../server/src/db/database', () => { throw new Error('Legacy database imports are forbidden in client tests') })
@@ -20,6 +21,7 @@ vi.mock('../../../api/client', () => ({ toursApi: { create: createTour, detail: 
 vi.mock('../useTourPermissions', () => ({ useTourPermissions: ({ canEdit = true, canAssign = true }: { canEdit?: boolean; canAssign?: boolean }) => ({ canEdit, canAssign }) }))
 
 import { useTourPlanner } from './useTourPlanner'
+import { TourPlannerRail } from './TourPlannerPanels'
 
 const routed = {
   coordinates: [[48, 11], [48.01, 11.02]] as [number, number][],
@@ -1064,5 +1066,39 @@ describe('useTourPlanner', () => {
     expect(localStorage.getItem('tour-draft-29')).toBeNull()
     expect(updateTour).not.toHaveBeenCalled()
     expect(createTour).not.toHaveBeenCalled()
+  })
+
+  it('clears a successfully deleted saved Tour from the editor and blocks a stale update', async () => {
+    detailTour.mockResolvedValue({
+      tour: savedTour,
+      waypoints: [
+        { lat: 48, lng: 11, role: 'start', sequence: 0 },
+        { lat: 48.01, lng: 11.02, role: 'end', sequence: 1 },
+      ],
+    })
+    const { result } = renderHook(() => useTourPlanner({ tripId: 29 }))
+    await act(async () => { expect(await result.current.openTour(savedTour)).toBe(true) })
+    act(() => result.current.setName('Unsaved rename'))
+    await act(async () => { await vi.advanceTimersByTimeAsync(450) })
+    expect(result.current.mode).toEqual({ type: 'edit-saved', placeId: savedTour.place_id })
+    const view = render(<TourPlannerRail planner={result.current} />)
+    expect(screen.getByRole('heading', { name: 'Edit tour' })).toBeInTheDocument()
+
+    act(() => result.current.forgetDeletedTour(savedTour.place_id))
+    view.rerender(<TourPlannerRail planner={result.current} />)
+
+    expect(result.current.mode).toEqual({ type: 'neutral' })
+    expect(result.current.editingPlaceId).toBeNull()
+    expect(result.current.waypoints).toEqual([])
+    expect(result.current.route).toBeNull()
+    expect(result.current.routeProfileFocus).toBeNull()
+    expect(result.current.error).toBeNull()
+    expect(result.current.hasUnsavedChanges).toBe(false)
+    expect(result.current.canSave).toBe(false)
+    expect(localStorage.getItem('tour-draft-29')).toBeNull()
+    expect(screen.getByText('Plan a tour')).toBeInTheDocument()
+    expect(screen.queryByText('Tour could not be saved. Your draft is still here.')).not.toBeInTheDocument()
+    await act(async () => { expect(await result.current.save()).toBeNull() })
+    expect(updateTour).not.toHaveBeenCalled()
   })
 })

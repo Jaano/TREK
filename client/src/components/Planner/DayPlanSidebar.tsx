@@ -78,6 +78,7 @@ interface DayPlanSidebarProps {
   trip: Trip
   days: Day[]
   places: Place[]
+  tourPlaceIds?: ReadonlySet<number>
   categories: Category[]
   assignments: AssignmentsMap
   selectedDayId: number | null
@@ -2190,7 +2191,14 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                           safeHttpUrl(place.website) && { label: t('inspector.website'), icon: ExternalLink, onClick: () => window.open(safeHttpUrl(place.website)!, '_blank', 'noopener,noreferrer') },
                           collectionsEnabled && { label: t('inspector.saveToCollection'), icon: Bookmark, onClick: () => useSaveToCollectionStore.getState().open(placeToSaveTarget(place)) },
                           { divider: true },
-                          canEditPlaces && onDeletePlace && { label: t('common.delete'), icon: Trash2, danger: true, onClick: () => onDeletePlace(place.id) },
+                          canEditPlaces &&
+                            onDeletePlace &&
+                            !(toursEnabled && (props.tourPlaceIds?.has(place.id) || place.tour_place_id === place.id)) && {
+                              label: t('common.delete'),
+                              icon: Trash2,
+                              danger: true,
+                              onClick: () => onDeletePlace(place.id),
+                            },
                         ]
 
                         return (

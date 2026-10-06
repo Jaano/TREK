@@ -142,6 +142,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
   const draftRevisionRef = useRef(0)
   const saveRequestIdRef = useRef(0)
   const saveInFlightRef = useRef(false)
+  const deletedTourPlaceIdsRef = useRef(new Set<number>())
   const mountedRef = useRef(false)
   const contextGenerationRef = useRef(0)
   const detailRequestIdRef = useRef(0)
@@ -338,6 +339,20 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
     setMapFocusKey(key => key + 1)
   }, [invalidateDetailRequest, interruptRouting, storageKey])
 
+  const forgetDeletedTour = useCallback((placeId: number) => {
+    deletedTourPlaceIdsRef.current.add(placeId)
+    const editorReferencesTour = editingPlaceIdRef.current === placeId
+      || readOnlyGpxTourRef.current?.tour.place_id === placeId
+      || detailPlaceIdRef.current === placeId
+    if (!editorReferencesTour) return
+    if (saveInFlightRef.current) {
+      saveRequestIdRef.current += 1
+      saveInFlightRef.current = false
+      setIsSaving(false)
+    }
+    returnToNeutral()
+  }, [returnToNeutral])
+
   const startNewTour = useCallback((confirmed = false) => {
     if (!editPermissionRef.current || saveInFlightRef.current) return
     const currentDraftIsEmpty = editingPlaceId === null && waypoints.length === 0 && name.trim().length === 0
@@ -372,7 +387,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
   }, [invalidateDetailRequest])
 
   const openTour = useCallback(async (tour: TourListItem) => {
-    if (!mountedRef.current || !activeRef.current || saveInFlightRef.current) return false
+    if (!mountedRef.current || !activeRef.current || saveInFlightRef.current || deletedTourPlaceIdsRef.current.has(tour.place_id)) return false
     detailAbortRef.current?.abort()
     const controller = new AbortController()
     detailAbortRef.current = controller
@@ -544,6 +559,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
 
   const save = useCallback(async () => {
     if (!mountedRef.current || saveInFlightRef.current || !editPermissionRef.current || !canSave || !hasCompleteElevation(enrichedGeometry)) return null
+    if (editingPlaceId !== null && deletedTourPlaceIdsRef.current.has(editingPlaceId)) return null
     invalidateDetailRequest()
     saveInFlightRef.current = true
     const requestId = ++saveRequestIdRef.current
@@ -586,7 +602,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
         editingPlaceIdRef.current = result.tour.place_id
         setSaveOutcome(result.tour)
       }
-      if (mountedRef.current && String(tripIdRef.current) === submittedTripId) {
+      if (mountedRef.current && String(tripIdRef.current) === submittedTripId && !deletedTourPlaceIdsRef.current.has(result.tour.place_id)) {
         try { await onSaved?.(result) } catch { return result }
       }
       return result
@@ -615,7 +631,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
     routeProfileFocus, setRouteProfileFocus,
     mapBaseLayer, setMapBaseLayer,
     mode, readOnlyGpxTour, readOnlyGpxAnalysis, viewGpxTour, closeGpxTour,
-    startNewTour, newTourConfirmationOpen, cancelNewTour,
+    startNewTour, newTourConfirmationOpen, cancelNewTour, forgetDeletedTour,
     elevationProfileExpanded, toggleElevationProfile, newDraftGeneration, draftRestored, mapFocusKey,
     editingPlaceId, openingTourId, openTour,
     saveOutcome, hasUnsavedChanges, canSave, save, discard, returnToNeutral,

@@ -22,8 +22,8 @@ interface MToursSelectionListProps extends TourPermissionProps {
  * (the same one MPlacesBrowser's unplanned-place rows open) — a tour is a
  * Place under the hood, so no new linking code is needed here either.
  */
-export default function MToursSelectionList({ planner, shell, filter, canEdit, canAssign: assignPermission }: MToursSelectionListProps) {
-  const { canAssign } = useTourPermissions({ tripId: planner.tripId, canEdit, canAssign: assignPermission })
+export default function MToursSelectionList({ planner, shell, filter, canAssign: assignPermission }: MToursSelectionListProps) {
+  const { canAssign } = useTourPermissions({ tripId: planner.tripId, canAssign: assignPermission })
   const { t } = planner
   const distanceUnit = useSettingsStore(s => s.settings.distance_unit)
   const tours: TourListItem[] = planner.tours

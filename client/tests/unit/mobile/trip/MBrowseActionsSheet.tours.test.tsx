@@ -61,6 +61,8 @@ describe('MBrowseActionsSheet Tour assignment picker', () => {
     const planner = mobilePlanner({ handleAssignToDay });
     const { rerender, shell } = renderDayPicker(planner);
 
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument();
+
     const dayOne = screen.getByRole('button', { name: /Day one/ });
     const dayTwo = screen.getByRole('button', { name: /Day two/ });
     expect(dayOne).toBeDisabled();

@@ -78,6 +78,21 @@ describe('useTourPlaceIds', () => {
     expect(result.current.tours).toEqual([edited, tour])
   })
 
+  it('removes a deleted Tour from the visible list before the refresh completes', async () => {
+    const { result } = renderHook(() => useTourPlaceIds(7, true))
+    await waitFor(() => expect(result.current.tours).toEqual([tour]))
+    const refresh = deferred<{ tours: TourListItem[] }>()
+    vi.mocked(toursApi.list).mockReturnValueOnce(refresh.promise)
+
+    act(() => result.current.invalidateTourPlaceIds({ removedPlaceIds: [tour.place_id] }))
+
+    expect(result.current.tours).toEqual([])
+    expect(result.current.tourPlaceIds.size).toBe(0)
+    await act(async () => refresh.resolve({ tours: [] }))
+    await waitFor(() => expect(result.current.toursLoading).toBe(false))
+    expect(result.current.tourLoadError).toBe(false)
+  })
+
   it('shows only the new trip Tours after a successful trip switch', async () => {
     const tripTwoTour = tourFor(84, 'Trip two tour')
     vi.mocked(toursApi.list).mockImplementation(async tripId => ({

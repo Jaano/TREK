@@ -389,9 +389,10 @@ interface TourPlannerToursRailProps extends TourPermissionProps {
   loading: boolean
   onAssignToDay: (placeId: number, dayId: number) => void | boolean | Promise<void | boolean>
   onViewGpxTour: (tour: TourListItem) => void
+  onDeleteTour?: (placeId: number) => void
 }
 
-export function TourPlannerToursRail({ planner, tours, days, loading, onAssignToDay, onViewGpxTour, canEdit: editPermission, canAssign: assignPermission }: TourPlannerToursRailProps) {
+export function TourPlannerToursRail({ planner, tours, days, loading, onAssignToDay, onViewGpxTour, onDeleteTour, canEdit: editPermission, canAssign: assignPermission }: TourPlannerToursRailProps) {
   const { canEdit, canAssign } = useTourPermissions({ canEdit: editPermission ?? planner.canEdit, canAssign: assignPermission ?? planner.canAssign })
   const { t } = useTranslation()
   const toast = useToast()
@@ -496,13 +497,29 @@ export function TourPlannerToursRail({ planner, tours, days, loading, onAssignTo
                     disabled={isSaving}
                     selected={(planner.mode.type === 'edit-saved' || planner.mode.type === 'view-gpx') && planner.mode.placeId === tour.place_id}
                     onSelect={requestOpenTour}
-                    action={canAssign && days.length > 0 ? (
-                      <TourDayMenu
-                        days={days}
-                        placeId={tour.place_id}
-                        label={`${t('tours.addToDay')}: ${tour.name}`}
-                        onPick={day => { if (canAssign) void onAssignToDay(tour.place_id, day.id) }}
-                      />
+                    action={((canAssign && days.length > 0) || (canEdit && onDeleteTour)) ? (
+                      <>
+                        {canAssign && days.length > 0 && (
+                          <TourDayMenu
+                            days={days}
+                            placeId={tour.place_id}
+                            label={`${t('tours.addToDay')}: ${tour.name}`}
+                            onPick={day => { if (canAssign) void onAssignToDay(tour.place_id, day.id) }}
+                          />
+                        )}
+                        {canEdit && onDeleteTour && (
+                          <button
+                            type="button"
+                            aria-label={`${t('common.delete')} ${tour.name}`}
+                            title={`${t('common.delete')}: ${tour.name}`}
+                            disabled={isSaving}
+                            onClick={event => { event.stopPropagation(); if (!isSaving) onDeleteTour(tour.place_id) }}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-content-muted hover:text-danger focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-50"
+                          >
+                            <Trash2 size={16} strokeWidth={1.9} aria-hidden="true" />
+                          </button>
+                        )}
+                      </>
                     ) : undefined}
                   />
                 ))}

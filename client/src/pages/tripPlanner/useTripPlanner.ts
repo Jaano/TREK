@@ -2415,13 +2415,25 @@ export function useTripPlanner() {
     setStayDraft(draft)
   }, [])
 
-  const handleDeletePlace = useCallback((placeId) => {
-    if (!can('place_edit', trip)) return
-    setDeletePlaceId(placeId)
-  }, [can, trip])
+  const handleDeletePlace = useCallback(
+    (placeId) => {
+      if (!can('place_edit', trip)) return
+      if (toursEnabled && isTourPlace(placeId)) return
+      setDeletePlaceId(placeId)
+    },
+    [can, trip, toursEnabled, isTourPlace]
+  )
+
+  const handleDeleteTour = useCallback(
+    (placeId: number) => {
+      if (!can('place_edit', trip) || !toursEnabled || !isTourPlace(placeId)) return
+      setDeletePlaceId(placeId)
+    },
+    [can, trip, toursEnabled, isTourPlace]
+  )
 
   const confirmDeletePlace = useCallback(async () => {
-    if (!deletePlaceId) return
+    if (!deletePlaceId) return null
     const state = useTripStore.getState()
     const capturedPlace = state.places.find(p => p.id === deletePlaceId)
     const capturedAssignments = Object.entries(state.assignments).flatMap(([dayId, as]) =>
@@ -2432,7 +2444,8 @@ export function useTripPlanner() {
       const deletedTour = Array.isArray(deletion?.tourPlaceIds)
         ? deletion.tourPlaceIds.includes(deletePlaceId)
         : isTourPlace(deletePlaceId)
-      void reloadTourPlaceIds()
+      if (deletedTour) invalidateTourPlaceIds({ removedPlaceIds: [deletePlaceId] })
+      else void reloadTourPlaceIds()
       if (selectedPlaceId === deletePlaceId) setSelectedPlaceId(null)
       updateRouteForDay(selectedDayId)
       toast.success(t('trip.toast.placeDeleted'))
@@ -2457,8 +2470,12 @@ export function useTripPlanner() {
           }
         })
       }
-    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) }
-  }, [deletePlaceId, tripId, toast, selectedPlaceId, selectedDayId, updateRouteForDay, pushUndo, forgetPlace, reloadTourPlaceIds, isTourPlace])
+      return deletedTour ? deletePlaceId : null
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : t('common.unknownError'))
+      return null
+    }
+  }, [deletePlaceId, tripId, toast, selectedPlaceId, selectedDayId, updateRouteForDay, pushUndo, forgetPlace, invalidateTourPlaceIds, reloadTourPlaceIds, isTourPlace])
 
   const confirmDeletePlaces = useCallback(async (ids?: number[]) => {
     const targetIds = ids ?? deletePlaceIds
@@ -3072,6 +3089,7 @@ export function useTripPlanner() {
     route, routeWalking, routeSegments, routeInfo, setRoute, setRouteInfo, updateRouteForDay,
     handleSelectDay, handlePlaceClick, handleMarkerClick, handleMapClick, handleMapContextMenu, openAddPlaceFromPoi, handlePoiClick,
     handleSavePlace, openPlaceEditor, handleDeletePlace, confirmDeletePlace, confirmDeletePlaces, confirmChangeCategory,
+    handleDeleteTour,
     handleAssignToDay, handleMoveToDay, handleRemoveAssignment, handleReorder, handleReorderDays, handleAddDay, dayAdd, handleUpdateDayTitle,
     ...dayDelete,
     ...dayClear,

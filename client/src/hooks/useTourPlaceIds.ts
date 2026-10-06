@@ -54,6 +54,11 @@ export function useTourPlaceIds(tripId: number, enabled: boolean) {
       || !activeRequestRef.current.enabled) return
     const added = change?.placeIds ?? []
     const removed = change?.removedPlaceIds ?? []
+    if (removed.length) {
+      setTourData(current => current?.tripId === tripId
+        ? { tripId, tours: current.tours.filter(tour => !removed.includes(tour.place_id)) }
+        : current)
+    }
     if (added.length || removed.length) {
       setPendingPlaceIds(current => {
         const ids = new Set(current?.tripId === tripId ? current.ids : [])

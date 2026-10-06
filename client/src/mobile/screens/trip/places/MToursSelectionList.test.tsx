@@ -91,8 +91,8 @@ describe('MToursSelectionList', () => {
     expect(name).not.toHaveClass('truncate')
   })
 
-  it('keeps metrics atomic and gives the mobile day action a separate full-width row', () => {
-    const { container } = render(<MToursSelectionList planner={{ ...planner(), selectedPlaceId: tour.place_id }} shell={shell()} filter="all" canAssign />)
+  it('keeps the mobile TRIP-PLAN Tours browse list limited to viewing and assignment', () => {
+    const { container } = render(<MToursSelectionList planner={{ ...planner(), selectedPlaceId: tour.place_id }} shell={shell()} filter="all" canEdit canAssign />)
     expect(screen.getByRole('option', { name: new RegExp(tour.name) })).toHaveAttribute('aria-selected', 'true')
     const metrics = screen.getByTestId('mobile-tour-metrics')
     expect(metrics).toHaveTextContent('12.5 km')
@@ -109,6 +109,7 @@ describe('MToursSelectionList', () => {
     add.click()
     expect(openSheet).toHaveBeenCalledWith('bract', { placeId: tour.place_id, dayPicker: true })
     expect(container.querySelector('[data-testid="mobile-tour-metrics"]')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
   it('keeps a long German name and source/difficulty labels intact', () => {
