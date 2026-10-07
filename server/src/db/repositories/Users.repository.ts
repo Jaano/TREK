@@ -931,7 +931,7 @@ export class UsersRepository extends TrekRepository<Users> {
    * `SELECT id FROM users WHERE LOWER(email) = LOWER(?) [AND id != ?] AND COALESCE(is_guest, 0) = 0`
    *
    * Both sides folded by SQLite's own `LOWER()` (`lowerParam` binds the RAW
-   * value) — program rule 18. Every email collision check goes through here
+   * value), program rule 18. Every email collision check goes through here
    * (profile, admin create and update), because login and the OIDC fallback
    * match case-insensitively: a second account that differs only in case
    * would make them pick whichever row comes first.

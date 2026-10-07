@@ -991,7 +991,7 @@ describe('createUser — the pre-existing uniqueness-check TOCTOU window (AD2-4,
     spy.mockRestore();
   });
 
-  it('ADMIN-SVC-095 — an address that differs only in case is already taken, on create and on update', async () => {
+  it('ADMIN-SVC-095: an address that differs only in case is already taken, on create and on update', async () => {
     const { user: existing } = createUser(testDb, { email: 'Case@Test.example.com' });
     const { user: other } = createUser(testDb, { email: 'other-case@test.example.com' });
 

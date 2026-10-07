@@ -193,7 +193,7 @@ export class CollabNotesRepository extends TrekRepository<CollabNotes> {
   // -------------------------------------------------------------------------
 
   /**
-   * CB6 (`formatNote`'s hydration read) — `SELECT id, filename, original_name,
+   * CB6 (`formatNote`'s hydration read): `SELECT id, filename, original_name,
    * file_size, mime_type FROM trip_files WHERE note_id = ? AND deleted_at IS
    * NULL`. A note's file can be moved to the trash from the file manager; it
    * leaves the note then, as a chat attachment leaves its message.

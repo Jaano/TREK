@@ -358,7 +358,7 @@ export const mutationQueue = {
               blockedTrips.add(mutation.tripId)
             }
           } else {
-            // No answer at all (network) or a retryable status — reset to
+            // No answer at all (network) or a retryable status: reset to
             // pending and stop the flush; the next trigger retries.
             await offlineDb.mutationQueue.update(mutation.id, {
               status: 'pending',

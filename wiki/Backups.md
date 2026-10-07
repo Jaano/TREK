@@ -40,7 +40,7 @@ Before restoring, TREK runs integrity checks on the uploaded database:
 
 1. **SQLite `PRAGMA integrity_check`** — verifies the database file is not corrupt.
 2. **Required tables present** — confirms the file contains `users`, `trips`, `trip_members`, `places`, and `days`. Files missing any of these are rejected as not being a valid TREK backup.
-3. **Not from a newer TREK** — a backup whose database a newer release migrated is refused with `This backup was made by a newer TREK version. Update TREK before restoring it.` Restoring it would leave this version unable to start.
+3. **Not from a newer TREK**: a backup whose database a newer release migrated is refused with `This backup was made by a newer TREK version. Update TREK before restoring it.` Restoring it would leave this version unable to start.
 
 The database being replaced is kept as `data/pre-restore-<time>.db`, so a restore of the wrong archive can be undone by hand. Delete these copies once you no longer need them.
 

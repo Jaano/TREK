@@ -85,7 +85,7 @@ describe('CronRegistrarService', () => {
     expect(registrar.jobCount).toBe(0);
   });
 
-  it('CRONREG-014 — a tick still running is not started again, and a failed tick reaches the app log', () => {
+  it('CRONREG-014: a tick still running is not started again, and a failed tick reaches the app log', () => {
     const { registrar } = makeRegistrar(false);
     registrar.register('slow-job', '0 * * * *', () => {});
     const job = h.jobs[0]!;

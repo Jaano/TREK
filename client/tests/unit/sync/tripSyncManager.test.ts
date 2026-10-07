@@ -438,7 +438,7 @@ describe('tripSyncManager.syncAll — logout while syncing', () => {
 
 vi.mock('../../../src/repo/roadtripPreferencesRepo', () => ({ roadtripPreferencesRepo: { read: vi.fn(async () => ({})) } }))
 
-describe('tripSyncManager.syncAll — deletions made elsewhere', () => {
+describe('tripSyncManager.syncAll: deletions made elsewhere', () => {
   it('drops cached rows the server no longer has, and keeps the ones created offline', async () => {
     const tripId = 400;
     const bundle = makeBundle(tripId);

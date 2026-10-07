@@ -1264,7 +1264,7 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
     expect(callOrder.indexOf('closeDb')).toBeLessThan(callOrder.indexOf('copyFileSync'));
   });
 
-  it('BACKUP-045g — keeps a copy of the database it replaces, before closing it', async () => {
+  it('BACKUP-045g: keeps a copy of the database it replaces, before closing it', async () => {
     setupSuccessfulExtraction();
     setupAllTablesPresent();
     const { RequestContext } = await import('@mikro-orm/core');
@@ -1285,7 +1285,7 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
     expect(logMock.logInfo).toHaveBeenCalledWith(expect.stringContaining('the replaced database was kept as'));
   });
 
-  it('BACKUP-045h — a database that cannot be copied does not block the restore', async () => {
+  it('BACKUP-045h: a database that cannot be copied does not block the restore', async () => {
     setupSuccessfulExtraction();
     setupAllTablesPresent();
     const { RequestContext } = await import('@mikro-orm/core');

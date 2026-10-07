@@ -504,7 +504,7 @@ describe('mutationQueue.flush — failure handling (B3)', () => {
   });
 });
 
-describe('mutationQueue.flush — a write the server keeps failing on', () => {
+describe('mutationQueue.flush: a write the server keeps failing on', () => {
   it('holds back only its own trip, with a growing gap, while other trips sync', async () => {
     const stuck = generateUUID();
     const sameTrip = generateUUID();
@@ -563,7 +563,7 @@ describe('mutationQueue.flush — a write the server keeps failing on', () => {
   });
 });
 
-describe('mutationQueue — parked changes', () => {
+describe('mutationQueue: parked changes', () => {
   it('retryFailed puts them back in line from a fresh start and sends them', async () => {
     const id = generateUUID();
     await mutationQueue.enqueue(makeMutation({ id }));

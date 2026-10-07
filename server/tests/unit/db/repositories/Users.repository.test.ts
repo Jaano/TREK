@@ -514,7 +514,7 @@ describe('UsersRepository', () => {
     });
   });
 
-  describe('findForPasswordReset (AU36) — case-insensitive, like login', () => {
+  describe('findForPasswordReset (AU36): case-insensitive, like login', () => {
     it('USERSREPO-035: finds an address stored with capitals from the lowercased input the service passes', async () => {
       const { user } = createUser(testDb, { email: 'Exact@Example.com' });
       expect((await users.findForPasswordReset('exact@example.com'))?.id).toBe(user.id);

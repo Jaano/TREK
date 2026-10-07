@@ -165,7 +165,7 @@ describe('trip reminder tick', () => {
     expect(logMock.logInfo).toHaveBeenCalledWith(expect.stringMatching(/^Trip reminders sent for 2 trip\(s\): /));
   });
 
-  it('RJOB-012 — catches up a reminder the job missed, sends each one once, and again for a moved trip', async () => {
+  it('RJOB-012: catches up a reminder the job missed, sends each one once, and again for a moved trip', async () => {
     const { user } = createUser(testDb);
     // Due yesterday (start in 2 days, reminder 3 days ahead): the job did not run then.
     const missed = createTrip(testDb, user.id, { title: 'Missed' });
