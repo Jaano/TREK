@@ -44,13 +44,38 @@ export function ContextMenu({ menu, onClose }: ContextMenuProps) {
   useEffect(() => {
     if (!menu) return
     const handler = () => onClose()
+    // A fixed menu stays where it opened, so it closes when the page under it
+    // moves or the window changes size, and Escape closes it like any menu.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('click', handler)
     document.addEventListener('contextmenu', handler)
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('scroll', handler, true)
+    window.addEventListener('resize', handler)
     return () => {
       document.removeEventListener('click', handler)
       document.removeEventListener('contextmenu', handler)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', handler, true)
+      window.removeEventListener('resize', handler)
     }
   }, [menu, onClose])
+
+  // Keyboard users land on the first item and move with the arrow keys.
+  useEffect(() => {
+    if (!menu) return
+    ref.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus({ preventScroll: true })
+  }, [menu])
+
+  const moveFocus = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
+    e.preventDefault()
+    const items = [...(ref.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [])]
+    if (items.length === 0) return
+    const at = items.indexOf(document.activeElement as HTMLButtonElement)
+    const next = e.key === 'ArrowDown' ? (at + 1) % items.length : (at - 1 + items.length) % items.length
+    items[next]?.focus()
+  }
 
   useLayoutEffect(() => {
     if (!menu || !ref.current) return
@@ -69,7 +94,7 @@ export function ContextMenu({ menu, onClose }: ContextMenuProps) {
   if (!menu) return null
 
   return createPortal(
-    <div ref={ref} className="trek-popover-enter" style={{
+    <div ref={ref} onKeyDown={moveFocus} className="trek-popover-enter" style={{
       position: 'fixed', left: menu.x, top: menu.y, zIndex: 999999,
       background: 'var(--bg-card)', borderRadius: 10, padding: '4px',
       border: '1px solid var(--border-primary)',

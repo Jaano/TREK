@@ -54,8 +54,8 @@ export default tseslint.config(
       // --- Severities tuned to keep CI green on a codebase that was never linted ---
       // (each rule below has pre-existing violations; surfaced as warnings, not blockers)
 
-      // rules-of-hooks has one conditional-hook violation in PlaceInspector.tsx -> warn (not error).
-      'react-hooks/rules-of-hooks': 'warn',
+      // A hook called conditionally is a crash waiting for the render that skips it.
+      'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
 
       '@typescript-eslint/no-explicit-any': 'warn',
