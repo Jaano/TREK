@@ -1176,7 +1176,7 @@ function FilterMenu({ id, label, valueLabel, options, onPick, value, menu, setMe
           {options.map(([v, lbl]) => (
             <button type="button" key={v} onClick={() => { onPick(v); setMenu(null) }}
               className={`${MENU_ITEM} ${value === v ? 'font-semibold text-content' : 'text-content-secondary'}`} style={fs(12.5, 'body')}>
-              <span className="min-w-0 flex-1 truncate text-left">{lbl}</span>
+              <span className="min-w-0 flex-1 truncate text-start">{lbl}</span>
               <Check size={14} className={`flex-none text-content-muted ${value === v ? 'opacity-100' : 'opacity-0'}`} />
             </button>
           ))}
@@ -1215,7 +1215,7 @@ function InstalledRow({ p, t, busy, menu, setMenu, hasUpdate, latestVer, newerIn
           <PluginIcon name={p.icon} size={19} className="text-content-secondary" />
         </span>
         <Tooltip label={t(`admin.plugins.status.${p.status}` as never)}>
-          <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full ring-2 ring-surface-card ${HEALTH[p.status] || HEALTH.inactive}`} />
+          <span className={`absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-surface-card ${HEALTH[p.status] || HEALTH.inactive}`} />
         </Tooltip>
       </div>
 
@@ -1311,7 +1311,7 @@ function InstalledRow({ p, t, busy, menu, setMenu, hasUpdate, latestVer, newerIn
             <ArrowUpCircle size={13} /> <span>{t('admin.plugins.updateTo', { version: latestVer })}</span>
           </button>
         )}
-        <span className={`min-w-[42px] text-right font-medium ${on ? 'text-content-secondary' : 'text-content-faint'}`} style={fs(12)}>
+        <span className={`min-w-[42px] text-end font-medium ${on ? 'text-content-secondary' : 'text-content-faint'}`} style={fs(12)}>
           {p.enabled === 1 ? t('admin.plugins.status.active') : t('admin.plugins.stateOff')}
         </span>
         <ToggleSwitch on={p.enabled === 1} label={t('admin.plugins.enabledToggle')} onToggle={onToggle} />
@@ -1444,11 +1444,11 @@ function RegistryGrid({ items, onInstall, onOpenDetail, busy, t, installedIds, f
             <div className="relative">
               <Screenshot url={item.screenshotUrl} className="aspect-[16/10]" iconSize={24} />
               {item.reviewedAt && (
-                <span className="absolute right-2.5 top-2.5">
+                <span className="absolute end-2.5 top-2.5">
                   <StatusPill icon={<ShieldCheck size={11} className="text-success" />}>{t('admin.plugins.reviewed')}</StatusPill>
                 </span>
               )}
-              <span className="absolute -bottom-4 left-3.5 z-[1] grid h-10 w-10 place-items-center rounded-[12px] border border-edge-faint bg-surface-card shadow-sm">
+              <span className="absolute -bottom-4 start-3.5 z-[1] grid h-10 w-10 place-items-center rounded-[12px] border border-edge-faint bg-surface-card shadow-sm">
                 <PluginIcon name={item.icon} size={20} className="text-content-secondary" />
               </span>
             </div>
@@ -2111,7 +2111,7 @@ function KeyRow({ label, value, highlight }: { label: string; value: string; hig
   return (
     <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
       <span className="flex-none text-content-muted" style={fs(12)}>{label}</span>
-      <code className={`min-w-0 break-all text-right font-mono ${highlight ? 'font-semibold text-warning' : 'text-content'}`} style={fs(12)}>{value}</code>
+      <code className={`min-w-0 break-all text-end font-mono ${highlight ? 'font-semibold text-warning' : 'text-content'}`} style={fs(12)}>{value}</code>
     </div>
   )
 }
@@ -2249,7 +2249,7 @@ function SecurityInfo({ t }: { t: T }) {
       icon={Lock}
       title={(
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
-          className="inline-flex max-w-full items-center gap-1.5 text-left font-bold text-content hover:opacity-80">
+          className="inline-flex max-w-full items-center gap-1.5 text-start font-bold text-content hover:opacity-80">
           <span className="truncate">{t('admin.plugins.security.title')}</span>
           <ChevronDown size={15} className={`flex-none text-content-faint transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>

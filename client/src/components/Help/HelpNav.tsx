@@ -41,7 +41,7 @@ export default function HelpNav({ context, currentId, activeGuideId }: {
   const [familyOpen, setFamilyOpen] = useState(false)
 
   return (
-    <nav className="flex flex-col min-h-0 border-b md:border-b-0 md:border-r border-edge bg-surface-secondary" aria-label={t('help.center.title')}>
+    <nav className="flex flex-col min-h-0 border-b md:border-b-0 md:border-e border-edge bg-surface-secondary" aria-label={t('help.center.title')}>
       <div className="px-5 pt-5 pb-3 flex items-center gap-2.5">
         <span className="w-8 h-8 rounded-lg flex items-center justify-center bg-accent text-accent-text">
           <LifeBuoy className="w-4 h-4" />
@@ -51,7 +51,7 @@ export default function HelpNav({ context, currentId, activeGuideId }: {
 
       <div className="px-5 pb-4">
         <label className="relative block">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-content-faint pointer-events-none" />
+          <Search className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-content-faint pointer-events-none" />
           <input
             ref={searchRef}
             type="search"
@@ -59,7 +59,7 @@ export default function HelpNav({ context, currentId, activeGuideId }: {
             onChange={e => setQuery(e.target.value)}
             placeholder={t('help.center.searchPlaceholder')}
             aria-label={t('help.center.searchPlaceholder')}
-            className="w-full rounded-xl bg-surface-card text-content text-body pl-9 pr-3 py-2.5 outline-none border border-edge focus:border-content-faint transition-colors placeholder:text-content-faint"
+            className="w-full rounded-xl bg-surface-card text-content text-body ps-9 pe-3 py-2.5 outline-none border border-edge focus:border-content-faint transition-colors placeholder:text-content-faint"
           />
         </label>
       </div>
@@ -77,7 +77,7 @@ export default function HelpNav({ context, currentId, activeGuideId }: {
                   type="button"
                   onClick={() => setFamilyOpen(o => !o)}
                   aria-expanded={familyOpen}
-                  className="flex items-center gap-1.5 px-2 pb-1 text-left text-caption font-semibold uppercase tracking-[0.1em] text-content-faint hover:text-content transition-colors"
+                  className="flex items-center gap-1.5 px-2 pb-1 text-start text-caption font-semibold uppercase tracking-[0.1em] text-content-faint hover:text-content transition-colors"
                 >
                   <span className="flex-1">{t('help.center.subScreensLabel')}</span>
                   <span className="text-caption font-bold tabular-nums normal-case tracking-normal">{family.length}</span>
@@ -101,7 +101,7 @@ export default function HelpNav({ context, currentId, activeGuideId }: {
                 type="button"
                 onClick={() => { closeGuide(); setQuery('') }}
                 aria-current={overviewActive ? 'page' : undefined}
-                className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${
+                className={`flex items-center gap-2.5 rounded-lg px-2 py-2 text-start transition-colors ${
                   overviewActive ? 'bg-surface-selected text-content' : 'text-content-secondary hover:bg-surface-hover hover:text-content'
                 }`}
               >
@@ -219,7 +219,7 @@ function ScreenSwitcher({ shown, currentId }: { shown: HelpContext | null; curre
         onClick={toggleList}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="w-full flex items-center gap-2.5 rounded-xl border border-edge bg-surface-card px-3 py-2.5 text-left hover:border-content-faint transition-colors"
+        className="w-full flex items-center gap-2.5 rounded-xl border border-edge bg-surface-card px-3 py-2.5 text-start hover:border-content-faint transition-colors"
       >
         <span className="w-7 h-7 rounded-md bg-accent text-accent-text flex items-center justify-center flex-shrink-0">
           <ShownIcon className="w-3.5 h-3.5" />
@@ -236,7 +236,7 @@ function ScreenSwitcher({ shown, currentId }: { shown: HelpContext | null; curre
         <ul
           role="listbox"
           aria-label={t('help.center.screens')}
-          className="trek-help-menu absolute left-2 right-2 top-full mt-1.5 z-10 flex flex-col gap-0.5 rounded-xl border border-edge bg-surface-card p-1.5 shadow-elevated"
+          className="trek-help-menu absolute inset-x-2 top-full mt-1.5 z-10 flex flex-col gap-0.5 rounded-xl border border-edge bg-surface-card p-1.5 shadow-elevated"
         >
           {screens.map(screen => {
             const children = childHelpContexts(screen.id)
@@ -251,7 +251,7 @@ function ScreenSwitcher({ shown, currentId }: { shown: HelpContext | null; curre
                   group={children.length > 0 ? { expanded, count: children.length, toggle: () => setOpenGroup(expanded ? null : screen.id) } : undefined}
                 />
                 {children.length > 0 && expanded && (
-                  <ul role="group" className="flex flex-col gap-0.5 pl-3">
+                  <ul role="group" className="flex flex-col gap-0.5 ps-3">
                     {children.map(child => (
                       <li key={child.id}>
                         <ScreenRow
@@ -296,7 +296,7 @@ function ScreenRow({
         selected ? 'bg-surface-selected text-content' : 'text-content-secondary hover:bg-surface-hover hover:text-content'
       }`}
     >
-      <button type="button" onClick={onPick} className="min-w-0 flex-1 flex items-center gap-2.5 px-2 py-2 text-left">
+      <button type="button" onClick={onPick} className="min-w-0 flex-1 flex items-center gap-2.5 px-2 py-2 text-start">
         {nested ? (
           <CornerDownRight className="w-3.5 h-3.5 flex-shrink-0 text-content-faint" />
         ) : (
@@ -312,7 +312,7 @@ function ScreenRow({
           onClick={e => { e.stopPropagation(); group.toggle() }}
           aria-expanded={group.expanded}
           aria-label={t('help.center.subScreens', { count: group.count })}
-          className="flex items-center gap-1 rounded-md mr-1.5 px-1.5 py-1 text-caption font-semibold text-content-faint hover:bg-surface-tertiary hover:text-content transition-colors"
+          className="flex items-center gap-1 rounded-md me-1.5 px-1.5 py-1 text-caption font-semibold text-content-faint hover:bg-surface-tertiary hover:text-content transition-colors"
         >
           {group.count}
           <Fold className="w-3.5 h-3.5" />
@@ -332,7 +332,7 @@ function NavScreen({ screen, shown, current }: { screen: HelpContext; shown: boo
       type="button"
       onClick={() => browse(current ? null : screen.id)}
       aria-current={shown ? 'page' : undefined}
-      className={`group w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
+      className={`group w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-start transition-colors ${
         shown ? 'bg-surface-selected text-content' : 'text-content-secondary hover:bg-surface-hover hover:text-content'
       }`}
     >
@@ -360,7 +360,7 @@ function NavGuide({ guide, active }: { guide: HelpGuide; active: boolean }): Rea
       type="button"
       onClick={() => openGuide(guide.id)}
       aria-current={active ? 'page' : undefined}
-      className={`group w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors ${
+      className={`group w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-start transition-colors ${
         active ? 'bg-surface-selected text-content' : 'text-content-secondary hover:bg-surface-hover hover:text-content'
       }`}
     >

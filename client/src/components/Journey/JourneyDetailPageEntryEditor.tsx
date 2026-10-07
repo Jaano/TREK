@@ -39,9 +39,9 @@ const SOURCE_ON = 'border-content bg-surface-secondary text-content'
 const PHOTO_PANEL = 'mt-2 rounded-[12px] border border-edge-faint bg-surface-secondary'
 /** A control laid over a photo tile, raised on the card colour so it reads on any picture. */
 const ON_PHOTO = 'bg-surface-card text-content shadow-sm'
-const PHOTO_REMOVE = `absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 ${ON_PHOTO}`
+const PHOTO_REMOVE = `absolute end-1 top-1 grid h-5 w-5 place-items-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 ${ON_PHOTO}`
 /** What hangs under the location field: the search results, or the note that a search is running. */
-const DROPDOWN = 'absolute left-0 right-0 top-full z-[100] mt-1 rounded-[12px] border border-edge-faint bg-surface-card shadow-dropdown'
+const DROPDOWN = 'absolute inset-x-0 top-full z-[100] mt-1 rounded-[12px] border border-edge-faint bg-surface-card shadow-dropdown'
 
 const VERDICT_TONES = {
   pros: { Icon: Check, text: 'text-success', soft: 'bg-success-soft', dot: 'bg-success' },
@@ -659,12 +659,12 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                         <img src={photoUrl(p)} className="h-full w-full object-cover" alt="" onError={thumbnailFallback(p)} />
                       )}
                       {idx === 0 && photos.length > 1 && (
-                        <span className={`absolute bottom-0.5 left-0.5 rounded px-1 py-px font-bold ${ON_PHOTO}`} style={fs(8)}>{t('journey.editor.photoFirst')}</span>
+                        <span className={`absolute bottom-0.5 start-0.5 rounded px-1 py-px font-bold ${ON_PHOTO}`} style={fs(8)}>{t('journey.editor.photoFirst')}</span>
                       )}
                       {idx > 0 && photos.length > 1 && (
                         <button type="button"
                           onClick={e => { e.stopPropagation(); photoOrder.makeFirst(idx) }}
-                          className={`absolute bottom-0.5 left-0.5 rounded px-1.5 py-0.5 font-semibold opacity-0 transition-opacity group-hover:opacity-100 ${ON_PHOTO}`}
+                          className={`absolute bottom-0.5 start-0.5 rounded px-1.5 py-0.5 font-semibold opacity-0 transition-opacity group-hover:opacity-100 ${ON_PHOTO}`}
                           style={fs(8)}
                         >
                           {t('journey.editor.makeFirst')}
@@ -825,7 +825,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                   }}
                   onFocus={() => { if (locationResults.length > 0) setShowLocationResults(true) }}
                   placeholder={t('journey.editor.searchLocation')}
-                  className={`${INPUT} pr-9`}
+                  className={`${INPUT} pe-9`}
                 />
                 <Tooltip label={t('journey.editor.useCurrentLocation')}>
                   <button
@@ -833,7 +833,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                     onClick={handleUseCurrentLocation}
                     disabled={locating}
                     aria-label={t('journey.editor.useCurrentLocation')}
-                    className="absolute right-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[8px] text-content-faint hover:bg-surface-hover hover:text-content disabled:cursor-default disabled:opacity-50"
+                    className="absolute end-1 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[8px] text-content-faint hover:bg-surface-hover hover:text-content disabled:cursor-default disabled:opacity-50"
                   >
                     {locating ? <Loader2 size={14} className="animate-spin" /> : <Locate size={14} />}
                   </button>
@@ -854,7 +854,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                           setShowLocationResults(false)
                           setLocationResults([])
                         }}
-                        className="flex w-full items-start gap-2.5 rounded-[8px] px-2.5 py-2 text-left hover:bg-surface-hover"
+                        className="flex w-full items-start gap-2.5 rounded-[8px] px-2.5 py-2 text-start hover:bg-surface-hover"
                       >
                         <MapPin size={13} className="mt-0.5 flex-none text-content-faint" />
                         <div className="min-w-0">

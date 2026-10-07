@@ -314,7 +314,7 @@ function NoteCardRow({ note, color, canEdit, onTap, onTogglePin, onDelete, t }: 
     <div className="mt-2 overflow-hidden rounded-2xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)]">
       <div className="flex items-center gap-[7px] px-3 py-[10px]" style={{ background: `${color}0d` }}>
         {!!note.pinned && <Pin size={11} strokeWidth={2.4} style={{ color }} className="flex-none" />}
-        <button type="button" onClick={onTap} className="flex min-w-0 flex-1 items-center gap-[7px] text-left">
+        <button type="button" onClick={onTap} className="flex min-w-0 flex-1 items-center gap-[7px] text-start">
           <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-bold text-m-ink">{note.title}</span>
           {note.category && (
             <span
@@ -358,9 +358,9 @@ function NoteCardRow({ note, color, canEdit, onTap, onTogglePin, onDelete, t }: 
         )}
       </div>
 
-      <button type="button" onClick={onTap} className="block w-full px-3 pb-3 pt-[9px] text-left">
+      <button type="button" onClick={onTap} className="block w-full px-3 pb-3 pt-[9px] text-start">
         {note.content && (
-          <div className="line-clamp-3 [overflow-wrap:anywhere] font-geist text-[0.75rem] leading-[1.5] text-m-muted [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-1 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-4">
+          <div className="line-clamp-3 [overflow-wrap:anywhere] font-geist text-[0.75rem] leading-[1.5] text-m-muted [&_a]:underline [&_ol]:list-decimal [&_ol]:ps-4 [&_p]:mb-1 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ps-4">
             <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={sanitizedMarkdownPlugins} components={sanitizedMarkdownComponents}>{note.content}</Markdown>
           </div>
         )}
@@ -640,7 +640,7 @@ function NoteViewSheet({ open, note, onClose, t }: {
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-[18px] pb-4 pt-1">
         {snapshot?.content && (
-          <div className="font-geist text-[0.8125rem] leading-[1.6] text-m-ink [overflow-wrap:anywhere] [&_a]:underline [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:pl-5">
+          <div className="font-geist text-[0.8125rem] leading-[1.6] text-m-ink [overflow-wrap:anywhere] [&_a]:underline [&_ol]:list-decimal [&_ol]:ps-5 [&_p]:mb-2 [&_strong]:font-bold [&_ul]:list-disc [&_ul]:ps-5">
             <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={sanitizedMarkdownPlugins} components={sanitizedMarkdownComponents}>{snapshot.content}</Markdown>
           </div>
         )}
@@ -662,7 +662,7 @@ function NoteViewSheet({ open, note, onClose, t }: {
                 key={f.id}
                 type="button"
                 onClick={() => openFile(f.url, f.original_name)}
-                className="flex items-center gap-[6px] rounded-[10px] border border-[color:var(--m-rowbr)] bg-m-card px-[10px] py-[8px] text-left"
+                className="flex items-center gap-[6px] rounded-[10px] border border-[color:var(--m-rowbr)] bg-m-card px-[10px] py-[8px] text-start"
               >
                 <FileText size={13} strokeWidth={2} className="flex-none text-m-muted" />
                 <span className="min-w-0 flex-1 truncate font-geist text-[0.71875rem] font-semibold text-m-muted">

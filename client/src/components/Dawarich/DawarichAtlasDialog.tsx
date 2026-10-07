@@ -537,7 +537,7 @@ function Row({
       aria-label={name}
       disabled={disabled}
       onClick={onToggle}
-      className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition-colors ${
+      className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-start transition-colors ${
         checked ? 'border-accent bg-accent-subtle' : 'border-edge hover:bg-surface-hover'
       } ${disabled ? 'opacity-60' : ''}`}
     >

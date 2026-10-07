@@ -131,7 +131,7 @@ export default function GitHubPanel({ isPrerelease = false }: { isPrerelease?: b
     const flushList = () => {
       if (listItems.length > 0) {
         elements.push(
-          <ul key={`ul-${elements.length}`} className="my-1.5 space-y-1 pl-0">
+          <ul key={`ul-${elements.length}`} className="my-1.5 space-y-1 ps-0">
             {listItems.map((item, i) => (
               <li key={i} className="flex gap-2 leading-relaxed text-content-secondary" style={fs(12.5, 'body')}>
                 <span className="mt-[0.6em] h-1 w-1 flex-shrink-0 rounded-full bg-content-faint" />
@@ -279,7 +279,7 @@ export default function GitHubPanel({ isPrerelease = false }: { isPrerelease?: b
         {/* Timeline */}
         <div className="relative">
           {/* Timeline line, from the first dot's middle down to the last one's */}
-          {shown.length > 1 && <div className="absolute bottom-6 left-[15px] top-4 w-px bg-edge" aria-hidden="true" />}
+          {shown.length > 1 && <div className="absolute bottom-6 start-[15px] top-4 w-px bg-edge" aria-hidden="true" />}
 
           <div className="flex flex-col gap-5">
             {shown.map((release, idx) => {

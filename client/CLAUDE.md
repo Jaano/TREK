@@ -10,6 +10,7 @@ npm run build             # prebuild generates PWA icons, then vite build
 npm run typecheck         # tsc --noEmit (CI)
 npm run lint              # eslint .   (lint:check in CI)
 npm run lint:pages        # enforce the Page pattern (CI gate)
+npm run lint:rtl          # physical left/right sides may only shrink per file (CI gate; --list shows them, --update lowers the baseline)
 npm run test              # vitest run (tests/** + co-located src/**/*.test.{ts,tsx}); also test:unit / test:integration / test:coverage
 npm run e2e               # Playwright (local only; e2e:report opens the last report)
 npm run shots             # Playwright screenshot project (shots:promote to accept)

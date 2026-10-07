@@ -261,7 +261,7 @@ function FileRow({ file, planner, onOpen, onStar, onMenu }: {
 
   return (
     <div className="mt-2 flex items-center gap-[11px] rounded-2xl border border-[color:var(--m-rowbr)] bg-m-sheetop px-[11px] py-[10px]">
-      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-[11px] text-left">
+      <button type="button" onClick={onOpen} className="flex min-w-0 flex-1 items-center gap-[11px] text-start">
         <div
           className="flex h-[42px] w-[42px] flex-none flex-col items-center justify-center gap-[2px] rounded-[13px]"
           style={{ background: `${meta.color}22`, color: meta.color }}
@@ -283,7 +283,7 @@ function FileRow({ file, planner, onOpen, onStar, onMenu }: {
               {formatFileDate(file.created_at, locale)}
             </span>
             {file.uploaded_by_name && (
-              <span className="flex items-center gap-[3px] rounded-full bg-[color:var(--m-ic)] py-[2px] pl-[3px] pr-[7px]">
+              <span className="flex items-center gap-[3px] rounded-full bg-[color:var(--m-ic)] py-[2px] ps-[3px] pe-[7px]">
                 <span className="flex h-3 w-3 flex-none items-center justify-center rounded-full bg-m-act font-geist text-[0.40625rem] font-extrabold text-m-actfg">
                   {file.uploaded_by_name[0]?.toUpperCase()}
                 </span>

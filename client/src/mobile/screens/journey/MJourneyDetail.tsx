@@ -409,7 +409,7 @@ export default function MJourneyDetail() {
       )}
 
       {/* Header: back — segment — upload / overflow menu */}
-      <div className="absolute left-4 right-4 top-[var(--m-safe-top,12px)] z-10 flex items-center justify-between gap-2">
+      <div className="absolute inset-x-4 top-[var(--m-safe-top,12px)] z-10 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => navigate('/journey')}
@@ -440,7 +440,7 @@ export default function MJourneyDetail() {
             {t('journey.share.gallery')}
           </button>
         </div>
-        <span className="ml-auto flex flex-none items-center gap-2">
+        <span className="ms-auto flex flex-none items-center gap-2">
           {/* Uploading lives on the dock's FAB while the Gallery is open — the
               one big action on the screen. A second button up here would be the
               same thing twice, so it only appears while an upload is running,
@@ -514,7 +514,7 @@ export default function MJourneyDetail() {
           nothing between the cards and it; two pixels keeps a hair of daylight and
           gives the strip the rest. */}
       {view === 'timeline' && entries.length > 0 && (
-        <div ref={railRef} className="absolute left-0 right-0 z-[8] bottom-[calc(var(--bottom-nav-h,84px)+2px)]">
+        <div ref={railRef} className="absolute inset-x-0 z-[8] bottom-[calc(var(--bottom-nav-h,84px)+2px)]">
         <JourneyDayScrubber
           days={scrubberDays}
           activeDate={entries[activeIndex]?.entry_date ?? null}

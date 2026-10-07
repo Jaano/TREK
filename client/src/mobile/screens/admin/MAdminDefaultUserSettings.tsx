@@ -132,7 +132,7 @@ export default function MAdminDefaultUserSettings(): React.ReactElement {
       <button
         type="button"
         onClick={() => reset(field)}
-        className="ml-2 font-geist text-[0.625rem] font-medium text-m-faint underline"
+        className="ms-2 font-geist text-[0.625rem] font-medium text-m-faint underline"
       >
         {t('admin.defaultSettings.resetToBuiltIn')}
       </button>

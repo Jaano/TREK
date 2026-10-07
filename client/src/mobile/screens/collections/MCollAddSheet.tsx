@@ -156,7 +156,7 @@ export default function MCollAddSheet({ open, collectionId, collectionName, list
           </div>
         )}
         {/* Search — picking a result fills the location */}
-        <div className="flex items-center gap-2 rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheet)] py-1 pl-[13px] pr-[6px]">
+        <div className="flex items-center gap-2 rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheet)] py-1 ps-[13px] pe-[6px]">
           <Search size={15} strokeWidth={2.2} className="flex-none text-m-muted" />
           <input
             value={query}
@@ -184,7 +184,7 @@ export default function MCollAddSheet({ open, collectionId, collectionName, list
               </button>
             </div>
             {results.map((r, i) => (
-              <button key={i} type="button" onClick={() => pick(r)} className="flex w-full items-center gap-[10px] px-[13px] py-[10px] text-left">
+              <button key={i} type="button" onClick={() => pick(r)} className="flex w-full items-center gap-[10px] px-[13px] py-[10px] text-start">
                 <span className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-lg bg-[color:var(--m-ic)] text-m-faint">
                   <MapPin size={14} strokeWidth={2.2} />
                 </span>
@@ -235,7 +235,7 @@ export default function MCollAddSheet({ open, collectionId, collectionName, list
         <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} placeholder={t('collections.descriptionPlaceholder')} className={TEXTAREA_CLS} />
       </div>
       <SheetFooter>
-        <CancelPill className="ml-auto" onClick={onClose}>{t('common.cancel')}</CancelPill>
+        <CancelPill className="ms-auto" onClick={onClose}>{t('common.cancel')}</CancelPill>
         <PrimaryPill onClick={save} disabled={saving || !name.trim() || targetId == null}>
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} strokeWidth={2.4} />} {t('common.add')}
         </PrimaryPill>

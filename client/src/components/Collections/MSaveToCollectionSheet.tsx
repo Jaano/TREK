@@ -200,7 +200,7 @@ export default function MSaveToCollectionSheet() {
                 type="button"
                 onClick={() => handleToggle(list)}
                 disabled={busyId != null}
-                className={`mt-2 flex w-full items-center gap-[11px] rounded-[14px] border px-3 py-[10px] text-left disabled:opacity-60 ${
+                className={`mt-2 flex w-full items-center gap-[11px] rounded-[14px] border px-3 py-[10px] text-start disabled:opacity-60 ${
                   saved
                     ? 'border-[color:var(--m-act)] bg-[color:var(--m-inner)]'
                     : 'border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)]'

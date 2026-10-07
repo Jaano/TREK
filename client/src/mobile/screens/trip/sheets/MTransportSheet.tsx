@@ -300,7 +300,7 @@ export default function MTransportSheet({ planner, shell }: MTripSheetsProps) {
             <button
               type="button"
               onClick={editTransport}
-              className="ml-auto flex items-center gap-[5px] rounded-full bg-m-act px-3 py-[7px] text-[0.75rem] font-semibold text-m-actfg"
+              className="ms-auto flex items-center gap-[5px] rounded-full bg-m-act px-3 py-[7px] text-[0.75rem] font-semibold text-m-actfg"
             >
               <Pencil size={13} strokeWidth={2} />
               {t('common.edit')}

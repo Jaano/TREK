@@ -390,7 +390,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
     <div className="flex min-h-[48px] items-center gap-2 border-b border-edge-faint px-4 py-2.5" style={{ background: NEUTRAL_TINT }}>
       <span className={EYEBROW} style={fs(11)}>{label}</span>
       {extra}
-      {action && <span className="ml-auto">{action}</span>}
+      {action && <span className="ms-auto">{action}</span>}
     </div>
   )
   const labelCls = 'text-[11px] font-semibold uppercase tracking-[0.12em] text-content-faint'
@@ -403,7 +403,8 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
       parts = new Intl.NumberFormat(currencyLocale(base), { style: 'currency', currency: base, minimumFractionDigits: d, maximumFractionDigits: d }).formatToParts(amount || 0)
     } catch { return <>{formatMoney(amount, base, locale)}</> }
     const isBig = (p: Intl.NumberFormatPart) => p.type === 'integer' || p.type === 'group' || p.type === 'minusSign'
-    return <>{parts.map((p, i) => <span key={i} style={isBig(p) ? undefined : { fontSize: smallSize, fontWeight: 500, color: mutedColor }}>{p.value}</span>)}</>
+    // One left-to-right box: the parts are spans, which a right-to-left flex row would reorder.
+    return <span dir="ltr" className="inline-flex items-baseline">{parts.map((p, i) => <span key={i} style={isBig(p) ? undefined : { fontSize: smallSize, fontWeight: 500, color: mutedColor }}>{p.value}</span>)}</span>
   }
 
   // ── category + day filter controls (shared by both layouts) ──────────────
@@ -498,7 +499,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
                 <div className="mb-3 flex items-center gap-2 px-0.5">
                   <span className={EYEBROW} style={fs(11)}>{g.day}</span>
                   <CountPill>{g.entries.length}</CountPill>
-                  <span className="ml-auto rounded-full bg-surface-tertiary px-2.5 py-[3px] font-geist font-semibold tabular-nums text-content-secondary" style={fs(11.5)}>{t('costs.spent', { amount: fmt(dtot) })}</span>
+                  <span className="ms-auto rounded-full bg-surface-tertiary px-2.5 py-[3px] font-geist font-semibold tabular-nums text-content-secondary" style={fs(11.5)}>{t('costs.spent', { amount: fmt(dtot) })}</span>
                 </div>
                 )}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -651,8 +652,8 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
           <div style={{ fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', textTransform: 'uppercase', letterSpacing: '0.12em', color: 'rgba(255,255,255,0.6)', fontWeight: 600 }}>{t('costs.totalSpend')}</div>
           <div style={{ fontSize: 'calc(44px * var(--fs-scale-title, 1))', fontWeight: 700, letterSpacing: '-0.04em', lineHeight: 1, marginTop: 8, display: 'flex', alignItems: 'baseline' }}>{bigMoney(totals.totalSpend, 24, 'rgba(255,255,255,0.6)')}</div>
           <div style={{ display: 'flex', gap: 18, marginTop: 12, fontSize: 'calc(12px * var(--fs-scale-body, 1))', color: 'rgba(255,255,255,0.6)', flexWrap: 'wrap' }}>
-            <span>{t('costs.yourShare')} <b style={{ color: '#fff', fontWeight: 600, marginLeft: 4 }}>{fmt0(totals.myShare)}</b></span>
-            <span>{t('costs.youPaid')} <b style={{ color: '#fff', fontWeight: 600, marginLeft: 4 }}>{fmt0(totals.myPaid)}</b></span>
+            <span>{t('costs.yourShare')} <b style={{ color: '#fff', fontWeight: 600, marginInlineStart: 4 }}>{fmt0(totals.myShare)}</b></span>
+            <span>{t('costs.youPaid')} <b style={{ color: '#fff', fontWeight: 600, marginInlineStart: 4 }}>{fmt0(totals.myPaid)}</b></span>
           </div>
           {canEdit && (
             <button type="button" onClick={() => { setEditing(null); setModalOpen(true) }} style={{ marginTop: 16, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.16)', color: '#fff', padding: 13, borderRadius: 14, fontSize: 'calc(14px * var(--fs-scale-body, 1))', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
@@ -692,7 +693,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
               <div className="text-content" style={{ fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', fontWeight: 600 }}>{t('costs.outstanding')}</div>
               <div className="text-content-faint" style={{ fontSize: 'calc(10.5px * var(--fs-scale-caption, 1))' }}>{t('costs.outstandingSub')}</div>
             </div>
-            <div style={{ marginLeft: 'auto', fontSize: 'calc(27px * var(--fs-scale-title, 1))', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, display: 'flex', alignItems: 'baseline', color: '#d97706' }}>{bigMoney(totals.outstanding, 16, 'var(--c-ink3)')}</div>
+            <div style={{ marginInlineStart: 'auto', fontSize: 'calc(27px * var(--fs-scale-title, 1))', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, display: 'flex', alignItems: 'baseline', color: '#d97706' }}>{bigMoney(totals.outstanding, 16, 'var(--c-ink3)')}</div>
           </div>
         </div>
 
@@ -739,7 +740,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
                 const dtot = g.entries.reduce((a, en) => en.kind === 'expense' ? a + baseTotal(en.e) : a, 0)
                 return (
                   <div key={g.day} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {!dayFilter && <div className={labelCls} style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>{g.day}<span className="text-content-muted" style={{ marginLeft: 'auto', textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))' }}>{t('costs.spent', { amount: fmt(dtot) })}</span></div>}
+                    {!dayFilter && <div className={labelCls} style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>{g.day}<span className="text-content-muted" style={{ marginInlineStart: 'auto', textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))' }}>{t('costs.spent', { amount: fmt(dtot) })}</span></div>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{g.entries.map(en => en.kind === 'expense'
                       ? <Fragment key={'e' + en.e.id}>{ExpenseRow({ e: en.e })}</Fragment>
                       : <Fragment key={'s' + en.s.id}>{SettlementRow({ s: en.s })}</Fragment>)}</div>
@@ -819,7 +820,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
         {/* The category rides the card edge as a tab, the way the mobile card
             does, so it stops taking up a slot inside the row itself. */}
         {!isMobile && (
-          <span aria-hidden="true" style={{ position: 'absolute', left: -1, top: -1, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 11px 4px 10px', borderRadius: '17px 0 12px 0', background: c.color, color: '#fff', fontSize: 'calc(9.5px * var(--fs-scale-caption, 1))', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.2 }}>
+          <span aria-hidden="true" style={{ position: 'absolute', insetInlineStart: -1, top: -1, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 11px 4px 10px', borderStartStartRadius: 17, borderEndEndRadius: 12, background: c.color, color: '#fff', fontSize: 'calc(9.5px * var(--fs-scale-caption, 1))', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase', lineHeight: 1.2 }}>
             <Icon size={10} strokeWidth={2.4} />
             {t(c.labelKey)}
           </span>
@@ -829,7 +830,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
           <Icon size={21} />
           {isMobile && unfinished && (
             <Tooltip label={t('costs.unfinishedHint')}>
-            <span role="img" aria-label={t('costs.unfinishedHint')} style={{ position: 'absolute', bottom: -4, right: -4, width: 20, height: 20, borderRadius: '50%', background: '#d97706', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 800, lineHeight: 1, border: '2px solid var(--bg-card)' }}>!</span>
+            <span role="img" aria-label={t('costs.unfinishedHint')} style={{ position: 'absolute', bottom: -4, insetInlineEnd: -4, width: 20, height: 20, borderRadius: '50%', background: '#d97706', color: '#fff', display: 'grid', placeItems: 'center', fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 800, lineHeight: 1, border: '2px solid var(--bg-card)' }}>!</span>
             </Tooltip>
           )}
         </span>
@@ -886,7 +887,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
               {payers.map(p => (
                 <Tooltip key={p.user_id} label={personName(p.user_id)}>
-                <span className="bg-surface-card border border-edge-faint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px 3px 3px', borderRadius: 999, fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))' }}>
+                <span className="bg-surface-card border border-edge-faint" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, paddingBlock: 3, paddingInline: '3px 10px', borderRadius: 999, fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))' }}>
                   <Avatar id={p.user_id} size={18} />
                   <span className="text-content" style={{ fontWeight: 700 }}>{fmt(booked(p.amount, e))}</span>
                 </span>
@@ -929,12 +930,12 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
     const chip = 'inline-flex items-center gap-[5px] rounded-full bg-surface-tertiary text-content-secondary'
     return (
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 5, marginTop: 6 }}>
-        <span className="text-content-faint" style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginRight: 2 }}>{t('costs.split')}</span>
+        <span className="text-content-faint" style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginInlineEnd: 2 }}>{t('costs.split')}</span>
         {shown.map(m => {
           const share = fmt(shareOf(e, m.user_id))
           return (
             <Tooltip key={m.user_id} label={t('costs.splitChipLabel', { name: personName(m.user_id), amount: share })}>
-            <span className={chip} data-testid="split-chip" style={{ padding: '2px 8px 2px 2px', fontSize: 'calc(11px * var(--fs-scale-caption, 1))' }}>
+            <span className={chip} data-testid="split-chip" style={{ paddingBlock: 2, paddingInline: '2px 8px', fontSize: 'calc(11px * var(--fs-scale-caption, 1))' }}>
               <Avatar id={m.user_id} size={16} />
               <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{share}</span>
               {m.paid ? <Check size={11} strokeWidth={2.6} className="text-success" aria-label={t('costs.paid')} /> : null}
@@ -960,7 +961,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
       <button type="button" onClick={() => setExpandedNoteId(open ? null : noteKey)}
         aria-expanded={open}
         className="bg-surface-card border border-edge-faint text-content-muted hover:text-content hover:border-content-faint transition-colors exp-note-btn"
-        style={{ display: 'flex', alignItems: open ? 'flex-start' : 'center', gap: 9, minWidth: 0, width: '100%', padding: open ? '10px 14px 11px 13px' : '7px 12px 7px 11px', borderRadius: open ? 14 : 999, borderLeft: '3px solid ' + color, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', lineHeight: 1.5, textAlign: 'left' }}>
+        style={{ display: 'flex', alignItems: open ? 'flex-start' : 'center', gap: 9, minWidth: 0, width: '100%', padding: open ? '10px 14px 11px 13px' : '7px 12px 7px 11px', borderRadius: open ? 14 : 999, borderInlineStart: '3px solid ' + color, cursor: 'pointer', fontFamily: 'inherit', fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', lineHeight: 1.5, textAlign: 'start' }}>
         <span style={open
           ? { whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', minWidth: 0, flex: 1 }
           : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: 1 }}>{note}</span>
@@ -984,7 +985,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
         <div style={{ minWidth: 0 }}>
           <div className="text-content" style={{ fontSize: 'calc(15px * var(--fs-scale-subtitle, 1))', fontWeight: 600, marginBottom: 6 }}>
             {t('costs.payment')}
-            {line && <span className="text-content-faint" style={{ fontWeight: 400, fontSize: 'calc(12px * var(--fs-scale-body, 1))', marginLeft: 10 }}>{fmt(line.entered.amount, line.entered.currency)} → {fmt(line.into.amount, line.into.currency)}</span>}
+            {line && <span className="text-content-faint" style={{ fontWeight: 400, fontSize: 'calc(12px * var(--fs-scale-body, 1))', marginInlineStart: 10 }}>{fmt(line.entered.amount, line.entered.currency)} → {fmt(line.into.amount, line.into.currency)}</span>}
           </div>
           <Tooltip label={`${personName(s.from_user_id)} → ${personName(s.to_user_id)}`}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
@@ -1034,7 +1035,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
                   {neg && <span style={{ position: 'absolute', right: '50%', top: 0, bottom: 0, width: pct / 2 + '%', background: '#dc2626', borderRadius: 3 }} />}
                 </div>
               </div>
-              <div style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 600, textAlign: 'right', color: pos ? '#16a34a' : neg ? '#dc2626' : 'var(--text-faint)' }}>
+              <div style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 600, textAlign: 'end', color: pos ? '#16a34a' : neg ? '#dc2626' : 'var(--text-faint)' }}>
                 {pos ? '+' + fmt(r.balance) : neg ? '−' + fmt(-r.balance) : fmt(0)}
               </div>
             </div>
@@ -1066,7 +1067,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
             <div key={r.user_id}>
               <button type="button" onClick={() => setExpandedFinalId(open ? null : r.user_id)} aria-expanded={open}
                 className="text-content"
-                style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto 14px', gap: 10, alignItems: 'center', width: '100%', padding: '7px 0', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto 14px', gap: 10, alignItems: 'center', width: '100%', padding: '7px 0', background: 'none', border: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'start' }}>
                 <Avatar id={r.user_id} size={28} />
                 <span style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 600, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{personName(r.user_id)}</span>
                 <span style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 700 }}>{fmt(r.final)}</span>
@@ -1123,7 +1124,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
                 return (
                   <div key={r.item_id} style={lineCls}>
                     <span className="text-content-muted" style={{ minWidth: 0, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {r.name}{entered && <span className="text-content-faint" style={{ marginLeft: 8 }}>{entered}</span>}
+                      {r.name}{entered && <span className="text-content-faint" style={{ marginInlineStart: 8 }}>{entered}</span>}
                     </span>
                     <span className="text-content" style={{ whiteSpace: 'nowrap' }}>{signed(r.amount)}</span>
                   </div>
@@ -1239,7 +1240,7 @@ function FlowPills({ ids, lead, Avatar, name }: { ids: number[]; lead: string; A
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
       <span className="text-content-faint">{lead}</span>
       {uniq.map(id => (
-        <span key={id} className="bg-surface-secondary border border-edge text-content" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px 3px 3px', borderRadius: 999, fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 600 }}>
+        <span key={id} className="bg-surface-secondary border border-edge text-content" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, paddingBlock: 3, paddingInline: '3px 10px', borderRadius: 999, fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 600 }}>
           <Avatar id={id} size={18} />{name(id)}
         </span>
       ))}
@@ -1329,7 +1330,7 @@ function SettlementModal({ tripId, people, me, editing, currency, tripCurrency, 
             {/* Typed and shown the way the expense total is, in the reader's own decimal mark. */}
             <NumericInput mode="decimal" placeholder={localizeAmountInput('0.00', cur)} value={localizeAmountInput(amount, cur)}
               onValueChange={v => setAmount(v.replace(',', '.'))}
-              className="w-full flex-1 border-0 bg-transparent pl-1.5 font-semibold text-content outline-none dark:bg-transparent" style={fs(14, 'body')} />
+              className="w-full flex-1 border-0 bg-transparent ps-1.5 font-semibold text-content outline-none dark:bg-transparent" style={fs(14, 'body')} />
           </div>
         </EditorField>
         <EditorField label={t('costs.currency')}>
@@ -1694,7 +1695,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
   const PERSON_LIST = 'divide-y divide-edge-faint overflow-hidden rounded-[12px] border border-edge-faint bg-surface-card'
   const PERSON_ROW = 'grid min-h-[48px] grid-cols-[minmax(0,1fr)_130px] items-center gap-2.5 px-3 py-1.5'
   const AMOUNT_BOX = 'flex items-center gap-1 rounded-[8px] border border-edge bg-surface-input px-2.5'
-  const AMOUNT_INPUT = 'w-full border-0 bg-transparent py-2 text-right font-semibold text-content outline-none dark:bg-transparent'
+  const AMOUNT_INPUT = 'w-full border-0 bg-transparent py-2 text-end font-semibold text-content outline-none dark:bg-transparent'
 
   const nameOf = (p: TripMember) => (p.id === me ? t('costs.you') : p.username)
   // Who is in, shown as a real box to tick instead of a row that only fades.
@@ -1741,7 +1742,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
             const on = payerId === p.id
             return (
               <button key={p.id} type="button" role="radio" aria-checked={on} aria-label={nameOf(p)} onClick={() => setPayerId(p.id)}
-                className={`inline-flex items-center gap-2 rounded-full border py-1 pl-1 pr-3 font-medium ${on ? 'border-[color:var(--text-primary)] bg-surface-card text-content shadow-sm' : 'border-edge-faint bg-surface-secondary text-content-muted hover:text-content'}`}
+                className={`inline-flex items-center gap-2 rounded-full border py-1 ps-1 pe-3 font-medium ${on ? 'border-[color:var(--text-primary)] bg-surface-card text-content shadow-sm' : 'border-edge-faint bg-surface-secondary text-content-muted hover:text-content'}`}
                 style={fs(13, 'body')}>
                 {personFace(p, idx, true, 22)}
                 {nameOf(p)}
@@ -1763,7 +1764,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
               return (
                 <div key={p.id} className={PERSON_ROW}>
                   <button type="button" role="checkbox" aria-checked={on} aria-label={nameOf(p)} onClick={() => togglePayer(p.id)} data-testid="payer-toggle"
-                    className="inline-flex min-w-0 items-center gap-2.5 text-left">
+                    className="inline-flex min-w-0 items-center gap-2.5 text-start">
                     {tick(on)}
                     {personFace(p, idx, on)}
                     {personName(p, on)}
@@ -1852,7 +1853,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="mr-1 font-geist font-bold uppercase tracking-[.08em] text-content-faint" style={fs(9.5)}>{t('costs.ticketSplitting')}</span>
+                  <span className="me-1 font-geist font-bold uppercase tracking-[.08em] text-content-faint" style={fs(9.5)}>{t('costs.ticketSplitting')}</span>
                   {people.map((p, pIdx) => {
                     const active = item.participants.has(p.id)
                     return (
@@ -1862,7 +1863,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
                         role="checkbox"
                         aria-checked={active}
                         onClick={() => handleToggleItemParticipant(item.id, p.id)}
-                        className={`inline-flex items-center gap-1.5 rounded-full border py-[3px] pl-1 pr-2 font-medium ${active ? 'border-[color:var(--text-primary)] bg-surface-card text-content' : 'border-edge bg-surface-secondary text-content-faint'}`}
+                        className={`inline-flex items-center gap-1.5 rounded-full border py-[3px] ps-1 pe-2 font-medium ${active ? 'border-[color:var(--text-primary)] bg-surface-card text-content' : 'border-edge bg-surface-secondary text-content-faint'}`}
                         style={fs(11.5)}
                       >
                         {personFace(p, pIdx, active, 16)}
@@ -1897,14 +1898,14 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
               return (
                 <div key={p.id} className={PERSON_ROW}>
                   <button type="button" role="checkbox" aria-checked={on} aria-label={nameOf(p)} onClick={() => toggleParticipant(p.id)}
-                    className="inline-flex min-w-0 items-center gap-2.5 text-left">
+                    className="inline-flex min-w-0 items-center gap-2.5 text-start">
                     {tick(on)}
                     {personFace(p, idx, on)}
                     {personName(p, on)}
                     {p.is_guest && <GuestBadge size="xs" customTooltip />}
                   </button>
                   {!on ? excludedNote : splitMode === 'equally' ? (
-                    <span className="text-right">{badge(money(equalShares[p.id] || 0))}</span>
+                    <span className="text-end">{badge(money(equalShares[p.id] || 0))}</span>
                   ) : inPercent ? (
                     <div className="flex flex-col items-end gap-0.5">
                       <div className={`${AMOUNT_BOX} w-full`}>
@@ -1981,7 +1982,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
           {receipts.map((r, rIdx) => (
             <div key={r.id} className={receiptRow}>
               <button type="button" onClick={() => setModalPreviewReceipts({ receipts, initialIndex: rIdx })}
-                className="inline-flex min-w-0 items-center gap-2 text-left text-content hover:underline" style={fs(13, 'body')}>
+                className="inline-flex min-w-0 items-center gap-2 text-start text-content hover:underline" style={fs(13, 'body')}>
                 <Receipt size={14} className="flex-shrink-0 text-content-faint" />
                 <span className="truncate">{r.original_name}</span>
               </button>
@@ -2052,7 +2053,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
                 onValueChange={onTotalChange}
                 signToggleLabel={t('costs.toggleSign')}
                 disabled={isTicketMode}
-                className="w-full flex-1 border-0 bg-transparent pl-1.5 font-semibold text-content outline-none dark:bg-transparent" style={fs(15, 'subtitle')} />
+                className="w-full flex-1 border-0 bg-transparent ps-1.5 font-semibold text-content outline-none dark:bg-transparent" style={fs(15, 'subtitle')} />
             </div>
           </EditorField>
           <EditorField label={t('costs.currency')}>

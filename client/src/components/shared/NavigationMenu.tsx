@@ -121,7 +121,7 @@ export function NavigationMenu({ targets, anchor, onClose, title }: NavigationMe
             padding: '8px 10px', borderRadius: 8, border: 'none',
             background: 'none', cursor: 'pointer', fontFamily: 'inherit',
             fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', fontWeight: 500,
-            textAlign: 'left', color: 'var(--text-primary)',
+            textAlign: 'start', color: 'var(--text-primary)',
             transition: 'background 0.12s',
           }}
           onMouseEnter={e => { e.currentTarget.style.background = 'var(--bg-hover)' }}

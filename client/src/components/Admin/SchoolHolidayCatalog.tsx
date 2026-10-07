@@ -82,8 +82,8 @@ function Catalog() {
         {regions.length === 0
           ? <div className="rounded-[12px] border border-dashed border-edge px-4 py-5 text-center"><SettingsHint>{t('schoolCatalog.empty')}</SettingsHint></div>
           : <SettingRows>
-            {regions.map(region => <div key={region.id} className="flex items-center gap-2 py-1.5 pl-1.5 pr-3">
-              <button type="button" className="group flex min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2 py-1.5 text-left transition-colors hover:bg-surface-secondary" onClick={() => void state.openRegion(region.id)}>
+            {regions.map(region => <div key={region.id} className="flex items-center gap-2 py-1.5 ps-1.5 pe-3">
+              <button type="button" className="group flex min-w-0 flex-1 items-center gap-3 rounded-[10px] px-2 py-1.5 text-start transition-colors hover:bg-surface-secondary" onClick={() => void state.openRegion(region.id)}>
                 <span aria-hidden className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-surface-tertiary text-content-secondary"><MapPinned size={15} strokeWidth={1.9} /></span>
                 <span className="min-w-0 flex-1 truncate font-medium text-content" style={fs(13, 'body')}>{region.name}</span>
                 <ChevronRight aria-hidden size={15} className="flex-none text-content-faint transition-transform group-hover:translate-x-0.5" />

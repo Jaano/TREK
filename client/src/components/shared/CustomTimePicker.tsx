@@ -142,7 +142,7 @@ export default function CustomTimePicker({ value, onChange, placeholder = '00:00
           disabled={disabled}
           style={{
             flex: 1, border: 'none', outline: 'none', background: 'transparent',
-            padding: '8px 10px 8px 14px', fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontFamily: 'inherit',
+            paddingBlock: 8, paddingInlineEnd: 10, paddingInlineStart: 14, fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontFamily: 'inherit',
             color: value ? 'var(--text-primary)' : 'var(--text-faint)',
             minWidth: 0,
           }}
@@ -163,7 +163,8 @@ export default function CustomTimePicker({ value, onChange, placeholder = '00:00
       </div>
 
       {open && createPortal(
-        <div ref={dropRef} style={{
+        // dir=ltr so hours, minutes and AM/PM read the same way round in an RTL locale.
+        <div ref={dropRef} dir="ltr" style={{
           position: 'fixed',
           ...(anchored
             ? anchored.flipped
@@ -225,7 +226,7 @@ export default function CustomTimePicker({ value, onChange, placeholder = '00:00
 
           {/* AM/PM Toggle */}
           {is12h && hour !== null && (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginLeft: 4 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, marginInlineStart: 4 }}>
               <button type="button" onClick={() => { if (hour < 12) update(hour + 12, minute ?? 0); else update(hour - 12, minute ?? 0) }} style={btnStyle}
                 onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
                 onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}>
@@ -249,7 +250,7 @@ export default function CustomTimePicker({ value, onChange, placeholder = '00:00
           {/* Clear */}
           {value && (
             <button type="button" onClick={() => { onChange(''); setOpen(false) }}
-              style={{ ...btnStyle, marginLeft: 4, fontSize: 'calc(11px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', padding: '4px 6px' }}
+              style={{ ...btnStyle, marginInlineStart: 4, fontSize: 'calc(11px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', padding: '4px 6px' }}
               onMouseEnter={e => e.currentTarget.style.color = '#ef4444'}
               onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}>
               ✕

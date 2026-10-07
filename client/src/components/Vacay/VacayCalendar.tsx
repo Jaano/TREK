@@ -177,7 +177,7 @@ export default function VacayCalendar() {
                 <div key={i} className="flex items-center gap-2" style={{ marginTop: i ? 4 : 0 }}>
                   <span className="w-2 h-2 rounded-full shrink-0" style={{ background: e.person_color || '#6366f1' }} />
                   <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--vg-ink)' }}>{e.person_name}</span>
-                  <span style={{ marginLeft: 'auto', paddingLeft: 12, fontSize: 11, fontWeight: 700, color: emphasized ? 'var(--vg-ink)' : 'var(--vg-ink3)' }}>
+                  <span style={{ marginInlineStart: 'auto', paddingInlineStart: 12, fontSize: 11, fontWeight: 700, color: emphasized ? 'var(--vg-ink)' : 'var(--vg-ink3)' }}>
                     {dayTypeLabel(e.fraction, e.kind)}
                   </span>
                 </div>
@@ -188,7 +188,7 @@ export default function VacayCalendar() {
               <div key={`s${i}`} className="flex items-center gap-2" style={{ marginTop: (tipEntries?.length || i) ? 4 : 0 }}>
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ border: `2px solid ${m.color}` }} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--vg-ink)' }}>{m.name}</span>
-                <span style={{ marginLeft: 'auto', paddingLeft: 12, fontSize: 11, fontWeight: 700, color: 'var(--vg-ink3)' }}>
+                <span style={{ marginInlineStart: 'auto', paddingInlineStart: 12, fontSize: 11, fontWeight: 700, color: 'var(--vg-ink3)' }}>
                   {m.company ? t('vacay.companyHoliday') : dayTypeLabel(m.fraction, m.kind)}
                 </span>
               </div>
@@ -247,7 +247,7 @@ export default function VacayCalendar() {
             onClick={() => setCompDay(v => !v)}
             title={t('vacay.modeCompHint')}
             aria-pressed={compDay}
-            className="flex items-center gap-1.5 pl-2 pr-2.5 sm:pl-2.5 sm:pr-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-[background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]"
+            className="flex items-center gap-1.5 ps-2 pe-2.5 sm:ps-2.5 sm:pe-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-[background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]"
             style={compDay
               ? { background: 'var(--vg-ink)', color: 'var(--vg-bg)' }
               : { background: 'transparent', color: 'var(--vg-ink3)' }}>
@@ -266,7 +266,7 @@ export default function VacayCalendar() {
             onClick={() => setHalfDay(v => !v)}
             title={t('vacay.modeHalfHint')}
             aria-pressed={halfDay}
-            className="flex items-center gap-1.5 pl-2 pr-2.5 sm:pl-2.5 sm:pr-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-[background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]"
+            className="flex items-center gap-1.5 ps-2 pe-2.5 sm:ps-2.5 sm:pe-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold transition-[background-color,color] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]"
             style={halfDay
               ? { background: 'var(--vg-ink)', color: 'var(--vg-bg)' }
               : { background: 'transparent', color: 'var(--vg-ink3)' }}>

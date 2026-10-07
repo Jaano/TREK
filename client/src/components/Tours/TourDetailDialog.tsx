@@ -294,7 +294,7 @@ export default function TourDetailDialog({
         {canEdit && onUpdatePlace ? (
           <div className={BOX}>
             <button type="button" onClick={() => setColorOpen(open => !open)} aria-expanded={colorOpen}
-              className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left transition-colors hover:bg-surface-hover">
+              className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-start transition-colors hover:bg-surface-hover">
               <span className="h-4 w-4 flex-none rounded-full ring-1 ring-inset ring-edge" style={{ backgroundColor: trackColor }} />
               <span className="min-w-0 flex-1 truncate font-medium text-content-secondary" style={fs(12, 'body')}>{colorLabel}</span>
               {colorOpen ? <ChevronUp size={13} className="flex-none text-content-faint" /> : <ChevronDown size={13} className="flex-none text-content-faint" />}
@@ -330,7 +330,7 @@ export default function TourDetailDialog({
         >
           <div className={BOX}>
             <button type="button" onClick={() => setFilesExpanded(expanded => !expanded)} aria-expanded={filesExpanded}
-              className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left transition-colors hover:bg-surface-hover">
+              className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-start transition-colors hover:bg-surface-hover">
               <FileText size={13} strokeWidth={2} className="flex-none text-content-faint" />
               <span className="min-w-0 flex-1 truncate font-medium text-content-secondary" style={fs(12, 'body')}>
                 {placeFiles.length ? t('inspector.filesCount', { count: placeFiles.length }) : t('inspector.files')}
@@ -341,7 +341,7 @@ export default function TourDetailDialog({
               <div className="flex flex-col gap-0.5 border-t border-edge-faint p-1">
                 {placeFiles.map(file => (
                   <button type="button" key={file.id} onClick={() => void openFile(file.url)}
-                    className="flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left transition-colors hover:bg-surface-hover">
+                    className="flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-start transition-colors hover:bg-surface-hover">
                     {(file.mime_type || '').startsWith('image/')
                       ? <FileImage size={12} strokeWidth={2} className="flex-none text-content-muted" />
                       : <File size={12} strokeWidth={2} className="flex-none text-content-muted" />}

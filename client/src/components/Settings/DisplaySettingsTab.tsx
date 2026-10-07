@@ -148,7 +148,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                 type="button"
                 onClick={() => setLangOpen(v => !v)}
                 aria-expanded={langOpen}
-                className="flex w-full items-center justify-between gap-2 rounded-[10px] border border-edge bg-surface-input px-3 py-2 text-left font-medium text-content"
+                className="flex w-full items-center justify-between gap-2 rounded-[10px] border border-edge bg-surface-input px-3 py-2 text-start font-medium text-content"
                 style={fs(13, 'body')}
               >
                 <span className="min-w-0 truncate">{currentLanguage?.label}</span>

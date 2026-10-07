@@ -88,7 +88,7 @@ export default function InAppNotificationItem({ notification, onClose }: Notific
               {hasUnknownTitle ? notification.title_key : titleText}
             </p>
             <div className="flex items-center gap-0.5 flex-shrink-0">
-              <span className="text-xs mr-1 text-content-faint">
+              <span className="text-xs me-1 text-content-faint">
                 {relativeTime(notification.created_at, locale)}
               </span>
               {!notification.is_read && (

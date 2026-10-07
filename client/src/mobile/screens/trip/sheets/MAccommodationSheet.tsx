@@ -245,7 +245,7 @@ export default function MAccommodationSheet({ planner, shell }: MTripSheetsProps
                   key={p.id}
                   type="button"
                   onClick={() => setForm(f => ({ ...f, place_id: p.id }))}
-                  className={`flex items-center gap-[10px] rounded-[14px] border px-3 py-[9px] text-left ${
+                  className={`flex items-center gap-[10px] rounded-[14px] border px-3 py-[9px] text-start ${
                     sel ? 'border-[color:var(--m-act)] bg-[color:var(--m-inner)]' : 'border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)]'
                   }`}
                 >

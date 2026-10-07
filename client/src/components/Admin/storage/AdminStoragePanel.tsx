@@ -79,7 +79,7 @@ const ROW_BUTTON_PRIMARY = 'inline-flex items-center gap-1.5 rounded-[10px] bg-a
 /** The icon square on the left of a row. */
 const TILE = 'grid h-9 w-9 flex-none place-items-center rounded-[10px] bg-surface-tertiary text-content-muted'
 /** What a row says under its head line, lined up with the name rather than the tile. */
-const DETAILS = 'mt-2 flex flex-col items-start gap-1.5 empty:hidden sm:pl-12'
+const DETAILS = 'mt-2 flex flex-col items-start gap-1.5 empty:hidden sm:ps-12'
 const META = 'm-0 leading-snug text-content-faint'
 
 const TYPE_ICON: Record<string, LucideIcon> = { local: HardDrive, s3: Cloud, mirror: Copy }

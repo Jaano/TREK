@@ -66,7 +66,7 @@ export function WhenFields({ facts }: { facts: BookingFacts }) {
       {facts.day && (
         <Field label={t('reservations.date')} className="flex-[1.4]">
           {facts.day.label}
-          {facts.day.date && <span className="ml-1.5 font-medium text-content-faint">{facts.day.date}</span>}
+          {facts.day.date && <span className="ms-1.5 font-medium text-content-faint">{facts.day.date}</span>}
         </Field>
       )}
       {facts.time && <Field label={t('reservations.time')} className="flex-1" tabular>{facts.time}</Field>}
@@ -104,13 +104,13 @@ export function CountPill({ children }: { children: ReactNode }) {
 /** A collapsible section head: the label, what the day is, the count, and the chevron on the right. */
 export function SectionHead({ label, sub, count, open, onToggle }: { label: string; sub?: string; count: number; open: boolean; onToggle: () => void }) {
   return (
-    <button type="button" onClick={onToggle} aria-expanded={open} className="mb-3 flex w-full items-center gap-2 px-0.5 text-left">
+    <button type="button" onClick={onToggle} aria-expanded={open} className="mb-3 flex w-full items-center gap-2 px-0.5 text-start">
       <span className={EYEBROW} style={fs(11)}>{label}</span>
       {sub && <span className="truncate font-geist font-medium text-content-muted" style={fs(11.5)}>{sub}</span>}
       <CountPill>{count}</CountPill>
       {open
-        ? <ChevronUp size={14} strokeWidth={2} className="ml-auto flex-none text-content-faint" />
-        : <ChevronDown size={14} strokeWidth={2} className="ml-auto flex-none text-content-faint" />}
+        ? <ChevronUp size={14} strokeWidth={2} className="ms-auto flex-none text-content-faint" />
+        : <ChevronDown size={14} strokeWidth={2} className="ms-auto flex-none text-content-faint" />}
     </button>
   )
 }
@@ -235,7 +235,7 @@ export function TravelerChips({ travelers }: { travelers: ReservationTraveler[] 
       {travelers.map(tv => {
         const src = tv.avatar_url || avatarSrc(tv.avatar)
         return (
-          <span key={tv.user_id} className={`${BOX} flex items-center gap-1.5 rounded-full py-[3px] pl-[3px] pr-2.5`}>
+          <span key={tv.user_id} className={`${BOX} flex items-center gap-1.5 rounded-full py-[3px] ps-[3px] pe-2.5`}>
             <span className="grid h-5 w-5 flex-none place-items-center overflow-hidden rounded-full bg-accent font-bold text-accent-text" style={fs(9)}>
               {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : tv.username?.[0]?.toUpperCase()}
             </span>
@@ -258,12 +258,12 @@ export function TravelerStack({ travelers, max = 3 }: { travelers: ReservationTr
         {travelers.slice(0, max).map((tv, i) => {
           const src = tv.avatar_url || avatarSrc(tv.avatar)
           return (
-            <span key={tv.user_id} className="grid h-[22px] w-[22px] flex-none place-items-center overflow-hidden rounded-full border-2 border-surface-card bg-accent font-bold text-accent-text" style={{ ...fs(9), marginLeft: i ? -7 : 0 }}>
+            <span key={tv.user_id} className="grid h-[22px] w-[22px] flex-none place-items-center overflow-hidden rounded-full border-2 border-surface-card bg-accent font-bold text-accent-text" style={{ ...fs(9), marginInlineStart: i ? -7 : 0 }}>
               {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : tv.username?.[0]?.toUpperCase()}
             </span>
           )
         })}
-        {travelers.length > max && <span className="ml-1 font-geist font-semibold text-content-faint" style={fs(10.5)}>+{travelers.length - max}</span>}
+        {travelers.length > max && <span className="ms-1 font-geist font-semibold text-content-faint" style={fs(10.5)}>+{travelers.length - max}</span>}
       </span>
     </Tooltip>
   )
@@ -291,7 +291,7 @@ export function FileRows({ files }: { files: TripFile[] }) {
           key={f.id}
           type="button"
           onClick={e => { e.stopPropagation(); open(f) }}
-          className={`${BOX} flex items-center gap-1.5 px-[10px] py-[7px] text-left hover:bg-surface-hover`}
+          className={`${BOX} flex items-center gap-1.5 px-[10px] py-[7px] text-start hover:bg-surface-hover`}
         >
           <FileText size={12} strokeWidth={2} className="flex-none text-content-muted" />
           <span className="truncate font-geist font-semibold text-content-muted" style={fs(11.5)}>{f.original_name}</span>

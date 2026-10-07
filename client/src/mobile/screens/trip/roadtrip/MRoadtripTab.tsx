@@ -138,7 +138,7 @@ export default function MRoadtripTab({ planner, shell }: MTripTabPanelProps) {
   // fall back to the trip's first routed day, which is not the one on screen, and every
   // distance it answered with would be measured against a road nobody is looking at.
   const searchBar = stage && (
-    <div className="pointer-events-auto absolute left-4 right-4 top-[calc(var(--m-safe-top,12px)+96px)] z-[26]">
+    <div className="pointer-events-auto absolute inset-x-4 top-[calc(var(--m-safe-top,12px)+96px)] z-[26]">
       <MRtCorridorBar planner={planner} corridor={corridor} onOpen={() => shell.openSheet('rtsearch')} />
     </div>
   )
@@ -165,7 +165,7 @@ export default function MRoadtripTab({ planner, shell }: MTripTabPanelProps) {
             Mounted only while the picker is open, so nothing invisible lies over the map's
             own buttons the rest of the time. */}
         {alts.open && (
-          <div className="pointer-events-auto absolute left-4 right-4 bottom-[calc(var(--bottom-nav-h,84px)+4px)]">
+          <div className="pointer-events-auto absolute inset-x-4 bottom-[calc(var(--bottom-nav-h,84px)+4px)]">
             <MRtAlternativesBar planner={planner} alts={alts} />
           </div>
         )}
@@ -243,7 +243,7 @@ export default function MRoadtripTab({ planner, shell }: MTripTabPanelProps) {
                     {rt.clocks.start ? formatClockTime(rt.clocks.start, is12h) : '-'}
                   </span>
                 </span>
-                <span className="min-w-0 text-right">
+                <span className="min-w-0 text-end">
                   <span className="block font-geist text-[0.5625rem] font-bold uppercase tracking-[.08em] text-m-faint">
                     {t('roadtrip.stay.arrive')}
                   </span>
@@ -386,7 +386,7 @@ function UpNext({ planner, shell, rt, stageDayId, onOpen }: {
 
   return (
     <section className="mt-2.5 rounded-[22px] border border-[color:var(--m-inbr)] bg-[color:var(--m-inner)] px-4 py-3.5 shadow-[0_18px_44px_-18px_rgba(0,0,0,.3)]">
-      <button type="button" onClick={() => onOpen(next.row)} className="w-full text-left">
+      <button type="button" onClick={() => onOpen(next.row)} className="w-full text-start">
         <span className="flex items-center justify-between gap-2">
           <span className="font-geist text-[0.65625rem] font-bold uppercase tracking-[.08em] text-m-muted">
             {t('mobileTrip.upNext')}

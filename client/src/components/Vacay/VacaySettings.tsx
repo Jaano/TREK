@@ -62,7 +62,7 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
 
       {/* Weekend days selector */}
       {plan.block_weekends !== false && (
-        <div data-testid="weekend-days" style={{ paddingLeft: 36 }}>
+        <div data-testid="weekend-days" style={{ paddingInlineStart: 36 }}>
           <p className="text-xs font-medium mb-2 text-content-muted">{t('vacay.weekendDays')}</p>
           <div className="flex flex-wrap gap-1.5">
             {[
@@ -105,7 +105,7 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
             <p className="text-xs mt-0.5 text-content-faint">{t('vacay.weekStartHint')}</p>
           </div>
         </div>
-        <div style={{ paddingLeft: 36, marginTop: 8 }} className="flex gap-1.5">
+        <div style={{ paddingInlineStart: 36, marginTop: 8 }} className="flex gap-1.5">
           {[
             { value: 1, label: t('vacay.mon') },
             { value: 0, label: t('vacay.sun') },
@@ -152,7 +152,7 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
           onChange={() => toggle('company_holidays_enabled')}
         />
         {plan.company_holidays_enabled && (
-          <div className="ml-7 mt-2">
+          <div className="ms-7 mt-2">
             <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md" style={{ background: 'var(--vg-surf)', border: '1px solid var(--vg-line)' }}>
               <AlertCircle size={12} style={{ color: 'var(--vg-ink3)' }} />
               <span className="text-[10px]" style={{ color: 'var(--vg-ink3)' }}>{t('vacay.companyHolidaysNoDeduct')}</span>
@@ -171,7 +171,7 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
           onChange={() => toggle('holidays_enabled')}
         />
         {plan.holidays_enabled && (
-          <div className="ml-7 mt-2 space-y-2">
+          <div className="ms-7 mt-2 space-y-2">
             {publicHolidayCalendars.length === 0 && (
               <p className="text-xs text-content-faint">{t('vacay.noCalendars')}</p>
             )}
@@ -219,7 +219,7 @@ export default function VacaySettings({ onClose }: VacaySettingsProps) {
         />
         {schoolCountryError && <p role="alert" className="text-caption text-danger">{schoolCountryError}</p>}
         {plan.school_holidays_enabled && (
-          <div className="ml-7 mt-2 space-y-2">
+          <div className="ms-7 mt-2 space-y-2">
             {schoolHolidayCalendars.length === 0 && (
               <p className="text-xs text-content-faint">{t('vacay.noSchoolCalendars')}</p>
             )}
@@ -341,7 +341,7 @@ function YearTypePicker() {
           <p className="text-xs mt-0.5 text-content-faint">{t('vacay.yearTypeHint')}</p>
         </div>
       </div>
-      <div style={{ paddingLeft: 36, marginTop: 8 }} className="flex flex-wrap gap-1.5">
+      <div style={{ paddingInlineStart: 36, marginTop: 8 }} className="flex flex-wrap gap-1.5">
         {([
           { value: 'calendar', label: t('vacay.yearTypeCalendar') },
           { value: 'fiscal', label: t('vacay.yearTypeFiscal') },
@@ -361,7 +361,7 @@ function YearTypePicker() {
       </div>
 
       {type === 'fiscal' && (
-        <div style={{ paddingLeft: 36, marginTop: 8 }} className="flex items-center gap-2">
+        <div style={{ paddingInlineStart: 36, marginTop: 8 }} className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <CustomSelect
               value={String(yearSettings.year_start_month)}
@@ -382,7 +382,7 @@ function YearTypePicker() {
       )}
 
       {type === 'anniversary' && (
-        <div style={{ paddingLeft: 36, marginTop: 8 }}>
+        <div style={{ paddingInlineStart: 36, marginTop: 8 }}>
           <input
             type="date"
             value={yearSettings.hire_date || ''}
@@ -396,7 +396,7 @@ function YearTypePicker() {
         </div>
       )}
 
-      <p className="text-[11px] mt-2 text-content-faint" style={{ paddingLeft: 36 }}>
+      <p className="text-[11px] mt-2 text-content-faint" style={{ paddingInlineStart: 36 }}>
         {t('vacay.yearWindow', { year: selectedYear, window: windowLabel })}
       </p>
     </div>
@@ -493,7 +493,7 @@ function CalendarRow({ cal, countries, calendarType, onUpdate, onDelete }: {
           title={t('vacay.calendarColor')}
         />
         {showColorPicker && (
-          <div style={{ position: 'absolute', top: 34, left: 0, zIndex: 50, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 12, padding: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, width: 120 }}>
+          <div style={{ position: 'absolute', top: 34, insetInlineStart: 0, zIndex: 50, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 12, padding: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, width: 120 }}>
             {PRESET_COLORS.map(c => (
               <button type="button" key={c} onClick={() => { setLocalColor(c); setShowColorPicker(false); if (c !== cal.color) onUpdate({ color: c }) }}
                 style={{ width: 24, height: 24, borderRadius: 6, background: c, border: localColor === c ? '2px solid var(--text-primary)' : '2px solid transparent', cursor: 'pointer' }} />
@@ -577,7 +577,7 @@ function AddCalendarForm({ countries, calendarType, onAdd, onCancel, defaultColo
           title={t('vacay.calendarColor')}
         />
         {showColorPicker && (
-          <div style={{ position: 'absolute', top: 34, left: 0, zIndex: 50, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 12, padding: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, width: 120 }}>
+          <div style={{ position: 'absolute', top: 34, insetInlineStart: 0, zIndex: 50, background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 12, padding: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4, width: 120 }}>
             {PRESET_COLORS.map(c => (
               <button type="button" key={c} onClick={() => { setColor(c); setShowColorPicker(false) }}
                 style={{ width: 24, height: 24, borderRadius: 6, background: c, border: color === c ? '2px solid var(--text-primary)' : '2px solid transparent', cursor: 'pointer' }} />

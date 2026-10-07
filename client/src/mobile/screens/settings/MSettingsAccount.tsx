@@ -306,7 +306,7 @@ export default function MSettingsAccount() {
               type="button"
               aria-label={t('settings.uploadAvatar')}
               onClick={() => avatarInputRef.current?.click()}
-              className="absolute -bottom-[3px] -right-[3px] flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--m-sheetop)] bg-m-act text-m-actfg"
+              className="absolute -bottom-[3px] -end-[3px] flex h-7 w-7 items-center justify-center rounded-full border-2 border-[color:var(--m-sheetop)] bg-m-act text-m-actfg"
             >
               <Camera size={13} />
             </button>
@@ -315,7 +315,7 @@ export default function MSettingsAccount() {
                 type="button"
                 aria-label={t('settings.removeAvatar')}
                 onClick={handleAvatarRemove}
-                className="absolute -right-[2px] -top-[2px] flex h-5 w-5 items-center justify-center rounded-full border-2 border-[color:var(--m-sheetop)] bg-[color:var(--m-st-danger)] text-m-actfg"
+                className="absolute -end-[2px] -top-[2px] flex h-5 w-5 items-center justify-center rounded-full border-2 border-[color:var(--m-sheetop)] bg-[color:var(--m-st-danger)] text-m-actfg"
               >
                 <Trash2 size={10} />
               </button>

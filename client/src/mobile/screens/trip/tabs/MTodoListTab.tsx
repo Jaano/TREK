@@ -86,7 +86,7 @@ export default function MTodoListTab({ planner }: { planner: TripPlanner }) {
             <button
               type="button"
               onClick={openCreate}
-              className="ml-auto flex items-center gap-1 rounded-full bg-m-act px-[12px] py-[5px] text-[0.6875rem] font-semibold text-m-actfg"
+              className="ms-auto flex items-center gap-1 rounded-full bg-m-act px-[12px] py-[5px] text-[0.6875rem] font-semibold text-m-actfg"
             >
               <Plus size={11} strokeWidth={2.4} />
               {t('todo.newItem')}
@@ -214,7 +214,7 @@ function TaskCard({ item, members, today, onToggle, onOpen }: {
         <Check size={12} strokeWidth={3} />
       </button>
 
-      <button type="button" onClick={() => onOpen(item.id)} className="flex min-w-0 flex-1 items-start gap-[8px] text-left">
+      <button type="button" onClick={() => onOpen(item.id)} className="flex min-w-0 flex-1 items-start gap-[8px] text-start">
         <div className="min-w-0 flex-1">
           <div className={`truncate text-[0.8125rem] font-semibold ${done ? 'text-m-faint line-through opacity-45' : 'text-m-ink'}`}>
             {item.name}
@@ -241,7 +241,7 @@ function TaskCard({ item, members, today, onToggle, onOpen }: {
                 </span>
               )}
               {assignee && (
-                <span className="inline-flex items-center gap-[4px] rounded-full bg-[color:var(--m-ic)] py-[2px] pl-[3px] pr-2 font-geist text-[0.59375rem] font-bold text-m-muted">
+                <span className="inline-flex items-center gap-[4px] rounded-full bg-[color:var(--m-ic)] py-[2px] ps-[3px] pe-2 font-geist text-[0.59375rem] font-bold text-m-muted">
                   <span className="flex h-[13px] w-[13px] flex-none items-center justify-center overflow-hidden rounded-full bg-m-act text-[0.4375rem] font-extrabold text-m-actfg">
                     {avatarSrcUrl ? <img src={avatarSrcUrl} alt="" className="h-full w-full object-cover" /> : assignee.username[0]?.toUpperCase()}
                   </span>

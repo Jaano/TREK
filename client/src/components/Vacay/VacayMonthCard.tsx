@@ -72,7 +72,7 @@ export default function VacayMonthCard({
 
   return (
     <div className="vg-card rounded-[22px]" style={{ padding: '15px 16px 14px' }}>
-      <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--vg-ink)', marginBottom: 9, paddingLeft: 2 }} className="capitalize">
+      <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.02em', color: 'var(--vg-ink)', marginBottom: 9, paddingInlineStart: 2 }} className="capitalize">
         {monthName}
       </div>
 
@@ -214,21 +214,20 @@ export default function VacayMonthCard({
               )}
 
               {tripDates?.has(dateStr) && (
-                <span className="absolute top-1 right-1 w-[5px] h-[5px] rounded-full z-[2] bg-[#3b82f6]" style={{ boxShadow: '0 0 0 1.5px var(--vg-surf)' }} />
+                <span className="absolute top-1 end-1 w-[5px] h-[5px] rounded-full z-[2] bg-[#3b82f6]" style={{ boxShadow: '0 0 0 1.5px var(--vg-surf)' }} />
               )}
 
               {/* Half day (#552): a small orange corner dot, mirroring the blue trip dot.
                   The hover tooltip spells out who is on a half day. */}
               {anyHalf && (
-                <span className="absolute bottom-1 right-1 w-[5px] h-[5px] rounded-full z-[3] bg-[#f97316]" style={{ boxShadow: '0 0 0 1.5px var(--vg-surf)' }} aria-hidden />
+                <span className="absolute bottom-1 end-1 w-[5px] h-[5px] rounded-full z-[3] bg-[#f97316]" style={{ boxShadow: '0 0 0 1.5px var(--vg-surf)' }} aria-hidden />
               )}
 
               {schoolHolidayMarkers.length > 0 && (
                 <span
                   className="absolute rounded-full z-[2]"
                   style={{
-                    left: 4,
-                    right: 4,
+                    insetInline: 4,
                     bottom: 3,
                     height: 3,
                     background: schoolHolidayBand(schoolHolidayMarkers.map(h => h.color)),

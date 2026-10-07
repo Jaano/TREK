@@ -50,7 +50,7 @@ export default function AtlasCountrySearch({
   return (
     <div
       className="absolute z-20 flex justify-center"
-      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 14px)', left: 0, right: 0, pointerEvents: 'none' }}
+      style={{ top: 'calc(env(safe-area-inset-top, 0px) + 14px)', insetInline: 0, pointerEvents: 'none' }}
     >
       <div ref={boxRef} style={{ width: 'min(520px, calc(100vw - 28px))', pointerEvents: 'auto' }}>
         <div style={{
@@ -155,7 +155,7 @@ export default function AtlasCountrySearch({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   fontFamily: 'inherit',
-                  textAlign: 'left',
+                  textAlign: 'start',
                   borderBottom: '1px solid ' + (dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'),
                 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }}
@@ -200,7 +200,7 @@ export default function AtlasCountrySearch({
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   fontFamily: 'inherit',
-                  textAlign: 'left',
+                  textAlign: 'start',
                   borderBottom: '1px solid ' + (dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'),
                 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }}

@@ -99,7 +99,7 @@ export default function MPlacesSaveToCollectionSheet({ open, tripId, placeIds, o
                 type="button"
                 onClick={() => pick(list)}
                 disabled={busyId != null}
-                className="mt-2 flex w-full items-center gap-[11px] rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[10px] text-left disabled:opacity-60"
+                className="mt-2 flex w-full items-center gap-[11px] rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[10px] text-start disabled:opacity-60"
               >
                 <span
                   className="flex h-9 w-9 flex-none items-center justify-center rounded-xl text-white"

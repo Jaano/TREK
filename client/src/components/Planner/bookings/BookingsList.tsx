@@ -51,7 +51,7 @@ export default function BookingsList(p: BookingsListProps) {
           <section key={g.id} className="overflow-hidden rounded-2xl border border-edge-faint bg-surface-card">
             {g.label && (
               <button type="button" onClick={() => p.onToggleGroup(g.id)} aria-expanded={open}
-                className="flex w-full items-center gap-2 bg-surface-secondary px-3.5 py-2.5 text-left">
+                className="flex w-full items-center gap-2 bg-surface-secondary px-3.5 py-2.5 text-start">
                 <span className={EYEBROW} style={fs(10.5)}>{g.label}</span>
                 {g.sub && <span className="truncate font-geist font-medium text-content-muted" style={fs(11.5)}>{g.sub}</span>}
                 <CountPill>{g.items.length}</CountPill>
@@ -123,7 +123,7 @@ function Row({ r, p, facts, files, costs, t, locale }: {
           </div>
         )}
       </div>
-      <div className="text-right tabular-nums">
+      <div className="text-end tabular-nums">
         <div className="font-geist text-content-faint" style={fs(11)}>{facts.day ? [facts.day.label, facts.day.date].filter(Boolean).join('  ') : t('reservations.undated')}</div>
         {facts.time && <div className="font-semibold text-content" style={fs(12.5, 'body')}>{facts.time}</div>}
       </div>

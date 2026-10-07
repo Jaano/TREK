@@ -102,14 +102,14 @@ function FilterDropdown({ label, current, options, onSelect, lead }: {
         className={`flex w-full items-center gap-1.5 rounded-full bg-surface-card px-2.5 py-1.5 font-semibold text-content shadow-sm ring-1 transition-colors hover:bg-surface-hover ${open ? 'ring-content-faint' : 'ring-edge-faint'}`}
         style={fs(12, 'body')}>
         <span className="flex flex-none text-content-faint">{cur.icon ?? lead}</span>
-        <span id={valueId} className="min-w-0 flex-1 truncate text-left">{cur.label}</span>
+        <span id={valueId} className="min-w-0 flex-1 truncate text-start">{cur.label}</span>
         <ChevronDown size={13} strokeWidth={2.2} className={`flex-none text-content-faint transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div role="listbox" aria-label={label} className="absolute left-0 right-0 top-full z-30 mt-1 flex max-h-[240px] flex-col gap-0.5 overflow-y-auto rounded-[12px] border border-edge-faint bg-surface-card p-1 shadow-dropdown">
+        <div role="listbox" aria-label={label} className="absolute inset-x-0 top-full z-30 mt-1 flex max-h-[240px] flex-col gap-0.5 overflow-y-auto rounded-[12px] border border-edge-faint bg-surface-card p-1 shadow-dropdown">
           {options.map(o => (
             <button key={o.key} type="button" role="option" aria-selected={o.key === current} onClick={() => { onSelect(o.key); setOpen(false) }}
-              className={`flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-left transition-colors hover:bg-surface-hover ${o.key === current ? 'bg-surface-tertiary font-semibold text-content' : 'text-content-secondary'}`}
+              className={`flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-start transition-colors hover:bg-surface-hover ${o.key === current ? 'bg-surface-tertiary font-semibold text-content' : 'text-content-secondary'}`}
               style={fs(12.5, 'body')}>
               <span className="flex flex-none text-content-faint">{o.icon}</span>
               <span className="min-w-0 flex-1 truncate">{o.label}</span>
@@ -209,7 +209,7 @@ export default function CollectionPicker({ bias, onSelect, t }: CollectionPicker
       <div className="flex flex-none flex-col gap-2 px-3 pb-2.5">
         <EditorField label={t('common.search')} htmlFor={searchId}>
           <div className="relative">
-            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+            <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
             <input
               id={searchId}
               type="text"
@@ -218,7 +218,7 @@ export default function CollectionPicker({ bias, onSelect, t }: CollectionPicker
               // Named after what it searches: the form beside it has a search of its own.
               aria-label={t('collections.picker.search')}
               placeholder={t('collections.picker.search')}
-              className={`${INPUT} pl-8`}
+              className={`${INPUT} ps-8`}
             />
           </div>
         </EditorField>
@@ -247,7 +247,7 @@ export default function CollectionPicker({ bias, onSelect, t }: CollectionPicker
                 key={place.id}
                 type="button"
                 onClick={() => onSelect(place)}
-                className="group flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2 text-left outline-none transition-colors hover:bg-surface-card hover:shadow-sm focus-visible:bg-surface-card focus-visible:ring-2 focus-visible:ring-[color:var(--text-primary)] active:bg-surface-selected"
+                className="group flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2 text-start outline-none transition-colors hover:bg-surface-card hover:shadow-sm focus-visible:bg-surface-card focus-visible:ring-2 focus-visible:ring-[color:var(--text-primary)] active:bg-surface-selected"
               >
                 <PlaceAvatar place={place} size={34} category={place.category ? { color: place.category.color ?? undefined, icon: place.category.icon ?? undefined } : null} />
                 <span className="flex min-w-0 flex-1 flex-col">

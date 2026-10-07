@@ -497,7 +497,7 @@ export default function MTripShell({
 
       {/* ── Day chips (z-25 — covered by non-plan tab overlays, stays mounted) ── */}
       {days.length > 0 && (
-        <div className="absolute left-4 right-4 z-[25] flex gap-[6px] top-[calc(var(--m-safe-top,12px)+50px)]">
+        <div className="absolute inset-x-4 z-[25] flex gap-[6px] top-[calc(var(--m-safe-top,12px)+50px)]">
           <div className="flex flex-1 items-center gap-[2px] overflow-x-auto rounded-full border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] p-[3px] backdrop-blur-[24px] backdrop-saturate-[1.7]">
             {days.map((day, idx) => {
               const active = day.id === planner.selectedDayId
@@ -571,7 +571,7 @@ export default function MTripShell({
       )}
 
       {/* ── Top controls (z-42 — above every layer incl. tab overlays) ── */}
-      <div className="absolute left-4 right-4 z-[42] flex h-10 items-center justify-between top-[var(--m-safe-top,12px)]">
+      <div className="absolute inset-x-4 z-[42] flex h-10 items-center justify-between top-[var(--m-safe-top,12px)]">
         <MIconBtn ariaLabel={t('common.back')} onClick={() => navigate('/dashboard')} className="backdrop-blur-[24px] backdrop-saturate-[1.7]">
           <ChevronLeft size={19} strokeWidth={2.2} />
         </MIconBtn>
@@ -598,7 +598,7 @@ export default function MTripShell({
         )}
 
         {trTab === 'transports' && (
-          <div className="absolute left-[52px] right-2 top-1/2 flex -translate-y-1/2 items-center justify-center gap-[7px]">
+          <div className="absolute start-[52px] end-2 top-1/2 flex -translate-y-1/2 items-center justify-center gap-[7px]">
             <PrimaryPill
               label={t('transport.addTransport')}
               onClick={() => {
@@ -623,7 +623,7 @@ export default function MTripShell({
         )}
 
         {trTab === 'buchungen' && (
-          <div className="absolute left-[52px] right-2 top-1/2 flex -translate-y-1/2 items-center justify-center gap-[7px]">
+          <div className="absolute start-[52px] end-2 top-1/2 flex -translate-y-1/2 items-center justify-center gap-[7px]">
             <PrimaryPill
               label={t('mobileTrip.newReservation')}
               onClick={() => { planner.setEditingReservation(null); planner.setShowReservationModal(true) }}
@@ -707,7 +707,7 @@ export default function MTripShell({
             type="button"
             onClick={() => openSheet('rtinfo')}
             aria-label={rtHeaderLabel || undefined}
-            className="absolute left-[52px] right-[52px] top-1/2 mx-auto flex h-[34px] w-fit max-w-full -translate-y-1/2 items-center gap-[5px] rounded-full border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] px-[10px] backdrop-blur-[24px] backdrop-saturate-[1.7]"
+            className="absolute inset-x-[52px] top-1/2 mx-auto flex h-[34px] w-fit max-w-full -translate-y-1/2 items-center gap-[5px] rounded-full border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] px-[10px] backdrop-blur-[24px] backdrop-saturate-[1.7]"
           >
             <Route size={14} strokeWidth={2} className="flex-none text-m-muted" aria-hidden="true" />
             {rtHeaderLabel ? (
@@ -742,7 +742,7 @@ export default function MTripShell({
           if (!tab) return null
           const Icon = tab.icon
           return (
-            <div className="pointer-events-none absolute left-[52px] right-[52px] top-1/2 flex -translate-y-1/2 items-center justify-center gap-[7px]">
+            <div className="pointer-events-none absolute inset-x-[52px] top-1/2 flex -translate-y-1/2 items-center justify-center gap-[7px]">
               <div className="flex min-w-0 items-center gap-[7px] rounded-full border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] px-[13px] py-[7px] backdrop-blur-[24px] backdrop-saturate-[1.7]">
                 {Icon && <Icon size={14} strokeWidth={2} className="flex-none text-m-muted" />}
                 <span className="truncate text-[0.8125rem] font-semibold text-m-ink">{tab.label}</span>
@@ -768,7 +768,7 @@ export default function MTripShell({
       </div>
 
       {/* ── Bottom dock (replaces the global bottom nav on this screen) ── */}
-      <nav className="absolute left-4 right-4 z-40 flex h-[62px] items-center justify-around rounded-[31px] border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] px-[14px] shadow-[0_16px_44px_-14px_rgba(0,0,0,.35)] backdrop-blur-[30px] backdrop-saturate-[1.8] bottom-[calc(env(safe-area-inset-bottom,0px)+12px)]">
+      <nav className="absolute inset-x-4 z-40 flex h-[62px] items-center justify-around rounded-[31px] border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] px-[14px] shadow-[0_16px_44px_-14px_rgba(0,0,0,.35)] backdrop-blur-[30px] backdrop-saturate-[1.8] bottom-[calc(env(safe-area-inset-bottom,0px)+12px)]">
         {dockTabs.map(({ id, icon: Icon }) => {
           const active = trTab === id
           return (

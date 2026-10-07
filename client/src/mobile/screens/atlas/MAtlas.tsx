@@ -117,7 +117,7 @@ export default function MAtlas() {
 
       {/* Full-width bucket-list button. The bottom nav makes a back button
           redundant on this main-nav screen, so the header spans the width. */}
-      <div className="absolute left-4 right-4 top-[var(--m-safe-top,12px)] z-[5] flex items-center gap-2">
+      <div className="absolute inset-x-4 top-[var(--m-safe-top,12px)] z-[5] flex items-center gap-2">
         <button
           type="button"
           onClick={() => setBucketOpen(true)}

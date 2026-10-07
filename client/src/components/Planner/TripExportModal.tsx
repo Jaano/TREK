@@ -251,7 +251,7 @@ function ExportRow({ icon: Icon, title, sub, busy = false, disabled = false, onC
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="group flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-card px-3 py-2.5 text-left transition-colors enabled:hover:bg-surface-hover disabled:cursor-default disabled:opacity-50"
+      className="group flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-card px-3 py-2.5 text-start transition-colors enabled:hover:bg-surface-hover disabled:cursor-default disabled:opacity-50"
     >
       <span className="grid h-9 w-9 flex-none place-items-center rounded-[10px] bg-surface-tertiary text-content-secondary transition-colors group-enabled:group-hover:bg-surface-card group-enabled:group-hover:text-content">
         {busy ? <Loader2 size={16} strokeWidth={2} className="animate-spin" /> : <Icon size={16} strokeWidth={1.9} />}

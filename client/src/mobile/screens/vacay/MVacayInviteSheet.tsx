@@ -76,7 +76,7 @@ export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetPr
               onClick={() => setPickerOpen(o => !o)}
               className="flex w-full items-center gap-[9px] rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-[14px] py-3 text-[0.8125rem] font-semibold"
             >
-              <span className={`min-w-0 flex-1 truncate text-left ${selectedUser ? '' : 'text-m-muted'}`}>
+              <span className={`min-w-0 flex-1 truncate text-start ${selectedUser ? '' : 'text-m-muted'}`}>
                 {selectedUser ? selectedUser.username : t('vacay.selectUser')}
               </span>
               <ChevronDown size={14} strokeWidth={2} className="flex-none text-m-faint" />
@@ -88,7 +88,7 @@ export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetPr
                     key={u.id}
                     type="button"
                     onClick={() => { setSelected(u.id); setPickerOpen(false) }}
-                    className={`flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[9px] text-left text-[0.8125rem] font-semibold ${
+                    className={`flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[9px] text-start text-[0.8125rem] font-semibold ${
                       u.id === selected ? 'bg-[color:var(--m-ic)]' : ''
                     }`}
                   >
@@ -124,7 +124,7 @@ export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetPr
           <button
             type="button"
             onClick={onClose}
-            className="ml-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold"
+            className="ms-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold"
           >
             {t('common.cancel')}
           </button>

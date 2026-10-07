@@ -87,7 +87,7 @@ export default function MSettings() {
           className="flex h-[38px] min-w-0 flex-1 items-center gap-[7px] rounded-full border border-[color:var(--m-gbr)] bg-[color:var(--m-sheet)] px-[14px] text-[0.8125rem] font-bold text-m-ink shadow-[0_5px_12px_-8px_rgba(0,0,0,.18)]"
         >
           <Settings2 size={14} strokeWidth={2.2} className="flex-none" />
-          <span className="min-w-0 flex-1 truncate text-left">{active.label}</span>
+          <span className="min-w-0 flex-1 truncate text-start">{active.label}</span>
           <ChevronDown size={13} strokeWidth={2} className="flex-none text-m-faint" />
         </button>
       </div>
@@ -103,7 +103,7 @@ export default function MSettings() {
                 setActiveTab(tab.id)
                 setDropOpen(false)
               }}
-              className={`flex w-full items-center gap-[10px] rounded-[11px] p-[10px] text-left text-[0.8125rem] font-semibold text-m-ink ${
+              className={`flex w-full items-center gap-[10px] rounded-[11px] p-[10px] text-start text-[0.8125rem] font-semibold text-m-ink ${
                 tab.id === active.id ? 'bg-[color:var(--m-ic)]' : ''
               }`}
             >

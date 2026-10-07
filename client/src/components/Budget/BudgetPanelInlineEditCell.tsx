@@ -53,7 +53,7 @@ export default function InlineEditCell({ value, onSave, type = 'text', style = {
     padding: '2px 4px', borderRadius: 4, minHeight: 22, display: 'flex', alignItems: 'center',
     justifyContent: style?.textAlign === 'center' ? 'center' : 'flex-start', transition: 'background 0.15s',
     color: display ? 'var(--text-primary)' : 'var(--text-faint)', fontSize: 'calc(13px * var(--fs-scale-body, 1))',
-    width: '100%', textAlign: 'left', ...style,
+    width: '100%', textAlign: 'start', ...style,
   }
   const content = display || placeholder || '-'
 

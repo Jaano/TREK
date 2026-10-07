@@ -228,7 +228,7 @@ export function DialogHeader(p: DialogHeaderProps) {
     title = (
       <Tooltip label={p.titleTooltip ?? ''}>
         <button id={titleId} type="button" onClick={p.onTitleClick}
-          className="block max-w-full truncate text-left font-bold tracking-[-0.01em] text-content hover:underline hover:decoration-edge" style={titleStyle}>
+          className="block max-w-full truncate text-start font-bold tracking-[-0.01em] text-content hover:underline hover:decoration-edge" style={titleStyle}>
           {p.title}
         </button>
       </Tooltip>
@@ -272,7 +272,7 @@ export function DialogSection({ label, action, className, children }: { label: R
     <section className={className}>
       <div className="mb-2 flex items-center gap-2">
         <div className={EYEBROW} style={fs(9.5)}>{label}</div>
-        {action && <span className="ml-auto">{action}</span>}
+        {action && <span className="ms-auto">{action}</span>}
       </div>
       {children}
     </section>

@@ -64,8 +64,8 @@ export default function MLinkedCosts({ reservationId = null, placeId = null, hin
             const meta = catMeta(item.category)
             const Icon = meta.Icon
             return (
-              <div key={item.id} className="flex items-center gap-1 rounded-[13px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] py-[5px] pl-[10px] pr-1">
-                <button type="button" onClick={() => onEdit(item)} aria-label={t('common.edit')} className="flex min-w-0 flex-1 items-center gap-[10px] py-[3px] text-left">
+              <div key={item.id} className="flex items-center gap-1 rounded-[13px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] py-[5px] ps-[10px] pe-1">
+                <button type="button" onClick={() => onEdit(item)} aria-label={t('common.edit')} className="flex min-w-0 flex-1 items-center gap-[10px] py-[3px] text-start">
                   <span className="flex h-[30px] w-[30px] flex-none items-center justify-center rounded-[9px]" style={{ background: `${meta.color}22`, color: meta.color }}>
                     <Icon size={15} strokeWidth={2} />
                   </span>
@@ -120,7 +120,7 @@ export default function MLinkedCosts({ reservationId = null, placeId = null, hin
                 return (
                   <button key={item.id} type="button"
                     onClick={async () => { await link(item); setPicking(false); setQuery('') }}
-                    className="flex w-full items-center gap-[10px] rounded-[10px] px-[10px] py-[8px] text-left active:bg-[color:var(--m-ic)]">
+                    className="flex w-full items-center gap-[10px] rounded-[10px] px-[10px] py-[8px] text-start active:bg-[color:var(--m-ic)]">
                     <Icon size={14} strokeWidth={2} className="flex-none" style={{ color: meta.color }} />
                     <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-medium text-m-ink">{item.name}</span>
                     <span className="flex-none font-geist text-[0.71875rem] tabular-nums text-m-muted">{money(item)}</span>

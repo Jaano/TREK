@@ -90,7 +90,7 @@ export function MTrekApiBlock() {
     <div className="relative mt-[18px]">
       {/* The recommendation sits on the border, as on the desktop card, and small:
           a wide coloured banner would shout over the settings beside it. */}
-      <span className="pointer-events-none absolute -top-2 left-3 z-10 rounded-md bg-m-act px-2 py-[1px] font-geist text-[0.5625rem] font-bold tracking-[.12em] text-m-actfg uppercase">
+      <span className="pointer-events-none absolute -top-2 start-3 z-10 rounded-md bg-m-act px-2 py-[1px] font-geist text-[0.5625rem] font-bold tracking-[.12em] text-m-actfg uppercase">
         {t('admin.trekApi.badgeDefault')}
       </span>
 
@@ -115,7 +115,7 @@ export function MTrekApiBlock() {
           type="button"
           onClick={() => setOpen(v => !v)}
           aria-expanded={open}
-          className="flex w-full items-center gap-2 border-t border-[color:var(--m-rowbr)] px-[14px] py-[10px] text-left"
+          className="flex w-full items-center gap-2 border-t border-[color:var(--m-rowbr)] px-[14px] py-[10px] text-start"
         >
           <ChevronRight
             size={15}
@@ -169,7 +169,7 @@ export function MBlockDisclosure({ label, children }: { label: string; children:
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-[14px] py-[10px] text-left"
+        className="flex w-full items-center gap-2 px-[14px] py-[10px] text-start"
       >
         <ChevronRight
           size={15}
@@ -207,7 +207,7 @@ export function MProviderBlock({
     <div className={`relative ${badge ? 'mt-[18px]' : 'mt-3'}`}>
       {badge && (
         <span
-          className={`pointer-events-none absolute -top-2 left-3 z-10 rounded-md border px-2 py-[1px] font-geist text-[0.5625rem] font-bold tracking-[.12em] uppercase ${
+          className={`pointer-events-none absolute -top-2 start-3 z-10 rounded-md border px-2 py-[1px] font-geist text-[0.5625rem] font-bold tracking-[.12em] uppercase ${
             tone === 'caution'
               ? 'border-[color:var(--m-st-pending)] bg-[color:color-mix(in_srgb,var(--m-st-pending)_16%,var(--m-sheetop))] text-[color:var(--m-st-pending)]'
               : 'border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] text-m-faint'

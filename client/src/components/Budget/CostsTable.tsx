@@ -107,7 +107,7 @@ export default function CostsTable(p: CostsTableProps) {
           </colgroup>
           <thead>
             <tr className="border-b border-edge-faint bg-surface-tertiary" style={fs(10)}>
-              <th scope="col" className={`${HEAD_BASE} text-left`}>{t('budget.table.name')}</th>
+              <th scope="col" className={`${HEAD_BASE} text-start`}>{t('budget.table.name')}</th>
               <th scope="col" className={HEAD}>{t('budget.table.date')}</th>
               <th scope="col" className={HEAD}>{t('budget.table.total')}</th>
               <th scope="col" className={HEAD}>{t('budget.table.persons')}</th>
@@ -124,9 +124,9 @@ export default function CostsTable(p: CostsTableProps) {
             return (
               <tbody key={meta.key}>
                 <tr className="border-t border-edge-faint" style={{ background: tintOf(meta.color, 9) }}>
-                  <th scope="rowgroup" colSpan={2} className="px-2 py-2 text-left font-normal">
+                  <th scope="rowgroup" colSpan={2} className="px-2 py-2 text-start font-normal">
                     <button type="button" onClick={() => toggle(meta.key)} aria-expanded={open}
-                      className="inline-flex items-center gap-2.5 rounded-[10px] py-0.5 pl-1 pr-2 hover:bg-surface-card">
+                      className="inline-flex items-center gap-2.5 rounded-[10px] py-0.5 ps-1 pe-2 hover:bg-surface-card">
                       <ChevronDown size={14} strokeWidth={2.2} className={`text-content-faint transition-transform ${open ? '' : '-rotate-90'}`} />
                       <span className="grid h-7 w-7 place-items-center rounded-[9px] bg-surface-card shadow-sm">
                         <meta.Icon size={14} strokeWidth={2.2} style={{ color: meta.color }} />
@@ -147,7 +147,7 @@ export default function CostsTable(p: CostsTableProps) {
                   <tr className="border-t border-edge-faint">
                     <td colSpan={9} className="px-3 py-1.5">
                       <button type="button" onClick={() => void add(meta.key)}
-                        className="inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 font-medium text-content-muted hover:bg-surface-hover hover:text-content"
+                        className="inline-flex items-center gap-2 rounded-full py-1 ps-1 pe-3 font-medium text-content-muted hover:bg-surface-hover hover:text-content"
                         style={fs(12, 'body')}>
                         <span className="grid h-5 w-5 place-items-center rounded-full bg-surface-card shadow-sm ring-1 ring-edge-faint"><Plus size={12} strokeWidth={2.4} /></span>
                         {t('costs.addExpense')}
@@ -160,9 +160,9 @@ export default function CostsTable(p: CostsTableProps) {
           })}
           <tfoot>
             <tr className="border-t border-edge" style={{ background: NEUTRAL_TINT }}>
-              <th scope="row" colSpan={2} className="px-3 py-3 text-left font-geist font-bold uppercase tracking-[.08em] text-content-muted" style={fs(10.5)}>
+              <th scope="row" colSpan={2} className="px-3 py-3 text-start font-geist font-bold uppercase tracking-[.08em] text-content-muted" style={fs(10.5)}>
                 {t('budget.total')}
-                <span className="ml-2 rounded-full bg-surface-card px-2 py-px font-normal normal-case tracking-normal text-content-muted shadow-sm" style={fs(10.5)}>{p.items.length}</span>
+                <span className="ms-2 rounded-full bg-surface-card px-2 py-px font-normal normal-case tracking-normal text-content-muted shadow-sm" style={fs(10.5)}>{p.items.length}</span>
               </th>
               <td className="px-3 py-3 text-center">
                 <span className="inline-flex rounded-full bg-accent px-3 py-1 font-geist font-bold tabular-nums text-accent-text" style={fs(13, 'body')}>{p.fmt(grandTotal)}</span>
@@ -201,7 +201,7 @@ function Row({ e, p, editing, setEditing, numFmt }: {
 
   return (
     <tr className="group border-t border-edge-faint hover:bg-surface-hover">
-      <td className="px-3 py-2 text-left">
+      <td className="px-3 py-2 text-start">
         <EditCell label={t('budget.table.name')} text={e.name} canEdit={p.canEdit} editing={isEditing('name')} onEdit={() => setEditing({ id: e.id, field: 'name' })}
           display={<span className="block truncate font-medium">{e.name}</span>}
           input={<TextInput value={e.name} onSave={v => { if (v.trim()) save({ name: v.trim() }); else setEditing(null) }} onCancel={() => setEditing(null)} label={t('budget.table.name')} />} />

@@ -875,11 +875,11 @@ export default function MAdminPluginsPanel() {
           </div>
 
           <div className="relative">
-            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-m-faint" />
+            <Search size={15} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-m-faint" />
             <input
               value={q} onChange={e => setQ(e.target.value)} type="search"
               placeholder={t('admin.plugins.searchPlaceholder')}
-              className="h-[42px] w-full rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] pl-9 pr-3 text-[0.84375rem] text-m-ink outline-none placeholder:text-m-faint focus:border-[color:var(--m-faint)]"
+              className="h-[42px] w-full rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] ps-9 pe-3 text-[0.84375rem] text-m-ink outline-none placeholder:text-m-faint focus:border-[color:var(--m-faint)]"
             />
           </div>
 
@@ -915,7 +915,7 @@ export default function MAdminPluginsPanel() {
               {/* p => runUpdate(p), NOT forEach(runUpdate): forEach's index would land in
                   runUpdate's `version` parameter and pin the update to a number. */}
               <button type="button" onClick={() => updatable.forEach(p => runUpdate(p))}
-                className="ml-auto rounded-full bg-[color:var(--m-st-pending)] px-3 py-1.5 text-[0.6875rem] font-bold text-white">
+                className="ms-auto rounded-full bg-[color:var(--m-st-pending)] px-3 py-1.5 text-[0.6875rem] font-bold text-white">
                 {t('admin.plugins.updateAll')}
               </button>
             </div>
@@ -1293,7 +1293,7 @@ function PickerSheet({ open, onClose, title, options, value, onPick }: {
         <div className="space-y-1">
           {options.map(([v, lbl]) => (
             <button key={v} type="button" onClick={() => { onPick(v); onClose() }}
-              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[0.8125rem] ${
+              className={`flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-start text-[0.8125rem] ${
                 value === v ? 'bg-[color:var(--m-ic)] font-bold text-m-ink' : 'font-medium text-m-muted'}`}>
               <span className="min-w-0 flex-1 truncate">{lbl}</span>
               <Check size={16} className={`text-m-ink ${value === v ? 'opacity-100' : 'opacity-0'}`} />
@@ -1323,7 +1323,7 @@ function InstalledRow({ p, t, busy, hasUpdate, latestVer, newerIncompatible, blo
           <div className="grid h-[46px] w-[46px] place-items-center rounded-[13px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)]">
             <PluginIcon name={p.icon} size={22} className="text-m-muted" />
           </div>
-          <span className={`absolute -bottom-0.5 -right-0.5 h-[13px] w-[13px] rounded-full ring-[2.5px] ring-[color:var(--m-sheetop)] ${HEALTH[p.status] || HEALTH.inactive}`}
+          <span className={`absolute -bottom-0.5 -end-0.5 h-[13px] w-[13px] rounded-full ring-[2.5px] ring-[color:var(--m-sheetop)] ${HEALTH[p.status] || HEALTH.inactive}`}
             title={t(`admin.plugins.status.${p.status}` as never)} />
         </div>
 
@@ -1444,7 +1444,7 @@ function RowActionsSheet({ p, t, onClose, onRestart, onErrors, onEgress, onSetti
   onRestart: () => void; onErrors: () => void; onEgress: () => void; onSettings: () => void; onChangeVersion: () => void; onUninstall: () => void
 }) {
   const linkable = p.source_repo && p.source_repo !== 'local:upload' && p.source_repo !== 'local:link'
-  const rowClass = 'flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[0.8125rem] font-semibold text-m-ink'
+  const rowClass = 'flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-start text-[0.8125rem] font-semibold text-m-ink'
   return (
     <MSheet open onClose={onClose} variant="bottom" material="opaque" ariaLabel={p.name}>
       <MAdminSheetFrame title={p.name} onClose={onClose}>
@@ -1479,7 +1479,7 @@ function RowActionsSheet({ p, t, onClose, onRestart, onErrors, onEgress, onSetti
             </>
           )}
           <div className="my-1 border-t border-[color:var(--m-rowbr)]" />
-          <button type="button" className="flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-left text-[0.8125rem] font-semibold text-[color:var(--m-st-danger)]" onClick={onUninstall}>
+          <button type="button" className="flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-start text-[0.8125rem] font-semibold text-[color:var(--m-st-danger)]" onClick={onUninstall}>
             <Trash2 size={16} /> {t('common.delete')}
           </button>
         </div>
@@ -1513,7 +1513,7 @@ function VersionPickerSheet({ plugin, versions, failed, busy, t, locale, onPick,
                 <span className={`text-[13px] font-semibold tabular-nums ${v.compatible ? 'text-m-ink' : 'text-m-faint'}`}>v{v.version}</span>
                 {v.publishedAt && <span className="text-[11.5px] text-m-faint">{new Date(v.publishedAt).toLocaleDateString(locale)}</span>}
                 {v.signed && <ShieldCheck size={13} className="shrink-0 text-[color:var(--m-st-confirmed)]" />}
-                <span className="ml-auto" />
+                <span className="ms-auto" />
                 {current ? (
                   <span className="text-[11.5px] font-medium text-m-faint">{t('admin.plugins.installed')}</span>
                 ) : v.compatible ? (
@@ -1596,11 +1596,11 @@ function RegistryList({ items, onInstall, onOpenDetail, busy, t, installedIds, f
               <Screenshot url={item.screenshotUrl} className="aspect-[16/10]" iconSize={24} />
               <div className="absolute inset-0 bg-gradient-to-t from-black/45 to-transparent" />
               {item.reviewedAt && (
-                <span className="absolute right-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-[10.5px] font-semibold text-white backdrop-blur-sm">
+                <span className="absolute end-2.5 top-2.5 inline-flex items-center gap-1 rounded-full bg-black/40 px-2 py-1 text-[10.5px] font-semibold text-white backdrop-blur-sm">
                   <ShieldCheck size={12} /> {t('admin.plugins.reviewed')}
                 </span>
               )}
-              <div className="absolute -bottom-4 left-3 z-[1] grid h-11 w-11 place-items-center rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] shadow-[0_5px_12px_-8px_rgba(0,0,0,.4)]">
+              <div className="absolute -bottom-4 start-3 z-[1] grid h-11 w-11 place-items-center rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] shadow-[0_5px_12px_-8px_rgba(0,0,0,.4)]">
                 <PluginIcon name={item.icon} size={22} className="text-m-muted" />
               </div>
             </div>
@@ -1621,7 +1621,7 @@ function RegistryList({ items, onInstall, onOpenDetail, busy, t, installedIds, f
                 <button type="button" onClick={e => { e.stopPropagation(); onInstall(item.id, offer.version, offer.warn) }}
                   disabled={busy === item.id || installed || offer.blocked}
                   title={installed ? undefined : offer.title}
-                  className={`ml-auto ${ACT_PILL}`}>
+                  className={`ms-auto ${ACT_PILL}`}>
                   {installed ? t('admin.plugins.installed') : offer.label}
                 </button>
               </div>
@@ -1679,7 +1679,7 @@ function PluginDetailSheet({ item, installed, busy, onInstall, onClose, t, local
       <div className="relative flex-none">
         <Screenshot url={item.screenshotUrl} className="aspect-[16/9] w-full" iconSize={36} />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-        <button type="button" onClick={onClose} aria-label={t('common.close')} className="absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg bg-black/40 text-white"><X size={16} /></button>
+        <button type="button" onClick={onClose} aria-label={t('common.close')} className="absolute end-3 top-3 grid h-8 w-8 place-items-center rounded-lg bg-black/40 text-white"><X size={16} /></button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -1832,7 +1832,7 @@ function PluginDetailSheet({ item, installed, busy, onInstall, onClose, t, local
                     <span className={`text-[12.5px] font-medium tabular-nums ${v.compatible ? 'text-m-ink' : 'text-m-faint'}`}>v{v.version}</span>
                     {v.publishedAt && <span className="text-[11.5px] text-m-faint">{new Date(v.publishedAt).toLocaleDateString(locale)}</span>}
                     {v.signed && <ShieldCheck size={13} className="shrink-0 text-[color:var(--m-st-confirmed)]" />}
-                    <span className="ml-auto" />
+                    <span className="ms-auto" />
                     {v.compatible ? (
                       !installed && (
                         <button type="button" onClick={() => onInstall(item.id, v.version)} disabled={busy === item.id}
@@ -2087,7 +2087,7 @@ function SecurityInfo({ t }: { t: T }) {
       </div>
       <button type="button" onClick={() => setOpen(o => !o)}
         className="flex w-full items-center justify-between gap-2 border-t border-[color:var(--m-rowbr)] px-4 py-3 text-xs font-medium text-m-muted">
-        <span className="flex items-center gap-2"><Lock size={13} className="shrink-0" /> <span className="text-left">{t('admin.plugins.security.title')}</span></span>
+        <span className="flex items-center gap-2"><Lock size={13} className="shrink-0" /> <span className="text-start">{t('admin.plugins.security.title')}</span></span>
         <ChevronDown size={15} className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (

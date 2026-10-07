@@ -67,13 +67,13 @@ export default function AdminUsersTab({ admin, t, locale }: AdminUsersTabProps):
           <div className="overflow-x-auto rounded-[12px] border border-edge-faint bg-surface-card">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-edge-faint text-left" style={fs(9.5)}>
+                <tr className="border-b border-edge-faint text-start" style={fs(9.5)}>
                   <th className={TH}>{t('admin.table.user')}</th>
                   <th className={TH}>{t('admin.table.email')}</th>
                   <th className={TH}>{t('admin.table.role')}</th>
                   <th className={TH}>{t('admin.table.created')}</th>
                   <th className={TH}>{t('admin.table.lastLogin')}</th>
-                  <th className={`${TH} text-right`}>{t('admin.table.actions')}</th>
+                  <th className={`${TH} text-end`}>{t('admin.table.actions')}</th>
                 </tr>
               </thead>
               <tbody className="trek-stagger divide-y divide-edge-faint">
@@ -91,7 +91,7 @@ export default function AdminUsersTab({ admin, t, locale }: AdminUsersTabProps):
                                 {u.username.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-surface-card ${u.online ? 'bg-success' : 'bg-content-faint'}`} />
+                            <span className={`absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full border-2 border-surface-card ${u.online ? 'bg-success' : 'bg-content-faint'}`} />
                           </div>
                           <div className="min-w-0">
                             <p className="m-0 truncate font-semibold text-content" style={fs(13, 'body')}>{u.username}</p>

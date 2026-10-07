@@ -57,10 +57,11 @@ export default function BudgetSummary({ theme, currency, locale, grandTotal, has
               const sep = (0.1).toLocaleString(locale).replace(/\d/g, '')
               const [integerPart, decimalPart] = decimals > 0 ? full.split(sep) : [full, '']
               return (
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, letterSpacing: '-0.03em', lineHeight: 1 }}>
+                // dir=ltr: the amount is split into spans, which a right-to-left flex row would reorder.
+                <div dir="ltr" style={{ display: 'flex', alignItems: 'baseline', gap: 4, letterSpacing: '-0.03em', lineHeight: 1 }}>
                   <span style={{ fontSize: 'calc(38px * var(--fs-scale-title, 1))', fontWeight: 700 }}>{integerPart}</span>
                   {decimalPart && <span style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 500, color: theme.sub }}>{sep}{decimalPart}</span>}
-                  <span style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 500, color: theme.sub, marginLeft: 2 }}>{SYMBOLS[currency] || currency}</span>
+                  <span style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 500, color: theme.sub, marginInlineStart: 2 }}>{SYMBOLS[currency] || currency}</span>
                 </div>
               )
             })()}
@@ -82,7 +83,7 @@ export default function BudgetSummary({ theme, currency, locale, grandTotal, has
                 }}>
                   {settlementOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                   {t('budget.settlement')}
-                  <span style={{ position: 'relative', display: 'inline-flex', marginLeft: 2 }}>
+                  <span style={{ position: 'relative', display: 'inline-flex', marginInlineStart: 2 }}>
                     {/* Decoration inside the settlement toggle: the hint hangs off
                         hover, and the click only keeps the toggle from firing. A
                         role of its own would give the toggle a second name and a
@@ -100,7 +101,7 @@ export default function BudgetSummary({ theme, currency, locale, grandTotal, has
                       marginTop: 6, width: 220, padding: '10px 12px', borderRadius: 10, zIndex: 100,
                       background: 'var(--bg-card)', border: '1px solid var(--border-faint)',
                       boxShadow: '0 4px 16px rgba(0,0,0,0.12)',
-                      fontSize: 'calc(11px * var(--fs-scale-caption, 1))', fontWeight: 400, color: 'var(--text-secondary)', lineHeight: 1.5, textAlign: 'left',
+                      fontSize: 'calc(11px * var(--fs-scale-caption, 1))', fontWeight: 400, color: 'var(--text-secondary)', lineHeight: 1.5, textAlign: 'start',
                     }}>
                       {t('budget.settlementInfo')}
                     </div>
@@ -126,7 +127,7 @@ export default function BudgetSummary({ theme, currency, locale, grandTotal, has
                             {fmt(flow.amount, currency)}
                           </span>
                           <div style={{ width: '100%', height: 2, borderRadius: 2, background: 'linear-gradient(90deg, rgba(239,68,68,0.1), rgba(239,68,68,0.55), rgba(239,68,68,0.3))', position: 'relative' }}>
-                            <div style={{ position: 'absolute', right: -1, top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderLeft: '6px solid rgba(239,68,68,0.55)', borderTop: '4px solid transparent', borderBottom: '4px solid transparent' }} />
+                            <div style={{ position: 'absolute', insetInlineEnd: -1, top: '50%', transform: 'translateY(-50%)', width: 0, height: 0, borderInlineStart: '6px solid rgba(239,68,68,0.55)', borderTop: '4px solid transparent', borderBottom: '4px solid transparent' }} />
                           </div>
                         </div>
                         <RingAvatar userId={flow.to.user_id} username={flow.to.username} avatarUrl={flow.to.avatar_url} size={32} innerBg={theme.centerBg} textColor={theme.text} />
@@ -232,7 +233,7 @@ export default function BudgetSummary({ theme, currency, locale, grandTotal, has
                   </svg>
                   <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, pointerEvents: 'none' }}>
                     <div style={{ fontSize: 'calc(10.5px * var(--fs-scale-caption, 1))', color: theme.faint, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 700 }}>{t('budget.total')}</div>
-                    <div style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                    <div dir="ltr" style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 700, letterSpacing: '-0.03em', lineHeight: 1, display: 'flex', alignItems: 'baseline', gap: 2 }}>
                       <span>{totalInt}</span>
                       {totalDec && <span style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500, color: theme.sub }}>{decimalSep}{totalDec}</span>}
                     </div>

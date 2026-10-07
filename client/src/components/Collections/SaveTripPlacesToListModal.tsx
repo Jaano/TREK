@@ -94,14 +94,14 @@ export default function SaveTripPlacesToListModal({ isOpen, tripId, placeIds, on
     >
       {lists.length > 5 && (
         <div className="relative">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+          <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
           <input
             autoFocus
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder={t('collections.searchLists')}
             aria-label={t('collections.searchLists')}
-            className={`${INPUT} pl-8`}
+            className={`${INPUT} ps-8`}
           />
         </div>
       )}
@@ -119,7 +119,7 @@ export default function SaveTripPlacesToListModal({ isOpen, tripId, placeIds, on
                 type="button"
                 onClick={() => pick(list)}
                 disabled={busyId != null}
-                className="flex min-h-[48px] items-center gap-3 rounded-[10px] px-3 py-2 text-left hover:bg-surface-card disabled:opacity-60"
+                className="flex min-h-[48px] items-center gap-3 rounded-[10px] px-3 py-2 text-start hover:bg-surface-card disabled:opacity-60"
               >
                 <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: list.color || '#6366f1' }} /* theme-lint-disable: the list's own colour, and the default a list without one is drawn in (ListsRail) */ />
                 <span className="min-w-0 flex-1">

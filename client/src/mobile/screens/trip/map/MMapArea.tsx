@@ -347,7 +347,7 @@ export default function MMapArea({ planner, shell }: MMapAreaProps) {
       <span
         ref={insetProbe}
         aria-hidden="true"
-        className="pointer-events-none invisible absolute left-0 top-0 pb-[env(safe-area-inset-bottom,0px)] pt-[env(safe-area-inset-top,0px)]"
+        className="pointer-events-none invisible absolute start-0 top-0 pb-[env(safe-area-inset-bottom,0px)] pt-[env(safe-area-inset-top,0px)]"
       />
       <MapViewAuto
         tripId={planner.tripId}
@@ -424,7 +424,7 @@ export default function MMapArea({ planner, shell }: MMapAreaProps) {
           takes the full width between the screen margins, so its segments are
           the same size as everything else the thumb aims at on this screen. */}
       {mapActive && !onStage && poiPillEnabled && (
-        <div className="pointer-events-none absolute left-4 right-4 z-[25] flex flex-col items-center gap-2 top-[calc(var(--m-safe-top,12px)+96px)]">
+        <div className="pointer-events-none absolute inset-x-4 z-[25] flex flex-col items-center gap-2 top-[calc(var(--m-safe-top,12px)+96px)]">
           <PoiCategoryPill
             fullWidth
             categories={poi.categories}
@@ -458,7 +458,7 @@ export default function MMapArea({ planner, shell }: MMapAreaProps) {
           right above its own toggle: it decides which pins the plan map shows, so it is
           there whatever else is; the stage draws its own pins and has no use for it. */}
       {mapActive && !onStage && (
-        <div className="pointer-events-none absolute left-3 right-3 z-[25] flex flex-col items-end gap-2 bottom-[calc(var(--bottom-nav-h,84px)+58px)]">
+        <div className="pointer-events-none absolute inset-x-3 z-[25] flex flex-col items-end gap-2 bottom-[calc(var(--bottom-nav-h,84px)+58px)]">
           {!planner.roadtripActive && planner.overviewActive && (
             <TripRouteOverviewPanel
               overview={planner.tripOverview}

@@ -88,7 +88,7 @@ export default function BulkAssignLabelModal({ isOpen, labels, count, onAssign, 
                 type="button"
                 aria-pressed={on}
                 onClick={() => toggle(l.id)}
-                className={`flex min-h-[44px] items-center gap-3 rounded-[10px] px-3 py-2 text-left ${on ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
+                className={`flex min-h-[44px] items-center gap-3 rounded-[10px] px-3 py-2 text-start ${on ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
               >
                 <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: l.color || '#6366f1' }} /* theme-lint-disable: the label's own colour, and the first swatch of the label manager for one without */ />
                 <span className="min-w-0 flex-1 truncate font-semibold text-content" style={fs(13, 'body')}>{l.name}</span>

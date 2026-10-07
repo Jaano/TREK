@@ -109,7 +109,7 @@ export function DatePicker({ value, onChange, tripDates }: {
       <button
         type="button"
         onClick={toggleOpen}
-        className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[13px] bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-left flex items-center justify-between"
+        className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-700 rounded-lg text-[13px] bg-white dark:bg-zinc-800 text-zinc-900 dark:text-white text-start flex items-center justify-between"
       >
         {formatted ? (
           <span>{formatted}</span>
@@ -127,7 +127,7 @@ export function DatePicker({ value, onChange, tripDates }: {
           {/* Click-away catcher — no semantics of its own; the trigger button
               above closes the popover again from the keyboard. */}
           <div role="presentation" className="fixed inset-0 z-[10]" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 z-[20] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg p-3 w-[280px]">
+          <div className="absolute top-full start-0 mt-1 z-[20] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-lg p-3 w-[280px]">
             {/* Header: arrows step the current view, the label climbs to the next one up */}
             <div className="flex items-center justify-between mb-2">
               <button type="button" onClick={handlePrev} aria-label={prevLabel} className={navButton}>

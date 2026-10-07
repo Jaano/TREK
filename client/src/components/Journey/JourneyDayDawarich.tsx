@@ -53,7 +53,7 @@ export default function JourneyDayDawarich({
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-surface-hover"
+        className="flex w-full items-center gap-2.5 px-3 py-2.5 text-start transition-colors hover:bg-surface-hover"
       >
         {/* The brand mark in its own colours, which is what tells this row from an entry
             at a glance. No second label saying "Dawarich": the mark is the label. */}

@@ -116,7 +116,7 @@ export default function VacayPersons() {
               </span>
               {u.id === currentUser?.id && <VacayBadge label={t('vacay.you')} />}
               {isSelected && isFused && (
-                <Check size={15} strokeWidth={2.4} className="ml-auto" style={{ color: 'var(--vg-ink2)' }} />
+                <Check size={15} strokeWidth={2.4} className="ms-auto" style={{ color: 'var(--vg-ink2)' }} />
               )}
             </div>
           )
@@ -132,7 +132,7 @@ export default function VacayPersons() {
             </span>
             <VacayBadge label={t('vacay.pending')} tone="amber" />
             <button type="button" onClick={() => cancelInvite(inv.user_id)}
-              className="ml-auto opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded transition-all"
+              className="ms-auto opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded transition-all"
               style={{ color: 'var(--vg-ink3)' }}>
               {t('common.cancel')}
             </button>

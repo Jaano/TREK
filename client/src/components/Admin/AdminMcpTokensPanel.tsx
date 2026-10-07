@@ -56,7 +56,7 @@ function ListState({ loading, icon, text }: { loading: boolean; icon: ReactNode;
 /** One fact on the right of a row: an eyebrow over its value. */
 function Meta({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="min-w-0 text-right">
+    <div className="min-w-0 text-end">
       <div className="font-geist font-bold uppercase tracking-[.08em] text-content-faint" style={fs(9.5)}>{label}</div>
       <div className="whitespace-nowrap font-geist tabular-nums text-content-muted" style={fs(12, 'body')}>{children}</div>
     </div>

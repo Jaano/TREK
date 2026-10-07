@@ -163,12 +163,12 @@ export function GalleryView({ entries, gallery, journeyId, userId, trips, onPhot
               {/* Delete button */}
               <button type="button"
                 onClick={(e) => { e.stopPropagation(); void handleDeletePhoto(photo.id) }}
-                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                className="absolute top-1.5 end-1.5 w-6 h-6 rounded-full bg-black/60 backdrop-blur text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
               >
                 <X size={12} />
               </button>
               {photo.provider && photo.provider !== 'local' && (
-                <div className="absolute top-1.5 left-1.5">
+                <div className="absolute top-1.5 start-1.5">
                   <span className="text-[8px] font-medium px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur text-white flex items-center gap-1">
                     <RefreshCw size={7} />
                     {photo.provider === 'immich' ? 'Immich' : photo.provider === 'synologyphotos' ? 'Synology Photos' : photo.provider}
@@ -176,7 +176,7 @@ export function GalleryView({ entries, gallery, journeyId, userId, trips, onPhot
                 </div>
               )}
               {photo.caption && (
-                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-0 inset-x-0 p-2 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                   <p className="text-[10px] text-white truncate">{photo.caption}</p>
                 </div>
               )}

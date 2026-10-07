@@ -397,7 +397,7 @@ export default function MAdminSettingsSection({ admin, t }: MAdminSettingsSectio
               type="button"
               disabled={savingPlacesProvider}
               onClick={() => setProviderPickerOpen(true)}
-              className="flex h-[42px] w-full items-center gap-2 rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 text-left text-[0.84375rem] text-m-ink disabled:opacity-50"
+              className="flex h-[42px] w-full items-center gap-2 rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 text-start text-[0.84375rem] text-m-ink disabled:opacity-50"
             >
               <span className="min-w-0 flex-1 truncate">{t(`admin.placesProvider.${placesProvider}`)}</span>
               <ChevronDown size={15} strokeWidth={2.2} className="flex-none text-m-faint" aria-hidden />

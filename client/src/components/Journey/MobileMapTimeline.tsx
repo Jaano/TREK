@@ -180,7 +180,7 @@ export default function MobileMapTimeline({
   if (entries.length === 0) {
     return (
       <div
-        className="fixed left-0 right-0 z-10"
+        className="fixed inset-x-0 z-10"
         style={{ top: 'var(--nav-h, 0px)', bottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <JourneyMap
@@ -196,7 +196,7 @@ export default function MobileMapTimeline({
           cartoApiKey={cartoApiKey}
         />
         {!readOnly && onAddEntry && (
-          <div className="fixed right-4 z-30" style={{ bottom: 'calc(var(--bottom-nav-h, 84px) + 16px)' }}>
+          <div className="fixed end-4 z-30" style={{ bottom: 'calc(var(--bottom-nav-h, 84px) + 16px)' }}>
             <button type="button"
               onClick={onAddEntry}
               className="w-12 h-12 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 shadow-lg flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
@@ -211,7 +211,7 @@ export default function MobileMapTimeline({
 
   return (
     <div
-      className="fixed left-0 right-0 z-10"
+      className="fixed inset-x-0 z-10"
       style={{ top: 'var(--nav-h, 0px)', bottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       {/* Full-screen map */}
@@ -232,7 +232,7 @@ export default function MobileMapTimeline({
 
       {/* Day bar + card carousel, as one block at the bottom of the map */}
       <div
-        className="fixed left-0 right-0 z-40"
+        className="fixed inset-x-0 z-40"
         style={{ touchAction: 'pan-x', bottom: carouselBottom }}
       >
         <JourneyDayScrubber
@@ -274,7 +274,7 @@ export default function MobileMapTimeline({
       {/* FAB: add entry — bottom right, above the timeline carousel */}
       {!readOnly && onAddEntry && (
         <div
-          className="fixed right-4 z-30"
+          className="fixed end-4 z-30"
           style={{ bottom: 'calc(var(--bottom-nav-h, 84px) + 226px)' }}
         >
           <button type="button"

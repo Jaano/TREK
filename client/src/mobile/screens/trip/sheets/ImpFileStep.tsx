@@ -277,7 +277,7 @@ function ImpTypeToggles({ title, options, onToggle, noneSelected, noneSelectedLa
           type="button"
           onClick={() => onToggle(opt.key)}
           aria-pressed={opt.on}
-          className="flex w-full items-center gap-2 py-[5px] text-left"
+          className="flex w-full items-center gap-2 py-[5px] text-start"
         >
           <span
             className={`flex h-4 w-4 flex-none items-center justify-center rounded-[4px] ${

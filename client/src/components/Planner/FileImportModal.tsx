@@ -34,7 +34,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024
 function TypeCheck({ checked, label, onToggle }: { checked: boolean; label: string; onToggle: () => void }) {
   return (
     <button type="button" role="checkbox" aria-checked={checked} onClick={onToggle}
-      className="flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-left hover:bg-surface-hover">
+      className="flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-start hover:bg-surface-hover">
       <span className={`grid h-4 w-4 flex-none place-items-center rounded-[5px] ${checked ? 'bg-accent' : 'border-[1.5px] border-edge'}`}>
         {checked && <Check size={11} strokeWidth={3} className="text-accent-text" />}
       </span>

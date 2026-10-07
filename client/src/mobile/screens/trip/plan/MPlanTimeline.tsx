@@ -160,7 +160,7 @@ export default function MPlanTimeline({ planner, shell }: MPlanTimelineProps) {
       <div
         ref={cardRef}
         data-touch-drag={editing ? '' : undefined}
-        className="absolute left-4 right-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-[22px] border border-[color:var(--m-cbr)] bg-[color:var(--m-card)] px-3.5 pb-2 pt-1 backdrop-blur-[24px] backdrop-saturate-[1.6] bottom-[calc(env(safe-area-inset-bottom,0px)+90px)]"
+        className="absolute inset-x-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-[22px] border border-[color:var(--m-cbr)] bg-[color:var(--m-card)] px-3.5 pb-2 pt-1 backdrop-blur-[24px] backdrop-saturate-[1.6] bottom-[calc(env(safe-area-inset-bottom,0px)+90px)]"
         style={{ top: `calc(var(--m-safe-top, 12px) + ${editing ? 140 : tl.upNext ? 216 : 102}px)` }}
       >
         {planner.toursEnabled && tl.rows.some(row => row.kind === 'place' && row.invalidTour) && (
@@ -312,7 +312,7 @@ function UpNextCard({ tl, t, onOpen }: {
     <button
       type="button"
       onClick={() => onOpen(upNext.assignment)}
-      className="absolute left-4 right-4 cursor-pointer rounded-[22px] border border-[color:var(--m-inbr)] bg-[color:var(--m-inner)] px-4 py-3.5 text-left shadow-[0_18px_44px_-18px_rgba(0,0,0,.3)] backdrop-blur-[28px] backdrop-saturate-[1.8] top-[calc(var(--m-safe-top,12px)+102px)]"
+      className="absolute inset-x-4 cursor-pointer rounded-[22px] border border-[color:var(--m-inbr)] bg-[color:var(--m-inner)] px-4 py-3.5 text-start shadow-[0_18px_44px_-18px_rgba(0,0,0,.3)] backdrop-blur-[28px] backdrop-saturate-[1.8] top-[calc(var(--m-safe-top,12px)+102px)]"
     >
       <div className="flex items-center justify-between">
         <span className="whitespace-nowrap font-geist text-[0.65625rem] font-bold uppercase tracking-[.08em] text-m-muted">
@@ -336,7 +336,7 @@ function UpNextCard({ tl, t, onOpen }: {
           </div>
           {sub && <MarkdownText clamp className="mt-[2px] font-geist text-[0.75rem] text-m-muted">{sub}</MarkdownText>}
         </div>
-        <span className="ml-2 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-m-act text-m-actfg">
+        <span className="ms-2 flex h-8 w-8 flex-none items-center justify-center rounded-full bg-m-act text-m-actfg">
           <ChevronRight size={16} strokeWidth={2.4} />
         </span>
       </div>
@@ -361,7 +361,7 @@ function EditHeader({ tl, planner, shell }: {
   }
 
   return (
-    <div className="absolute left-4 right-4 flex items-center gap-2 top-[calc(var(--m-safe-top,12px)+102px)]">
+    <div className="absolute inset-x-4 flex items-center gap-2 top-[calc(var(--m-safe-top,12px)+102px)]">
       {renaming ? (
         <input
           autoFocus
@@ -410,7 +410,7 @@ function EditHeader({ tl, planner, shell }: {
         onClick={() => void handleUndo()}
         disabled={!canUndo}
         title={lastActionLabel ? t('undo.tooltip', { action: lastActionLabel }) : undefined}
-        className={`ml-auto flex flex-none items-center gap-[5px] px-3 py-1.5 text-[0.75rem] font-semibold disabled:opacity-40 ${GLASS_PILL}`}
+        className={`ms-auto flex flex-none items-center gap-[5px] px-3 py-1.5 text-[0.75rem] font-semibold disabled:opacity-40 ${GLASS_PILL}`}
       >
         <Undo2 size={14} strokeWidth={2} />
         {t('undo.button')}
@@ -476,7 +476,7 @@ function TimelineHeader({ tl, dayLabel, openLabel, weatherLabel, onOpenDay, onOp
           onClick={onOpenDay}
           aria-label={weatherLabel || openLabel}
           title={tl.weatherPlaceName || undefined}
-          className="ml-auto flex flex-none items-center gap-1 whitespace-nowrap px-1.5 py-1 text-[0.71875rem] font-semibold"
+          className="ms-auto flex flex-none items-center gap-1 whitespace-nowrap px-1.5 py-1 text-[0.71875rem] font-semibold"
         >
           <WeatherIcon size={13} strokeWidth={2} />
           {tl.weatherTemp}°

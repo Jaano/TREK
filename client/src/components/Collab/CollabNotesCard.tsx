@@ -77,7 +77,7 @@ export function NoteCard({ note, canEdit, onUpdate, onDelete, onEdit, onView, on
       // A pinned note keeps its category colour on the frame, the way a selected booking card does.
       style={{ borderColor: note.pinned ? `color-mix(in srgb, ${color} 45%, transparent)` : 'var(--border-faint)' }}
     >
-      <div className={`flex items-center gap-2 py-1.5 pl-3 pr-1.5 ${hasBody ? 'border-b border-edge-faint' : ''}`} style={{ background: `color-mix(in srgb, ${color} 11%, transparent)` }}>
+      <div className={`flex items-center gap-2 py-1.5 ps-3 pe-1.5 ${hasBody ? 'border-b border-edge-faint' : ''}`} style={{ background: `color-mix(in srgb, ${color} 11%, transparent)` }}>
         {/* The category is only its colour here; the name is in the tooltip and the filter above. */}
         {note.category && (
           <Tooltip label={note.category}>

@@ -39,7 +39,7 @@ export function SharedTopBar({ title, locale, langOpen, onLangOpenChange }: TopB
         <img src="/logo-dark.svg" alt="TREK" className="hidden sm:block" style={{ height: 26 }} />
         <span className="hidden text-content-faint sm:inline">/</span>
         <span className="hidden min-w-0 truncate font-medium text-content-muted sm:inline" style={fs(14, 'body')}>{title}</span>
-        <div className="ml-auto flex flex-none items-center gap-2">
+        <div className="ms-auto flex flex-none items-center gap-2">
           <Tooltip label={t('shared.readOnly')}>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-tertiary px-3 py-1.5 font-semibold text-content-muted" style={fs(12, 'body')}>
               <Eye size={13} strokeWidth={2} className="flex-none" aria-hidden />
@@ -151,7 +151,7 @@ export function SharedFooter() {
   const { t } = useTranslation()
   return (
     <footer className="mt-14 border-t border-edge-faint bg-surface-card">
-      <div className={`${PAGE_WIDTH} flex flex-col items-center gap-4 py-8 text-center sm:flex-row sm:justify-between sm:text-left`}>
+      <div className={`${PAGE_WIDTH} flex flex-col items-center gap-4 py-8 text-center sm:flex-row sm:justify-between sm:text-start`}>
         <div className="flex items-center gap-3">
           <img src="/icons/icon.svg" alt="TREK" width="34" height="34" className="rounded-[10px] shadow-sm" />
           <div>

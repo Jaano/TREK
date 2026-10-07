@@ -105,7 +105,7 @@ export default function PhotoLightbox({ photos, startIndex = 0, onClose }: Props
         style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' }}
       >
         {/* Top bar */}
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px' }}>
+        <div style={{ position: 'absolute', top: 0, insetInline: 0, zIndex: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px' }}>
           <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500 }}>
             {idx + 1} / {photos.length}
           </span>

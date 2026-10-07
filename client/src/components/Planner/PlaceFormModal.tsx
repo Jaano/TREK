@@ -885,7 +885,7 @@ const ROW = 'flex items-stretch gap-5'
 const STACK = 'flex flex-col gap-5'
 const FORM_COLUMN = 'flex min-w-0 flex-1 flex-col gap-4'
 /** A row of the typed-ahead list or of the search results. */
-const PICK_ROW = 'flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left'
+const PICK_ROW = 'flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-start'
 const WARNING_BANNER = 'flex items-start gap-1.5 rounded-[10px] bg-warning-soft px-2.5 py-1.5 text-warning'
 /** The small accent square beside a field that runs its action, sized by the row it sits in. */
 const SIDE_BUTTON = 'grid w-[38px] flex-none place-items-center rounded-[10px] transition-colors disabled:cursor-default disabled:opacity-60'
@@ -1090,7 +1090,7 @@ export default function PlaceFormModal(props: PlaceFormModalProps) {
                     follow the core ones (#2221) and the list must stay inside the dialog;
                     the row the arrow keys land on is scrolled into view. */}
                 {acSuggestions.length > 0 && (
-                  <div className="absolute left-0 right-0 z-20 mt-1 max-h-96 overflow-y-auto rounded-[12px] border border-edge-faint bg-surface-card p-1 shadow-dropdown">
+                  <div className="absolute inset-x-0 z-20 mt-1 max-h-96 overflow-y-auto rounded-[12px] border border-edge-faint bg-surface-card p-1 shadow-dropdown">
                     {acSuggestions.map((s, idx) => (
                       <button
                         key={s.placeId}

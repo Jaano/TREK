@@ -255,7 +255,7 @@ function PluginSettingsForm({ id, name, icon }: { id: string; name: string; icon
                   </button>
                   {a.hint && <span className="min-w-0 flex-1 text-content-faint" style={fs(11.5)}>{a.hint}</span>}
                   {res && (
-                    <span className={`ml-auto font-medium ${res.ok ? 'text-success' : 'text-danger'}`} style={fs(12, 'body')}>
+                    <span className={`ms-auto font-medium ${res.ok ? 'text-success' : 'text-danger'}`} style={fs(12, 'body')}>
                       {res.message || (res.ok ? t('common.success') : t('common.error'))}
                     </span>
                   )}

@@ -97,7 +97,7 @@ export default function VacaySharedCalendars() {
                 {s.username}
               </span>
               <VacayBadge label={t('vacay.viewOnly')} />
-              <span className="ml-auto flex items-center gap-1">
+              <span className="ms-auto flex items-center gap-1">
                 <button type="button" onClick={e => { e.stopPropagation(); handleRemove(s.id) }}
                   className="opacity-0 group-hover:opacity-100 w-5 h-5 rounded flex items-center justify-center transition-all"
                   style={{ color: 'var(--vg-ink3)' }}
@@ -126,7 +126,7 @@ export default function VacaySharedCalendars() {
                 {s.username}
               </span>
               <button type="button" onClick={() => handleRemove(s.id)}
-                className="ml-auto opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded transition-all"
+                className="ms-auto opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded transition-all"
                 style={{ color: 'var(--vg-ink3)' }}>
                 {t('vacay.stopSharing')}
               </button>

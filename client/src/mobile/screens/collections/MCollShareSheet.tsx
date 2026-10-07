@@ -209,7 +209,7 @@ export default function MCollShareSheet({
                   <button
                     type="button"
                     onClick={() => setUserPickerOpen(v => !v)}
-                    className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheet)] px-[13px] py-[11px] text-left text-[0.78125rem]"
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheet)] px-[13px] py-[11px] text-start text-[0.78125rem]"
                   >
                     <span className={`truncate ${selectedUser ? 'font-semibold text-m-ink' : 'text-m-faint'}`}>
                       {selectedUser?.username ?? t('collections.share.inviteUser')}
@@ -226,13 +226,13 @@ export default function MCollShareSheet({
                     {inviting ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} strokeWidth={2.2} />}
                   </button>
                   {userPickerOpen && (
-                    <div className="absolute left-0 right-[52px] top-[calc(100%+6px)] z-[5] max-h-[180px] overflow-y-auto rounded-[14px] border border-[color:var(--m-rowbr)] bg-m-sheetop shadow-[0_20px_44px_-18px_rgba(0,0,0,.45)]">
+                    <div className="absolute start-0 end-[52px] top-[calc(100%+6px)] z-[5] max-h-[180px] overflow-y-auto rounded-[14px] border border-[color:var(--m-rowbr)] bg-m-sheetop shadow-[0_20px_44px_-18px_rgba(0,0,0,.45)]">
                       {availableUsers.map(u => (
                         <button
                           key={u.id}
                           type="button"
                           onClick={() => { setSelectedUserId(u.id); setUserPickerOpen(false) }}
-                          className="flex w-full items-center gap-2 border-t border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left text-[0.8125rem] font-semibold text-m-ink first:border-t-0"
+                          className="flex w-full items-center gap-2 border-t border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start text-[0.8125rem] font-semibold text-m-ink first:border-t-0"
                         >
                           <span className="min-w-0 flex-1 truncate">{u.username}</span>
                           {selectedUserId === u.id && <Check size={14} strokeWidth={2.6} />}
@@ -266,7 +266,7 @@ export default function MCollShareSheet({
               <>
                 <div className="mb-2 text-[0.8125rem] text-m-ink">{t('collections.share.leaveConfirm')}</div>
                 <div className="flex items-center gap-2">
-                  <CancelPill className="ml-auto" onClick={() => setConfirmLeave(false)}>{t('common.cancel')}</CancelPill>
+                  <CancelPill className="ms-auto" onClick={() => setConfirmLeave(false)}>{t('common.cancel')}</CancelPill>
                   <PrimaryPill onClick={handleLeave} disabled={leaving} className="!bg-[color:var(--m-st-danger)] !text-white">
                     {leaving ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} strokeWidth={2.2} />} {t('collections.share.leave')}
                   </PrimaryPill>

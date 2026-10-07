@@ -172,7 +172,7 @@ export default function DefaultUserSettingsTab(): React.ReactElement {
     isSet(field) ? (
       <button type="button"
         onClick={() => reset(field)}
-        className="ml-2 align-baseline font-geist font-medium normal-case tracking-normal text-content-muted underline decoration-edge underline-offset-2 hover:text-content"
+        className="ms-2 align-baseline font-geist font-medium normal-case tracking-normal text-content-muted underline decoration-edge underline-offset-2 hover:text-content"
         style={fs(11)}
       >
         {t('admin.defaultSettings.resetToBuiltIn')}

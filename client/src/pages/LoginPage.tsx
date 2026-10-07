@@ -102,7 +102,9 @@ export default function LoginPage(): React.ReactElement {
 
   const inputBase: React.CSSProperties = {
     width: '100%',
-    padding: '11px 12px 11px 40px',
+    paddingBlock: 11,
+    paddingInlineEnd: 12,
+    paddingInlineStart: 40,
     border: '1px solid #e5e7eb',
     borderRadius: 12,
     fontSize: 'calc(14px * var(--fs-scale-body, 1))',
@@ -229,7 +231,7 @@ export default function LoginPage(): React.ReactElement {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', fontFamily: 'var(--font-system)', position: 'relative' }}>
       {/* Language dropdown */}
-      <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 10 }}>
+      <div style={{ position: 'absolute', top: 16, insetInlineEnd: 16, zIndex: 10 }}>
         <button type="button"
           onClick={(e) => {
             e.stopPropagation();
@@ -281,7 +283,7 @@ export default function LoginPage(): React.ReactElement {
             style={{
               position: 'absolute',
               top: '100%',
-              right: 0,
+              insetInlineEnd: 0,
               marginTop: 4,
               background: 'white',
               borderRadius: 12,
@@ -304,7 +306,7 @@ export default function LoginPage(): React.ReactElement {
                 style={{
                   display: 'block',
                   width: '100%',
-                  textAlign: 'left',
+                  textAlign: 'start',
                   padding: '9px 16px',
                   border: 'none',
                   background: value === language ? 'rgba(99,102,241,0.08)' : 'transparent',
@@ -676,7 +678,7 @@ export default function LoginPage(): React.ReactElement {
                             className="text-[#9ca3af]"
                             style={{
                               position: 'absolute',
-                              left: 13,
+                              insetInlineStart: 13,
                               top: '50%',
                               transform: 'translateY(-50%)',
                               pointerEvents: 'none',
@@ -715,7 +717,7 @@ export default function LoginPage(): React.ReactElement {
                             className="text-[#9ca3af]"
                             style={{
                               position: 'absolute',
-                              left: 13,
+                              insetInlineStart: 13,
                               top: '50%',
                               transform: 'translateY(-50%)',
                               pointerEvents: 'none',
@@ -757,7 +759,7 @@ export default function LoginPage(): React.ReactElement {
                           className="text-[#9ca3af]"
                           style={{
                             position: 'absolute',
-                            left: 13,
+                            insetInlineStart: 13,
                             top: '50%',
                             transform: 'translateY(-50%)',
                             pointerEvents: 'none',
@@ -826,7 +828,7 @@ export default function LoginPage(): React.ReactElement {
                           className="text-[#9ca3af]"
                           style={{
                             position: 'absolute',
-                            left: 13,
+                            insetInlineStart: 13,
                             top: '50%',
                             transform: 'translateY(-50%)',
                             pointerEvents: 'none',
@@ -866,7 +868,7 @@ export default function LoginPage(): React.ReactElement {
                           className="text-[#9ca3af]"
                           style={{
                             position: 'absolute',
-                            left: 13,
+                            insetInlineStart: 13,
                             top: '50%',
                             transform: 'translateY(-50%)',
                             pointerEvents: 'none',
@@ -906,7 +908,7 @@ export default function LoginPage(): React.ReactElement {
                           className="text-[#9ca3af]"
                           style={{
                             position: 'absolute',
-                            left: 13,
+                            insetInlineStart: 13,
                             top: '50%',
                             transform: 'translateY(-50%)',
                             pointerEvents: 'none',
@@ -918,7 +920,7 @@ export default function LoginPage(): React.ReactElement {
                           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                           required
                           placeholder="••••••••"
-                          style={{ ...inputBase, paddingRight: 44 }}
+                          style={{ ...inputBase, paddingInlineEnd: 44 }}
                           onFocus={(e: React.FocusEvent<HTMLInputElement>) => (e.target.style.borderColor = '#111827')}
                           onBlur={(e: React.FocusEvent<HTMLInputElement>) => (e.target.style.borderColor = '#e5e7eb')}
                         />
@@ -927,7 +929,7 @@ export default function LoginPage(): React.ReactElement {
                           onClick={() => setShowPassword((v) => !v)}
                           style={{
                             position: 'absolute',
-                            right: 12,
+                            insetInlineEnd: 12,
                             top: '50%',
                             transform: 'translateY(-50%)',
                             background: 'none',

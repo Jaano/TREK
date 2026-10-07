@@ -211,7 +211,7 @@ export default function JourneyPublicPage() {
             </div>
 
             {/* Entries */}
-            <div className="flex flex-col gap-4 pl-[52px]">
+            <div className="flex flex-col gap-4 ps-[52px]">
               {dayEntries.map((entry) => {
                 const photos = entry.photos || [];
                 const mood = entry.mood ? MOOD_CONFIG[entry.mood] : null;
@@ -247,7 +247,7 @@ export default function JourneyPublicPage() {
                     {photos.length === 1 && (
                       <button
                         type="button"
-                        className="relative block w-full cursor-pointer text-left"
+                        className="relative block w-full cursor-pointer text-start"
                         onClick={() => setLightbox({ photos: lightboxPhotos, index: 0 })}
                       >
                         <div className={`relative h-64 w-full ${photos[0].media_type === 'video' ? 'bg-black' : ''}`}>
@@ -277,7 +277,7 @@ export default function JourneyPublicPage() {
                           }}
                         />
                         {entry.location_name && (
-                          <div className="absolute left-4 top-3">
+                          <div className="absolute start-4 top-3">
                             <span className="inline-flex items-center gap-1 rounded-full bg-black/40 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur-sm">
                               <MapPin size={10} className="flex-shrink-0" />
                               <span className="max-w-[200px] truncate">{formatLocationName(entry.location_name)}</span>
@@ -285,7 +285,7 @@ export default function JourneyPublicPage() {
                           </div>
                         )}
                         {entry.title && (
-                          <div className="pointer-events-none absolute bottom-4 left-5 right-5">
+                          <div className="pointer-events-none absolute bottom-4 inset-x-5">
                             <h3 className="text-[18px] font-bold leading-tight text-white drop-shadow-sm">
                               {entry.title}
                             </h3>
@@ -615,7 +615,9 @@ export default function JourneyPublicPage() {
               position: 'sticky',
               top: 0,
               height: '100dvh',
-              padding: '16px 16px 16px 0',
+              paddingBlock: 16,
+              paddingInlineEnd: 16,
+              paddingInlineStart: 0,
               alignSelf: 'flex-start',
             }}
           >
@@ -640,7 +642,7 @@ export default function JourneyPublicPage() {
           {/* Floating view toggle — visible above the fullscreen map on mobile */}
           {isMobile && view === 'timeline' && perms.share_timeline && perms.share_map && availableViews.length > 1 && (
             <div
-              className="fixed left-0 right-0 z-50 flex justify-center px-4"
+              className="fixed inset-x-0 z-50 flex justify-center px-4"
               style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}
             >
               <div className="flex overflow-hidden rounded-lg border border-zinc-200 bg-white/90 shadow-lg backdrop-blur-lg dark:border-zinc-700 dark:bg-zinc-800/90">

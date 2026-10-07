@@ -188,7 +188,7 @@ function JourneyDetailPageDesktop() {
           back | tabs+title | book export, suggestions, settings */}
       {isMobileChromeless && (
         <div
-          className="fixed left-0 right-0 z-30 flex items-start justify-between gap-2 px-4"
+          className="fixed inset-x-0 z-30 flex items-start justify-between gap-2 px-4"
           style={{ top: 'calc(var(--nav-h, 56px) + 12px)' }}
         >
           <button type="button"
@@ -333,7 +333,7 @@ function JourneyDetailPageDesktop() {
                       >
                         {hideSkeletons ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
-                      <span className="absolute top-full mt-2 right-0 px-2 py-1 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-medium whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity">
+                      <span className="absolute top-full mt-2 end-0 px-2 py-1 rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 text-[11px] font-medium whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity">
                         {skeletonLabel}
                       </span>
                     </div>
@@ -515,7 +515,7 @@ function JourneyDetailPageDesktop() {
                                   feed misaligned with the day header above it. Shown on
                                   hover, since they are for the one card you are working on. */}
                               {canReorder && (
-                                <div className="absolute right-full top-1/2 mr-1.5 flex -translate-y-1/2 flex-col gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+                                <div className="absolute end-full top-1/2 me-1.5 flex -translate-y-1/2 flex-col gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
                                   <button
                                     type="button"
                                     onClick={() => move(-1)}
@@ -661,7 +661,7 @@ function JourneyDetailPageDesktop() {
           {/* RIGHT column on desktop — sticky rounded map (polarsteps-style).
               Hidden on mobile; mobile gets its own chromeless combined view. */}
           {!isMobile && (
-            <aside className="w-[44%] max-w-[820px] min-w-[420px] pt-6 pr-4 pb-4 pl-0">
+            <aside className="w-[44%] max-w-[820px] min-w-[420px] pt-6 pe-4 pb-4 ps-0">
               <div className="h-full rounded-[22px] overflow-hidden shadow-sm" style={{ border: '1px solid var(--vg-line)' }}>
                 <JourneyMap
                   ref={mapRef}

@@ -21,7 +21,7 @@ export function SharedUnplannedCard({ places, categories }: SharedUnplannedCardP
   if (places.length === 0) return null
   return (
     <article className="overflow-hidden rounded-2xl border border-edge-faint bg-surface-card">
-      <div className="flex items-center gap-2.5 py-2.5 pl-2.5 pr-2" style={{ background: NEUTRAL_TINT }}>
+      <div className="flex items-center gap-2.5 py-2.5 ps-2.5 pe-2" style={{ background: NEUTRAL_TINT }}>
         <span className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-surface-card text-content-muted shadow-sm">
           <MapPin size={14} strokeWidth={2} />
         </span>

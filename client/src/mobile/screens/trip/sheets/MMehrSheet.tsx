@@ -69,7 +69,7 @@ export default function MMehrSheet({ planner, shell }: MTripSheetsProps) {
                   key={tab.id}
                   type="button"
                   onClick={() => openSection(tab.id)}
-                  className="rounded-[18px] bg-[color:var(--m-ic)] px-4 pb-[15px] pt-[14px] text-left"
+                  className="rounded-[18px] bg-[color:var(--m-ic)] px-4 pb-[15px] pt-[14px] text-start"
                 >
                   <div
                     className="flex h-[38px] w-[38px] items-center justify-center rounded-[11px]"
@@ -91,7 +91,7 @@ export default function MMehrSheet({ planner, shell }: MTripSheetsProps) {
               key={action.id}
               type="button"
               onClick={action.go}
-              className="flex w-full items-center gap-[13px] rounded-[18px] bg-[color:var(--m-ic)] px-4 py-[14px] text-left"
+              className="flex w-full items-center gap-[13px] rounded-[18px] bg-[color:var(--m-ic)] px-4 py-[14px] text-start"
             >
               <div className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] bg-[color:var(--m-ic)]">
                 <action.icon size={17} strokeWidth={1.9} />

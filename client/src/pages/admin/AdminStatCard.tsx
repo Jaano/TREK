@@ -7,7 +7,7 @@ import { fs } from '../../components/shared/DialogShell'
 export default function AdminStatCard({ label, value, icon: Icon }: { label: string; value: number; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }> }): React.ReactElement {
   const animated = useCountUp(value, 900)
   return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-[12px] bg-surface-card py-2 pl-2 pr-3.5 shadow-sm">
+    <div className="flex min-w-0 items-center gap-2.5 rounded-[12px] bg-surface-card py-2 ps-2 pe-3.5 shadow-sm">
       <span className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-surface-tertiary text-content-secondary">
         <Icon className="h-4 w-4" />
       </span>

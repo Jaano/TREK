@@ -562,11 +562,11 @@ describe('MDashboard', () => {
     render(<MDashboard />);
 
     // flex-1 on the scroll box stretched the grey pill track all the way to the
-    // calendar icon on phones from ~400px up; the icons ride on ml-auto instead.
+    // calendar icon on phones from ~400px up; the icons ride on ms-auto instead.
     const chip = await screen.findByText('dashboard.filter.planned');
     const wrapper = chip.closest('button')!.parentElement!.parentElement as HTMLElement;
     expect(wrapper.className).not.toContain('flex-1');
     expect(screen.getByRole('button', { name: 'dashboard.subscribeAllTrips' }).className)
-      .toContain('ml-auto');
+      .toContain('ms-auto');
   });
 });

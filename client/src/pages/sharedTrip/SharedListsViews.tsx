@@ -34,7 +34,7 @@ export function SharedPackingView({ items }: { items: PackingItem[] }) {
     <div className="flex flex-col gap-4">
       <div className={`${CARD} px-5 py-4`}>
         <SectionTitle icon={<PackageCheck size={16} strokeWidth={2} />} title={t('shared.tabPacking')}>
-          <span className="ml-auto font-medium text-content-muted" style={fs(12.5, 'body')}>
+          <span className="ms-auto font-medium text-content-muted" style={fs(12.5, 'body')}>
             {t('packing.progress', { packed, total: items.length, percent: Math.round((packed / items.length) * 100) })}
           </span>
         </SectionTitle>
@@ -185,7 +185,7 @@ export function SharedChatView({ messages }: { messages: ChatMessage[] }) {
               )}
               <div className="flex items-end gap-2.5">
                 <TripMemberAvatar username={msg.username || '?'} avatarUrl={msg.avatar ? avatarSrc(msg.avatar) : null} size={30} />
-                <div className="min-w-0 max-w-[85%] rounded-2xl rounded-bl-md bg-surface-secondary px-3.5 py-2">
+                <div className="min-w-0 max-w-[85%] rounded-2xl rounded-es-md bg-surface-secondary px-3.5 py-2">
                   <div className="flex items-baseline gap-2">
                     <span className="font-semibold text-content" style={fs(12, 'body')}>{msg.username}</span>
                     <span className="text-content-faint" style={fs(10.5)}>

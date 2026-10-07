@@ -99,7 +99,7 @@ export function CategorySettingsModal({ onClose, categories, categoryColors, onS
             {allCats.map(cat => {
               const current = localColors[cat] || NOTE_COLORS[0].value
               return (
-                <div key={cat} className="flex items-center gap-2.5 rounded-[12px] bg-surface-secondary py-1.5 pl-3 pr-1.5">
+                <div key={cat} className="flex items-center gap-2.5 rounded-[12px] bg-surface-secondary py-1.5 ps-3 pe-1.5">
                   <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: current }} />
                   {/* Category name — editable */}
                   <EditableCatName name={cat} onRename={(newName) => handleRenameCategory(cat, newName)} renameLabel={t('common.rename')} />

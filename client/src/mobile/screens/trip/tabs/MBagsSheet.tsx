@@ -206,7 +206,7 @@ function BagRow({ planner, bag, itemCount, weight, pct, tripMembers, canEdit, on
             className="min-w-0 flex-1 border-b border-[color:var(--m-rowbr)] bg-transparent text-[0.8125rem] font-semibold text-m-ink outline-none"
           />
         ) : (
-          <button type="button" onClick={() => canEdit && setEditingName(true)} className="min-w-0 flex-1 truncate text-left text-[0.8125rem] font-semibold text-m-ink">
+          <button type="button" onClick={() => canEdit && setEditingName(true)} className="min-w-0 flex-1 truncate text-start text-[0.8125rem] font-semibold text-m-ink">
             {bag.name}
           </button>
         )}
@@ -224,7 +224,7 @@ function BagRow({ planner, bag, itemCount, weight, pct, tripMembers, canEdit, on
                 onChange={e => setLimitVal(e.target.value)}
                 onBlur={saveLimit}
                 onKeyDown={e => { if (e.key === 'Enter') saveLimit(); if (e.key === 'Escape') { setLimitVal(limitToInput(bag.weight_limit_grams)); setEditingLimit(false) } }}
-                className="w-9 border-b border-[color:var(--m-rowbr)] bg-transparent text-right text-m-ink outline-none"
+                className="w-9 border-b border-[color:var(--m-rowbr)] bg-transparent text-end text-m-ink outline-none"
               />
               <span>kg</span>
             </>
@@ -278,7 +278,7 @@ function BagRow({ planner, bag, itemCount, weight, pct, tripMembers, canEdit, on
           </button>
         )}
         {showPicker && (
-          <div className="absolute left-0 top-[26px] z-[5] max-h-[180px] w-[190px] overflow-y-auto rounded-[12px] border border-[color:var(--m-rowbr)] bg-m-sheetop p-1 shadow-[0_16px_40px_-16px_rgba(0,0,0,.45)]">
+          <div className="absolute start-0 top-[26px] z-[5] max-h-[180px] w-[190px] overflow-y-auto rounded-[12px] border border-[color:var(--m-rowbr)] bg-m-sheetop p-1 shadow-[0_16px_40px_-16px_rgba(0,0,0,.45)]">
             {tripMembers.length === 0 && (
               <div className="px-[10px] py-2 font-geist text-[0.6875rem] text-m-faint">{t('packing.noMembers')}</div>
             )}
@@ -290,7 +290,7 @@ function BagRow({ planner, bag, itemCount, weight, pct, tripMembers, canEdit, on
                   key={m.id}
                   type="button"
                   onClick={() => toggleMember(m.id)}
-                  className="flex w-full items-center gap-[8px] rounded-[8px] px-[8px] py-[6px] text-left"
+                  className="flex w-full items-center gap-[8px] rounded-[8px] px-[8px] py-[6px] text-start"
                 >
                   <span className="flex h-5 w-5 flex-none items-center justify-center overflow-hidden rounded-full bg-[color:var(--m-ic)] text-[0.5625rem] font-bold text-m-muted">
                     {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : m.username[0]?.toUpperCase()}

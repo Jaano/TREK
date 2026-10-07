@@ -137,12 +137,12 @@ export default function DocSyncScopeModal({
             <span className="text-body font-medium text-content">{t('docsync.scope.pickTitle')}</span>
             {scopes && scopes.length > 6 && (
               <span className="relative">
-                <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-content-faint" />
+                <Search size={13} className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-content-faint" />
                 <input
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   placeholder={t('docsync.scope.search')}
-                  className="w-44 rounded-lg border border-edge bg-surface-input py-1.5 pl-8 pr-2.5 text-caption text-content ring-accent focus:outline-none focus:ring-2"
+                  className="w-44 rounded-lg border border-edge bg-surface-input py-1.5 ps-8 pe-2.5 text-caption text-content ring-accent focus:outline-none focus:ring-2"
                 />
               </span>
             )}
@@ -174,7 +174,7 @@ export default function DocSyncScopeModal({
                     type="button"
                     onClick={() => void bind(s)}
                     disabled={working !== null}
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors hover:bg-surface-hover disabled:opacity-50"
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-start transition-colors hover:bg-surface-hover disabled:opacity-50"
                   >
                     <span className="min-w-0">
                       <span className="block truncate text-body text-content">{s.label}</span>

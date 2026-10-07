@@ -69,9 +69,11 @@ export function ChatMessages(props: any) {
             }
 
             // Bubble border radius — iMessage style tails
-            const br = own
-              ? `18px 18px ${isLastInGroup ? '4px' : '18px'} 18px`
-              : `18px 18px 18px ${isLastInGroup ? '4px' : '18px'}`
+            const tail = isLastInGroup ? 4 : 18
+            const br = {
+              borderStartStartRadius: 18, borderStartEndRadius: 18,
+              borderEndEndRadius: own ? tail : 18, borderEndStartRadius: own ? 18 : tail,
+            }
 
             return (
               <React.Fragment key={msg.id}>
@@ -92,7 +94,7 @@ export function ChatMessages(props: any) {
                   display: 'flex', alignItems: own ? 'flex-end' : 'flex-start',
                   flexDirection: own ? 'row-reverse' : 'row',
                   gap: 6, marginTop: isNewGroup ? 10 : 1,
-                  paddingLeft: own ? 40 : 0, paddingRight: own ? 0 : 40,
+                  paddingInlineStart: own ? 40 : 0, paddingInlineEnd: own ? 0 : 40,
                   transition: 'transform 0.3s ease, opacity 0.3s ease, max-height 0.3s ease',
                   ...(deletingIds.has(msg.id) ? { transform: 'scale(0.3)', opacity: 0, maxHeight: 0, marginTop: 0, overflow: 'hidden' } : {}),
                 }}>
@@ -118,7 +120,7 @@ export function ChatMessages(props: any) {
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: own ? 'flex-end' : 'flex-start', maxWidth: '78%', minWidth: 0 }}>
                     {/* Username for others at group start */}
                     {!own && isNewGroup && (
-                      <span style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 600, color: 'var(--text-faint)', marginBottom: 2, paddingLeft: 4 }}>
+                      <span style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 600, color: 'var(--text-faint)', marginBottom: 2, paddingInlineStart: 4 }}>
                         {msg.username}
                       </span>
                     )}
@@ -150,7 +152,7 @@ export function ChatMessages(props: any) {
                           background: own ? 'var(--accent)' : 'var(--bg-card)',
                           color: own ? 'var(--accent-text)' : 'var(--text-primary)',
                           border: own ? 'none' : '1px solid var(--border-faint)',
-                          borderRadius: br, padding: hasReply ? '4px 4px 8px 4px' : '8px 14px',
+                          ...br, padding: hasReply ? '4px 4px 8px 4px' : '8px 14px',
                           fontSize: 'calc(14px * var(--fs-scale-body, 1))', lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'pre-wrap',
                         }}>
                           {/* Inline reply quote */}
@@ -185,7 +187,7 @@ export function ChatMessages(props: any) {
                         opacity: hoveredId === msg.id ? 1 : 0,
                         pointerEvents: hoveredId === msg.id ? 'auto' : 'none',
                         transition: 'opacity .1s',
-                        ...(own ? { left: -6 } : { right: -6 }),
+                        ...(own ? { insetInlineStart: -6 } : { insetInlineEnd: -6 }),
                       }}>
                         <Tooltip label={t('collab.chat.reply')}>
                         <button type="button" onClick={() => setReplyTo(msg)} aria-label={t('collab.chat.reply')} style={{
@@ -223,7 +225,7 @@ export function ChatMessages(props: any) {
                       <div style={{
                         display: 'flex', gap: 3, marginTop: -6, marginBottom: 4,
                         justifyContent: own ? 'flex-end' : 'flex-start',
-                        paddingLeft: own ? 0 : 8, paddingRight: own ? 8 : 0,
+                        paddingInlineStart: own ? 0 : 8, paddingInlineEnd: own ? 8 : 0,
                         position: 'relative', zIndex: 1,
                       }}>
                         <div style={{

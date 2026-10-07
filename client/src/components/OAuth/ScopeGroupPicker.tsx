@@ -64,7 +64,7 @@ export default function ScopeGroupPicker({ selected, onChange }: Props): React.R
                     type="button"
                     onClick={() => setOpen(prev => ({ ...prev, [group]: !prev[group] }))}
                     aria-expanded={!!open[group]}
-                    className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-content-secondary hover:text-content"
+                    className="flex min-w-0 flex-1 items-center gap-1.5 text-start text-content-secondary hover:text-content"
                   >
                     {open[group]
                       ? <ChevronDown size={13} className="flex-none" />
@@ -102,7 +102,7 @@ export default function ScopeGroupPicker({ selected, onChange }: Props): React.R
                           role="checkbox"
                           aria-checked={on}
                           onClick={() => onChange(on ? selected.filter(s => s !== scope) : [...selected, scope])}
-                          className="flex w-full items-start gap-2.5 px-3.5 py-2.5 text-left transition-colors hover:bg-surface-tertiary"
+                          className="flex w-full items-start gap-2.5 px-3.5 py-2.5 text-start transition-colors hover:bg-surface-tertiary"
                         >
                           <span className="mt-px"><CheckBox checked={on} /></span>
                           <span className="min-w-0 flex-1">

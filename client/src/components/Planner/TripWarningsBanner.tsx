@@ -75,7 +75,7 @@ export default function TripWarningsBanner({ tripId, onOpenPluginTab }: { tripId
         navSlot
       )}
       {floating.length > 0 && (
-        <div style={{ position: 'absolute', bottom: 'calc(var(--bottom-nav-h, 0px) + 8px)', left: 0, right: 0, zIndex: 6, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 6, padding: '0 16px' }}>
+        <div style={{ position: 'absolute', bottom: 'calc(var(--bottom-nav-h, 0px) + 8px)', insetInline: 0, zIndex: 6, pointerEvents: 'none', display: 'flex', flexDirection: 'column', gap: 6, padding: '0 16px' }}>
           {floating.map((w, i) => {
             const s = STYLE[w.level] ?? STYLE.warning
             return (

@@ -22,7 +22,7 @@ export default function HelpLightbox(): React.ReactElement | null {
         type="button"
         onClick={() => close(null)}
         aria-label={t('help.center.close')}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-inverse text-inverse-text flex items-center justify-center shadow-elevated hover:scale-105 transition-transform"
+        className="absolute top-4 end-4 w-10 h-10 rounded-full bg-inverse text-inverse-text flex items-center justify-center shadow-elevated hover:scale-105 transition-transform"
       >
         <X className="w-5 h-5" />
       </button>

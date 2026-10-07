@@ -134,7 +134,7 @@ export default function MNoteSheet({ planner, open, payload, onClose }: MNoteShe
             <ChevronDown
               size={11}
               strokeWidth={2.4}
-              className={`absolute bottom-[3px] right-[3px] text-m-faint transition-transform duration-200 ${iconOpen ? 'rotate-180' : ''}`}
+              className={`absolute bottom-[3px] end-[3px] text-m-faint transition-transform duration-200 ${iconOpen ? 'rotate-180' : ''}`}
             />
           </button>
 

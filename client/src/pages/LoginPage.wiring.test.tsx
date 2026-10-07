@@ -248,7 +248,7 @@ describe('LoginPage — password form', () => {
     expect(input).toHaveAttribute('type', 'password');
 
     const buttons = screen.getAllByRole('button');
-    const toggle = buttons.find((b) => b.getAttribute('type') === 'button' && b.querySelector('svg') && b.style.right === '12px')!;
+    const toggle = buttons.find((b) => b.getAttribute('type') === 'button' && b.querySelector('svg') && b.style.insetInlineEnd === '12px')!;
     fireEvent.click(toggle);
 
     const updater = vi.mocked(fixture.setShowPassword).mock.calls[0][0] as (v: boolean) => boolean;

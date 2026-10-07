@@ -79,7 +79,7 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
     planner.handleDeletePlace(place.id)
   }
 
-  const rowCls = 'flex w-full items-center gap-3 px-2 py-[11px] text-left text-[0.84375rem] font-medium'
+  const rowCls = 'flex w-full items-center gap-3 px-2 py-[11px] text-start text-[0.84375rem] font-medium'
 
   return (
     <MSheet open={open && !!livePlace} onClose={shell.closeSheet} variant="card" material="glass" ariaLabel={place.name}>
@@ -126,7 +126,7 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
                     type="button"
                     disabled={tourAlreadyAssignedToDay(d.id) || (isTourPlace(place.id) && pendingTourDayIds.current.has(`${place.id}:${d.id}`))}
                     onClick={() => { void assignToDay(d.id) }}
-                    className={`flex w-full items-center gap-2 px-3 py-[10px] text-left disabled:cursor-default disabled:opacity-40 ${i > 0 ? 'border-t border-[color:var(--m-rowbr)]' : ''}`}
+                    className={`flex w-full items-center gap-2 px-3 py-[10px] text-start disabled:cursor-default disabled:opacity-40 ${i > 0 ? 'border-t border-[color:var(--m-rowbr)]' : ''}`}
                   >
                     <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold">
                       {/* A day_number of 0 is as unusable as a missing one — both take the row position. */}

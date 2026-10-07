@@ -34,7 +34,7 @@ export function CategoryTile({ category, size = 24 }: { category?: Pick<Category
   )
 }
 
-const ROW = 'flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-left hover:bg-surface-hover'
+const ROW = 'flex w-full items-center gap-2.5 rounded-[10px] px-2 py-1.5 text-start hover:bg-surface-hover'
 
 /**
  * Popup for the Places selection toolbar: pick one category to apply to every

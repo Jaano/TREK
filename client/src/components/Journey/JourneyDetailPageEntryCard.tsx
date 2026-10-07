@@ -58,7 +58,7 @@ export function EntryCard({ entry, readOnly, onEdit, onDelete, onPhotoClick }: {
           <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)', height: '60%' }} />
 
           {/* Badges top-left */}
-          <div className="absolute top-3 left-4 right-14 flex items-center gap-1.5 z-[2]">
+          <div className="absolute top-3 start-4 end-14 flex items-center gap-1.5 z-[2]">
             {entry.location_name && (
               <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-black/40 backdrop-blur-sm rounded-full text-[10px] font-semibold text-white tracking-wide max-w-full overflow-hidden">
                 <MapPin size={10} className="flex-shrink-0" />
@@ -90,14 +90,14 @@ export function EntryCard({ entry, readOnly, onEdit, onDelete, onPhotoClick }: {
 
           {/* Menu top-right, raised on the card colour so it reads on any photo */}
           {!readOnly && (
-            <div className="absolute top-2.5 right-3 z-[2]">
+            <div className="absolute top-2.5 end-3 z-[2]">
               <MoreButton label={t('files.menu')} items={menuItems} size={32} alwaysVisible className="bg-surface-card shadow-sm" />
             </div>
           )}
 
           {/* Title on photo */}
           {entry.title && (
-            <div className="absolute bottom-4 left-5 right-5 z-[2] pointer-events-none">
+            <div className="absolute bottom-4 inset-x-5 z-[2] pointer-events-none">
               <h3 className="text-[22px] font-bold text-white tracking-[-0.02em] leading-tight drop-shadow-sm">{entry.title}</h3>
             </div>
           )}
@@ -105,7 +105,7 @@ export function EntryCard({ entry, readOnly, onEdit, onDelete, onPhotoClick }: {
       ) : (
         /* No photos: simple header */
         <div className="flex items-center justify-between px-4 pt-3">
-          <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1 me-2">
             {entry.location_name && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-zinc-100 dark:bg-zinc-800 rounded-full text-[10px] font-semibold text-zinc-500 max-w-full overflow-hidden">
                 <MapPin size={10} className="flex-shrink-0" /> <span className="truncate">{formatLocationName(entry.location_name)}</span>
@@ -172,8 +172,8 @@ export function EntryCard({ entry, readOnly, onEdit, onDelete, onPhotoClick }: {
               <div key={`${p.pluginId}-${i}`} className="flex items-baseline justify-between gap-2 text-[12px]">
                 <span className="font-medium text-zinc-500 dark:text-zinc-400 flex-shrink-0">{it.label}</span>
                 {it.url
-                  ? <a href={it.url} target="_blank" rel="noreferrer noopener" className="text-indigo-600 dark:text-indigo-400 truncate text-right">{it.value ?? it.url}</a>
-                  : <span className="text-zinc-600 dark:text-zinc-300 truncate text-right">{it.value}</span>}
+                  ? <a href={it.url} target="_blank" rel="noreferrer noopener" className="text-indigo-600 dark:text-indigo-400 truncate text-end">{it.value ?? it.url}</a>
+                  : <span className="text-zinc-600 dark:text-zinc-300 truncate text-end">{it.value}</span>}
               </div>
             )))}
           </div>

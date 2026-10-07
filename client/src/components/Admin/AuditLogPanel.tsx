@@ -21,7 +21,7 @@ interface AuditLogPanelProps {
   serverTimezone?: string
 }
 
-const TH = 'whitespace-nowrap px-3.5 py-2.5 text-left font-geist font-bold uppercase tracking-[.08em] text-content-faint'
+const TH = 'whitespace-nowrap px-3.5 py-2.5 text-start font-geist font-bold uppercase tracking-[.08em] text-content-faint'
 const TD = 'px-3.5 py-2.5 align-top'
 const CODE = 'font-geist tabular-nums'
 

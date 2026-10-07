@@ -397,7 +397,7 @@ function ConfigBlock({ open, onToggle, json, hint, copied, onCopy, t }: {
   return (
     <div className="overflow-hidden rounded-[12px] border border-edge-faint bg-surface-card">
       <button type="button" onClick={onToggle} aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left hover:bg-surface-secondary">
+        className="flex w-full items-center gap-2 px-3.5 py-2.5 text-start hover:bg-surface-secondary">
         <ChevronRight size={15} strokeWidth={2.2} className={`flex-none text-content-faint transition-transform ${open ? 'rotate-90' : ''}`} />
         <span className="flex-1 font-medium text-content" style={fs(13, 'body')}>{t('settings.mcp.clientConfig')}</span>
       </button>

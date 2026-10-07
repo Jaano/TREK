@@ -127,7 +127,7 @@ function ActionTile({ icon, label, value, onClick, tileRef }: {
       </span>
     </>
   )
-  const box = 'flex h-14 min-w-0 items-center gap-2.5 rounded-[14px] bg-[color:var(--m-ic)] px-3 text-left'
+  const box = 'flex h-14 min-w-0 items-center gap-2.5 rounded-[14px] bg-[color:var(--m-ic)] px-3 text-start'
   if (!onClick) return <div className={box}>{inner}</div>
   return <button ref={tileRef} type="button" onClick={onClick} className={`${box} border-0`}>{inner}</button>
 }

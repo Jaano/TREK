@@ -35,7 +35,7 @@ export default function MScopeGroupPicker({ selected, onChange }: Props) {
         </button>
       </div>
 
-      <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-[2px]">
+      <div className="max-h-[22rem] space-y-2 overflow-y-auto pe-[2px]">
         {Object.entries(scopesByGroup).map(([group, groupScopes]) => {
           const groupScopeKeys = groupScopes.map((s) => s.scope)
           const allGroupSelected = groupScopeKeys.every((s) => selected.includes(s))
@@ -49,7 +49,7 @@ export default function MScopeGroupPicker({ selected, onChange }: Props) {
                 <button
                   type="button"
                   onClick={() => setOpen((prev) => ({ ...prev, [group]: !prev[group] }))}
-                  className="flex flex-1 items-center gap-1 text-left text-[0.75rem] font-bold text-m-ink"
+                  className="flex flex-1 items-center gap-1 text-start text-[0.75rem] font-bold text-m-ink"
                 >
                   {isOpen ? (
                     <ChevronDown size={13} className="flex-none text-m-faint" />
@@ -58,7 +58,7 @@ export default function MScopeGroupPicker({ selected, onChange }: Props) {
                   )}
                   <span className="min-w-0 truncate">{group}</span>
                   {someGroupSelected && (
-                    <span className="ml-[6px] flex-none font-geist text-[0.625rem] font-normal text-m-faint">
+                    <span className="ms-[6px] flex-none font-geist text-[0.625rem] font-normal text-m-faint">
                       ({selectedInGroup}/{groupScopeKeys.length})
                     </span>
                   )}
@@ -100,7 +100,7 @@ export default function MScopeGroupPicker({ selected, onChange }: Props) {
                         onClick={() =>
                           onChange(on ? selected.filter((s) => s !== scope) : [...selected, scope])
                         }
-                        className="flex w-full items-start gap-2.5 border-t border-[color:var(--m-rowbr)] px-3 py-2 text-left"
+                        className="flex w-full items-start gap-2.5 border-t border-[color:var(--m-rowbr)] px-3 py-2 text-start"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-[0.75rem] font-semibold text-m-ink">{label}</p>

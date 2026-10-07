@@ -42,7 +42,7 @@ export function BulkImportModal(S: PackingState) {
         {t('packing.importHintMarkdown')}
       </p>
       <div className="flex overflow-hidden rounded-[10px] border border-edge bg-surface-input focus-within:ring-2 focus-within:ring-[color:var(--text-primary)]">
-        <div aria-hidden className="min-w-8 flex-none select-none border-r border-edge-faint bg-surface-tertiary py-2.5 text-right font-mono leading-normal text-content-faint" style={text}>
+        <div aria-hidden className="min-w-8 flex-none select-none border-e border-edge-faint bg-surface-tertiary py-2.5 text-end font-mono leading-normal text-content-faint" style={text}>
           {(importText || ' ').split('\n').map((_, i) => (
             <div key={i} className="px-1.5">{i + 1}</div>
           ))}

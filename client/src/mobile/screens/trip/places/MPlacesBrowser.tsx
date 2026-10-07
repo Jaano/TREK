@@ -233,7 +233,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
           >
             <SlidersHorizontal size={15} strokeWidth={2} />
             {panelFilterCount > 0 && (
-              <span className="absolute -right-[3px] -top-[3px] box-border flex h-4 min-w-[16px] items-center justify-center rounded-full bg-m-act px-1 font-geist text-[0.5625rem] font-bold text-m-actfg">
+              <span className="absolute -end-[3px] -top-[3px] box-border flex h-4 min-w-[16px] items-center justify-center rounded-full bg-m-act px-1 font-geist text-[0.5625rem] font-bold text-m-actfg">
                 {panelFilterCount}
               </span>
             )}
@@ -285,11 +285,11 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
 
         {/* ── Selection toolbar ── */}
         {selectMode && (
-          <div className="mt-2 flex items-center gap-2 rounded-full border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] py-[6px] pl-[14px] pr-[6px] backdrop-blur-[20px]">
+          <div className="mt-2 flex items-center gap-2 rounded-full border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] py-[6px] ps-[14px] pe-[6px] backdrop-blur-[20px]">
             <span className="font-geist text-[0.6875rem] font-bold text-m-muted">
               {t('places.selectionCount', { count: selectedIds.size })}
             </span>
-            <div className="ml-auto flex gap-[5px]">
+            <div className="ms-auto flex gap-[5px]">
               <BulkBtn label={allSelected ? t('common.deselectAll') : t('common.selectAll')} onClick={toggleAllVisible}>
                 <CheckCheck size={14} strokeWidth={2} />
               </BulkBtn>
@@ -357,7 +357,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
             const sub = place.address || place.description
             return (
               <div key={place.id} className="flex items-center gap-[11px] border-b border-[color:var(--m-rowbr)] px-[2px] py-[9px]">
-                <button type="button" onClick={() => openRow(place)} className="flex min-w-0 flex-1 items-center gap-[11px] text-left">
+                <button type="button" onClick={() => openRow(place)} className="flex min-w-0 flex-1 items-center gap-[11px] text-start">
                   {selectMode && !planner.isTourPlace(place.id) && <SquareCheck big checked={selectedIds.has(place.id)} />}
                   <PlaceAvatar place={place} category={cat} size={40} />
                   <div className="min-w-0 flex-1">

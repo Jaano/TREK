@@ -320,14 +320,14 @@ export default function PlPlaceSearch({ planner, locationBias, onPick, onResolvi
       </div>
 
       {suggestions.length > 0 && (
-        <div className="absolute left-0 right-12 top-[calc(100%+6px)] z-10 max-h-[210px] overflow-y-auto rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] shadow-[0_20px_44px_-18px_rgba(0,0,0,.45)]">
+        <div className="absolute start-0 end-12 top-[calc(100%+6px)] z-10 max-h-[210px] overflow-y-auto rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] shadow-[0_20px_44px_-18px_rgba(0,0,0,.45)]">
           {suggestions.map(s => (
             <button
               key={s.placeId}
               type="button"
               onPointerDown={e => e.preventDefault()}
               onClick={() => handleSelectSuggestion(s)}
-              className="block w-full border-t border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left first:border-t-0"
+              className="block w-full border-t border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start first:border-t-0"
             >
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
@@ -350,7 +350,7 @@ export default function PlPlaceSearch({ planner, locationBias, onPick, onResolvi
               key={idx}
               type="button"
               onClick={() => applyPlace(result, { mode: 'search', rank: idx, count: results.length })}
-              className="block w-full border-t border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left first:border-t-0"
+              className="block w-full border-t border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start first:border-t-0"
             >
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">

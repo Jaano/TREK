@@ -360,7 +360,7 @@ export function JourneySettingsDialog({ journey, onClose, onSaved, onOpenInvite,
               <button
                 type="button"
                 onClick={() => { void onRestoreSuggestions() }}
-                className="flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-secondary px-3.5 py-2.5 text-left transition-colors hover:bg-surface-card"
+                className="flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-secondary px-3.5 py-2.5 text-start transition-colors hover:bg-surface-card"
               >
                 <Undo2 size={15} className="flex-none text-content-faint" />
                 <span className="min-w-0 flex-1">

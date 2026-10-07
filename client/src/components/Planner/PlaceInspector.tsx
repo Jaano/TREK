@@ -504,8 +504,8 @@ export default function PlaceInspector({
                 <div key={`${p.pluginId}-${i}`} className="flex items-baseline justify-between gap-3" style={fs(12.5, 'body')}>
                   <span className="flex-none font-medium text-content-secondary">{it.label}</span>
                   {it.url
-                    ? <a href={it.url} target="_blank" rel="noreferrer noopener" className="truncate text-right text-accent-on hover:underline">{it.value ?? '↗'}</a>
-                    : <span className="text-right text-content-muted">{it.value}</span>}
+                    ? <a href={it.url} target="_blank" rel="noreferrer noopener" className="truncate text-end text-accent-on hover:underline">{it.value ?? '↗'}</a>
+                    : <span className="text-end text-content-muted">{it.value}</span>}
                 </div>
               )))}
             </div>
@@ -875,7 +875,7 @@ function LinkedBookingCard({ res, timeFormat, open, opens = 'editor' }: { res: R
       onKeyDown={open ? (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open() }
       } : undefined}
-      className={`group flex flex-col overflow-hidden rounded-xl border border-edge-faint bg-surface-secondary text-left ${open ? 'cursor-pointer transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--text-primary)]' : ''}`}
+      className={`group flex flex-col overflow-hidden rounded-xl border border-edge-faint bg-surface-secondary text-start ${open ? 'cursor-pointer transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--text-primary)]' : ''}`}
     >
       <div className="flex items-center gap-2 px-2.5 py-1.5" style={{ background: toneTint(toneOf(res)) }}>
         <TypeTile type={res.type} size={24} />
@@ -996,7 +996,7 @@ function ParticipantsBox({ tripMembers, participantIds, allJoined, onSetParticip
         {activeMembers.map(member => (
           <button type="button" key={member.id} disabled={!canRemove}
             onClick={() => { if (canRemove) handleRemove(member.id) }}
-            className="group/chip inline-flex max-w-full items-center gap-1.5 rounded-full border border-edge-faint bg-surface-card py-[2px] pl-[2px] pr-2.5 font-semibold text-content transition-colors enabled:hover:border-danger enabled:hover:bg-danger-soft enabled:hover:text-danger disabled:cursor-default"
+            className="group/chip inline-flex max-w-full items-center gap-1.5 rounded-full border border-edge-faint bg-surface-card py-[2px] ps-[2px] pe-2.5 font-semibold text-content transition-colors enabled:hover:border-danger enabled:hover:bg-danger-soft enabled:hover:text-danger disabled:cursor-default"
             style={fs(11.5, 'body')}>
             <MemberAvatar member={member} size={18} />
             <span className={`truncate ${canRemove ? 'group-hover/chip:line-through' : ''}`}>{member.username}</span>
@@ -1012,10 +1012,10 @@ function ParticipantsBox({ tripMembers, participantIds, allJoined, onSetParticip
             </Tooltip>
 
             {showAdd && (
-              <div className="absolute left-0 top-[26px] z-[100] min-w-[160px] rounded-[10px] border border-edge bg-surface-card p-1 shadow-dropdown">
+              <div className="absolute start-0 top-[26px] z-[100] min-w-[160px] rounded-[10px] border border-edge bg-surface-card p-1 shadow-dropdown">
                 {availableToAdd.map(member => (
                   <button type="button" key={member.id} onClick={() => handleAdd(member.id)}
-                    className="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-left text-content transition-colors hover:bg-surface-hover"
+                    className="flex w-full items-center gap-2 rounded-[6px] px-2 py-1.5 text-start text-content transition-colors hover:bg-surface-hover"
                     style={fs(11.5, 'body')}>
                     <MemberAvatar member={member} size={18} />
                     <span className="min-w-0 flex-1 truncate">{member.username}</span>
@@ -1043,7 +1043,7 @@ function TrackColorRow({ place, trackColor, onUpdatePlace }: { place: Place; tra
     <DialogSection className="flex-none" label={t('inspector.trackColor')}>
       <div className={BOX}>
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
-          className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left transition-colors hover:bg-surface-hover">
+          className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-start transition-colors hover:bg-surface-hover">
           <span className="h-4 w-4 flex-none rounded-full ring-1 ring-inset ring-edge" style={{ backgroundColor: trackColor }} />
           <span className="min-w-0 flex-1 truncate font-medium text-content-secondary" style={fs(12, 'body')}>
             <span className="sr-only">{t('inspector.trackColor')}: </span>
@@ -1200,7 +1200,7 @@ function PlaceExtras({ openingHours, weekdayIndex, hoursExpanded, setHoursExpand
           <div className={`${BOX} relative`}>
             {hoursExpanded ? (
               <>
-                <div className="flex flex-col py-2 pl-3 pr-10" style={fs(12, 'body')}>
+                <div className="flex flex-col py-2 ps-3 pe-10" style={fs(12, 'body')}>
                   {openingHours.map((line, i) => (
                     <span key={i} className={`py-[2px] ${i === weekdayIndex ? 'font-semibold text-content' : 'text-content-muted'}`}>
                       {convertHoursLine(line, timeFormat)}
@@ -1209,14 +1209,14 @@ function PlaceExtras({ openingHours, weekdayIndex, hoursExpanded, setHoursExpand
                 </div>
                 <Tooltip label={t('common.collapse')}>
                   <button type="button" onClick={() => setHoursExpanded(false)} aria-expanded aria-label={t('common.collapse')}
-                    className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full text-content-faint transition-colors hover:bg-surface-hover hover:text-content">
+                    className="absolute end-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full text-content-faint transition-colors hover:bg-surface-hover hover:text-content">
                     <ChevronUp size={14} strokeWidth={2} />
                   </button>
                 </Tooltip>
               </>
             ) : (
               <button type="button" onClick={() => setHoursExpanded(true)} aria-expanded={false}
-                className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left transition-colors hover:bg-surface-hover">
+                className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-start transition-colors hover:bg-surface-hover">
                 <Clock size={13} strokeWidth={2} className="flex-none text-content-faint" />
                 <span className="min-w-0 flex-1 truncate font-medium text-content-secondary" style={fs(12, 'body')}>
                   {convertHoursLine(openingHours[weekdayIndex] || '', timeFormat) || t('inspector.showHours')}
@@ -1243,7 +1243,7 @@ function PlaceExtras({ openingHours, weekdayIndex, hoursExpanded, setHoursExpand
         >
           <div className={BOX}>
             <button type="button" onClick={() => setFilesExpanded(f => !f)} aria-expanded={filesExpanded}
-              className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-left transition-colors hover:bg-surface-hover">
+              className="flex w-full items-center gap-2 rounded-[10px] px-3 py-2 text-start transition-colors hover:bg-surface-hover">
               <FileText size={13} strokeWidth={2} className="flex-none text-content-faint" />
               <span className="min-w-0 flex-1 truncate font-medium text-content-secondary" style={fs(12, 'body')}>
                 {placeFiles.length > 0 ? t('inspector.filesCount', { count: placeFiles.length }) : t('inspector.files')}
@@ -1254,7 +1254,7 @@ function PlaceExtras({ openingHours, weekdayIndex, hoursExpanded, setHoursExpand
               <div className="flex flex-col gap-0.5 border-t border-edge-faint p-1">
                 {placeFiles.map(f => (
                   <button type="button" key={f.id} onClick={() => openFile(f)}
-                    className="flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left transition-colors hover:bg-surface-hover">
+                    className="flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-start transition-colors hover:bg-surface-hover">
                     {(f.mime_type || '').startsWith('image/')
                       ? <FileImage size={12} strokeWidth={2} className="flex-none text-content-muted" />
                       : <File size={12} strokeWidth={2} className="flex-none text-content-muted" />}

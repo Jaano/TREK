@@ -278,7 +278,7 @@ function GuestsList({ m, onAsk }: { m: TripMembersState; onAsk: (ask: Ask) => vo
 function LinkLine({ url, copied, onCopy }: { url: string; copied: boolean; onCopy: () => void }) {
   const { t } = useTranslation()
   return (
-    <div className="flex items-center gap-2 rounded-[10px] border border-edge bg-surface-input py-1 pl-3 pr-1">
+    <div className="flex items-center gap-2 rounded-[10px] border border-edge bg-surface-input py-1 ps-3 pe-1">
       <input type="text" value={url} readOnly aria-label={url} onFocus={e => e.currentTarget.select()}
         className="min-w-0 flex-1 truncate border-0 bg-transparent font-mono text-content outline-none" style={fs(11.5)} />
       <button type="button" onClick={onCopy}

@@ -289,7 +289,7 @@ export default function MCollPlaceSheet({
                 <Eyebrow className="mb-[6px] mt-[14px]">{t('collections.links').toUpperCase()}</Eyebrow>
                 <MCollLinksEditor links={links} onChange={setLinks} t={t} />
                 <div className="mt-4 flex items-center gap-2">
-                  <CancelPill className="ml-auto" onClick={cancelEdit}>{t('common.cancel')}</CancelPill>
+                  <CancelPill className="ms-auto" onClick={cancelEdit}>{t('common.cancel')}</CancelPill>
                   <PrimaryPill onClick={save} disabled={saving}>
                     <Check size={14} strokeWidth={2.4} /> {t('common.save')}
                   </PrimaryPill>

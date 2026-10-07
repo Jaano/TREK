@@ -106,7 +106,7 @@ export default function HelpPanel(): React.ReactElement | null {
               type="button"
               onClick={closeHelp}
               aria-label={t('help.center.close')}
-              className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full flex items-center justify-center text-content-muted bg-surface-card border border-edge shadow-card hover:text-content hover:bg-surface-hover transition-colors"
+              className="absolute top-4 end-4 z-10 w-9 h-9 rounded-full flex items-center justify-center text-content-muted bg-surface-card border border-edge shadow-card hover:text-content hover:bg-surface-hover transition-colors"
             >
               <X className="w-4 h-4" />
             </button>

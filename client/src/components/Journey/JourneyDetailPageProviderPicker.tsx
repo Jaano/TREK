@@ -421,7 +421,7 @@ export function ProviderPicker({
                           year: 'numeric',
                         })}
                       </span>
-                      <span className="ml-1 text-zinc-400">
+                      <span className="ms-1 text-zinc-400">
                         (
                         {Math.ceil((new Date(tripRange.to).getTime() - new Date(tripRange.from).getTime()) / 86400000) +
                           1}{' '}
@@ -501,14 +501,14 @@ export function ProviderPicker({
               {addToOpen && (
                 <>
                   <div className="fixed inset-0 z-[9]" role="presentation" onClick={() => setAddToOpen(false)} />
-                  <div className="absolute top-full left-12 z-10 mt-1 max-h-[240px] min-w-[200px] overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
+                  <div className="absolute top-full start-12 z-10 mt-1 max-h-[240px] min-w-[200px] overflow-y-auto rounded-xl border border-zinc-200 bg-white py-1.5 shadow-lg dark:border-zinc-700 dark:bg-zinc-800">
                     <button
                       type="button"
                       onClick={() => {
                         setTargetEntryId(null);
                         setAddToOpen(false);
                       }}
-                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] ${
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-start text-[12px] ${
                         !targetEntryId
                           ? 'bg-zinc-100 font-semibold text-zinc-900 dark:bg-zinc-700 dark:text-white'
                           : 'text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-700'
@@ -530,7 +530,7 @@ export function ProviderPicker({
                             setTargetEntryId(e.id);
                             setAddToOpen(false);
                           }}
-                          className={`w-full truncate px-3 py-2 text-left text-[12px] ${
+                          className={`w-full truncate px-3 py-2 text-start text-[12px] ${
                             targetEntryId === e.id
                               ? 'bg-zinc-100 font-semibold text-zinc-900 dark:bg-zinc-700 dark:text-white'
                               : 'text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-700'
@@ -656,22 +656,22 @@ export function ProviderPicker({
                                 }}
                               />
                               {alreadyAdded && (
-                                <div className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-500 text-white">
+                                <div className="absolute top-1.5 end-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-500 text-white">
                                   <Check size={12} />
                                 </div>
                               )}
                               {isSelected && !alreadyAdded && (
-                                <div className="absolute top-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
+                                <div className="absolute top-1.5 end-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-white dark:text-zinc-900">
                                   <Check size={12} />
                                 </div>
                               )}
                               {asset.mediaType === 'video' && (
-                                <div className="pointer-events-none absolute bottom-1.5 left-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/60">
+                                <div className="pointer-events-none absolute bottom-1.5 start-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-black/60">
                                   <Play size={8} className="ml-px text-white" fill="currentColor" />
                                 </div>
                               )}
                               {asset.city && (
-                                <div className="absolute right-0 bottom-0 left-0 bg-gradient-to-t from-black/50 to-transparent p-1">
+                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-1">
                                   <p className="truncate text-[8px] text-white">{asset.city}</p>
                                 </div>
                               )}

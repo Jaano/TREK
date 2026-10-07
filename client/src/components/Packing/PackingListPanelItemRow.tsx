@@ -196,7 +196,7 @@ export function ArtikelZeile({ item, tripId, categories, onCategoryChange: _onCa
         <button
           type="button"
           onClick={() => setEditing(true)}
-          style={{ ...nameStyle, border: 'none', background: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit' }}
+          style={{ ...nameStyle, border: 'none', background: 'none', padding: 0, textAlign: 'start', fontFamily: 'inherit' }}
         >
           {item.name}
         </button>
@@ -256,7 +256,7 @@ export function ArtikelZeile({ item, tripId, categories, onCategoryChange: _onCa
                 try { await updatePackingItem(tripId, item.id, { weight_grams: v }) } catch { toast.error(t('packing.toast.saveError')) }
               }}
               placeholder="—"
-              style={{ width: 36, border: 'none', fontSize: 'calc(12px * var(--fs-scale-body, 1))', textAlign: 'right', fontFamily: 'inherit', outline: 'none', color: 'var(--text-secondary)', background: 'transparent', padding: 0 }}
+              style={{ width: 36, border: 'none', fontSize: 'calc(12px * var(--fs-scale-body, 1))', textAlign: 'end', fontFamily: 'inherit', outline: 'none', color: 'var(--text-secondary)', background: 'transparent', padding: 0 }}
             />
             <span style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', userSelect: 'none' }}>g</span>
           </div>
@@ -385,7 +385,7 @@ export function ArtikelZeile({ item, tripId, categories, onCategoryChange: _onCa
                               try { await updatePackingItem(tripId, item.id, { weight_grams: v }) } catch { toast.error(t('packing.toast.saveError')) }
                             }}
                             placeholder="—"
-                            style={{ width: 42, border: 'none', fontSize: 'calc(12px * var(--fs-scale-body, 1))', textAlign: 'right', fontFamily: 'inherit', outline: 'none', color: 'var(--text-secondary)', background: 'transparent', padding: 0 }}
+                            style={{ width: 42, border: 'none', fontSize: 'calc(12px * var(--fs-scale-body, 1))', textAlign: 'end', fontFamily: 'inherit', outline: 'none', color: 'var(--text-secondary)', background: 'transparent', padding: 0 }}
                           />
                           <span style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', userSelect: 'none' }}>g</span>
                         </div>
@@ -411,7 +411,7 @@ export function ArtikelZeile({ item, tripId, categories, onCategoryChange: _onCa
                   <PopoverItem icon={<span style={{ width: 9, height: 9, borderRadius: '50%', background: katColor(item.category || t('packing.defaultCategory'), categories), display: 'inline-block' }} />} label={t('packing.changeCategory')} onClick={() => setShowMenuCategories(v => !v)}
                     trailing={showMenuCategories ? <ChevronDown size={13} style={{ color: 'var(--text-faint)', flexShrink: 0 }} /> : <ChevronRight size={13} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />} />
                   {showMenuCategories && (
-                    <div style={{ margin: '2px 0 4px 18px', paddingLeft: 6, borderLeft: '1px solid var(--border-faint)' }}>
+                    <div style={{ marginBlock: '2px 4px', marginInlineStart: 18, paddingInlineStart: 6, borderInlineStart: '1px solid var(--border-faint)' }}>
                       {categories.map(cat => (
                         <PopoverItem key={cat} icon={<span style={{ width: 8, height: 8, borderRadius: '50%', background: katColor(cat, categories), display: 'inline-block' }} />} label={cat} active={cat === (item.category || t('packing.defaultCategory'))} onClick={() => handleCatChange(cat)} />
                       ))}

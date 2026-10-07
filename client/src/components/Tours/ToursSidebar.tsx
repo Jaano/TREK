@@ -144,17 +144,17 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
             aria-expanded={filterOpen} aria-haspopup="listbox" aria-label={t('places.filterShow')}
             className="flex h-8 w-full min-w-0 items-center gap-1.5 rounded-[10px] bg-surface-card px-2.5 font-semibold text-content-secondary shadow-sm transition-colors hover:text-content"
             style={fs(12, 'body')}>
-            <span className="min-w-0 truncate text-left">{filterLabel}</span>
+            <span className="min-w-0 truncate text-start">{filterLabel}</span>
             <span className="font-geist tabular-nums text-content-faint" style={fs(10.5)}>{filterCount}</span>
-            <ChevronDown size={13} strokeWidth={2.2} className={`ml-auto flex-none text-content-faint transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown size={13} strokeWidth={2.2} className={`ms-auto flex-none text-content-faint transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
           </button>
           {filterOpen && (
-            <div role="group" aria-label={t('places.filterShow')} className="trek-popover-enter absolute left-0 top-full z-50 mt-1.5 flex w-full min-w-[180px] flex-col gap-px rounded-[12px] border border-edge-secondary bg-surface-card p-1.5 shadow-popover">
+            <div role="group" aria-label={t('places.filterShow')} className="trek-popover-enter absolute start-0 top-full z-50 mt-1.5 flex w-full min-w-[180px] flex-col gap-px rounded-[12px] border border-edge-secondary bg-surface-card p-1.5 shadow-popover">
               {(['all', 'unplanned', 'planned'] as const).map(id => {
                 const label = id === 'all' ? t('places.all') : id === 'unplanned' ? t('places.unplanned') : t('places.planned')
                 const active = filter === id
                 return <button key={id} type="button" onClick={() => { setFilter(id); setFilterOpen(false) }} aria-pressed={active}
-                  className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-left transition-colors ${active ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
+                  className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-start transition-colors ${active ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
                   style={fs(12.5, 'body')}>
                   <span className="min-w-0 flex-1 truncate text-content">{label}</span>
                   <span className="font-geist tabular-nums text-content-faint" style={fs(11)}>{counts[id]}</span>

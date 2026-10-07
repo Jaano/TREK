@@ -69,9 +69,9 @@ function PasswordInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`${INPUT} pr-10`}
+        className={`${INPUT} pe-10`}
       />
-      <span className="absolute right-1.5 top-1/2 flex -translate-y-1/2">
+      <span className="absolute end-1.5 top-1/2 flex -translate-y-1/2">
         <Tooltip label="Show or hide password" placement="top">
           <button
             type="button"

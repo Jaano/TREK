@@ -194,7 +194,7 @@ export default function AccountTab(): React.ReactElement {
               <button type="button"
                 onClick={() => avatarInputRef.current?.click()}
                 aria-label={t('settings.uploadAvatar')}
-                className="absolute -bottom-1 -right-1 grid h-7 w-7 place-items-center rounded-full border-2 border-[color:var(--bg-card)] bg-[color:var(--text-primary)] text-[color:var(--bg-card)] shadow-sm transition-transform hover:scale-110"
+                className="absolute -bottom-1 -end-1 grid h-7 w-7 place-items-center rounded-full border-2 border-[color:var(--bg-card)] bg-[color:var(--text-primary)] text-[color:var(--bg-card)] shadow-sm transition-transform hover:scale-110"
               >
                 <Camera size={13} strokeWidth={2.2} />
               </button>
@@ -204,7 +204,7 @@ export default function AccountTab(): React.ReactElement {
                 <button type="button"
                   onClick={handleAvatarRemove}
                   aria-label={t('settings.removeAvatar')}
-                  className="absolute -right-1 -top-1 grid h-6 w-6 place-items-center rounded-full border-2 border-[color:var(--bg-card)] bg-danger text-white shadow-sm transition-transform hover:scale-110" // theme-lint-disable: white glyph on the danger fill, as ConfirmDialog draws it
+                  className="absolute -end-1 -top-1 grid h-6 w-6 place-items-center rounded-full border-2 border-[color:var(--bg-card)] bg-danger text-white shadow-sm transition-transform hover:scale-110" // theme-lint-disable: white glyph on the danger fill, as ConfirmDialog draws it
                 >
                   <Trash2 size={11} strokeWidth={2.2} />
                 </button>

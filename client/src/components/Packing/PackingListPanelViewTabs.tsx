@@ -58,7 +58,7 @@ export function PackingViewTabs(S: PackingState) {
       )}
       {items.length > 0 && (
         // A second click on the active switch goes back to the manual order.
-        <div role="group" aria-label={t('packing.sortBy')} style={{ ...track, marginLeft: 'auto' }}>
+        <div role="group" aria-label={t('packing.sortBy')} style={{ ...track, marginInlineStart: 'auto' }}>
           <button type="button" aria-pressed={sort === 'name'} title={t('packing.sortByName')}
             onClick={() => setSort(sort === 'name' ? 'manual' : 'name')} style={segment(sort === 'name')}>
             <ArrowDownAZ size={14} /><span className="hidden sm:inline">{t('packing.sortByName')}</span>

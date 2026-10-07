@@ -116,7 +116,7 @@ export default function DawarichConnectionSection(): React.ReactElement {
             type="button"
             onClick={S.disconnect}
             disabled={S.saving}
-            className={`${SETTINGS_BUTTON_DANGER} ml-auto`}
+            className={`${SETTINGS_BUTTON_DANGER} ms-auto`}
           >
             <Unplug size={14} strokeWidth={2.2} /> {t('dawarich.disconnect')}
           </button>

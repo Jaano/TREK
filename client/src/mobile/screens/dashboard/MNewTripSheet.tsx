@@ -361,7 +361,7 @@ export default function MNewTripSheet({ open, trip, onClose, onSave, onCoverUpda
             {coverPreview ? (
               <div className="relative h-[130px] overflow-hidden rounded-[16px]">
                 <img src={coverPreview} alt="" className="h-full w-full object-cover" />
-                <div className="absolute bottom-2 right-2 flex gap-[6px]">
+                <div className="absolute bottom-2 end-2 flex gap-[6px]">
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
@@ -428,7 +428,7 @@ export default function MNewTripSheet({ open, trip, onClose, onSave, onCoverUpda
                   >
                     <img src={photo.thumb} alt={photo.description || ''} loading="lazy" className="h-full w-full object-cover" />
                     {photo.photographer && (
-                      <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-[6px] py-1 text-left font-geist text-[0.625rem] text-white">
+                      <span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-[6px] py-1 text-start font-geist text-[0.625rem] text-white">
                         {photo.photographer}
                       </span>
                     )}

@@ -258,7 +258,7 @@ export default function MAdminPackingTemplateManager() {
                     />
                   </div>
                 ) : (
-                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => toggleExpand(tmpl.id)}>
+                  <button type="button" className="min-w-0 flex-1 text-start" onClick={() => toggleExpand(tmpl.id)}>
                     <div className="truncate text-[0.8125rem] font-bold text-m-ink">{tmpl.name}</div>
                     <div className="mt-[1px] font-geist text-[0.59375rem] text-m-faint">
                       {tmpl.category_count} {t('admin.packingTemplates.categories')} · {tmpl.item_count} {t('admin.packingTemplates.items')}
@@ -278,7 +278,7 @@ export default function MAdminPackingTemplateManager() {
 
               {/* Expanded content */}
               {expandedId === tmpl.id && (
-                <div className="space-y-2 pb-3 pl-6">
+                <div className="space-y-2 pb-3 ps-6">
                   {categories.map(cat => {
                     const catItems = items.filter(i => i.category_id === cat.id)
                     return (

@@ -156,7 +156,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
       {/* Header */}
       <div className="flex items-center gap-[7px] border-b border-[color:var(--m-rowbr)] px-3 py-[10px]" style={{ background: tint }}>
         <StatusDot color={dotColor} />
-        <button type="button" onClick={openEdit} className="flex min-w-0 flex-1 items-center gap-[7px] text-left">
+        <button type="button" onClick={openEdit} className="flex min-w-0 flex-1 items-center gap-[7px] text-start">
           <span className="inline-flex flex-none items-center gap-1 rounded-full border border-[color:var(--m-rowbr)] bg-m-card px-2 py-[2px] font-geist text-[0.5625rem] font-bold uppercase tracking-[.06em] text-m-muted">
             <TypeIcon size={10} strokeWidth={2.2} style={{ color: typeColor }} />
             {t(`reservations.type.${res.type}`)}
@@ -194,7 +194,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
           control instead of a click handler buried inside the card button. */}
       {!compact && (
         <div className="px-3 pb-3 pt-[9px]">
-          <button type="button" onClick={openEdit} className="block w-full text-left">
+          <button type="button" onClick={openEdit} className="block w-full text-start">
             <div className="flex gap-2">
               <Field label={t('reservations.date')} className="flex-[1.4]">{dayValue}</Field>
               <Field label={t('reservations.time')} className="flex-1" tabular>{timeValue}</Field>
@@ -210,7 +210,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
             />
           )}
 
-          <button type="button" onClick={openEdit} className="block w-full text-left">
+          <button type="button" onClick={openEdit} className="block w-full text-start">
             {metaCells.length > 0 && (
               <div className="mt-2 flex gap-2">
                 {metaCells.slice(0, 3).map((c, i) => (

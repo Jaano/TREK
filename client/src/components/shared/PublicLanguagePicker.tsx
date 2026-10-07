@@ -149,7 +149,7 @@ export default function PublicLanguagePicker({ locale, open, onOpenChange, varia
                 padding: '7px 12px',
                 border: 'none',
                 background: 'none',
-                textAlign: 'left',
+                textAlign: 'start',
                 cursor: 'pointer',
                 fontSize: 'calc(12px * var(--fs-scale-body, 1))',
                 fontWeight: lang.value === current ? 600 : 400,

@@ -171,7 +171,7 @@ function LinkRow({ icon: Icon, label, active, busy, onClick }: {
       type="button"
       onClick={onClick}
       disabled={busy}
-      className={`flex w-full items-center gap-[10px] rounded-[13px] border px-3 py-[10px] text-left disabled:opacity-60 ${
+      className={`flex w-full items-center gap-[10px] rounded-[13px] border px-3 py-[10px] text-start disabled:opacity-60 ${
         active ? 'border-[color:var(--m-act)] bg-[color:var(--m-ic)]' : 'border-[color:var(--m-rowbr)] bg-m-card'
       }`}
     >

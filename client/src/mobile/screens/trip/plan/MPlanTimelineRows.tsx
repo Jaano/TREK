@@ -334,7 +334,7 @@ function TransitLegRows({ legs, t }: { legs: TransitLegDisplay[]; t: Translation
         const hasSeg = i < legs.length - 1
         return (
           <div key={i} className="flex gap-[9px]">
-            <span className="w-9 flex-none pt-[9px] text-right font-geist text-[0.65625rem] font-semibold tabular-nums text-m-muted">
+            <span className="w-9 flex-none pt-[9px] text-end font-geist text-[0.65625rem] font-semibold tabular-nums text-m-muted">
               {isWalk ? '' : leg.from?.time?.slice(0, 5) || ''}
             </span>
             <div className="flex w-3 flex-none flex-col items-center">
@@ -356,7 +356,7 @@ function TransitLegRows({ legs, t }: { legs: TransitLegDisplay[]; t: Translation
             <div className="min-w-0 flex-1 py-[7px]">
               {isWalk ? (
                 <div className="truncate font-geist text-[0.6875rem] font-semibold text-m-muted">
-                  <Footprints size={10} strokeWidth={2.2} className="mr-1 inline-block align-[-1px]" />
+                  <Footprints size={10} strokeWidth={2.2} className="me-1 inline-block align-[-1px]" />
                   {[mins ? t('transit.min', { count: mins }) : '', t('transit.walkTo', { name: leg.to?.name || '' })]
                     .filter(Boolean).join(' · ')}
                 </div>
@@ -424,12 +424,12 @@ export function TransitRow({ res, transit, dayId, open, chrome, reorder, drag, o
               {to ? `${from} → ${to}` : res.title}
             </span>
             {start && (
-              <span className="ml-auto flex-none whitespace-nowrap rounded-[6px] bg-[color:var(--m-ic)] px-[6px] py-px font-geist text-[0.6875rem] font-semibold tabular-nums">
-                <Clock size={10} strokeWidth={2.2} className="mr-[3px] inline-block align-[-1px]" />
+              <span className="ms-auto flex-none whitespace-nowrap rounded-[6px] bg-[color:var(--m-ic)] px-[6px] py-px font-geist text-[0.6875rem] font-semibold tabular-nums">
+                <Clock size={10} strokeWidth={2.2} className="me-[3px] inline-block align-[-1px]" />
                 {fmtTime(start, chrome)}{end ? ` – ${fmtTime(end, chrome)}` : ''}
               </span>
             )}
-            <Chevron size={15} strokeWidth={2} className={`flex-none text-m-faint ${start ? '' : 'ml-auto'}`} />
+            <Chevron size={15} strokeWidth={2} className={`flex-none text-m-faint ${start ? '' : 'ms-auto'}`} />
           </div>
           <TransitStrip legs={transit.legs} />
         </div>

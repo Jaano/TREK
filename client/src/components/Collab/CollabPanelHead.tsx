@@ -23,7 +23,7 @@ export default function CollabPanelHead({ icon: Icon, title, count, actions }: {
       {count != null && count > 0 && (
         <span className="rounded-full bg-surface-card px-2 py-[2px] font-geist font-bold text-content-muted" style={fs(10)}>{count}</span>
       )}
-      {actions && <div className="ml-auto flex items-center gap-1.5" style={fs(11.5)}>{actions}</div>}
+      {actions && <div className="ms-auto flex items-center gap-1.5" style={fs(11.5)}>{actions}</div>}
     </div>
   )
 }

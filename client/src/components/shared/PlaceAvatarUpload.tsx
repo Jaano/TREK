@@ -127,7 +127,7 @@ export default function PlaceAvatarUpload({ place, category, size = 52, onUpload
             onClick={handleRemove}
             aria-label={t('places.removeImage')}
             style={{
-              position: 'absolute', top: -3, right: -3, width: 18, height: 18, borderRadius: '50%',
+              position: 'absolute', top: -3, insetInlineEnd: -3, width: 18, height: 18, borderRadius: '50%',
               background: '#ef4444', color: '#fff', border: '2px solid var(--bg-elevated, #fff)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 1,
             }}
@@ -187,7 +187,7 @@ function ImageChooser({ anchor, images, onUpload, onPick, onClose }: {
       className="trek-popover-enter fixed z-[var(--z-toast)] flex w-[264px] flex-col gap-2 rounded-[14px] border border-edge-secondary bg-surface-card p-2 shadow-popover"
       style={{ top: pos.top, left: pos.left }}>
       <button type="button" onClick={onUpload}
-        className="flex items-center gap-2 rounded-[10px] px-2.5 py-2 text-left text-body font-semibold text-content hover:bg-surface-hover">
+        className="flex items-center gap-2 rounded-[10px] px-2.5 py-2 text-start text-body font-semibold text-content hover:bg-surface-hover">
         <Upload size={14} strokeWidth={2.2} className="text-content-muted" />
         {t('places.uploadFromDevice')}
       </button>

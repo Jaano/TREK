@@ -23,13 +23,13 @@ interface AppUser {
 }
 
 /** A native select in the editors' box look, with the chevron the CustomSelect draws. */
-const SELECT = `${INPUT} appearance-none pr-9`
+const SELECT = `${INPUT} appearance-none pe-9`
 
 function SelectBox({ id, children, ...rest }: React.SelectHTMLAttributes<HTMLSelectElement>): React.ReactElement {
   return (
     <div className="relative">
       <select id={id} {...rest} className={SELECT}>{children}</select>
-      <ChevronDown size={14} strokeWidth={2.2} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-content-faint" />
+      <ChevronDown size={14} strokeWidth={2.2} className="pointer-events-none absolute end-3 top-1/2 -translate-y-1/2 text-content-faint" />
     </div>
   )
 }
@@ -89,7 +89,7 @@ export default function DevNotificationsPanel(): React.ReactElement {
     <button type="button"
       onClick={onClick}
       disabled={sending !== null}
-      className="flex w-full min-w-0 items-center gap-3 rounded-[12px] border border-edge-faint bg-surface-card px-3 py-2.5 text-left transition-colors hover:bg-surface-secondary disabled:cursor-default"
+      className="flex w-full min-w-0 items-center gap-3 rounded-[12px] border border-edge-faint bg-surface-card px-3 py-2.5 text-start transition-colors hover:bg-surface-secondary disabled:cursor-default"
     >
       <span className="grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-surface-tertiary text-content-secondary">
         <Icon size={15} strokeWidth={2} />

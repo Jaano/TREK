@@ -274,7 +274,7 @@ export default function ShareCollectionModal({
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-content" style={fs(13, 'body')}>
                       {member.username}
-                      {isSelf && <span className="ml-1 font-normal text-content-faint">({t('collections.share.you')})</span>}
+                      {isSelf && <span className="ms-1 font-normal text-content-faint">({t('collections.share.you')})</span>}
                     </div>
                     {member.email && !pending && (
                       <div className="truncate text-content-faint" style={fs(11.5)}>{member.email}</div>

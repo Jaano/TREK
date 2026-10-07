@@ -292,7 +292,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
                           onClick={handleImageRemove}
                           aria-label={t('places.removeImage')}
                           className="absolute flex items-center justify-center rounded-full"
-                          style={{ top: -5, right: -5, width: 18, height: 18, background: '#ef4444', color: '#fff', border: '2px solid var(--m-sheet)' }}
+                          style={{ top: -5, insetInlineEnd: -5, width: 18, height: 18, background: '#ef4444', color: '#fff', border: '2px solid var(--m-sheet)' }}
                         >
                           <X size={9} strokeWidth={3} />
                         </button>
@@ -409,7 +409,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
               {placeAssignments.map(({ day, assignment }) => (
                 <span
                   key={assignment.id}
-                  className={`flex items-center gap-1 rounded-full py-1 pl-[10px] text-[0.75rem] font-semibold ${INNER_CLS} ${canEditDays ? 'pr-1' : 'pr-[10px]'}`}
+                  className={`flex items-center gap-1 rounded-full py-1 ps-[10px] text-[0.75rem] font-semibold ${INNER_CLS} ${canEditDays ? 'pe-1' : 'pe-[10px]'}`}
                 >
                   {day.title || t('planner.dayN', { n: (day.day_number ?? planner.days.indexOf(day) + 1) || '?' })}
                   {canEditDays && !isTourPlace && place.lat != null && place.lng != null && (
@@ -455,7 +455,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
                     key={d.id}
                     type="button"
                     onClick={() => { planner.handleAssignToDay(place.id, d.id); setDayPickerOpen(false) }}
-                    className="flex w-full items-center gap-2 rounded-[10px] px-[10px] py-[9px] text-left text-[0.78125rem] font-semibold"
+                    className="flex w-full items-center gap-2 rounded-[10px] px-[10px] py-[9px] text-start text-[0.78125rem] font-semibold"
                   >
                     <span className="min-w-0 flex-1 truncate">
                       {d.title || t('planner.dayN', { n: (d.day_number ?? planner.days.indexOf(d) + 1) || '?' })}
@@ -502,7 +502,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
                       onClick={() => openRes(res)}
                       disabled={!canOpenRes(res)}
                       aria-label={canOpenRes(res) ? t('inspector.editRes') : undefined}
-                      className={`flex w-full items-center gap-2 rounded-[14px] px-3 py-[10px] text-left ${INNER_CLS}`}
+                      className={`flex w-full items-center gap-2 rounded-[14px] px-3 py-[10px] text-start ${INNER_CLS}`}
                     >
                       <span
                         className="h-2 w-2 flex-none rounded-full"
@@ -529,7 +529,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
                       key={m.id}
                       type="button"
                       onClick={() => { if (activeMembers.length > 1) removeParticipant(m.id) }}
-                      className={`flex items-center gap-[6px] rounded-full p-1 pr-[11px] ${INNER_CLS}`}
+                      className={`flex items-center gap-[6px] rounded-full p-1 pe-[11px] ${INNER_CLS}`}
                     >
                       <span className="flex h-[22px] w-[22px] flex-none items-center justify-center overflow-hidden rounded-full bg-m-act text-[0.625rem] font-bold text-m-actfg">
                         {(m.avatar_url || m.avatar)
@@ -558,7 +558,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
                         key={m.id}
                         type="button"
                         onClick={() => addParticipant(m.id)}
-                        className="flex w-full items-center gap-2 rounded-[10px] px-[10px] py-2 text-left text-[0.78125rem] font-semibold"
+                        className="flex w-full items-center gap-2 rounded-[10px] px-[10px] py-2 text-start text-[0.78125rem] font-semibold"
                       >
                         <span className="flex h-[20px] w-[20px] flex-none items-center justify-center overflow-hidden rounded-full bg-[color:var(--m-ic)] text-[0.5625rem] font-bold text-m-muted">
                           {(m.avatar_url || m.avatar)
@@ -608,7 +608,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
                       key={f.id}
                       type="button"
                       onClick={() => openFile(f.url, f.original_name)}
-                      className="flex w-full items-center gap-2 rounded-[10px] bg-[color:var(--m-ic)] px-[10px] py-[7px] text-left"
+                      className="flex w-full items-center gap-2 rounded-[10px] bg-[color:var(--m-ic)] px-[10px] py-[7px] text-start"
                     >
                       <span className="min-w-0 flex-1 truncate text-[0.75rem] font-medium">{f.original_name}</span>
                       <ExternalLink size={11} strokeWidth={2} className="flex-none text-m-faint" />
@@ -663,7 +663,7 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
                   onClick={() => { planner.openPlaceEditor(place, assignmentInDay?.id ?? null); close() }}
                   label={t('common.edit')}
                   primary
-                  className="ml-auto"
+                  className="ms-auto"
                 >
                   <Pencil size={15} strokeWidth={2} />
                 </ActionCircle>

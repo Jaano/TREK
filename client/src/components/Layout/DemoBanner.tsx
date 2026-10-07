@@ -332,8 +332,7 @@ export default function DemoBanner(): React.ReactElement | null {
         justifyContent: 'center',
         paddingTop: 'max(16px, env(safe-area-inset-top))',
         paddingBottom: 'max(16px, calc(env(safe-area-inset-bottom) + 80px))',
-        paddingLeft: 16,
-        paddingRight: 16,
+        paddingInline: 16,
         overflow: 'auto',
         fontFamily: 'var(--font-system)',
       }}
@@ -508,7 +507,7 @@ export default function DemoBanner(): React.ReactElement | null {
                     color: '#94a3b8',
                     margin: 0,
                     lineHeight: 1.3,
-                    paddingLeft: 18,
+                    paddingInlineStart: 18,
                   }}
                 >
                   {desc}

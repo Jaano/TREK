@@ -18,7 +18,7 @@ function MenuItem({ icon: Icon, label, onClick }: { icon: LucideIcon; label: str
       type="button"
       role="menuitem"
       onClick={onClick}
-      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-caption font-medium text-content hover:bg-surface-tertiary"
+      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-start text-caption font-medium text-content hover:bg-surface-tertiary"
     >
       <Icon size={13} className="text-content-faint" />
       {label}
@@ -76,7 +76,7 @@ export default function PackingExportMenu({ tripId, view, style, className }: Pa
       {open && (
         <div
           role="menu"
-          className="trek-menu-enter absolute right-0 top-full z-50 mt-1.5 min-w-[220px] origin-top-right rounded-[10px] border border-edge bg-surface-card p-1 shadow-dropdown"
+          className="trek-menu-enter absolute end-0 top-full z-50 mt-1.5 min-w-[220px] origin-top-right rounded-[10px] border border-edge bg-surface-card p-1 shadow-dropdown"
         >
           <MenuItem icon={Printer} label={t('packing.exportPrint')} onClick={choose(packingExport.openPrint)} />
           <MenuItem icon={FileText} label={t('packing.exportMarkdown')} onClick={choose(packingExport.exportMarkdown)} />

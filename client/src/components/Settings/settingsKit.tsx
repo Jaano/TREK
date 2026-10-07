@@ -20,7 +20,7 @@ export function SettingsHeader({ icon: Icon, title, subtitle, actions }: {
   actions?: ReactNode
 }) {
   return (
-    <div className="mb-5 flex flex-wrap items-center gap-3 rounded-[18px] bg-surface-tertiary py-3 pl-3 pr-3">
+    <div className="mb-5 flex flex-wrap items-center gap-3 rounded-[18px] bg-surface-tertiary py-3 px-3">
       <span className="grid h-10 w-10 flex-none place-items-center rounded-[12px] bg-surface-card text-content-secondary shadow-sm">
         <Icon size={18} strokeWidth={1.9} />
       </span>

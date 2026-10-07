@@ -77,7 +77,7 @@ export default function JourneyShareSection({ journeyId }: { journeyId: number }
         <div className="flex flex-col gap-3">
           {/* URL + Copy */}
           <div className="flex items-center gap-2 p-2 rounded-2xl bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700">
-            <Link size={13} className="text-zinc-400 flex-shrink-0 ml-1.5" />
+            <Link size={13} className="text-zinc-400 flex-shrink-0 ms-1.5" />
             <span className="flex-1 text-[11px] text-zinc-600 dark:text-zinc-400 truncate">{shareUrl}</span>
             <button type="button"
               onClick={copyLink}
@@ -111,7 +111,7 @@ export default function JourneyShareSection({ journeyId }: { journeyId: number }
               >
                 <Icon size={13} />
                 {label}
-                {link[key] && <Check size={12} className="ml-auto" />}
+                {link[key] && <Check size={12} className="ms-auto" />}
               </button>
             ))}
           </div>

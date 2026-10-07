@@ -67,7 +67,7 @@ export default function HelpHome({ context }: { context: HelpContext | null }): 
           <HelpBadge tone="accent" icon={ListOrdered} count={guides.length}>{t('help.center.searchGuides')}</HelpBadge>
           {context.docs.length > 0 && <HelpBadge tone="neutral" icon={BookOpen} count={context.docs.length}>{t('help.center.searchDocs')}</HelpBadge>}
           {screenRoute && (
-            <Link to={screenRoute} onClick={closeHelp} className="ml-auto">
+            <Link to={screenRoute} onClick={closeHelp} className="ms-auto">
               <HelpBadge tone="accent" icon={ArrowUpRight} className="hover:bg-accent-hover transition-colors">
                 {t('help.center.goToScreen', { screen: t(ctxKey(context.id, 'title')) })}
               </HelpBadge>
@@ -83,7 +83,7 @@ export default function HelpHome({ context }: { context: HelpContext | null }): 
             type="button"
             onClick={() => setSubScreensOpen(o => !o)}
             aria-expanded={subScreensOpen}
-            className="flex items-center gap-3 p-4 text-left rounded-2xl hover:bg-surface-hover transition-colors"
+            className="flex items-center gap-3 p-4 text-start rounded-2xl hover:bg-surface-hover transition-colors"
           >
             <HelpBadge tone="neutral" icon={LayoutGrid} uppercase count={children.length}>{t('help.center.subScreensLabel')}</HelpBadge>
             <span className="min-w-0 flex-1 text-caption text-content-muted truncate">
@@ -113,7 +113,7 @@ export default function HelpHome({ context }: { context: HelpContext | null }): 
             decoding="async"
             className="block w-full aspect-video object-contain"
           />
-          <span className="absolute bottom-3 left-3">
+          <span className="absolute bottom-3 start-3">
             <HelpBadge tone="accent" icon={Camera}>{t(ctxKey(context.id, 'title'))}</HelpBadge>
           </span>
         </figure>
@@ -178,7 +178,7 @@ function SubScreenCard({ screen }: { screen: HelpContext }): React.ReactElement 
     <button
       type="button"
       onClick={() => browse(current ? null : screen.id)}
-      className="group w-full h-full flex items-center gap-3 rounded-xl border border-edge bg-surface-secondary px-3 py-2.5 text-left hover:border-content-faint hover:bg-surface-card transition-colors"
+      className="group w-full h-full flex items-center gap-3 rounded-xl border border-edge bg-surface-secondary px-3 py-2.5 text-start hover:border-content-faint hover:bg-surface-card transition-colors"
     >
       <span className="w-9 h-9 rounded-lg bg-surface-card text-content-secondary flex items-center justify-center flex-shrink-0 group-hover:bg-accent group-hover:text-accent-text transition-colors">
         <Icon className="w-4 h-4" />
@@ -214,7 +214,7 @@ export function GuideCard({ guide }: { guide: HelpGuide }): React.ReactElement {
     <button
       type="button"
       onClick={() => openGuide(guide.id)}
-      className="group w-full h-full flex flex-col gap-3 rounded-2xl border border-edge bg-surface-card p-4 text-left hover:border-content-faint hover:shadow-elevated transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out-quint)] hover:-translate-y-px"
+      className="group w-full h-full flex flex-col gap-3 rounded-2xl border border-edge bg-surface-card p-4 text-start hover:border-content-faint hover:shadow-elevated transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-out-quint)] hover:-translate-y-px"
     >
       <span className="flex items-center justify-between">
         <span className="w-10 h-10 rounded-xl bg-surface-tertiary text-content-secondary flex items-center justify-center group-hover:bg-accent group-hover:text-accent-text transition-colors">

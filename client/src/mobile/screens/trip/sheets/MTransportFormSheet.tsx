@@ -115,7 +115,7 @@ function emptyStationWaypoint(dayId: string | number = ''): StationWaypointForm 
 }
 
 // Traveler picker row — same surface as the cost-split rows (bg on --m-ic).
-const TRAVELER_ROW_CLS = 'flex w-full items-center gap-[9px] rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[9px] text-left'
+const TRAVELER_ROW_CLS = 'flex w-full items-center gap-[9px] rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[9px] text-start'
 
 const EMPTY = {
   title: '',
@@ -1105,7 +1105,7 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
           <button
             type="button"
             onClick={handleClose}
-            className="ml-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold text-m-ink"
+            className="ms-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold text-m-ink"
           >
             {t('common.cancel')}
           </button>

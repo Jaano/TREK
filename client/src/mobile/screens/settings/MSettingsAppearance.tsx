@@ -55,7 +55,7 @@ function SliderRow({ label, sub, value, onChange }: { label: string; sub?: strin
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="min-w-0">
           <span className="text-[0.78125rem] font-bold text-m-ink">{label}</span>
-          {sub && <span className="ml-[6px] font-geist text-[0.625rem] text-m-muted">{sub}</span>}
+          {sub && <span className="ms-[6px] font-geist text-[0.625rem] text-m-muted">{sub}</span>}
         </div>
         <span className="font-geist text-[0.6875rem] tabular-nums text-m-muted">{Math.round(value * 100)}%</span>
       </div>
@@ -177,7 +177,7 @@ export default function MSettingsAppearance() {
                 key={s.id}
                 type="button"
                 onClick={() => update({ schemeId: s.id })}
-                className={`flex items-center gap-2 rounded-xl px-3 py-[9px] text-left text-[0.78125rem] ${
+                className={`flex items-center gap-2 rounded-xl px-3 py-[9px] text-start text-[0.78125rem] ${
                   active
                     ? 'bg-m-act font-semibold text-m-actfg'
                     : 'border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheet)] font-medium text-m-ink'
@@ -191,7 +191,7 @@ export default function MSettingsAppearance() {
           <button
             type="button"
             onClick={() => update({ schemeId: 'custom', accent: cfg.accent ?? { light: accentLight, dark: accentDark } })}
-            className={`flex items-center gap-2 rounded-xl px-3 py-[9px] text-left text-[0.78125rem] ${
+            className={`flex items-center gap-2 rounded-xl px-3 py-[9px] text-start text-[0.78125rem] ${
               cfg.schemeId === 'custom'
                 ? 'bg-m-act font-semibold text-m-actfg'
                 : 'border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheet)] font-medium text-m-ink'

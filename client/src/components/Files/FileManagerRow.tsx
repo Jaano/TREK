@@ -64,7 +64,7 @@ export function FileRow(p: FileManagerState & { file: TripFile; isTrash?: boolea
             type="button"
             disabled={isTrash}
             onClick={() => !isTrash && openFile(file)}
-            style={{ fontWeight: 500, fontSize: 'calc(13px * var(--fs-scale-body, 1))', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: isTrash ? 'default' : 'pointer', textAlign: 'left', minWidth: 0 }}
+            style={{ fontWeight: 500, fontSize: 'calc(13px * var(--fs-scale-body, 1))', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: isTrash ? 'default' : 'pointer', textAlign: 'start', minWidth: 0 }}
           >
             {file.original_name}
           </button>

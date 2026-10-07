@@ -96,7 +96,7 @@ function AtlasPageDesktop(): React.ReactElement {
   return (
     <div className="h-screen overflow-hidden bg-surface">
       <Navbar />
-      <div style={{ position: 'fixed', top: 'var(--nav-h)', left: 0, right: 0, bottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div style={{ position: 'fixed', top: 'var(--nav-h)', insetInline: 0, bottom: 'env(safe-area-inset-bottom, 0px)' }}>
         {/* Map */}
         <div ref={mapRef} style={{ position: 'absolute', inset: 0, zIndex: 1, background: dark ? '#1a1a2e' : '#f0f0f0' }} />
 
@@ -155,7 +155,7 @@ function AtlasPageDesktop(): React.ReactElement {
       )}
 
       {/* Mobile: Bottom bar */}
-        <div className="md:hidden absolute left-0 right-0 z-10 flex justify-center" style={{ bottom: 'calc(84px + env(safe-area-inset-bottom, 0px) + 8px)', touchAction: 'manipulation' }}>
+        <div className="md:hidden absolute inset-x-0 z-10 flex justify-center" style={{ bottom: 'calc(84px + env(safe-area-inset-bottom, 0px) + 8px)', touchAction: 'manipulation' }}>
           <div className="flex items-center gap-4 px-5 py-4 rounded-2xl"
             style={{ background: dark ? 'rgba(0,0,0,0.45)' : 'rgba(255,255,255,0.5)', backdropFilter: 'blur(16px)' }}>
             {/* Countries highlighted */}
@@ -180,8 +180,7 @@ function AtlasPageDesktop(): React.ReactElement {
           className="hidden md:grid absolute z-10 items-stretch"
           style={{
             bottom: 16,
-            left: 20,
-            right: 20,
+            insetInline: 20,
             gridTemplateColumns: '1fr auto 1fr',
             alignItems: 'stretch',
             gap: 12,
@@ -462,7 +461,7 @@ function CountryChoice({ icon: Icon, tone = 'text-content-secondary', title, hin
     <button
       type="button"
       onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-card px-3 py-2.5 text-left transition-colors hover:bg-surface-hover"
+      className="group flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-card px-3 py-2.5 text-start transition-colors hover:bg-surface-hover"
     >
       <span className={`grid h-9 w-9 flex-none place-items-center rounded-[10px] bg-surface-tertiary transition-colors group-hover:bg-surface-card ${tone}`}>
         <Icon size={16} strokeWidth={1.9} />
@@ -627,7 +626,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
           )}
           <button type="button" onClick={() => onDeleteBucket(item.id)}
             className="opacity-0 group-hover:opacity-100"
-            style={{ position: 'absolute', top: 4, right: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: tf, display: 'flex', transition: 'opacity 0.15s' }}>
+            style={{ position: 'absolute', top: 4, insetInlineEnd: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: tf, display: 'flex', transition: 'opacity 0.15s' }}>
             <X size={10} />
           </button>
         </div>
@@ -689,7 +688,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
               zIndex: 99999, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', overflowY: 'auto',
             }}>
               {bucketSearchResults.slice(0, 6).map((r, i) => (
-                <button type="button" key={i} onClick={() => onSelectBucketPoi(r)} className="border-b border-edge-faint" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', padding: '6px 10px', borderTop: 'none', borderLeft: 'none', borderRight: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                <button type="button" key={i} onClick={() => onSelectBucketPoi(r)} className="border-b border-edge-faint" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', padding: '6px 10px', borderTop: 'none', borderInline: 'none', background: 'none', cursor: 'pointer', textAlign: 'start', fontFamily: 'inherit' }}>
                   <span className="text-content" style={{ fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 500 }}>{r.name}</span>
                   {r.address && <span className="text-content-faint" style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))' }}>{r.address}</span>}
                 </button>
@@ -826,7 +825,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
               <p className="text-sm font-bold" style={{ color: tp }}>
                 {resolveName(selectedCountry)}
                 {countryDetail.status && countryDetail.status !== 'visited' && (
-                  <span className="ml-2 text-[9px] font-semibold uppercase tracking-wide" style={{ color: tf }}>{t('atlas.planned')}</span>
+                  <span className="ms-2 text-[9px] font-semibold uppercase tracking-wide" style={{ color: tf }}>{t('atlas.planned')}</span>
                 )}
               </p>
               {/* Counts as quiet badges, the regions among them once any is visited (#1639). */}

@@ -494,7 +494,7 @@ function PhotoTile({
         className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.06]"
       />
       {selected && (
-        <span className="absolute top-1 right-1 rounded-full bg-accent p-0.5 shadow-card">
+        <span className="absolute top-1 end-1 rounded-full bg-accent p-0.5 shadow-card">
           <Check className="w-2.5 h-2.5 text-accent-on" />
         </span>
       )}
@@ -689,7 +689,7 @@ function OpeningHoursBlock({
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          className="w-full flex items-center gap-2 px-2.5 py-2 text-left hover:bg-surface-hover transition-colors"
+          className="w-full flex items-center gap-2 px-2.5 py-2 text-start hover:bg-surface-hover transition-colors"
         >
           <Clock className="w-3.5 h-3.5 shrink-0 text-content-faint" />
           <span className="min-w-0 flex-1">
@@ -733,7 +733,7 @@ function OpeningHoursBlock({
                   <span className="shrink-0">{day}</span>
                   {/* Wraps rather than truncates: this is the view someone
                       opened on purpose, and split shifts run long. */}
-                  <span className="min-w-0 text-right break-words tabular-nums">
+                  <span className="min-w-0 text-end break-words tabular-nums">
                     {isUnknownHoursLine(times) ? '–' : times}
                   </span>
                 </li>

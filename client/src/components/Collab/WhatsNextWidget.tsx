@@ -153,7 +153,7 @@ export default function WhatsNextWidget({ tripMembers = [] }: WhatsNextWidgetPro
                       {item.participants.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1">
                           {item.participants.map(p => (
-                            <span key={p.user_id} className="flex items-center gap-1 rounded-full border border-edge-faint bg-surface-secondary py-[2px] pl-[2px] pr-2">
+                            <span key={p.user_id} className="flex items-center gap-1 rounded-full border border-edge-faint bg-surface-secondary py-[2px] ps-[2px] pe-2">
                               <span className="grid h-4 w-4 flex-none place-items-center overflow-hidden rounded-full bg-surface-tertiary font-bold text-content-muted" style={fs(7)}>
                                 {p.avatar
                                   ? <img src={avatarSrc(p.avatar)!} alt="" className="h-full w-full object-cover" />

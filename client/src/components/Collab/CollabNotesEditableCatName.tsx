@@ -36,7 +36,7 @@ export function EditableCatName({ name, onRename, renameLabel = 'Click to rename
   return (
     <Tooltip label={renameLabel}>
       <button type="button" onClick={() => { setValue(name); setEditing(true) }}
-        className="min-w-0 flex-1 truncate py-0.5 text-left font-semibold text-content hover:underline hover:decoration-edge"
+        className="min-w-0 flex-1 truncate py-0.5 text-start font-semibold text-content hover:underline hover:decoration-edge"
         style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))' }}>
         {name}
       </button>

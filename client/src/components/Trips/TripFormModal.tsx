@@ -468,7 +468,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
           {coverPreview ? (
             <div className="relative h-[130px] rounded-xl overflow-hidden">
               <img src={coverPreview} alt="" className="w-full h-full object-cover" />
-              <div className="absolute bottom-2 right-2 flex gap-1.5">
+              <div className="absolute bottom-2 end-2 flex gap-1.5">
                 {/* Chrome sitting on top of a photo, so it is deliberately dark in
                     both themes rather than following the surface tokens. */}
                 <button type="button" onClick={() => fileRef.current?.click()} disabled={uploadingCover}

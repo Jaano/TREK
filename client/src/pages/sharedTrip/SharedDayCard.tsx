@@ -53,8 +53,8 @@ export function SharedDayCard(p: SharedDayCardProps) {
       id={`shared-day-${day.id}`}
       className={`scroll-mt-20 overflow-hidden rounded-2xl border border-edge-faint bg-surface-card transition-shadow ${p.selected ? 'shadow-md' : ''}`}
     >
-      <div className="flex items-start gap-1 py-2.5 pl-2.5 pr-2" style={{ background: p.selected ? DAY_HEAD_SELECTED : NEUTRAL_TINT }}>
-        <button type="button" onClick={p.onSelect} aria-pressed={p.selected} className="flex min-w-0 flex-1 items-start gap-2.5 text-left">
+      <div className="flex items-start gap-1 py-2.5 ps-2.5 pe-2" style={{ background: p.selected ? DAY_HEAD_SELECTED : NEUTRAL_TINT }}>
+        <button type="button" onClick={p.onSelect} aria-pressed={p.selected} className="flex min-w-0 flex-1 items-start gap-2.5 text-start">
           <span
             className={`grid h-8 w-8 flex-none place-items-center rounded-[10px] font-geist font-bold tabular-nums shadow-sm ${p.selected ? 'bg-accent text-accent-text' : 'bg-surface-card text-content-muted'}`}
             style={fs(12)}
@@ -153,7 +153,7 @@ export function PlaceRow({ place, notes, number, category }: PlaceRowProps) {
             : <CatIcon size={16} strokeWidth={2} color="white" />}
         </span>
         {number != null && (
-          <span className="absolute -bottom-1 -right-1 grid h-[18px] min-w-[18px] place-items-center rounded-full border border-edge-faint bg-surface-card px-1 font-geist font-bold tabular-nums text-content shadow-sm" style={fs(9.5)}>
+          <span className="absolute -bottom-1 -end-1 grid h-[18px] min-w-[18px] place-items-center rounded-full border border-edge-faint bg-surface-card px-1 font-geist font-bold tabular-nums text-content shadow-sm" style={fs(9.5)}>
             {number}
           </span>
         )}

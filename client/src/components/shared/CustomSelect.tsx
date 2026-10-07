@@ -197,7 +197,7 @@ export default function CustomSelect({
           border: '1px solid var(--border-primary)',
           background: 'var(--bg-input)', color: 'var(--text-primary)',
           fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500, fontFamily: 'inherit',
-          cursor: disabled ? 'default' : 'pointer', outline: 'none', textAlign: 'left',
+          cursor: disabled ? 'default' : 'pointer', outline: 'none', textAlign: 'start',
           transition: 'border-color 0.15s', overflow: 'hidden', minWidth: 0,
           opacity: disabled ? 0.5 : 1,
         }}
@@ -307,7 +307,7 @@ export default function CustomSelect({
                       padding: '7px 10px', borderRadius: 6,
                       border: 'none', background: isSelected ? 'var(--bg-hover)' : 'transparent',
                       color: 'var(--text-primary)', fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontFamily: 'inherit',
-                      cursor: 'pointer', textAlign: 'left', transition: 'background 0.1s',
+                      cursor: 'pointer', textAlign: 'start', transition: 'background 0.1s',
                     }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                     onMouseLeave={e => e.currentTarget.style.background = isSelected ? 'var(--bg-hover)' : 'transparent'}

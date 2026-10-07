@@ -203,7 +203,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
             ) : collapsed ? (
               <div className="truncate font-bold text-content" style={fs(13.5, 'body')}>
                 {heading.primary}
-                {heading.secondary && <span className="ml-2 font-medium text-content-muted">{heading.secondary}</span>}
+                {heading.secondary && <span className="ms-2 font-medium text-content-muted">{heading.secondary}</span>}
               </div>
             ) : (
               <div className="flex min-w-0 items-center gap-1">
@@ -381,7 +381,7 @@ function DayWeather({ weather, loading, isFahrenheit, placeName }: { weather: We
 }
 
 /** A row or box that opens a booking: the hover lift and focus ring of the inspector's booking cards. */
-const OPENS_BOOKING = 'w-full cursor-pointer text-left transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--text-primary)]'
+const OPENS_BOOKING = 'w-full cursor-pointer text-start transition-shadow hover:shadow-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--text-primary)]'
 
 /** The bookings of the day, hotels aside (they have their own block). With `onOpen` each row opens its booking. */
 function DayReservations({ day, assignments, reservations, is12h, onOpen }: { day: Day; assignments: AssignmentsMap; reservations: Reservation[]; is12h: boolean; onOpen?: (r: Reservation) => void }) {
@@ -684,7 +684,7 @@ function HotelPickerModal({ mode, onClose, onSave, days, categories, places, hot
               const cat = categories.find(c => c.id === p.category_id)
               return (
                 <button type="button" key={p.id} aria-pressed={on} onClick={() => onSelectPlace(p.id)}
-                  className={`flex w-full flex-none items-center gap-3 rounded-[11px] px-2.5 py-2 text-left transition-colors ${on ? 'bg-surface-card shadow-sm ring-2 ring-accent' : 'hover:bg-surface-card'}`}>
+                  className={`flex w-full flex-none items-center gap-3 rounded-[11px] px-2.5 py-2 text-start transition-colors ${on ? 'bg-surface-card shadow-sm ring-2 ring-accent' : 'hover:bg-surface-card'}`}>
                   {p.image_url ? (
                     <img src={p.image_url} alt="" className="h-10 w-10 flex-none rounded-[10px] bg-surface-tertiary object-cover" />
                   ) : (

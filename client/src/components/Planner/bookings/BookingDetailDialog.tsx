@@ -144,7 +144,7 @@ export default function BookingDetailDialog(p: BookingDetailDialogProps) {
           {!!r.needs_review && <ReviewPill pill />}
           <AirTrailPill r={r} pill />
           {r.confirmation_number && (
-            <span className={`${PILL} ml-auto gap-1 py-0.5 pr-1`}>
+            <span className={`${PILL} ms-auto gap-1 py-0.5 pe-1`}>
               <BlurredCode className="font-geist tabular-nums">#{r.confirmation_number}</BlurredCode>
               <Tooltip label={t('reservations.copyCode')}>
                 <button type="button" onClick={copyCode} aria-label={t('reservations.copyCode')}
@@ -202,9 +202,9 @@ export default function BookingDetailDialog(p: BookingDetailDialogProps) {
             <div className={`${BOX} flex flex-col gap-2 px-3.5 py-3`}>
               {facts.endpoints.map((ep, i) => (
                 <div key={ep.id ?? i} className="flex items-center gap-2.5" style={fs(13, 'body')}>
-                  <span className="w-12 flex-none text-right font-semibold tabular-nums text-content">{ep.local_time ? formatTime(ep.local_time, locale, timeFormat) : ''}</span>
+                  <span className="w-12 flex-none text-end font-semibold tabular-nums text-content">{ep.local_time ? formatTime(ep.local_time, locale, timeFormat) : ''}</span>
                   <span className="h-2.5 w-2.5 flex-none rounded-full border-2" style={{ borderColor: 'var(--text-faint)' }} />
-                  <span className="min-w-0 flex-1 truncate font-medium text-content">{ep.code ? <b className="mr-1.5">{ep.code}</b> : null}{ep.name}</span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-content">{ep.code ? <b className="me-1.5">{ep.code}</b> : null}{ep.name}</span>
                 </div>
               ))}
             </div>
@@ -262,7 +262,7 @@ export default function BookingDetailDialog(p: BookingDetailDialogProps) {
             <div className="flex flex-col gap-1.5">
               {p.linkedCosts.map(item => (
                 <button key={item.id} type="button" disabled={!p.onEditExpense} onClick={() => p.onEditExpense?.(item)}
-                  className={`${BOX} flex items-center gap-2.5 px-3.5 py-2.5 text-left enabled:hover:bg-surface-hover`} style={fs(13, 'body')}>
+                  className={`${BOX} flex items-center gap-2.5 px-3.5 py-2.5 text-start enabled:hover:bg-surface-hover`} style={fs(13, 'body')}>
                   <Wallet size={14} strokeWidth={2} className="flex-none text-content-faint" />
                   <span className="min-w-0 flex-1 truncate font-medium text-content">{item.name}</span>
                   <span className="flex-none font-semibold tabular-nums text-content">{formatMoney(item.total_price, (item.currency || tripCurrency || 'EUR'), locale)}</span>

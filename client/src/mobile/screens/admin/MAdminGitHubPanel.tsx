@@ -232,7 +232,7 @@ export default function MAdminGitHubPanel({ isPrerelease = false }: { isPrerelea
               <div className="truncate text-[0.8125rem] font-bold text-m-ink">{card.title}</div>
               <div className="mt-[1px] truncate font-geist text-[0.625rem] text-m-faint">{card.sub}</div>
             </div>
-            <ExternalLink size={14} className="ml-auto flex-none text-m-faint" />
+            <ExternalLink size={14} className="ms-auto flex-none text-m-faint" />
           </a>
         ))}
       </div>
@@ -275,7 +275,7 @@ export default function MAdminGitHubPanel({ isPrerelease = false }: { isPrerelea
           <div className="px-[14px] py-3">
             <div className="relative">
               {/* Timeline line */}
-              <div className="absolute left-[11px] top-3 bottom-3 w-px" style={{ background: 'var(--m-rowbr)' }} />
+              <div className="absolute start-[11px] top-3 bottom-3 w-px" style={{ background: 'var(--m-rowbr)' }} />
 
               <div className="space-y-0">
                 {shownReleases.map((release, idx) => {
@@ -283,10 +283,10 @@ export default function MAdminGitHubPanel({ isPrerelease = false }: { isPrerelea
                   const isExpanded = expanded[release.id]
 
                   return (
-                    <div key={release.id} className="relative pb-5 pl-8">
+                    <div key={release.id} className="relative pb-5 ps-8">
                       {/* Timeline dot */}
                       <div
-                        className="absolute left-0 top-1 flex h-[23px] w-[23px] items-center justify-center rounded-full border-2"
+                        className="absolute start-0 top-1 flex h-[23px] w-[23px] items-center justify-center rounded-full border-2"
                         style={{
                           background: isLatest ? 'var(--m-ink)' : 'var(--m-sheetop)',
                           borderColor: isLatest ? 'var(--m-ink)' : 'var(--m-rowbr)',

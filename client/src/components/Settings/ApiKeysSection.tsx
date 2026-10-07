@@ -321,7 +321,7 @@ export default function ApiKeysSection(): React.ReactElement {
             <div className="flex items-stretch overflow-hidden rounded-[12px] border border-edge-faint bg-surface-secondary">
               <code className="min-w-0 flex-1 select-all break-all px-3.5 py-3 font-geist text-content" style={fs(12.5, 'body')}>{created}</code>
               <button type="button" onClick={() => handleCopy(created, 'key')} title={t('settings.apiKeys.copy')}
-                className="flex flex-none items-center gap-1.5 border-l border-edge-faint bg-surface-card px-3.5 font-medium text-content-secondary transition-colors hover:text-content"
+                className="flex flex-none items-center gap-1.5 border-s border-edge-faint bg-surface-card px-3.5 font-medium text-content-secondary transition-colors hover:text-content"
                 style={fs(12.5, 'body')}>
                 {copied === 'key' ? <Check size={14} className="text-success" /> : <Copy size={14} />}
                 {copied === 'key' ? t('common.copied') : t('settings.apiKeys.copy')}
@@ -346,7 +346,7 @@ export default function ApiKeysSection(): React.ReactElement {
                 </span>
                 <button type="button"
                   onClick={() => setNewScopes(allSelected ? new Set() : new Set(PUBLIC_API_SCOPES))}
-                  className="ml-auto flex-none rounded-full px-2 py-0.5 font-semibold text-content-muted transition-colors hover:bg-surface-tertiary hover:text-content"
+                  className="ms-auto flex-none rounded-full px-2 py-0.5 font-semibold text-content-muted transition-colors hover:bg-surface-tertiary hover:text-content"
                   style={fs(11.5, 'body')}>
                   {allSelected ? t('common.deselectAll') : t('common.selectAll')}
                 </button>
@@ -439,7 +439,7 @@ function ScopeOption({ icon: Icon, label, checked, onToggle }: {
 }): React.ReactElement {
   return (
     <button type="button" role="checkbox" aria-checked={checked} onClick={onToggle}
-      className={`flex w-full min-w-0 items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-left transition-colors ${
+      className={`flex w-full min-w-0 items-center gap-2.5 rounded-[10px] border px-3 py-2.5 text-start transition-colors ${
         checked ? 'border-[color:var(--text-primary)] bg-surface-card shadow-sm' : 'border-edge-faint bg-surface-secondary hover:bg-surface-card'
       }`}>
       <span aria-hidden

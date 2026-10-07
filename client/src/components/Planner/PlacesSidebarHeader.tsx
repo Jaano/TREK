@@ -100,7 +100,7 @@ export function PlacesHeader(S: SidebarState) {
 
 function SearchField({ t, search, setSearch, selectMode, setSelectedIds }: SidebarState) {
   return (
-    <label className={`${CONTROL} flex min-w-0 flex-1 items-center gap-2 bg-surface-card pl-2.5 pr-1.5 text-content-faint focus-within:ring-2 focus-within:ring-[color:var(--text-primary)]`}>
+    <label className={`${CONTROL} flex min-w-0 flex-1 items-center gap-2 bg-surface-card ps-2.5 pe-1.5 text-content-faint focus-within:ring-2 focus-within:ring-[color:var(--text-primary)]`}>
       <Search size={13} strokeWidth={2} className="flex-none" />
       <input
         type="text"
@@ -127,7 +127,7 @@ function SearchField({ t, search, setSearch, selectMode, setSelectedIds }: Sideb
 function CategoryChoice({ on, onClick, tile, label }: { on: boolean; onClick: () => void; tile: ReactNode; label: string }) {
   return (
     <button type="button" onClick={onClick} aria-pressed={on}
-      className={`flex w-full items-center gap-2 rounded-[9px] px-1.5 py-1 text-left transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
+      className={`flex w-full items-center gap-2 rounded-[9px] px-1.5 py-1 text-start transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
       style={fs(12.5, 'body')}>
       {tile}
       <span className="min-w-0 flex-1 truncate text-content">{label}</span>
@@ -168,7 +168,7 @@ function ShowDropdown(S: SidebarState) {
           const on = filter === tab.id
           return (
             <button type="button" key={tab.id} onClick={() => { pickFilter(tab.id); setOpen(false) }} aria-pressed={on}
-              className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-left transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
+              className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-start transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
               style={fs(12.5, 'body')}>
               <span className="min-w-0 flex-1 truncate text-content">{tab.label}</span>
               <span className="font-geist tabular-nums text-content-faint" style={fs(11)}>{filterCounts[tab.id]}</span>
@@ -225,9 +225,9 @@ function FilterDropdown({ label, active, badge, icon, open, setOpen, name, child
         <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-haspopup="listbox" aria-label={name}
           className={`${CONTROL} flex w-full min-w-0 items-center gap-1.5 bg-surface-card px-2.5 font-semibold transition-colors ${active || open ? 'text-content' : 'text-content-secondary hover:text-content'}`}
           style={fs(12, 'body')}>
-          <span className="min-w-0 truncate text-left">{label}</span>
+          <span className="min-w-0 truncate text-start">{label}</span>
           {count != null && <span className="font-geist tabular-nums text-content-faint" style={fs(10.5)}>{count}</span>}
-          <ChevronDown size={13} strokeWidth={2.2} className={`ml-auto flex-none text-content-faint transition-transform ${open ? 'rotate-180' : ''}`} />
+          <ChevronDown size={13} strokeWidth={2.2} className={`ms-auto flex-none text-content-faint transition-transform ${open ? 'rotate-180' : ''}`} />
         </button>
       ) : (
       <Tooltip label={active ? `${name}: ${label}` : name} disabled={open}>
@@ -235,7 +235,7 @@ function FilterDropdown({ label, active, badge, icon, open, setOpen, name, child
           className={`${CONTROL} relative grid w-8 place-items-center bg-surface-card transition-colors ${active || open ? 'text-content' : 'text-content-secondary hover:text-content'}`}>
           {icon}
           {active && badge != null && (
-            <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-geist font-bold tabular-nums text-accent-text" style={fs(9)}>
+            <span className="absolute -end-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-geist font-bold tabular-nums text-accent-text" style={fs(9)}>
               {badge}
             </span>
           )}
@@ -243,7 +243,7 @@ function FilterDropdown({ label, active, badge, icon, open, setOpen, name, child
       </Tooltip>
       )}
       {open && (
-        <div className={`trek-popover-enter absolute ${wide ? 'left-0' : 'right-0'} top-full z-50 mt-1.5 flex max-h-[min(60vh,360px)] flex-col overflow-y-auto rounded-[12px] border border-edge-secondary bg-surface-card p-1.5 shadow-popover`} style={{ width: 'max-content', minWidth: 180, maxWidth: 260 }}>
+        <div className={`trek-popover-enter absolute ${wide ? 'start-0' : 'end-0'} top-full z-50 mt-1.5 flex max-h-[min(60vh,360px)] flex-col overflow-y-auto rounded-[12px] border border-edge-secondary bg-surface-card p-1.5 shadow-popover`} style={{ width: 'max-content', minWidth: 180, maxWidth: 260 }}>
           {children}
         </div>
       )}
@@ -286,7 +286,7 @@ function CategoryFilter(S: SidebarState) {
       )}
       {categoryFilters.size > 0 && (
         <button type="button" onClick={() => setCategoryFilters(new Set())}
-          className="mt-1 flex w-full items-center gap-1.5 rounded-[9px] border-t border-edge-faint px-1.5 pb-1 pt-2 text-left font-semibold text-content-muted hover:text-content"
+          className="mt-1 flex w-full items-center gap-1.5 rounded-[9px] border-t border-edge-faint px-1.5 pb-1 pt-2 text-start font-semibold text-content-muted hover:text-content"
           style={fs(12, 'body')}>
           <X size={12} strokeWidth={2.4} />
           {t('places.clearFilter')}
@@ -315,7 +315,7 @@ function RatingFilter(S: SidebarState) {
         const on = ratingFilter === opt
         return (
           <button type="button" key={String(opt)} onClick={() => { setRatingFilter(opt); setOpen(false) }} aria-pressed={on}
-            className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-left transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
+            className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-start transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
             style={fs(12.5, 'body')}>
             {opt === 'all' ? <span className="w-3" /> : star}
             <span className="min-w-0 flex-1 text-content">{opt === 'all' ? t('common.all') : `${opt}+`}</span>
@@ -355,7 +355,7 @@ function SortDropdown(S: SidebarState) {
         const on = placesSort === opt
         return (
           <button type="button" key={opt} onClick={() => { setPlacesSort(opt); setOpen(false) }} aria-pressed={on}
-            className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-left transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
+            className={`flex w-full items-center gap-2 rounded-[9px] px-2 py-1.5 text-start transition-colors ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
             style={fs(12.5, 'body')}>
             <span className="min-w-0 flex-1 text-content">{t(SORT_LABEL_KEYS[opt])}</span>
             {on && <Check size={13} strokeWidth={2.4} className="flex-none text-content-muted" />}
@@ -378,7 +378,7 @@ function LocalityFilterDropdown(S: SidebarState) {
   const pick = (country: string, region: string | null) => { setLocalityFilter({ country, region }); setOpen(false) }
   const row = (key: string, label: string, count: number, on: boolean, onClick: () => void, indent: boolean) => (
     <button type="button" key={key} onClick={onClick} aria-pressed={on}
-      className={`flex w-full items-center gap-2 rounded-[9px] py-1.5 pr-2 text-left transition-colors ${indent ? 'pl-5' : 'pl-2'} ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
+      className={`flex w-full items-center gap-2 rounded-[9px] py-1.5 pe-2 text-start transition-colors ${indent ? 'ps-5' : 'ps-2'} ${on ? 'bg-surface-tertiary' : 'hover:bg-surface-hover'}`}
       style={fs(indent ? 12 : 12.5, 'body')}>
       <span className={`min-w-0 flex-1 truncate ${indent ? 'text-content-secondary' : 'font-semibold text-content'}`}>{label}</span>
       <span className="rounded-full bg-surface-secondary px-1.5 font-geist tabular-nums text-content-faint" style={fs(10.5)}>{count}</span>
@@ -397,7 +397,7 @@ function LocalityFilterDropdown(S: SidebarState) {
       ))}
       {localityFilter && (
         <button type="button" onClick={() => { setLocalityFilter(null); setOpen(false) }}
-          className="mt-1 flex w-full items-center gap-1.5 rounded-[9px] border-t border-edge-faint px-1.5 pb-1 pt-2 text-left font-semibold text-content-muted hover:text-content"
+          className="mt-1 flex w-full items-center gap-1.5 rounded-[9px] border-t border-edge-faint px-1.5 pb-1 pt-2 text-start font-semibold text-content-muted hover:text-content"
           style={fs(12, 'body')}>
           <X size={12} strokeWidth={2.4} />
           {t('places.clearFilter')}
@@ -485,7 +485,7 @@ function FilterChip({ label, clearLabel, onClear, icon, tone = 'neutral' }: {
 }) {
   const look = tone === 'info' ? 'bg-info-soft text-info' : 'border border-edge-faint bg-surface-card text-content-secondary'
   return (
-    <span className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full py-[3px] font-semibold ${onClear ? 'pl-2 pr-[3px]' : 'px-2'} ${look}`} style={fs(11)}>
+    <span className={`inline-flex min-w-0 max-w-full items-center gap-1 rounded-full py-[3px] font-semibold ${onClear ? 'ps-2 pe-[3px]' : 'px-2'} ${look}`} style={fs(11)}>
       {icon}
       <span className="min-w-0 truncate">{label}</span>
       {onClear && (

@@ -96,7 +96,7 @@ export default function AddressInput({ value, onChange, placeholder, className }
         className={className}
       />
       {open && (loading || results.length > 0) && (
-        <div className="bg-surface-card" style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, border: '1px solid var(--border-primary)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 260, overflowY: 'auto', zIndex: 1000 }}>
+        <div className="bg-surface-card" style={{ position: 'absolute', top: 'calc(100% + 4px)', insetInline: 0, border: '1px solid var(--border-primary)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 260, overflowY: 'auto', zIndex: 1000 }}>
           {loading && results.length === 0 && (
             <div className="text-content-faint" style={{ padding: 10, fontSize: 'calc(12px * var(--fs-scale-body, 1))' }}>{t('common.loading')}</div>
           )}
@@ -109,7 +109,7 @@ export default function AddressInput({ value, onChange, placeholder, className }
               className={`text-content ${i === highlight ? 'bg-surface-hover' : 'bg-transparent'}`}
               style={{
                 display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%',
-                padding: '8px 12px', border: 'none', cursor: 'pointer', textAlign: 'left',
+                padding: '8px 12px', border: 'none', cursor: 'pointer', textAlign: 'start',
                 fontFamily: 'inherit',
               }}
             >

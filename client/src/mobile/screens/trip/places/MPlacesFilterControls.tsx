@@ -38,7 +38,7 @@ function CategoryFilterRow({ checked, onToggle, label, children }: {
       onClick={onToggle}
       role="checkbox"
       aria-checked={checked}
-      className="flex min-h-[44px] w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left last:border-b-0"
+      className="flex min-h-[44px] w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start last:border-b-0"
     >
       <SquareCheck checked={checked} />
       {children}

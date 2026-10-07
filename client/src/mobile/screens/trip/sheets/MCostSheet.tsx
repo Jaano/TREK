@@ -428,7 +428,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
           type="button"
           aria-expanded={catOpen}
           onClick={() => setCatOpen(v => !v)}
-          className="flex w-full items-center gap-[10px] overflow-hidden rounded-xl border border-[color:var(--m-rowbr)] bg-m-card px-[13px] py-[11px] text-left"
+          className="flex w-full items-center gap-[10px] overflow-hidden rounded-xl border border-[color:var(--m-rowbr)] bg-m-card px-[13px] py-[11px] text-start"
         >
           {(() => {
             const meta = catMeta(cat)
@@ -449,7 +449,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                   type="button"
                   aria-pressed={on}
                   onClick={() => { setCat(c.key); setCatOpen(false) }}
-                  className="flex w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[11px] text-left last:border-b-0"
+                  className="flex w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[11px] text-start last:border-b-0"
                 >
                   <Icon size={14} strokeWidth={2} style={{ color: c.color }} className="flex-none" />
                   <span className={`flex-1 text-[0.78125rem] ${on ? 'font-bold text-m-ink' : 'font-medium text-m-muted'}`}>{t(c.labelKey)}</span>
@@ -492,7 +492,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                     <button
                       type="button"
                       onClick={() => togglePayer(p.id)}
-                      className="flex min-w-0 flex-1 items-center gap-[8px] text-left"
+                      className="flex min-w-0 flex-1 items-center gap-[8px] text-start"
                     >
                       <Avatar p={p} idx={idx} dim={!on} />
                       <span className="truncate text-[0.8125rem] font-medium text-m-ink">{nameOf(p)}</span>
@@ -506,7 +506,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                           placeholder={localizeAmountInput('0.00', currency)}
                           value={localizeAmountInput(payerAmounts[p.id] || '', currency)}
                           onValueChange={v => onPayerAmountChange(p.id, v)}
-                          className="w-full border-0 bg-transparent py-[7px] text-right text-[0.8125rem] font-semibold text-m-ink outline-none"
+                          className="w-full border-0 bg-transparent py-[7px] text-end text-[0.8125rem] font-semibold text-m-ink outline-none"
                         />
                       </div>
                     ) : (
@@ -560,7 +560,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                       placeholder={localizeAmountInput('0.00', currency)}
                       value={localizeAmountInput(item.price, currency)}
                       onValueChange={v => handleUpdateItemPrice(item.id, v)}
-                      className="w-full border-0 bg-transparent py-[7px] text-right text-[0.8125rem] font-semibold text-m-ink outline-none"
+                      className="w-full border-0 bg-transparent py-[7px] text-end text-[0.8125rem] font-semibold text-m-ink outline-none"
                     />
                   </div>
                   <button type="button" onClick={() => handleRemoveItem(item.id)} className="flex-none text-m-muted" aria-label={t('common.delete')}>
@@ -615,7 +615,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                     <button
                       type="button"
                       onClick={() => toggleParticipant(p.id)}
-                      className="flex min-w-0 flex-1 items-center gap-[8px] text-left"
+                      className="flex min-w-0 flex-1 items-center gap-[8px] text-start"
                     >
                       <Avatar p={p} idx={idx} dim={!on} />
                       <span className="truncate text-[0.8125rem] font-medium text-m-ink">{nameOf(p)}</span>
@@ -623,11 +623,11 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                     </button>
                     {splitMode === 'equally' ? (
                       on ? (
-                        <span className="flex-none pr-1 text-[0.8125rem] font-semibold text-m-ink [font-variant-numeric:tabular-nums]">
+                        <span className="flex-none pe-1 text-[0.8125rem] font-semibold text-m-ink [font-variant-numeric:tabular-nums]">
                           {sym(currency)}{(equalShares[p.id] || 0).toFixed(2)}
                         </span>
                       ) : (
-                        <span className="flex-none pr-1 text-[0.6875rem] text-m-faint">{t('costs.tapToInclude')}</span>
+                        <span className="flex-none pe-1 text-[0.6875rem] text-m-faint">{t('costs.tapToInclude')}</span>
                       )
                     ) : on ? (
                       <div className={`${MINI_INPUT_WRAP} w-[120px] flex-none`}>
@@ -638,7 +638,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                           placeholder={localizeAmountInput((placeholderShares[p.id] || 0).toFixed(2), currency)}
                           value={localizeAmountInput(customAmounts[p.id] || '', currency)}
                           onChange={e => handleCustomAmountChange(p.id, e.target.value)}
-                          className="w-full border-0 bg-transparent py-[7px] text-right text-[0.8125rem] font-semibold text-m-ink outline-none placeholder:text-m-faint"
+                          className="w-full border-0 bg-transparent py-[7px] text-end text-[0.8125rem] font-semibold text-m-ink outline-none placeholder:text-m-faint"
                         />
                       </div>
                     ) : (
@@ -715,7 +715,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
                 <button
                   type="button"
                   onClick={() => setPreviewReceipts({ receipts, initialIndex: rIdx })}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-start"
                 >
                   <Receipt size={14} className="flex-none text-m-faint" />
                   <span className="truncate text-[0.8125rem] font-medium text-m-ink">{r.original_name}</span>

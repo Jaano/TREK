@@ -24,7 +24,7 @@ export function PopoverItem({ icon, label, onClick, active = false, danger = fal
         padding: '8px 10px', borderRadius: 9, border: 'none', cursor: 'pointer',
         background: active ? 'var(--bg-tertiary)' : 'none',
         color: tone,
-        fontFamily: 'inherit', fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', fontWeight: 500, textAlign: 'left',
+        fontFamily: 'inherit', fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', fontWeight: 500, textAlign: 'start',
       }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.background = danger ? 'rgba(239,68,68,0.1)' : 'var(--bg-tertiary)' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}

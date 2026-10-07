@@ -183,7 +183,7 @@ export default function CollectionPlaceDetail({
         {/* Chip and cover controls share the top bar. The controls keep the end and
             never shrink, so a long category name ellipsizes instead of sliding under
             them, however many buttons there are and whatever size phones give them. */}
-        <div className="absolute left-[14px] right-[12px] top-[12px] z-[2] flex items-center gap-[8px]">
+        <div className="absolute start-[14px] end-[12px] top-[12px] z-[2] flex items-center gap-[8px]">
           {place.category?.name && (
             <span className="col-detail-cover-cat min-w-0" style={{ ['--cat' as string]: place.category.color || '#6366f1' }}>
               <CatIcon size={12} className="flex-none" />

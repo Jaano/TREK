@@ -196,7 +196,7 @@ export function DayReorderPopup({ isOpen, days, t, locale, onReorder, onAddDay, 
                       if (dragIndex !== null && dragIndex !== index) move(dragIndex, index)
                       setDragIndex(null); setOverIndex(null)
                     }}
-                    className={`flex items-center gap-2.5 rounded-[14px] border border-edge-faint py-2 pl-2.5 pr-2 ${
+                    className={`flex items-center gap-2.5 rounded-[14px] border border-edge-faint py-2 ps-2.5 pe-2 ${
                       dropTarget ? 'bg-surface-hover outline-dashed outline-2 -outline-offset-2 outline-edge' : 'bg-surface-card'
                     } ${dragIndex === index ? 'opacity-50' : ''}`}
                   >

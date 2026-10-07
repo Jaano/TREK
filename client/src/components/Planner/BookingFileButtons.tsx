@@ -54,7 +54,7 @@ export function BookingFileButtons({ canAttach, uploading, onAttach, linkable, o
           </button>
           {open && (
             <div className="bg-surface-card" style={{
-              position: 'absolute', bottom: '100%', left: 0, right: 0, marginBottom: 6, zIndex: 50,
+              position: 'absolute', bottom: '100%', insetInline: 0, marginBottom: 6, zIndex: 50,
               border: '1px solid var(--border-secondary)', borderRadius: 12,
               boxShadow: '0 12px 32px -8px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.06)', padding: 6, maxHeight: 220, overflowY: 'auto',
             }}>
@@ -64,7 +64,7 @@ export function BookingFileButtons({ canAttach, uploading, onAttach, linkable, o
                   style={{
                     display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '8px 10px',
                     border: 'none', cursor: 'pointer', fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', fontFamily: 'inherit',
-                    borderRadius: 8, textAlign: 'left',
+                    borderRadius: 8, textAlign: 'start',
                   }}>
                   <FileText size={13} className="text-content-faint" style={{ flexShrink: 0 }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.original_name}</span>

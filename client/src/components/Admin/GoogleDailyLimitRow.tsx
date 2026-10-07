@@ -30,7 +30,7 @@ export default function GoogleDailyLimitRow() {
                   {t('admin.googleQuota.reached', { used: status.used_today })}
                 </StatusPill>
               ) : (
-                <StatusPill icon={<span aria-hidden className="mr-0.5 h-1.5 w-1.5 rounded-full bg-success" />}>
+                <StatusPill icon={<span aria-hidden className="me-0.5 h-1.5 w-1.5 rounded-full bg-success" />}>
                   {status.daily_limit == null
                     ? t('admin.googleQuota.usedToday', { used: status.used_today })
                     : t('admin.googleQuota.usedOfLimit', { used: status.used_today, limit: status.daily_limit })}
@@ -50,7 +50,7 @@ export default function GoogleDailyLimitRow() {
               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void save() } }}
               placeholder={t('admin.googleQuota.placeholder')}
               disabled={status === null || saving}
-              className={`${INPUT} text-right font-geist tabular-nums`}
+              className={`${INPUT} text-end font-geist tabular-nums`}
             />
           </div>
           {dirty && (

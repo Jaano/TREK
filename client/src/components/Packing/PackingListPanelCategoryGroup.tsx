@@ -121,7 +121,7 @@ export function KategorieGruppe({ kategorie, items, tripId, allCategories, onRen
     // Shaped after the phone's category card: a tinted head band carrying the
     // name as written, the count, and the fold arrow on the far right.
     <div style={{ marginBottom: 6, background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border-secondary)', overflow: 'visible' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 12px 11px 14px', background: 'var(--bg-tertiary)', borderRadius: offen ? '15px 15px 0 0' : 15 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBlock: 11, paddingInlineEnd: 12, paddingInlineStart: 14, background: 'var(--bg-tertiary)', borderRadius: offen ? '15px 15px 0 0' : 15 }}>
         <span style={{ width: 10, height: 10, borderRadius: '50%', background: dot, flexShrink: 0 }} />
 
         {editingName && canEdit ? (
@@ -139,7 +139,7 @@ export function KategorieGruppe({ kategorie, items, tripId, allCategories, onRen
         )}
 
         {/* Assignee chips */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 1, minWidth: 0, marginLeft: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 3, flex: 1, minWidth: 0, marginInlineStart: 4 }}>
           {assignees.map(a => {
             // The chip is only ever clickable for an editor, so read-only members
             // get the plain div back rather than a focusable stop that does nothing.
@@ -191,7 +191,7 @@ export function KategorieGruppe({ kategorie, items, tripId, allCategories, onRen
               <UserPlus size={10} />
             </button>
             {showAssigneeDropdown && (
-              <div className="trek-menu-enter" style={{ ...POPOVER, position: 'absolute', left: 0, top: '100%', marginTop: 6, zIndex: 50, minWidth: 190 }}>
+              <div className="trek-menu-enter" style={{ ...POPOVER, position: 'absolute', insetInlineStart: 0, top: '100%', marginTop: 6, zIndex: 50, minWidth: 190 }}>
                 {tripMembers.map(m => {
                   const isAssigned = assignees.some(a => a.user_id === m.id)
                   return (
@@ -299,7 +299,7 @@ export function KategorieGruppe({ kategorie, items, tripId, allCategories, onRen
           {canEdit && (showAddItem ? (
             // The new item already looks like a row: an empty box in the checkbox
             // column, the name typed where names sit, and the add as the accent.
-            <div style={{ ...COMPOSER, gap: 9, margin: '6px 4px 0', padding: '4px 4px 4px 27px' }}>
+            <div style={{ ...COMPOSER, gap: 9, margin: '6px 4px 0', paddingBlock: 4, paddingInlineEnd: 4, paddingInlineStart: 27 }}>
               <span aria-hidden style={{ width: 20, height: 20, borderRadius: 6, border: '1.5px solid var(--text-faint)', opacity: 0.6, flexShrink: 0 }} />
               <input
                 ref={addItemRef}
@@ -333,7 +333,7 @@ export function KategorieGruppe({ kategorie, items, tripId, allCategories, onRen
             // of trailing off: a dashed box in the checkbox column (past the drag
             // grip's width) and the label where an item's name sits.
             <button type="button" onClick={() => { setShowAddItem(true); setTimeout(() => addItemRef.current?.focus(), 30) }}
-              style={{ display: 'flex', alignItems: 'center', gap: 9, width: 'calc(100% - 8px)', margin: '6px 4px 0', padding: '8px 10px 8px 28px', borderRadius: 10, border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500, color: 'var(--text-faint)', fontFamily: 'inherit', textAlign: 'left' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 9, width: 'calc(100% - 8px)', margin: '6px 4px 0', paddingBlock: 8, paddingInlineEnd: 10, paddingInlineStart: 28, borderRadius: 10, border: 'none', background: 'var(--bg-secondary)', cursor: 'pointer', fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500, color: 'var(--text-faint)', fontFamily: 'inherit', textAlign: 'start' }}
               onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'}
               onMouseLeave={e => e.currentTarget.style.color = 'var(--text-faint)'}>
               <span style={{ width: 20, height: 20, borderRadius: 6, border: '1.5px dashed currentColor', display: 'grid', placeItems: 'center', flexShrink: 0 }}>

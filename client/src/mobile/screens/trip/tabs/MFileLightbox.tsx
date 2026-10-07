@@ -89,7 +89,7 @@ export default function MFileLightbox({ files, index, onIndexChange, onClose, t 
       <div role="presentation" className="flex flex-none items-center justify-between px-4 py-[10px]" onClick={e => e.stopPropagation()}>
         <span className="min-w-0 flex-1 truncate font-geist text-[0.75rem] text-white/70">
           {file.original_name}
-          <span className="ml-2 text-white/40">{index + 1} / {files.length}</span>
+          <span className="ms-2 text-white/40">{index + 1} / {files.length}</span>
         </span>
         <div className="flex flex-none items-center gap-1">
           <button

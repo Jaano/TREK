@@ -60,7 +60,7 @@ export default function JourneyDayJump({ days, feedRef }: { days: JumpDay[]; fee
               <div key={day.date}>
                 <div className="flex items-center gap-1">
                   <button type="button" role="menuitem" onClick={() => goDay(day.date)}
-                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 text-left hover:bg-[color:var(--vg-surf2)]">
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2 py-1.5 text-start hover:bg-[color:var(--vg-surf2)]">
                     <span className="grid h-6 w-6 flex-none place-items-center rounded-lg text-[11px] font-bold text-white" style={{ background: day.color }}>{i + 1}</span>
                     <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold" style={{ color: 'var(--vg-ink)' }}>{dateLabel(day.date)}</span>
                     <span className="flex-none rounded-full px-1.5 text-[10px] font-bold tabular-nums" style={{ background: 'var(--vg-surf2)', color: 'var(--vg-ink3)' }}>{day.entries.length}</span>
@@ -75,7 +75,7 @@ export default function JourneyDayJump({ days, feedRef }: { days: JumpDay[]; fee
                 </div>
                 {isOpen && day.entries.map(entry => (
                   <button key={entry.id} type="button" role="menuitem" onClick={() => goEntry(entry.id)}
-                    className="flex w-full items-center gap-2 rounded-lg py-1 pl-11 pr-2 text-left text-[12px] hover:bg-[color:var(--vg-surf2)]" style={{ color: 'var(--vg-ink2)' }}>
+                    className="flex w-full items-center gap-2 rounded-lg py-1 ps-11 pe-2 text-start text-[12px] hover:bg-[color:var(--vg-surf2)]" style={{ color: 'var(--vg-ink2)' }}>
                     <span className="h-1.5 w-1.5 flex-none rounded-full" style={{ background: day.color }} />
                     <span className="min-w-0 truncate">{entry.title}</span>
                   </button>

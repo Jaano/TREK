@@ -38,8 +38,8 @@ const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 const POSITION: Record<MSheetVariant, string> = {
-  card: 'absolute left-[14px] right-[14px] top-1/2 -translate-y-1/2',
-  bottom: 'absolute left-4 right-4 bottom-[calc(var(--bottom-nav-h,84px)+16px)]',
+  card: 'absolute inset-x-[14px] top-1/2 -translate-y-1/2',
+  bottom: 'absolute inset-x-4 bottom-[calc(var(--bottom-nav-h,84px)+16px)]',
   drawer: 'absolute left-0 top-0 bottom-0 w-[78%] max-w-[320px]',
 }
 

@@ -103,7 +103,7 @@ export default function DocSyncPanel({
               onAdd={p => (sync.connectionFor(p.id) ? setScopeFor(p.id) : setConnecting(p))}
             />
 
-            <div className="min-w-0 md:border-l md:border-edge-faint md:pl-6">
+            <div className="min-w-0 md:border-s md:border-edge-faint md:ps-6">
               {active ? (
                 <div className="space-y-5">
                   <DocSyncBinding
@@ -272,7 +272,7 @@ function StoreButton({
       onClick={onClick}
       aria-current={active ? 'true' : undefined}
       className={[
-        'group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+        'group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-start transition-colors',
         active
           ? 'border-transparent bg-accent-subtle'
           : 'border-edge bg-surface hover:bg-surface-hover',

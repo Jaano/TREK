@@ -36,9 +36,9 @@ export function BagSidebar(S: PackingState) {
   useDismissOnOutside(composerRef, showAddBag, closeComposer)
 
   return (
-    <div className="hidden xl:block" style={{ width: 272, marginLeft: 16, overflowY: 'auto', padding: '10px 0 16px', flexShrink: 0 }}>
+    <div className="hidden xl:block" style={{ width: 272, marginInlineStart: 16, overflowY: 'auto', padding: '10px 0 16px', flexShrink: 0 }}>
       <div style={{ background: 'var(--bg-card)', borderRadius: 16, border: '1px solid var(--border-secondary)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px 9px 14px', background: 'var(--bg-tertiary)', borderRadius: '15px 15px 0 0' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBlock: 9, paddingInlineEnd: 10, paddingInlineStart: 14, background: 'var(--bg-tertiary)', borderRadius: '15px 15px 0 0' }}>
           <Briefcase size={14} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />
           <span style={{ flex: 1, fontSize: 'calc(14px * var(--fs-scale-body, 1))', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
             {t('packing.bags')}
@@ -52,7 +52,7 @@ export function BagSidebar(S: PackingState) {
         </div>
 
         {canEdit && showAddBag && (
-          <div ref={composerRef} style={{ ...COMPOSER, margin: '10px 10px 0', padding: '4px 4px 4px 10px' }}>
+          <div ref={composerRef} style={{ ...COMPOSER, margin: '10px 10px 0', paddingBlock: 4, paddingInlineEnd: 4, paddingInlineStart: 10 }}>
             <span aria-hidden style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px dashed var(--text-faint)', flexShrink: 0 }} />
             <input autoFocus value={newBagName} onChange={e => setNewBagName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void handleCreateBag(); if (e.key === 'Escape') closeComposer() }}

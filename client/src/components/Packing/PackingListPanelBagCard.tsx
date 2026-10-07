@@ -72,7 +72,7 @@ export function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, 
             style={{ flex: 1, fontSize: sz.name, fontWeight: 600, padding: '1px 4px', borderRadius: 4, border: '1px solid var(--border-primary)', outline: 'none', fontFamily: 'inherit', color: 'var(--text-primary)', background: 'transparent' }} />
         ) : (
           <button type="button" disabled={!canEdit} onClick={() => setEditingName(true)}
-            style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: sz.name, fontWeight: 700, color: 'var(--text-primary)', cursor: canEdit ? 'text' : 'default', background: 'none', border: 'none', padding: 0, textAlign: 'left', fontFamily: 'inherit' }}>{bag.name}</button>
+            style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: sz.name, fontWeight: 700, color: 'var(--text-primary)', cursor: canEdit ? 'text' : 'default', background: 'none', border: 'none', padding: 0, textAlign: 'start', fontFamily: 'inherit' }}>{bag.name}</button>
         )}
         {/* Members */}
         <div ref={membersRef} style={{ display: 'flex', alignItems: 'center', gap: 3, flexShrink: 0, position: 'relative' }}>

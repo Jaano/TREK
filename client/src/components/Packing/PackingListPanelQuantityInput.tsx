@@ -19,7 +19,7 @@ export function QuantityInput({ value, onSave, style }: { value: number; onSave:
         onValueChange={setLocal}
         onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') { commit(); (e.target as HTMLInputElement).blur() } }}
-        style={{ width: 24, border: 'none', outline: 'none', background: 'transparent', fontSize: 'calc(12px * var(--fs-scale-body, 1))', textAlign: 'right', fontFamily: 'inherit', color: 'var(--text-secondary)', padding: 0 }}
+        style={{ width: 24, border: 'none', outline: 'none', background: 'transparent', fontSize: 'calc(12px * var(--fs-scale-body, 1))', textAlign: 'end', fontFamily: 'inherit', color: 'var(--text-secondary)', padding: 0 }}
       />
       <span style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', fontWeight: 500 }}>x</span>
     </div>

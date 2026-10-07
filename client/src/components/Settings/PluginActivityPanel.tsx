@@ -26,7 +26,7 @@ function codeTone(code: string): string {
   return 'bg-warning-soft text-warning'
 }
 
-const TH = 'whitespace-nowrap px-3 py-2.5 text-left font-geist font-bold uppercase tracking-[.08em] text-content-faint'
+const TH = 'whitespace-nowrap px-3 py-2.5 text-start font-geist font-bold uppercase tracking-[.08em] text-content-faint'
 const TD = 'px-3 py-3 align-middle'
 
 /**
@@ -80,17 +80,17 @@ export default function PluginActivityPanel() {
           <table className="w-full border-collapse" style={fs(12.5, 'body')}>
             <thead>
               <tr className="border-b border-edge-faint bg-surface-secondary" style={fs(10)}>
-                <th className={`${TH} pl-3.5`}>{t('settings.pluginActivity.columns.plugin')}</th>
+                <th className={`${TH} ps-3.5`}>{t('settings.pluginActivity.columns.plugin')}</th>
                 <th className={TH}>{t('settings.pluginActivity.columns.action')}</th>
                 <th className={TH}>{t('settings.pluginActivity.columns.resource')}</th>
                 <th className={TH}>{t('settings.pluginActivity.columns.when')}</th>
-                <th className={`${TH} pr-3.5 text-right`}>{t('settings.pluginActivity.columns.status')}</th>
+                <th className={`${TH} pe-3.5 text-end`}>{t('settings.pluginActivity.columns.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-edge-faint">
               {rows.map((r, i) => (
                 <tr key={i}>
-                  <td className={`${TD} max-w-[200px] pl-3.5`}>
+                  <td className={`${TD} max-w-[200px] ps-3.5`}>
                     <span className="block truncate font-medium text-content">{r.plugin_name || r.plugin_id}</span>
                   </td>
                   <td className={TD}>
@@ -100,7 +100,7 @@ export default function PluginActivityPanel() {
                     <span className="block truncate font-mono text-content-muted" style={fs(11.5)} title={r.resource || undefined}>{r.resource || '—'}</span>
                   </td>
                   <td className={`${TD} whitespace-nowrap font-geist tabular-nums text-content-muted`}>{fmtWhen(r.ts)}</td>
-                  <td className={`${TD} pr-3.5 text-right`}>
+                  <td className={`${TD} pe-3.5 text-end`}>
                     <span className={`inline-block whitespace-nowrap rounded-full px-2 py-[2px] font-geist font-semibold ${codeTone(r.code)}`} style={fs(11)}>
                       {r.code}
                     </span>

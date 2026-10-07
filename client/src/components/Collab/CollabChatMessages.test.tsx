@@ -129,8 +129,8 @@ describe('ChatMessages', () => {
     ])
     const first = screen.getByText('first').closest('div[style]')!
     const last = screen.getByText('second').closest('div[style]')!
-    expect(first.getAttribute('style')).toContain('border-radius: 18px 18px 18px 18px')
-    expect(last.getAttribute('style')).toContain('border-radius: 18px 18px 4px 18px')
+    expect(first.getAttribute('style')).toContain('border-start-start-radius: 18px; border-start-end-radius: 18px; border-end-end-radius: 18px; border-end-start-radius: 18px')
+    expect(last.getAttribute('style')).toContain('border-start-start-radius: 18px; border-start-end-radius: 18px; border-end-end-radius: 4px; border-end-start-radius: 18px')
   })
 
   it('FE-W5CCM-007: the avatar image is rendered for a foreign author who has one', () => {

@@ -296,7 +296,7 @@ export default function MCollabChat({ planner }: MCollabChatProps) {
 
       <div className="mt-[10px] flex flex-none flex-col gap-2">
         {replyTo && (
-          <div className="flex items-center gap-2 rounded-[12px] border-l-[3px] border-m-act bg-[color:var(--m-ic)] px-[10px] py-[6px]">
+          <div className="flex items-center gap-2 rounded-[12px] border-s-[3px] border-m-act bg-[color:var(--m-ic)] px-[10px] py-[6px]">
             <Reply size={12} strokeWidth={2} className="flex-none text-m-faint" />
             <span className="min-w-0 flex-1 truncate font-geist text-[0.71875rem] text-m-muted">
               <strong className="text-m-ink">{replyTo.username}</strong>: {replyTo.text.slice(0, 60)}
@@ -319,7 +319,7 @@ export default function MCollabChat({ planner }: MCollabChatProps) {
                 {images.previews.map((url, i) => (
                   <div key={url} className="relative">
                     <img src={url} alt="" className="h-14 w-14 rounded-lg object-cover" />
-                    <button type="button" aria-label="Remove image" onClick={() => images.remove(i)} className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-m-ink text-[10px] text-m-bg">×</button>
+                    <button type="button" aria-label="Remove image" onClick={() => images.remove(i)} className="absolute -end-1 -top-1 h-4 w-4 rounded-full bg-m-ink text-[10px] text-m-bg">×</button>
                   </div>
                 ))}
               </div>
@@ -433,7 +433,7 @@ function ChatBubbleRow({ msg, own, showHeader, isLastInGroup, marginTop, is12h, 
 
   return (
     <div
-      className={`flex gap-2 ${own ? 'flex-row-reverse pl-10' : 'flex-row pr-10'}`}
+      className={`flex gap-2 ${own ? 'flex-row-reverse ps-10' : 'flex-row pe-10'}`}
       style={{ marginTop }}
     >
       {!own && (
@@ -452,7 +452,7 @@ function ChatBubbleRow({ msg, own, showHeader, isLastInGroup, marginTop, is12h, 
 
       <div className={`flex min-w-0 max-w-[78%] flex-col ${own ? 'items-end' : 'items-start'}`}>
         {showHeader && (
-          <span className="mb-[2px] pl-1 font-geist text-[0.59375rem] font-bold text-m-faint">{msg.username}</span>
+          <span className="mb-[2px] ps-1 font-geist text-[0.59375rem] font-bold text-m-faint">{msg.username}</span>
         )}
 
         <button
@@ -462,7 +462,7 @@ function ChatBubbleRow({ msg, own, showHeader, isLastInGroup, marginTop, is12h, 
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={clearPress}
-          className="max-w-full text-left"
+          className="max-w-full text-start"
         >
           {bigEmoji ? (
             <div className="py-[2px] text-[2.5rem] leading-[1.15]">{msg.text}</div>
@@ -562,7 +562,7 @@ function MessageActionsPopover({ x, y, canDeleteOwn, t, onReact, onReply, onDele
           <button
             type="button"
             onClick={onReply}
-            className="flex w-full items-center gap-2 rounded-[10px] px-2 py-[8px] text-left text-[0.8125rem] font-semibold text-m-ink"
+            className="flex w-full items-center gap-2 rounded-[10px] px-2 py-[8px] text-start text-[0.8125rem] font-semibold text-m-ink"
           >
             <Reply size={14} strokeWidth={2} /> {t('collab.chat.reply')}
           </button>
@@ -570,7 +570,7 @@ function MessageActionsPopover({ x, y, canDeleteOwn, t, onReact, onReply, onDele
             <button
               type="button"
               onClick={onDelete}
-              className="flex w-full items-center gap-2 rounded-[10px] px-2 py-[8px] text-left text-[0.8125rem] font-semibold text-[color:var(--m-st-danger)]"
+              className="flex w-full items-center gap-2 rounded-[10px] px-2 py-[8px] text-start text-[0.8125rem] font-semibold text-[color:var(--m-st-danger)]"
             >
               <Trash2 size={14} strokeWidth={2} /> {t('common.delete')}
             </button>

@@ -68,14 +68,14 @@ export function AddTripDialog({ journeyId, existingTripIds, onClose, onAdded }: 
       )}
     >
       <div className="relative">
-        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+        <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
         <input
           autoFocus
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder={t('journey.trips.searchPlaceholder')}
           aria-label={t('journey.trips.searchTrip')}
-          className={`${INPUT} pl-8`}
+          className={`${INPUT} ps-8`}
         />
       </div>
 

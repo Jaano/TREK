@@ -191,7 +191,7 @@ export function PillSelect<T extends string>({ value, options, onChange, label, 
         {shown?.icon}
         <span>{shown?.label}</span>
         {shown?.hint && <span className="font-medium text-content-muted">{shown.hint}</span>}
-        <ChevronDown size={12} strokeWidth={2.2} className={`-mr-0.5 flex-none text-content-faint transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} strokeWidth={2.2} className={`-me-0.5 flex-none text-content-faint transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && box && createPortal(
         <div ref={menuRef} id={listId} role="group" aria-label={label} onKeyDown={onListKey}

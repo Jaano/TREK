@@ -36,7 +36,7 @@ export default function PlaceHoverCard({ x, y, name, categoryName, categoryIcon,
   const tone = categoryName ? categoryColor || 'var(--text-muted)' : null
   return (
     <div data-testid="tooltip"
-      className="flex max-w-[300px] items-center gap-3 rounded-[18px] border border-edge-faint bg-surface-card p-1.5 pr-4 font-system shadow-popover"
+      className="flex max-w-[300px] items-center gap-3 rounded-[18px] border border-edge-faint bg-surface-card p-1.5 pe-4 font-system shadow-popover"
       style={{ position: 'fixed', left: x + 14, top: y - 10, zIndex: 9999, pointerEvents: 'none' }}>
       {/* Twelve inside eighteen with six of padding: the picture's corners follow the card's. */}
       {photo ? (

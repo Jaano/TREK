@@ -149,7 +149,7 @@ export default function BackgroundTasksWidget() {
 
   return createPortal(
     <div
-      style={{ position: 'fixed', right: 16, bottom: 16, zIndex: 50000, display: 'flex', flexDirection: 'column', gap: 8, width: 380, maxWidth: 'calc(100vw - 32px)', fontFamily: 'var(--font-system)' }}
+      style={{ position: 'fixed', insetInlineEnd: 16, bottom: 16, zIndex: 50000, display: 'flex', flexDirection: 'column', gap: 8, width: 380, maxWidth: 'calc(100vw - 32px)', fontFamily: 'var(--font-system)' }}
     >
       {tasks.map((task) => (
         <div

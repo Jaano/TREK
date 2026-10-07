@@ -39,7 +39,7 @@ export default function MAdminUsersSection({ admin, t, locale }: MAdminUsersSect
           <span className="font-geist text-[0.625rem] font-bold text-m-faint">
             {users.length} {t('admin.stats.users').toLowerCase()}
           </span>
-          <MAdminButton className="ml-auto" onClick={() => setShowCreateUser(true)}>
+          <MAdminButton className="ms-auto" onClick={() => setShowCreateUser(true)}>
             <UserPlus size={12} strokeWidth={2.2} />
             {t('mobileAdmin.create')}
           </MAdminButton>
@@ -55,7 +55,7 @@ export default function MAdminUsersSection({ admin, t, locale }: MAdminUsersSect
               key={u.id}
               type="button"
               onClick={() => handleEditUser(u)}
-              className="flex w-full items-center gap-[11px] border-t border-[color:var(--m-rowbr)] py-[11px] text-left"
+              className="flex w-full items-center gap-[11px] border-t border-[color:var(--m-rowbr)] py-[11px] text-start"
             >
               {u.avatar_url ? (
                 <img src={u.avatar_url} alt="" className="h-[34px] w-[34px] flex-none rounded-full object-cover" />

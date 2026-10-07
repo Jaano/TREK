@@ -76,7 +76,7 @@ export default function BookingsHeader(p: BookingsHeaderProps) {
   const hasEntries = p.total > 0
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5 rounded-[18px] bg-surface-tertiary py-3 pl-[22px] pr-3">
+    <div className="flex flex-wrap items-center gap-2.5 rounded-[18px] bg-surface-tertiary py-3 ps-[22px] pe-3">
       <h2 className="m-0 shrink-0 text-subtitle font-semibold tracking-[-0.01em] text-content">{p.title}</h2>
       <span className="flex-1" />
 
@@ -161,7 +161,7 @@ function usePopover() {
 
 function Menu({ children, onClose, width = 260 }: { children: ReactNode; onClose: () => void; width?: number }) {
   return (
-    <div role="menu" onKeyDown={e => { if (e.key === 'Escape') onClose() }} className="absolute right-0 top-11 z-30" style={{ ...POPOVER, width }}>
+    <div role="menu" onKeyDown={e => { if (e.key === 'Escape') onClose() }} className="absolute end-0 top-11 z-30" style={{ ...POPOVER, width }}>
       {children}
     </div>
   )
@@ -179,7 +179,7 @@ function FilterMenu(p: BookingsHeaderProps) {
       <Tooltip label={t('reservations.filter')}>
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={t('reservations.filter')} className={`${BAR_BTN} ${active ? 'text-content' : ''}`}>
           <Filter size={15} strokeWidth={2} />
-          {active > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-geist font-bold text-accent-text" style={fs(9)}>{active}</span>}
+          {active > 0 && <span className="absolute -end-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-geist font-bold text-accent-text" style={fs(9)}>{active}</span>}
         </button>
       </Tooltip>
       {open && (
@@ -220,7 +220,7 @@ function FilterMenu(p: BookingsHeaderProps) {
                   const on = p.activeTravelers.has(m.id)
                   return (
                     <button key={m.id} type="button" onClick={() => p.onToggleTraveler(m.id)} aria-pressed={on}
-                      className={`flex items-center gap-1.5 rounded-full border py-[3px] pl-[3px] pr-2.5 ${on ? 'border-[color:var(--text-primary)] text-content' : 'border-edge-faint text-content-muted hover:text-content'}`} style={fs(12, 'body')}>
+                      className={`flex items-center gap-1.5 rounded-full border py-[3px] ps-[3px] pe-2.5 ${on ? 'border-[color:var(--text-primary)] text-content' : 'border-edge-faint text-content-muted hover:text-content'}`} style={fs(12, 'body')}>
                       <span className="grid h-5 w-5 flex-none place-items-center overflow-hidden rounded-full bg-surface-tertiary font-bold" style={fs(9)}>
                         {m.avatar_url ? <img src={m.avatar_url} alt="" className="h-full w-full object-cover" /> : m.username?.[0]?.toUpperCase()}
                       </span>
@@ -256,7 +256,7 @@ function ViewOptions(p: BookingsHeaderProps) {
       <Tooltip label={t('reservations.viewOptions')}>
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={t('reservations.viewOptions')} className={BAR_BTN}>
           <SlidersHorizontal size={15} strokeWidth={2} />
-          {!p.viewIsDefault && <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />}
+          {!p.viewIsDefault && <span className="absolute end-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />}
         </button>
       </Tooltip>
       {open && (

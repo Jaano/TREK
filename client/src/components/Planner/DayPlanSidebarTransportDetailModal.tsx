@@ -146,7 +146,7 @@ function TransportDetailDialog({ res, setTransportDetail, onNavigateToFiles, onE
           <div className="flex flex-col gap-1.5">
             {files.map(f => (
               <button key={f.id} type="button" onClick={() => { close(); onNavigateToFiles?.() }}
-                className={`${BOX} flex items-center gap-2.5 px-3.5 py-2.5 text-left hover:bg-surface-hover`}>
+                className={`${BOX} flex items-center gap-2.5 px-3.5 py-2.5 text-start hover:bg-surface-hover`}>
                 <FileText size={14} strokeWidth={2} className="flex-none text-content-muted" />
                 <span className="min-w-0 flex-1 truncate font-medium text-content" style={fs(13, 'body')}>{f.original_name}</span>
                 <ExternalLink size={12} strokeWidth={2} className="flex-none text-content-faint" />

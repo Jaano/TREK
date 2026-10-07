@@ -193,7 +193,7 @@ function Lane({
 
       {/* Explicitly aligned to the arrow's side: the dialog inherits a centred
           text-align, which would otherwise float the label away from it. */}
-      <span className={`relative min-w-0 flex-1 truncate font-medium ${reverse ? 'text-right' : 'text-left'}`}>
+      <span className={`relative min-w-0 flex-1 truncate font-medium ${reverse ? 'text-end' : 'text-start'}`}>
         {caption}
       </span>
 

@@ -9,7 +9,7 @@ import { COMPOSER } from '../Packing/packingPopoverStyles'
 import { SettingRows, SettingsCard, SettingsHint, StatusPill, SETTINGS_BUTTON_PRIMARY, SETTINGS_ICON_BUTTON } from '../Settings/settingsKit'
 
 /** The planner's composer (#2541): a framed field on the card with its confirm and cancel beside it. */
-const COMPOSER_ROW = 'flex items-center gap-2 rounded-[10px] border border-edge bg-surface-card py-1 pl-3 pr-1'
+const COMPOSER_ROW = 'flex items-center gap-2 rounded-[10px] border border-edge bg-surface-card py-1 ps-3 pe-1'
 const COMPOSER_INPUT = 'min-w-0 flex-1 border-0 bg-transparent py-1 font-medium text-content outline-none placeholder:text-content-faint'
 const COMPOSER_CANCEL = 'grid h-7 w-7 flex-none place-items-center rounded-[8px] text-content-faint hover:bg-surface-secondary hover:text-content'
 /** A name being renamed in place, sized to the row it sits in. */
@@ -240,7 +240,7 @@ export default function PackingTemplateManager() {
                       aria-label={t('common.rename')}
                       className={`${ROW_INPUT} flex-1 font-semibold`} style={fs(13, 'body')} />
                   ) : (
-                    <button type="button" onClick={() => toggleExpand(tmpl.id)} className="min-w-0 flex-1 truncate text-left font-semibold text-content" style={fs(13, 'body')}>{tmpl.name}</button>
+                    <button type="button" onClick={() => toggleExpand(tmpl.id)} className="min-w-0 flex-1 truncate text-start font-semibold text-content" style={fs(13, 'body')}>{tmpl.name}</button>
                   )}
                   <span className="max-sm:hidden">
                     <StatusPill>{tmpl.category_count} {t('admin.packingTemplates.categories')} · {tmpl.item_count} {t('admin.packingTemplates.items')}</StatusPill>
@@ -257,13 +257,13 @@ export default function PackingTemplateManager() {
 
                 {/* Expanded content: the template's categories as the packing list draws them */}
                 {expanded && (
-                  <div className="flex flex-col gap-2.5 border-t border-edge-faint bg-surface-secondary px-3 py-3 sm:pl-[52px]">
+                  <div className="flex flex-col gap-2.5 border-t border-edge-faint bg-surface-secondary px-3 py-3 sm:ps-[52px]">
                     {categories.map(cat => {
                       const catItems = items.filter(i => i.category_id === cat.id)
                       return (
                         <div key={cat.id} className="overflow-hidden rounded-[12px] border border-edge-faint bg-surface-card">
                           {/* Category header */}
-                          <div data-row="category" className="flex items-center gap-1.5 border-b border-edge-faint bg-surface-tertiary py-1.5 pl-3 pr-1.5">
+                          <div data-row="category" className="flex items-center gap-1.5 border-b border-edge-faint bg-surface-tertiary py-1.5 ps-3 pe-1.5">
                             {editingCatId === cat.id ? (
                               <input autoFocus value={editCatName} onChange={e => setEditCatName(e.target.value)}
                                 onBlur={() => handleRenameCategory(cat.id)}
@@ -292,7 +292,7 @@ export default function PackingTemplateManager() {
                           {(catItems.length > 0 || addingItemToCatId === cat.id) && (
                             <div className="divide-y divide-edge-faint">
                               {catItems.map(item => (
-                                <div key={item.id} data-row="item" className="group flex min-h-[40px] items-center gap-2 py-1.5 pl-3 pr-1.5">
+                                <div key={item.id} data-row="item" className="group flex min-h-[40px] items-center gap-2 py-1.5 ps-3 pe-1.5">
                                   {editingItemId === item.id ? (
                                     <>
                                       <input autoFocus value={editItemName} onChange={e => setEditItemName(e.target.value)}
@@ -328,7 +328,7 @@ export default function PackingTemplateManager() {
 
                               {/* Add item inline */}
                               {addingItemToCatId === cat.id && (
-                                <div className="flex items-center gap-2 py-1.5 pl-3 pr-1.5">
+                                <div className="flex items-center gap-2 py-1.5 ps-3 pe-1.5">
                                   <input ref={addItemRef} value={newItemName} onChange={e => setNewItemName(e.target.value)}
                                     onKeyDown={e => { if (e.key === 'Enter' && newItemName.trim()) void handleAddItem(cat.id); if (e.key === 'Escape') { setAddingItemToCatId(null); setNewItemName('') } }}
                                     placeholder={t('admin.packingTemplates.itemName')}

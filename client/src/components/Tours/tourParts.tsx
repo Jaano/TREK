@@ -125,7 +125,7 @@ export function TourSection({ label, action, children, className = '' }: { label
     <section className={className}>
       <div className="mb-2 flex min-h-[18px] items-center gap-2">
         <Eyebrow>{label}</Eyebrow>
-        {action && <span className="ml-auto flex items-center">{action}</span>}
+        {action && <span className="ms-auto flex items-center">{action}</span>}
       </div>
       {children}
     </section>

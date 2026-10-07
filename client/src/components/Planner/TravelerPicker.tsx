@@ -59,11 +59,11 @@ export function TravelerPicker({ tripMembers, selectedIds, onToggle }: {
   const field = {
     width: '100%', minHeight: 38, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 8px',
     borderRadius: 10, border: '1px solid var(--border-primary)', background: 'var(--bg-input)',
-    fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500, fontFamily: 'inherit', textAlign: 'left',
+    fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500, fontFamily: 'inherit', textAlign: 'start',
   } as const
 
   if (tripMembers.length === 0) {
-    return <div className="text-content-faint" style={{ ...field, paddingLeft: 12 }}>{t('reservations.travelers.none')}</div>
+    return <div className="text-content-faint" style={{ ...field, paddingInlineStart: 12 }}>{t('reservations.travelers.none')}</div>
   }
 
   const chosen = tripMembers.filter(m => selectedIds.has(m.id))
@@ -75,7 +75,7 @@ export function TravelerPicker({ tripMembers, selectedIds, onToggle }: {
           <>
             <span style={{ display: 'inline-flex', flexShrink: 0 }}>
               {chosen.slice(0, 4).map((m, i) => (
-                <span key={m.id} style={{ marginLeft: i ? -7 : 0, borderRadius: '50%', boxShadow: '0 0 0 2px var(--bg-input)', display: 'inline-flex' }}>
+                <span key={m.id} style={{ marginInlineStart: i ? -7 : 0, borderRadius: '50%', boxShadow: '0 0 0 2px var(--bg-input)', display: 'inline-flex' }}>
                   <Avatar userId={m.id} username={m.username} avatarUrl={m.avatar_url} />
                 </span>
               ))}
@@ -86,7 +86,7 @@ export function TravelerPicker({ tripMembers, selectedIds, onToggle }: {
           </>
         ) : (
           <>
-            <Users size={15} className="text-content-faint" style={{ flexShrink: 0, marginLeft: 4 }} />
+            <Users size={15} className="text-content-faint" style={{ flexShrink: 0, marginInlineStart: 4 }} />
             <span className="text-content-faint" style={{ flex: 1 }}>{t('reservations.travelers.assign')}</span>
           </>
         )}
@@ -95,7 +95,7 @@ export function TravelerPicker({ tripMembers, selectedIds, onToggle }: {
 
       {open && (
         <div role="listbox" aria-multiselectable="true" className="bg-surface-card" style={{
-          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 50,
+          position: 'absolute', top: '100%', insetInline: 0, marginTop: 4, zIndex: 50,
           border: '1px solid var(--border-secondary)', borderRadius: 12, padding: 6, maxHeight: 260, overflowY: 'auto',
           boxShadow: '0 12px 32px -8px rgba(0,0,0,0.25), 0 2px 6px rgba(0,0,0,0.06)',
         }}>
@@ -106,7 +106,7 @@ export function TravelerPicker({ tripMembers, selectedIds, onToggle }: {
                 className={`transition-colors hover:bg-surface-tertiary ${on ? 'text-content' : 'text-content-muted'}`}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '7px 9px', borderRadius: 8,
-                  border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'start',
                   fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: on ? 600 : 500,
                 }}>
                 <Avatar userId={m.id} username={m.username} avatarUrl={m.avatar_url} dim={!on} />
@@ -161,7 +161,7 @@ export function TravelerFilterAvatars({ members, active, onToggle, label }: {
   const hasFilter = active.size > 0
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }} title={label} aria-label={label}>
-      <Users size={13} className="text-content-faint" style={{ flexShrink: 0, marginRight: 1 }} />
+      <Users size={13} className="text-content-faint" style={{ flexShrink: 0, marginInlineEnd: 1 }} />
       {members.map(m => {
         const on = active.has(m.id)
         const dim = hasFilter && !on
@@ -194,7 +194,7 @@ export function TravelerFilterAvatars({ members, active, onToggle, label }: {
             </span>
             {on && (
               <span style={{
-                position: 'absolute', right: -2, bottom: -2, width: 13, height: 13, borderRadius: '50%',
+                position: 'absolute', insetInlineEnd: -2, bottom: -2, width: 13, height: 13, borderRadius: '50%',
                 background: 'var(--accent)', display: 'grid', placeItems: 'center', boxShadow: '0 0 0 1.5px var(--bg-tertiary)',
               }}>
                 <Check size={8} strokeWidth={3.5} color="#fff" />

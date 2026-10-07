@@ -748,7 +748,7 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
   // dates has no day to depart on, so it gets the manual form alone. The switch
   // sits in the head band, which stays put while the body swaps modes.
   const modeSwitch = !reservation && tripHasDates && (
-    <span className="ml-auto">
+    <span className="ms-auto">
       <Segmented
         label={`${t('transport.modeManual')} / ${t('transport.modeAutomated')}`}
         value={automated ? 'automated' : 'manual'}
@@ -1144,12 +1144,12 @@ const GRID_4 = 'grid grid-cols-4 items-start gap-3 max-sm:grid-cols-1'
 /** One stop on the route: a dot on the line from origin to destination, its fields beside it. */
 function RailStop({ first, last, children }: { first: boolean; last: boolean; children: ReactNode }) {
   return (
-    <li className="relative pl-7">
-      {!first && <span aria-hidden="true" className="absolute left-[7px] top-0 h-6 w-0.5 bg-edge" />}
-      {!last && <span aria-hidden="true" className="absolute bottom-0 left-[7px] top-6 w-0.5 bg-edge" />}
+    <li className="relative ps-7">
+      {!first && <span aria-hidden="true" className="absolute start-[7px] top-0 h-6 w-0.5 bg-edge" />}
+      {!last && <span aria-hidden="true" className="absolute bottom-0 start-[7px] top-6 w-0.5 bg-edge" />}
       <span
         aria-hidden="true"
-        className={`absolute left-[3px] top-[19px] h-2.5 w-2.5 rounded-full border-2 bg-surface-card ${first || last ? 'border-content-muted' : 'border-content-faint'}`}
+        className={`absolute start-[3px] top-[19px] h-2.5 w-2.5 rounded-full border-2 bg-surface-card ${first || last ? 'border-content-muted' : 'border-content-faint'}`}
       />
       {children}
     </li>

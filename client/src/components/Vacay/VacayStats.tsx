@@ -52,7 +52,7 @@ export default function VacayStats() {
       <button type="button"
         onClick={toggleCollapsed}
         aria-expanded={!collapsed}
-        className={`w-full flex items-start gap-2 text-left ${collapsed ? '' : 'mb-2.5'}`}
+        className={`w-full flex items-start gap-2 text-start ${collapsed ? '' : 'mb-2.5'}`}
         style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer', font: 'inherit' }}
       >
         <span className="min-w-0 flex-1">
@@ -145,7 +145,7 @@ function StatCard({ stat: s, isMe, canEdit, selectedYear, isShiftedYear, onSave,
           {s.person_name}
         </span>
         {isMe && <VacayBadge label={t('vacay.you')} />}
-        <span className="tabular-nums ml-auto" style={{ fontFamily: 'var(--font-subtext)', fontSize: 10.5, color: 'var(--vg-ink3)' }}>{fmtDays(s.used)}/{s.total_available}</span>
+        <span className="tabular-nums ms-auto" style={{ fontFamily: 'var(--font-subtext)', fontSize: 10.5, color: 'var(--vg-ink3)' }}>{fmtDays(s.used)}/{s.total_available}</span>
       </div>
       <div className="overflow-hidden" style={{ height: 6, borderRadius: 99, background: 'var(--vg-surf2)', marginBottom: 7 }}>
         <div

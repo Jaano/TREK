@@ -639,7 +639,7 @@ function ScopeView({
               type="button"
               onClick={() => void bind(s)}
               disabled={working !== null}
-              className="flex items-center gap-[10px] rounded-2xl border border-[color:var(--m-rowbr)] bg-m-sheetop px-3 py-[9px] text-left disabled:opacity-50"
+              className="flex items-center gap-[10px] rounded-2xl border border-[color:var(--m-rowbr)] bg-m-sheetop px-3 py-[9px] text-start disabled:opacity-50"
             >
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[0.78125rem] font-semibold text-m-ink">{s.label}</span>
@@ -679,7 +679,7 @@ function StoreRow({
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-[10px] rounded-2xl border border-[color:var(--m-rowbr)] bg-m-sheetop px-3 py-[9px] text-left"
+      className="flex items-center gap-[10px] rounded-2xl border border-[color:var(--m-rowbr)] bg-m-sheetop px-3 py-[9px] text-start"
     >
       <span className="flex h-9 w-9 flex-none items-center justify-center rounded-[10px] bg-[color:var(--m-ic)] text-m-ink">
         {Icon ? <Icon className="h-4 w-4" /> : null}
@@ -742,7 +742,7 @@ function LaneRow({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={active}
-      className={`flex h-11 items-center gap-[10px] overflow-hidden rounded-2xl px-3 text-left ${
+      className={`flex h-11 items-center gap-[10px] overflow-hidden rounded-2xl px-3 text-start ${
         active ? 'bg-m-act text-m-actfg' : 'trek-docsync-lane-off-m bg-[color:var(--m-inner)] text-m-faint'
       }`}
     >
@@ -860,7 +860,7 @@ function MConflicts({
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="flex w-full items-center justify-between gap-3 text-left"
+          className="flex w-full items-center justify-between gap-3 text-start"
         >
           {heading}
           <span className="shrink-0 font-geist text-[0.6875rem] font-bold text-m-ink">
@@ -868,7 +868,7 @@ function MConflicts({
           </span>
         </button>
       ) : (
-        <div className="flex w-full items-center justify-between gap-3 text-left">
+        <div className="flex w-full items-center justify-between gap-3 text-start">
           {heading}
           <span className="shrink-0 font-geist text-[0.6875rem] font-bold tabular-nums text-m-ink">{count}</span>
         </div>

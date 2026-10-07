@@ -69,7 +69,7 @@ function LabelRow({ label, onUpdate, onDelete, t }: {
   }
 
   return (
-    <div className="flex items-center gap-2.5 rounded-[12px] bg-surface-secondary py-1.5 pl-3 pr-1.5">
+    <div className="flex items-center gap-2.5 rounded-[12px] bg-surface-secondary py-1.5 ps-3 pe-1.5">
       <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: color }} />
       {/* Transparent on the row until pointed at or typed in; the dark: variants
           outrank the global dark rule that paints every input. */}
@@ -79,7 +79,7 @@ function LabelRow({ label, onUpdate, onDelete, t }: {
         onBlur={commitName}
         onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
         maxLength={60}
-        className="-ml-1.5 min-w-0 flex-1 rounded-[8px] border-0 bg-transparent px-1.5 py-1 font-semibold text-content outline-none hover:bg-surface-card focus:bg-surface-card focus:shadow-sm dark:bg-transparent dark:hover:bg-surface-card dark:focus:bg-surface-card"
+        className="-ms-1.5 min-w-0 flex-1 rounded-[8px] border-0 bg-transparent px-1.5 py-1 font-semibold text-content outline-none hover:bg-surface-card focus:bg-surface-card focus:shadow-sm dark:bg-transparent dark:hover:bg-surface-card dark:focus:bg-surface-card"
         style={fs(13, 'body')}
         aria-label={t('collections.labels.name')}
       />

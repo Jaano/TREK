@@ -34,7 +34,7 @@ export function PlacesSelectionBar(S: SidebarState) {
   const allLabel = selectedIds.size === filtered.length && filtered.length > 0 ? t('common.deselectAll') : t('common.selectAll')
   return (
     <div className="flex-none p-2">
-      <div className="flex items-center gap-0.5 rounded-[14px] bg-accent py-1 pl-1.5 pr-1 text-accent-text shadow-lg">
+      <div className="flex items-center gap-0.5 rounded-[14px] bg-accent py-1 ps-1.5 pe-1 text-accent-text shadow-lg">
         {/* Just the number, on a white badge: the words are its name and its tooltip. */}
         <Tooltip label={t('places.selectionCount', { count: selectedIds.size })} placement="top">
           <span role="status" aria-label={t('places.selectionCount', { count: selectedIds.size })}

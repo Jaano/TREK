@@ -39,7 +39,7 @@ function Btn({
       type="button"
       onClick={onClick}
       disabled={sending !== null}
-      className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[11px] text-left disabled:opacity-50"
+      className="flex w-full items-center gap-3 rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[11px] text-start disabled:opacity-50"
     >
       <span
         className="flex h-8 w-8 flex-none items-center justify-center rounded-[10px]"

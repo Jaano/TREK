@@ -266,7 +266,7 @@ html.dark .bg-slate-50\/60, html.dark [class*="bg-slate-50/"] { background-color
     /* There is no hover on touch, so these are always live — undo the base rule. */
     pointer-events: auto !important;
     align-items: center;
-    margin-left: auto;
+    margin-inline-start: auto;
   }
   .reorder-buttons button {
     background: var(--bg-tertiary) !important;
@@ -559,8 +559,8 @@ input[type="number"], input[type="time"], input[type="date"], input[type="dateti
 @media (max-width: 639px) {
   .trek-modal-enter {
     animation: trek-drawer-enter 320ms cubic-bezier(0.32, 0.72, 0, 1);
-    border-bottom-left-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
+    border-end-start-radius: 0 !important;
+    border-end-end-radius: 0 !important;
     margin-top: auto !important;
     align-self: flex-end;
   }
@@ -1400,7 +1400,8 @@ img[alt="TREK"] {
   align-items: center;
   gap: 6px;
   min-width: 0;
-  padding: 5px 8px 5px 5px;
+  padding-block: 5px;
+  padding-inline: 5px 8px;
   /* Half the one-line height, so a one-line chip is still a pill and one whose
      title wraps (#2550) keeps its rounded corners instead of a stadium end. */
   border-radius: 18px;
@@ -1490,7 +1491,7 @@ img[alt="TREK"] {
   align-items: center;
   flex: 0 0 auto;
   gap: 1px;
-  margin-left: auto;
+  margin-inline-start: auto;
   opacity: 0.45;
   transition: opacity 0.15s ease;
 }
@@ -1543,14 +1544,14 @@ img[alt="TREK"] {
 .collab-note-md-full h3 { font-size: 1em !important; font-weight: 700 !important; margin: 0.8em 0 0.3em; }
 .collab-note-md p, .collab-note-md-full p { margin: 0 0 0.3em; }
 .collab-note-md p:last-child, .collab-note-md-full p:last-child { margin-bottom: 0; }
-.collab-note-md ul, .collab-note-md-full ul { list-style-type: disc !important; padding-left: 1.4em !important; margin: 0.2em 0; }
-.collab-note-md ol, .collab-note-md-full ol { list-style-type: decimal !important; padding-left: 1.4em !important; margin: 0.2em 0; }
+.collab-note-md ul, .collab-note-md-full ul { list-style-type: disc !important; padding-inline-start: 1.4em !important; margin: 0.2em 0; }
+.collab-note-md ol, .collab-note-md-full ol { list-style-type: decimal !important; padding-inline-start: 1.4em !important; margin: 0.2em 0; }
 .collab-note-md li, .collab-note-md-full li { display: list-item !important; margin: 0.1em 0; }
 .collab-note-md code, .collab-note-md-full code { font-size: 0.9em; padding: 1px 5px; border-radius: 4px; background: var(--bg-secondary); word-break: break-all; }
 .collab-note-md-full pre { padding: 10px 12px; border-radius: 8px; background: var(--bg-secondary); overflow-x: auto; margin: 0.5em 0; }
 .collab-note-md-full pre code { padding: 0; background: none; }
 .collab-note-md a, .collab-note-md-full a { color: #3b82f6; text-decoration: underline; word-break: normal; overflow-wrap: break-word; }
-.collab-note-md blockquote, .collab-note-md-full blockquote { border-left: 3px solid var(--border-primary); padding-left: 12px; margin: 0.5em 0; color: var(--text-muted); }
+.collab-note-md blockquote, .collab-note-md-full blockquote { border-inline-start: 3px solid var(--border-primary); padding-inline-start: 12px; margin: 0.5em 0; color: var(--text-muted); }
 .collab-note-md-full table { border-collapse: collapse; width: 100%; margin: 0.5em 0; }
 .collab-note-md-full th, .collab-note-md-full td { border: 1px solid var(--border-primary); padding: 4px 8px; font-size: 0.9em; }
 .collab-note-md-full hr { border: none; border-top: 1px solid var(--border-primary); margin: 0.8em 0; }

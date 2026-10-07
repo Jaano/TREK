@@ -91,7 +91,7 @@ function WidgetPanel({ icon, title, action, children }: {
       <div className="flex items-center gap-[7px] font-geist text-[0.625rem] font-bold uppercase tracking-[.14em] text-m-faint">
         {icon}
         {title}
-        {action && <span className="ml-auto flex">{action}</span>}
+        {action && <span className="ms-auto flex">{action}</span>}
       </div>
       {children}
     </section>
@@ -262,11 +262,11 @@ function MCollectionsWidget(): React.ReactElement {
             key={list.id}
             type="button"
             onClick={() => navigate(`/collections/${list.id}`)}
-            className="mt-[11px] flex w-full items-center rounded-[14px] p-[15px_14px] text-left text-white"
+            className="mt-[11px] flex w-full items-center rounded-[14px] p-[15px_14px] text-start text-white"
             style={{ background: list.color || entityGradient(list.id) }}
           >
             <span className="min-w-0 flex-1 truncate text-[0.875rem] font-bold">{list.name}</span>
-            <span className="ml-auto flex flex-none items-center gap-1 rounded-full bg-white/[.22] px-[10px] py-[3px] font-geist text-[0.625rem] font-bold">
+            <span className="ms-auto flex flex-none items-center gap-1 rounded-full bg-white/[.22] px-[10px] py-[3px] font-geist text-[0.625rem] font-bold">
               <MapPin size={10} strokeWidth={2.4} />
               {list.place_count ?? 0}
             </span>
@@ -430,7 +430,7 @@ function MUpcomingWidget({ items }: { items: UpcomingReservation[] }): React.Rea
             key={upcomingKey(r)}
             type="button"
             onClick={() => openReservation(r.trip_id)}
-            className="flex w-full items-center gap-[11px] border-b border-[color:var(--m-rowbr)] py-[9px] text-left"
+            className="flex w-full items-center gap-[11px] border-b border-[color:var(--m-rowbr)] py-[9px] text-start"
           >
             <span className="flex h-8 w-8 flex-none items-center justify-center rounded-[11px] bg-[color:var(--m-ic)]">
               {RES_ICON[r.type] || <Ticket size={14} strokeWidth={2} />}

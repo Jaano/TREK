@@ -93,7 +93,7 @@ export default function PageSidebar({
           />
           <aside
             ref={drawerRef}
-            className="lg:hidden fixed top-0 left-0 bottom-0 z-50 flex flex-col shadow-2xl bg-surface-secondary"
+            className="lg:hidden fixed top-0 start-0 bottom-0 z-50 flex flex-col shadow-2xl bg-surface-secondary"
             style={{
               width: 280,
               padding: '18px 14px',
@@ -174,7 +174,7 @@ function SidebarInner({
                 <button type="button"
                   onClick={() => onTabChange(tab.id)}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex items-center gap-2.5 rounded-[11px] px-2 py-1.5 text-left transition-colors ${active ? 'bg-surface-card font-semibold text-content shadow-sm ring-1 ring-edge-faint' : 'font-medium text-content-secondary hover:bg-surface-hover hover:text-content'}`}
+                  className={`flex items-center gap-2.5 rounded-[11px] px-2 py-1.5 text-start transition-colors ${active ? 'bg-surface-card font-semibold text-content shadow-sm ring-1 ring-edge-faint' : 'font-medium text-content-secondary hover:bg-surface-hover hover:text-content'}`}
                   style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))' }}
                 >
                   <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-[8px] ${active ? 'bg-accent text-accent-text' : 'bg-surface-tertiary text-content-muted'}`}>

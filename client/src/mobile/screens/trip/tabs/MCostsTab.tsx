@@ -256,14 +256,14 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
             type="button"
             aria-expanded={settleOpen}
             onClick={() => setSettleOpen(v => !v)}
-            className="flex min-w-0 flex-1 items-center gap-[7px] text-left"
+            className="flex min-w-0 flex-1 items-center gap-[7px] text-start"
           >
             <span className="text-[0.875rem] font-extrabold text-m-ink">{t('costs.settleUp')}</span>
             <CountPill>{flows.length}</CountPill>
             {settleOpen ? (
-              <ChevronUp size={14} strokeWidth={2} className="ml-auto flex-none text-m-faint" />
+              <ChevronUp size={14} strokeWidth={2} className="ms-auto flex-none text-m-faint" />
             ) : (
-              <ChevronDown size={14} strokeWidth={2} className="ml-auto flex-none text-m-faint" />
+              <ChevronDown size={14} strokeWidth={2} className="ms-auto flex-none text-m-faint" />
             )}
           </button>
           {canEdit && (
@@ -295,7 +295,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
                     <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold text-m-ink">{personName(f.from.user_id)}</span>
                     <ArrowRight size={12} strokeWidth={2.2} className="flex-none text-m-faint" />
                     <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold text-m-ink">{personName(f.to.user_id)}</span>
-                    <span className="ml-auto flex-none font-geist text-[0.78125rem] font-extrabold tabular-nums text-m-ink">{formatMoney(f.amount, base, locale)}</span>
+                    <span className="ms-auto flex-none font-geist text-[0.78125rem] font-extrabold tabular-nums text-m-ink">{formatMoney(f.amount, base, locale)}</span>
                   </div>
                 ))}
               </div>
@@ -310,7 +310,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
                 <div key={p.id} className="flex items-center gap-[9px] border-b border-[color:var(--m-rowbr)] py-[7px] last:border-b-0">
                   <MemberAvatar name={p.username} avatarUrl={p.avatar_url} isMe={p.id === me} variant="neutral" size={24} t={t} />
                   <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold text-m-ink">{p.id === me ? t('costs.you') : p.username}</span>
-                  <span className="ml-auto flex-none font-geist text-[0.75rem] font-extrabold tabular-nums" style={{ color: pos ? STATUS_COLOR.confirmed : neg ? STATUS_COLOR.danger : 'var(--m-faint)' }}>
+                  <span className="ms-auto flex-none font-geist text-[0.75rem] font-extrabold tabular-nums" style={{ color: pos ? STATUS_COLOR.confirmed : neg ? STATUS_COLOR.danger : 'var(--m-faint)' }}>
                     {pos ? '+' : neg ? '−' : ''}
                     {formatMoney(Math.abs(balance), base, locale)}
                   </span>
@@ -335,11 +335,11 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
                 type="button"
                 aria-expanded={open}
                 onClick={() => setExpandedFinalId(open ? null : p.id)}
-                className="flex w-full items-center gap-[9px] py-[7px] text-left font-[inherit]"
+                className="flex w-full items-center gap-[9px] py-[7px] text-start font-[inherit]"
               >
                 <MemberAvatar name={p.username} avatarUrl={p.avatar_url} isMe={p.id === me} variant="neutral" size={24} t={t} />
                 <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-semibold text-m-ink">{personName(p.id)}</span>
-                <span className="ml-auto flex-none font-geist text-[0.75rem] font-extrabold tabular-nums text-m-ink">{formatMoney(row.final, base, locale)}</span>
+                <span className="ms-auto flex-none font-geist text-[0.75rem] font-extrabold tabular-nums text-m-ink">{formatMoney(row.final, base, locale)}</span>
                 {open
                   ? <ChevronUp size={13} strokeWidth={2.2} className="flex-none text-m-faint" />
                   : <ChevronDown size={13} strokeWidth={2.2} className="flex-none text-m-faint" />}
@@ -365,7 +365,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
                 <div className="flex items-center gap-[7px]">
                   <span className="h-2 w-2 flex-none rounded-full" style={{ background: meta.color }} />
                   <span className="min-w-0 flex-1 truncate font-geist text-[0.65625rem] font-semibold text-m-muted">{t(meta.labelKey)}</span>
-                  <span className="ml-auto flex-none font-geist text-[0.65625rem] font-bold tabular-nums text-m-ink">{formatMoney(c.amount, base, locale)}</span>
+                  <span className="ms-auto flex-none font-geist text-[0.65625rem] font-bold tabular-nums text-m-ink">{formatMoney(c.amount, base, locale)}</span>
                 </div>
                 <div className="mt-1 h-1 overflow-hidden rounded-full bg-[color:var(--m-ic)]">
                   <span className="block h-full rounded-full" style={{ width: `${c.widthPct}%`, background: meta.color }} />
@@ -408,7 +408,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
             setCatOpen(v => !v)
             setDayOpen(false)
           }}
-          className="flex flex-1 items-center justify-between gap-2 overflow-hidden rounded-xl border border-[color:var(--m-rowbr)] bg-m-card px-[13px] py-[9px] text-left"
+          className="flex flex-1 items-center justify-between gap-2 overflow-hidden rounded-xl border border-[color:var(--m-rowbr)] bg-m-card px-[13px] py-[9px] text-start"
         >
           <span className="min-w-0 flex-1 truncate text-[0.75rem] font-semibold text-m-ink">
             {catFilter ? t(catMeta(catFilter).labelKey) : t('costs.filter.allCategories')}
@@ -422,7 +422,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
             setDayOpen(v => !v)
             setCatOpen(false)
           }}
-          className="flex flex-1 items-center justify-between gap-2 overflow-hidden rounded-xl border border-[color:var(--m-rowbr)] bg-m-card px-[13px] py-[9px] text-left"
+          className="flex flex-1 items-center justify-between gap-2 overflow-hidden rounded-xl border border-[color:var(--m-rowbr)] bg-m-card px-[13px] py-[9px] text-start"
         >
           <span className="min-w-0 flex-1 truncate text-[0.75rem] font-semibold text-m-ink">
             {dayFilter ? dayOptionLabel(dayFilter) : t('costs.filter.allDays')}
@@ -439,7 +439,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
               setCatFilter('')
               setCatOpen(false)
             }}
-            className="flex w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left"
+            className="flex w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start"
           >
             <Layers size={14} strokeWidth={2} className="flex-none text-m-muted" />
             <span className="text-[0.78125rem] font-medium text-m-ink">{t('costs.filter.allCategories')}</span>
@@ -455,7 +455,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
                   setCatFilter(k)
                   setCatOpen(false)
                 }}
-                className="flex w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left last:border-b-0"
+                className="flex w-full items-center gap-[10px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start last:border-b-0"
               >
                 <Icon size={14} strokeWidth={2} style={{ color: meta.color }} className="flex-none" />
                 <span className="text-[0.78125rem] font-medium text-m-ink">{t(meta.labelKey)}</span>
@@ -473,7 +473,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
               setDayFilter('')
               setDayOpen(false)
             }}
-            className="w-full border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left text-[0.78125rem] font-medium text-m-ink"
+            className="w-full border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start text-[0.78125rem] font-medium text-m-ink"
           >
             {t('costs.filter.allDays')}
           </button>
@@ -485,7 +485,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
                 setDayFilter(d)
                 setDayOpen(false)
               }}
-              className="w-full border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-left text-[0.78125rem] font-medium text-m-ink last:border-b-0"
+              className="w-full border-b border-[color:var(--m-rowbr)] px-[13px] py-[10px] text-start text-[0.78125rem] font-medium text-m-ink last:border-b-0"
             >
               {dayOptionLabel(d)}
             </button>
@@ -500,7 +500,7 @@ export default function MCostsTab({ planner, shell }: MTabScreenProps) {
           <div key={g.dateKey || 'no-date'}>
             <div className="mt-[14px] flex items-baseline gap-2 px-[2px]">
               <span className="font-geist text-[0.625rem] font-bold uppercase tracking-[.09em] text-m-faint">{groupLabel(g.dateKey)}</span>
-              <span className="ml-auto flex-none font-geist text-[0.59375rem] font-bold tabular-nums text-m-muted">
+              <span className="ms-auto flex-none font-geist text-[0.59375rem] font-bold tabular-nums text-m-muted">
                 {t('costs.spent', { amount: formatMoney(groupTotal, base, locale) })}
               </span>
             </div>
@@ -640,7 +640,7 @@ function ExpenseRow({ item, ctx, base, locale, t, canEdit, onEdit, onDelete, onT
     <div className="mt-2 flex items-center gap-[6px]">
       <div className="relative min-w-0 flex-1 rounded-2xl bg-m-card px-3 pb-[10px] pt-[22px]" style={{ border: `1.5px solid ${borderColor}` }}>
         <span
-          className="absolute -left-[1.5px] -top-[1.5px] flex items-center gap-1 rounded-bl-none rounded-br-[12px] rounded-tl-[15px] rounded-tr-none px-[11px] pb-[4px] pt-[3px] font-geist text-[0.5625rem] font-extrabold uppercase tracking-[.05em] text-white"
+          className="absolute -start-[1.5px] -top-[1.5px] flex items-center gap-1 rounded-es-none rounded-ee-[12px] rounded-ss-[15px] rounded-se-none px-[11px] pb-[4px] pt-[3px] font-geist text-[0.5625rem] font-extrabold uppercase tracking-[.05em] text-white"
           style={{ background: meta.color }}
         >
           <Icon size={10} strokeWidth={2.4} />
@@ -648,7 +648,7 @@ function ExpenseRow({ item, ctx, base, locale, t, canEdit, onEdit, onDelete, onT
         </span>
         {unfinished && (
           <span
-            className="absolute -right-[1.5px] -top-[1.5px] rounded-bl-[12px] rounded-br-none rounded-tl-none rounded-tr-[15px] px-[11px] pb-[4px] pt-[3px] font-geist text-[0.53125rem] font-extrabold uppercase tracking-[.03em] text-white"
+            className="absolute -end-[1.5px] -top-[1.5px] rounded-es-[12px] rounded-ee-none rounded-ss-none rounded-se-[15px] px-[11px] pb-[4px] pt-[3px] font-geist text-[0.53125rem] font-extrabold uppercase tracking-[.03em] text-white"
             style={{ background: 'var(--m-st-pending)' }}
           >
             {t('costs.unfinished')}
@@ -688,7 +688,7 @@ function ExpenseRow({ item, ctx, base, locale, t, canEdit, onEdit, onDelete, onT
                     disabled={!canEdit}
                     aria-pressed={Boolean(m.paid)}
                     onClick={() => onTogglePaid(m.user_id, !m.paid)}
-                    className={`inline-flex items-center gap-1 rounded-full py-[2px] pl-[3px] pr-[7px] ${
+                    className={`inline-flex items-center gap-1 rounded-full py-[2px] ps-[3px] pe-[7px] ${
                       m.paid ? 'border-2 border-[color:var(--m-st-confirmed)]' : 'border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)]'
                     }`}
                   >
@@ -734,7 +734,7 @@ function RowNote({ note }: { note: string }) {
       type="button"
       aria-expanded={open}
       onClick={() => setOpen(v => !v)}
-      className="mt-[7px] flex w-full items-center gap-[7px] rounded-xl bg-[color:var(--m-ic)] px-[9px] py-[6px] text-left"
+      className="mt-[7px] flex w-full items-center gap-[7px] rounded-xl bg-[color:var(--m-ic)] px-[9px] py-[6px] text-start"
     >
       <StickyNote size={11} strokeWidth={2} className="flex-none text-m-faint" />
       <span className={`min-w-0 flex-1 text-[0.6875rem] leading-[1.5] text-m-muted ${open ? 'whitespace-pre-wrap [overflow-wrap:anywhere]' : 'truncate'}`}>

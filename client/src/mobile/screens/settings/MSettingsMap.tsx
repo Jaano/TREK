@@ -179,7 +179,7 @@ export default function MSettingsMap() {
               key={p.id}
               type="button"
               onClick={() => changeProvider(p.id)}
-              className={`flex items-center gap-[10px] rounded-xl border px-[13px] py-[10px] text-left ${
+              className={`flex items-center gap-[10px] rounded-xl border px-[13px] py-[10px] text-start ${
                 active
                   ? 'border-transparent bg-m-act text-m-actfg'
                   : 'border-[color:var(--m-rowbr)] bg-[color:var(--m-sheet)] text-m-ink'

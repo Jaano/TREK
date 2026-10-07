@@ -37,7 +37,7 @@ const TYPE_OPTIONS = [
 ]
 
 // Traveler picker row — same surface as the cost-split rows (bg on --m-ic).
-const TRAVELER_ROW_CLS = 'flex w-full items-center gap-[9px] rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[9px] text-left'
+const TRAVELER_ROW_CLS = 'flex w-full items-center gap-[9px] rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[9px] text-start'
 
 const EMPTY = {
   title: '', type: 'other', status: 'pending',
@@ -528,13 +528,13 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
         {/* LINK */}
         <Eyebrow className="mb-[5px] mt-3 uppercase">{t('reservations.urlLabel')}</Eyebrow>
         <div className="relative">
-          <Link2 size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-m-faint" />
+          <Link2 size={15} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-m-faint" />
           <input
             type="url"
             value={form.url}
             onChange={e => set('url', e.target.value)}
             placeholder={t('reservations.urlPlaceholder')}
-            className={`${FIELD_CLS} pl-[34px]`}
+            className={`${FIELD_CLS} ps-[34px]`}
           />
         </div>
 

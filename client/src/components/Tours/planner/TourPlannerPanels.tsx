@@ -215,7 +215,7 @@ export function TourPlannerRail({ planner, canEdit: editPermission, canAssign: a
                       <button
                         type="button"
                         onClick={() => planner.setSelectedWaypointId(point.id)}
-                        className={`group flex w-full items-center gap-2.5 rounded-[12px] px-2 py-1.5 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[color:var(--text-primary)] ${selected ? 'bg-surface-selected' : 'hover:bg-surface-hover'}`}
+                        className={`group flex w-full items-center gap-2.5 rounded-[12px] px-2 py-1.5 text-start outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[color:var(--text-primary)] ${selected ? 'bg-surface-selected' : 'hover:bg-surface-hover'}`}
                         aria-current={selected ? 'true' : undefined}
                       >
                         <span
@@ -260,7 +260,7 @@ export function TourPlannerRail({ planner, canEdit: editPermission, canAssign: a
               {planner.error === 'save' ? t('tours.planner.status.saveFailed') : statusKey ? t(statusKey) : null}
               {canRetry && (
                 <button type="button" onClick={planner.retry}
-                  className="ml-2 inline-flex items-center rounded-full bg-surface-card px-2 py-[1px] font-semibold text-content shadow-sm hover:bg-surface-secondary"
+                  className="ms-2 inline-flex items-center rounded-full bg-surface-card px-2 py-[1px] font-semibold text-content shadow-sm hover:bg-surface-secondary"
                   style={fs(11)}>
                   {t('tours.planner.retry')}
                 </button>

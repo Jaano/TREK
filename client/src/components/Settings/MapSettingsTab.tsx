@@ -90,7 +90,7 @@ function StyleDropdown({ value, provider, onChange }: { value: string; provider:
         type="button"
         onClick={() => setOpen(v => !v)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 rounded-[10px] border border-edge bg-surface-input px-3 py-2 text-left hover:border-content-faint focus:outline-none focus:ring-2 focus:ring-[color:var(--text-primary)]"
+        className="flex w-full items-center justify-between gap-2 rounded-[10px] border border-edge bg-surface-input px-3 py-2 text-start hover:border-content-faint focus:outline-none focus:ring-2 focus:ring-[color:var(--text-primary)]"
         style={fs(13, 'body')}
       >
         <span className="flex min-w-0 items-center gap-2">
@@ -114,7 +114,7 @@ function StyleDropdown({ value, provider, onChange }: { value: string; provider:
                 key={preset.url}
                 type="button"
                 onClick={() => { onChange(preset.url); setOpen(false) }}
-                className={`flex w-full items-center justify-between gap-2 rounded-[9px] px-2.5 py-2 text-left hover:bg-surface-tertiary ${isActive ? 'bg-surface-tertiary' : ''}`}
+                className={`flex w-full items-center justify-between gap-2 rounded-[9px] px-2.5 py-2 text-start hover:bg-surface-tertiary ${isActive ? 'bg-surface-tertiary' : ''}`}
                 style={fs(12.5, 'body')}
               >
                 <span className="flex min-w-0 flex-wrap items-center gap-1.5">
@@ -145,7 +145,7 @@ function ProviderTile({ active, onClick, icon: Icon, name, subtitle, badge }: {
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`flex min-w-0 items-start gap-3 rounded-[12px] border bg-surface-card p-3 text-left transition-colors ${active ? 'border-[color:var(--text-primary)] shadow-sm' : 'border-edge hover:border-content-faint'}`}
+      className={`flex min-w-0 items-start gap-3 rounded-[12px] border bg-surface-card p-3 text-start transition-colors ${active ? 'border-[color:var(--text-primary)] shadow-sm' : 'border-edge hover:border-content-faint'}`}
     >
       <span className={`grid h-8 w-8 flex-none place-items-center rounded-[10px] ${active ? 'bg-accent text-accent-text' : 'bg-surface-tertiary text-content-secondary'}`}>
         <Icon size={15} strokeWidth={2} />

@@ -177,7 +177,7 @@ function TransportCard({ res, planner, shell, canEdit, compact }: {
         <button
           type="button"
           onClick={openDetail}
-          className="flex min-w-0 flex-1 items-center gap-[7px] text-left"
+          className="flex min-w-0 flex-1 items-center gap-[7px] text-start"
         >
           <span className="inline-flex flex-none items-center gap-1 rounded-full border border-[color:var(--m-rowbr)] bg-m-card px-2 py-[2px] font-geist text-[0.5625rem] font-bold uppercase tracking-[.06em] text-m-muted">
             <TypeIcon size={10} strokeWidth={2.2} style={{ color: typeColor }} />
@@ -216,7 +216,7 @@ function TransportCard({ res, planner, shell, canEdit, compact }: {
           control instead of a click handler buried inside the card button. */}
       {!compact && (
         <div className="px-3 pb-3 pt-[9px]">
-          <button type="button" onClick={openDetail} className="block w-full text-left">
+          <button type="button" onClick={openDetail} className="block w-full text-start">
             <div className="flex gap-2">
               <Field label={t('reservations.date')} className="flex-[1.4]">{dayValue}</Field>
               <Field label={t('reservations.time')} className="flex-1" tabular>{timeValue}</Field>
@@ -232,7 +232,7 @@ function TransportCard({ res, planner, shell, canEdit, compact }: {
             />
           )}
 
-          <button type="button" onClick={openDetail} className="block w-full text-left">
+          <button type="button" onClick={openDetail} className="block w-full text-start">
             {eps.length >= 2 && (
               <div className="mt-2 flex flex-wrap items-center justify-center gap-2 rounded-[10px] border border-[color:var(--m-rowbr)] bg-m-card px-[10px] py-2 text-[0.71875rem] font-semibold text-m-ink">
                 {eps.map((ep, i) => (

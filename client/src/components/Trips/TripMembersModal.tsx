@@ -397,7 +397,7 @@ function TripMembersSheet({ isOpen, onClose, tripId, tripTitle, onMembersChanged
         </div>
 
         {/* Right column: Share Link */}
-        {canManageShare && <div className="border-l border-edge-faint" style={{ paddingLeft: 24 }}>
+        {canManageShare && <div className="border-s border-edge-faint" style={{ paddingInlineStart: 24 }}>
         <ShareLinkSection tripId={tripId} t={t} />
         <TripInviteLinkSection tripId={tripId} t={t} />
         </div>}

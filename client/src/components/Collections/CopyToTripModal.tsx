@@ -115,14 +115,14 @@ export default function CopyToTripModal({ isOpen, onClose, placeIds, onCopy, t }
       )}
     >
       <div className="relative">
-        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+        <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
         <input
           autoFocus
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder={t('collections.copyToTripSearch')}
           aria-label={t('collections.copyToTripSearch')}
-          className={`${INPUT} pl-8`}
+          className={`${INPUT} ps-8`}
         />
       </div>
       {loading ? (
@@ -142,7 +142,7 @@ export default function CopyToTripModal({ isOpen, onClose, placeIds, onCopy, t }
                 type="button"
                 onClick={() => handleCopy(trip.id)}
                 disabled={busy}
-                className="flex min-h-[52px] items-center gap-3 rounded-[10px] px-2.5 py-2 text-left hover:bg-surface-card disabled:opacity-60"
+                className="flex min-h-[52px] items-center gap-3 rounded-[10px] px-2.5 py-2 text-start hover:bg-surface-card disabled:opacity-60"
               >
                 <span className="grid h-9 w-9 flex-none place-items-center overflow-hidden rounded-[9px] bg-surface-tertiary text-content-faint">
                   {trip.cover_image ? <img src={trip.cover_image} alt="" className="h-full w-full object-cover" /> : <MapPin size={15} />}

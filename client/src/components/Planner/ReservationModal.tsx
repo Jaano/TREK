@@ -449,7 +449,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
       {form.type !== 'hotel' && (
         <div className="flex flex-col gap-3">
           {assignmentOptions.length > 0 && (
-            <EditorField label={<><Link2 size={10} className="mr-[3px] inline align-[-1px]" />{t('reservations.linkAssignment')}</>}>
+            <EditorField label={<><Link2 size={10} className="me-[3px] inline align-[-1px]" />{t('reservations.linkAssignment')}</>}>
               <CustomSelect
                 value={form.assignment_id}
                 onChange={value => {

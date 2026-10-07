@@ -84,7 +84,7 @@ export default function BudgetCategoryTable({ cat, grouped, categoryColor, canEd
                   setDragCat(null); setDragOverCat(null)
                 }}
               >
-                {dragOverCat === cat && <div style={{ position: 'absolute', top: -2, left: 0, right: 0, height: 4, background: 'var(--accent)', borderRadius: 2, zIndex: 10 }} />}
+                {dragOverCat === cat && <div style={{ position: 'absolute', top: -2, insetInline: 0, height: 4, background: 'var(--accent)', borderRadius: 2, zIndex: 10 }} />}
                 <div style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#000000', color: '#fff',
                   borderRadius: '10px 10px 0 0', padding: '9px 14px',
@@ -137,7 +137,7 @@ export default function BudgetCategoryTable({ cat, grouped, categoryColor, canEd
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                       <tr>
-                        <th style={{ ...th, textAlign: 'left', minWidth: 120 }}>{t('budget.table.name')}</th>
+                        <th style={{ ...th, textAlign: 'start', minWidth: 120 }}>{t('budget.table.name')}</th>
                         <th style={{ ...th, minWidth: 75 }}>{t('budget.table.total')}</th>
                         <th className="hidden sm:table-cell" style={{ ...th, minWidth: 160 }}>{t('budget.table.persons')}</th>
                         <th className="hidden sm:table-cell" style={{ ...th, minWidth: 55 }}>{t('budget.table.days')}</th>
@@ -256,7 +256,7 @@ export default function BudgetCategoryTable({ cat, grouped, categoryColor, canEd
                           </tr>
                           {contributions.length > 0 && (
                             <tr>
-                              <td colSpan={10} style={{ padding: '0 8px 6px 20px' }}>
+                              <td colSpan={10} style={{ paddingBlock: '0 6px', paddingInline: '20px 8px' }}>
                                 <PluginCardFooter items={contributions} tripId={tripId} />
                               </td>
                             </tr>

@@ -362,7 +362,7 @@ interface MSubRowProps {
 /** Indented sub-feature row (bag tracking, collab features, memory providers). */
 function MSubRow({ icon: Icon, providerIcon: ProviderIcon, title, subtitle, enabled, onToggle }: MSubRowProps) {
   return (
-    <div className="flex items-center gap-3 border-t border-[color:var(--m-rowbr)] py-[9px] pl-[50px]">
+    <div className="flex items-center gap-3 border-t border-[color:var(--m-rowbr)] py-[9px] ps-[50px]">
       <span className="flex-none text-m-faint">
         {Icon ? <Icon size={14} /> : ProviderIcon ? <ProviderIcon size={14} /> : null}
       </span>
@@ -479,7 +479,7 @@ function LlmParsingConfig({ addon }: { addon: Addon }) {
   ]
 
   return (
-    <div className="space-y-5 pl-[50px]">
+    <div className="space-y-5 ps-[50px]">
       <p className="font-geist text-[0.625rem] leading-relaxed text-m-faint">
         Set instance-wide config (applies to all users). Leave blank to let each user configure their own provider.
       </p>
@@ -496,7 +496,7 @@ function LlmParsingConfig({ addon }: { addon: Addon }) {
                   key={opt.value}
                   type="button"
                   onClick={() => setProvider(opt.value)}
-                  className={`flex w-full items-center gap-2 rounded-xl border px-3 py-[10px] text-left ${
+                  className={`flex w-full items-center gap-2 rounded-xl border px-3 py-[10px] text-start ${
                     active ? 'border-[color:var(--m-act)] bg-[color:var(--m-ic)]' : 'border-[color:var(--m-rowbr)]'
                   }`}
                 >

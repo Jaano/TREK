@@ -420,7 +420,7 @@ export default function MJourneyEntrySheet({
           {entry.id === 0 ? t('journey.detail.newEntry') : t('journey.detail.editEntry')}
         </span>
         {(onMoveEarlier || onMoveLater) && (
-          <span className="mr-1 flex items-center gap-1">
+          <span className="me-1 flex items-center gap-1">
             <MIconBtn variant="neutral" size={34} onClick={() => onMoveEarlier?.()} disabled={!onMoveEarlier} ariaLabel={t('dayplan.moveUp')}>
               <ChevronUp size={15} strokeWidth={2.4} />
             </MIconBtn>
@@ -646,7 +646,7 @@ export default function MJourneyEntrySheet({
                   <button
                     type="button"
                     onClick={() => photoOrder.makeFirst(idx)}
-                    className="absolute bottom-[3px] left-[3px] rounded-full bg-black/60 px-[6px] py-[1px] font-geist text-[0.5rem] font-bold text-white"
+                    className="absolute bottom-[3px] start-[3px] rounded-full bg-black/60 px-[6px] py-[1px] font-geist text-[0.5rem] font-bold text-white"
                   >
                     {t('journey.editor.photoFirst')}
                   </button>
@@ -663,7 +663,7 @@ export default function MJourneyEntrySheet({
                       }
                     }}
                     aria-label={t('common.delete')}
-                    className="absolute right-[3px] top-[3px] flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
+                    className="absolute end-[3px] top-[3px] flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
                   >
                     <X size={10} />
                   </button>
@@ -682,7 +682,7 @@ export default function MJourneyEntrySheet({
                   type="button"
                   onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))}
                   aria-label={t('common.delete')}
-                  className="absolute right-[3px] top-[3px] flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
+                  className="absolute end-[3px] top-[3px] flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white"
                 >
                   <X size={10} />
                 </button>
@@ -863,7 +863,7 @@ export default function MJourneyEntrySheet({
             )}
           </div>
           {showLocationResults && locationResults.length > 0 && (
-            <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-[200px] overflow-y-auto rounded-[14px] border border-[color:var(--m-rowbr)] bg-m-sheetop shadow-[0_16px_40px_-18px_rgba(0,0,0,.5)]">
+            <div className="absolute inset-x-0 top-full z-10 mt-1 max-h-[200px] overflow-y-auto rounded-[14px] border border-[color:var(--m-rowbr)] bg-m-sheetop shadow-[0_16px_40px_-18px_rgba(0,0,0,.5)]">
               {locationResults.map((r, i) => (
                 <button
                   key={i}
@@ -876,7 +876,7 @@ export default function MJourneyEntrySheet({
                     setShowLocationResults(false)
                     setLocationResults([])
                   }}
-                  className="flex w-full items-start gap-2 border-b border-[color:var(--m-rowbr)] px-3 py-[10px] text-left last:border-0"
+                  className="flex w-full items-start gap-2 border-b border-[color:var(--m-rowbr)] px-3 py-[10px] text-start last:border-0"
                 >
                   <MapPin size={13} className="mt-[2px] flex-none text-m-faint" />
                   <span className="min-w-0">
@@ -1010,7 +1010,7 @@ export default function MJourneyEntrySheet({
         <button
           type="button"
           onClick={onDismiss}
-          className="mx-[18px] mt-1 mb-[10px] flex flex-none items-center gap-[9px] rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-[13px] py-[10px] text-left"
+          className="mx-[18px] mt-1 mb-[10px] flex flex-none items-center gap-[9px] rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-[13px] py-[10px] text-start"
         >
           <EyeOff size={15} strokeWidth={2} className="flex-none text-m-muted" />
           <span className="min-w-0 flex-1 text-[0.8125rem] font-semibold">{t('journey.suggestions.dismiss')}</span>
@@ -1040,7 +1040,7 @@ export default function MJourneyEntrySheet({
         <button
           type="button"
           onClick={handleClose}
-          className="ml-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold"
+          className="ms-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold"
         >
           {t('common.cancel')}
         </button>

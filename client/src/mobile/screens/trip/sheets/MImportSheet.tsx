@@ -91,7 +91,7 @@ function ImpMenuRow({ icon: Icon, title, sub, onClick, className = '' }: ImpMenu
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-3 rounded-2xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[13px] text-left ${className}`}
+      className={`flex w-full items-center gap-3 rounded-2xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[13px] text-start ${className}`}
     >
       <span className="flex h-[38px] w-[38px] flex-none items-center justify-center rounded-[12px] bg-[color:var(--m-glass)]">
         <Icon size={17} strokeWidth={1.9} />

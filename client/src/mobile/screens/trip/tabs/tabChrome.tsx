@@ -48,16 +48,16 @@ export function SectionHeader({ label, count, open, onToggle }: {
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="mb-[2px] mt-[15px] flex w-full items-center gap-[7px] px-[2px] text-left"
+      className="mb-[2px] mt-[15px] flex w-full items-center gap-[7px] px-[2px] text-start"
     >
       <span className="font-geist text-[0.625rem] font-bold uppercase tracking-[.09em] text-m-faint">
         {label}
       </span>
       {count != null && <CountPill>{count}</CountPill>}
       {open ? (
-        <ChevronUp size={13} strokeWidth={2} className="ml-auto flex-none text-m-faint" />
+        <ChevronUp size={13} strokeWidth={2} className="ms-auto flex-none text-m-faint" />
       ) : (
-        <ChevronDown size={13} strokeWidth={2} className="ml-auto flex-none text-m-faint" />
+        <ChevronDown size={13} strokeWidth={2} className="ms-auto flex-none text-m-faint" />
       )}
     </button>
   )
@@ -175,7 +175,7 @@ export function TravelerAvatars({ travelers, label }: {
           return (
             <span
               key={tv.user_id}
-              className="flex items-center gap-[6px] rounded-full border border-[color:var(--m-rowbr)] bg-m-card py-[3px] pl-[3px] pr-[10px]"
+              className="flex items-center gap-[6px] rounded-full border border-[color:var(--m-rowbr)] bg-m-card py-[3px] ps-[3px] pe-[10px]"
             >
               <span className="flex h-[20px] w-[20px] flex-none items-center justify-center overflow-hidden rounded-full bg-m-act text-[0.5625rem] font-extrabold text-m-actfg">
                 {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : tv.username?.[0]?.toUpperCase()}

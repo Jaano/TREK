@@ -21,7 +21,7 @@ interface PlFileAttachProps {
   onLink?: (file: TripFile) => Promise<boolean>
 }
 
-const ITEM_CLS = 'flex w-full items-center gap-2 rounded-[10px] bg-[color:var(--m-ic)] px-2 py-[6px] text-left'
+const ITEM_CLS = 'flex w-full items-center gap-2 rounded-[10px] bg-[color:var(--m-ic)] px-2 py-[6px] text-start'
 
 /**
  * Files row of the place and booking forms: picker pill plus the pending

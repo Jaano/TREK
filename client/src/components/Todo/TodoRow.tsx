@@ -84,7 +84,7 @@ export default function TodoRow({ item, members, categories, today, isSelected, 
           onClick={e => e.stopPropagation()}
           onDragStart={e => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; drag!.onStart(item.id) }}
           onDragEnd={() => drag!.onEnd()}
-          style={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: 'var(--text-faint)', flexShrink: 0, marginLeft: -4, opacity: 0.6 }}
+          style={{ cursor: 'grab', display: 'flex', alignItems: 'center', color: 'var(--text-faint)', flexShrink: 0, marginInlineStart: -4, opacity: 0.6 }}
         >
           <GripVertical size={13} />
         </div>

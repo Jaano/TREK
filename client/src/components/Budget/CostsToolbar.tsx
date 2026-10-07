@@ -64,7 +64,7 @@ export default function CostsToolbar({ dateMeta, people, me, colorFor, canEdit, 
   const button = 'inline-flex h-9 items-center gap-1.5 rounded-[10px] border-0 px-3.5 font-medium hover:opacity-[0.88]'
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2.5 rounded-[18px] bg-surface-tertiary py-3 pl-[22px] pr-3">
+    <div className="mb-4 flex flex-wrap items-center gap-2.5 rounded-[18px] bg-surface-tertiary py-3 ps-[22px] pe-3">
       <h2 className="m-0 shrink-0 text-subtitle font-semibold tracking-[-0.01em] text-content">{t('trip.tabs.budget')}</h2>
       <div className="mx-1.5 h-[22px] w-px shrink-0 bg-edge-faint" />
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5" style={{ fontSize: BODY_SIZE }}>
@@ -76,10 +76,10 @@ export default function CostsToolbar({ dateMeta, people, me, colorFor, canEdit, 
             <b className="text-content">{t('costs.daysCount', { count: dateMeta.days })}</b>
           </span>
         )}
-        <span className={`${chip} gap-2 pl-1.5`}>
+        <span className={`${chip} gap-2 ps-1.5`}>
           <span className="inline-flex">
             {people.slice(0, 4).map((p, i) => {
-              const ring = { width: 22, height: 22, marginLeft: i ? -8 : 0 }
+              const ring = { width: 22, height: 22, marginInlineStart: i ? -8 : 0 }
               return p.avatar_url
                 ? <img key={p.id} src={p.avatar_url} alt="" className="block shrink-0 rounded-full border-2 border-surface-card object-cover" style={ring} />
                 : (
@@ -178,11 +178,11 @@ function FilterMenu(f: CostsFilterProps) {
       <Tooltip label={t('reservations.filter')}>
         <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={t('reservations.filter')} className={`${BAR_BTN} ${active ? 'text-content' : ''}`}>
           <Filter size={15} strokeWidth={2} />
-          {active > 0 && <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-geist font-bold text-accent-text" style={{ fontSize: 'calc(9px * var(--fs-scale-caption, 1))' }}>{active}</span>}
+          {active > 0 && <span className="absolute -end-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-1 font-geist font-bold text-accent-text" style={{ fontSize: 'calc(9px * var(--fs-scale-caption, 1))' }}>{active}</span>}
         </button>
       </Tooltip>
       {open && (
-        <div role="menu" onKeyDown={e => { if (e.key === 'Escape') close() }} className="absolute right-0 top-11 z-30" style={{ ...POPOVER, width: 310 }}>
+        <div role="menu" onKeyDown={e => { if (e.key === 'Escape') close() }} className="absolute end-0 top-11 z-30" style={{ ...POPOVER, width: 310 }}>
           <div className="mx-1.5 mb-1 mt-1.5 flex rounded-[10px] bg-surface-tertiary p-[3px]">
             {owners.map(([o, label]) => (
               <button key={o} type="button" onClick={() => f.onOwner(o)} aria-pressed={f.owner === o}

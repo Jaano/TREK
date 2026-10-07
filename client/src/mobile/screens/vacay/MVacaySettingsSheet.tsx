@@ -90,10 +90,10 @@ export default function MVacaySettingsSheet({ open, onClose }: MVacaySettingsShe
         </div>
         {plan.block_weekends !== false && (
           <>
-            <div className="mb-[6px] ml-7 mt-[2px] font-geist text-[0.625rem] font-bold uppercase tracking-[.06em] text-m-faint">
+            <div className="mb-[6px] ms-7 mt-[2px] font-geist text-[0.625rem] font-bold uppercase tracking-[.06em] text-m-faint">
               {t('vacay.weekendDays')}
             </div>
-            <div className="mb-[6px] ml-7 flex gap-1">
+            <div className="mb-[6px] ms-7 flex gap-1">
               {weekdayChips.map(({ day, label }) => {
                 const active = weekendDays.includes(day)
                 return (
@@ -324,7 +324,7 @@ function YearTypeRows() {
           <div className="font-geist text-[0.65625rem] text-m-muted">{t('vacay.yearTypeHint')}</div>
         </div>
       </div>
-      <div className="ml-7 flex gap-1">
+      <div className="ms-7 flex gap-1">
         {([
           { value: 'calendar', label: t('vacay.yearTypeCalendar') },
           { value: 'fiscal', label: t('vacay.yearTypeFiscal') },
@@ -344,7 +344,7 @@ function YearTypeRows() {
       </div>
 
       {type === 'fiscal' && (
-        <div className="ml-7 flex gap-2">
+        <div className="ms-7 flex gap-2">
           <span className="min-w-0 flex-1">
             <SelectRow
               value={String(yearSettings.year_start_month)}
@@ -365,7 +365,7 @@ function YearTypeRows() {
       )}
 
       {type === 'anniversary' && (
-        <div className="ml-7">
+        <div className="ms-7">
           <input
             type="date"
             value={yearSettings.hire_date || ''}
@@ -376,7 +376,7 @@ function YearTypeRows() {
         </div>
       )}
 
-      <div className="ml-7 mt-[6px] font-geist text-[0.625rem] text-m-faint">
+      <div className="ms-7 mt-[6px] font-geist text-[0.625rem] text-m-faint">
         {t('vacay.yearWindow', { year: selectedYear, window: windowLabel })}
       </div>
     </>
@@ -428,7 +428,7 @@ function ColorSwatch({ color, onPick }: { color: string; onPick: (color: string)
         style={{ background: color }}
       />
       {openPalette && (
-        <span className="absolute left-0 top-[32px] z-10 grid w-[124px] grid-cols-4 gap-1 rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] p-2 shadow-[0_8px_24px_rgba(0,0,0,.12)]">
+        <span className="absolute start-0 top-[32px] z-10 grid w-[124px] grid-cols-4 gap-1 rounded-xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] p-2 shadow-[0_8px_24px_rgba(0,0,0,.12)]">
           {CALENDAR_COLORS.map(c => (
             <button
               key={c}

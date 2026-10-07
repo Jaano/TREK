@@ -85,13 +85,13 @@ export function MAdminSecretInput({ className = '', ...props }: InputHTMLAttribu
   const [show, setShow] = useState(false)
   return (
     <div className="relative">
-      <MAdminInput {...props} type={show ? 'text' : 'password'} className={`pr-10 ${className}`} />
+      <MAdminInput {...props} type={show ? 'text' : 'password'} className={`pe-10 ${className}`} />
       <button
         type="button"
         tabIndex={-1}
         aria-label="Show or hide"
         onClick={() => setShow((v) => !v)}
-        className="absolute right-3 top-1/2 -translate-y-1/2 text-m-faint"
+        className="absolute end-3 top-1/2 -translate-y-1/2 text-m-faint"
       >
         {show ? <EyeOff size={16} /> : <Eye size={16} />}
       </button>

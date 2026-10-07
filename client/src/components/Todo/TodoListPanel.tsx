@@ -57,14 +57,14 @@ function SidebarItem({ id, icon: Icon, label, count, color, active, compact, onS
       ) : Icon ? (
         <Icon size={compact ? 18 : 15} style={{ flexShrink: 0, opacity: 0.7 }} />
       ) : null}
-      {!compact && <span style={{ flex: 1, textAlign: 'left' }}>{label}</span>}
+      {!compact && <span style={{ flex: 1, textAlign: 'start' }}>{label}</span>}
       {!compact && count > 0 && (
         <span style={{ fontSize: 'calc(10.5px * var(--fs-scale-caption, 1))', fontWeight: 700, color: 'var(--text-faint)', background: active ? 'var(--bg-card)' : 'var(--bg-tertiary)', borderRadius: 99, padding: '1px 7px', minWidth: 20, textAlign: 'center' }}>
           {count}
         </span>
       )}
       {compact && count > 0 && (
-        <span style={{ position: 'absolute', top: 2, right: 2, fontSize: 'calc(8px * var(--fs-scale-caption, 1))', fontWeight: 700, color: 'var(--bg-primary)', background: 'var(--text-faint)', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{ position: 'absolute', top: 2, insetInlineEnd: 2, fontSize: 'calc(8px * var(--fs-scale-caption, 1))', fontWeight: 700, color: 'var(--bg-primary)', background: 'var(--text-faint)', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {count}
         </span>
       )}

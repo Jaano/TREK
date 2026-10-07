@@ -210,7 +210,7 @@ export default function ImportFromTripModal({ isOpen, collectionId, collectionNa
     footer = (
       <DialogFooter>
         <DialogButton onClick={() => setStep('trip')} icon={<ArrowLeft size={14} strokeWidth={2.2} />}>{t('common.back')}</DialogButton>
-        <span className="ml-1 text-content-faint" style={fs(12.5, 'body')}>
+        <span className="ms-1 text-content-faint" style={fs(12.5, 'body')}>
           {t('collections.importSelectedCount', { count: selected.size })}
         </span>
         <FooterSpacer />
@@ -255,7 +255,7 @@ export default function ImportFromTripModal({ isOpen, collectionId, collectionNa
                   key={tr.id}
                   type="button"
                   onClick={() => pickTrip(tr)}
-                  className="group flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-secondary p-2.5 text-left transition-colors hover:bg-surface-card hover:shadow-sm"
+                  className="group flex w-full items-center gap-3 rounded-[14px] border border-edge-faint bg-surface-secondary p-2.5 text-start transition-colors hover:bg-surface-card hover:shadow-sm"
                 >
                   <span className="grid h-[42px] w-[42px] flex-none place-items-center overflow-hidden rounded-[11px] bg-surface-tertiary text-content-faint">
                     {tr.cover_image
@@ -291,14 +291,14 @@ export default function ImportFromTripModal({ isOpen, collectionId, collectionNa
         <>
           <div className={STICKY_BAR}>
             <div className="relative min-w-[150px] flex-1">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+              <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
               <input
                 type="text"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 placeholder={t('collections.importSearchPlaces')}
                 aria-label={t('collections.importSearchPlaces')}
-                className={`${INPUT} pl-8`}
+                className={`${INPUT} ps-8`}
               />
             </div>
             {savedCount > 0 && (
@@ -349,7 +349,7 @@ export default function ImportFromTripModal({ isOpen, collectionId, collectionNa
                     onClick={() => !dup && toggle(p.place_id)}
                     disabled={dup}
                     aria-pressed={dup ? undefined : on}
-                    className={`flex min-h-[48px] w-full items-center gap-3 rounded-[10px] px-2.5 py-1.5 text-left disabled:cursor-default disabled:opacity-50 ${on ? 'bg-surface-card shadow-sm' : 'enabled:hover:bg-surface-card'}`}
+                    className={`flex min-h-[48px] w-full items-center gap-3 rounded-[10px] px-2.5 py-1.5 text-start disabled:cursor-default disabled:opacity-50 ${on ? 'bg-surface-card shadow-sm' : 'enabled:hover:bg-surface-card'}`}
                   >
                     <span className={`grid h-4 w-4 flex-none place-items-center rounded-[5px] ${dup ? 'invisible' : on ? 'bg-accent text-accent-text' : 'border-[1.5px] border-edge'}`}>
                       {on && <Check size={11} strokeWidth={3} />}

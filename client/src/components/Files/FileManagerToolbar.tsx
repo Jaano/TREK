@@ -15,7 +15,7 @@ export function FileManagerToolbar(S: FileManagerState) {
   const trashLabel = t('files.trash') || 'Trash'
   return (
     <div className="flex-none px-7 pt-6 max-md:px-4 max-md:pt-4">
-      <div className="flex flex-wrap items-center gap-2.5 rounded-[18px] bg-surface-tertiary py-3 pl-[22px] pr-3">
+      <div className="flex flex-wrap items-center gap-2.5 rounded-[18px] bg-surface-tertiary py-3 ps-[22px] pe-3">
         <h2 className="m-0 shrink-0 text-subtitle font-semibold tracking-[-0.01em] text-content">
           {showTrash ? trashLabel : t('files.title')}
         </h2>

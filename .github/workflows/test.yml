@@ -232,6 +232,12 @@ jobs:
       - name: Page pattern check
         run: cd client && npm run lint:pages
 
+      - name: Reading direction check
+        # Arabic runs right to left. A file may hold no more physical
+        # left/right classes and styles than scripts/rtl-baseline.json allows,
+        # so new code uses the logical start/end forms (scripts/rtl-lint.mjs).
+        run: cd client && npm run lint:rtl
+
   plugin-sdk-quality:
     name: Plugin SDK Types
     runs-on: ubuntu-latest

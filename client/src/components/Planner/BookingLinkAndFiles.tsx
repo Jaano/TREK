@@ -59,9 +59,9 @@ export function BookingLinkAndFiles({
       <div>
         <label className={labelClass}>{t('reservations.urlLabel')}</label>
         <div className="relative">
-          <Link2 size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-content-muted pointer-events-none" />
+          <Link2 size={15} className="absolute start-3 top-1/2 -translate-y-1/2 text-content-muted pointer-events-none" />
           <input type="url" value={url} onChange={e => onUrlChange(e.target.value)}
-            placeholder={t('reservations.urlPlaceholder')} className={inputClass} style={{ paddingLeft: 34 }} />
+            placeholder={t('reservations.urlPlaceholder')} className={inputClass} style={{ paddingInlineStart: 34 }} />
         </div>
       </div>
       <div>

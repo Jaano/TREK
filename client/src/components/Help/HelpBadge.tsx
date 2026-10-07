@@ -46,8 +46,8 @@ export default function HelpBadge({
 }): React.ReactElement {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 h-7 rounded-full pl-2.5 text-caption font-semibold leading-none whitespace-nowrap ${
-        count === undefined ? 'pr-2.5' : 'pr-1'
+      className={`inline-flex items-center gap-1.5 h-7 rounded-full ps-2.5 text-caption font-semibold leading-none whitespace-nowrap ${
+        count === undefined ? 'pe-2.5' : 'pe-1'
       } ${uppercase ? 'uppercase tracking-[0.08em]' : ''} ${TONES[tone]} ${className}`}
     >
       {Icon && <Icon className="w-3.5 h-3.5 flex-shrink-0" />}

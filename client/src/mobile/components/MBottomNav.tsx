@@ -148,7 +148,7 @@ export default function MBottomNav() {
         // Invisible scrim (the popover sits on the UI without dimming it).
         <div className="fixed inset-0 z-[60]" role="presentation" onClick={() => setMoreOpen(false)}>
           <div
-            className="absolute left-4 right-4 flex flex-col gap-2 rounded-[26px] border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] p-[10px] shadow-[0_-8px_40px_-14px_rgba(0,0,0,.45)] backdrop-blur-[30px] backdrop-saturate-[1.8] bottom-[calc(env(safe-area-inset-bottom,0px)+86px)]"
+            className="absolute inset-x-4 flex flex-col gap-2 rounded-[26px] border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] p-[10px] shadow-[0_-8px_40px_-14px_rgba(0,0,0,.45)] backdrop-blur-[30px] backdrop-saturate-[1.8] bottom-[calc(env(safe-area-inset-bottom,0px)+86px)]"
             role="presentation"
             onClick={e => e.stopPropagation()}
           >
@@ -157,7 +157,7 @@ export default function MBottomNav() {
                 key={to}
                 type="button"
                 onClick={() => { setMoreOpen(false); navigate(to) }}
-                className="flex items-center gap-[13px] rounded-[18px] bg-[color:var(--m-ic)] px-4 py-[14px] text-left"
+                className="flex items-center gap-[13px] rounded-[18px] bg-[color:var(--m-ic)] px-4 py-[14px] text-start"
               >
                 <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-[color:var(--m-ic)] text-m-ink">
                   <Icon size={20} strokeWidth={2} />
@@ -170,7 +170,7 @@ export default function MBottomNav() {
         </div>
       )}
 
-      <nav className="fixed left-4 right-4 z-40 flex h-[62px] items-center rounded-[31px] border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] px-3 shadow-[0_16px_44px_-14px_rgba(0,0,0,.35)] backdrop-blur-[30px] backdrop-saturate-[1.8] bottom-[calc(env(safe-area-inset-bottom,0px)+12px)]">
+      <nav className="fixed inset-x-4 z-40 flex h-[62px] items-center rounded-[31px] border border-[color:var(--m-gbr)] bg-[color:var(--m-glass)] px-3 shadow-[0_16px_44px_-14px_rgba(0,0,0,.35)] backdrop-blur-[30px] backdrop-saturate-[1.8] bottom-[calc(env(safe-area-inset-bottom,0px)+12px)]">
         <div className="flex min-w-0 flex-1 items-center justify-around">{left.map(renderItem)}</div>
 
         {logoSlot ? (

@@ -193,7 +193,7 @@ function ExportRow({ icon: Icon, title, sub, onClick }: {
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-[13px] rounded-[16px] px-3 py-[11px] text-left ${INNER_CLS}`}
+      className={`flex w-full items-center gap-[13px] rounded-[16px] px-3 py-[11px] text-start ${INNER_CLS}`}
     >
       <span className="flex h-[34px] w-[34px] flex-none items-center justify-center rounded-[10px] bg-[color:var(--m-ic)]">
         <Icon size={16} strokeWidth={1.9} />

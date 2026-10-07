@@ -72,7 +72,7 @@ export function TransitItineraryInline({ legs, t }: {
         const mins = leg.duration ? Math.round(leg.duration / 60) : null
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
-            <span className="text-content-muted" style={{ width: 34, flexShrink: 0, textAlign: 'right', fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 600, paddingTop: 1 }}>
+            <span className="text-content-muted" style={{ width: 34, flexShrink: 0, textAlign: 'end', fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 600, paddingTop: 1 }}>
               {leg.from?.time || ''}
             </span>
             <span style={{
@@ -205,7 +205,7 @@ export function TransitLegChips({ legs, transfers, size = 'sm', t }: {
         </React.Fragment>
       ))}
       {typeof transfers === 'number' && transfers > 0 && (
-        <span className="text-content-faint" style={{ fontSize: badgeFont, marginLeft: 2 }}>
+        <span className="text-content-faint" style={{ fontSize: badgeFont, marginInlineStart: 2 }}>
           · {t('transit.transfers', { count: transfers })}
         </span>
       )}

@@ -241,7 +241,7 @@ export default function NotificationsTab(): React.ReactElement {
             if (relevantChannels.length === 0) return null
             return (
               <div key={eventType} className="grid items-center gap-1 px-3.5 py-3" style={{ gridTemplateColumns: columns }}>
-                <span className="min-w-0 pr-2 font-medium text-content" style={fs(13, 'body')}>
+                <span className="min-w-0 pe-2 font-medium text-content" style={fs(13, 'body')}>
                   {t(EVENT_LABEL_KEYS[eventType]) || eventType}
                 </span>
                 {visibleChannels.map(ch => {

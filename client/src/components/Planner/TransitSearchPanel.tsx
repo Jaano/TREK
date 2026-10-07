@@ -273,20 +273,20 @@ function StopPicker({ label, value, onPick, quickPicks, near, placeholder }: {
             ? results.map((r, i) => (
               <button type="button" key={i} onClick={() => { onPick({ name: r.name, lat: r.lat, lng: r.lng }); setText(''); setResults([]); setOpen(false) }}
                 className="text-content"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'calc(13px * var(--fs-scale-body, 1))' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'start', padding: '8px 10px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'calc(13px * var(--fs-scale-body, 1))' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                 <MapPin size={13} className="text-content-faint" style={{ flexShrink: 0 }} />
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {r.name}
-                  {r.area && <span className="ml-1.5 text-content-faint">{r.area}</span>}
+                  {r.area && <span className="ms-1.5 text-content-faint">{r.area}</span>}
                 </span>
               </button>
             ))
             : quickPicks.map((p, i) => (
               <button type="button" key={i} onClick={() => { onPick(p); setText(''); setOpen(false) }}
                 className="text-content"
-                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: '8px 10px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'calc(13px * var(--fs-scale-body, 1))' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'start', padding: '8px 10px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 'calc(13px * var(--fs-scale-body, 1))' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                 <MapPin size={13} className="text-content-faint" style={{ flexShrink: 0 }} />
@@ -329,13 +329,13 @@ function ItineraryCard({ it, tzFrom, tzTo, is12h, expanded, onToggle, onAdd, add
   const walkMins = Math.round(it.walkSeconds / 60)
   return (
     <div className="bg-surface-card border border-edge" style={{ borderRadius: 14, overflow: 'hidden' }}>
-      <button type="button" onClick={onToggle} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '12px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+      <button type="button" onClick={onToggle} style={{ display: 'block', width: '100%', textAlign: 'start', padding: '12px 14px', border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <span className="text-content" style={{ fontSize: 'calc(15px * var(--fs-scale-subtitle, 1))', fontWeight: 700, letterSpacing: '-0.01em' }}>
             {fmtTimeInTz(it.startTime, tzFrom, is12h)} – {fmtTimeInTz(it.endTime, tzTo, is12h)}
           </span>
           <span className="text-content-muted" style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 600 }}>{fmtDuration(it.duration, t)}</span>
-          <span className="text-content-faint" style={{ marginLeft: 'auto', fontSize: 'calc(12px * var(--fs-scale-body, 1))', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+          <span className="text-content-faint" style={{ marginInlineStart: 'auto', fontSize: 'calc(12px * var(--fs-scale-body, 1))', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
             <span>{it.transfers === 0 ? t('transit.direct') : t('transit.transfers', { count: it.transfers })}</span>
             {walkMins > 0 && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}><Footprints size={12} />{t('transit.min', { count: walkMins })}</span>}
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -377,7 +377,7 @@ function ItineraryCard({ it, tzFrom, tzTo, is12h, expanded, onToggle, onAdd, add
               const color = leg.mode === 'WALK' ? 'var(--border-primary)' : (leg.lineColor || 'var(--text-muted)')
               return (
                 <div key={i} style={{ display: 'grid', gridTemplateColumns: '44px 18px 1fr', gap: 8, alignItems: 'stretch' }}>
-                  <div className="text-content-muted" style={{ fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', fontWeight: 600, paddingTop: 2, textAlign: 'right' }}>
+                  <div className="text-content-muted" style={{ fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', fontWeight: 600, paddingTop: 2, textAlign: 'end' }}>
                     {fmtTimeInTz(leg.from.time ?? leg.from.scheduledTime, tzAt(leg.from.lat, leg.from.lng), is12h)}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -413,7 +413,7 @@ function ItineraryCard({ it, tzFrom, tzTo, is12h, expanded, onToggle, onAdd, add
             })}
             {/* arrival row */}
             <div style={{ display: 'grid', gridTemplateColumns: '44px 18px 1fr', gap: 8, alignItems: 'center' }}>
-              <div className="text-content-muted" style={{ fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', fontWeight: 600, textAlign: 'right' }}>
+              <div className="text-content-muted" style={{ fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', fontWeight: 600, textAlign: 'end' }}>
                 {fmtTimeInTz(it.endTime, tzTo, is12h)}
               </div>
               <div style={{ display: 'flex', justifyContent: 'center' }}>

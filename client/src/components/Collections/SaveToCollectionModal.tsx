@@ -205,7 +205,7 @@ export default function SaveToCollectionModal(): React.ReactElement | null {
                 aria-pressed={saved}
                 onClick={() => handleToggle(list)}
                 disabled={busyId != null}
-                className={`flex min-h-[46px] items-center gap-3 rounded-[10px] px-3 py-2 text-left disabled:opacity-60 ${saved ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
+                className={`flex min-h-[46px] items-center gap-3 rounded-[10px] px-3 py-2 text-start disabled:opacity-60 ${saved ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
               >
                 <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: list.color || 'var(--accent)' }} />
                 <span className="min-w-0 flex-1 truncate font-semibold text-content" style={fs(13, 'body')}>{list.name}</span>

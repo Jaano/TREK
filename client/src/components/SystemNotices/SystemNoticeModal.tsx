@@ -110,7 +110,7 @@ function NoticeContent({ notice, title, body, ctaLabel, secondaryCtaLabel, title
       {notice.dismissible && isLastPage && (
         <button type="button"
           onClick={onDismissAll}
-          className="absolute top-4 right-4 z-10 p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+          className="absolute top-4 end-4 z-10 p-2 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           aria-label="Dismiss"
         >
           <X size={18} />
@@ -198,8 +198,8 @@ function NoticeContent({ notice, title, body, ctaLabel, secondaryCtaLabel, title
                     </div>
                   ),
                   strong: ({ children }) => <strong className="font-semibold text-slate-800 dark:text-slate-200">{children}</strong>,
-                  ul: ({ children }) => <ul className="list-disc list-inside text-left">{children}</ul>,
-                  ol: ({ children }) => <ol className="list-decimal list-inside text-left">{children}</ol>,
+                  ul: ({ children }) => <ul className="list-disc list-inside text-start">{children}</ul>,
+                  ol: ({ children }) => <ol className="list-decimal list-inside text-start">{children}</ol>,
                 }}
               >
                 {body}
@@ -686,7 +686,7 @@ function MobileNoticeSheet(S: NoticeState) {
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        className={`absolute bottom-0 left-0 right-0 rounded-t-3xl overflow-hidden h-[85dvh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl transition-[opacity,transform] ${dur} ${ease} ${mobileMotion}`}
+        className={`absolute bottom-0 inset-x-0 rounded-t-3xl overflow-hidden h-[85dvh] flex flex-col bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl transition-[opacity,transform] ${dur} ${ease} ${mobileMotion}`}
         style={{ touchAction: 'pan-y' }}
         onTouchStart={e => {
           touchStartX.current = e.touches[0].clientX;

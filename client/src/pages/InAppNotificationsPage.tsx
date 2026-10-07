@@ -31,7 +31,7 @@ function InAppNotificationsPageDesktop(): React.ReactElement {
               <h1 className="text-xl font-semibold text-content">
                 {t('notifications.title')}
                 {unreadCount > 0 && (
-                  <span className="ml-2 px-2 py-0.5 rounded-full text-xs font-medium align-middle inline-flex items-center justify-center bg-content text-surface">
+                  <span className="ms-2 px-2 py-0.5 rounded-full text-xs font-medium align-middle inline-flex items-center justify-center bg-content text-surface">
                     {unreadCount}
                   </span>
                 )}

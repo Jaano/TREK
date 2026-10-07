@@ -438,11 +438,11 @@ export default function MSettingsMcp() {
                     <p className="truncate text-[0.8125rem] font-bold text-m-ink">{token.name}</p>
                     <p className="mt-[2px] font-mono text-[0.625rem] text-m-faint">
                       {token.token_prefix}...
-                      <span className="ml-2 font-geist">
+                      <span className="ms-2 font-geist">
                         {t('settings.mcp.tokenCreatedAt')} {new Date(token.created_at).toLocaleDateString(locale)}
                       </span>
                       {token.last_used_at && (
-                        <span className="ml-1 font-geist">
+                        <span className="ms-1 font-geist">
                           · {t('settings.mcp.tokenUsedAt')} {new Date(token.last_used_at).toLocaleDateString(locale)}
                         </span>
                       )}

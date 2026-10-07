@@ -55,7 +55,7 @@ export default function AtlasCountryPlaces({ detail, onOpenTrip, variant = 'desk
               <button
                 type="button"
                 onClick={() => onOpenTrip(trip.id)}
-                className={`group flex items-center gap-2 rounded-[10px] px-2 py-1.5 text-left ${rowHover}`}
+                className={`group flex items-center gap-2 rounded-[10px] px-2 py-1.5 text-start ${rowHover}`}
               >
                 <Briefcase size={13} strokeWidth={2} className={`flex-none ${muted}`} />
                 <span className={`min-w-0 flex-1 truncate text-[0.8125rem] font-bold ${ink}`}>{trip.title}</span>
@@ -67,7 +67,7 @@ export default function AtlasCountryPlaces({ detail, onOpenTrip, variant = 'desk
                   key={place.id}
                   type="button"
                   onClick={() => onOpenTrip(trip.id)}
-                  className={`flex items-start gap-2 rounded-[10px] py-1.5 pl-7 pr-2 text-left ${rowHover}`}
+                  className={`flex items-start gap-2 rounded-[10px] py-1.5 ps-7 pe-2 text-start ${rowHover}`}
                 >
                   <MapPin size={12} strokeWidth={2} className={`mt-[3px] flex-none ${faint}`} />
                   <span className="min-w-0 flex-1">

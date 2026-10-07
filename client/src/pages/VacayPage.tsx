@@ -88,7 +88,7 @@ function VacayPageDesktop(): React.ReactElement {
               {years.length > 1 && (
                 <button type="button" aria-label={t('vacay.removeYear')}
                   onClick={e => { e.stopPropagation(); setDeleteYear(y); setShowMobileSidebar(false) }}
-                  className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[7px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  className="absolute -top-1 -end-1 w-3.5 h-3.5 rounded-full bg-red-500 text-white text-[7px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
                   <Minus size={7} />
                 </button>
               )}

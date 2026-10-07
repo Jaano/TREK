@@ -84,7 +84,7 @@ export function AssignModal(S: FileManagerState) {
                     }
                   }
                 }} style={{
-                  width: '100%', textAlign: 'left', padding: '6px 10px 6px 20px', background: isLinked ? 'var(--bg-hover)' : 'none',
+                  width: '100%', textAlign: 'start', paddingBlock: 6, paddingInlineEnd: 10, paddingInlineStart: 20, background: isLinked ? 'var(--bg-hover)' : 'none',
                   border: 'none', cursor: 'pointer', fontSize: 'calc(13px * var(--fs-scale-body, 1))', color: 'var(--text-primary)',
                   borderRadius: 8, fontFamily: 'inherit', fontWeight: isLinked ? 600 : 400,
                   display: 'flex', alignItems: 'center', gap: 6,
@@ -93,7 +93,7 @@ export function AssignModal(S: FileManagerState) {
                   onMouseLeave={e => e.currentTarget.style.background = isLinked ? 'var(--bg-hover)' : 'transparent'}>
                   <MapPin size={12} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
-                  {isLinked && <Check size={14} style={{ marginLeft: 'auto', flexShrink: 0, color: 'var(--accent)' }} />}
+                  {isLinked && <Check size={14} style={{ marginInlineStart: 'auto', flexShrink: 0, color: 'var(--accent)' }} />}
                 </button>
               )
             }
@@ -159,7 +159,7 @@ export function AssignModal(S: FileManagerState) {
                     }
                   }
                 }} style={{
-                  width: '100%', textAlign: 'left', padding: '6px 10px 6px 20px', background: isLinked ? 'var(--bg-hover)' : 'none',
+                  width: '100%', textAlign: 'start', paddingBlock: 6, paddingInlineEnd: 10, paddingInlineStart: 20, background: isLinked ? 'var(--bg-hover)' : 'none',
                   border: 'none', cursor: 'pointer', fontSize: 'calc(13px * var(--fs-scale-body, 1))', color: 'var(--text-primary)',
                   borderRadius: 8, fontFamily: 'inherit', fontWeight: isLinked ? 600 : 400,
                   display: 'flex', alignItems: 'center', gap: 6,
@@ -168,7 +168,7 @@ export function AssignModal(S: FileManagerState) {
                   onMouseLeave={e => e.currentTarget.style.background = isLinked ? 'var(--bg-hover)' : 'transparent'}>
                   <Icon size={12} style={{ flexShrink: 0, color: 'var(--text-muted)' }} />
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
-                  {isLinked && <Check size={14} style={{ marginLeft: 'auto', flexShrink: 0, color: 'var(--accent)' }} />}
+                  {isLinked && <Check size={14} style={{ marginInlineStart: 'auto', flexShrink: 0, color: 'var(--accent)' }} />}
                 </button>
               )
             }
@@ -197,10 +197,10 @@ export function AssignModal(S: FileManagerState) {
             const hasBoth = placesSection && bookingsSection
             return (
               <div className={hasBoth ? 'md:flex' : ''}>
-                <div className={hasBoth ? 'md:w-1/2' : ''} style={{ overflowY: 'auto', maxHeight: '55vh', paddingRight: hasBoth ? 6 : 0 }}>{placesSection}</div>
+                <div className={hasBoth ? 'md:w-1/2' : ''} style={{ overflowY: 'auto', maxHeight: '55vh', paddingInlineEnd: hasBoth ? 6 : 0 }}>{placesSection}</div>
                 {hasBoth && <div className="hidden md:block" style={{ width: 1, background: 'var(--border-primary)', flexShrink: 0 }} />}
                 {hasBoth && <div className="block md:hidden" style={{ height: 1, background: 'var(--border-primary)', margin: '8px 0' }} />}
-                <div className={hasBoth ? 'md:w-1/2' : ''} style={{ overflowY: 'auto', maxHeight: '55vh', paddingLeft: hasBoth ? 6 : 0 }}>{bookingsSection}</div>
+                <div className={hasBoth ? 'md:w-1/2' : ''} style={{ overflowY: 'auto', maxHeight: '55vh', paddingInlineStart: hasBoth ? 6 : 0 }}>{bookingsSection}</div>
               </div>
             )
           })()}

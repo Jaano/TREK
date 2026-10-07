@@ -58,7 +58,7 @@ export function PackingHeader(S: PackingState) {
               </button>
               {showTemplateDropdown && (
                 <div style={{
-                  position: 'absolute', right: 0, top: '100%', marginTop: 6, zIndex: 50,
+                  position: 'absolute', insetInlineEnd: 0, top: '100%', marginTop: 6, zIndex: 50,
                   background: 'var(--bg-card)', border: '1px solid var(--border-primary)', borderRadius: 10,
                   boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: 4, minWidth: 200,
                 }}>
@@ -74,7 +74,7 @@ export function PackingHeader(S: PackingState) {
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <Package size={13} className="text-content-faint" />
-                      <div style={{ flex: 1, textAlign: 'left' }}>
+                      <div style={{ flex: 1, textAlign: 'start' }}>
                         <div style={{ fontWeight: 600 }}>{tmpl.name}</div>
                         <div style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{tmpl.item_count} {t('admin.packingTemplates.items')}</div>
                       </div>
@@ -131,7 +131,7 @@ export function PackingHeader(S: PackingState) {
                   }}>{abgehakt}</span>
                   <span style={{
                     fontSize: 'calc(14px * var(--fs-scale-body, 1))', fontWeight: 500, color: 'var(--text-faint)',
-                    fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginLeft: 1,
+                    fontVariantNumeric: 'tabular-nums', lineHeight: 1, marginInlineStart: 1,
                   }}>/{items.length}</span>
                 </div>
                 <span style={{

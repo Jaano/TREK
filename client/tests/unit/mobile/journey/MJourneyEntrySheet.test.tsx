@@ -808,7 +808,7 @@ describe('MJourneyEntrySheet full editor', () => {
     fireEvent.change(screen.getByPlaceholderText('Search location...'), { target: { value: 'Roma' } });
 
     await waitFor(() => expect(calls).toBe(1), { timeout: 3000 });
-    expect(document.querySelector('.absolute.left-0.right-0.top-full')).not.toBeInTheDocument();
+    expect(document.querySelector('.absolute.inset-x-0.top-full')).not.toBeInTheDocument();
   });
 
   it('FE-MOB-JENTRY-036: leaves the strip untouched when the link call returns nothing', async () => {
@@ -860,7 +860,7 @@ describe('MJourneyEntrySheet full editor', () => {
 
     await waitFor(() => expect(calls).toBe(1), { timeout: 3000 });
     expect(screen.getByDisplayValue('Roma')).toBeInTheDocument();
-    expect(document.querySelector('.absolute.left-0.right-0.top-full')).not.toBeInTheDocument();
+    expect(document.querySelector('.absolute.inset-x-0.top-full')).not.toBeInTheDocument();
   });
 
   it('FE-MOB-JENTRY-025: asks before discarding a dirty editor', async () => {

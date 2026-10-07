@@ -64,10 +64,10 @@ const pollMarkdownComponents: Components = {
     <h3 style={{ margin: '0 0 0.45em', fontSize: '1.1em', lineHeight: 1.3 }}>{children}</h3>
   ),
   ul: ({ children }) => (
-    <ul style={{ margin: '0 0 0.55em', paddingLeft: 20, listStyle: 'disc' }}>{children}</ul>
+    <ul style={{ margin: '0 0 0.55em', paddingInlineStart: 20, listStyle: 'disc' }}>{children}</ul>
   ),
   ol: ({ children }) => (
-    <ol style={{ margin: '0 0 0.55em', paddingLeft: 20, listStyle: 'decimal' }}>{children}</ol>
+    <ol style={{ margin: '0 0 0.55em', paddingInlineStart: 20, listStyle: 'decimal' }}>{children}</ol>
   ),
 }
 
@@ -174,7 +174,7 @@ function CreatePollModal({ onClose, onCreate, t }: CreatePollModalProps) {
         <span className="text-content" style={fs(13, 'body')}>{t('collab.polls.multiChoice')}</span>
         <button type="button" role="switch" aria-checked={multiChoice} onClick={() => setMultiChoice(!multiChoice)}
           className={`flex h-5 w-9 flex-none items-center rounded-full p-0.5 transition-colors ${multiChoice ? 'bg-accent' : 'bg-surface-tertiary'}`}>
-          <span className={`block h-4 w-4 rounded-full bg-surface-card shadow-sm transition-transform ${multiChoice ? 'translate-x-4' : ''}`} />
+          <span className={`block h-4 w-4 rounded-full bg-surface-card shadow-sm transition-transform ${multiChoice ? 'translate-x-4 rtl:-translate-x-4' : ''}`} />
         </button>
       </label>
     </DialogShell>
@@ -191,7 +191,7 @@ function VoterChip({ voter, offset }: VoterChipProps) {
   return (
     <Tooltip label={voter.username || '?'}>
       <span className="grid h-[18px] w-[18px] flex-none place-items-center overflow-hidden rounded-full border-[1.5px] border-surface-card bg-surface-tertiary font-bold text-content-muted"
-        style={{ ...fs(7), marginLeft: offset ? -5 : 0 }}>
+        style={{ ...fs(7), marginInlineStart: offset ? -5 : 0 }}>
         {voter.avatar_url ? <img src={voter.avatar_url} alt={voter.username || ''} className="h-full w-full object-cover" /> : (voter.username || '?')[0].toUpperCase()}
       </span>
     </Tooltip>
@@ -265,7 +265,7 @@ function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: 
           return (
             <button type="button" key={idx} onClick={() => onVote(poll.id, idx)}
               disabled={isClosed}
-              className={`relative flex w-full items-start gap-2.5 overflow-hidden rounded-[10px] border bg-surface-secondary px-3 py-2.5 text-left transition-colors disabled:cursor-default ${myVote ? 'border-accent' : 'border-edge-faint enabled:hover:border-edge'}`}
+              className={`relative flex w-full items-start gap-2.5 overflow-hidden rounded-[10px] border bg-surface-secondary px-3 py-2.5 text-start transition-colors disabled:cursor-default ${myVote ? 'border-accent' : 'border-edge-faint enabled:hover:border-edge'}`}
             >
               {/* Progress bar background */}
               <span aria-hidden="true" className="absolute inset-y-0 left-0 transition-[width] duration-500"
@@ -300,7 +300,7 @@ function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: 
 
               {/* Percentage */}
               {(hasVoted || isClosed) && (
-                <span className={`relative z-[1] min-w-[32px] text-right font-geist font-bold tabular-nums ${myVote ? 'text-content' : 'text-content-muted'}`} style={fs(12, 'body')}>
+                <span className={`relative z-[1] min-w-[32px] text-end font-geist font-bold tabular-nums ${myVote ? 'text-content' : 'text-content-muted'}`} style={fs(12, 'body')}>
                   {pct}%
                 </span>
               )}

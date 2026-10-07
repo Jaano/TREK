@@ -95,7 +95,7 @@ export function ImageLightbox({ files, initialIndex, onClose }: ImageLightboxPro
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', flexShrink: 0 }}>
         <span style={{ fontSize: 'calc(12px * var(--fs-scale-body, 1))', color: 'rgba(255,255,255,0.7)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
           {file.original_name}
-          <span style={{ marginLeft: 8, color: 'rgba(255,255,255,0.4)' }}>{index + 1} / {files.length}</span>
+          <span style={{ marginInlineStart: 8, color: 'rgba(255,255,255,0.4)' }}>{index + 1} / {files.length}</span>
         </span>
         <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
           <Tooltip label={t('files.openTab')}>

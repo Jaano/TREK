@@ -123,7 +123,7 @@ export default function PackingShareControl({ item, tripMembers, currentUserId, 
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'none'}>
                   <span style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, background: `hsl(${(m.username.codePointAt(0) ?? 0) * 37 % 360}, 55%, 55%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'calc(9px * var(--fs-scale-caption, 1))', fontWeight: 700, color: 'white', textTransform: 'uppercase' }}>{m.username[0]}</span>
-                  <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.username}</span>
+                  <span style={{ flex: 1, textAlign: 'start', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.username}</span>
                   {on && <Check size={13} className="text-content-muted" />}
                 </button>
               )
@@ -139,7 +139,7 @@ export default function PackingShareControl({ item, tripMembers, currentUserId, 
 function Row({ icon, label, sub, active, onClick }: { icon: React.ReactNode; label: string; sub: string; active: boolean; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick}
-      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: active ? 'var(--bg-tertiary)' : 'none', fontFamily: 'inherit', textAlign: 'left' }}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%', padding: '7px 10px', borderRadius: 7, border: 'none', cursor: 'pointer', background: active ? 'var(--bg-tertiary)' : 'none', fontFamily: 'inherit', textAlign: 'start' }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-tertiary)' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}>
       <span style={{ color: active ? 'var(--accent)' : 'var(--text-muted)', marginTop: 1 }}>{icon}</span>
@@ -159,7 +159,7 @@ function MenuRow({ icon, label, hint, active = false, onClick, buttonRef }: {
 }) {
   return (
     <button type="button" ref={buttonRef} onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', borderRadius: 9, border: 'none', cursor: 'pointer', background: active ? 'var(--bg-tertiary)' : 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', fontWeight: 500, textAlign: 'left' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', padding: '8px 10px', borderRadius: 9, border: 'none', cursor: 'pointer', background: active ? 'var(--bg-tertiary)' : 'none', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 'calc(12.5px * var(--fs-scale-body, 1))', fontWeight: 500, textAlign: 'start' }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'var(--bg-tertiary)' }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'none' }}>
       <span style={{ width: 16, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: 'var(--text-muted)' }}>{icon}</span>

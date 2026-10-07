@@ -24,7 +24,7 @@ interface CoverSearchPhoto {
 const COVER_OVERLAY =
   'absolute inset-0 flex items-center justify-center gap-[6px] bg-[rgba(0,0,0,.28)] text-[0.78125rem] font-bold text-white' // theme-lint-disable
 const PHOTO_CREDIT =
-  'absolute inset-x-0 bottom-0 truncate bg-[rgba(0,0,0,.55)] px-[6px] py-1 text-left text-[0.625rem] text-white' // theme-lint-disable
+  'absolute inset-x-0 bottom-0 truncate bg-[rgba(0,0,0,.55)] px-[6px] py-1 text-start text-[0.625rem] text-white' // theme-lint-disable
 
 interface MCollEditSheetProps {
   /** null = closed, 'new' = create, a Collection = edit that list. */
@@ -278,7 +278,7 @@ export default function MCollEditSheet({ target, onClose, onCreated, onRequestDe
             <Trash2 size={13} strokeWidth={2} /> {t('collections.deleteList')}
           </button>
         )}
-        <CancelPill className="ml-auto" onClick={close}>{t('common.cancel')}</CancelPill>
+        <CancelPill className="ms-auto" onClick={close}>{t('common.cancel')}</CancelPill>
         <PrimaryPill onClick={save} disabled={!name.trim() || saving}>
           {saving && <Loader2 size={14} className="animate-spin" />}
           {editing ? t('common.save') : t('collections.create')}

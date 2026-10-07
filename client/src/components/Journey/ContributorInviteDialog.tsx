@@ -105,7 +105,7 @@ export default function ContributorInviteDialog({ journeyId, existingUserIds, on
                 <button type="button"
                   key={u.id}
                   onClick={() => setSelectedUserId(u.id)}
-                  className={`w-full text-left flex items-center gap-2.5 p-2.5 rounded-lg cursor-pointer transition-all ${
+                  className={`w-full text-start flex items-center gap-2.5 p-2.5 rounded-lg cursor-pointer transition-all ${
                     selectedUserId === u.id
                       ? 'bg-zinc-100 dark:bg-zinc-800 border border-zinc-900 dark:border-white'
                       : 'hover:bg-zinc-50 dark:hover:bg-zinc-800 border border-transparent'
@@ -204,14 +204,14 @@ export default function ContributorInviteDialog({ journeyId, existingUserIds, on
       )}
     >
       <div className="relative">
-        <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+        <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
         <input
           autoFocus
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder={t('journey.contributors.searchPlaceholder')}
           aria-label={t('journey.contributors.searchUser')}
-          className={`${INPUT} pl-8`}
+          className={`${INPUT} ps-8`}
         />
       </div>
 
@@ -227,7 +227,7 @@ export default function ContributorInviteDialog({ journeyId, existingUserIds, on
               key={u.id}
               onClick={() => setSelectedUserId(u.id)}
               aria-pressed={on}
-              className={`flex min-h-[48px] w-full items-center gap-3 rounded-[10px] px-2.5 py-1.5 text-left ${on ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
+              className={`flex min-h-[48px] w-full items-center gap-3 rounded-[10px] px-2.5 py-1.5 text-start ${on ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
             >
               <TripMemberAvatar username={u.username} avatarUrl={avatarSrc(u.avatar)} />
               <span className="min-w-0 flex-1">

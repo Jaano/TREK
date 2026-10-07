@@ -304,7 +304,7 @@ export default function MRtStaySheet({ planner, shell }: MTripSheetsProps) {
               type="button"
               onClick={() => { void save() }}
               disabled={!canEdit || saving}
-              className="ml-auto inline-flex h-11 items-center rounded-full bg-m-act px-[18px] text-[0.8125rem] font-semibold text-m-actfg disabled:opacity-40"
+              className="ms-auto inline-flex h-11 items-center rounded-full bg-m-act px-[18px] text-[0.8125rem] font-semibold text-m-actfg disabled:opacity-40"
             >
               {t('common.save')}
             </button>
@@ -376,7 +376,7 @@ function RtLeaveTime({ name, leave, arrival, departure, onClose }: {
             type="button"
             onClick={() => { void leave.remove?.() }}
             disabled={leave.removing}
-            className="ml-auto inline-flex h-11 items-center rounded-full bg-m-act px-[18px] text-[0.8125rem] font-semibold text-m-actfg disabled:opacity-40"
+            className="ms-auto inline-flex h-11 items-center rounded-full bg-m-act px-[18px] text-[0.8125rem] font-semibold text-m-actfg disabled:opacity-40"
           >
             {t('roadtrip.stay.clearLeave')}
           </button>

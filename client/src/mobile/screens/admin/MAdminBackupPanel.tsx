@@ -302,7 +302,7 @@ export default function MAdminBackupPanel() {
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 pl-12">
+                <div className="flex items-center gap-2 ps-12">
                   <MAdminButton
                     variant="ghost"
                     onClick={() => backupApi.download(backup.filename).catch(() => toast.error(t('backup.toast.downloadError')))}
@@ -323,7 +323,7 @@ export default function MAdminBackupPanel() {
                     type="button"
                     onClick={() => handleDelete(backup.filename)}
                     aria-label={t('common.delete')}
-                    className="ml-auto flex h-8 w-8 flex-none items-center justify-center rounded-full text-m-faint"
+                    className="ms-auto flex h-8 w-8 flex-none items-center justify-center rounded-full text-m-faint"
                   >
                     <Trash2 size={16} strokeWidth={2.2} />
                   </button>

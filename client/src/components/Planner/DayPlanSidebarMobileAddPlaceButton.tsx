@@ -67,7 +67,7 @@ export function MobileAddPlaceButton({ dayId, places, assignments, onAssign, onA
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: 8,
                   padding: '10px 12px', border: 'none', background: 'transparent',
-                  cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                  cursor: 'pointer', fontFamily: 'inherit', textAlign: 'start',
                 }}
               >
                 <MapPin size={13} style={{ color: 'var(--text-faint)', flexShrink: 0 }} />

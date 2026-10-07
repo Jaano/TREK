@@ -260,7 +260,7 @@ function PollCardRow({ poll, canEdit, currentUserId, t, onVote, onClosePoll, onD
           {/* Question is cross-user markdown (#2177): sanitized, raw HTML stays
               inert, links open in a new tab with rel protection (#1629).
               Heading/list sizes are em-based so they follow the text scale. */}
-          <div className="break-words text-[0.8125rem] font-bold leading-[1.35] text-m-ink [&_a]:underline [&_h1]:mb-1 [&_h1]:text-[1.35em] [&_h1]:leading-[1.2] [&_h2]:mb-1 [&_h2]:text-[1.2em] [&_h2]:leading-[1.25] [&_h3]:mb-1 [&_h3]:text-[1.1em] [&_h3]:leading-[1.3] [&_ol]:list-decimal [&_ol]:pl-4 [&_p]:mb-1 [&_ul]:list-disc [&_ul]:pl-4">
+          <div className="break-words text-[0.8125rem] font-bold leading-[1.35] text-m-ink [&_a]:underline [&_h1]:mb-1 [&_h1]:text-[1.35em] [&_h1]:leading-[1.2] [&_h2]:mb-1 [&_h2]:text-[1.2em] [&_h2]:leading-[1.25] [&_h3]:mb-1 [&_h3]:text-[1.1em] [&_h3]:leading-[1.3] [&_ol]:list-decimal [&_ol]:ps-4 [&_p]:mb-1 [&_ul]:list-disc [&_ul]:ps-4">
             <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={sanitizedMarkdownPlugins} components={sanitizedMarkdownComponents}>
               {poll.question}
             </Markdown>
@@ -327,7 +327,7 @@ function PollCardRow({ poll, canEdit, currentUserId, t, onVote, onClosePoll, onD
               type="button"
               disabled={closed || !canEdit}
               onClick={() => onVote(poll.id, idx)}
-              className="relative flex items-start gap-[8px] overflow-hidden rounded-[10px] bg-m-card px-[12px] py-[10px] text-left disabled:cursor-default"
+              className="relative flex items-start gap-[8px] overflow-hidden rounded-[10px] bg-m-card px-[12px] py-[10px] text-start disabled:cursor-default"
             >
               <span className="absolute inset-y-0 left-0" style={{ width: `${pct}%`, background: fillTint }} />
               <span
@@ -343,7 +343,7 @@ function PollCardRow({ poll, canEdit, currentUserId, t, onVote, onClosePoll, onD
                 {opt.text}
               </span>
               {(voted || closed) && count > 0 && (
-                <span className="relative flex flex-none -space-x-1">
+                <span className="relative flex flex-none [&>*+*]:-ms-1">
                   {(opt.voters || []).slice(0, 3).map(v => (
                     <span
                       key={v.user_id}

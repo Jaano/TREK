@@ -81,13 +81,13 @@ function KeyField({ shown, value, onChange, inputProps, label, onToggle }: {
         value={value}
         onChange={e => onChange(e.target.value)}
         {...inputProps}
-        className={`${INPUT} pr-10 font-geist`}
+        className={`${INPUT} pe-10 font-geist`}
       />
       <button
         type="button"
         onClick={onToggle}
         aria-label={label}
-        className="absolute right-1.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[8px] text-content-faint hover:bg-surface-hover hover:text-content"
+        className="absolute end-1.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-[8px] text-content-faint hover:bg-surface-hover hover:text-content"
       >
         {shown ? <EyeOff size={15} /> : <Eye size={15} />}
       </button>
@@ -441,10 +441,10 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
               </div>
               <SettingsHint>{t('admin.mapsKeyHintLong')}</SettingsHint>
               {validation.maps === true && (
-                <div><StatusPill tone="success" icon={<span className="mr-0.5 h-1.5 w-1.5 rounded-full bg-success" />}>{t('admin.keyValid')}</StatusPill></div>
+                <div><StatusPill tone="success" icon={<span className="me-0.5 h-1.5 w-1.5 rounded-full bg-success" />}>{t('admin.keyValid')}</StatusPill></div>
               )}
               {validation.maps === false && (
-                <div><StatusPill tone="danger" icon={<span className="mr-0.5 h-1.5 w-1.5 rounded-full bg-danger" />}>{t('admin.keyInvalid')}</StatusPill></div>
+                <div><StatusPill tone="danger" icon={<span className="me-0.5 h-1.5 w-1.5 rounded-full bg-danger" />}>{t('admin.keyInvalid')}</StatusPill></div>
               )}
             </div>
 

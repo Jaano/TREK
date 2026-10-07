@@ -172,7 +172,7 @@ export default function AddPlaceToCollectionModal({ isOpen, collectionId, collec
       // Typed into the band, as in the planner's place dialog. It takes no focus
       // on opening: the dialog starts at the search, which fills the name in.
       titleInput={{ value: name, onChange: setName, label: t('common.name'), placeholder: t('common.name') }}
-      sub={<><Bookmark size={11} strokeWidth={2.2} className="mr-1 inline-block align-[-1px]" />{collectionName}</>}
+      sub={<><Bookmark size={11} strokeWidth={2.2} className="me-1 inline-block align-[-1px]" />{collectionName}</>}
     />
   )
 
@@ -198,7 +198,7 @@ export default function AddPlaceToCollectionModal({ isOpen, collectionId, collec
         <div className="relative">
           <div className="flex items-stretch gap-2">
             <div className="relative min-w-0 flex-1">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+              <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
               <input
                 autoFocus
                 ref={searchRef}
@@ -208,7 +208,7 @@ export default function AddPlaceToCollectionModal({ isOpen, collectionId, collec
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void search() } }}
                 aria-label={t('collections.addPlaceSearch')}
                 placeholder={t('collections.addPlaceSearch')}
-                className={`${INPUT} pl-8`}
+                className={`${INPUT} ps-8`}
               />
             </div>
             <DialogButton
@@ -224,9 +224,9 @@ export default function AddPlaceToCollectionModal({ isOpen, collectionId, collec
             <div
               role="group"
               aria-label={t('common.search')}
-              className="absolute left-0 right-0 z-20 mt-1.5 flex max-h-[280px] flex-col gap-0.5 overflow-y-auto rounded-[12px] border border-edge-faint bg-surface-card p-1 shadow-dropdown"
+              className="absolute inset-x-0 z-20 mt-1.5 flex max-h-[280px] flex-col gap-0.5 overflow-y-auto rounded-[12px] border border-edge-faint bg-surface-card p-1 shadow-dropdown"
             >
-              <div className="flex items-center justify-between py-0.5 pl-2.5 pr-0.5">
+              <div className="flex items-center justify-between py-0.5 ps-2.5 pe-0.5">
                 <span className="font-geist font-bold uppercase tracking-[.08em] text-content-faint" style={fs(9.5)}>{t('common.search')}</span>
                 <Tooltip label={t('common.close')}>
                   <button type="button" onClick={dismissResults} aria-label={t('common.close')}
@@ -238,7 +238,7 @@ export default function AddPlaceToCollectionModal({ isOpen, collectionId, collec
               {noResults ? (
                 <div className="px-2.5 py-3 text-center text-content-faint" style={fs(12.5, 'body')}>{t('planner.noPlacesFound')}</div>
               ) : results.map((r, i) => (
-                <button key={i} type="button" onClick={() => pick(r)} className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left hover:bg-surface-hover">
+                <button key={i} type="button" onClick={() => pick(r)} className="flex w-full items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-start hover:bg-surface-hover">
                   <span className="grid h-8 w-8 flex-none place-items-center rounded-[9px] bg-surface-secondary text-content-faint"><MapPin size={15} /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold text-content" style={fs(13, 'body')}>{str(r.name)}</span>

@@ -100,7 +100,7 @@ export default function BottomNav() {
     <nav
       className="md:hidden fixed z-[60] flex items-center"
       style={{
-        left: 12, right: 12,
+        insetInline: 12,
         bottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
         padding: '8px 8px',
         borderRadius: 24,

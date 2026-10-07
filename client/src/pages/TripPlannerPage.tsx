@@ -154,7 +154,7 @@ function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number; p
       <div style={{ padding: '24px 28px 0', flexShrink: 0 }} className="max-md:!px-4 max-md:!pt-4">
         <div className="bg-surface-tertiary" style={{
           borderRadius: 18,
-          padding: '14px 16px 14px 22px',
+          paddingBlock: 14, paddingInlineEnd: 16, paddingInlineStart: 22,
           display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
         }}>
           <h2 className="text-content" style={{ margin: 0, fontSize: 'calc(18px * var(--fs-scale-subtitle, 1))', fontWeight: 600, letterSpacing: '-0.01em', flexShrink: 0 }}>
@@ -197,7 +197,7 @@ function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number; p
               borderRadius: 10, fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500,
             }
             return (
-              <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginLeft: 'auto', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6, flexShrink: 0, marginInlineStart: 'auto', flexWrap: 'wrap' }}>
                 {canEditPacking && (
                   <button type="button" onClick={() => setAddCategorySignal(s => s + 1)}
                     className={`${sharedBtnClass} bg-accent text-accent-text`}
@@ -242,7 +242,7 @@ function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number; p
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '9px 14px', borderRadius: 10, fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500,
                 flexShrink: 0,
-                marginLeft: 'auto',
+                marginInlineStart: 'auto',
               }}
             >
               <Plus size={14} strokeWidth={2.5} />
@@ -440,7 +440,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
       <Navbar tripTitle={trip.title} tripId={tripId} showBack onBack={() => navigate('/dashboard')} onShare={() => setShowMembersModal(true)} />
 
       <div className="bg-surface-elevated border-b border-edge-faint" style={{
-        position: 'fixed', top: 'var(--nav-h)', left: 0, right: 0, zIndex: 40,
+        position: 'fixed', top: 'var(--nav-h)', insetInline: 0, zIndex: 40,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '0 12px',
         backdropFilter: 'blur(16px)',
@@ -462,7 +462,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
       </div>
 
       {/* Offset by navbar + tab bar (44px) */}
-      <div style={{ position: 'fixed', top: 'calc(var(--nav-h) + 44px)', left: 0, right: 0, bottom: 0, overflow: 'hidden', overscrollBehavior: 'contain' }}>
+      <div style={{ position: 'fixed', top: 'calc(var(--nav-h) + 44px)', insetInline: 0, bottom: 0, overflow: 'hidden', overscrollBehavior: 'contain' }}>
 
         {/* Plugin validation/warning contributions (#1429) — navbar chips for
             plugins with a tab here, floating bottom overlay for the rest. */}
@@ -622,7 +622,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
             {/* Mobile POI search controls live in a portal like the Plan/Places
                 buttons so map touch handlers cannot swallow the tap targets. */}
             {poiPillEnabled && !mobileSidebarOpen && !showPlaceForm && !showMembersModal && !showReservationModal && createPortal(
-              <div data-testid="mobile-poi-category-pill" className="flex md:hidden" style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(var(--bottom-nav-h, 0px) + 12px)', justifyContent: 'center', zIndex: 100, pointerEvents: 'none' }}>
+              <div data-testid="mobile-poi-category-pill" className="flex md:hidden" style={{ position: 'fixed', insetInline: 12, bottom: 'calc(var(--bottom-nav-h, 0px) + 12px)', justifyContent: 'center', zIndex: 100, pointerEvents: 'none' }}>
                 <PoiCategoryPill categories={poi.categories} active={poi.active} onToggle={poi.toggle} loadingKeys={poi.loadingKeys} errorKeys={poi.errorKeys} moved={poi.moved} onSearchArea={poi.searchArea} />
               </div>,
               document.body
@@ -862,7 +862,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
 
             {/* Mobile sidebar buttons — portal to body to escape Leaflet touch handling */}
             {activeTab === 'plan' && !mobileSidebarOpen && !showPlaceForm && !showMembersModal && !showReservationModal && createPortal(
-              <div className="flex md:hidden" style={{ position: 'fixed', top: 'calc(var(--nav-h) + 44px + 12px)', left: 12, right: 12, justifyContent: 'space-between', zIndex: 100, pointerEvents: 'none' }}>
+              <div className="flex md:hidden" style={{ position: 'fixed', top: 'calc(var(--nav-h) + 44px + 12px)', insetInline: 12, justifyContent: 'space-between', zIndex: 100, pointerEvents: 'none' }}>
                 <button type="button" onClick={() => setMobileSidebarOpen('left')}
                   className="bg-surface-card text-content border border-edge"
                   style={{ pointerEvents: 'auto', backdropFilter: 'blur(12px)', borderRadius: 24, padding: '11px 24px', fontSize: 'calc(15px * var(--fs-scale-subtitle, 1))', fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 12px rgba(0,0,0,0.15)', minHeight: 44, fontFamily: 'inherit', touchAction: 'manipulation' }}>
@@ -1056,7 +1056,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
 
             {mobileSidebarOpen && createPortal(
               <div className="bg-[rgba(0,0,0,0.3)]" style={{ position: 'fixed', inset: 0, zIndex: 9999 }} role="presentation" onClick={() => setMobileSidebarOpen(null)}>
-                <div className="bg-surface-card" style={{ position: 'absolute', top: 'var(--nav-h)', left: 0, right: 0, bottom: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} role="presentation" onClick={e => e.stopPropagation()}>
+                <div className="bg-surface-card" style={{ position: 'absolute', top: 'var(--nav-h)', insetInline: 0, bottom: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} role="presentation" onClick={e => e.stopPropagation()}>
                   <div className="border-b border-edge-secondary" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
                     <span className="text-content" style={{ fontWeight: 600, fontSize: 'calc(14px * var(--fs-scale-body, 1))' }}>{mobileSidebarOpen === 'left' ? t('trip.mobilePlan') : t('trip.mobilePlaces')}</span>
                     <button type="button" onClick={() => setMobileSidebarOpen(null)} className="bg-surface-tertiary text-content" style={{ border: 'none', borderRadius: '50%', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1264,7 +1264,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
         )}
 
         {activeTab === 'collab' && (
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'var(--bottom-nav-h)', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, insetInline: 0, bottom: 'var(--bottom-nav-h)', overflow: 'hidden' }}>
             <LazyPanel id="collab">
               <CollabPanel tripId={tripId} tripMembers={tripMembers} collabFeatures={collabFeatures} />
             </LazyPanel>
@@ -1273,7 +1273,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
 
 
         {activeTab.startsWith('plugin:') && (
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'var(--bottom-nav-h)', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 0, insetInline: 0, bottom: 'var(--bottom-nav-h)', overflow: 'hidden' }}>
             <PluginFrame pluginId={activeTab.slice('plugin:'.length)} tripId={String(tripId)} fill surface="trip-tab" className="w-full h-full" />
           </div>
         )}

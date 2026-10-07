@@ -402,7 +402,7 @@ export default function TransitJourneyModal({ reservation, onClose, onSave, onDe
                       </div>
                     )
                     const timeCell = (time?: string | null) => (
-                      <div className="text-content-muted" style={{ fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', fontWeight: 600, textAlign: 'right', paddingTop: 1 }}>
+                      <div className="text-content-muted" style={{ fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', fontWeight: 600, textAlign: 'end', paddingTop: 1 }}>
                         {time || ''}
                       </div>
                     )
@@ -444,7 +444,7 @@ export default function TransitJourneyModal({ reservation, onClose, onSave, onDe
                   }
                   return (
                     <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                      <div className="text-content-muted" style={{ width: 44, flexShrink: 0, textAlign: 'right', fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 600, paddingTop: 1 }}>
+                      <div className="text-content-muted" style={{ width: 44, flexShrink: 0, textAlign: 'end', fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 600, paddingTop: 1 }}>
                         {leg.from?.time || ''}
                       </div>
                       <span style={{ display: 'inline-flex', alignItems: 'center', background: leg.line_color || 'var(--bg-hover)', color: leg.line_color ? (leg.line_text_color || '#fff') : 'var(--text-primary)', borderRadius: 6, padding: '2px 8px', fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', fontWeight: 700, flexShrink: 0 }}>

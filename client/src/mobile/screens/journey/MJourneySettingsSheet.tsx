@@ -315,7 +315,7 @@ export default function MJourneySettingsSheet({
           <button
             type="button"
             onClick={() => { void onRestoreSuggestions() }}
-            className="mb-[6px] flex w-full items-center gap-[11px] rounded-[14px] bg-[color:var(--m-ic)] px-3 py-[10px] text-left"
+            className="mb-[6px] flex w-full items-center gap-[11px] rounded-[14px] bg-[color:var(--m-ic)] px-3 py-[10px] text-start"
           >
             <Undo2 size={16} strokeWidth={2} className="flex-none text-m-muted" />
             <div className="min-w-0 flex-1">
@@ -478,7 +478,7 @@ export default function MJourneySettingsSheet({
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold"
+          className="ms-auto rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-4 py-[9px] text-[0.78125rem] font-semibold"
         >
           {t('common.cancel')}
         </button>

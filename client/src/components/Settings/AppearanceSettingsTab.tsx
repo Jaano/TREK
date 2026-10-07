@@ -65,7 +65,7 @@ const MOBILE_GROUPS: { id: string; fallback: string; keys: MobileWidgetKey[] }[]
 ]
 
 /** A tile of the scheme grid: a colour dot and a name, raised and outlined while chosen. */
-const SWATCH = 'flex min-w-0 items-center gap-2 rounded-[12px] border bg-surface-card px-3 py-2.5 text-left font-medium text-content transition-colors'
+const SWATCH = 'flex min-w-0 items-center gap-2 rounded-[12px] border bg-surface-card px-3 py-2.5 text-start font-medium text-content transition-colors'
 const swatchLook = (active: boolean) => active
   ? 'border-[color:var(--text-primary)] shadow-sm'
   : 'border-edge hover:border-content-faint'
@@ -414,7 +414,7 @@ function WidgetGroup({ caption, children }: { caption: string; children: ReactNo
 /** A colour input with its name, in the box look of the fields. */
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <label className="inline-flex items-center gap-2 rounded-[10px] border border-edge bg-surface-input py-1 pl-3 pr-1 font-medium text-content-secondary" style={fs(12.5, 'body')}>
+    <label className="inline-flex items-center gap-2 rounded-[10px] border border-edge bg-surface-input py-1 ps-3 pe-1 font-medium text-content-secondary" style={fs(12.5, 'body')}>
       {label}
       <input type="color" value={value} onChange={(e) => onChange(e.target.value)}
         className="h-7 w-9 cursor-pointer rounded-[7px] border-0 bg-transparent p-0" />

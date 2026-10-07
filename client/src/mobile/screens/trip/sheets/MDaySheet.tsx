@@ -420,7 +420,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
                         key={r.id}
                         type="button"
                         onClick={() => openReservation(r)}
-                        className={`flex w-full items-center gap-[10px] rounded-[13px] px-[11px] py-[9px] text-left ${INNER_CLS}`}
+                        className={`flex w-full items-center gap-[10px] rounded-[13px] px-[11px] py-[9px] text-start ${INNER_CLS}`}
                       >
                         <ResIcon size={15} strokeWidth={2} className="flex-none text-m-muted" />
                         <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold">{r.title}</span>
@@ -447,7 +447,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
                       type="button"
                       onClick={() => shell.openSheet('note', { dayId: day.id })}
                       aria-label={t('dayplan.addNote')}
-                      className="ml-auto flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--m-ic)] text-m-muted"
+                      className="ms-auto flex h-6 w-6 items-center justify-center rounded-full bg-[color:var(--m-ic)] text-m-muted"
                     >
                       <Plus size={12} strokeWidth={2.2} />
                     </button>
@@ -465,7 +465,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
                           key={note.id}
                           type="button"
                           onClick={() => { if (canEditDays) shell.openSheet('note', { dayId: day.id, note }) }}
-                          className={`flex w-full items-center gap-[10px] rounded-[13px] px-[11px] py-[9px] text-left ${INNER_CLS}`}
+                          className={`flex w-full items-center gap-[10px] rounded-[13px] px-[11px] py-[9px] text-start ${INNER_CLS}`}
                         >
                           <NoteIcon size={15} strokeWidth={1.8} className="flex-none text-m-muted" />
                           <span className="min-w-0 flex-1">
@@ -507,7 +507,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
                             if (canEditDays) editAccommodation(acc.id)
                             else if (acc.place_id) openAccommodationPlace(acc.place_id)
                           }}
-                          className="flex min-w-0 flex-1 items-center gap-[10px] text-left"
+                          className="flex min-w-0 flex-1 items-center gap-[10px] text-start"
                         >
                         {acc.place_image ? (
                           <div
@@ -565,7 +565,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
                         <button
                           type="button"
                           onClick={() => openReservation(linked)}
-                          className="mt-2 flex w-full items-center gap-2 text-left"
+                          className="mt-2 flex w-full items-center gap-2 text-start"
                         >
                           <span
                             className="h-2 w-2 flex-none rounded-full"

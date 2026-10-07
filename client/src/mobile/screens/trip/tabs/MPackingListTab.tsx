@@ -289,7 +289,7 @@ export default function MPackingListTab({ planner }: { planner: TripPlanner }) {
         <div className="flex items-baseline gap-[7px]">
           <span className="font-geist text-[1rem] font-extrabold tabular-nums text-m-ink">{progress.checked}/{progress.total}</span>
           <span className="font-geist text-[0.625rem] font-bold text-m-faint">{progress.pct}%</span>
-          <div className="ml-auto flex items-center gap-[6px]">
+          <div className="ms-auto flex items-center gap-[6px]">
             {bagTrackingEnabled && (
               <button
                 type="button"
@@ -369,7 +369,7 @@ export default function MPackingListTab({ planner }: { planner: TripPlanner }) {
                   key={tmpl.id}
                   type="button"
                   onClick={() => applyTemplate(tmpl.id)}
-                  className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[9px] text-left"
+                  className="flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[9px] text-start"
                 >
                   <Package size={14} strokeWidth={2} className="flex-none text-m-muted" />
                   <span className="min-w-0 flex-1">
@@ -571,7 +571,7 @@ function ActionRow({ icon: Icon, label, onClick, danger = false }: {
     <button
       type="button"
       onClick={onClick}
-      className={`flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[11px] text-left text-[0.78125rem] font-semibold last:border-b-0 ${
+      className={`flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-[13px] py-[11px] text-start text-[0.78125rem] font-semibold last:border-b-0 ${
         danger ? 'text-[color:var(--m-st-danger)]' : 'text-m-ink'
       }`}
     >
@@ -646,7 +646,7 @@ function PackingCategoryCard({
         onClick={onToggle}
         onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle() } }}
         aria-expanded={open}
-        className="flex w-full items-center gap-[8px] bg-[color:var(--m-ic)] px-[13px] py-[9px] text-left"
+        className="flex w-full items-center gap-[8px] bg-[color:var(--m-ic)] px-[13px] py-[9px] text-start"
       >
         <span className="h-[9px] w-[9px] flex-none rounded-full" style={{ background: dot }} />
         {renaming ? (
@@ -957,11 +957,11 @@ function PackingItemRow({ item, planner, currentUserId, editMode, canEdit, bagTr
       </div>
 
       {menuOpen && editMode && canEdit && (
-        <div className="mb-[6px] ml-[28px] overflow-hidden rounded-[13px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-glass)] backdrop-blur-[24px]">
+        <div className="mb-[6px] ms-[28px] overflow-hidden rounded-[13px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-glass)] backdrop-blur-[24px]">
           <button
             type="button"
             onClick={() => { setMenuOpen(false); onEdit() }}
-            className="flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-3 py-2 text-left text-[0.75rem] font-medium text-m-ink"
+            className="flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-3 py-2 text-start text-[0.75rem] font-medium text-m-ink"
           >
             <Pencil size={12} strokeWidth={2} />
             {t('common.edit')}
@@ -969,7 +969,7 @@ function PackingItemRow({ item, planner, currentUserId, editMode, canEdit, bagTr
           <button
             type="button"
             onClick={() => { setMenuOpen(false); onDelete() }}
-            className="flex w-full items-center gap-[9px] px-3 py-2 text-left text-[0.75rem] font-medium text-[color:var(--m-st-danger)]"
+            className="flex w-full items-center gap-[9px] px-3 py-2 text-start text-[0.75rem] font-medium text-[color:var(--m-st-danger)]"
           >
             <Trash2 size={12} strokeWidth={2} />
             {t('common.delete')}
@@ -978,13 +978,13 @@ function PackingItemRow({ item, planner, currentUserId, editMode, canEdit, bagTr
       )}
 
       {bagPickerOpen && bagTrackingEnabled && (
-        <div className="mb-[6px] ml-[28px] overflow-hidden rounded-[13px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-glass)] backdrop-blur-[24px]">
-          <button type="button" onClick={() => assignBag(null)} className="flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-3 py-2 text-left text-[0.75rem] font-medium text-m-muted">
+        <div className="mb-[6px] ms-[28px] overflow-hidden rounded-[13px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-glass)] backdrop-blur-[24px]">
+          <button type="button" onClick={() => assignBag(null)} className="flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-3 py-2 text-start text-[0.75rem] font-medium text-m-muted">
             <span className="h-[9px] w-[9px] flex-none rounded-full border border-dashed border-[color:var(--m-faint)]" />
             {t('packing.noBag')}
           </button>
           {bags.map(b => (
-            <button key={b.id} type="button" onClick={() => assignBag(b.id)} className="flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-3 py-2 text-left text-[0.75rem] font-medium text-m-ink">
+            <button key={b.id} type="button" onClick={() => assignBag(b.id)} className="flex w-full items-center gap-[9px] border-b border-[color:var(--m-rowbr)] px-3 py-2 text-start text-[0.75rem] font-medium text-m-ink">
               <span className="h-[9px] w-[9px] flex-none rounded-full" style={{ background: b.color }} />
               {b.name}
             </button>
@@ -1005,7 +1005,7 @@ function PackingItemRow({ item, planner, currentUserId, editMode, canEdit, bagTr
               </button>
             </div>
           ) : (
-            <button type="button" onClick={() => setCreatingBag(true)} className="flex w-full items-center gap-[7px] px-3 py-2 text-left font-geist text-[0.6875rem] font-semibold text-m-muted">
+            <button type="button" onClick={() => setCreatingBag(true)} className="flex w-full items-center gap-[7px] px-3 py-2 text-start font-geist text-[0.6875rem] font-semibold text-m-muted">
               <Plus size={11} strokeWidth={2.2} />
               {t('packing.addBag')}
             </button>

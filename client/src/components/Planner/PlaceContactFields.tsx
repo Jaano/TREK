@@ -78,16 +78,16 @@ export function PlaceContactFields({ id: anchorId, phone, email, openingHours, o
       <div className={GRID_2}>
         <EditorField label={t('places.formPhone')} htmlFor={`${id}-phone`}>
           <div className="relative">
-            <Phone size={13} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" />
+            <Phone size={13} strokeWidth={2} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" />
             <input id={`${id}-phone`} type="tel" value={phone} onChange={e => onChange('phone', e.target.value)}
-              maxLength={50} placeholder="+49 …" className={`${INPUT} pl-8`} />
+              maxLength={50} placeholder="+49 …" className={`${INPUT} ps-8`} />
           </div>
         </EditorField>
         <EditorField label={t('places.formEmail')} htmlFor={`${id}-email`}>
           <div className="relative">
-            <Mail size={13} strokeWidth={2} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" />
+            <Mail size={13} strokeWidth={2} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" />
             <input id={`${id}-email`} type="email" value={email} onChange={e => onChange('email', e.target.value)}
-              maxLength={254} placeholder="info@…" className={`${INPUT} pl-8`} />
+              maxLength={254} placeholder="info@…" className={`${INPUT} ps-8`} />
           </div>
         </EditorField>
       </div>

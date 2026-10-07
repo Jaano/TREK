@@ -118,7 +118,7 @@ export function TripRouteOverviewPanel({ overview, unit, selectedDayId, onSelect
           )
           const style = {
             display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-            padding: '7px 14px', textAlign: 'left' as const,
+            padding: '7px 14px', textAlign: 'start' as const,
             fontSize: 'calc(12px * var(--fs-scale-body, 1))',
             background: day.dayId === selectedDayId ? 'var(--bg-hover)' : 'transparent',
             border: 'none',

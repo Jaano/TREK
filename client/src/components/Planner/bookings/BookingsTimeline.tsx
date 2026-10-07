@@ -402,7 +402,7 @@ function TrayCard({ r, selected, onSelect }: { r: Reservation; selected: boolean
   const status = tone === 'transit' ? null : tone === 'confirmed' ? t('reservations.confirmed') : t('reservations.pending')
   return (
     <button type="button" onClick={onSelect} aria-pressed={selected}
-      className={`group flex items-center gap-3 rounded-2xl border bg-surface-secondary px-3 py-2.5 text-left transition-shadow hover:shadow-md ${selected ? 'border-[color:var(--text-primary)]' : 'border-edge-faint'}`}>
+      className={`group flex items-center gap-3 rounded-2xl border bg-surface-secondary px-3 py-2.5 text-start transition-shadow hover:shadow-md ${selected ? 'border-[color:var(--text-primary)]' : 'border-edge-faint'}`}>
       <TypeTile type={r.type} size={38} raised />
       <span className="min-w-0 flex-1">
         <span className="block truncate font-bold text-content" style={fs(13.5, 'body')}>{displayTitle(r)}</span>

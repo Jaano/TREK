@@ -244,7 +244,7 @@ function HitRow({ poi, unit, t, first, onShow, onAdd }: {
   const color = serviceColor(poi.category)
   return (
     <li className={`flex items-center gap-2.5 px-3 py-2 ${first ? '' : 'border-t border-[color:var(--m-rowbr)]'}`}>
-      <button type="button" onClick={onShow} className="flex min-w-0 flex-1 items-center gap-2.5 py-1 text-left">
+      <button type="button" onClick={onShow} className="flex min-w-0 flex-1 items-center gap-2.5 py-1 text-start">
         <span
           className="grid h-[30px] w-[30px] flex-none place-items-center rounded-[10px]"
           // theme-lint-disable: the road-signage palette from `roadtripModel`, the same

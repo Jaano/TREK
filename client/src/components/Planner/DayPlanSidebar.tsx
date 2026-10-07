@@ -1883,7 +1883,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                 onContextMenu={canEditDays ? e => ctxMenu.open(e, dayMenuItems) : undefined}
                 style={{
                   display: 'flex', alignItems: 'flex-start', gap: 10,
-                  padding: '10px 8px 10px 10px',
+                  paddingBlock: 10, paddingInlineEnd: 8, paddingInlineStart: 10,
                   cursor: 'pointer',
                   background: isDragTarget ? DAY_HEAD_DROP : (isSelected ? DAY_HEAD_SELECTED : headerTintBg),
                   transition: 'background 0.12s',
@@ -1961,7 +1961,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                             <Tooltip label={tip}>
                               <button type="button" data-dp="day-pill" data-pending={pending || undefined}
                                 onClick={e => { e.stopPropagation(); if ((acc as any).place_id) onPlaceClick((acc as any).place_id) }}
-                                className={`inline-flex min-w-0 items-center gap-1 py-[2px] font-geist font-normal text-content-secondary hover:text-content ${stayBooking ? 'pl-2 pr-1.5' : 'px-2'}`}
+                                className={`inline-flex min-w-0 items-center gap-1 py-[2px] font-geist font-normal text-content-secondary hover:text-content ${stayBooking ? 'ps-2 pe-1.5' : 'px-2'}`}
                                 style={{ ...fs(10.5), cursor: (acc as any).place_id ? 'pointer' : 'default' }}>
                                 <Hotel size={11} strokeWidth={2} className={`flex-none ${iconTone}`} />
                                 <span className="truncate">{accName}</span>
@@ -1971,7 +1971,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                               <Tooltip label={t('day.openStayBooking')}>
                                 <button type="button" data-dp="day-pill-booking" aria-label={t('day.openStayBooking')}
                                   onClick={e => { e.stopPropagation(); onOpenBooking!(stayBooking) }}
-                                  className="flex flex-none items-center border-l border-edge-faint pl-1.5 pr-2 text-content-faint hover:text-content">
+                                  className="flex flex-none items-center border-s border-edge-faint ps-1.5 pe-2 text-content-faint hover:text-content">
                                   <Ticket size={11} strokeWidth={2} />
                                 </button>
                               </Tooltip>
@@ -2278,7 +2278,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                             onMouseLeave={() => setHoveredAssignmentId(null)}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 8,
-                              padding: `6px 4px 6px ${gripsShown ? 2 : 8}px`,
+                              paddingBlock: 6, paddingInlineEnd: 4, paddingInlineStart: gripsShown ? 2 : 8,
                               borderRadius: 12,
                               cursor: 'pointer',
                               // A locked stop keeps a whisper of the danger tone; the lock on its avatar says why.
@@ -2435,18 +2435,18 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                                 <div className="mt-1 flex items-center">
                                   {assignment.participants.slice(0, 5).map((p, pi) => (
                                     <div key={p.user_id} className="grid h-4 w-4 flex-none place-items-center overflow-hidden rounded-full border-[1.5px] border-surface-card bg-surface-tertiary font-bold text-content-muted"
-                                      style={{ ...fs(7), marginLeft: pi > 0 ? -4 : 0 }}>
+                                      style={{ ...fs(7), marginInlineStart: pi > 0 ? -4 : 0 }}>
                                       {p.avatar ? <img src={avatarSrc(p.avatar)!} alt={p.username ?? ''} className="h-full w-full object-cover" /> : p.username?.[0]?.toUpperCase()}
                                     </div>
                                   ))}
                                   {assignment.participants.length > 5 && (
-                                    <span className="ml-0.5 text-content-faint" style={fs(8)}>+{assignment.participants.length - 5}</span>
+                                    <span className="ms-0.5 text-content-faint" style={fs(8)}>+{assignment.participants.length - 5}</span>
                                   )}
                                 </div>
                               )}
                             </div>
                             {/* The row's own controls, with room between them so each is its own target. */}
-                            <div className="flex flex-none items-center gap-2.5 pl-1">
+                            <div className="flex flex-none items-center gap-2.5 ps-1">
                             {canEditDays && <div className="reorder-buttons" style={{ flexShrink: 0, display: 'flex', gap: 1, transition: 'opacity 0.15s' }}>
                               <button type="button" onClick={moveUp} disabled={idx === 0} aria-label={t('dayplan.moveUp')} className="flex text-content-faint hover:text-content disabled:cursor-default disabled:text-edge">
                                 <ChevronUp size={12} strokeWidth={2} />
@@ -2612,7 +2612,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                             onMouseLeave={e => { e.currentTarget.style.background = tintOf(color, 7) }}
                             style={{
                               display: 'flex', alignItems: 'center', gap: 8,
-                              padding: `6px 4px 6px ${gripsShown ? 2 : 8}px`,
+                              paddingBlock: 6, paddingInlineEnd: 4, paddingInlineStart: gripsShown ? 2 : 8,
                               margin: '2px 0',
                               borderRadius: 12,
                               border: `1px solid ${tintOf(color, 24)}`,
@@ -2712,7 +2712,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                             })()}
                           </div>
                           {transitMeta && expandedTransitIds.has(res.id) && (
-                            <div style={{ margin: '2px 0 4px', padding: '9px 10px 9px 12px', borderRadius: 12, border: `1px solid ${tintOf(color, 18)}`, background: tintOf(color, 4) }}>
+                            <div style={{ margin: '2px 0 4px', paddingBlock: 9, paddingInlineEnd: 10, paddingInlineStart: 12, borderRadius: 12, border: `1px solid ${tintOf(color, 18)}`, background: tintOf(color, 4) }}>
                               <TransitItineraryInline legs={transitMeta.legs} t={t} />
                             </div>
                           )}
@@ -2804,7 +2804,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                           style={{
                             position: 'relative',
                             display: 'flex', alignItems: 'center', gap: 8,
-                            padding: `7px 4px 7px ${gripsShown ? 2 : 8}px`,
+                            paddingBlock: 7, paddingInlineEnd: 4, paddingInlineStart: gripsShown ? 2 : 8,
                             margin: '2px 0',
                             borderRadius: 12,
                             border: `1px solid ${noteSkin.border}`,

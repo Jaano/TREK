@@ -34,6 +34,7 @@ npm run test:cov                                   # coverage (lcov) for all fou
 cd client && npm run test                          # client vitest run
 cd client && npm run e2e                           # Playwright (local only)
 cd client && npm run lint:pages                    # enforce the Page pattern (CI gate)
+cd client && npm run lint:rtl                      # physical left/right sides may only shrink per file (CI gate)
 cd client && npm run theme:lint                    # flag styling that bypasses appearance tokens (local only)
 npm run typecheck --workspace=server               # tsc --noEmit (also client/shared; server also has typecheck:tests)
 ```
@@ -77,6 +78,7 @@ Offline-first, with a layered data flow. A Page never owns state directly:
 - **Page pattern** (enforced by `lint:pages`, spec in `client/src/pages/PATTERN.md`): a `*Page.tsx` is a **wiring container** composing a co-located `use<Page>()` hook; it must not call React state/effect/memo hooks itself.
 - **Data flow**: `store (Zustand, client/src/store/) → repo (client/src/repo/) → api (client/src/api/) | Dexie (client/src/db/offlineDb.ts)`. Writes go through `sync/mutationQueue.ts`: optimistic Dexie write, then a replay with an `X-Idempotency-Key` header on reconnect. `store/slices/remoteEventHandler.ts` applies incoming WebSocket events. Components never call the API directly.
 - **Styling**: semantic Tailwind tokens (`bg-surface*`, `text-content*`, `border-edge*`, `bg-accent*`) or the underlying `var(--token)` variables — never color literals, arbitrary-value color classes or numeric inline `fontSize`, so user-chosen scheme/transparency/text-size keep working. `theme:lint` flags bypasses; suppress intentional exceptions (map/PDF/brand) with a `theme-lint-disable` line comment.
+- **Reading direction**: Arabic runs the app right to left, so spacing, insets and alignment that follow the text use the logical forms (`ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-`/`text-start`/`border-s`/`rounded-s`, `marginInlineStart`, `insetInlineEnd`, `textAlign: 'start'`). `lint:rtl` counts the physical ones per file against `client/scripts/rtl-baseline.json`, which may only shrink; geometry that is physical on purpose in new code (maps, measured positions, time axes) carries an `rtl-lint-disable` comment.
 - **PWA**: `vite-plugin-pwa` + Workbox cache tiles, API and uploads; `prebuild` generates icons.
 
 ## Shared contracts & i18n
@@ -106,7 +108,7 @@ These principles come out of a full-repo audit and shape all new code:
 
 ## Quality gates in CI
 
-`.github/workflows/test.yml` runs, per package: typecheck (server also `typecheck:tests`), `lint:check`, `lint:pages`, `check:plugin-facts`, `i18n:parity:strict`, the S3 contract suite, coverage for all four packages, then a SonarCloud scan. `lint-prettier.yml` additionally runs `lint` + `format:check` on `shared/`. `plugin-sdk` has no lint script and is outside the eslint gates. **Not in CI**: `theme:lint`, Playwright, `check:gl-split` — run them locally. There are no git hooks; nothing runs before a commit except you. Other workflows build Docker images, scan them, and publish `trek-plugin-sdk` on `plugin-sdk-v*` tags.
+`.github/workflows/test.yml` runs, per package: typecheck (server also `typecheck:tests`), `lint:check`, `lint:pages`, `lint:rtl`, `check:plugin-facts`, `i18n:parity:strict`, the S3 contract suite, coverage for all four packages, then a SonarCloud scan. `lint-prettier.yml` additionally runs `lint` + `format:check` on `shared/`. `plugin-sdk` has no lint script and is outside the eslint gates. **Not in CI**: `theme:lint`, Playwright, `check:gl-split` — run them locally. There are no git hooks; nothing runs before a commit except you. Other workflows build Docker images, scan them, and publish `trek-plugin-sdk` on `plugin-sdk-v*` tags.
 
 **SonarCloud** (project `liketrek_TREK`, the built-in Sonar way gate; the run takes 20–25 min, so get it right before pushing) measures **new code only** on a PR; any failing condition blocks it:
 

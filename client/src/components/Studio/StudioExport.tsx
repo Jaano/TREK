@@ -172,7 +172,7 @@ function Option({ icon: Icon, name, hint, on, onClick }: {
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`flex w-full items-start gap-3 rounded-[12px] border px-3 py-2.5 text-left transition-colors ${on ? 'border-[color:var(--text-primary)] bg-surface-card shadow-sm' : 'border-edge-faint bg-surface-card hover:bg-surface-hover'}`}
+      className={`flex w-full items-start gap-3 rounded-[12px] border px-3 py-2.5 text-start transition-colors ${on ? 'border-[color:var(--text-primary)] bg-surface-card shadow-sm' : 'border-edge-faint bg-surface-card hover:bg-surface-hover'}`}
     >
       <Icon size={16} strokeWidth={1.9} className={`mt-0.5 flex-none ${on ? 'text-content' : 'text-content-muted'}`} />
       <span className="min-w-0 flex-1">

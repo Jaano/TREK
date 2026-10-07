@@ -82,7 +82,7 @@ function TargetCard({ active, icon: Icon, title, hint, onClick }: {
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className={`relative flex flex-col items-start gap-1.5 rounded-[14px] border p-3 text-left transition-colors ${
+      className={`relative flex flex-col items-start gap-1.5 rounded-[14px] border p-3 text-start transition-colors ${
         active ? 'border-accent bg-surface-card shadow-sm' : 'border-edge-faint bg-surface-secondary hover:bg-surface-card'
       }`}
     >
@@ -92,7 +92,7 @@ function TargetCard({ active, icon: Icon, title, hint, onClick }: {
       <span className="font-semibold text-content" style={fs(13, 'body')}>{title}</span>
       <span className="leading-snug text-content-faint" style={fs(11.5)}>{hint}</span>
       {active && (
-        <span className="absolute right-2 top-2 grid h-4 w-4 place-items-center rounded-full bg-accent text-accent-text">
+        <span className="absolute end-2 top-2 grid h-4 w-4 place-items-center rounded-full bg-accent text-accent-text">
           <Check size={11} strokeWidth={3} />
         </span>
       )}
@@ -117,13 +117,13 @@ function ListChoice({ lists, selectedId, onSelect, t }: {
     <div className="flex flex-col gap-2">
       {lists.length > 5 && (
         <div className="relative">
-          <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
+          <Search size={14} className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-content-faint" aria-hidden="true" />
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
             aria-label={t('collections.file.searchLists')}
             placeholder={t('collections.file.searchLists')}
-            className={`${INPUT} pl-8`}
+            className={`${INPUT} ps-8`}
           />
         </div>
       )}
@@ -136,7 +136,7 @@ function ListChoice({ lists, selectedId, onSelect, t }: {
               type="button"
               onClick={() => onSelect(list.id)}
               aria-pressed={active}
-              className={`flex min-h-[46px] items-center gap-3 rounded-[10px] px-2.5 py-2 text-left ${active ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
+              className={`flex min-h-[46px] items-center gap-3 rounded-[10px] px-2.5 py-2 text-start ${active ? 'bg-surface-card shadow-sm' : 'hover:bg-surface-card'}`}
             >
               <span className="grid h-8 w-8 flex-none place-items-center rounded-[9px]" style={swatch(list.color)}>
                 <Bookmark size={15} />

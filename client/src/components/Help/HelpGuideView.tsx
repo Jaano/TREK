@@ -60,7 +60,7 @@ export default function HelpGuideView({ guide }: { guide: HelpGuide }): React.Re
           {guide.media.steps && <HelpBadge tone="neutral" icon={Camera} count={guide.steps}>{t('help.center.screenshot')}</HelpBadge>}
           {/* One way out of the header: into the screen. The docs link waits at the bottom. */}
           {screen && screenRoute && (
-            <Link to={screenRoute} onClick={closeHelp} className="ml-auto">
+            <Link to={screenRoute} onClick={closeHelp} className="ms-auto">
               <HelpBadge tone="accent" icon={ArrowUpRight} className="hover:bg-accent-hover transition-colors">
                 {t('help.center.goToScreen', { screen: t(ctxKey(screen.id, 'title')) })}
               </HelpBadge>
@@ -76,7 +76,7 @@ export default function HelpGuideView({ guide }: { guide: HelpGuide }): React.Re
         </div>
         <ol className="relative flex flex-col gap-3">
           {/* The rail: runs behind the step numbers from the first to the last. */}
-          <span className="absolute left-[27px] top-6 bottom-6 w-px bg-edge" aria-hidden="true" />
+          <span className="absolute start-[27px] top-6 bottom-6 w-px bg-edge" aria-hidden="true" />
           {steps.map(n => {
             const text = t(guideStepKey(guide.id, n))
             const src = helpMedia.step(guide.id, n)
@@ -117,7 +117,7 @@ export default function HelpGuideView({ guide }: { guide: HelpGuide }): React.Re
                           box, and covering it would crop away the sides the
                           ring is drawn on. */}
                       <img src={src} alt="" loading="lazy" decoding="async" className="block w-full aspect-[16/10] object-contain" />
-                      <span className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-inverse text-inverse-text flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-elevated">
+                      <span className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-inverse text-inverse-text flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-elevated">
                         <Maximize2 className="w-3.5 h-3.5" />
                       </span>
                     </button>
@@ -146,10 +146,10 @@ export default function HelpGuideView({ guide }: { guide: HelpGuide }): React.Re
             className="trek-help-shot group relative rounded-xl overflow-hidden border border-edge-secondary bg-surface-tertiary"
           >
             <img src={helpMedia.result(guide.id)} alt="" loading="lazy" decoding="async" className="block w-full aspect-video object-contain" />
-            <span className="absolute bottom-2 left-2">
+            <span className="absolute bottom-2 start-2">
               <HelpBadge tone="success" icon={CheckCircle2}>{t('help.center.result')}</HelpBadge>
             </span>
-            <span className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-inverse text-inverse-text flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-elevated">
+            <span className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-inverse text-inverse-text flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-elevated">
               <Maximize2 className="w-3.5 h-3.5" />
             </span>
           </button>
@@ -205,7 +205,7 @@ export default function HelpGuideView({ guide }: { guide: HelpGuide }): React.Re
                       <button
                         type="button"
                         onClick={() => openGuide(g.id)}
-                        className="group w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-surface-hover transition-colors"
+                        className="group w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-start hover:bg-surface-hover transition-colors"
                       >
                         <span className="w-7 h-7 rounded-md bg-surface-tertiary text-content-muted flex items-center justify-center flex-shrink-0 group-hover:bg-accent group-hover:text-accent-text transition-colors">
                           <RelIcon className="w-3.5 h-3.5" />

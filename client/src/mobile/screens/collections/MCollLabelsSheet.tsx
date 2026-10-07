@@ -199,7 +199,7 @@ export default function MCollLabelsSheet({
           <button type="button" onClick={onSwitchToManage} className="text-[0.75rem] font-bold text-m-muted">
             {t('collections.labels.manage')}
           </button>
-          <PrimaryPill className="ml-auto" onClick={assign} disabled={checked.length === 0 || busy}>
+          <PrimaryPill className="ms-auto" onClick={assign} disabled={checked.length === 0 || busy}>
             <Tag size={13} strokeWidth={2.4} /> {t('collections.labels.assign')}
           </PrimaryPill>
         </SheetFooter>

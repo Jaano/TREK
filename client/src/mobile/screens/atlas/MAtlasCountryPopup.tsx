@@ -34,7 +34,7 @@ function OptionRow({ icon: Icon, tint, title, hint, onClick }: OptionRowProps) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-[13px] rounded-[18px] bg-[color:var(--m-ic)] px-4 py-[14px] text-left"
+      className="flex w-full items-center gap-[13px] rounded-[18px] bg-[color:var(--m-ic)] px-4 py-[14px] text-start"
     >
       <span className={`flex h-10 w-10 flex-none items-center justify-center rounded-xl ${tint}`}>
         <Icon size={20} strokeWidth={2} />
@@ -286,7 +286,7 @@ export default function MAtlasCountryPopup({ atlas }: MAtlasCountryPopupProps) {
 
           {a.type === 'bucket' && (
             <>
-              <label className="block text-left">
+              <label className="block text-start">
                 <span className="font-geist text-[0.6875rem] font-bold text-m-muted">{t('atlas.bucketWhen')}</span>
                 <input type="month" value={bucketDate} onChange={(e) => setBucketDate(e.target.value)} className={inputCls} />
               </label>
