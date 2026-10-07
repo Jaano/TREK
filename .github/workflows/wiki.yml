@@ -19,6 +19,7 @@ jobs:
   deploy:
     if: github.repository == 'liketrek/TREK'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Publish to GitHub wiki

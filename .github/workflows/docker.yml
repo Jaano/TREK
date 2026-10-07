@@ -24,6 +24,7 @@ jobs:
   version-bump:
     if: github.repository == 'liketrek/TREK'
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     outputs:
       version: ${{ steps.bump.outputs.VERSION }}
     steps:
@@ -114,6 +115,7 @@ jobs:
 
   build:
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
     needs: version-bump
     strategy:
       fail-fast: false
@@ -174,6 +176,7 @@ jobs:
 
   merge:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     needs: [version-bump, build]
     steps:
       - uses: actions/checkout@v4
@@ -232,6 +235,7 @@ jobs:
 
   release-helm:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     needs: version-bump
     steps:
       - name: Checkout

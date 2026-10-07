@@ -8,6 +8,7 @@ jobs:
   check-target:
     if: github.repository == 'liketrek/TREK'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       pull-requests: write
       issues: write

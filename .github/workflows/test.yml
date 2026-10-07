@@ -98,6 +98,7 @@ jobs:
   plugin-facts:
     name: Plugin Permission Facts
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
@@ -125,6 +126,7 @@ jobs:
   i18n-parity:
     name: i18n Key Parity
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v6
@@ -139,6 +141,7 @@ jobs:
   server-quality:
     name: Server Types & Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
@@ -203,6 +206,7 @@ jobs:
   client-quality:
     name: Client Types & Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v6
@@ -231,6 +235,7 @@ jobs:
   plugin-sdk-quality:
     name: Plugin SDK Types
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: plugin-sdk
@@ -253,6 +258,7 @@ jobs:
   s3-contract:
     name: S3 Driver Contract (MinIO)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     # Fork PRs don't get repo secrets, so MINIO_LICENSE_KEY would be empty and
     # the AIStor container would fail to boot. Pushes and manual dispatches do
@@ -325,6 +331,7 @@ jobs:
   server-coverage:
     name: Server Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
       - uses: actions/checkout@v6
@@ -363,6 +370,7 @@ jobs:
   client-coverage:
     name: Client Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
       - uses: actions/checkout@v6
@@ -396,6 +404,7 @@ jobs:
   shared-coverage:
     name: Shared Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
       - uses: actions/checkout@v6
@@ -422,6 +431,7 @@ jobs:
   plugin-sdk-coverage:
     name: Plugin SDK Coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     defaults:
       run:
@@ -454,6 +464,7 @@ jobs:
   scan:
     name: Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     # Fork PRs don't receive SONAR_TOKEN — skip the scan rather than fail it.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     # Coverage jobs failing must stop the scan: a missing lcov file would make

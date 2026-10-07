@@ -19,6 +19,7 @@ jobs:
     # Scout login can never succeed there.
     if: github.repository == 'liketrek/TREK' && github.event.pull_request.head.repo.fork != true
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
