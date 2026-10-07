@@ -1,4 +1,5 @@
 import { Migration } from '@mikro-orm/migrations';
+import { addColumnIfMissing, tableExists } from '../migration-utils';
 
 /**
  * Tours: a facet on `places` for hikes and other single-day routes.
@@ -18,7 +19,19 @@ import { Migration } from '@mikro-orm/migrations';
 export class Migration20200101042000_tours extends Migration {
   override name = 'Migration20200101042000_tours';
 
-  override up(): void {
+  override async up(): Promise<void> {
+    // The branch's earlier stages created `tours` without the difficulty cap.
+    // `CREATE TABLE IF NOT EXISTS` below leaves such a table as it is, so the
+    // column is added first, while the statements below are still queued.
+    if (await tableExists(this, 'tours')) {
+      await addColumnIfMissing(
+        this,
+        'tours',
+        'max_hiking_difficulty',
+        'max_hiking_difficulty INTEGER NOT NULL DEFAULT 2 CHECK(max_hiking_difficulty BETWEEN 1 AND 6)',
+      );
+    }
+
     this.addSql(`
       CREATE TABLE IF NOT EXISTS tour_types (
         key TEXT PRIMARY KEY,

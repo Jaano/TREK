@@ -136,4 +136,32 @@ describe('Tours migration', () => {
       await orm.close(true);
     }
   }, 30000);
+
+  it('TOURMIG-004: a tours table from an earlier branch stage gains the difficulty cap and keeps its rows', async () => {
+    const orm = await ormBeforeTarget();
+    try {
+      await rawExec(orm, `CREATE TABLE tour_types (
+        key TEXT PRIMARY KEY, label_key TEXT NOT NULL, icon TEXT NOT NULL, color TEXT NOT NULL, routing_profile TEXT,
+        is_sport INTEGER NOT NULL DEFAULT 1, enabled INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0)`);
+      await rawExec(orm, "INSERT INTO tour_types (key, label_key, icon, color, routing_profile) VALUES ('hike', 'tourTypes.hike', 'Mountain', '#16a34a', 'pedestrian')");
+      await rawExec(orm, `CREATE TABLE tours (
+        place_id INTEGER PRIMARY KEY REFERENCES places(id) ON DELETE CASCADE,
+        tour_type TEXT NOT NULL REFERENCES tour_types(key), distance REAL, elevation_gain REAL, elevation_loss REAL,
+        duration REAL, difficulty TEXT, wanderer_ref TEXT, match_confidence REAL, tour_group_id INTEGER,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP)`);
+      await seedTripWithPlace(orm);
+      await rawExec(orm, "INSERT INTO tours (place_id, tour_type, distance) VALUES (100, 'hike', 8)");
+
+      await migrateTo(orm, TARGET);
+
+      expect(await rawQuery(orm, 'SELECT place_id, distance, max_hiking_difficulty FROM tours')).toEqual([
+        { place_id: 100, distance: 8, max_hiking_difficulty: 2 },
+      ]);
+      expect(await rawQuery(orm, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tour_waypoints'")).toEqual([
+        { name: 'tour_waypoints' },
+      ]);
+    } finally {
+      await orm.close(true);
+    }
+  }, 30000);
 });

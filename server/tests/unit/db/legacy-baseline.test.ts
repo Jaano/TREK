@@ -238,4 +238,25 @@ describe('planLegacyBaseline / migrateToHead', () => {
     await migrate();
     await expect(migrate()).resolves.toBeUndefined();
   });
+
+  it.each([
+    [246, 242],
+    [243, 242],
+    [217, 215],
+  ])('LEGACYBASE-010: a pre-ORM Tours branch database at schema_version %i is baselined to upstream step %i', async (version, upstream) => {
+    const all = await pendingNames(orm);
+    const numbered = all.filter((name) => !UNNUMBERED.includes(name));
+    await rawExec(orm, 'CREATE TABLE schema_version (version INTEGER NOT NULL)');
+    await rawExec(orm, `INSERT INTO schema_version (version) VALUES (${version})`);
+    await rawExec(orm, 'CREATE TABLE tour_types (key TEXT PRIMARY KEY)');
+    expect(await baseline()).toEqual(numbered.slice(0, upstream));
+  });
+
+  it('LEGACYBASE-011: the same schema_version without the Tours tables is an upstream database and keeps its step', async () => {
+    const all = await pendingNames(orm);
+    const numbered = all.filter((name) => !UNNUMBERED.includes(name));
+    await rawExec(orm, 'CREATE TABLE schema_version (version INTEGER NOT NULL)');
+    await rawExec(orm, 'INSERT INTO schema_version (version) VALUES (244)');
+    expect(await baseline()).toEqual(numbered.slice(0, 244));
+  });
 });

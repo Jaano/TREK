@@ -129,6 +129,25 @@ async function legacyVersion(connection: Connection, migrator: Migrator): Promis
 }
 
 /**
+ * The pre-ORM Tours branch numbered its own steps after the upstream step it
+ * was cut from: 216 to 218 on the older line, 243 to 246 on the later one.
+ * Such a database's schema_version counts Tours steps, not the upstream steps
+ * of the same numbers, so it is cut back to the last upstream step it really
+ * has. The upstream steps then run, and the Tours migration adopts the tables
+ * the branch already created.
+ */
+async function withoutToursSteps(connection: Connection, version: number): Promise<number> {
+  const toursLine = version >= 216 && version <= 218 ? 215 : version >= 243 && version <= 246 ? 242 : null;
+  if (toursLine === null) return version;
+  const table: unknown[] = await connection.execute(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'tour_types'`,
+  );
+  if (table.length === 0) return version;
+  console.log(`[DB] schema_version ${version} was written by the pre-ORM Tours branch; baselining to upstream step ${toursLine}`);
+  return toursLine;
+}
+
+/**
  * The migrations a positional-runner database already has — steps 1..N, never
  * the baseline (see the file header) — or `[]` for every database that is not
  * one. Writes nothing; {@link migrateToHead} records them.
@@ -138,8 +157,9 @@ export async function planLegacyBaseline(
   migrator: Migrator,
   readSource: ReadSource = readFromDisk,
 ): Promise<string[]> {
-  const version = await legacyVersion(connection, migrator);
-  if (version === null) return [];
+  const recorded = await legacyVersion(connection, migrator);
+  if (recorded === null) return [];
+  const version = await withoutToursSteps(connection, recorded);
 
   const map = buildLegacyStepMap(await migrator.getPending(), readSource);
   if (version > map.finalStep) {
