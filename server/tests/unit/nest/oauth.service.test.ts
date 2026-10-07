@@ -1316,13 +1316,14 @@ describe('OauthModule', () => {
     const { OauthService: Svc } = await import('../../../src/nest/oauth/oauth.service');
 
     const { TrekClientsStore, TrekOAuthProvider } = await import('../../../src/nest/oauth/oauth-sdk.provider');
+    const { OauthTokenRetentionJob } = await import('../../../src/nest/oauth/oauth-token-retention.job');
 
     const controllers = Reflect.getMetadata('controllers', OauthModule);
     const providers = Reflect.getMetadata('providers', OauthModule);
     expect(controllers).toEqual([OauthPublicController, OauthApiController]);
     // RateLimitService is deliberately absent: it comes from the global
     // RateLimitModule so all consumers share one set of counters.
-    expect(providers).toEqual([Svc, TrekClientsStore, TrekOAuthProvider]);
+    expect(providers).toEqual([Svc, TrekClientsStore, TrekOAuthProvider, OauthTokenRetentionJob]);
   });
 });
 
