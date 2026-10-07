@@ -10,6 +10,7 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { useRoadtripSettings } from '../../hooks/useRoadtripSettings'
 import { useAuthStore } from '../../store/authStore'
 import { hasPersonalPlan } from '../PDF/pdfScope'
+import { importChunk } from '../../utils/chunkReload'
 
 /**
  * What a GPX download can carry. Worded by what someone wants on their device
@@ -98,7 +99,7 @@ export function TripExportModal({
       // sidebar, so every trip used to pay for it whether or not anyone
       // exported. A missing chunk lands in the catch and shows the same error
       // the export already had.
-      const { downloadTripPDF } = await import('../PDF/TripPDF')
+      const { downloadTripPDF } = await importChunk(() => import('../PDF/TripPDF'))
       await downloadTripPDF({ trip, days, places, assignments, categories, dayNotes: flatNotes, reservations, t, locale, timeFormat, distanceUnit, showServiceStops, onlyUserId: mine ? myId : undefined })
       onClose()
     } catch (e) {

@@ -11,6 +11,7 @@ import {
   sanitizeInlineHtml,
 } from '@trek/shared'
 import type { TranslationStrings } from '@trek/shared/i18n'
+import { importChunk } from '../utils/chunkReload'
 
 export { SUPPORTED_LANGUAGES }
 
@@ -122,7 +123,7 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
     if (!loader) return
 
     let cancelled = false
-    loader().then(mod => {
+    importChunk(loader).then(mod => {
       if (!cancelled) setStrings(mod.default)
     }).catch(err => {
       // The locale chunk can be gone after a deploy. Keep the strings we have —

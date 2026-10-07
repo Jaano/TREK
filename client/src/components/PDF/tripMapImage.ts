@@ -2,6 +2,7 @@ import { buildRouteOverlay, wrapSvg } from './tripMapSvg'
 import { hasWebGL } from '../../utils/webgl'
 import { normalizeStyleForProvider } from '../Map/glProviders'
 import type { TripOverviewDay } from '../Map/tripRouteGeometry'
+import { importChunk } from '../../utils/chunkReload'
 
 /**
  * The trip's route over a real basemap, for the PDF (#1736).
@@ -46,7 +47,7 @@ export async function renderTripMapImage(
   let container: HTMLDivElement | null = null
   let map: { remove: () => void } | null = null
   try {
-    const gl = (await import('../Map/engines/maplibre')).default
+    const gl = (await importChunk(() => import('../Map/engines/maplibre'))).default
 
     container = document.createElement('div')
     // Off-screen rather than hidden: MapLibre needs a laid-out box with real

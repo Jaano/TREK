@@ -11,6 +11,7 @@ import { hasPersonalPlan } from '../../../../components/PDF/pdfScope'
 import { INNER_CLS, TileHeader } from './MTripSheetUi'
 import type { MTripSheetsProps } from '../MTripShell'
 import type { LucideIcon } from 'lucide-react'
+import { importChunk } from '../../../../utils/chunkReload'
 
 /**
  * Export sheet ('export', opened from the Mehr sheet): the desktop day-plan
@@ -47,7 +48,7 @@ export default function MExportSheet({ planner, shell }: MTripSheetsProps) {
     setPdfBusy(mine ? 'mine' : 'all')
     try {
       // See DayPlanSidebarToolbar: loaded on demand, not with the trip.
-      const { downloadTripPDF } = await import('../../../../components/PDF/TripPDF')
+      const { downloadTripPDF } = await importChunk(() => import('../../../../components/PDF/TripPDF'))
       await downloadTripPDF({
         trip: planner.trip,
         days: planner.days,
