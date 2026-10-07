@@ -15,14 +15,7 @@ import { tripsApi, tagsApi, categoriesApi } from '../api/client'
 import {
   offlineDb,
   upsertTrip,
-  upsertDays,
-  upsertPlaces,
-  upsertPackingItems,
-  upsertTodoItems,
-  upsertBudgetItems,
-  upsertReservations,
-  upsertTripFiles,
-  upsertAccommodations,
+  replaceTripRows,
   upsertTripMembers,
   upsertTags,
   upsertCategories,
@@ -116,15 +109,17 @@ function isVideo(file: TripFile): boolean {
 async function syncTrip(tripId: number): Promise<void> {
   const bundle = await tripsApi.bundle(tripId) as TripBundle
 
+  // Replace, not merge: deletions made elsewhere while this device was offline
+  // reach the cache only through here, since the live events were missed.
   await upsertTrip(bundle.trip)
-  await upsertDays(bundle.days)
-  await upsertPlaces(bundle.places)
-  await upsertPackingItems(bundle.packingItems)
-  await upsertTodoItems(bundle.todoItems)
-  await upsertBudgetItems(bundle.budgetItems)
-  await upsertReservations(bundle.reservations)
-  await upsertTripFiles(bundle.files)
-  await upsertAccommodations(bundle.accommodations || [])
+  await replaceTripRows('days', tripId, bundle.days)
+  await replaceTripRows('places', tripId, bundle.places)
+  await replaceTripRows('packingItems', tripId, bundle.packingItems)
+  await replaceTripRows('todoItems', tripId, bundle.todoItems)
+  await replaceTripRows('budgetItems', tripId, bundle.budgetItems)
+  await replaceTripRows('reservations', tripId, bundle.reservations)
+  await replaceTripRows('tripFiles', tripId, bundle.files)
+  await replaceTripRows('accommodations', tripId, bundle.accommodations || [])
   await upsertTripMembers(tripId, bundle.members || [])
   // Merged onto the existing row, not written over it: `put` replaces the whole
   // record, and the row also carries `areaPlacesKey` — the fingerprint that says
@@ -209,6 +204,15 @@ let _syncing = false
  * sync; clears Dexie for stale or user-disabled trips as a side effect.
  */
 async function reconcileTrips(trips: Trip[]): Promise<Trip[]> {
+  // A cached trip the server no longer lists was deleted, or this user was
+  // removed from it. Its data has no business staying on the device.
+  const listed = new Set(trips.map(t => t.id))
+  const gone = (await offlineDb.trips.toArray()).filter(t => t.id > 0 && !listed.has(t.id))
+  await Promise.all(gone.map(async t => {
+    await clearTripData(t.id).catch(console.error)
+    await offlineDb.trips.delete(t.id)
+  }))
+
   const stale = trips.filter(isStale)
   // Trips the user turned off explicitly are evicted regardless of date.
   const disabled = trips.filter(t => !isTripOfflineEnabled(t.id))

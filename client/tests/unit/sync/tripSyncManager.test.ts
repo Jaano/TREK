@@ -437,3 +437,38 @@ describe('tripSyncManager.syncAll — logout while syncing', () => {
 });
 
 vi.mock('../../../src/repo/roadtripPreferencesRepo', () => ({ roadtripPreferencesRepo: { read: vi.fn(async () => ({})) } }))
+
+describe('tripSyncManager.syncAll — deletions made elsewhere', () => {
+  it('drops cached rows the server no longer has, and keeps the ones created offline', async () => {
+    const tripId = 400;
+    const bundle = makeBundle(tripId);
+    await upsertTrip(bundle.trip);
+    // Deleted by a collaborator while this device was offline.
+    await offlineDb.places.put(buildPlace({ trip_id: tripId, id: 7001 }));
+    // Created offline, not synced yet: a negative temp id.
+    await offlineDb.places.put(buildPlace({ trip_id: tripId, id: -55 }));
+    // Another trip's place is none of this sync's business.
+    await offlineDb.places.put(buildPlace({ trip_id: 999, id: 7002 }));
+
+    server.use(
+      http.get('/api/trips', () => HttpResponse.json({ trips: [buildTrip({ id: tripId, end_date: dateOffset(5) })] })),
+      http.get(`/api/trips/${tripId}/bundle`, () => HttpResponse.json(bundle)),
+    );
+    await tripSyncManager.syncAll();
+
+    const ids = (await offlineDb.places.toArray()).map(p => p.id).sort((a, b) => a - b);
+    expect(ids).toEqual([-55, bundle.places[0].id, 7002].sort((a, b) => a - b));
+  });
+
+  it('clears a cached trip the server no longer lists (deleted, or this user was removed)', async () => {
+    const gone = makeBundle(500);
+    await upsertTrip(gone.trip);
+    await offlineDb.places.put(buildPlace({ trip_id: 500, id: 8001 }));
+
+    server.use(http.get('/api/trips', () => HttpResponse.json({ trips: [] })));
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(500)).toBeUndefined();
+    expect(await offlineDb.places.where('trip_id').equals(500).count()).toBe(0);
+  });
+});

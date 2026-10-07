@@ -345,9 +345,36 @@ export async function upsertAccommodations(items: Accommodation[]): Promise<void
   await offlineDb.accommodations.bulkPut(items);
 }
 
+type TripScopedTable = 'days' | 'places' | 'packingItems' | 'todoItems' | 'budgetItems' | 'reservations' | 'tripFiles' | 'accommodations';
+
+/**
+ * Make one trip's rows in `table` match the server's list: put every row it
+ * sent and drop the ones it no longer has, so a place a collaborator deleted
+ * while this device was offline does not come back on the next offline read.
+ * Rows with a negative (temporary) id were created offline and have not
+ * synced yet; they stay.
+ */
+export async function replaceTripRows<T extends { id: number }>(table: TripScopedTable, tripId: number, rows: T[]): Promise<void> {
+  const target = offlineDb[table] as unknown as Table<T, number>;
+  const keep = new Set(rows.map(r => r.id));
+  await offlineDb.transaction('rw', target, async () => {
+    await target
+      .where('trip_id')
+      .equals(tripId)
+      .filter(row => row.id > 0 && !keep.has(row.id))
+      .delete();
+    await target.bulkPut(rows);
+  });
+}
+
 export async function upsertTripMembers(tripId: number, members: TripMember[]): Promise<void> {
   const rows: CachedTripMember[] = members.map(m => ({ ...m, tripId }));
-  await offlineDb.tripMembers.bulkPut(rows);
+  const keep = new Set(rows.map(r => r.id));
+  await offlineDb.transaction('rw', offlineDb.tripMembers, async () => {
+    // A member who left the trip leaves the cached list too.
+    await offlineDb.tripMembers.where('tripId').equals(tripId).filter(m => !keep.has(m.id)).delete();
+    await offlineDb.tripMembers.bulkPut(rows);
+  });
 }
 
 export async function upsertTags(tags: Tag[]): Promise<void> {

@@ -1,5 +1,5 @@
 import { placesApi } from '../api/client'
-import { offlineDb, upsertPlaces } from '../db/offlineDb'
+import { offlineDb, replaceTripRows, upsertPlaces } from '../db/offlineDb'
 import { mutationQueue, generateUUID, nextTempId } from '../sync/mutationQueue'
 import { isEffectivelyOffline } from '../sync/networkMode'
 import { onlineThenCache } from './withOfflineFallback'
@@ -10,7 +10,8 @@ export const placeRepo = {
     return onlineThenCache(
       async () => {
         const result = await placesApi.list(tripId, params)
-        void upsertPlaces(result.places)
+        // Filtered lists are a subset; only the whole list may drop what it lacks.
+        void (params ? upsertPlaces(result.places) : replaceTripRows('places', Number(tripId), result.places))
         return result
       },
       async () => ({
