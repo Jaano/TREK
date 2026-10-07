@@ -412,8 +412,8 @@ describe('BACKUP-036 createBackup', () => {
 
     expect(storage.getLocalPathOrNull).toHaveBeenCalledWith('files', 'a.pdf');
     expect(storage.getLocalPathOrNull).toHaveBeenCalledWith('journey', 'thumbs/x.jpg');
-    expect(archiverInstanceMock.file).toHaveBeenCalledWith('/stub/local/path', { name: 'uploads/files/a.pdf' });
-    expect(archiverInstanceMock.file).toHaveBeenCalledWith('/stub/local/path', { name: 'uploads/journey/thumbs/x.jpg' });
+    expect(archiverInstanceMock.file).toHaveBeenCalledWith('/stub/local/path', { name: 'uploads/files/a.pdf', store: true });
+    expect(archiverInstanceMock.file).toHaveBeenCalledWith('/stub/local/path', { name: 'uploads/journey/thumbs/x.jpg', store: true });
     // The local fast path never touches getStream — this is the zero-copy default-install branch.
     expect(storage.getStream).not.toHaveBeenCalled();
   });
@@ -609,7 +609,7 @@ describe('BACKUP-036 createBackup', () => {
 
     await createBackup(storage);
 
-    expect(archiverInstanceMock.file).toHaveBeenCalledWith('/stub/local/path', { name: 'uploads/photos/flat.jpg' });
+    expect(archiverInstanceMock.file).toHaveBeenCalledWith('/stub/local/path', { name: 'uploads/photos/flat.jpg', store: true });
     const names = archiverInstanceMock.file.mock.calls.map(c => c[1]?.name as string);
     expect(names.some(n => n?.includes('google/'))).toBe(false);
     expect(names.some(n => n?.includes('trek/'))).toBe(false);

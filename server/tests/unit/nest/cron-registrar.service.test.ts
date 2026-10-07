@@ -13,13 +13,22 @@ const h = vi.hoisted(() => ({
     timeZone?: string;
     start?: boolean;
     onTick: () => unknown;
+    waitForCompletion?: boolean;
+    errorHandler?: (error: unknown) => void;
     stopped: boolean;
     stop(): void;
   }>,
 }));
 vi.mock('cron', () => ({
   CronJob: {
-    from: (opts: { cronTime: string; timeZone?: string; start?: boolean; onTick: () => unknown }) => {
+    from: (opts: {
+      cronTime: string;
+      timeZone?: string;
+      start?: boolean;
+      onTick: () => unknown;
+      waitForCompletion?: boolean;
+      errorHandler?: (error: unknown) => void;
+    }) => {
       const job = {
         ...opts,
         stopped: false,
@@ -74,6 +83,15 @@ describe('CronRegistrarService', () => {
     expect(h.jobs).toHaveLength(0);
     expect(registry.getCronJobs().size).toBe(0);
     expect(registrar.jobCount).toBe(0);
+  });
+
+  it('CRONREG-014 — a tick still running is not started again, and a failed tick reaches the app log', () => {
+    const { registrar } = makeRegistrar(false);
+    registrar.register('slow-job', '0 * * * *', () => {});
+    const job = h.jobs[0]!;
+    expect(job.waitForCompletion).toBe(true);
+    job.errorHandler!(new Error('disk full'));
+    expect(logErrorMock).toHaveBeenCalledWith('Cron job "slow-job" failed: disk full');
   });
 
   it('CRONREG-002 — schedules a started job with tz UTC when TZ is unset', () => {

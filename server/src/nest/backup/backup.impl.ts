@@ -22,6 +22,7 @@ import { StorageInvalidKeyError } from '../storage/storage.types';
 // ---------------------------------------------------------------------------
 
 const dataDir = path.join(__dirname, '../../../data');
+const PRECOMPRESSED = /\.(jpe?g|png|webp|gif|heic|heif|avif|mp4|mov|m4v|webm|pdf|zip|gz)$/i;
 
 // Compressed upload cap for restore archives. Defaults to 500 MB, raisable via
 // BACKUP_UPLOAD_LIMIT_MB for instances whose backups (uploads/ included) grow
@@ -297,7 +298,11 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
         archive.file(encKeyPath, { name: '.encryption_key' });
       }
 
-      for (const entry of uploadEntries) archive.file(entry.absPath, { name: entry.name });
+      // Photos, videos and PDFs are compressed already; deflating them at level
+      // 9 costs most of a backup's CPU time for a few bytes. They are stored.
+      for (const entry of uploadEntries) {
+        archive.file(entry.absPath, { name: entry.name, store: PRECOMPRESSED.test(entry.name) });
+      }
 
       // Plugin data — each plugin's own SQLite file and any blobs. This is the ONLY
       // copy of the user data a plugin holds, so it belongs in the backup. Checkpoint

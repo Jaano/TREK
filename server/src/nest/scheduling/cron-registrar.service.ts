@@ -90,7 +90,18 @@ export class CronRegistrarService implements OnApplicationShutdown {
       }
       return withRequestContext(orm, () => onTick());
     };
-    const job = CronJob.from({ cronTime: expression, onTick: wrappedTick, start: true, timeZone });
+    // waitForCompletion: a tick still running when the next one is due is not
+    // started twice (an hourly backup of a large library can outlast its hour).
+    // errorHandler: a rejected tick reaches the app log instead of cron's own
+    // console line.
+    const job = CronJob.from({
+      cronTime: expression,
+      onTick: wrappedTick,
+      start: true,
+      timeZone,
+      waitForCompletion: true,
+      errorHandler: (error: unknown) => logError(`Cron job "${name}" failed: ${error instanceof Error ? error.message : String(error)}`),
+    });
     this.registry.addCronJob(name, job);
     this.names.add(name);
     return true;
