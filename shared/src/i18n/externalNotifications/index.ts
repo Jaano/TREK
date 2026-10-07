@@ -1,6 +1,7 @@
 import ar from '../ar/externalNotifications';
 import az from '../az/externalNotifications';
 import br from '../br/externalNotifications';
+import ca from '../ca/externalNotifications';
 import cs from '../cs/externalNotifications';
 import de from '../de/externalNotifications';
 import en from '../en/externalNotifications';
@@ -13,6 +14,7 @@ import id from '../id/externalNotifications';
 import it from '../it/externalNotifications';
 import ja from '../ja/externalNotifications';
 import ko from '../ko/externalNotifications';
+import type { SupportedLanguageCode } from '../languages';
 import nl from '../nl/externalNotifications';
 import pl from '../pl/externalNotifications';
 import ru from '../ru/externalNotifications';
@@ -21,6 +23,7 @@ import sv from '../sv/externalNotifications';
 import th from '../th/externalNotifications';
 import tr from '../tr/externalNotifications';
 import uk from '../uk/externalNotifications';
+import vi from '../vi/externalNotifications';
 import zhTW from '../zh-TW/externalNotifications';
 import zh from '../zh/externalNotifications';
 import type {
@@ -59,7 +62,11 @@ const LOCALES = {
   uk,
   gr,
   sv,
-} satisfies Record<string, NotificationLocale>;
+  vi,
+  ca,
+  // Every language the app ships, or the compiler says which one is missing:
+  // a locale left out here sent its users English mails without anyone noticing.
+} satisfies Record<SupportedLanguageCode, NotificationLocale>;
 
 export const EMAIL_I18N: Record<string, EmailStrings> = Object.fromEntries(
   Object.entries(LOCALES).map(([k, v]) => [k, v.email]),
