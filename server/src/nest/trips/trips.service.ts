@@ -28,6 +28,7 @@ import { TourWaypoints } from '../../db/entities/TourWaypoints.entity';
 import type { TourWaypointRow } from '../../db/repositories/TourWaypoints.repository';
 import {
   MAX_TRIP_DAYS,
+  addIsoDays,
   planDayGrid,
   resolveDayGridRange,
   tripSpanDays,
@@ -405,22 +406,33 @@ export class TripsService {
   }
 
   async create(userId: number, data: CreateTripData) {
-    if (data.start_date && data.end_date) assertTripSpan(data.start_date, data.end_date);
+    // One given date makes a week, on REST and MCP alike. Calendar arithmetic
+    // in UTC: a local-time Date shifted across a DST change lost or gained a day.
+    let startDate = data.start_date || null;
+    let endDate = data.end_date || null;
+    if (startDate && !endDate) endDate = addIsoDays(startDate, 6);
+    else if (!startDate && endDate) startDate = addIsoDays(endDate, -6);
+    if (startDate && endDate) assertTripSpan(startDate, endDate);
     const rd = data.reminder_days !== undefined
       ? (Number(data.reminder_days) >= 0 && Number(data.reminder_days) <= 30 ? Number(data.reminder_days) : 3)
       : 3;
+    const currency = data.currency || (await this.defaultCurrencyFor(userId));
 
-    const tripId = await this.tripsRepo.insertTrip({ // TP18
-      user_id: userId,
-      title: data.title,
-      description: data.description || null,
-      start_date: data.start_date || null,
-      end_date: data.end_date || null,
-      currency: data.currency || (await this.defaultCurrencyFor(userId)),
-      reminder_days: rd,
+    // The trip and its days commit together: a failure in between used to leave
+    // a dated trip without a single day.
+    const tripId = await this.uow.transactional(async () => {
+      const id = await this.tripsRepo.insertTrip({ // TP18
+        user_id: userId,
+        title: data.title,
+        description: data.description || null,
+        start_date: startDate,
+        end_date: endDate,
+        currency,
+        reminder_days: rd,
+      });
+      await this.generateDays(id, startDate, endDate, data.day_count);
+      return id;
     });
-
-    await this.generateDays(tripId, data.start_date || null, data.end_date || null, data.day_count);
 
     const trip = await this.tripsRepo.findForViewer(tripId, userId); // TP19 — the creator always owns it, so the access predicate is trivially satisfied
     return { trip, tripId, reminderDays: rd };

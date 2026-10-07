@@ -11,7 +11,7 @@ import { useTranslation } from '../../i18n'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import { normalizeImageFile } from '../../utils/convertHeic'
 import { getApiErrorMessage, type Trip } from '../../types'
-import { MAX_TRIP_DAYS, tripSpanDays, type TripCreateRequest } from '@trek/shared'
+import { MAX_TRIP_DAYS, addIsoDays, tripSpanDays, type TripCreateRequest } from '@trek/shared'
 import { NumericInput } from '../shared/NumericInput'
 import { currenciesWith, SYMBOLS } from '../Budget/BudgetPanel.constants'
 import TripDateReview, { dateReviewIsWide } from './TripDateReview'
@@ -373,12 +373,9 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
       if (!prev.end_date || prev.end_date < value) {
         next.end_date = value
       } else if (prev.start_date) {
-        const oldStart = new Date(prev.start_date + 'T00:00:00Z')
-        const oldEnd = new Date(prev.end_date + 'T00:00:00Z')
-        const duration = Math.round((oldEnd.getTime() - oldStart.getTime()) / 86400000)
-        const newEnd = new Date(value + 'T00:00:00Z')
-        newEnd.setDate(newEnd.getDate() + duration)
-        next.end_date = newEnd.toISOString().split('T')[0]
+        // Keep the trip's length, counted in UTC calendar days: a local-time
+        // shift across a DST change used to drop or add a day.
+        next.end_date = addIsoDays(value, tripSpanDays(prev.start_date, prev.end_date) - 1)
       }
     }
     return next

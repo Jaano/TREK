@@ -50,9 +50,6 @@ export const TRIP_COVER_FILE_FILTER: Options['fileFilter'] = (_req, file, cb) =>
   else cb(new Error('Only jpg, png, gif, webp images allowed'));
 };
 
-const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
-const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
-
 /**
  * /api/trips — the trip aggregate root.
  *
@@ -115,10 +112,8 @@ export class TripsController {
     }
     // Presence/shape validation happens in the ZodValidationPipe (tripCreateRequestSchema).
     const { title, description, currency, reminder_days, day_count } = body;
-    let start_date: string | null = body.start_date || null;
-    let end_date: string | null = body.end_date || null;
-    if (start_date && !end_date) end_date = toDateStr(addDays(new Date(start_date), 6));
-    else if (!start_date && end_date) start_date = toDateStr(addDays(new Date(end_date), -6));
+    const start_date: string | null = body.start_date || null;
+    const end_date: string | null = body.end_date || null;
     if (start_date && end_date && new Date(end_date) < new Date(start_date)) {
       throw new HttpException({ error: 'End date must be after start date' }, 400);
     }

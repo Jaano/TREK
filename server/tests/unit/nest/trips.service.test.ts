@@ -1116,6 +1116,24 @@ describe('folded trip CRUD', () => {
     expect(getDays(tripId)).toHaveLength(3);
   });
 
+  it('TRIP-SVC-090: one given date makes a week, counted in calendar days across a DST change', async () => {
+    const { user } = createUser(testDb);
+    const fromStart = await svc.create(user.id, { title: 'Spring', start_date: '2026-03-25' });
+    expect(fromStart.trip).toMatchObject({ start_date: '2026-03-25', end_date: '2026-03-31' });
+    expect(getDays(fromStart.tripId)).toHaveLength(7);
+    const fromEnd = await svc.create(user.id, { title: 'Autumn', end_date: '2026-10-30' });
+    expect(fromEnd.trip).toMatchObject({ start_date: '2026-10-24', end_date: '2026-10-30' });
+  });
+
+  it('TRIP-SVC-091: the trip and its days commit together', async () => {
+    const { user } = createUser(testDb);
+    const before = (testDb.prepare('SELECT COUNT(*) AS c FROM trips').get() as { c: number }).c;
+    const generate = vi.spyOn(svc, 'generateDays').mockRejectedValueOnce(new Error('disk I/O error'));
+    await expect(svc.create(user.id, { title: 'Half', start_date: '2026-05-01', end_date: '2026-05-03' })).rejects.toThrow('disk I/O error');
+    generate.mockRestore();
+    expect((testDb.prepare('SELECT COUNT(*) AS c FROM trips').get() as { c: number }).c).toBe(before);
+  });
+
   it('TRIP-SVC-080: create without a currency takes the display currency, admin default included, else EUR', async () => {
     const { user } = createUser(testDb);
     const setUser = (value: string) =>

@@ -161,10 +161,10 @@ describe('TripsController (parity with the legacy /api/trips route)', async () =
       expect(tripCreateRequestSchema.safeParse({ title: '' }).success).toBe(false);
     });
 
-    it('infers end_date from start_date (+6 days) and creates', async () => {
+    it('passes a single start date on as it is; the service fills in the week', async () => {
       const create = vi.fn().mockReturnValue({ trip: { id: 9 }, tripId: 9, reminderDays: 0 });
       await tc(svc({ create } as Partial<TripsService>)).create(user, { title: 'T', start_date: '2026-07-01' }, req);
-      expect(create).toHaveBeenCalledWith(1, expect.objectContaining({ start_date: '2026-07-01', end_date: '2026-07-07' }));
+      expect(create).toHaveBeenCalledWith(1, expect.objectContaining({ start_date: '2026-07-01', end_date: null }));
     });
 
     it('400 when end_date precedes start_date', async () => {
@@ -173,10 +173,10 @@ describe('TripsController (parity with the legacy /api/trips route)', async () =
       });
     });
 
-    it('infers start_date from end_date (-6 days) and parses day_count', async () => {
+    it('passes a single end date on as it is and parses day_count', async () => {
       const create = vi.fn().mockReturnValue({ trip: { id: 9 }, tripId: 9, reminderDays: 0 });
       await tc(svc({ create } as Partial<TripsService>)).create(user, prePipeCreateBody({ title: 'T', end_date: '2026-07-07', day_count: '40' }), req);
-      expect(create).toHaveBeenCalledWith(1, expect.objectContaining({ start_date: '2026-07-01', end_date: '2026-07-07', day_count: 40 }));
+      expect(create).toHaveBeenCalledWith(1, expect.objectContaining({ start_date: null, end_date: '2026-07-07', day_count: 40 }));
     });
 
     it('clamps a non-numeric day_count to the default of 7', async () => {
