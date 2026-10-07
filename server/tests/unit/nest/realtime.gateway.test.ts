@@ -20,6 +20,7 @@ vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
 }));
 
 import { RealtimeGateway } from '../../../src/nest/realtime/realtime.gateway';
+import { hostVersion } from '../../../src/nest/plugins/install/host-compat';
 import { logError } from '../../../src/nest/audit/audit-log.logger';
 import {
   bookPeers,
@@ -145,6 +146,15 @@ describe('RealtimeGateway handshake', () => {
     const welcome = JSON.parse(ws.sent[0]) as { type: string; socketId: unknown };
     expect(welcome.type).toBe('welcome');
     expect(Number.isInteger(welcome.socketId)).toBe(true);
+  });
+
+  it('WSGW-007d: the welcome frame names the version the server runs', async () => {
+    // A client open across a deploy reconnects and compares this with the
+    // build it runs, so it can offer the new one (NewVersionNotice).
+    const { ws } = await connect('/ws?token=x');
+    const welcome = JSON.parse(ws.sent[0]) as { type: string; version: unknown };
+    expect(welcome.version).toBe(hostVersion());
+    expect(welcome.version).toMatch(/^\d+\.\d+\.\d+/);
   });
 
   it('WSGW-007b: survives an upgrade request with no url, rather than throwing at it', async () => {

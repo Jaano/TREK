@@ -1,5 +1,7 @@
 // Singleton WebSocket manager for real-time collaboration
 
+import { useServerVersionStore } from '../store/serverVersionStore'
+
 type WebSocketListener = (event: Record<string, unknown>) => void
 type RefetchCallback = (tripId: string) => void
 
@@ -81,6 +83,7 @@ function handleMessage(event: MessageEvent): void {
     const parsed = JSON.parse(event.data)
     if (parsed.type === 'welcome') {
       mySocketId = parsed.socketId
+      useServerVersionStore.getState().note(parsed.version)
       return
     }
     listeners.forEach(fn => {
