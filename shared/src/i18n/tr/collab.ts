@@ -89,7 +89,7 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Kapat',
   'collab.polls.closed': 'Kapalı',
   'collab.polls.votes': '{n} oy',
-  'collab.polls.vote': '{n} oy',
+  'collab.polls.votes.one': '{n} oy',
   'collab.polls.multipleChoice': 'Çoklu seçim',
   'collab.polls.multiChoice': 'Çoklu seçim',
   'collab.polls.deadline': 'Son tarih',

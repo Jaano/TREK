@@ -89,7 +89,6 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Đóng',
   'collab.polls.closed': 'Đã đóng',
   'collab.polls.votes': '{n} phiếu bầu',
-  'collab.polls.vote': '{n} bầu chọn',
   'collab.polls.multipleChoice': 'Nhiều lựa chọn',
   'collab.polls.multiChoice': 'Nhiều lựa chọn',
   'collab.polls.deadline': 'Thời hạn',

@@ -37,7 +37,7 @@ function InAppNotificationsPageDesktop(): React.ReactElement {
                 )}
               </h1>
               <p className="text-sm mt-0.5 text-content-muted">
-                {total} {total === 1 ? 'notification' : 'notifications'}
+                {total} {t('notifications.countLabel', { count: total })}
               </p>
             </div>
 

@@ -58,10 +58,10 @@ const atlas: TranslationStrings = {
   'atlas.daysLeft': 'gün qalıb',
   'atlas.streak': 'Ardıcıllıq',
   'atlas.years': 'il',
-  'atlas.yearInRow': 'ardıcıl il',
   'atlas.yearsInRow': 'ardıcıl il',
-  'atlas.tripIn': 'səyahət ·',
+  'atlas.yearsInRow.one': 'ardıcıl il',
   'atlas.tripsIn': 'səyahət ·',
+  'atlas.tripsIn.one': 'səyahət ·',
   'atlas.since': 'etibarən',
 
   'atlas.europe': 'Avropa',
@@ -74,10 +74,11 @@ const atlas: TranslationStrings = {
 
   'atlas.firstVisit': 'İlk səyahət',
   'atlas.lastVisitLabel': 'Son səyahət',
-  'atlas.tripSingular': 'Səyahət',
   'atlas.tripPlural': 'Səyahətlər',
-  'atlas.placeVisited': 'Ziyarət edilmiş məkan',
+  'atlas.tripsLabel': 'Səyahətlər',
+  'atlas.tripsLabel.one': 'Səyahət',
   'atlas.placesVisited': 'Ziyarət edilmiş məkanlar',
+  'atlas.placesVisited.one': 'Ziyarət edilmiş məkan',
 
   'atlas.planned': 'Planlaşdırılıb',
   'atlas.showPlanned': 'Planlaşdırılan ölkələri göstər',

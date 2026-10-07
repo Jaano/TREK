@@ -403,9 +403,9 @@ function MSpotlightCard({ trip, t, onOpen, actions }: {
           </div>
         )}
         <div className={`flex gap-[6px] ${ongoing ? '' : 'mt-[9px]'}`}>
-          <SpotlightPill icon={<CalendarDays size={11} strokeWidth={2.2} />} label={days === 1 ? t('dashboard.mobile.spotlightDayOne', { count: days }) : t('dashboard.mobile.spotlightDaysMany', { count: days })} />
-          <SpotlightPill icon={<MapPin size={11} strokeWidth={2.2} />} label={places === 1 ? t('dashboard.hero.destinationOne', { count: places }) : t('dashboard.hero.destinationMany', { count: places })} />
-          <SpotlightPill icon={<Users size={11} strokeWidth={2.2} />} label={people === 1 ? t('dashboard.hero.travelerOne', { count: people }) : t('dashboard.hero.travelerMany', { count: people })} />
+          <SpotlightPill icon={<CalendarDays size={11} strokeWidth={2.2} />} label={t('dashboard.mobile.spotlightDays', { count: days })} />
+          <SpotlightPill icon={<MapPin size={11} strokeWidth={2.2} />} label={t('dashboard.hero.destinations', { count: places })} />
+          <SpotlightPill icon={<Users size={11} strokeWidth={2.2} />} label={t('dashboard.hero.travelers', { count: people })} />
         </div>
       </div>
     </div>
@@ -564,7 +564,7 @@ function MTripListCard({ trip, locale, t, badge, pluginBadges, actions, onOpen }
         <div className="flex text-center">
           <ListStat value={trip.day_count ?? 0} label={t('dashboard.days')} />
           <ListStat value={trip.place_count ?? 0} label={t('dashboard.places')} />
-          <ListStat value={trip.shared_count ?? 0} label={trip.shared_count === 1 ? t('dashboard.card.buddyOne') : t('dashboard.members')} />
+          <ListStat value={trip.shared_count ?? 0} label={t('dashboard.card.buddies', { count: trip.shared_count ?? 0 })} />
         </div>
         <MTripBadges items={pluginBadges} />
       </div>

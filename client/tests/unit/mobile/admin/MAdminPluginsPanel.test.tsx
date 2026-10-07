@@ -730,7 +730,7 @@ describe('MAdminPluginsPanel — operator-supplied egress hosts', () => {
 
     mockPanel([plugin({ operatorEgress: true, egressHostCount: 2 })]);
     render(<MAdminPluginsPanel />);
-    expect(await screen.findByRole('button', { name: '2 allowed host(s)' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '2 allowed hosts' })).toBeInTheDocument();
   });
 
   it('FE-MOB-PLUGP-042: the sheet adds and removes hosts through the API', async () => {
@@ -747,7 +747,7 @@ describe('MAdminPluginsPanel — operator-supplied egress hosts', () => {
     );
     render(<MAdminPluginsPanel />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '1 allowed host(s)' }));
+    fireEvent.click(await screen.findByRole('button', { name: '1 allowed host' }));
     expect(await screen.findByText('gotify.mydomain.test')).toBeInTheDocument();
 
     fireEvent.change(screen.getByPlaceholderText('gotify.example.com'), { target: { value: ' ntfy.mydomain.test ' } });
@@ -1511,7 +1511,7 @@ describe('MAdminPluginsPanel — edge paths', () => {
     await escapeUntilGone('No errors logged.');
 
     // Allowed hosts → Escape, from the row chip.
-    fireEvent.click(screen.getByRole('button', { name: '1 allowed host(s)' }));
+    fireEvent.click(screen.getByRole('button', { name: '1 allowed host' }));
     await screen.findByText('No hosts added yet.');
     await escapeUntilGone('No hosts added yet.');
   });

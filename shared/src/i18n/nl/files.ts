@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'Bestand kon niet worden geopend',
   'files.downloadPdf': 'PDF downloaden',
   'files.count': '{count} bestanden',
-  'files.countSingular': '1 bestand',
+  'files.count.one': '{count} bestand',
   'files.uploaded': '{count} geüpload',
   'files.uploadError': 'Uploaden mislukt',
   'files.uploadErrorType': 'Dit bestandstype wordt niet ondersteund',

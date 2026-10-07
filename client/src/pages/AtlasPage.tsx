@@ -798,7 +798,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
           <div className="flex flex-col items-center justify-center px-3">
             <span className="text-2xl font-black tabular-nums leading-none" style={{ color: tp }}>{streak}</span>
             <span className="text-[9px] font-semibold mt-1.5 uppercase tracking-wide text-center leading-tight whitespace-nowrap" style={{ color: tf }}>
-              {streak === 1 ? t('atlas.yearInRow') : t('atlas.yearsInRow')}
+              {t('atlas.yearsInRow', { count: streak })}
             </span>
           </div>
         )}
@@ -807,7 +807,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
           <div className="flex flex-col items-center justify-center px-3">
             <span className="text-2xl font-black tabular-nums leading-none" style={{ color: tp }}>{tripsThisYear}</span>
             <span className="text-[9px] font-semibold mt-1.5 uppercase tracking-wide text-center leading-tight whitespace-nowrap" style={{ color: tf }}>
-              {tripsThisYear === 1 ? t('atlas.tripIn') : t('atlas.tripsIn')} {thisYear}
+              {t('atlas.tripsIn', { count: tripsThisYear })} {thisYear}
             </span>
           </div>
         )}

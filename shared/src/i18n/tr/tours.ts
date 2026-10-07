@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Yükseklik verileri veya ölçümler eksik – çekinceyle içe aktarıldı',
   'tours.import.caution': 'Çekinceyle içe aktarıldı – yükseklik verileri veya ölçümler eksik',
   'tours.import.success': 'GPX dosyasından içe aktarılan tur sayısı: {count}',
-  'tours.import.successOne': 'GPX dosyasından 1 tur içe aktarıldı',
+  'tours.import.success.one': 'GPX dosyasından {count} tur içe aktarıldı',
   'tours.import.noTrack': 'Bu GPX dosyasında iz veya rota bulunamadı',
   'tours.import.error': 'GPX dosyası içe aktarılamadı',
   'tours.delete.confirmBody':

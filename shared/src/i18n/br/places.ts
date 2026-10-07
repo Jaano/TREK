@@ -70,7 +70,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'categorias',
   'places.clearFilter': 'Limpar filtro',
   'places.count': '{count} lugares',
-  'places.countSingular': '1 lugar',
+  'places.count.one': '{count} lugar',
   'places.allPlanned': 'Todos os lugares estão planejados',
   'places.noneFound': 'Nenhum lugar encontrado',
   'places.editPlace': 'Editar lugar',

@@ -70,7 +70,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'kategorier',
   'places.clearFilter': 'Rensa filter',
   'places.count': '{count} platser',
-  'places.countSingular': '1 plats',
+  'places.count.one': '{count} plats',
   'places.allPlanned': 'Alla platser är planerade',
   'places.noneFound': 'Inga platser hittades',
   'places.editPlace': 'Redigera plats',

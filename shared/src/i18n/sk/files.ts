@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'Súbor sa nedá otvoriť',
   'files.downloadPdf': 'Stiahnuť PDF',
   'files.count': '{count} súborov',
-  'files.countSingular': '1 súbor',
+  'files.count.one': '{count} súbor',
   'files.uploaded': '{count} nahraných',
   'files.uploadError': 'Nahrávanie zlyhalo',
   'files.uploadErrorType': 'Tento typ súboru nie je podporovaný',

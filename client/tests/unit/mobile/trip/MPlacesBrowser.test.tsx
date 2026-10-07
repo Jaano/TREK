@@ -111,7 +111,7 @@ describe('MPlacesBrowser', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'places.planned' }))
     expect(useTripStore.getState().placesFilter).toBe('planned')
-    expect(screen.getByText('places.countSingular')).toBeInTheDocument()
+    expect(screen.getByText('places.count:1')).toBeInTheDocument()
     expect(screen.getByText('Louvre')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'places.all' }))
@@ -121,7 +121,7 @@ describe('MPlacesBrowser', () => {
   it('FE-MOB-PBROW-006: the tracks chip only appears with a track and filters to it', () => {
     renderBrowser()
     fireEvent.click(screen.getByRole('button', { name: 'places.filterTracks' }))
-    expect(screen.getByText('places.countSingular')).toBeInTheDocument()
+    expect(screen.getByText('places.count:1')).toBeInTheDocument()
     expect(screen.getByText('Seine Track')).toBeInTheDocument()
     expect(screen.queryByText('Louvre')).not.toBeInTheDocument()
   })

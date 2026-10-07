@@ -104,8 +104,8 @@ describe('MDashboard', () => {
     expect(screen.getByText('dashboard.status.ongoing')).toBeInTheDocument();
     expect(screen.getByText('dashboard.mobile.spotlightDayOf')).toBeInTheDocument();
     // Stat pills reuse the desktop hero keys (no mobile-only duplicates).
-    expect(screen.getByText('dashboard.hero.destinationMany')).toBeInTheDocument();
-    expect(screen.getByText('dashboard.hero.travelerMany')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.hero.destinations')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.hero.travelers')).toBeInTheDocument();
     expect(screen.getByText('Lisbon')).toBeInTheDocument();
   });
 
@@ -263,7 +263,7 @@ describe('MDashboard', () => {
 
     expect(screen.getByText('12')).toBeInTheDocument();
     expect(screen.getByText('30')).toBeInTheDocument();
-    expect(screen.getByText('dashboard.card.buddyOne')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.card.buddies')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'dashboard.archive' }));
     expect(handleArchive).toHaveBeenCalledWith(4);
@@ -368,7 +368,7 @@ describe('MDashboard', () => {
     render(<MDashboard />);
 
     expect(screen.getByText('dashboard.hero.badgeRecent')).toBeInTheDocument();
-    expect(screen.getByText('dashboard.mobile.spotlightDayOne')).toBeInTheDocument();
+    expect(screen.getByText('dashboard.mobile.spotlightDays')).toBeInTheDocument();
   });
 
   it('FE-MOB-DASH-024: the spotlight opens on Enter as well as on click', () => {

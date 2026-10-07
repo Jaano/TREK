@@ -74,7 +74,6 @@ const collab: TranslationStrings = {
   'collab.polls.close': "ปิด",
   'collab.polls.closed': "ปิดแล้ว",
   'collab.polls.votes': "{n} โหวต",
-  'collab.polls.vote': "{n} โหวต",
   'collab.polls.multipleChoice': "หลายทางเลือก",
   'collab.polls.multiChoice': "หลายทางเลือก",
   'collab.polls.deadline': "กำหนดเวลา",

@@ -20,7 +20,6 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'ข้อมูลระดับความสูงหรือค่าสถิติไม่ครบถ้วน ใช้ข้อมูลที่นำเข้าด้วยความระมัดระวัง',
   'tours.import.caution': 'นำเข้าแล้ว แต่ข้อมูลระดับความสูงหรือค่าสถิติไม่ครบถ้วน โปรดใช้ด้วยความระมัดระวัง',
   'tours.import.success': 'นำเข้าทัวร์ {count} รายการจาก GPX แล้ว',
-  'tours.import.successOne': 'นำเข้าทัวร์ 1 รายการจาก GPX แล้ว',
   'tours.import.noTrack': 'ไม่พบแทร็กหรือเส้นทางในไฟล์ GPX นี้',
   'tours.import.error': 'ไม่สามารถนำเข้าไฟล์ GPX ได้',
   'tours.delete.confirmBody':

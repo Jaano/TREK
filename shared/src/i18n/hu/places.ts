@@ -70,7 +70,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'kategória',
   'places.clearFilter': 'Szűrő törlése',
   'places.count': '{count} hely',
-  'places.countSingular': '1 hely',
+  'places.count.one': '{count} hely',
   'places.allPlanned': 'Minden hely be van tervezve',
   'places.noneFound': 'Nem találhatók helyek',
   'places.editPlace': 'Hely szerkesztése',

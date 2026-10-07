@@ -227,7 +227,7 @@ describe('AdminUserModals', () => {
     fireEvent.click(screen.getByRole('button', { name: /reset passkeys/i }));
     confirmPasskeyReset();
 
-    await waitFor(() => expect(admin.toast.success).toHaveBeenCalledWith('Removed 3 passkey(s)'));
+    await waitFor(() => expect(admin.toast.success).toHaveBeenCalledWith('Removed 3 passkeys'));
     expect(deletedFor).toBe('2');
   });
 

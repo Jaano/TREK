@@ -71,7 +71,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'kategooriat',
   'places.clearFilter': 'Tühjenda filter',
   'places.count': '{count} kohta',
-  'places.countSingular': '1 koht',
+  'places.count.one': '{count} koht',
   'places.allPlanned': 'Kõik kohad on plaani lisatud',
   'places.noneFound': 'Kohti ei leitud',
   'places.editPlace': 'Muuda kohta',

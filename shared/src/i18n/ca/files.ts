@@ -8,7 +8,7 @@ const files: TranslationStrings = {
   'files.openError': "No s'ha pogut obrir el fitxer",
   'files.downloadPdf': 'Baixa el PDF',
   'files.count': '{count} fitxers',
-  'files.countSingular': '1 fitxer',
+  'files.count.one': '{count} fitxer',
   'files.uploaded': '{count} fitxers pujats',
   'files.uploadError': 'La pujada ha fallat',
   'files.dropzone': 'Arrossega els fitxers aquí',

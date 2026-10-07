@@ -12,6 +12,7 @@ import {
 } from '@trek/shared'
 import type { TranslationStrings } from '@trek/shared/i18n'
 import { importChunk } from '../utils/chunkReload'
+import { resolveTemplate } from './resolveTemplate'
 
 export { SUPPORTED_LANGUAGES }
 
@@ -134,8 +135,12 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
   }, [language])
 
   const value = useMemo((): TranslationContextValue => {
+    const intlLanguage = getIntlLanguage(language)
+    const template = (key: string, params?: Record<string, string | number>): string =>
+      resolveTemplate(strings, intlLanguage, key, params)
+
     function t(key: string, params?: Record<string, string | number>): string {
-      let val: string = (strings[key] ?? en[key] ?? key) as string
+      let val = template(key, params)
       if (params) {
         Object.entries(params).forEach(([k, v]) => {
           // Function replacement: a value carrying `$&` or `$1` (a trip named
@@ -147,7 +152,7 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
     }
 
     function tHtml(key: string, params?: Record<string, string | number>): string {
-      let val: string = (strings[key] ?? en[key] ?? key) as string
+      let val = template(key, params)
       if (params) {
         Object.entries(params).forEach(([k, v]) => {
           // Escape BEFORE substitution so a user-controlled value with `<` or

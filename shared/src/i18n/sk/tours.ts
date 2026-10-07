@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Neúplné výškové údaje alebo metriky – importované s upozornením',
   'tours.import.caution': 'Importované s upozornením – neúplné výškové údaje alebo metriky',
   'tours.import.success': 'Počet túr importovaných z GPX: {count}',
-  'tours.import.successOne': '1 túra importovaná z GPX',
+  'tours.import.success.one': '{count} túra importovaná z GPX',
   'tours.import.noTrack': 'V tomto súbore GPX sa nenašla žiadna stopa ani trasa',
   'tours.import.error': 'Súbor GPX sa nepodarilo importovať',
   'tours.delete.confirmBody':

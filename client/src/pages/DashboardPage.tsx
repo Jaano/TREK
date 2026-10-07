@@ -367,11 +367,11 @@ function BoardingPassHero({ trip, bundle, locale, onOpen, onEdit, onCopy, onArch
     const daysLeft = Math.max(0, Math.round((endMid.getTime() - todayMid.getTime()) / MS_PER_DAY))
     countdownTop = t('dashboard.status.ongoing')
     countdownNumber = String(daysLeft)
-    countdownLabel = daysLeft === 0 ? t('dashboard.hero.lastDay') : daysLeft === 1 ? t('dashboard.hero.dayLeft') : t('dashboard.hero.daysLeft')
+    countdownLabel = daysLeft === 0 ? t('dashboard.hero.lastDay') : t('dashboard.hero.daysLeft', { count: daysLeft })
   } else if (until !== null && until >= 0) {
     countdownTop = t('dashboard.hero.startsIn')
     countdownNumber = String(until)
-    countdownLabel = until === 1 ? t('dashboard.hero.dayUnitOne') : t('dashboard.hero.dayUnitMany')
+    countdownLabel = t('dashboard.hero.dayUnit', { count: until })
   }
 
   const members = bundle?.members || []
@@ -398,7 +398,7 @@ function BoardingPassHero({ trip, bundle, locale, onOpen, onEdit, onCopy, onArch
           {members.length > 4 && <div className="buddy-more">+{members.length - 4}</div>}
           {members.length === 0 && <div className="buddy-avatar" style={{ background: buddyColor(0) }}>{initials(trip.owner_username)}</div>}
         </div>
-        <div className="date-month">{buddyCount === 1 ? t('dashboard.hero.travelerOne', { count: buddyCount }) : t('dashboard.hero.travelerMany', { count: buddyCount })}</div>
+        <div className="date-month">{t('dashboard.hero.travelers', { count: buddyCount })}</div>
       </div>
 
       <div className="pass-cell dates-combined">
@@ -433,7 +433,7 @@ function BoardingPassHero({ trip, bundle, locale, onOpen, onEdit, onCopy, onArch
           {places.length === 0 && <div className="place-more"><MapPin size={15} /></div>}
           {places.length > 3 && <div className="place-more">+{places.length - 3}</div>}
         </div>
-        <div className="date-month">{placeCount === 1 ? t('dashboard.hero.destinationOne', { count: placeCount }) : t('dashboard.hero.destinationMany', { count: placeCount })}</div>
+        <div className="date-month">{t('dashboard.hero.destinations', { count: placeCount })}</div>
       </div>
     </>
   )
@@ -666,7 +666,7 @@ function TripCard({ trip, locale, badges, matchedPlaces, onOpen, onEdit, onCopy,
         <div className="trip-meta" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
           <div><span className="n mono">{trip.day_count ?? 0}</span><span className="k">{t('dashboard.days')}</span></div>
           <div><span className="n mono">{trip.place_count ?? 0}</span><span className="k">{t('dashboard.places')}</span></div>
-          <div><span className="n mono">{trip.shared_count ?? 0}</span><span className="k">{trip.shared_count === 1 ? t('dashboard.card.buddyOne') : t('dashboard.members')}</span></div>
+          <div><span className="n mono">{trip.shared_count ?? 0}</span><span className="k">{t('dashboard.card.buddies', { count: trip.shared_count ?? 0 })}</span></div>
         </div>
         <TripCardBadges items={badges ?? []} />
       </div>

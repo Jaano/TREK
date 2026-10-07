@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Höhendaten oder Streckenwerte unvollständig – mit Vorsicht importiert',
   'tours.import.caution': 'Mit Vorsicht importiert – Höhendaten oder Streckenwerte unvollständig',
   'tours.import.success': '{count} Touren aus GPX importiert',
-  'tours.import.successOne': '1 Tour aus GPX importiert',
+  'tours.import.success.one': '{count} Tour aus GPX importiert',
   'tours.import.noTrack': 'Keine Strecke oder Route in dieser GPX-Datei gefunden',
   'tours.import.error': 'GPX-Datei konnte nicht importiert werden',
   'tours.delete.confirmBody':

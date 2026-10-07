@@ -69,7 +69,6 @@ const places: TranslationStrings = {
   'places.categoriesSelected': '個分類',
   'places.clearFilter': '清除篩選',
   'places.count': '{count} 個地點',
-  'places.countSingular': '1 個地點',
   'places.allPlanned': '所有地點已規劃',
   'places.noneFound': '未找到地點',
   'places.editPlace': '編輯地點',

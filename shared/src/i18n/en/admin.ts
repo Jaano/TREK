@@ -336,7 +336,8 @@ const admin: TranslationStrings = {
     'This plugin does not use operator-supplied hosts. Its allowed hosts are fixed in its manifest.',
   'admin.plugins.allowedHosts.restartNote': 'Saving restarts the plugin so it picks up the new list.',
   'admin.plugins.allowedHosts.add': 'Add allowed host',
-  'admin.plugins.allowedHosts.count': '{n} allowed host(s)',
+  'admin.plugins.allowedHosts.count': '{n} allowed hosts',
+  'admin.plugins.allowedHosts.count.one': '{n} allowed host',
   'admin.plugins.operatorEgressPill': '+ hosts you add',
   'admin.plugins.operatorEgressHint':
     'This plugin talks to a service only you can name. After installing, add the hosts it may reach under ⋯ → Allowed hosts. It can reach no others.',
@@ -552,6 +553,7 @@ const admin: TranslationStrings = {
   'admin.plugins.sortUpdates': 'Updates first',
   'admin.plugins.sortDownloads': 'Most downloads',
   'admin.plugins.updatesAvailable': '{count} updates available for your plugins.',
+  'admin.plugins.updatesAvailable.one': '{count} update available for your plugins.',
   'admin.plugins.newerNeedsTrek': 'v{version} available — needs TREK {range}',
   'admin.plugins.updateAll': 'Update all',
   'admin.plugins.versionsTitle': 'Versions',
@@ -800,7 +802,8 @@ const admin: TranslationStrings = {
   'admin.passkey.resetHint':
     "Remove all of this user's passkeys (e.g. on a lost device). They can still sign in with their password.",
   'admin.passkey.resetConfirm': 'Remove all passkeys for {name}?',
-  'admin.passkey.resetDone': 'Removed {count} passkey(s)',
+  'admin.passkey.resetDone': 'Removed {count} passkeys',
+  'admin.passkey.resetDone.one': 'Removed {count} passkey',
   'admin.group.users': 'Users',
   'admin.group.config': 'Configuration',
   'admin.group.integration': 'Integrations',

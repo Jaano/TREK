@@ -36,7 +36,21 @@ const NON_EN_LOCALES: Record<string, TranslationStrings> = {
   ar, br, cs, pl, ja, ko, uk, gr,
 }
 
-const enKeys = new Set(Object.keys(en))
+// A count-bearing string's category forms (`places.count.one`, `.few`, ...)
+// differ by language on purpose: Russian needs `.few` and `.many`, Japanese
+// none. They are left out of the key comparison here; the shared parity CLI
+// checks each locale has exactly the forms its plural rule needs.
+const VARIANTS = ['zero', 'one', 'two', 'few', 'many']
+const allEnKeys = new Set(Object.keys(en))
+const pluralGroups = new Set(
+  [...allEnKeys]
+    .filter((k) => VARIANTS.includes(k.slice(k.lastIndexOf('.') + 1)))
+    .map((k) => k.slice(0, k.lastIndexOf('.')))
+    .filter((base) => allEnKeys.has(base) || allEnKeys.has(`${base}.other`)),
+)
+const isVariant = (k: string) =>
+  VARIANTS.includes(k.slice(k.lastIndexOf('.') + 1)) && pluralGroups.has(k.slice(0, k.lastIndexOf('.')))
+const enKeys = new Set([...allEnKeys].filter((k) => !isVariant(k)))
 
 describe('i18n locale key parity', () => {
   it('covers every non-en locale', () => {
@@ -46,7 +60,7 @@ describe('i18n locale key parity', () => {
 
   for (const [locale, strings] of Object.entries(NON_EN_LOCALES)) {
     it(`${locale} has the exact same key set as en`, () => {
-      const localeKeys = new Set(Object.keys(strings))
+      const localeKeys = new Set(Object.keys(strings).filter((k) => !isVariant(k)))
       const missing = [...enKeys].filter((k) => !localeKeys.has(k))
       const extra = [...localeKeys].filter((k) => !enKeys.has(k))
 

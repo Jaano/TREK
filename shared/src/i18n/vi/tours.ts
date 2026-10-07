@@ -20,7 +20,6 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Dữ liệu độ cao hoặc thông số chưa đầy đủ; đã nhập kèm cảnh báo',
   'tours.import.caution': 'Đã nhập kèm cảnh báo; dữ liệu độ cao hoặc thông số chưa đầy đủ',
   'tours.import.success': 'Đã nhập {count} chuyến tham quan từ GPX',
-  'tours.import.successOne': 'Đã nhập 1 chuyến tham quan từ GPX',
   'tours.import.noTrack': 'Không tìm thấy vệt hành trình hoặc tuyến đường trong tệp GPX này',
   'tours.import.error': 'Không thể nhập tệp GPX',
   'tours.delete.confirmBody':

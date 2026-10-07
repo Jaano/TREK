@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'Kunde inte öppna fil',
   'files.downloadPdf': 'Ladda ner PDF',
   'files.count': '{count} filer',
-  'files.countSingular': '1 fil',
+  'files.count.one': '{count} fil',
   'files.uploaded': '{count} uppladdade',
   'files.uploadError': 'Uppladdning misslyckades',
   'files.uploadErrorType': 'Den här filtypen stöds inte',

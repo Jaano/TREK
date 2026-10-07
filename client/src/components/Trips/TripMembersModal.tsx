@@ -240,7 +240,7 @@ function TripMembersSheet({ isOpen, onClose, tripId, tripTitle, onMembersChanged
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
             <Users size={13} className="text-content-faint" />
             <span className="text-content-secondary" style={{ fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 600 }}>
-              {t('members.access')} ({realMembers.length} {realMembers.length === 1 ? t('members.person') : t('members.persons')})
+              {t('members.access')} ({realMembers.length} {t('members.persons', { count: realMembers.length })})
             </span>
           </div>
 

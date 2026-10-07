@@ -100,7 +100,7 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Bağla',
   'collab.polls.closed': 'Bağlanıb',
   'collab.polls.votes': '{n} səs',
-  'collab.polls.vote': '{n} səs',
+  'collab.polls.votes.one': '{n} səs',
   'collab.polls.multipleChoice': 'Çoxseçimli',
   'collab.polls.multiChoice': 'Çoxseçimli',
   'collab.polls.deadline': 'Son tarix',

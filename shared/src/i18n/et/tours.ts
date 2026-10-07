@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Kõrgusandmed või mõõdikud on puudulikud — imporditud hoiatusega',
   'tours.import.caution': 'Imporditud hoiatusega — kõrgusandmed või mõõdikud on puudulikud',
   'tours.import.success': 'GPX-failist imporditi {count} retke',
-  'tours.import.successOne': 'GPX-failist imporditi 1 retk',
+  'tours.import.success.one': 'GPX-failist imporditi {count} retk',
   'tours.import.noTrack': 'Sellest GPX-failist ei leitud rada ega marsruuti',
   'tours.import.error': 'GPX-faili importimine ebaõnnestus',
   'tours.delete.confirmBody':

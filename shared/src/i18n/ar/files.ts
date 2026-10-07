@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'تعذر فتح الملف',
   'files.downloadPdf': 'تنزيل PDF',
   'files.count': '{count} ملفات',
-  'files.countSingular': 'ملف واحد',
+  'files.count.one': 'ملف واحد',
   'files.uploaded': 'تم رفع {count}',
   'files.uploadError': 'فشل الرفع',
   'files.uploadErrorType': 'نوع الملف هذا غير مدعوم',

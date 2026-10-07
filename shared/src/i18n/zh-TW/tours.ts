@@ -20,7 +20,6 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': '海拔或指標資料不完整，已附警告匯入',
   'tours.import.caution': '已附警告匯入，海拔或指標資料不完整',
   'tours.import.success': '已從 GPX 匯入 {count} 個遊程',
-  'tours.import.successOne': '已從 GPX 匯入 1 個遊程',
   'tours.import.noTrack': '這個 GPX 檔案中找不到軌跡或路線',
   'tours.import.error': '無法匯入 GPX 檔案',
   'tours.delete.confirmBody': '要永久刪除此行程嗎？其路線、可編輯的途經點和日期指派都會一併移除。此操作無法復原。',

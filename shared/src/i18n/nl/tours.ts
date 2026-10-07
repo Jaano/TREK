@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Hoogtegegevens of meetwaarden onvolledig: met voorbehoud geïmporteerd',
   'tours.import.caution': 'Met voorbehoud geïmporteerd: hoogtegegevens of meetwaarden onvolledig',
   'tours.import.success': '{count} tochten geïmporteerd uit GPX',
-  'tours.import.successOne': '1 tocht geïmporteerd uit GPX',
+  'tours.import.success.one': '{count} tocht geïmporteerd uit GPX',
   'tours.import.noTrack': 'Geen track of route gevonden in dit GPX-bestand',
   'tours.import.error': 'GPX-bestand kon niet worden geïmporteerd',
   'tours.delete.confirmBody':

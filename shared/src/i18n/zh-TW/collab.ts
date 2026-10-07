@@ -89,7 +89,6 @@ const collab: TranslationStrings = {
   'collab.polls.close': '關閉',
   'collab.polls.closed': '已關閉',
   'collab.polls.votes': '{n} 票',
-  'collab.polls.vote': '{n} 票',
   'collab.polls.multipleChoice': '多選',
   'collab.polls.multiChoice': '多選',
   'collab.polls.deadline': '截止時間',

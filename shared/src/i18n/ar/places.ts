@@ -70,7 +70,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'فئات',
   'places.clearFilter': 'مسح الفلتر',
   'places.count': '{count} أماكن',
-  'places.countSingular': 'مكان واحد',
+  'places.count.one': 'مكان واحد',
   'places.allPlanned': 'تم تخطيط جميع الأماكن',
   'places.noneFound': 'لم يتم العثور على أماكن',
   'places.editPlace': 'تعديل المكان',

@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Altitud o mètriques incompletes: importada amb reserves',
   'tours.import.caution': 'Importada amb reserves: altitud o mètriques incompletes',
   'tours.import.success': '{count} excursions importades de GPX',
-  'tours.import.successOne': '1 excursió importada de GPX',
+  'tours.import.success.one': '{count} excursió importada de GPX',
   'tours.import.noTrack': "No s'ha trobat cap traça ni ruta en aquest fitxer GPX",
   'tours.import.error': "No s'ha pogut importar el fitxer GPX",
   'tours.delete.confirmBody':

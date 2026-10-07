@@ -247,7 +247,7 @@ describe('AirTrailConnectionSection', () => {
     await screen.findByDisplayValue('https://air.example.com');
     await user.click(screen.getByRole('button', { name: /Test connection/ }));
 
-    await screen.findByText('Connected — 12 flight(s) found');
+    await screen.findByText('Connected. 12 flights found');
     expect(screen.getByText('Connected')).toBeInTheDocument();
     expect(body).toEqual({ url: 'https://air.example.com', allowInsecureTls: false });
   });
@@ -263,7 +263,7 @@ describe('AirTrailConnectionSection', () => {
     await screen.findByDisplayValue('https://air.example.com');
     await user.click(screen.getByRole('button', { name: /Test connection/ }));
 
-    expect(await screen.findByText('Connected — 0 flight(s) found')).toBeInTheDocument();
+    expect(await screen.findByText('Connected. 0 flights found')).toBeInTheDocument();
   });
 
   it('FE-COMP-AIRTRAIL-015: a refused test shows the returned error and keeps the badge off', async () => {

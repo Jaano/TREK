@@ -60,13 +60,7 @@ export default function JourneyDayDawarich({
         <DawarichIcon size={18} className="shrink-0" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold text-content">
-            {/* Two keys picked by the count, the shape this codebase uses for a number
-                that changes its noun: there is no plural engine in the i18n layer, and one
-                key with {count} in it reads as "1 stays". */}
-            {t(
-              suggestions.length === 1 ? 'dawarich.journey.dayStays.one' : 'dawarich.journey.dayStays.other',
-              { count: suggestions.length },
-            )}
+            {t('dawarich.journey.dayStays', { count: suggestions.length })}
           </span>
           {span && <span className="block text-[11px] text-content-faint tabular-nums">{span}</span>}
         </span>

@@ -15,7 +15,6 @@ const files: TranslationStrings = {
   'files.openError': 'Không thể mở tập tin',
   'files.downloadPdf': 'Tải xuống PDF',
   'files.count': '{count} tập tin',
-  'files.countSingular': '1 tập tin',
   'files.uploaded': '{count} đã tải lên',
   'files.uploadError': 'Tải lên không thành công',
   'files.dropzone': 'Thả tập tin ở đây',

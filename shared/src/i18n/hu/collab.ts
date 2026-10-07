@@ -89,7 +89,7 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Lezárás',
   'collab.polls.closed': 'Lezárva',
   'collab.polls.votes': '{n} szavazat',
-  'collab.polls.vote': '{n} szavazat',
+  'collab.polls.votes.one': '{n} szavazat',
   'collab.polls.multipleChoice': 'Többszörös választás',
   'collab.polls.multiChoice': 'Többszörös választás',
   'collab.polls.deadline': 'Határidő',

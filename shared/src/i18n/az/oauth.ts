@@ -115,8 +115,8 @@ const oauth: TranslationStrings = {
   'oauth.authorize.trustNote':
     'Yalnız etibar etdiyiniz tətbiqlərə giriş icazəsi verin. Məlumatlarınız serverinizdə qalır.',
   'oauth.authorize.selectScope': 'Ən azı bir icazə sahəsi seçin',
-  'oauth.authorize.approveOneScope': 'Təsdiqlə ({count} icazə sahəsi)',
-  'oauth.authorize.approveManyScopes': 'Təsdiqlə ({count} icazə sahəsi)',
+  'oauth.authorize.approveScopes': 'Təsdiqlə ({count} icazə sahəsi)',
+  'oauth.authorize.approveScopes.one': 'Təsdiqlə ({count} icazə sahəsi)',
   'oauth.authorize.approveAccess': 'Girişə icazə ver',
   'oauth.authorize.deny': 'Rədd et',
   'oauth.authorize.choosePermissions': 'Veriləcək icazələri seçin',

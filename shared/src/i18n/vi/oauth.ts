@@ -87,8 +87,7 @@ const oauth: TranslationStrings = {
   'oauth.authorize.trustNote':
     'Chỉ cấp quyền truy cập cho các ứng dụng mà bạn tin tưởng. Dữ liệu của bạn vẫn còn trên máy chủ của bạn.',
   'oauth.authorize.selectScope': 'Chọn ít nhất một phạm vi',
-  'oauth.authorize.approveOneScope': 'Phê duyệt (phạm vi {count})',
-  'oauth.authorize.approveManyScopes': 'Phê duyệt ({count} phạm vi)',
+  'oauth.authorize.approveScopes': 'Phê duyệt ({count} phạm vi)',
   'oauth.authorize.approveAccess': 'Phê duyệt quyền truy cập',
   'oauth.authorize.deny': 'Từ chối',
   'oauth.authorize.choosePermissions': 'Chọn quyền nào để cấp',

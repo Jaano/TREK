@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Niepełne dane wysokościowe lub parametry – import z zastrzeżeniami',
   'tours.import.caution': 'Import z zastrzeżeniami – niepełne dane wysokościowe lub parametry',
   'tours.import.success': 'Liczba wycieczek zaimportowanych z GPX: {count}',
-  'tours.import.successOne': 'Zaimportowano 1 wycieczkę z GPX',
+  'tours.import.success.one': 'Zaimportowano {count} wycieczkę z GPX',
   'tours.import.noTrack': 'W tym pliku GPX nie znaleziono śladu ani trasy',
   'tours.import.error': 'Nie udało się zaimportować pliku GPX',
   'tours.delete.confirmBody':

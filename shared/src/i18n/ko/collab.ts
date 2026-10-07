@@ -89,7 +89,6 @@ const collab: TranslationStrings = {
   'collab.polls.close': '닫기',
   'collab.polls.closed': '종료됨',
   'collab.polls.votes': '{n}표',
-  'collab.polls.vote': '{n}표',
   'collab.polls.multipleChoice': '복수 선택',
   'collab.polls.multiChoice': '복수 선택',
   'collab.polls.deadline': '마감일',

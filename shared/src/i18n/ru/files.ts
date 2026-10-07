@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'Не удалось открыть файл',
   'files.downloadPdf': 'Скачать PDF',
   'files.count': '{count} файлов',
-  'files.countSingular': '1 файл',
+  'files.count.one': '{count} файл',
   'files.uploaded': '{count} загружено',
   'files.uploadError': 'Ошибка загрузки',
   'files.uploadErrorType': 'Этот тип файла не поддерживается',

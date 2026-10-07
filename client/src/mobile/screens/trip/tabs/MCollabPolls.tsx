@@ -281,7 +281,7 @@ function PollCardRow({ poll, canEdit, currentUserId, t, onVote, onClosePoll, onD
               </span>
             )}
             <span className="font-geist text-[0.625rem] text-m-faint">
-              {t(total === 1 ? 'collab.polls.vote' : 'collab.polls.votes', { n: total })}
+              {t('collab.polls.votes', { n: total })}
             </span>
           </div>
         </div>

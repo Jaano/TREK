@@ -14,7 +14,6 @@ const files: TranslationStrings = {
   'files.openError': 'Tidak dapat membuka file',
   'files.downloadPdf': 'Unduh PDF',
   'files.count': '{count} file',
-  'files.countSingular': '1 berkas',
   'files.uploaded': '{count} diunggah',
   'files.uploadError': 'Gagal mengunggah',
   'files.uploadErrorType': 'Tipe file ini tidak didukung',

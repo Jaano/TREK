@@ -70,7 +70,6 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'Thể loại',
   'places.clearFilter': 'Xóa bộ lọc',
   'places.count': '{count} địa điểm',
-  'places.countSingular': '1 nơi',
   'places.allPlanned': 'Tất cả các địa điểm đều được quy hoạch',
   'places.noneFound': 'Không tìm thấy địa điểm nào',
   'places.editPlace': 'Chỉnh sửa địa điểm',

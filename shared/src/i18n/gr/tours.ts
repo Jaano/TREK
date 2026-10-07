@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Ελλιπή υψομετρικά δεδομένα ή μετρήσεις – εισαγωγή με επιφύλαξη',
   'tours.import.caution': 'Εισαγωγή με επιφύλαξη – ελλιπή υψομετρικά δεδομένα ή μετρήσεις',
   'tours.import.success': 'Αριθμός εκδρομών που εισήχθησαν από GPX: {count}',
-  'tours.import.successOne': 'Εισήχθη 1 εκδρομή από GPX',
+  'tours.import.success.one': 'Εισήχθη {count} εκδρομή από GPX',
   'tours.import.noTrack': 'Δεν βρέθηκε ίχνος ή διαδρομή σε αυτό το αρχείο GPX',
   'tours.import.error': 'Δεν ήταν δυνατή η εισαγωγή του αρχείου GPX',
   'tours.delete.confirmBody':

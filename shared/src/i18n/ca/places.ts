@@ -69,7 +69,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'categories',
   'places.clearFilter': 'Esborra el filtre',
   'places.count': '{count} llocs',
-  'places.countSingular': '1 lloc',
+  'places.count.one': '{count} lloc',
   'places.allPlanned': 'Tots els llocs estan planificats',
   'places.noneFound': "No s'han trobat llocs",
   'places.editPlace': 'Edita el lloc',

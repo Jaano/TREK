@@ -30,6 +30,8 @@ const dashboard: TranslationStrings = {
   'dashboard.days': 'Ημέρες',
   'dashboard.places': 'Τόποι',
   'dashboard.members': 'Μέλη',
+  'dashboard.card.buddies': 'Μέλη',
+  'dashboard.card.buddies.one': 'Buddy', // en-fallback
   'dashboard.archive': 'Αρχειοθήκευση',
   'dashboard.copyTrip': 'Αντιγραφή',
   'dashboard.copySuffix': 'αντιγραφή',
@@ -158,8 +160,8 @@ const dashboard: TranslationStrings = {
   'dashboard.mobile.inDays': 'Σε {count} ημέρες',
   'dashboard.mobile.inMonths': 'Σε {count} μήνες',
   'dashboard.mobile.spotlightDayOf': 'Ημέρα {day} από {total}',
-  'dashboard.mobile.spotlightDayOne': '{count} ημέρα',
-  'dashboard.mobile.spotlightDaysMany': '{count} ημέρες',
+  'dashboard.mobile.spotlightDays': '{count} ημέρες',
+  'dashboard.mobile.spotlightDays.one': '{count} ημέρα',
   'dashboard.mobile.completed': 'Ολοκληρώθηκε',
   'dashboard.mobile.currencyConverter': 'Μετατροπέας Νομισμάτων',
   'dashboard.newTripSub': 'Plan a new trip from scratch', // en-fallback
@@ -174,14 +176,14 @@ const dashboard: TranslationStrings = {
   'dashboard.hero.badgeRecent': 'RECENT', // en-fallback
   'dashboard.hero.tripDates': 'Trip dates', // en-fallback
   'dashboard.hero.noDates': 'No dates set', // en-fallback
-  'dashboard.hero.travelerOne': '{count} traveler', // en-fallback
-  'dashboard.hero.travelerMany': '{count} travelers', // en-fallback
-  'dashboard.hero.destinationOne': '{count} destination', // en-fallback
-  'dashboard.hero.destinationMany': '{count} destinations', // en-fallback
-  'dashboard.hero.dayUnitOne': 'day', // en-fallback
-  'dashboard.hero.dayUnitMany': 'days', // en-fallback
-  'dashboard.hero.dayLeft': 'Day left', // en-fallback
+  'dashboard.hero.travelers': '{count} travelers', // en-fallback
+  'dashboard.hero.travelers.one': '{count} traveler', // en-fallback
+  'dashboard.hero.destinations': '{count} destinations', // en-fallback
+  'dashboard.hero.destinations.one': '{count} destination', // en-fallback
+  'dashboard.hero.dayUnit': 'days', // en-fallback
+  'dashboard.hero.dayUnit.one': 'day', // en-fallback
   'dashboard.hero.daysLeft': 'Days left', // en-fallback
+  'dashboard.hero.daysLeft.one': 'Day left', // en-fallback
   'dashboard.hero.lastDay': 'Last day', // en-fallback
   'dashboard.hero.untilStart': 'Until start', // en-fallback
   'dashboard.hero.startsIn': 'Trip starts in', // en-fallback
@@ -196,7 +198,6 @@ const dashboard: TranslationStrings = {
   'dashboard.atlas.kmUnit': 'km', // en-fallback
   'dashboard.atlas.aroundEquator': '≈ {count}× around the equator', // en-fallback
   'dashboard.card.idea': 'Idea', // en-fallback
-  'dashboard.card.buddyOne': 'Buddy', // en-fallback
   'dashboard.fx.from': 'From', // en-fallback
   'dashboard.fx.to': 'To', // en-fallback
   'dashboard.fx.unavailable': 'Rate unavailable', // en-fallback

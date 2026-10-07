@@ -87,8 +87,8 @@ const oauth: TranslationStrings = {
   'oauth.authorize.trustNote':
     'Només atorga accés a aplicacions de confiança. Les teves dades es mantenen al teu servidor.',
   'oauth.authorize.selectScope': 'Selecciona almenys un àmbit',
-  'oauth.authorize.approveOneScope': 'Aprova ({count} àmbit)',
-  'oauth.authorize.approveManyScopes': 'Aprova ({count} àmbits)',
+  'oauth.authorize.approveScopes': 'Aprova ({count} àmbits)',
+  'oauth.authorize.approveScopes.one': 'Aprova ({count} àmbit)',
   'oauth.authorize.approveAccess': "Aprova l'accés",
   'oauth.authorize.deny': 'Denega',
   'oauth.authorize.choosePermissions': 'Tria quins permisos atorgar',

@@ -14,7 +14,6 @@ const files: TranslationStrings = {
   'files.openError': "ไม่สามารถเปิดไฟล์ได้",
   'files.downloadPdf': "ดาวน์โหลดไฟล์ PDF",
   'files.count': "{count} ไฟล์",
-  'files.countSingular': "1 ไฟล์",
   'files.uploaded': "{count} อัปโหลดแล้ว",
   'files.uploadError': "การอัปโหลดล้มเหลว",
   'files.uploadErrorType': "ไม่รองรับไฟล์ประเภทนี้",

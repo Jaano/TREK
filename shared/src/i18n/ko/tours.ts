@@ -20,7 +20,6 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': '고도 또는 측정 데이터가 불완전하여 주의가 필요한 상태로 가져왔습니다',
   'tours.import.caution': '고도 또는 측정 데이터가 불완전하여 주의가 필요한 상태로 가져왔습니다',
   'tours.import.success': 'GPX에서 투어 {count}개를 가져왔습니다',
-  'tours.import.successOne': 'GPX에서 투어 1개를 가져왔습니다',
   'tours.import.noTrack': '이 GPX 파일에서 트랙이나 경로를 찾을 수 없습니다',
   'tours.import.error': 'GPX 파일을 가져오지 못했습니다',
   'tours.delete.confirmBody':

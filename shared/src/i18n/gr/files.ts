@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'Δεν ήταν δυνατό το άνοιγμα του αρχείου',
   'files.downloadPdf': 'Λήψη PDF',
   'files.count': '{count} αρχεία',
-  'files.countSingular': '1 αρχείο',
+  'files.count.one': '{count} αρχείο',
   'files.uploaded': '{count} μεταφορτώθηκαν',
   'files.uploadError': 'Η μεταφόρτωση απέτυχε',
   'files.uploadErrorType': 'Αυτός ο τύπος αρχείου δεν υποστηρίζεται',

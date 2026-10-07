@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'No se pudo abrir el archivo',
   'files.downloadPdf': 'Descargar PDF',
   'files.count': '{count} archivos',
-  'files.countSingular': '1 archivo',
+  'files.count.one': '{count} archivo',
   'files.uploaded': '{count} archivos subidos',
   'files.uploadError': 'La subida falló',
   'files.uploadErrorType': 'Este tipo de archivo no es compatible',

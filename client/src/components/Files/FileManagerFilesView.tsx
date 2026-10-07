@@ -56,7 +56,7 @@ export function FilesView(S: FileManagerState) {
           }}>{tab.icon ? <tab.icon size={13} fill={filterType === tab.id ? '#facc15' : 'none'} color={filterType === tab.id ? '#facc15' : 'currentColor'} /> : tab.label}</button>
         ))}
         <span style={{ marginLeft: 'auto', fontSize: 'calc(11.5px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', alignSelf: 'center' }}>
-          {filteredFiles.length === 1 ? t('files.countSingular') : t('files.count', { count: filteredFiles.length })}
+          {t('files.count', { count: filteredFiles.length })}
         </span>
       </div>
 

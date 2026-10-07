@@ -41,7 +41,7 @@ function OpenDialog({ onClose, tripId, tripTitle, onMembersChanged }: TripShareD
   const labelId = useId()
   const m = useTripMembers({ isOpen: true, tripId, onClose, onMembersChanged })
   const [ask, setAsk] = useState<Ask | null>(null)
-  const persons = `${m.realMembers.length} ${m.realMembers.length === 1 ? t('members.person') : t('members.persons')}`
+  const persons = `${m.realMembers.length} ${t('members.persons', { count: m.realMembers.length })}`
 
   return (
     <>

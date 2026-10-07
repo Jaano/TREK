@@ -87,6 +87,7 @@ export * from './geo/gcj02';
 
 // i18n registry (language list + pure helpers — no locale data)
 export * from './i18n/languages';
+export * from './i18n/plural';
 
 // Plugin permission list, generated from the host's protocol/envelope.ts
 // (server/scripts/gen-plugin-facts.ts). The admin consent screens render from it.

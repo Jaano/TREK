@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Elevation/metrics incomplete — imported with caution',
   'tours.import.caution': 'Imported with caution — elevation/metrics incomplete',
   'tours.import.success': '{count} tours imported from GPX',
-  'tours.import.successOne': '1 tour imported from GPX',
+  'tours.import.success.one': '{count} tour imported from GPX',
   'tours.import.noTrack': 'No track or route found in that GPX file',
   'tours.import.error': 'Could not import GPX file',
   'tours.delete.confirmBody':

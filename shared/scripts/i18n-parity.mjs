@@ -12,6 +12,13 @@
 // returns exit-code 1 when any drift is present (intended for CI). Without
 // `--strict` the script exits 0 and prints, so it can also run as a non-blocking
 // audit during translation work.
+//   3. Plural forms: a count-bearing string (`key` or `key.other`, plus at
+//      least one of `key.zero|one|two|few|many` in en) is a plural group. Its
+//      category keys are not compared with en's, since Russian needs `.few`
+//      and `.many` and Japanese needs none. Instead every locale must spell
+//      out each category whole counts reach in its language, and may not
+//      carry one its language never selects. The rules come from
+//      `Intl.PluralRules`, through the same helpers the client resolves with.
 //
 // Limitations: we only parse *top-level* string keys (those declared as the
 // first column of the file, matching the regex below). Nested objects, function
@@ -21,6 +28,8 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { getIntlLanguage } from '../src/i18n/languages.ts';
+import { allPluralCategories, integerPluralCategories } from '../src/i18n/plural.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const i18nRoot = join(here, '..', 'src', 'i18n');
@@ -52,6 +61,50 @@ function extractKeys(locale, file) {
   return keys;
 }
 
+const VARIANT_CATEGORIES = ['zero', 'one', 'two', 'few', 'many'];
+
+/** The plural groups en defines in one domain file: their base keys. */
+function pluralGroups(enKeys) {
+  const groups = new Set();
+  for (const key of enKeys) {
+    const dot = key.lastIndexOf('.');
+    if (dot < 0 || !VARIANT_CATEGORIES.includes(key.slice(dot + 1))) continue;
+    const base = key.slice(0, dot);
+    if (enKeys.has(base) || enKeys.has(`${base}.other`)) groups.add(base);
+  }
+  return groups;
+}
+
+/** `{ base, category }` when `key` is a category form of one of `groups`. */
+function asVariant(key, groups) {
+  const dot = key.lastIndexOf('.');
+  if (dot < 0) return null;
+  const category = key.slice(dot + 1);
+  const base = key.slice(0, dot);
+  return VARIANT_CATEGORIES.includes(category) && groups.has(base) ? { base, category } : null;
+}
+
+function withoutVariants(keys, groups) {
+  return new Set([...keys].filter((k) => !asVariant(k, groups)));
+}
+
+/** What one locale owes the plural groups of one file. */
+function checkPluralForms(locale, keys, groups) {
+  const intl = getIntlLanguage(locale);
+  const required = integerPluralCategories(intl).filter((c) => c !== 'other');
+  const allowed = new Set(allPluralCategories(intl));
+  const missing = [];
+  const invalid = [];
+  for (const base of groups) {
+    for (const c of required) if (!keys.has(`${base}.${c}`)) missing.push(`${base}.${c}`);
+  }
+  for (const key of keys) {
+    const v = asVariant(key, groups);
+    if (v && !allowed.has(v.category)) invalid.push(key);
+  }
+  return { missing, invalid };
+}
+
 function diffSets(reference, candidate) {
   const missing = [];
   const extra = [];
@@ -69,7 +122,14 @@ function checkParity() {
   const enKeysByDomain = new Map();
   for (const f of enFiles) enKeysByDomain.set(f, extractKeys('en', f));
 
-  const report = { fileDrift: [], keyDrift: [] };
+  const report = { fileDrift: [], keyDrift: [], pluralDrift: [] };
+  const groupsByDomain = new Map();
+  for (const f of enFiles) {
+    const groups = pluralGroups(enKeysByDomain.get(f));
+    groupsByDomain.set(f, groups);
+    const { missing, invalid } = checkPluralForms('en', enKeysByDomain.get(f), groups);
+    if (missing.length || invalid.length) report.pluralDrift.push({ locale: 'en', file: f, missing, invalid });
+  }
 
   for (const locale of locales) {
     if (locale === 'en') continue;
@@ -87,9 +147,17 @@ function checkParity() {
     for (const file of enFiles) {
       if (!localeFiles.includes(file)) continue;
       const localeKeys = extractKeys(locale, file);
-      const { missing, extra } = diffSets(enKeysByDomain.get(file), localeKeys);
+      const groups = groupsByDomain.get(file);
+      const { missing, extra } = diffSets(
+        withoutVariants(enKeysByDomain.get(file), groups),
+        withoutVariants(localeKeys, groups),
+      );
       if (missing.length || extra.length) {
         report.keyDrift.push({ locale, file, missing, extra });
+      }
+      const plural = checkPluralForms(locale, localeKeys, groups);
+      if (plural.missing.length || plural.invalid.length) {
+        report.pluralDrift.push({ locale, file, ...plural });
       }
     }
   }
@@ -122,6 +190,18 @@ function formatReport(report) {
     }
   }
 
+  if (report.pluralDrift.length === 0) {
+    lines.push('Plural forms: OK');
+  } else {
+    lines.push(`Plural forms: ${report.pluralDrift.length} domain file(s) with missing or impossible forms`);
+    for (const { locale, file, missing, invalid } of report.pluralDrift) {
+      const parts = [];
+      if (missing.length) parts.push(`missing ${missing.join(', ')}`);
+      if (invalid.length) parts.push(`never selected ${invalid.join(', ')}`);
+      lines.push(`  ${locale}/${file}: ${parts.join('; ')}`);
+    }
+  }
+
   return lines.join('\n');
 }
 
@@ -135,11 +215,11 @@ if (isCli) {
   const strict = process.argv.includes('--strict');
   const filesOnly = process.argv.includes('--files-only');
   const report = checkParity();
-  process.stdout.write(formatReport(filesOnly ? { ...report, keyDrift: [] } : report) + '\n');
+  process.stdout.write(formatReport(filesOnly ? { ...report, keyDrift: [], pluralDrift: [] } : report) + '\n');
 
   if (strict) {
     const hasFileDrift = report.fileDrift.length > 0;
-    const hasKeyDrift = filesOnly ? false : report.keyDrift.length > 0;
+    const hasKeyDrift = filesOnly ? false : report.keyDrift.length > 0 || report.pluralDrift.length > 0;
     if (hasFileDrift || hasKeyDrift) process.exit(1);
   }
 }

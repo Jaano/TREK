@@ -7,7 +7,6 @@ const members: TranslationStrings = {
   'members.invite': "เชิญ",
   'members.allHaveAccess': "ผู้ใช้ทุกคนมีสิทธิ์เข้าถึงแล้ว",
   'members.access': "การเข้าถึง",
-  'members.person': "คน",
   'members.persons': "บุคคล",
   'members.you': "คุณ",
   'members.owner': "เจ้าของ",

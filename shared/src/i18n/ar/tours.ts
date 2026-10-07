@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'بيانات الارتفاع أو المقاييس غير مكتملة؛ تم الاستيراد مع تنبيه للحذر',
   'tours.import.caution': 'تم الاستيراد مع تنبيه للحذر؛ بيانات الارتفاع أو المقاييس غير مكتملة',
   'tours.import.success': 'تم استيراد {count} من الجولات من GPX',
-  'tours.import.successOne': 'تم استيراد جولة واحدة من GPX',
+  'tours.import.success.one': 'تم استيراد جولة واحدة من GPX',
   'tours.import.noTrack': 'لم يُعثر على أثر مسجّل أو مسار في ملف GPX هذا',
   'tours.import.error': 'تعذّر استيراد ملف GPX',
   'tours.delete.confirmBody':

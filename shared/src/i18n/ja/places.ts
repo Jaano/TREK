@@ -70,7 +70,6 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'カテゴリ',
   'places.clearFilter': 'フィルター解除',
   'places.count': '{count} 件の場所',
-  'places.countSingular': '1 件の場所',
   'places.allPlanned': 'すべての場所が計画済みです',
   'places.noneFound': '場所が見つかりません',
   'places.editPlace': '場所を編集',

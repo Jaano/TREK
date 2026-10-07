@@ -70,7 +70,7 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
         // enter the shared store used by the day map.
         await onToursChanged?.(result.tours.map(tour => tour.place_id))
         await loadTrip(tripId)
-        toast.success(t(result.tours.length === 1 ? 'tours.import.successOne' : 'tours.import.success', { count: result.tours.length }))
+        toast.success(t('tours.import.success', { count: result.tours.length }))
         if (result.caution) toast.info(t('tours.import.caution'))
       } else {
         toast.warning(t('places.importAllSkipped'))

@@ -20,7 +20,6 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Data elevasi atau metrik belum lengkap; diimpor dengan peringatan',
   'tours.import.caution': 'Diimpor dengan peringatan; data elevasi atau metrik belum lengkap',
   'tours.import.success': '{count} tur diimpor dari GPX',
-  'tours.import.successOne': '1 tur diimpor dari GPX',
   'tours.import.noTrack': 'Tidak ditemukan jejak atau rute dalam berkas GPX tersebut',
   'tours.import.error': 'Berkas GPX tidak dapat diimpor',
   'tours.delete.confirmBody':

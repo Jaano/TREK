@@ -89,7 +89,7 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Fermer',
   'collab.polls.closed': 'Fermé',
   'collab.polls.votes': '{n} votes',
-  'collab.polls.vote': '{n} vote',
+  'collab.polls.votes.one': '{n} vote',
   'collab.polls.multipleChoice': 'Choix multiples',
   'collab.polls.multiChoice': 'Choix multiples',
   'collab.polls.deadline': 'Date limite',

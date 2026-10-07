@@ -89,7 +89,7 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Sulge',
   'collab.polls.closed': 'Suletud',
   'collab.polls.votes': '{n} häält',
-  'collab.polls.vote': '{n} hääl',
+  'collab.polls.votes.one': '{n} hääl',
   'collab.polls.multipleChoice': 'Mitu valikut',
   'collab.polls.multiChoice': 'Mitu valikut',
   'collab.polls.deadline': 'Tähtaeg',

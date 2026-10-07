@@ -71,7 +71,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'catégories',
   'places.clearFilter': 'Effacer le filtre',
   'places.count': '{count} lieux',
-  'places.countSingular': '1 lieu',
+  'places.count.one': '{count} lieu',
   'places.allPlanned': 'Tous les lieux sont planifiés',
   'places.noneFound': 'Aucun lieu trouvé',
   'places.editPlace': 'Modifier le lieu',

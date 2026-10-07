@@ -89,7 +89,6 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Tutup',
   'collab.polls.closed': 'Ditutup',
   'collab.polls.votes': '{n} suara',
-  'collab.polls.vote': '{n} suara',
   'collab.polls.multipleChoice': 'Pilihan ganda',
   'collab.polls.multiChoice': 'Pilihan ganda',
   'collab.polls.deadline': 'Tenggat waktu',

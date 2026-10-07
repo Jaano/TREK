@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Дані про висоту або показники неповні — імпорт із застереженнями',
   'tours.import.caution': 'Імпорт із застереженнями — дані про висоту або показники неповні',
   'tours.import.success': 'Імпортовано турів із GPX: {count}',
-  'tours.import.successOne': 'Імпортовано 1 тур із GPX',
+  'tours.import.success.one': 'Імпортовано {count} тур із GPX',
   'tours.import.noTrack': 'У цьому файлі GPX не знайдено треку або маршруту',
   'tours.import.error': 'Не вдалося імпортувати файл GPX',
   'tours.delete.confirmBody':

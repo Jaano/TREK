@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Yüksəklik və göstəricilər natamamdır — ehtiyatla idxal edilib',
   'tours.import.caution': 'Ehtiyatla idxal edilib — yüksəklik və göstəricilər natamamdır',
   'tours.import.success': 'GPX-dən {count} tur idxal edildi',
-  'tours.import.successOne': 'GPX-dən 1 tur idxal edildi',
+  'tours.import.success.one': 'GPX-dən {count} tur idxal edildi',
   'tours.import.noTrack': 'Bu GPX faylında iz və ya marşrut tapılmadı',
   'tours.import.error': 'GPX faylını idxal etmək mümkün olmadı',
   'tours.delete.confirmBody':

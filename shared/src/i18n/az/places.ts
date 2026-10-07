@@ -79,7 +79,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'kateqoriya',
   'places.clearFilter': 'Filtri təmizlə',
   'places.count': '{count} məkan',
-  'places.countSingular': '1 məkan',
+  'places.count.one': '{count} məkan',
   'places.allPlanned': 'Bütün məkanlar planlaşdırılıb',
   'places.noneFound': 'Heç bir məkan tapılmadı',
 

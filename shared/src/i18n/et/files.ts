@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'Faili avamine ebaõnnestus',
   'files.downloadPdf': 'Laadi PDF alla',
   'files.count': '{count} faili',
-  'files.countSingular': '1 fail',
+  'files.count.one': '{count} fail',
   'files.uploaded': '{count} üles laaditud',
   'files.uploadError': 'Üleslaadimine ebaõnnestus',
   'files.uploadErrorType': 'Seda failitüüpi ei toetata',

@@ -14,7 +14,6 @@ const files: TranslationStrings = {
   'files.openError': '파일을 열 수 없습니다',
   'files.downloadPdf': 'PDF 다운로드',
   'files.count': '파일 {count}개',
-  'files.countSingular': '파일 1개',
   'files.uploaded': '{count}개 업로드됨',
   'files.uploadError': '업로드 실패',
   'files.uploadErrorType': '지원되지 않는 파일 형식입니다',

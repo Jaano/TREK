@@ -9,8 +9,8 @@ const members: TranslationStrings = {
     'Bütün istifadəçilərin artıq giriş icazəsi var.',
 
   'members.access': 'Giriş icazəsi',
-  'members.person': 'nəfər',
   'members.persons': 'nəfər',
+  'members.persons.one': 'nəfər',
   'members.you': 'siz',
   'members.owner': 'Sahib',
 

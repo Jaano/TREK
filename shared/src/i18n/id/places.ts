@@ -69,7 +69,6 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'kategori',
   'places.clearFilter': 'Hapus filter',
   'places.count': '{count} tempat',
-  'places.countSingular': '1 tempat',
   'places.allPlanned': 'Semua tempat sudah direncanakan',
   'places.noneFound': 'Tidak ada tempat ditemukan',
   'places.editPlace': 'Edit Tempat',

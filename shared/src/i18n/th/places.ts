@@ -64,7 +64,6 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'หมวดหมู่',
   'places.clearFilter': 'ล้างตัวกรอง',
   'places.count': '{count} สถานที่',
-  'places.countSingular': '1 แห่ง',
   'places.allPlanned': 'มีการวางแผนสถานที่ทั้งหมดแล้ว',
   'places.noneFound': 'ไม่พบสถานที่',
   'places.editPlace': 'แก้ไขสถานที่',

@@ -69,7 +69,6 @@ const places: TranslationStrings = {
   'places.categoriesSelected': '카테고리',
   'places.clearFilter': '필터 지우기',
   'places.count': '장소 {count}개',
-  'places.countSingular': '장소 1개',
   'places.allPlanned': '모든 장소가 계획되었습니다',
   'places.noneFound': '장소를 찾을 수 없습니다',
   'places.editPlace': '장소 편집',

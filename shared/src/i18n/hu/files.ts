@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'A fájl megnyitása sikertelen',
   'files.downloadPdf': 'PDF letöltése',
   'files.count': '{count} fájl',
-  'files.countSingular': '1 fájl',
+  'files.count.one': '{count} fájl',
   'files.uploaded': '{count} feltöltve',
   'files.uploadError': 'Feltöltés sikertelen',
   'files.uploadErrorType': 'Ez a fájltípus nem támogatott',

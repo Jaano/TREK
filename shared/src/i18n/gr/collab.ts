@@ -89,7 +89,7 @@ const collab: TranslationStrings = {
   'collab.polls.close': 'Κλείσιμο',
   'collab.polls.closed': 'Κλειστή',
   'collab.polls.votes': '{n} ψήφοι',
-  'collab.polls.vote': '{n} ψήφος',
+  'collab.polls.votes.one': '{n} ψήφος',
   'collab.polls.multipleChoice': 'Πολλαπλή επιλογή',
   'collab.polls.multiChoice': 'Πολλαπλή επιλογή',
   'collab.polls.deadline': 'Προθεσμία',

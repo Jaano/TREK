@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'Dosya açılamadı',
   'files.downloadPdf': 'PDF İndir',
   'files.count': '{count} dosya',
-  'files.countSingular': '1 dosya',
+  'files.count.one': '{count} dosya',
   'files.uploaded': '{count} yüklendi',
   'files.uploadError': 'Yükleme başarısız oldu',
   'files.uploadErrorType': 'Bu dosya türü desteklenmiyor',

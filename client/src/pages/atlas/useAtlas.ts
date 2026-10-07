@@ -625,8 +625,8 @@ export function useAtlas() {
             <div style="display:flex;flex-direction:column;gap:8px;min-width:160px">
               <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;padding-bottom:6px;border-bottom:1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}">${name}${planned ? ` <span style="font-size:9px;font-weight:700;opacity:0.55;letter-spacing:0.06em">· ${t('atlas.planned')}</span>` : ''}</div>
               <div style="display:flex;gap:14px">
-                <div><span style="font-size:16px;font-weight:800">${c.tripCount}</span> <span style="font-size:10px;opacity:0.5;text-transform:uppercase;letter-spacing:0.05em">${c.tripCount === 1 ? t('atlas.tripSingular') : t('atlas.tripPlural')}</span></div>
-                <div><span style="font-size:16px;font-weight:800">${c.placeCount}</span> <span style="font-size:10px;opacity:0.5;text-transform:uppercase;letter-spacing:0.05em">${c.placeCount === 1 ? t('atlas.placeVisited') : t('atlas.placesVisited')}</span></div>
+                <div><span style="font-size:16px;font-weight:800">${c.tripCount}</span> <span style="font-size:10px;opacity:0.5;text-transform:uppercase;letter-spacing:0.05em">${t('atlas.tripsLabel', { count: c.tripCount })}</span></div>
+                <div><span style="font-size:16px;font-weight:800">${c.placeCount}</span> <span style="font-size:10px;opacity:0.5;text-transform:uppercase;letter-spacing:0.05em">${t('atlas.placesVisited', { count: c.placeCount })}</span></div>
               </div>
               <div style="display:flex;gap:2px;border-top:1px solid ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'};padding-top:8px">
                 ${datesHtml}
@@ -895,7 +895,7 @@ export function useAtlas() {
             tt.style.left = e.originalEvent.clientX + 12 + 'px'
             tt.style.top = e.originalEvent.clientY - 10 + 'px'
             tt.innerHTML = visited
-              ? `<div style="font-weight:600;margin-bottom:3px">${regionName}</div><div style="opacity:0.5;font-size:10px">${countryName}</div><div style="margin-top:5px;font-size:11px"><b>${count}</b> ${count === 1 ? 'place' : 'places'}</div>`
+              ? `<div style="font-weight:600;margin-bottom:3px">${regionName}</div><div style="opacity:0.5;font-size:10px">${countryName}</div><div style="margin-top:5px;font-size:11px"><b>${count}</b> ${t('atlas.regionPlacesLabel', { count })}</div>`
               : `<div style="font-weight:600;margin-bottom:3px">${regionName}</div><div style="opacity:0.5;font-size:10px">${countryName}</div>`
           }
         })

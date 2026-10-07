@@ -241,7 +241,7 @@ function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: 
             {isClosed && <PollChip icon={<Lock size={9} strokeWidth={2.4} />}>{t('collab.polls.closed')}</PollChip>}
             {remaining && !isClosed && <PollChip tone="warning" icon={<Clock size={9} strokeWidth={2.4} />}>{remaining}</PollChip>}
             {poll.multiple_choice && <PollChip>{t('collab.polls.multiChoice')}</PollChip>}
-            <PollChip>{t(total === 1 ? 'collab.polls.vote' : 'collab.polls.votes', { n: total })}</PollChip>
+            <PollChip>{t('collab.polls.votes', { n: total })}</PollChip>
           </div>
         </div>
         {canEdit && (

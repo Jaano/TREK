@@ -20,7 +20,6 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': '標高・各種データが不完全です。注意が必要な状態でインポートされました。',
   'tours.import.caution': '標高・各種データが不完全なため、注意が必要な状態でインポートしました。',
   'tours.import.success': 'GPXから{count}件のツアーをインポートしました',
-  'tours.import.successOne': 'GPXから1件のツアーをインポートしました',
   'tours.import.noTrack': 'このGPXファイルにトラックやルートが見つかりません',
   'tours.import.error': 'GPXファイルをインポートできませんでした',
   'tours.delete.confirmBody':

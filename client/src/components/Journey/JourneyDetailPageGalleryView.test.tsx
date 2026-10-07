@@ -297,7 +297,7 @@ describe('GalleryView', () => {
 
     await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1))
     expect(bodies[0]).toEqual({ provider: 'immich', asset_ids: ['asset-1'], media_types: ['image'] })
-    expect(toastSpy).toHaveBeenCalledWith('1 photos added', 'success', undefined)
+    expect(toastSpy).toHaveBeenCalledWith('1 photo added', 'success', undefined)
     expect(screen.queryByRole('heading', { name: 'Immich' })).not.toBeInTheDocument()
   })
 

@@ -70,7 +70,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'категорий',
   'places.clearFilter': 'Сбросить фильтр',
   'places.count': '{count} мест',
-  'places.countSingular': '1 место',
+  'places.count.one': '{count} место',
   'places.allPlanned': 'Все места запланированы',
   'places.noneFound': 'Места не найдены',
   'places.editPlace': 'Редактировать место',

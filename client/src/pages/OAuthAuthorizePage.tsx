@@ -112,12 +112,7 @@ export default function OAuthAuthorizePage(): React.ReactElement {
                     : validation?.scopeSelectable && selectedScopes.length === 0
                         ? t('oauth.authorize.selectScope')
                         : validation?.scopeSelectable
-                            ? t(
-                                selectedScopes.length !== 1
-                                    ? 'oauth.authorize.approveManyScopes'
-                                    : 'oauth.authorize.approveOneScope',
-                                { count: selectedScopes.length },
-                            )
+                            ? t('oauth.authorize.approveScopes', { count: selectedScopes.length })
                             : t('oauth.authorize.approveAccess')}
               </button>
               <button type="button"

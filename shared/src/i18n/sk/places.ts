@@ -71,7 +71,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'kategórií',
   'places.clearFilter': 'Vymazať filter',
   'places.count': '{count} miest',
-  'places.countSingular': '1 miesto',
+  'places.count.one': '{count} miesto',
   'places.allPlanned': 'Všetky miesta sú naplánované',
   'places.noneFound': 'Žiadne miesta sa nenašli',
   'places.editPlace': 'Upraviť miesto',

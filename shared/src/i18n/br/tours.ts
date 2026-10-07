@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Elevação ou métricas incompletas: importado com ressalvas',
   'tours.import.caution': 'Importado com ressalvas: elevação ou métricas incompletas',
   'tours.import.success': '{count} passeios importados de GPX',
-  'tours.import.successOne': '1 passeio importado de GPX',
+  'tours.import.success.one': '{count} passeio importado de GPX',
   'tours.import.noTrack': 'Nenhum traçado ou rota encontrado nesse arquivo GPX',
   'tours.import.error': 'Não foi possível importar o arquivo GPX',
   'tours.delete.confirmBody':

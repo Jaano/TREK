@@ -86,8 +86,8 @@ const oauth: TranslationStrings = {
   'oauth.authorize.trustNote':
     'Prístup udeľujte len aplikáciám, ktorým dôverujete. Vaše dáta zostávajú na vašom serveri.',
   'oauth.authorize.selectScope': 'Vyberte aspoň jedno oprávnenie',
-  'oauth.authorize.approveOneScope': 'Schváliť ({count} oprávnenie)',
-  'oauth.authorize.approveManyScopes': 'Schváliť ({count} oprávnení)',
+  'oauth.authorize.approveScopes': 'Schváliť ({count} oprávnení)',
+  'oauth.authorize.approveScopes.one': 'Schváliť ({count} oprávnenie)',
   'oauth.authorize.approveAccess': 'Schváliť prístup',
   'oauth.authorize.deny': 'Zamietnuť',
   'oauth.authorize.choosePermissions': 'Vyberte, ktoré oprávnenia udeliť',

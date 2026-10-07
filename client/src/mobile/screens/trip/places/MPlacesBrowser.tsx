@@ -331,7 +331,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
         <div className="mb-1 mt-[14px] flex items-center gap-[10px]">
           <span className="h-px flex-1 bg-[color:var(--m-rowbr)]" />
           <span className="whitespace-nowrap font-geist text-[0.625rem] font-bold uppercase tracking-[.09em] text-m-faint">
-            {filtered.length === 1 ? t('places.countSingular') : t('places.count', { count: filtered.length })}
+            {t('places.count', { count: filtered.length })}
           </span>
           <span className="h-px flex-1 bg-[color:var(--m-rowbr)]" />
         </div>

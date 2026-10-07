@@ -20,7 +20,7 @@ const tours: TranslationStrings = {
   'tours.caution.tooltip': 'Ofullständiga höjddata eller mätvärden: importerad med förbehåll',
   'tours.import.caution': 'Importerad med förbehåll: ofullständiga höjddata eller mätvärden',
   'tours.import.success': '{count} turer importerade från GPX',
-  'tours.import.successOne': '1 tur importerad från GPX',
+  'tours.import.success.one': '{count} tur importerad från GPX',
   'tours.import.noTrack': 'Varken något spår eller någon rutt hittades i GPX-filen',
   'tours.import.error': 'Det gick inte att importera GPX-filen',
   'tours.delete.confirmBody':

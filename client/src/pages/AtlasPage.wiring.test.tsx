@@ -428,9 +428,9 @@ describe('AtlasPage wiring', () => {
       expect(screen.getAllByText('9')).toHaveLength(2);
       expect(screen.getAllByText('40')).toHaveLength(2);
       expect(screen.getByText('atlas.europe')).toBeInTheDocument();
-      // Singular labels are picked when streak / tripsThisYear are 1.
-      expect(screen.getByText('atlas.yearInRow')).toBeInTheDocument();
-      expect(screen.getByText(/atlas\.tripIn/)).toBeInTheDocument();
+      // The labels get the counts, so the language's own rule picks the form.
+      expect(screen.getByText('atlas.yearsInRow:1')).toBeInTheDocument();
+      expect(screen.getByText(/atlas\.tripsIn:1/)).toBeInTheDocument();
 
       // The last-trip tile used to sit in this row; the row is stats only now.
       expect(screen.queryByText('Paris Trip')).not.toBeInTheDocument();

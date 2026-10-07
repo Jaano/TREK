@@ -71,7 +71,7 @@ const places: TranslationStrings = {
   'places.categoriesSelected': 'κατηγορίες',
   'places.clearFilter': 'Καθαρισμός φίλτρου',
   'places.count': '{count} μέρη',
-  'places.countSingular': '1 μέρος',
+  'places.count.one': '{count} μέρος',
   'places.allPlanned': 'Όλα τα μέρη είναι προγραμματισμένα',
   'places.noneFound': 'Δεν βρέθηκαν μέρη',
   'places.editPlace': 'Επεξεργασία Μέρους',
