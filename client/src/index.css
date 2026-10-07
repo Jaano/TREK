@@ -13,7 +13,7 @@ body { height: 100%; overflow: auto; overscroll-behavior: none; -webkit-overflow
    overscroll-behavior has to sit on html, because the value on body is never
    propagated to the viewport, and without it a pull at the top of the page
    reloads the installed PWA. Desktop/tablet keep the rules above. */
-@media (max-width: 767px) {
+@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
   html { overflow: visible; overscroll-behavior: none; }
   /* overflow-x clip (not hidden: clip creates no scroll container) so a screen
      that accidentally overflows sideways cannot widen the document. Android's
@@ -182,7 +182,7 @@ html:not(.dark) .atlas-tooltip::before { border-top-color: rgba(255, 255, 255, 0
 .dark .leaflet-control-zoom a:hover {
   background: rgba(30, 30, 40, 0.8) !important;
 }
-@media (max-width: 767px) {
+@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
   .leaflet-control-zoom { display: none !important; }
 }
 
@@ -816,7 +816,7 @@ input[type="number"], input[type="time"], input[type="date"], input[type="dateti
   --vg-hi: inset 0 1px 0 oklch(1 0 0 / .8);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
   :root { --bottom-nav-h: calc(84px + env(safe-area-inset-bottom, 0px)); }
 }
 
@@ -1222,7 +1222,7 @@ body {
   background: var(--scrollbar-hover);
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (pointer: coarse) and (max-height: 500px) {
   * { scrollbar-width: none; }
   ::-webkit-scrollbar { width: 0; height: 0; }
 }

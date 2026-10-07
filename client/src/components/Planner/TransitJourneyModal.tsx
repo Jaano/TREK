@@ -15,6 +15,7 @@ import { useSettingsStore } from '../../store/settingsStore'
 import { splitReservationDateTime, formatTime } from '../../utils/formatters'
 import { TransitTitle, TransitMetaBadges, TransitWalkDivider, fmtTransitDuration } from './transitDisplay'
 import type { Reservation } from '../../types'
+import { useIsPhone } from '../../mobile/useIsPhone'
 
 /**
  * The journey view for an automated public-transit entry (#1065): a roomy modal
@@ -52,7 +53,7 @@ interface TransitJourneyModalProps {
 
 export default function TransitJourneyModal({ reservation, onClose, onSave, onDelete, onChangeRoute, onEditDetails, canEdit }: TransitJourneyModalProps) {
   const { t, locale } = useTranslation()
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const isMobile = useIsPhone()
   const timeFormat = useSettingsStore(st => st.settings.time_format) || '24h'
   const res = reservation
   const meta = typeof res.metadata === 'string' ? (() => { try { return JSON.parse(res.metadata || '{}') } catch { return {} } })() : (res.metadata || {})

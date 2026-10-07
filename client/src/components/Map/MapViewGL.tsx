@@ -2323,12 +2323,11 @@ export function MapViewGL({
 
   // Fit bounds on fitKey change — matches the Leaflet BoundsController
   const paddingOpts = useMemo(() => {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
     if (isMobile) return { top: 40, right: 20, bottom: 40, left: 20 }
     const top = 60
     const bottom = hasInspector ? 320 : hasDayDetail ? 280 : 60
     return { top, right: rightWidth + 40, bottom, left: leftWidth + 40 }
-  }, [leftWidth, rightWidth, hasInspector, hasDayDetail])
+  }, [isMobile, leftWidth, rightWidth, hasInspector, hasDayDetail])
 
   const prevFitKey = useRef<number | null>(-1)
   const pendingRouteFitRef = useRef<{ fitKey: number | null; routeKey: string } | null>(null)

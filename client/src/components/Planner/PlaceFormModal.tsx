@@ -76,7 +76,7 @@ interface PlaceFormModalProps {
   dayAssignments?: Assignment[]
   /** Mobile keeps the untouched single-column form; desktop adds the saved-place
    *  picker column when the Collections addon is enabled. Sourced from the trip
-   *  planner's matchMedia('(max-width:767px)'). */
+   *  planner's useIsPhone(). */
   isMobile?: boolean
   /** Opens the Costs editor for this place's linked expense (#1298) — the same
    *  seam the booking and transport modals use. */

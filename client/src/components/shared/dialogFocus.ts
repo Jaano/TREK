@@ -1,4 +1,5 @@
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { isPhoneViewport } from '../../mobile/useIsPhone'
 
 /**
  * Keyboard focus for the app's dialogs (#1302): the first Tab lands in the dialog
@@ -39,7 +40,7 @@ export function firstTextField(panel: HTMLElement): HTMLElement | null {
 /** Only with a mouse or trackpad: on a phone a focused field would throw the keyboard up. */
 function typingDevice(): boolean {
   if (typeof window.matchMedia !== 'function') return false
-  return window.matchMedia('(pointer: fine)').matches && !window.matchMedia('(max-width: 767px)').matches
+  return window.matchMedia('(pointer: fine)').matches && !isPhoneViewport()
 }
 
 /**

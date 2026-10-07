@@ -24,6 +24,7 @@ import { NoteCard } from './CollabNotesCard'
 import { FilePreviewPortal } from './CollabNotesFilePreviewPortal'
 import { AuthedImg } from './CollabNotesAuthedImg'
 import { safeExternalHref } from '../../utils/safeUrl'
+import { useIsPhone } from '../../mobile/useIsPhone'
 
 // ── Main Component ──────────────────────────────────────────────────────────
 interface CollabNotesProps {
@@ -343,6 +344,7 @@ function CollabNotesGrid(S: NotesState) {
     sortedNotes, currentUser, canEdit, handleUpdateNote, setPendingDeleteNoteId,
     setEditingNote, setViewingNote, setPreviewFile, getCategoryColor, tripId, t,
   } = S
+  const isPhone = useIsPhone()
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
       {sortedNotes.length === 0 ? (
@@ -352,7 +354,7 @@ function CollabNotesGrid(S: NotesState) {
         /* ── Notes grid — 2 columns ── */
         <div style={{
           display: 'grid',
-          gridTemplateColumns: window.innerWidth < 768 ? '1fr' : 'repeat(2, minmax(0, 1fr))',
+          gridTemplateColumns: isPhone ? '1fr' : 'repeat(2, minmax(0, 1fr))',
           gap: 10,
         }}>
           {sortedNotes.map(note => (

@@ -893,8 +893,11 @@ export const MapView = memo(function MapView({
   // Dynamic padding: account for sidebars + bottom inspector + day detail panel
   // The chrome overlaying the map (side panels, day detail). Kept as a plain box so both the
   // Leaflet fit options and the opening-camera maths can read the same numbers.
+  // Followed rather than read once: a phone turned sideways and back crosses
+  // the breakpoint twice, and the padding here and the locate button further
+  // down used to stay with whatever the map saw when it mounted.
+  const isMobile = useIsPhone()
   const paddingBox = useMemo((): ViewportPadding => {
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
     if (isMobile) return { top: 20, right: 40, bottom: 20, left: 40 }
     return {
       top: 60,
@@ -902,7 +905,7 @@ export const MapView = memo(function MapView({
       bottom: hasInspector ? 320 : hasDayDetail ? 280 : 60,
       left: leftWidth + 40,
     }
-  }, [leftWidth, rightWidth, hasInspector, hasDayDetail])
+  }, [isMobile, leftWidth, rightWidth, hasInspector, hasDayDetail])
 
   const paddingOpts = useMemo(() => leafletPadding(paddingBox), [paddingBox])
 
@@ -1158,10 +1161,6 @@ export const MapView = memo(function MapView({
   const { position: userPosition, mode: trackingMode, error: trackingError, errorCode: trackingErrorCode, cycleMode: cycleTrackingMode } = useGeolocation()
   // Desktop browsers only get IP-based geolocation (city-level accuracy),
   // so the button would be misleading. Mobile, where real GPS lives, keeps it.
-  // The width is followed rather than read once: a phone turned sideways and
-  // back crosses the breakpoint twice, and the button used to stay with
-  // whatever the map saw when it mounted.
-  const isMobile = useIsPhone()
   // When the day-detail panel is open it slides up over the map (bottom: navh+20,
   // height var(--day-panel-h)) and covers the button's band, so lift the button
   // above it; otherwise keep the plain bottom-nav offset. #1348

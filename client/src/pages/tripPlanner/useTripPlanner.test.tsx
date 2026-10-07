@@ -22,6 +22,7 @@ import { offlineDb, saveImportFiles, getImportFiles } from '../../db/offlineDb'
 import { getCached, fetchPhoto } from '../../services/photoService'
 import type { TourListItem } from '@trek/shared'
 import type { Accommodation, Place, Reservation, Settings } from '../../types'
+import { PHONE_QUERY } from '../../mobile/useIsPhone'
 
 // ── Router ────────────────────────────────────────────────────────────────────
 // Only useParams/useNavigate/useSearchParams are consumed by the hook, so the
@@ -2716,7 +2717,11 @@ describe('useTripPlanner — misc state', () => {
   it('FE-TP-HOOK-097: the media query listener drives the mobile flag', async () => {
     const listeners: Record<string, Array<(e: MediaQueryListEvent) => void>> = {}
     const removeEventListener = vi.fn()
-    vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+    // Swapped by hand and put back below: window.matchMedia is the setup's own
+    // mock, and a spy on it outlives restoreAllMocks, which left every later
+    // test of this file answering "not a phone" whatever the viewport.
+    const originalMatchMedia = window.matchMedia
+    window.matchMedia = vi.fn((query: string) => ({
       matches: false,
       media: query,
       onchange: null,
@@ -2727,17 +2732,21 @@ describe('useTripPlanner — misc state', () => {
       },
       removeEventListener,
       dispatchEvent: vi.fn(),
-    }) as unknown as MediaQueryList)
-    seedTrip()
+    }) as unknown as MediaQueryList) as unknown as typeof window.matchMedia
+    try {
+      seedTrip()
 
-    const { result, unmount } = await renderPlanner()
-    expect(result.current.isMobile).toBe(false)
+      const { result, unmount } = await renderPlanner()
+      expect(result.current.isMobile).toBe(false)
 
-    act(() => { listeners['(max-width: 767px)'][0]({ matches: true } as MediaQueryListEvent) })
-    expect(result.current.isMobile).toBe(true)
+      act(() => { listeners[PHONE_QUERY][0]({ matches: true } as MediaQueryListEvent) })
+      expect(result.current.isMobile).toBe(true)
 
-    unmount()
-    expect(removeEventListener).toHaveBeenCalled()
+      unmount()
+      expect(removeEventListener).toHaveBeenCalled()
+    } finally {
+      window.matchMedia = originalMatchMedia
+    }
   })
 
   it('FE-TP-HOOK-098: selectedPlace resolves the current selection out of the store', async () => {

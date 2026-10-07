@@ -1,5 +1,6 @@
 import React from 'react'
 import { Footprints, MoveRight, type LucideIcon } from 'lucide-react'
+import { useIsPhone } from '../../mobile/useIsPhone'
 
 /**
  * Shared display bits for public-transit entries (#1065) — the timeline row,
@@ -33,7 +34,7 @@ export function TransitWalkDivider({ leg, t, size = 'md' }: {
   size?: 'sm' | 'md'
 }) {
   const mins = leg.duration ? Math.round(leg.duration / 60) : null
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const isMobile = useIsPhone()
   // Hairlines that fade towards the outer edges — strongest next to the text.
   const rule = (dir: 'left' | 'right'): React.CSSProperties => ({
     flex: 1, height: 1, minWidth: 12, borderRadius: 1,

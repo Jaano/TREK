@@ -13,6 +13,7 @@ import type { Day, Place, Accommodation, Reservation } from '../../types'
 import { useTripStore } from '../../store/tripStore'
 import { isCarrierTransport } from '../../utils/dayMerge'
 import type { TransitProvider } from '@trek/shared'
+import { useIsPhone } from '../../mobile/useIsPhone'
 
 /**
  * Public transit route search (#1065), backed by Transitous (MOTIS) through the
@@ -465,7 +466,7 @@ export default function TransitSearchPanel({ day, days, places, accommodations =
   const { t, language } = useTranslation()
   const toast = useToast()
   const is12h = useSettingsStore(s => s.settings.time_format) === '12h'
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768
+  const isMobile = useIsPhone()
 
   const [from, setFrom] = useState<PickedPlace | null>(initialFrom)
   const [to, setTo] = useState<PickedPlace | null>(initialTo)

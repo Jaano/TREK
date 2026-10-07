@@ -8,6 +8,7 @@ import { formatDate as fmtDate } from '../../utils/formatters'
 import type { TodoItem } from '../../types'
 import { localToday } from '../Planner/today'
 import type { FilterType, Member } from './todoListModel'
+import { useIsPhone } from '../../mobile/useIsPhone'
 
 /**
  * Todo list logic — store actions, member load, the filter/selection/add-new
@@ -24,13 +25,7 @@ export function useTodoList(tripId: number, items: TodoItem[], addItemSignal: nu
   const { t, locale } = useTranslation()
   const formatDate = (d: string) => fmtDate(d, locale) || d
 
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)')
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
+  const isMobile = useIsPhone()
 
   const [filter, setFilter] = useState<FilterType>('all')
   const [selectedId, setSelectedId] = useState<number | null>(null)

@@ -87,6 +87,7 @@ import { matchesPlacesFilter } from '../../utils/placesFilter'
 import { pendingStayPlaceIds } from '../../utils/pendingStays'
 import { useDayDelete } from './useDayDelete'
 import { useDayAdd } from './useDayAdd'
+import { useIsPhone } from '../../mobile/useIsPhone'
 
 /** Stable empty list so the road trip hook stays inert while its mode is off. */
 const EMPTY_DAYS: Day[] = []
@@ -155,13 +156,7 @@ export function useTripPlanner() {
   // Declared here rather than with the other layout state further down, because
   // road-trip mode is decided on it and the assignment and place lists below are
   // decided on that. One subscriber for the whole hook.
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)')
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
+  const isMobile = useIsPhone()
   // The phone shell has no road-trip surface at all: no rail, no drive lines, and
   // no switch to turn the mode back off. Narrowing a desktop window past the
   // phone breakpoint used to carry the flag across anyway, which took the trip
