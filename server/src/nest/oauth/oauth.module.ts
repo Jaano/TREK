@@ -7,6 +7,8 @@ import { clientRegistrationHandler } from '@modelcontextprotocol/sdk/server/auth
 import { OauthPublicController } from './oauth-public.controller';
 import { OauthApiController } from './oauth-api.controller';
 import { OauthService } from './oauth.service';
+import { OauthTokenRetentionJob } from './oauth-token-retention.job';
+import { SchedulingModule } from '../scheduling/scheduling.module';
 import { TrekClientsStore, TrekOAuthProvider } from './oauth-sdk.provider';
 import { AuditModule } from '../audit/audit.module';
 import { AddonsModule } from '../addons/addons.module';
@@ -52,9 +54,9 @@ import { Users } from '../../db/entities/Users.entity';
  * `Users` call (Task 1's ruling: "do not add users methods" for this join).
  */
 @Module({
-  imports: [RateLimitModule, AuditModule, AddonsModule, MikroOrmModule.forFeature([OauthClients, OauthTokens, OauthConsents, Users])],
+  imports: [RateLimitModule, AuditModule, AddonsModule, SchedulingModule, MikroOrmModule.forFeature([OauthClients, OauthTokens, OauthConsents, Users])],
   controllers: [OauthPublicController, OauthApiController],
-  providers: [OauthService, TrekClientsStore, TrekOAuthProvider],
+  providers: [OauthService, TrekClientsStore, TrekOAuthProvider, OauthTokenRetentionJob],
   exports: [OauthService],
 })
 export class OauthModule implements NestModule {

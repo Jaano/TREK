@@ -529,4 +529,34 @@ describe('OauthTokensRepository', () => {
       expect(row.scopes).toBe('["kept-scope"]'); // untouched by either read
     });
   });
+
+  describe('deleteExpiredBefore (retention)', () => {
+    const longAgo = '2026-01-01T00:00:00.000Z';
+    const cutoff = '2026-06-01T00:00:00.000Z';
+    const ids = () => (testDb.prepare('SELECT id FROM oauth_tokens ORDER BY id').all() as { id: number }[]).map((r) => r.id);
+
+    it('OAUTHTOKREPO-040: deletes a whole expired chain, parents after their children', async () => {
+      const { user } = createUser(testDb);
+      seedClient(user.id, 'ret-1');
+      const root = seedToken({ clientId: 'ret-1', userId: user.id, refreshExpiresAt: longAgo, revokedAt: longAgo });
+      const mid = seedToken({ clientId: 'ret-1', userId: user.id, refreshExpiresAt: longAgo, revokedAt: longAgo, parentId: root });
+      seedToken({ clientId: 'ret-1', userId: user.id, refreshExpiresAt: longAgo, parentId: mid });
+
+      expect(await withRequestContext(t.orm, () => tokens.deleteExpiredBefore(cutoff))).toBe(3);
+      expect(ids()).toEqual([]);
+    });
+
+    it('OAUTHTOKREPO-041: keeps an expired parent while a live token still names it', async () => {
+      const { user } = createUser(testDb);
+      seedClient(user.id, 'ret-2');
+      const root = seedToken({ clientId: 'ret-2', userId: user.id, refreshExpiresAt: longAgo, revokedAt: longAgo });
+      const live = seedToken({ clientId: 'ret-2', userId: user.id, parentId: root });
+      const unrelated = seedToken({ clientId: 'ret-2', userId: user.id, refreshExpiresAt: longAgo });
+
+      expect(await withRequestContext(t.orm, () => tokens.deleteExpiredBefore(cutoff))).toBe(1);
+      expect(ids()).toEqual([root, live].sort((a, b) => a - b));
+      expect(ids()).not.toContain(unrelated);
+    });
+  });
 });
+

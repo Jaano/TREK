@@ -44,6 +44,7 @@ import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.se
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import type { BudgetItemsRepository } from '../../../src/db/repositories/BudgetItems.repository';
+import type { BudgetSettlementsRepository } from '../../../src/db/repositories/BudgetSettlements.repository';
 import type { JourneyShareTokensRepository } from '../../../src/db/repositories/JourneyShareTokens.repository';
 import type { JourneysRepository } from '../../../src/db/repositories/Journeys.repository';
 import type { JourneyEntriesRepository } from '../../../src/db/repositories/JourneyEntries.repository';
@@ -181,7 +182,7 @@ describe('erasePluginUserData', () => {
     // call — stubs are enough for those.
     const slimSvc = new UserCleanupService(
       (await sharedTestOrm(slim)).em, budget, await createTestUnitOfWork(slim), await createTestUsersRepo(slim),
-      {} as unknown as TripMembersRepository, {} as unknown as BudgetItemsRepository,
+      {} as unknown as TripMembersRepository, {} as unknown as BudgetItemsRepository, {} as unknown as BudgetSettlementsRepository,
       {} as unknown as JourneyShareTokensRepository, {} as unknown as JourneysRepository,
       {} as unknown as JourneyEntriesRepository, {} as unknown as JourneyContributorsRepository,
       // Plan 3h Task 6: a real repository (never a stub cast — `erasePluginUserData`

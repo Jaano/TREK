@@ -353,6 +353,35 @@ export class OauthTokensRepository extends TrekRepository<OauthTokens> {
   }
 
   // ---------------------------------------------------------------------
+  // Retention
+  // ---------------------------------------------------------------------
+
+  /**
+   * Delete tokens whose refresh token expired before `cutoffIso`, oldest
+   * generation first. A row is only deleted once no other token names it as
+   * parent: `parent_token_id` has no ON DELETE action, and a token still in a
+   * live chain is what replay detection walks. Each pass removes the current
+   * leaves, so a whole expired chain goes over a few passes; `maxPasses`
+   * bounds a chain that is still growing. Returns the number deleted.
+   */
+  async deleteExpiredBefore(cutoffIso: string, maxPasses = 50): Promise<number> {
+    let total = 0;
+    for (let pass = 0; pass < maxPasses; pass++) {
+      const result = await this.kysely<OauthTokensKyselyDB>()
+        .deleteFrom('oauth_tokens')
+        .where('refresh_token_expires_at', '<', cutoffIso)
+        .where('id', 'not in', (eb) =>
+          eb.selectFrom('oauth_tokens as child').select('child.parent_token_id').where('child.parent_token_id', 'is not', null),
+        )
+        .executeTakeFirst();
+      const deleted = Number(result.numDeletedRows ?? 0);
+      total += deleted;
+      if (deleted === 0) break;
+    }
+    return total;
+  }
+
+  // ---------------------------------------------------------------------
   // OA19 — chain-wide revoke
   // ---------------------------------------------------------------------
 

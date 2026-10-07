@@ -301,7 +301,8 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
       // Photos, videos and PDFs are compressed already; deflating them at level
       // 9 costs most of a backup's CPU time for a few bytes. They are stored.
       for (const entry of uploadEntries) {
-        archive.file(entry.absPath, { name: entry.name, store: PRECOMPRESSED.test(entry.name) });
+        const data: archiver.ZipEntryData = { name: entry.name, store: PRECOMPRESSED.test(entry.name) };
+        archive.file(entry.absPath, data);
       }
 
       // Plugin data — each plugin's own SQLite file and any blobs. This is the ONLY
