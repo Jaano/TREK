@@ -109,6 +109,8 @@ export interface PlaceWithTagsRow extends PlaceRow {
   ratings: PlaceRatingRow[];
   rating_avg: number | null;
   rating_count: number;
+  /** The place's own id when it is a Tour, else null; the list read carries the same mark. */
+  tour_place_id: number | null;
 }
 
 export class PlacesRepository extends TrekRepository<Places> {
