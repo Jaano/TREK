@@ -3,27 +3,10 @@
  * PlacesService prepares and persists imported places; these helpers derive
  * metrics from the resulting [[lat,lng,ele?]] geometry.
  */
+import { haversineMetres } from '../common/geo';
 
 /** One decoded `route_geometry` point: `[lat, lng]` or `[lat, lng, ele]`. */
 export type GeometryPoint = [number, number] | [number, number, number];
-
-const EARTH_RADIUS_KM = 6371;
-
-function toRad(deg: number): number {
-  return (deg * Math.PI) / 180;
-}
-
-/** Great-circle distance between two points, in km. */
-function haversineKm(a: GeometryPoint, b: GeometryPoint): number {
-  const [lat1, lng1] = a;
-  const [lat2, lng2] = b;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_KM * Math.asin(Math.min(1, Math.sqrt(s)));
-}
 
 export interface TourMetrics {
   /** Sum of segment haversine distances, in km. */
@@ -51,7 +34,7 @@ export function computeTourMetrics(points: GeometryPoint[]): TourMetrics {
   let gain = 0;
   let loss = 0;
   for (let i = 1; i < points.length; i++) {
-    distanceKm += haversineKm(points[i - 1], points[i]);
+    distanceKm += haversineMetres(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1]) / 1000;
     if (hasElevation) {
       const delta = (points[i][2] as number) - (points[i - 1][2] as number);
       if (delta > 0) gain += delta;
