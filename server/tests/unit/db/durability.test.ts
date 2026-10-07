@@ -184,6 +184,7 @@ describe('standalone scripts honour the same configuration', () => {
         password_hash TEXT,
         role TEXT,
         must_change_password INTEGER DEFAULT 0,
+        password_version INTEGER NOT NULL DEFAULT 0,
         mfa_secret TEXT,
         maps_api_key TEXT,
         openweather_api_key TEXT,
@@ -224,6 +225,24 @@ describe('standalone scripts honour the same configuration', () => {
       | undefined;
     db.close();
     expect(admin?.role).toBe('admin');
+  }, 60000);
+
+  it('reset-admin.js finds the account whatever the case, and ends its sessions', () => {
+    seedWalDb();
+    const seed = new Database(dbPath);
+    seed.prepare("INSERT INTO users (username, email, password_hash, role, password_version) VALUES ('boss', 'Boss@Example.com', 'x', 'user', 3)").run();
+    seed.close();
+
+    execFileSync(process.execPath, ['reset-admin.js'], {
+      cwd: SERVER_ROOT,
+      env: { ...process.env, TREK_DB_FILE: dbPath, RESET_ADMIN_EMAIL: 'boss@example.com', RESET_ADMIN_PASSWORD: 'Recovery12345!' },
+      stdio: 'pipe',
+    });
+
+    const db = new Database(dbPath);
+    const rows = db.prepare('SELECT email, role, password_version, must_change_password FROM users').all();
+    db.close();
+    expect(rows).toEqual([{ email: 'Boss@Example.com', role: 'admin', password_version: 4, must_change_password: 1 }]);
   }, 60000);
 
   it('migrate-encryption.ts no longer forces the database back to WAL', () => {
