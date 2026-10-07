@@ -21,6 +21,9 @@ import type { AppSettingsRepository } from '../../db/repositories/AppSettings.re
 import { Users } from '../../db/entities/Users.entity';
 import type { UsersRepository, UserApiKeyColumns, UserProfilePatch } from '../../db/repositories/Users.repository';
 
+/** A key check is a single request to a provider; one that hangs must not hold the settings page. */
+const KEY_CHECK_TIMEOUT_MS = 10_000;
+
 /**
  * The account a user administers about themselves: display settings, avatar,
  * the third-party API keys they paste in, and the directory listing other
@@ -376,6 +379,7 @@ export class UserProfileService {
               'X-Goog-FieldMask': SEARCH_TEXT_FIELD_MASK,
             },
             body: JSON.stringify({ textQuery: 'test' }),
+            signal: AbortSignal.timeout(KEY_CHECK_TIMEOUT_MS),
           }
         );
         result.maps = mapsRes.status === 200;
@@ -412,7 +416,8 @@ export class UserProfileService {
     if (openweather_api_key) {
       try {
         const weatherRes = await fetch(
-          `https://api.openweathermap.org/data/2.5/weather?q=London&appid=${openweather_api_key}`
+          `https://api.openweathermap.org/data/2.5/weather?q=London&appid=${openweather_api_key}`,
+          { signal: AbortSignal.timeout(KEY_CHECK_TIMEOUT_MS) },
         );
         result.weather = weatherRes.status === 200;
       } catch {

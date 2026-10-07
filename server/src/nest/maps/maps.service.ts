@@ -1469,6 +1469,9 @@ export class MapsService {
         method: 'POST',
         headers: { 'User-Agent': UA, 'Content-Type': 'application/x-www-form-urlencoded' },
         body: `data=${encodeURIComponent(query)}`,
+        // The query asks Overpass for 5 s; a public instance that is overloaded
+        // takes the connection and then sits on it.
+        signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) return null;
       const data = (await res.json()) as { elements?: OverpassElement[] };
@@ -1615,7 +1618,12 @@ export class MapsService {
           pilimit: '1',
           redirects: '1',
         });
-        const res = await fetch(`https://en.wikipedia.org/w/api.php?${searchParams}`, { headers: { 'User-Agent': UA } });
+        const res = await fetch(`https://en.wikipedia.org/w/api.php?${searchParams}`, {
+          headers: { 'User-Agent': UA },
+          // This runs inside one of the few shared photo-fetch slots; a stalled
+          // answer would hold it for everyone.
+          signal: AbortSignal.timeout(WIKI_TIMEOUT_MS),
+        });
         if (res.ok) {
           const data = (await res.json()) as { query?: { pages?: Record<string, { thumbnail?: { source?: string } }> } };
           const pages = data.query?.pages;

@@ -220,7 +220,7 @@ export class PluginRegistryService {
         headers['Cache-Control'] = 'no-cache';
         headers.Pragma = 'no-cache';
       }
-      const resp = await fetch(url, { headers });
+      const resp = await fetch(url, { headers, signal: AbortSignal.timeout(15_000) });
       if (!resp.ok) throw new Error(`registry ${resp.status}`);
       const data = (await resp.json()) as Registry;
       if (!data || !Array.isArray(data.plugins)) throw new Error('malformed registry');

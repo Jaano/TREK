@@ -130,6 +130,19 @@ export default tseslint.config(
           message:
             'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
         },
+        {
+          // Every outbound fetch needs a timeout (server/CLAUDE.md): a provider
+          // that takes the connection and goes quiet otherwise holds the request
+          // for undici's 300 s default. An init built elsewhere (a variable or a
+          // spread) is trusted to carry its own signal.
+          selector: "CallExpression[callee.name='fetch'][arguments.length=1]",
+          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+        },
+        {
+          selector:
+            "CallExpression[callee.name='fetch'] > ObjectExpression:not(:has(Property[key.name='signal'])):not(:has(SpreadElement))",
+          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+        },
       ],
     },
   },
@@ -271,6 +284,19 @@ export default tseslint.config(
           selector: "TaggedTemplateExpression[tag.name='sql']",
           message:
             'Dialect SQL goes through src/db/dialect/sql-functions.ts, which dispatches on the live MikroORM platform. A repository must not spell raw SQL.',
+        },
+        {
+          // Every outbound fetch needs a timeout (server/CLAUDE.md): a provider
+          // that takes the connection and goes quiet otherwise holds the request
+          // for undici's 300 s default. An init built elsewhere (a variable or a
+          // spread) is trusted to carry its own signal.
+          selector: "CallExpression[callee.name='fetch'][arguments.length=1]",
+          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+        },
+        {
+          selector:
+            "CallExpression[callee.name='fetch'] > ObjectExpression:not(:has(Property[key.name='signal'])):not(:has(SpreadElement))",
+          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
         },
       ],
     },
