@@ -23,7 +23,8 @@ export interface TourMetrics {
  * ones for a tour saved offline, so both read them from here.
  */
 export function computeTourMetrics(points: readonly GeometryPoint[]): TourMetrics {
-  if (points.length < 2) {
+  const [first, ...rest] = points;
+  if (!first || rest.length === 0) {
     return { distanceKm: 0, elevationGainM: null, elevationLossM: null, hasElevation: false };
   }
   const hasElevation = points.every((p) => p.length === 3 && Number.isFinite(p[2]));
@@ -31,13 +32,15 @@ export function computeTourMetrics(points: readonly GeometryPoint[]): TourMetric
   let distanceKm = 0;
   let gain = 0;
   let loss = 0;
-  for (let i = 1; i < points.length; i++) {
-    distanceKm += haversineMetres(points[i - 1][0], points[i - 1][1], points[i][0], points[i][1]) / 1000;
+  let prev = first;
+  for (const point of rest) {
+    distanceKm += haversineMetres(prev[0], prev[1], point[0], point[1]) / 1000;
     if (hasElevation) {
-      const delta = (points[i][2] as number) - (points[i - 1][2] as number);
+      const delta = (point[2] as number) - (prev[2] as number);
       if (delta > 0) gain += delta;
       else loss += -delta;
     }
+    prev = point;
   }
 
   return {
