@@ -158,7 +158,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
     shell.openSheet('bract', { placeId: place.id, dayPicker: false })
   }
 
-  const selectedTours = [...selectedIds].filter(planner.isTourPlace)
+  const selectedTours = [...selectedIds].filter(id => planner.isTourPlace(id))
   const panelFilterCount = countActivePlacesFilters({ filter: 'all', categoryFilters, ratingFilter })
 
   return (
