@@ -83,7 +83,9 @@ export const placeRepo = {
 
   async delete(tripId: number | string, id: number | string): Promise<{ success?: boolean; tourPlaceIds?: number[] }> {
     if (isEffectivelyOffline()) {
+      // A tour is a place plus its facet; the server's cascade drops both.
       await offlineDb.places.delete(Number(id))
+      await offlineDb.tours.delete(Number(id))
       const mutId = generateUUID()
       const isTemp = Number(id) < 0
       await mutationQueue.enqueue({
@@ -100,12 +102,14 @@ export const placeRepo = {
     }
     const result = await placesApi.delete(tripId, id)
     offlineDb.places.delete(Number(id))
+    offlineDb.tours.delete(Number(id))
     return result
   },
 
   async deleteMany(tripId: number | string, ids: number[]): Promise<{ deleted?: number[]; count?: number; tourPlaceIds?: number[] }> {
     if (isEffectivelyOffline()) {
       await offlineDb.places.bulkDelete(ids)
+      await offlineDb.tours.bulkDelete(ids)
       for (const id of ids) {
         const mutId = generateUUID()
         const isTemp = id < 0
@@ -124,6 +128,7 @@ export const placeRepo = {
     }
     const result = await placesApi.bulkDelete(tripId, ids)
     await offlineDb.places.bulkDelete(ids)
+    await offlineDb.tours.bulkDelete(ids)
     return result
   },
 

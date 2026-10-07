@@ -12,6 +12,7 @@ import { tripSyncManager } from '../../../src/sync/tripSyncManager';
 import { setAuthed } from '../../../src/sync/authGate';
 import { setTripPinned, _resetOfflinePrefs } from '../../../src/sync/offlinePrefs';
 import { offlineDb, clearAll, upsertTrip } from '../../../src/db/offlineDb';
+import { useAddonStore } from '../../../src/store/addonStore';
 import {
   buildTrip,
   buildDay,
@@ -291,6 +292,55 @@ describe('tripSyncManager.syncAll — bundle upsert', () => {
     expect(meta).toBeDefined();
     expect(meta!.lastSyncedAt).toBeGreaterThanOrEqual(before);
     expect(meta!.lastSyncedAt).toBeLessThanOrEqual(after);
+  });
+});
+
+describe('tripSyncManager.syncAll — tours', () => {
+  const tour = {
+    place_id: 900, name: 'Ridge walk', tour_type: 'hike', distance: 8, elevation_gain: 600, elevation_loss: 600,
+    duration: 180, difficulty: null, wanderer_ref: null, match_confidence: 1, max_hiking_difficulty: 2,
+    planned: false, caution: false, has_waypoints: true,
+  };
+
+  function serve(tripId: number, tours: () => Response) {
+    let asked = 0;
+    server.use(
+      http.get('/api/trips', () => HttpResponse.json({ trips: [buildTrip({ id: tripId, end_date: dateOffset(5) })] })),
+      http.get(`/api/trips/${tripId}/bundle`, () => HttpResponse.json(makeBundle(tripId))),
+      http.get(`/api/trips/${tripId}/tours`, () => { asked++; return tours(); }),
+    );
+    return () => asked;
+  }
+
+  afterEach(() => useAddonStore.setState({ addons: [] }));
+
+  it("caches the trip's tours while the addon is on", async () => {
+    useAddonStore.setState({ addons: [{ id: 'tours', enabled: true }] as never });
+    serve(310, () => HttpResponse.json({ tours: [tour] }));
+
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.tours.get(900)).toMatchObject({ trip_id: 310, name: 'Ridge walk' });
+  });
+
+  it('does not ask while the addon is off', async () => {
+    const asked = serve(311, () => HttpResponse.json({ tours: [tour] }));
+
+    await tripSyncManager.syncAll();
+
+    expect(asked()).toBe(0);
+    expect(await offlineDb.tours.count()).toBe(0);
+  });
+
+  it('a failed tours request leaves the rest of the trip stored', async () => {
+    useAddonStore.setState({ addons: [{ id: 'tours', enabled: true }] as never });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    serve(312, () => HttpResponse.json({ error: 'boom' }, { status: 500 }));
+
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.places.where('trip_id').equals(312).count()).toBe(1);
+    expect(await offlineDb.syncMeta.get(312)).toBeDefined();
   });
 });
 

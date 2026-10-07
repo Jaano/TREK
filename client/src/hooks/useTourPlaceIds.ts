@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import type { TourListItem } from '@trek/shared'
-import { toursApi } from '../api/client'
+import { tourRepo } from '../repo/tourRepo'
+
+const NO_TOURS: TourListItem[] = []
 
 export interface ToursInvalidation {
   placeIds?: number[]
@@ -37,7 +39,7 @@ export function useTourPlaceIds(tripId: number, enabled: boolean) {
     const requestId = ++requestIdRef.current
     setRequestState({ tripId, loading: true, error: false })
     try {
-      const response = await toursApi.list(tripId)
+      const response = await tourRepo.list(tripId)
       if (!mountedRef.current || requestId !== requestIdRef.current) return
       setTourData({ tripId, tours: response.tours })
       setPendingPlaceIds(current => current?.tripId === tripId ? null : current)
@@ -92,14 +94,18 @@ export function useTourPlaceIds(tripId: number, enabled: boolean) {
   }, [enabled, tripId])
 
   const tourDataReady = !enabled || tourData?.tripId === tripId
-  const visibleTours = enabled && tourData?.tripId === tripId ? tourData.tours : []
-  const pendingIds = enabled && pendingPlaceIds?.tripId === tripId ? pendingPlaceIds.ids : []
+  // Memoised on the stored state, not on the derived values: an empty list
+  // made fresh in the render is a new dependency every time.
+  const visibleTours = useMemo(
+    () => enabled && tourData?.tripId === tripId ? tourData.tours : NO_TOURS,
+    [enabled, tourData, tripId],
+  )
   const currentRequest = requestState?.tripId === tripId ? requestState : null
   // One Set per change, not per render: consumers memoise on it.
-  const tourPlaceIds = useMemo(
-    () => new Set([...visibleTours.map(tour => tour.place_id), ...pendingIds]),
-    [visibleTours, pendingIds],
-  )
+  const tourPlaceIds = useMemo(() => {
+    const pending = enabled && pendingPlaceIds?.tripId === tripId ? pendingPlaceIds.ids : []
+    return new Set([...visibleTours.map(tour => tour.place_id), ...pending])
+  }, [visibleTours, enabled, pendingPlaceIds, tripId])
 
   return {
     tours: visibleTours,

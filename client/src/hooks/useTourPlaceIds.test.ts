@@ -1,11 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TourListItem } from '@trek/shared'
-import { toursApi } from '../api/client'
+import { tourRepo } from '../repo/tourRepo'
 import { useTourPlaceIds } from './useTourPlaceIds'
 
-vi.mock('../api/client', () => ({
-  toursApi: { list: vi.fn() },
+vi.mock('../repo/tourRepo', () => ({
+  tourRepo: { list: vi.fn() },
 }))
 
 const tour: TourListItem = {
@@ -40,7 +40,7 @@ function tourFor(placeId: number, name: string): TourListItem {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.mocked(toursApi.list).mockResolvedValue({ tours: [tour] })
+  vi.mocked(tourRepo.list).mockResolvedValue({ tours: [tour] })
 })
 
 describe('useTourPlaceIds', () => {
@@ -50,7 +50,22 @@ describe('useTourPlaceIds', () => {
     await waitFor(() => expect(result.current.tourDataReady).toBe(true))
     expect(result.current.tours).toEqual([tour])
     expect(result.current.tourPlaceIds).toEqual(new Set([42]))
-    expect(toursApi.list).toHaveBeenCalledWith(7)
+    expect(tourRepo.list).toHaveBeenCalledWith(7)
+  })
+
+  it('hands out the same Set and list until something changes, enabled or not', async () => {
+    const { result, rerender } = renderHook(({ enabled }) => useTourPlaceIds(7, enabled), { initialProps: { enabled: true } })
+    await waitFor(() => expect(result.current.tours).toEqual([tour]))
+    const { tourPlaceIds, tours } = result.current
+
+    rerender({ enabled: true })
+    expect(result.current.tourPlaceIds).toBe(tourPlaceIds)
+    expect(result.current.tours).toBe(tours)
+
+    rerender({ enabled: false })
+    const disabled = result.current.tourPlaceIds
+    rerender({ enabled: false })
+    expect(result.current.tourPlaceIds).toBe(disabled)
   })
 
   it('hides facet identity while disabled without fetching or deleting its cached data', async () => {
@@ -61,7 +76,7 @@ describe('useTourPlaceIds', () => {
     expect(result.current.tourDataReady).toBe(true)
     expect(result.current.tours).toEqual([])
     expect(result.current.tourPlaceIds.size).toBe(0)
-    expect(toursApi.list).toHaveBeenCalledTimes(1)
+    expect(tourRepo.list).toHaveBeenCalledTimes(1)
   })
 
   it('inserts a fresh save immediately and replaces it after an edit', async () => {
@@ -81,7 +96,7 @@ describe('useTourPlaceIds', () => {
     const { result } = renderHook(() => useTourPlaceIds(7, true))
     await waitFor(() => expect(result.current.tours).toEqual([tour]))
     const refresh = deferred<{ tours: TourListItem[] }>()
-    vi.mocked(toursApi.list).mockReturnValueOnce(refresh.promise)
+    vi.mocked(tourRepo.list).mockReturnValueOnce(refresh.promise)
 
     act(() => result.current.invalidateTourPlaceIds({ removedPlaceIds: [tour.place_id] }))
 
@@ -94,7 +109,7 @@ describe('useTourPlaceIds', () => {
 
   it('shows only the new trip Tours after a successful trip switch', async () => {
     const tripTwoTour = tourFor(84, 'Trip two tour')
-    vi.mocked(toursApi.list).mockImplementation(async tripId => ({
+    vi.mocked(tourRepo.list).mockImplementation(async tripId => ({
       tours: [tripId === 7 ? tour : tripTwoTour],
     }))
     const { result, rerender } = renderHook(({ tripId }) => useTourPlaceIds(tripId, true), {
@@ -112,7 +127,7 @@ describe('useTourPlaceIds', () => {
   })
 
   it('keeps previous-trip data hidden when the new trip refresh fails', async () => {
-    vi.mocked(toursApi.list).mockImplementation(async tripId => {
+    vi.mocked(tourRepo.list).mockImplementation(async tripId => {
       if (tripId === 8) throw new Error('Trip two unavailable')
       return { tours: [tour] }
     })
@@ -135,7 +150,7 @@ describe('useTourPlaceIds', () => {
     const tripOne = deferred<{ tours: TourListItem[] }>()
     const tripTwoTour = tourFor(84, 'Trip two tour')
     const tripTwo = deferred<{ tours: TourListItem[] }>()
-    vi.mocked(toursApi.list).mockImplementation(tripId => tripId === 7 ? tripOne.promise : tripTwo.promise)
+    vi.mocked(tourRepo.list).mockImplementation(tripId => tripId === 7 ? tripOne.promise : tripTwo.promise)
     const { result, rerender } = renderHook(({ tripId }) => useTourPlaceIds(tripId, true), {
       initialProps: { tripId: 7 },
     })
@@ -151,7 +166,7 @@ describe('useTourPlaceIds', () => {
 
   it('lets only the latest request commit after rapid trip changes', async () => {
     const requests = new Map<string | number, ReturnType<typeof deferred<{ tours: TourListItem[] }>>>()
-    vi.mocked(toursApi.list).mockImplementation(tripId => {
+    vi.mocked(tourRepo.list).mockImplementation(tripId => {
       const request = deferred<{ tours: TourListItem[] }>()
       requests.set(tripId, request)
       return request.promise
@@ -177,7 +192,7 @@ describe('useTourPlaceIds', () => {
     await waitFor(() => expect(result.current.tours).toEqual([tour]))
     const beforeMutation = deferred<{ tours: TourListItem[] }>()
     const afterMutation = deferred<{ tours: TourListItem[] }>()
-    vi.mocked(toursApi.list).mockReset()
+    vi.mocked(tourRepo.list).mockReset()
       .mockReturnValueOnce(beforeMutation.promise)
       .mockReturnValueOnce(afterMutation.promise)
 
@@ -200,7 +215,7 @@ describe('useTourPlaceIds', () => {
   it('retains same-trip last-good data and exposes a failed refresh', async () => {
     const { result } = renderHook(() => useTourPlaceIds(7, true))
     await waitFor(() => expect(result.current.tourDataReady).toBe(true))
-    vi.mocked(toursApi.list).mockRejectedValueOnce(new Error('Refresh unavailable'))
+    vi.mocked(tourRepo.list).mockRejectedValueOnce(new Error('Refresh unavailable'))
 
     await act(async () => { await result.current.reloadTourPlaceIds() })
 
@@ -213,7 +228,7 @@ describe('useTourPlaceIds', () => {
 
   it('does not let a pending request update state after unmount', async () => {
     const request = deferred<{ tours: TourListItem[] }>()
-    vi.mocked(toursApi.list).mockReturnValue(request.promise)
+    vi.mocked(tourRepo.list).mockReturnValue(request.promise)
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { unmount } = renderHook(() => useTourPlaceIds(7, true))
     unmount()
@@ -224,13 +239,13 @@ describe('useTourPlaceIds', () => {
   })
 
   it('distinguishes an empty successful list from a failed refresh', async () => {
-    vi.mocked(toursApi.list).mockResolvedValueOnce({ tours: [] })
+    vi.mocked(tourRepo.list).mockResolvedValueOnce({ tours: [] })
     const { result } = renderHook(() => useTourPlaceIds(7, true))
     await waitFor(() => expect(result.current.tourDataReady).toBe(true))
     expect(result.current.tours).toEqual([])
     expect(result.current.tourLoadError).toBe(false)
 
-    vi.mocked(toursApi.list).mockRejectedValueOnce(new Error('Refresh unavailable'))
+    vi.mocked(tourRepo.list).mockRejectedValueOnce(new Error('Refresh unavailable'))
     await act(async () => { await result.current.reloadTourPlaceIds() })
     expect(result.current.tours).toEqual([])
     expect(result.current.tourDataReady).toBe(true)
@@ -241,7 +256,7 @@ describe('useTourPlaceIds', () => {
     const { result } = renderHook(() => useTourPlaceIds(7, true))
     await waitFor(() => expect(result.current.tourDataReady).toBe(true))
     const refresh = deferred<{ tours: TourListItem[] }>()
-    vi.mocked(toursApi.list).mockReturnValueOnce(refresh.promise)
+    vi.mocked(tourRepo.list).mockReturnValueOnce(refresh.promise)
     act(() => { void result.current.reloadTourPlaceIds() })
     await waitFor(() => expect(result.current.toursLoading).toBe(true))
 

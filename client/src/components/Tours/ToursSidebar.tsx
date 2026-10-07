@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import { Check, ChevronDown, FileDown } from 'lucide-react'
 import type { TourListItem } from '@trek/shared'
 import type { Day } from '../../types'
-import { toursApi } from '../../api/client'
+import { tourRepo } from '../../repo/tourRepo'
 import { useTripStore } from '../../store/tripStore'
 import { useTranslation } from '../../i18n'
 import { useToast } from '../shared/Toast'
@@ -63,7 +63,7 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
 
     setImporting(true)
     try {
-      const result = await toursApi.importGpx(tripId, file)
+      const result = await tourRepo.importGpx(tripId, file)
       if (result.tours.length > 0) {
         // The server publishes place:created with sender echo suppression.
         // Reload the importing client's trip so new places and route geometry

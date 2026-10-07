@@ -1,10 +1,20 @@
-import type { RoadtripPreferences } from '@trek/shared';
+import type { RoadtripPreferences, TourListItem, TourWaypoint } from '@trek/shared';
 import Dexie, { type Table } from 'dexie';
 import type { Trip, Day, Place, PackingItem, TodoItem, BudgetItem, Reservation, TripFile, Accommodation, TripMember, Tag, Category } from '../types';
 
 /** TripMember enriched with tripId so we can index by trip. */
 export interface CachedTripMember extends TripMember {
   tripId: number;
+}
+
+/**
+ * A tour as the Tours list reads it, with the trip it belongs to (the list item
+ * carries none) and, once the route editor opened it online, its control
+ * points, so the tour still opens offline.
+ */
+export interface CachedTour extends TourListItem {
+  trip_id: number;
+  waypoints?: TourWaypoint[];
 }
 
 // ── Queue + sync types ────────────────────────────────────────────────────────
@@ -185,6 +195,7 @@ class TrekOfflineDb extends Dexie {
   blobCache!: Table<BlobCacheEntry, string>;
   importFiles!: Table<ImportSourceFile, [string, string]>;
   areaPlaces!: Table<CachedAreaPlace, [string, number]>;
+  tours!: Table<CachedTour, number>;
 
   constructor(name: string = ANON_DB_NAME) {
     super(name);
@@ -252,6 +263,10 @@ class TrekOfflineDb extends Dexie {
         delete row.areaPlacesKey;
       });
     });
+
+    // v9: the Tours facet, keyed like the place it belongs to, so a Tour still
+    // reads as one offline and can be edited there.
+    this.version(9).stores({ tours: 'place_id, trip_id' });
   }
 }
 
@@ -364,6 +379,33 @@ export async function replaceTripRows<T extends { id: number }>(table: TripScope
       .filter(row => row.id > 0 && !keep.has(row.id))
       .delete();
     await target.bulkPut(rows);
+  });
+}
+
+/**
+ * {@link replaceTripRows} for the Tours facet, which is keyed on `place_id`.
+ * A tour's cached control points survive the refresh only while its route
+ * reads the same: the list carries no waypoints, and a route edited elsewhere
+ * must not open offline with the old ones.
+ */
+export async function replaceTripTours(tripId: number, tours: TourListItem[]): Promise<void> {
+  await offlineDb.transaction('rw', offlineDb.tours, async () => {
+    const cached = new Map((await offlineDb.tours.where('trip_id').equals(tripId).toArray()).map(t => [t.place_id, t]));
+    const keep = new Set(tours.map(t => t.place_id));
+    await offlineDb.tours
+      .where('trip_id')
+      .equals(tripId)
+      .filter(t => t.place_id > 0 && !keep.has(t.place_id))
+      .delete();
+    await offlineDb.tours.bulkPut(tours.map(tour => {
+      const previous = cached.get(tour.place_id);
+      const sameRoute = previous !== undefined
+        && previous.distance === tour.distance
+        && previous.elevation_gain === tour.elevation_gain
+        && previous.elevation_loss === tour.elevation_loss
+        && previous.has_waypoints === tour.has_waypoints;
+      return { ...tour, trip_id: tripId, ...(sameRoute && previous.waypoints ? { waypoints: previous.waypoints } : {}) };
+    }));
   });
 }
 
@@ -504,6 +546,7 @@ export async function clearTripData(tripId: number): Promise<void> {
       offlineDb.blobCache,
       offlineDb.areaPlaces,
       offlineDb.roadtripPreferences,
+      offlineDb.tours,
     ],
     async () => {
       await offlineDb.roadtripPreferences.delete(tripId);
@@ -515,6 +558,7 @@ export async function clearTripData(tripId: number): Promise<void> {
       await offlineDb.reservations.where('trip_id').equals(tripId).delete();
       await offlineDb.tripFiles.where('trip_id').equals(tripId).delete();
       await offlineDb.accommodations.where('trip_id').equals(tripId).delete();
+      await offlineDb.tours.where('trip_id').equals(tripId).delete();
       await offlineDb.tripMembers.where('tripId').equals(tripId).delete();
       // Keep pending/syncing/conflict mutations — only purge dead 'failed' rows.
       await offlineDb.mutationQueue.where('tripId').equals(tripId).and(m => m.status === 'failed').delete();

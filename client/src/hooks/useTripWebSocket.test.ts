@@ -4,7 +4,7 @@ import type { TourListItem } from '@trek/shared'
 
 const mocks = vi.hoisted(() => {
   const listeners = new Set<(event: Record<string, unknown>) => void>()
-  const toursApi = { list: vi.fn() }
+  const tourRepo = { list: vi.fn() }
   const handleRemoteEvent = vi.fn()
   const loadFiles = vi.fn()
   const useTripStore = Object.assign(vi.fn(() => ({ loadFiles })), {
@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => {
   })
   return {
     listeners,
-    toursApi,
+    tourRepo,
     handleRemoteEvent,
     loadFiles,
     useTripStore,
@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => {
   }
 })
 
-vi.mock('../api/client', () => ({ toursApi: mocks.toursApi }))
+vi.mock('../repo/tourRepo', () => ({ tourRepo: mocks.tourRepo }))
 vi.mock('../api/websocket', () => ({
   joinTrip: mocks.joinTrip,
   leaveTrip: mocks.leaveTrip,
@@ -81,14 +81,14 @@ beforeEach(() => {
   mocks.leaveTrip.mockClear()
   mocks.handleRemoteEvent.mockClear()
   mocks.loadFiles.mockClear()
-  mocks.toursApi.list.mockReset().mockResolvedValue({ tours: [baseTour] })
+  mocks.tourRepo.list.mockReset().mockResolvedValue({ tours: [baseTour] })
 })
 
 describe('Tours websocket invalidation', () => {
   it('refreshes the active trip read model and Places exclusion after tours:changed', async () => {
     const nextTour = { ...baseTour, place_id: 84, name: 'Trip 7 new tour' }
     const refresh = deferred<{ tours: TourListItem[] }>()
-    mocks.toursApi.list.mockResolvedValueOnce({ tours: [baseTour] }).mockReturnValueOnce(refresh.promise)
+    mocks.tourRepo.list.mockResolvedValueOnce({ tours: [baseTour] }).mockReturnValueOnce(refresh.promise)
     const { result } = renderTrip(7)
     await waitFor(() => expect(result.current.tourDataReady).toBe(true))
     expect(result.current.tourPlaceIds).toEqual(new Set([42]))
@@ -99,7 +99,7 @@ describe('Tours websocket invalidation', () => {
     await act(async () => refresh.resolve({ tours: [nextTour] }))
     await waitFor(() => expect(result.current.tourPlaceIds).toEqual(new Set([84])))
     expect(result.current.tours).toEqual([nextTour])
-    expect(mocks.toursApi.list).toHaveBeenCalledTimes(2)
+    expect(mocks.tourRepo.list).toHaveBeenCalledTimes(2)
   })
 
   it('ignores events for another trip and events without an explicit trip id', async () => {
@@ -111,7 +111,7 @@ describe('Tours websocket invalidation', () => {
       emit({ type: 'tours:changed', placeIds: [84] })
     })
 
-    expect(mocks.toursApi.list).toHaveBeenCalledOnce()
+    expect(mocks.tourRepo.list).toHaveBeenCalledOnce()
     expect(result.current.tourPlaceIds).toEqual(new Set([42]))
   })
 
@@ -122,7 +122,7 @@ describe('Tours websocket invalidation', () => {
 
       act(() => emit({ type, tripId: 7, placeId: 42 }))
 
-      await waitFor(() => expect(mocks.toursApi.list).toHaveBeenCalledTimes(2))
+      await waitFor(() => expect(mocks.tourRepo.list).toHaveBeenCalledTimes(2))
     },
   )
 
@@ -133,7 +133,7 @@ describe('Tours websocket invalidation', () => {
 
       act(() => emit({ type, tripId: 7 }))
 
-      await waitFor(() => expect(mocks.toursApi.list).toHaveBeenCalledTimes(2))
+      await waitFor(() => expect(mocks.tourRepo.list).toHaveBeenCalledTimes(2))
     },
   )
 
@@ -141,7 +141,7 @@ describe('Tours websocket invalidation', () => {
     const first = deferred<{ tours: TourListItem[] }>()
     const second = deferred<{ tours: TourListItem[] }>()
     const newest = { ...baseTour, place_id: 99, name: 'Newest' }
-    mocks.toursApi.list.mockResolvedValueOnce({ tours: [baseTour] })
+    mocks.tourRepo.list.mockResolvedValueOnce({ tours: [baseTour] })
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise)
     const { result } = renderTrip(7)
@@ -158,13 +158,13 @@ describe('Tours websocket invalidation', () => {
 
     expect(result.current.tours).toEqual([newest])
     expect(result.current.tourPlaceIds).toEqual(new Set([99]))
-    expect(mocks.toursApi.list).toHaveBeenCalledTimes(3)
+    expect(mocks.tourRepo.list).toHaveBeenCalledTimes(3)
   })
 
   it('removes a pending Tour exclusion when its Place is deleted before refresh completes', async () => {
     const staleRefresh = deferred<{ tours: TourListItem[] }>()
     const deleteRefresh = deferred<{ tours: TourListItem[] }>()
-    mocks.toursApi.list.mockResolvedValueOnce({ tours: [] })
+    mocks.tourRepo.list.mockResolvedValueOnce({ tours: [] })
       .mockReturnValueOnce(staleRefresh.promise)
       .mockReturnValueOnce(deleteRefresh.promise)
     const { result } = renderTrip(7)
@@ -178,13 +178,13 @@ describe('Tours websocket invalidation', () => {
     await act(async () => deleteRefresh.resolve({ tours: [] }))
     await act(async () => staleRefresh.resolve({ tours: [{ ...baseTour, place_id: 84 }] }))
     expect(result.current.tourPlaceIds).toEqual(new Set())
-    expect(mocks.toursApi.list).toHaveBeenCalledTimes(3)
+    expect(mocks.tourRepo.list).toHaveBeenCalledTimes(3)
   })
 
   it('keeps same-trip last-good Tours and exposes error on refresh failure', async () => {
     const { result } = renderTrip(7)
     await waitFor(() => expect(result.current.tourDataReady).toBe(true))
-    mocks.toursApi.list.mockRejectedValueOnce(new Error('refresh unavailable'))
+    mocks.tourRepo.list.mockRejectedValueOnce(new Error('refresh unavailable'))
 
     act(() => emit({ type: 'tours:changed', tripId: 7, placeIds: [84] }))
 
@@ -201,7 +201,7 @@ describe('Tours websocket invalidation', () => {
     act(() => emit({ type: 'tours:changed', tripId: 7 }))
 
     expect(mocks.handleRemoteEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'place:created', tripId: 7 }))
-    expect(mocks.toursApi.list).not.toHaveBeenCalled()
+    expect(mocks.tourRepo.list).not.toHaveBeenCalled()
     expect(result.current.tours).toEqual([])
     expect(result.current.tourPlaceIds.size).toBe(0)
   })

@@ -22,7 +22,7 @@ const state = vi.hoisted(() => ({
 vi.mock('../../store/tripStore', () => ({ useTripStore: (selector: (store: unknown) => unknown) => selector({ trip: state.trip, loadTrip: state.loadTrip }) }))
 vi.mock('../../store/authStore', () => ({ useAuthStore: (selector: (store: unknown) => unknown) => selector({ user: state.user }) }))
 vi.mock('../../store/settingsStore', () => ({ useSettingsStore: (selector: (store: unknown) => unknown) => selector({ settings: { distance_unit: 'metric' } }) }))
-vi.mock('../../api/client', () => ({ toursApi: { importGpx: state.importGpx, create: state.create, update: state.update, detail: state.detail } }))
+vi.mock('../../repo/tourRepo', () => ({ tourRepo: { importGpx: state.importGpx, create: state.create, update: state.update, detail: state.detail } }))
 vi.mock('./planner/tourRouting', () => ({ routeWalkingTour: state.route, enrichTourElevations: state.elevation }))
 vi.mock('../../i18n', () => ({ useTranslation: () => ({ t: (key: string) => key, locale: 'en' }), translateApiError: () => 'error' }))
 vi.mock('../shared/Toast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() }) }))

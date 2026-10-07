@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TourCreateResponse, TourListItem, TourWaypointRole, TourMaxHikingDifficulty } from '@trek/shared'
-import { toursApi } from '../../../api/client'
+import { tourRepo } from '../../../repo/tourRepo'
 import { randomId } from '../../../utils/randomId'
 import type { TourBaseLayer } from '../../Map/MapLayerSwitcher'
 import { analyzeRouteGeometry, type RouteProfileFocus } from '../../../utils/routeGeometry'
@@ -412,7 +412,7 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
     setOpeningTourId(tour.place_id)
     setError(null)
     try {
-      const result = await toursApi.detail(tripId, tour.place_id, controller.signal)
+      const result = await tourRepo.detail(tripId, tour.place_id, controller.signal)
       if (!requestIsCurrent() || saveInFlightRef.current) return false
       if (result.waypoints.length < 2) {
         setError('open')
@@ -591,8 +591,8 @@ export function useTourPlanner({ tripId, active = true, onSaved, canEdit: editPe
       && draftRevisionRef.current === submittedRevision
     try {
       const result = submittedPlaceId === null
-        ? await toursApi.create(tripId, payload)
-        : await toursApi.update(tripId, submittedPlaceId, payload)
+        ? await tourRepo.create(tripId, payload)
+        : await tourRepo.update(tripId, submittedPlaceId, payload)
       if (stillCurrent()) {
         localStorage.removeItem(storageKey)
         setHasUnsavedChanges(false)

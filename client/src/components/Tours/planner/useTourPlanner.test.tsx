@@ -17,7 +17,7 @@ const { routeWalkingTour, enrichTourElevations, createTour, detailTour, updateTo
 }))
 
 vi.mock('./tourRouting', () => ({ routeWalkingTour, enrichTourElevations }))
-vi.mock('../../../api/client', () => ({ toursApi: { create: createTour, detail: detailTour, update: updateTour } }))
+vi.mock('../../../repo/tourRepo', () => ({ tourRepo: { create: createTour, detail: detailTour, update: updateTour } }))
 vi.mock('../useTourPermissions', () => ({ useTourPermissions: ({ canEdit = true, canAssign = true }: { canEdit?: boolean; canAssign?: boolean }) => ({ canEdit, canAssign }) }))
 
 import { useTourPlanner } from './useTourPlanner'

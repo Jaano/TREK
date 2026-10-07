@@ -11,11 +11,12 @@ import { roadtripPreferencesRepo } from '../repo/roadtripPreferencesRepo'
  *   - trip list refresh (DashboardPage)
  *   - WS reconnect (phase 7)
  */
-import { tripsApi, tagsApi, categoriesApi } from '../api/client'
+import { tripsApi, tagsApi, categoriesApi, toursApi } from '../api/client'
 import {
   offlineDb,
   upsertTrip,
   replaceTripRows,
+  replaceTripTours,
   upsertTripMembers,
   upsertTags,
   upsertCategories,
@@ -29,6 +30,7 @@ import { isAuthed } from './authGate'
 import { isEffectivelyOffline } from './networkMode'
 import { getOfflinePrefs, isTripOfflineEnabled, isTripPinned } from './offlinePrefs'
 import { useSettingsStore } from '../store/settingsStore'
+import { useAddonStore } from '../store/addonStore'
 import type { Trip, Day, Place, PackingItem, TodoItem, BudgetItem, Reservation, TripFile, Accommodation, TripMember } from '../types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -145,6 +147,17 @@ async function syncTrip(tripId: number): Promise<void> {
   // threw the whole downloaded bundle away for that trip while the run still
   // reported it stored, so Settings said "N trips ready" over an empty database.
   await roadtripPreferencesRepo.read(tripId).catch(() => { /* optional addon, optional cache */ })
+
+  // Tours, the same way: optional, and never fatal. Without them every Tour
+  // reads as a plain place offline. Asked only while the addon is on, so a
+  // sync of many trips does not spend a refused request on each.
+  if (useAddonStore.getState().isEnabled('tours')) {
+    try {
+      await replaceTripTours(tripId, (await toursApi.list(tripId)).tours)
+    } catch (err) {
+      console.warn(`[sync] tours for trip ${tripId} not cached:`, err)
+    }
+  }
 }
 
 /** Cache non-photo file blobs for a trip. Fire-and-forget safe. */

@@ -13,7 +13,7 @@ import { getOfflinePrefs } from './offlinePrefs'
 import { randomId } from '../utils/randomId'
 import type { QueuedMutation } from '../db/offlineDb'
 import type { Table } from 'dexie'
-import { roadtripPreferencesResponseSchema, assignmentSchema } from '@trek/shared'
+import { roadtripPreferencesResponseSchema, assignmentSchema, tourCreateResponseSchema, type TourCreateResponse } from '@trek/shared'
 import { cacheAssignment } from '../db/cacheAssignment'
 
 // Map Dexie table names used in `resource` field → actual Dexie tables.
@@ -95,6 +95,60 @@ async function applyServerEntity(mutation: QueuedMutation, server: unknown): Pro
   if (!mutation.resource || !server || typeof server !== 'object' || !('id' in server)) return
   const table = getTable(mutation.resource)
   if (table) await table.put(server)
+}
+
+/**
+ * Roll back what an offline CREATE wrote under its temporary id, once the
+ * server refused it for good. A tour is a place plus its facet, so both go.
+ */
+async function dropTempRows(mutation: QueuedMutation): Promise<void> {
+  if (mutation.method === 'DELETE' || mutation.tempId === undefined || !mutation.resource) return
+  if (mutation.resource === 'tours') {
+    await offlineDb.places.delete(mutation.tempId)
+    await offlineDb.tours.delete(mutation.tempId)
+    return
+  }
+  const table = getTable(mutation.resource)
+  if (table) await table.delete(mutation.tempId)
+}
+
+/**
+ * A CREATE replayed and the server answered with the real id: later queued
+ * writes still aimed at the temporary one are pointed at it, in memory for
+ * this flush and durably for the next.
+ */
+async function remapTempId(mutation: QueuedMutation, realId: number, idMap: Map<number, number>): Promise<void> {
+  if (mutation.tempId === undefined || mutation.tempId === realId) return
+  idMap.set(mutation.tempId, realId)
+  await offlineDb.mutationQueue
+    .where('tripId')
+    .equals(mutation.tripId)
+    .filter(m => m.tempEntityId === mutation.tempId)
+    .modify(m => {
+      m.url = m.url.replace('{id}', String(realId))
+      m.entityId = realId
+      m.tempEntityId = undefined
+    })
+}
+
+/**
+ * A replayed tour write. The answer names the tour by its place, so the
+ * offline place and facet move from the temporary id to the real one. The
+ * place keeps its offline copy until the next list replaces it: the server
+ * created it from the same route.
+ */
+async function reconcileTour(mutation: QueuedMutation, saved: TourCreateResponse, idMap: Map<number, number>): Promise<void> {
+  const realId = saved.tour.place_id
+  await offlineDb.transaction('rw', offlineDb.places, offlineDb.tours, async () => {
+    if (mutation.tempId !== undefined && mutation.tempId !== realId) {
+      const temp = await offlineDb.places.get(mutation.tempId)
+      await offlineDb.places.delete(mutation.tempId)
+      await offlineDb.tours.delete(mutation.tempId)
+      if (temp && !(await offlineDb.places.get(realId))) await offlineDb.places.put({ ...temp, id: realId })
+    }
+    await offlineDb.tours.put({ ...saved.tour, trip_id: mutation.tripId, waypoints: saved.waypoints })
+  })
+  await remapTempId(mutation, realId, idMap)
 }
 
 export const mutationQueue = {
@@ -222,7 +276,9 @@ export const mutationQueue = {
           if (mutation.resource === 'assignments') {
             await cacheAssignment(assignmentSchema.parse(response.data.assignment))
           }
-          if (mutation.method !== 'DELETE' && mutation.resource) {
+          if (mutation.resource === 'tours') {
+            await reconcileTour(mutation, tourCreateResponseSchema.parse(response.data), idMap)
+          } else if (mutation.method !== 'DELETE' && mutation.resource) {
             const table = getTable(mutation.resource)
             if (table && response.data && typeof response.data === 'object') {
               // Server returns { place: {...} } or { item: {...} } — grab first value
@@ -234,17 +290,7 @@ export const mutationQueue = {
                 // remap any queued mutations that still target the negative id.
                 if (mutation.tempId !== undefined && mutation.tempId !== realId) {
                   await table.delete(mutation.tempId)
-                  idMap.set(mutation.tempId, realId)
-                  // Durable rewrite so dependents survive a flush boundary / reload.
-                  await offlineDb.mutationQueue
-                    .where('tripId')
-                    .equals(mutation.tripId)
-                    .filter(m => m.tempEntityId === mutation.tempId)
-                    .modify(m => {
-                      m.url = m.url.replace('{id}', String(realId))
-                      m.entityId = realId
-                      m.tempEntityId = undefined
-                    })
+                  await remapTempId(mutation, realId, idMap)
                 }
                 await table.put(entity)
                 // Advance the base-version token of any other queued edits to the
@@ -328,10 +374,7 @@ export const mutationQueue = {
           if (isTerminal) {
             // Permanent client error — roll back the phantom optimistic CREATE so
             // it can't masquerade as synced, then mark failed and continue.
-            if (mutation.method !== 'DELETE' && mutation.tempId !== undefined && mutation.resource) {
-              const table = getTable(mutation.resource)
-              if (table) await table.delete(mutation.tempId)
-            }
+            await dropTempRows(mutation)
             await offlineDb.mutationQueue.update(mutation.id, {
               status: 'failed',
               attempts: mutation.attempts + 1,
@@ -343,10 +386,7 @@ export const mutationQueue = {
             // parked as failed instead of holding every later write forever.
             const attempts = mutation.attempts + 1
             if (attempts >= MAX_SERVER_ERROR_ATTEMPTS) {
-              if (mutation.method !== 'DELETE' && mutation.tempId !== undefined && mutation.resource) {
-                const table = getTable(mutation.resource)
-                if (table) await table.delete(mutation.tempId)
-              }
+              await dropTempRows(mutation)
               await offlineDb.mutationQueue.update(mutation.id, { status: 'failed', attempts, lastError: String(err), retryAfter: undefined })
             } else {
               await offlineDb.mutationQueue.update(mutation.id, {

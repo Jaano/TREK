@@ -9,7 +9,7 @@ import ToursSidebar from '../Tours/ToursSidebar'
 import type { Day } from '../../types'
 import CustomSelect from './CustomSelect'
 
-vi.mock('../../api/client', () => ({ toursApi: {} }))
+vi.mock('../../repo/tourRepo', () => ({ tourRepo: {} }))
 vi.mock('../../store/settingsStore', () => ({
   useSettingsStore: (selector: (state: { settings: { language: string; distance_unit: string } }) => unknown) =>
     selector({ settings: { language: 'en', distance_unit: 'metric' } }),
