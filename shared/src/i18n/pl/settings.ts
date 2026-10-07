@@ -551,6 +551,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Podróże w pamięci podręcznej',
   'settings.offline.stats.pending': 'Oczekujące zmiany',
   'settings.offline.stats.failed': 'Nieudane zmiany',
+  'settings.offline.failed.hint':
+    'Te zmiany nigdy nie dotarły do serwera. Spróbuj ponownie lub odrzuć je, aby zachować wersję z serwera.',
+  'settings.offline.failed.retry': 'Spróbuj ponownie',
+  'settings.offline.failed.discard': 'Odrzuć',
   'settings.offline.stats.conflicts': 'Konflikty',
   'settings.offline.empty': 'Brak podróży w pamięci podręcznej. Połącz się z internetem, aby zsynchronizować.',
   'settings.offline.loading': 'Ładowanie…',

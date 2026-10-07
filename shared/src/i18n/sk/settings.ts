@@ -561,6 +561,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Cesty vo vyrovnávacej pamäti',
   'settings.offline.stats.pending': 'Čakajúce zmeny',
   'settings.offline.stats.failed': 'Neúspešné zmeny',
+  'settings.offline.failed.hint':
+    'Tieto zmeny sa nikdy nedostali na server. Skúste to znova alebo ich zahoďte a ponechajte verziu zo servera.',
+  'settings.offline.failed.retry': 'Skúsiť znova',
+  'settings.offline.failed.discard': 'Zahodiť',
   'settings.offline.stats.conflicts': 'Konflikty',
   'settings.offline.empty': 'Zatiaľ žiadne cesty vo vyrovnávacej pamäti. Pre synchronizáciu sa pripojte k internetu.',
   'settings.offline.loading': 'Načítava sa…',

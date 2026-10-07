@@ -561,6 +561,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Vahemälus reisid',
   'settings.offline.stats.pending': 'Ootel muudatused',
   'settings.offline.stats.failed': 'Ebaõnnestunud muudatused',
+  'settings.offline.failed.hint':
+    'Need muudatused ei jõudnud kunagi serverisse. Proovi uuesti või loobu neist, et säilitada serveri versioon.',
+  'settings.offline.failed.retry': 'Proovi uuesti',
+  'settings.offline.failed.discard': 'Loobu',
   'settings.offline.stats.conflicts': 'Konfliktid',
   'settings.offline.empty': 'Reise pole veel vahemällu salvestatud. Sünkroonimiseks loo internetiühendus.',
   'settings.offline.loading': 'Laadimine…',

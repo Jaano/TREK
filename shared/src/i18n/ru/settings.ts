@@ -556,6 +556,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Кэшированные поездки',
   'settings.offline.stats.pending': 'Изменения в очереди',
   'settings.offline.stats.failed': 'Неудавшиеся изменения',
+  'settings.offline.failed.hint':
+    'Эти изменения так и не попали на сервер. Повторите попытку или отмените их, чтобы оставить версию с сервера.',
+  'settings.offline.failed.retry': 'Повторить',
+  'settings.offline.failed.discard': 'Отменить',
   'settings.offline.stats.conflicts': 'Конфликты',
   'settings.offline.empty': 'Поездки ещё не кэшированы. Подключитесь к интернету для синхронизации.',
   'settings.offline.loading': 'Загрузка…',

@@ -678,6 +678,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Keşlənmiş səyahətlər',
   'settings.offline.stats.pending': 'Gözləyən dəyişikliklər',
   'settings.offline.stats.failed': 'Uğursuz dəyişikliklər',
+  'settings.offline.failed.hint':
+    'Bu dəyişikliklər serverə çatmayıb. Yenidən cəhd edin və ya serverdəki versiyanı saxlamaq üçün onları ləğv edin.',
+  'settings.offline.failed.retry': 'Yenidən cəhd et',
+  'settings.offline.failed.discard': 'Ləğv et',
   'settings.offline.stats.conflicts': 'Ziddiyyətlər',
   'settings.offline.empty':
     'Hələ heç bir səyahət keşlənməyib. Sinxronlaşdırmaq üçün internetə qoşulun.',

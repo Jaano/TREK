@@ -503,3 +503,89 @@ describe('mutationQueue.flush — failure handling (B3)', () => {
     expect(m!.status).toBe('pending');
   });
 });
+
+describe('mutationQueue.flush — a write the server keeps failing on', () => {
+  it('holds back only its own trip, with a growing gap, while other trips sync', async () => {
+    const stuck = generateUUID();
+    const sameTrip = generateUUID();
+    const otherTrip = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id: stuck }));
+    await mutationQueue.enqueue(makeMutation({ id: sameTrip, body: { name: 'Louvre' } }));
+    await mutationQueue.enqueue(makeMutation({ id: otherTrip, tripId: 2, url: '/trips/2/places' }));
+
+    server.use(
+      http.post('/api/trips/1/places', () => HttpResponse.json({ error: 'boom' }, { status: 500 })),
+      http.post('/api/trips/2/places', () => HttpResponse.json({ place: buildPlace({ trip_id: 2, id: 77 }) })),
+    );
+
+    const before = Date.now();
+    await mutationQueue.flush();
+
+    const first = await offlineDb.mutationQueue.get(stuck);
+    expect(first).toMatchObject({ status: 'pending', attempts: 1 });
+    expect(first!.retryAfter).toBeGreaterThanOrEqual(before + 30_000);
+    // The trip's later write keeps its place in line…
+    expect(await offlineDb.mutationQueue.get(sameTrip)).toMatchObject({ status: 'pending', attempts: 0 });
+    // …and the other trip is not held up at all.
+    expect(await offlineDb.mutationQueue.get(otherTrip)).toBeUndefined();
+
+    // Inside the gap the next trigger does not knock again.
+    await mutationQueue.flush();
+    expect((await offlineDb.mutationQueue.get(stuck))!.attempts).toBe(1);
+  });
+
+  it('parks it as failed once it has failed often enough, so the trip moves on', async () => {
+    const stuck = generateUUID();
+    const tempId = nextTempId();
+    await offlineDb.places.put(buildPlace({ trip_id: 1, id: tempId }));
+    await mutationQueue.enqueue(makeMutation({ id: stuck, tempId }));
+    await offlineDb.mutationQueue.update(stuck, { attempts: 7 });
+
+    server.use(http.post('/api/trips/1/places', () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+    await mutationQueue.flush();
+
+    expect(await offlineDb.mutationQueue.get(stuck)).toMatchObject({ status: 'failed', attempts: 8 });
+    expect(await offlineDb.places.get(tempId)).toBeUndefined();
+    expect(await mutationQueue.failedCount()).toBe(1);
+  });
+
+  it('counts a DELETE the server answers 404 as done', async () => {
+    const id = generateUUID();
+    await offlineDb.places.put(buildPlace({ trip_id: 1, id: 5 }));
+    await mutationQueue.enqueue(makeMutation({ id, method: 'DELETE', url: '/trips/1/places/5', body: undefined, entityId: 5 }));
+
+    server.use(http.delete('/api/trips/1/places/5', () => HttpResponse.json({ error: 'Place not found' }, { status: 404 })));
+    await mutationQueue.flush();
+
+    expect(await offlineDb.mutationQueue.get(id)).toBeUndefined();
+    expect(await offlineDb.places.get(5)).toBeUndefined();
+    expect(await mutationQueue.failedCount()).toBe(0);
+  });
+});
+
+describe('mutationQueue — parked changes', () => {
+  it('retryFailed puts them back in line from a fresh start and sends them', async () => {
+    const id = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id }));
+    await offlineDb.mutationQueue.update(id, { status: 'failed', attempts: 8, lastError: 'boom' });
+    server.use(http.post('/api/trips/1/places', () => HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 91 }) })));
+
+    await mutationQueue.retryFailed();
+
+    expect(await offlineDb.mutationQueue.get(id)).toBeUndefined();
+    expect(await offlineDb.places.get(91)).toBeDefined();
+  });
+
+  it('discardFailed drops only the parked ones', async () => {
+    const parked = generateUUID();
+    const waiting = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id: parked }));
+    await mutationQueue.enqueue(makeMutation({ id: waiting }));
+    await offlineDb.mutationQueue.update(parked, { status: 'failed' });
+
+    await mutationQueue.discardFailed();
+
+    expect(await offlineDb.mutationQueue.get(parked)).toBeUndefined();
+    expect(await offlineDb.mutationQueue.get(waiting)).toBeDefined();
+  });
+});

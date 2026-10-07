@@ -552,6 +552,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Gyorsítótárazott utazások',
   'settings.offline.stats.pending': 'Függőben lévő módosítások',
   'settings.offline.stats.failed': 'Sikertelen módosítások',
+  'settings.offline.failed.hint':
+    'Ezek a módosítások nem jutottak el a szerverre. Próbáld újra, vagy vesd el őket, hogy a szerveren lévő változat maradjon.',
+  'settings.offline.failed.retry': 'Újrapróbálás',
+  'settings.offline.failed.discard': 'Elvetés',
   'settings.offline.stats.conflicts': 'Ütközések',
   'settings.offline.empty': 'Még nincsenek gyorsítótárazott utazások. Csatlakozz az internethez a szinkronizáláshoz.',
   'settings.offline.loading': 'Betöltés…',

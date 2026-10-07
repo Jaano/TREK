@@ -41,7 +41,7 @@ export default function OfflineTab(): React.ReactElement {
     syncing, clearing, loading, preparing, progress, notice, prefs, canClear,
     runPrepare, handleToggleForce, handleResync, handleClear,
     handleToggleTiles, tripStorageState, handleToggleTrip, resolveConflict,
-    handleConflictStrategy,
+    handleConflictStrategy, retryFailed, discardFailed,
   } = useOfflineSettings()
   const [confirmClear, setConfirmClear] = useState(false)
 
@@ -225,6 +225,22 @@ export default function OfflineTab(): React.ReactElement {
           {conflicts.length > 0 && <Stat label={t('settings.offline.stats.conflicts')} value={conflicts.length} danger />}
           {failedCount > 0 && <Stat label={t('settings.offline.stats.failed')} value={failedCount} danger />}
         </div>
+
+        {failedCount > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <SettingsHint>{t('settings.offline.failed.hint')}</SettingsHint>
+            <div className="flex gap-2">
+              <button type="button" onClick={() => void retryFailed()} disabled={offline} className={SETTINGS_BUTTON} style={fs(12.5, 'body')}>
+                <RefreshCw size={14} />
+                {t('settings.offline.failed.retry')}
+              </button>
+              <button type="button" onClick={() => void discardFailed()} className={SETTINGS_BUTTON_DANGER} style={fs(12.5, 'body')}>
+                <Trash2 size={14} />
+                {t('settings.offline.failed.discard')}
+              </button>
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="flex items-center gap-2 text-content-faint" style={fs(12, 'body')}>

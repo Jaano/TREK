@@ -256,6 +256,17 @@ export function useOfflineSettings() {
     await load()
   }, [load, tripStorageState])
 
+  const retryFailed = useCallback(async () => {
+    await mutationQueue.retryFailed()
+    await load()
+  }, [load])
+
+  const discardFailed = useCallback(async () => {
+    await mutationQueue.discardFailed()
+    if (!isEffectivelyOffline()) await tripSyncManager.syncAll().catch(() => null)
+    await load()
+  }, [load])
+
   const resolveConflict = useCallback(async (id: string, keepMine: boolean) => {
     if (keepMine) await mutationQueue.resolveKeepMine(id)
     else await mutationQueue.resolveKeepServer(id)
@@ -277,6 +288,6 @@ export function useOfflineSettings() {
     canClear: storedTripCount > 0 || pendingCount > 0,
     load, runPrepare, handleToggleForce, handleResync, handleClear,
     handleToggleTiles, tripStorageState, handleToggleTrip, resolveConflict,
-    handleConflictStrategy,
+    handleConflictStrategy, retryFailed, discardFailed,
   }
 }

@@ -548,6 +548,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Cachelagrade resor',
   'settings.offline.stats.pending': 'Väntande ändringar',
   'settings.offline.stats.failed': 'Misslyckade ändringar',
+  'settings.offline.failed.hint':
+    'De här ändringarna nådde aldrig servern. Försök igen, eller släng dem för att behålla serverns version.',
+  'settings.offline.failed.retry': 'Försök igen',
+  'settings.offline.failed.discard': 'Släng',
   'settings.offline.stats.conflicts': 'Konflikter',
   'settings.offline.empty': 'Inga resor har cachelagrats ännu. Anslut till internet för att synkronisera.',
   'settings.offline.loading': 'Laddar…',

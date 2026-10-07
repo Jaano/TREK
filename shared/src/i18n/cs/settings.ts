@@ -543,6 +543,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Cesty v mezipaměti',
   'settings.offline.stats.pending': 'Čekající změny',
   'settings.offline.stats.failed': 'Neúspěšné změny',
+  'settings.offline.failed.hint':
+    'Tyto změny se na server nikdy nedostaly. Zkuste to znovu, nebo je zahoďte a ponechte verzi ze serveru.',
+  'settings.offline.failed.retry': 'Zkusit znovu',
+  'settings.offline.failed.discard': 'Zahodit',
   'settings.offline.stats.conflicts': 'Konflikty',
   'settings.offline.empty': 'Zatím žádné cesty v mezipaměti. Pro synchronizaci se připojte k internetu.',
   'settings.offline.loading': 'Načítání…',

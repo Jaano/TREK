@@ -557,6 +557,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Zwischengespeicherte Reisen',
   'settings.offline.stats.pending': 'Ausstehende Änderungen',
   'settings.offline.stats.failed': 'Fehlgeschlagene Änderungen',
+  'settings.offline.failed.hint':
+    'Diese Änderungen haben den Server nie erreicht. Versuche es erneut oder verwirf sie, um die Version vom Server zu behalten.',
+  'settings.offline.failed.retry': 'Erneut versuchen',
+  'settings.offline.failed.discard': 'Verwerfen',
   'settings.offline.stats.conflicts': 'Konflikte',
   'settings.offline.empty':
     'Noch keine Reisen zwischengespeichert. Verbinde dich mit dem Internet zum Synchronisieren.',

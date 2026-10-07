@@ -553,6 +553,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Chuyến đi trong bộ nhớ đệm',
   'settings.offline.stats.pending': 'Thay đổi đang chờ',
   'settings.offline.stats.failed': 'Thay đổi không thành công',
+  'settings.offline.failed.hint':
+    'Những thay đổi này chưa bao giờ đến được máy chủ. Hãy thử lại, hoặc bỏ chúng để giữ phiên bản trên máy chủ.',
+  'settings.offline.failed.retry': 'Thử lại',
+  'settings.offline.failed.discard': 'Bỏ',
   'settings.offline.stats.conflicts': 'Xung đột',
   'settings.offline.empty': 'Chưa có chuyến đi nào trong bộ nhớ đệm. Kết nối internet để đồng bộ hóa.',
   'settings.offline.loading': 'Đang tải…',

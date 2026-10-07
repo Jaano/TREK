@@ -555,6 +555,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Gecachte reizen',
   'settings.offline.stats.pending': 'Wijzigingen in afwachting',
   'settings.offline.stats.failed': 'Mislukte wijzigingen',
+  'settings.offline.failed.hint':
+    'Deze wijzigingen hebben de server nooit bereikt. Probeer het opnieuw of verwijder ze om de versie van de server te houden.',
+  'settings.offline.failed.retry': 'Opnieuw proberen',
+  'settings.offline.failed.discard': 'Verwerpen',
   'settings.offline.stats.conflicts': 'Conflicten',
   'settings.offline.empty': 'Nog geen reizen gecacht. Maak verbinding met internet om te synchroniseren.',
   'settings.offline.loading': 'Laden…',

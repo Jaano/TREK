@@ -563,6 +563,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Ταξίδια σε προσωρινή μνήμη',
   'settings.offline.stats.pending': 'Εκκρεμείς αλλαγές',
   'settings.offline.stats.failed': 'Αποτυχημένες αλλαγές',
+  'settings.offline.failed.hint':
+    'Αυτές οι αλλαγές δεν έφτασαν ποτέ στον διακομιστή. Δοκιμάστε ξανά ή απορρίψτε τες για να κρατήσετε την έκδοση του διακομιστή.',
+  'settings.offline.failed.retry': 'Δοκιμή ξανά',
+  'settings.offline.failed.discard': 'Απόρριψη',
   'settings.offline.stats.conflicts': 'Διενέξεις',
   'settings.offline.empty': 'Δεν υπάρχουν ταξίδια σε προσωρινή μνήμη ακόμη. Συνδεθείτε στο διαδίκτυο για συγχρονισμό.',
   'settings.offline.loading': 'Φόρτωση…',

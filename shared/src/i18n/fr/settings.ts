@@ -563,6 +563,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Voyages en cache',
   'settings.offline.stats.pending': 'Modifications en attente',
   'settings.offline.stats.failed': 'Modifications échouées',
+  'settings.offline.failed.hint':
+    'Ces modifications ne sont jamais parvenues au serveur. Réessayez, ou abandonnez-les pour garder la version du serveur.',
+  'settings.offline.failed.retry': 'Réessayer',
+  'settings.offline.failed.discard': 'Abandonner',
   'settings.offline.stats.conflicts': 'Conflits',
   'settings.offline.empty': "Aucun voyage en cache pour l'instant. Connectez-vous à Internet pour synchroniser.",
   'settings.offline.loading': 'Chargement…',

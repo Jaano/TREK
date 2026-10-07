@@ -542,6 +542,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': "ทริปที่แคชไว้",
   'settings.offline.stats.pending': "รอดำเนินการเปลี่ยนแปลง",
   'settings.offline.stats.failed': "การเปลี่ยนแปลงล้มเหลว",
+  'settings.offline.failed.hint':
+    'การเปลี่ยนแปลงเหล่านี้ไม่เคยไปถึงเซิร์ฟเวอร์ ลองอีกครั้ง หรือทิ้งไปเพื่อคงเวอร์ชันบนเซิร์ฟเวอร์ไว้',
+  'settings.offline.failed.retry': 'ลองอีกครั้ง',
+  'settings.offline.failed.discard': 'ทิ้ง',
   'settings.offline.stats.conflicts': "ข้อขัดแย้ง",
   'settings.offline.empty': "ยังไม่มีแคชการเดินทาง เชื่อมต่ออินเทอร์เน็ตเพื่อซิงค์",
   'settings.offline.loading': "กำลังโหลด...",

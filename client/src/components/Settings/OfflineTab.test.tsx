@@ -44,6 +44,8 @@ const h = vi.hoisted(() => {
     conflicts: vi.fn(),
     resolveKeepMine: vi.fn(),
     resolveKeepServer: vi.fn(),
+    retryFailed: vi.fn(),
+    discardFailed: vi.fn(),
     clearTileCache: vi.fn(),
   };
 });
@@ -68,6 +70,8 @@ vi.mock('../../sync/mutationQueue', async (importOriginal) => {
       conflicts: h.conflicts,
       resolveKeepMine: h.resolveKeepMine,
       resolveKeepServer: h.resolveKeepServer,
+      retryFailed: h.retryFailed,
+      discardFailed: h.discardFailed,
     },
   };
 });
@@ -234,6 +238,21 @@ describe('OfflineTab', () => {
     expect(within(stat('Pending changes')).getByText('4')).toBeInTheDocument();
     expect(within(stat('Failed changes')).getByText('2')).toBeInTheDocument();
     expect(within(stat('Conflicts')).getByText('1')).toBeInTheDocument();
+  });
+
+  it('FE-COMP-OFFLINETAB-030: failed changes offer to try them again or discard them', async () => {
+    h.failedCount.mockResolvedValue(2);
+    h.retryFailed.mockResolvedValue(undefined);
+    h.discardFailed.mockResolvedValue(undefined);
+    h.syncAll.mockResolvedValue([]);
+    const user = userEvent.setup();
+    render(<OfflineTab />);
+
+    await user.click(await screen.findByRole('button', { name: 'Try again' }));
+    expect(h.retryFailed).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'Discard' }));
+    expect(h.discardFailed).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/never reached the server/)).toBeInTheDocument();
   });
 
   it('FE-COMP-OFFLINETAB-008: conflicts are named from the queued body, the server copy or the entity id', async () => {

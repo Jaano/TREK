@@ -551,6 +551,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Önbelleğe alınan geziler',
   'settings.offline.stats.pending': 'Bekleyen değişiklikler',
   'settings.offline.stats.failed': 'Başarısız değişiklikler',
+  'settings.offline.failed.hint':
+    'Bu değişiklikler sunucuya hiç ulaşmadı. Yeniden deneyin ya da sunucudaki sürümü korumak için onları silin.',
+  'settings.offline.failed.retry': 'Yeniden dene',
+  'settings.offline.failed.discard': 'Sil',
   'settings.offline.stats.conflicts': 'Çakışmalar',
   'settings.offline.empty': 'Henüz önbelleğe alınmış gezi yok. Senkronize etmek için internete bağlanın.',
   'settings.offline.loading': 'Yükleniyor…',

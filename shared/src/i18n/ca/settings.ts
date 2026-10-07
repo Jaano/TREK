@@ -530,6 +530,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Viatges a la memòria cau',
   'settings.offline.stats.pending': 'Canvis pendents',
   'settings.offline.stats.failed': 'Canvis fallits',
+  'settings.offline.failed.hint':
+    'Aquests canvis no han arribat mai al servidor. Torna-ho a provar o descarta’ls per conservar la versió del servidor.',
+  'settings.offline.failed.retry': 'Torna-ho a provar',
+  'settings.offline.failed.discard': 'Descarta',
   'settings.offline.stats.conflicts': 'Conflictes',
   'settings.offline.empty': "Encara no hi ha cap viatge a la memòria cau. Connecta't a internet per sincronitzar.",
   'settings.offline.loading': 'Carregant…',

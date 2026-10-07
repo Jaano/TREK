@@ -552,6 +552,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Cached trips',
   'settings.offline.stats.pending': 'Pending changes',
   'settings.offline.stats.failed': 'Failed changes',
+  'settings.offline.failed.hint':
+    "These changes never reached the server. Try them again, or discard them to keep the server's version.",
+  'settings.offline.failed.retry': 'Try again',
+  'settings.offline.failed.discard': 'Discard',
   'settings.offline.stats.conflicts': 'Conflicts',
   'settings.offline.empty': 'No trips cached yet. Connect to the internet to sync.',
   'settings.offline.loading': 'Loading…',

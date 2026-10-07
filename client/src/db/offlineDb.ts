@@ -59,6 +59,12 @@ export interface QueuedMutation {
    * next one (see mutationQueue's STUCK_SYNCING_MS).
    */
   syncingSince?: number;
+  /**
+   * Not before this time (ms): set after the server answered with a 5xx, so a
+   * write the server keeps failing on is retried with growing gaps rather than
+   * on every trigger.
+   */
+  retryAfter?: number;
 }
 
 export interface SyncMeta {

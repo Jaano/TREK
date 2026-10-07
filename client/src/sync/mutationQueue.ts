@@ -66,6 +66,14 @@ export function nextTempId(): number {
   return -_lastTempId
 }
 
+/**
+ * A write the server answers with a 5xx this many times is parked as failed.
+ * The gaps double from 30 s, so the last try comes about two hours after the
+ * first: long enough for a restart or an outage, short of blocking forever.
+ */
+const MAX_SERVER_ERROR_ATTEMPTS = 8
+const SERVER_ERROR_BACKOFF_MS = 30_000
+
 /** HTTP statuses that should be retried later rather than treated as terminal. */
 function isRetryableStatus(status: number | undefined): boolean {
   // 401: token expired mid-flush (offline window) — retry after re-auth.
@@ -112,8 +120,10 @@ export const mutationQueue = {
 
   /**
    * Drain the queue: replay each pending mutation against the server in FIFO order.
-   * Stops on first network error (will retry on next trigger).
-   * 4xx responses are marked failed and skipped.
+   * Stops on the first network error (retried on the next trigger). 4xx answers
+   * are marked failed and skipped; a DELETE answered 404 counts as done. A 5xx
+   * holds back only its own trip, retried with growing gaps, and is parked as
+   * failed once it has failed MAX_SERVER_ERROR_ATTEMPTS times.
    */
   async flush(): Promise<void> {
     if (_flushing || isEffectivelyOffline() || !isAuthed()) return
@@ -145,12 +155,21 @@ export const mutationQueue = {
         .equals('pending')
         .sortBy('createdAt')
 
+      // Trips whose queue waits behind a write the server failed on. Their later
+      // writes must keep their order, but every other trip goes on syncing.
+      const blockedTrips = new Set<number>()
+
       for (const mutation of pending) {
         // Re-checked every pass, not just on entry: this loop writes server
         // responses straight into Dexie, and after a logout the proxy points at
         // the shared anonymous database. A flush that started before logout
         // would otherwise seed it with the previous account's rows.
         if (!isAuthed()) break
+        if (blockedTrips.has(mutation.tripId)) continue
+        if (mutation.retryAfter !== undefined && mutation.retryAfter > Date.now()) {
+          blockedTrips.add(mutation.tripId)
+          continue
+        }
 
         // Mark as syncing so UI can show progress. The stamp is what lets the
         // next flush tell an in-flight row from one a killed tab abandoned.
@@ -263,6 +282,17 @@ export const mutationQueue = {
         } catch (err: unknown) {
           const httpStatus = (err as { response?: { status: number } })?.response?.status
 
+          // A DELETE of something the server no longer has did what it set out
+          // to do. Reporting it as a failed sync would flag a change that worked.
+          if (httpStatus === 404 && mutation.method === 'DELETE') {
+            if (mutation.resource && reqEntityId !== undefined) {
+              const table = getTable(mutation.resource)
+              if (table) await table.delete(reqEntityId)
+            }
+            await offlineDb.mutationQueue.delete(mutation.id)
+            continue
+          }
+
           // 409 = the entity changed on the server since this offline edit was
           // made. This is NOT a dropped change like other 4xx — resolve it per
           // the user's strategy instead of failing it. Deliberately scoped to
@@ -307,8 +337,29 @@ export const mutationQueue = {
               attempts: mutation.attempts + 1,
               lastError: String(err),
             })
+          } else if (httpStatus !== undefined && httpStatus >= 500) {
+            // The server answered and failed. Retried with growing gaps, and
+            // only this trip waits for it. One that never goes through is
+            // parked as failed instead of holding every later write forever.
+            const attempts = mutation.attempts + 1
+            if (attempts >= MAX_SERVER_ERROR_ATTEMPTS) {
+              if (mutation.method !== 'DELETE' && mutation.tempId !== undefined && mutation.resource) {
+                const table = getTable(mutation.resource)
+                if (table) await table.delete(mutation.tempId)
+              }
+              await offlineDb.mutationQueue.update(mutation.id, { status: 'failed', attempts, lastError: String(err), retryAfter: undefined })
+            } else {
+              await offlineDb.mutationQueue.update(mutation.id, {
+                status: 'pending',
+                attempts,
+                lastError: String(err),
+                retryAfter: Date.now() + SERVER_ERROR_BACKOFF_MS * 2 ** (attempts - 1),
+              })
+              blockedTrips.add(mutation.tripId)
+            }
           } else {
-            // Network / transient error — reset to pending, abort flush (retry next trigger)
+            // No answer at all (network) or a retryable status — reset to
+            // pending and stop the flush; the next trigger retries.
             await offlineDb.mutationQueue.update(mutation.id, {
               status: 'pending',
               attempts: mutation.attempts + 1,
@@ -362,6 +413,23 @@ export const mutationQueue = {
       .where('status')
       .equals('failed')
       .count()
+  },
+
+  /** Put every parked change back in line, from a fresh start, and flush. */
+  async retryFailed(): Promise<void> {
+    await offlineDb.mutationQueue
+      .where('status')
+      .equals('failed')
+      .modify(m => { m.status = 'pending'; m.attempts = 0; m.retryAfter = undefined; m.lastError = null })
+    await this.flush()
+  },
+
+  /**
+   * Drop every parked change. The local copy of an edit that never reached the
+   * server goes with the next trip sync, which reads the server's version.
+   */
+  async discardFailed(): Promise<void> {
+    await offlineDb.mutationQueue.where('status').equals('failed').delete()
   },
 
   /** Count unresolved sync conflicts (offline edits the server rejected as stale). */

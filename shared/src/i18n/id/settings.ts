@@ -550,6 +550,10 @@ const settings: TranslationStrings = {
   'settings.offline.stats.trips': 'Perjalanan di cache',
   'settings.offline.stats.pending': 'Perubahan tertunda',
   'settings.offline.stats.failed': 'Perubahan gagal',
+  'settings.offline.failed.hint':
+    'Perubahan ini tidak pernah sampai ke server. Coba lagi, atau buang untuk mempertahankan versi di server.',
+  'settings.offline.failed.retry': 'Coba lagi',
+  'settings.offline.failed.discard': 'Buang',
   'settings.offline.stats.conflicts': 'Konflik',
   'settings.offline.empty': 'Belum ada perjalanan di cache. Sambungkan ke internet untuk menyinkronkan.',
   'settings.offline.loading': 'Memuat…',
