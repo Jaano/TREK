@@ -1472,6 +1472,21 @@ describe('applyHolidayCalendars', () => {
       .all(plan.id, holidayDate);
     expect(remaining).toHaveLength(0);
   });
+
+  it('VACAY-SVC-047b: a holiday API that does not answer is skipped, a failing delete is not', async () => {
+    const { plan } = await setupUserWithPlan();
+    testDb.prepare('UPDATE vacay_plans SET holidays_enabled = 1 WHERE id = ?').run(plan.id);
+    await svc.addHolidayCalendar(plan.id, 'FR', null, undefined, 0, undefined);
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    await expect(svc.applyHolidayCalendars(plan.id)).resolves.toBeUndefined();
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => [{ date: '2031-07-14', global: true }] }));
+    const entries = (svc as unknown as { entries: { deleteForPlanAndDate: () => Promise<void> } }).entries;
+    const del = vi.spyOn(entries, 'deleteForPlanAndDate').mockRejectedValueOnce(new Error('database is locked'));
+    await expect(svc.applyHolidayCalendars(plan.id)).rejects.toThrow('database is locked');
+    del.mockRestore();
+  });
 });
 
 // ── Read-only calendar shares (#444/#667) ─────────────────────────────────────

@@ -479,6 +479,24 @@ export class VacayService {
   // Holiday calendar helpers
   // -------------------------------------------------------------------------
 
+  /** A country's public holidays for a year, cached; undefined when the API does not answer usably. */
+  private async fetchPublicHolidays(year: number, country: string): Promise<Holiday[] | undefined> {
+    const cacheKey = `${year}-${country}`;
+    const cached = this.holidayCache.get(cacheKey);
+    if (cached && Date.now() - cached.time < CACHE_TTL) return cached.data as Holiday[];
+    if (!COUNTRY_RE.test(country)) return undefined;
+    try {
+      const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!resp.ok) { discardBody(resp); return undefined; }
+      const parsed = await readCappedJson<Holiday[]>(resp, MAX_HOLIDAY_BYTES);
+      if (parsed === undefined) return undefined;
+      this.holidayCache.set(cacheKey, { data: parsed, time: Date.now() });
+      return parsed;
+    } catch {
+      return undefined;
+    }
+  }
+
   async applyHolidayCalendars(planId: number): Promise<void> {
     const holidaysEnabled = await this.plans.getHolidaysEnabled(planId);
     if (!holidaysEnabled) return;
@@ -498,28 +516,18 @@ export class VacayService {
       const country = cal.region.split('-')[0];
       const region = cal.region.includes('-') ? cal.region : null;
       for (const year of calendarYears) {
-        try {
-          const cacheKey = `${year}-${country}`;
-          const cached = this.holidayCache.get(cacheKey);
-          let holidays = cached && Date.now() - cached.time < CACHE_TTL ? cached.data as Holiday[] : undefined;
-          if (!holidays) {
-            if (!COUNTRY_RE.test(country)) continue;
-            const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-            if (!resp.ok) { discardBody(resp); continue; }
-            const parsed = await readCappedJson<Holiday[]>(resp, MAX_HOLIDAY_BYTES);
-            if (parsed === undefined) continue;
-            holidays = parsed;
-            this.holidayCache.set(cacheKey, { data: holidays, time: Date.now() });
+        const holidays = await this.fetchPublicHolidays(year, country);
+        if (!holidays) continue;
+        const hasRegions = holidays.some((h: Holiday) => h.counties && h.counties.length > 0);
+        if (hasRegions && !region) continue;
+        // Outside the fetch's catch: a failing delete is a real error, and
+        // swallowing it as "API error" left vacation days standing on holidays.
+        for (const h of holidays) {
+          if (h.global || !h.counties || (region && h.counties.includes(region))) {
+            await this.entries.deleteForPlanAndDate(planId, h.date);
+            await this.companyHolidays.deleteForPlanAndDate(planId, h.date);
           }
-          const hasRegions = holidays.some((h: Holiday) => h.counties && h.counties.length > 0);
-          if (hasRegions && !region) continue;
-          for (const h of holidays) {
-            if (h.global || !h.counties || (region && h.counties.includes(region))) {
-              await this.entries.deleteForPlanAndDate(planId, h.date);
-              await this.companyHolidays.deleteForPlanAndDate(planId, h.date);
-            }
-          }
-        } catch { /* API error, skip */ }
+        }
       }
     }
   }
