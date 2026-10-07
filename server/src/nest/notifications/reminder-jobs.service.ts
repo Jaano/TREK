@@ -9,6 +9,8 @@ import { Trips } from '../../db/entities/Trips.entity';
 import { TodoItems } from '../../db/entities/TodoItems.entity';
 import { NotificationsService } from './notifications.service';
 import { CronRegistrarService } from '../scheduling/cron-registrar.service';
+import { addIsoDays } from '@trek/shared';
+import { appClock } from '../common/timezoneService';
 
 /**
  * The trip-reminder and todo-due reminder crons, in the domain that owns them
@@ -75,28 +77,27 @@ export class ReminderJobsService implements OnApplicationBootstrap {
     this.registrar.register('todo-reminders', '0 9 * * *', () => this.todoTick());
   }
 
-  /** Daily check for trips starting exactly reminder_days from now. */
+  /**
+   * Daily check for trips whose reminder is due: the reminder day has come,
+   * the trip has not started yet, and no reminder went out for this start
+   * date. A day the job did not run is caught up on the next one, and a trip
+   * moved to a new start date is reminded again. "Today" is the date in the
+   * TZ the job is scheduled in, not UTC.
+   */
   async tripTick(): Promise<void> {
     try {
       if ((await this.appSettings.getValue('notify_trip_reminder')) === 'false') return;
 
-      // RJ3 (Task 0's R9 ruling): the legacy statement concatenated a
-      // per-row column (`t.reminder_days`) into a `date('now', '+' ||
-      // t.reminder_days || ' days')` modifier — no bound-parameter or
-      // JS-constant-spelled helper can express that. Read the narrower
-      // candidate set (reminder_days set, start_date set) and do the
-      // per-row date-equality check in JS instead. `Date.UTC(...)` matches
-      // SQLite's own `date('now')`, which is UTC, not server-local time.
+      const today = appClock().date;
       const candidates = await this.trips.listReminderCandidates();
-      const todayUtc = new Date();
-      const trips = candidates.filter((t) => {
-        const target = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate()));
-        target.setUTCDate(target.getUTCDate() + t.reminder_days);
-        return t.start_date === target.toISOString().slice(0, 10);
-      });
+      const trips = candidates.filter((t) =>
+        t.reminder_sent_for !== t.start_date
+        && t.start_date >= today
+        && addIsoDays(t.start_date, -t.reminder_days) <= today);
 
       for (const trip of trips) {
         await this.notifications.send({ event: 'trip_reminder', actorId: null, scope: 'trip', targetId: trip.id, params: { trip: trip.title, tripId: String(trip.id) } }).catch(() => {});
+        await this.trips.markReminderSent(trip.id, trip.start_date);
       }
 
       if (trips.length > 0) {
@@ -112,18 +113,10 @@ export class ReminderJobsService implements OnApplicationBootstrap {
     try {
       if ((await this.appSettings.getValue('notify_todo_due')) === 'false') return;
 
-      // RJ4 (Task 0's R9 ruling): `date('now', '+' || ? || ' days')`
-      // concatenates a bound parameter into the modifier — resolved in JS
-      // the same way RJ3 is (`Date.UTC`-based, matching SQLite's UTC
-      // `date('now')`). `due_date` is documented as always canonical
-      // `YYYY-MM-DD` text, so a direct text-range bind reproduces
-      // `date(ti.due_date) <= / >= ...` for well-formed rows.
-      const todayUtc = new Date();
-      const today = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate()));
-      const todayDate = today.toISOString().slice(0, 10);
-      const cutoff = new Date(today);
-      cutoff.setUTCDate(cutoff.getUTCDate() + TODO_REMINDER_LEAD_DAYS);
-      const cutoffDate = cutoff.toISOString().slice(0, 10);
+      // `due_date` is canonical `YYYY-MM-DD` text, so a text-range bind
+      // covers the lead window. "Today" is the date in the job's TZ.
+      const todayDate = appClock().date;
+      const cutoffDate = addIsoDays(todayDate, TODO_REMINDER_LEAD_DAYS);
 
       const todos = await this.todoItems.listDueForReminder(todayDate, cutoffDate);
 

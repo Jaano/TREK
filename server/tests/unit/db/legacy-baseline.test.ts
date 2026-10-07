@@ -32,6 +32,7 @@ const UNNUMBERED = [
   BASELINE,
   'Migration20200101040200_trek_photo_cache_meta_cache_key_not_null',
   'Migration20200101042000_tours',
+  'Migration20200101042100_a_trip_reminder_remembers_it_was_sent',
 ];
 // The last step the positional runner ever had; planLegacyBaseline refuses a
 // schema_version past it.

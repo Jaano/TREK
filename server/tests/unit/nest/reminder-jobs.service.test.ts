@@ -165,6 +165,28 @@ describe('trip reminder tick', () => {
     expect(logMock.logInfo).toHaveBeenCalledWith(expect.stringMatching(/^Trip reminders sent for 2 trip\(s\): /));
   });
 
+  it('RJOB-012 — catches up a reminder the job missed, sends each one once, and again for a moved trip', async () => {
+    const { user } = createUser(testDb);
+    // Due yesterday (start in 2 days, reminder 3 days ahead): the job did not run then.
+    const missed = createTrip(testDb, user.id, { title: 'Missed' });
+    testDb.prepare("UPDATE trips SET reminder_days = 3, start_date = date('now', '+2 days') WHERE id = ?").run(missed.id);
+    // Already started: no reminder any more.
+    const started = createTrip(testDb, user.id, { title: 'Started' });
+    testDb.prepare("UPDATE trips SET reminder_days = 3, start_date = date('now', '-1 days') WHERE id = ?").run(started.id);
+
+    const { svc, send } = makeJobs();
+    await svc.tripTick();
+    expect(send.mock.calls.map(([p]) => p.targetId)).toEqual([missed.id]);
+
+    send.mockClear();
+    await svc.tripTick();
+    expect(send).not.toHaveBeenCalled();
+
+    testDb.prepare("UPDATE trips SET start_date = date('now', '+1 days') WHERE id = ?").run(missed.id);
+    await svc.tripTick();
+    expect(send.mock.calls.map(([p]) => p.targetId)).toEqual([missed.id]);
+  });
+
   it('RJOB-006 — the per-tick gate skips everything when notify_trip_reminder is false', async () => {
     const { user } = createUser(testDb);
     tripWithReminder(user.id, 3);

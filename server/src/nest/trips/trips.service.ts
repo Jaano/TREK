@@ -52,6 +52,7 @@ import { escapeLikePattern } from '../places/places.helpers';
 import { NotFoundError, ValidationError } from '../common/domain-errors';
 import { UnitOfWork } from '../database/unit-of-work';
 import { legacyBoundIntegerText } from '../common/row-id';
+import { appClock } from '../common/timezoneService';
 
 /**
  * The date range is refused, not cut short: generateDays used to clip the day
@@ -455,7 +456,7 @@ export class TripsService {
    * trip with its per-trip day/place counts.
    */
   /** TP21 — `TripsRepository.activeTrip`: the triple `CASE WHEN … relevance` projection and the double-`CASE WHEN` `ORDER BY`. */
-  async activeTrip(userId: number, today = new Date().toISOString().slice(0, 10)) {
+  async activeTrip(userId: number, today = appClock().date) {
     return await this.tripsRepo.activeTrip(userId, today) as ActiveTrip & { relevance: number } | undefined;
   }
 

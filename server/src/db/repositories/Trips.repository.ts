@@ -34,6 +34,7 @@ export interface TripRawRow {
   feed_token: string | null;
   created_at: string | null;
   updated_at: string | null;
+  reminder_sent_for: string | null;
 }
 
 const _tripRawRowKeys: AssertRowKeys<TripRawRow, Trips> = true;
@@ -76,6 +77,7 @@ interface TripSelectKyselyDB {
     feed_token: string | null;
     created_at: string | null;
     updated_at: string | null;
+    reminder_sent_for: string | null;
   };
   users: { id: number; username: string };
   trip_members: { id: number; trip_id: number; user_id: number };
@@ -882,9 +884,14 @@ export class TripsRepository extends TrekRepository<Trips> {
    */
   async listReminderCandidates(): Promise<TripReminderCandidateRow[]> {
     return await this.qb('t')
-      .select(['t.id', 't.title', 't.user', 't.reminder_days', 't.start_date'])
+      .select(['t.id', 't.title', 't.user', 't.reminder_days', 't.start_date', 't.reminder_sent_for'])
       .andWhere({ reminder_days: { $gt: 0 }, start_date: { $ne: null } })
       .execute<TripReminderCandidateRow[]>('all', false);
+  }
+
+  /** `UPDATE trips SET reminder_sent_for = ? WHERE id = ?`: the start date the reminder went out for. */
+  async markReminderSent(id: number, startDate: string): Promise<void> {
+    await this.nativeUpdate({ id }, { reminder_sent_for: startDate });
   }
 
   // ---------------------------------------------------------------------------
@@ -1076,6 +1083,7 @@ export interface TripReminderCandidateRow {
   user_id: number;
   reminder_days: number;
   start_date: string;
+  reminder_sent_for: string | null;
 }
 
 /** `PublicApiService.listTrips`/`getTrip`'s 8-column trip projection. */

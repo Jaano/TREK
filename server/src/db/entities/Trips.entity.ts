@@ -52,6 +52,7 @@ export class Trips {
   feed_token?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  reminder_sent_for?: string | null;
   budget_category_order_collection = new Collection<BudgetCategoryOrder>(this);
   budget_items_collection = new Collection<BudgetItems>(this);
   budget_settlements_collection = new Collection<BudgetSettlements>(this);
@@ -112,6 +113,7 @@ export const TripsSchema = defineEntity({
     feed_token: p.text().nullable(),
     created_at: p.type(DbTimestampType).nullable().defaultRaw(`CURRENT_TIMESTAMP`).index('idx_trips_created_at'),
     updated_at: p.type(DbTimestampType).nullable().defaultRaw(`CURRENT_TIMESTAMP`),
+    reminder_sent_for: p.text().nullable(),
     budget_category_order_collection: () => p.oneToMany(BudgetCategoryOrder).mappedBy('trip').hidden(),
     budget_items_collection: () => p.oneToMany(BudgetItems).mappedBy('trip').hidden(),
     budget_settlements_collection: () => p.oneToMany(BudgetSettlements).mappedBy('trip').hidden(),

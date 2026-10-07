@@ -37,6 +37,7 @@ import { Trips } from '../../db/entities/Trips.entity';
 import { BudgetItems } from '../../db/entities/BudgetItems.entity';
 import type { BudgetItemsRepository } from '../../db/repositories/BudgetItems.repository';
 import type { TripsRepository } from '../../db/repositories/Trips.repository';
+import { appClock } from '../common/timezoneService';
 
 type Trip = TripAccess;
 type BudgetEntry = { total_price?: number; category?: string; currency?: string | null; exchange_rate?: number } | undefined;
@@ -484,9 +485,10 @@ export class ReservationsService {
    * docstring for the CTE/`UNION ALL`/GLOB/CAST shape.
    */
   async listUpcoming(userId: number, limit = 6) {
-    const today = new Date().toISOString().slice(0, 10);
-    const now = new Date().toISOString();
-    return await this.reservationsRepo.listUpcomingForUser(userId, today, now.slice(11, 16), limit);
+    // Reservation dates and times are wall-clock values, so "now" is the
+    // instance's local clock rather than UTC.
+    const { date, time } = appClock();
+    return await this.reservationsRepo.listUpcomingForUser(userId, date, time, limit);
   }
 
   async getReservationWithJoins(id: string | number) {
