@@ -2,6 +2,7 @@ import type { Connection, MigrationInfo } from '@mikro-orm/core';
 import type { Migrator } from '@mikro-orm/migrations';
 
 import fs from 'node:fs';
+import { knownMigrationNames, unknownMigrations } from './known-migrations';
 
 /**
  * Upgrading an install the retired hand-written runner migrated.
@@ -162,8 +163,10 @@ export async function migrateToHead(
   connection: Connection,
   migrator: Migrator,
   readSource: ReadSource = readFromDisk,
+  known: Set<string> = knownMigrationNames(),
 ): Promise<void> {
   const baselined = await planLegacyBaseline(connection, migrator, readSource);
+  refuseNewerDatabase((await migrator.getExecuted()).map((row) => row.name), known);
   const already = new Set(baselined);
   const pending = (await migrator.getPending()).filter((migration) => !already.has(migration.name));
   if (pending.length === 0 && baselined.length === 0) return;
@@ -179,4 +182,19 @@ export async function migrateToHead(
     for (const name of baselined) await storage.logMigration({ name }, trx);
     await migrator.up({ transaction: trx });
   });
+}
+
+/**
+ * A database a newer TREK migrated carries migrations this build does not
+ * ship. An image rolled back, or a newer backup restored, would otherwise run
+ * older code against a schema it does not know and fail later, far from the
+ * cause. Refused before anything is written.
+ */
+export function refuseNewerDatabase(executed: string[], known: Set<string>): void {
+  const unknown = unknownMigrations(executed, known);
+  if (unknown.length === 0) return;
+  throw new Error(
+    `${REFUSAL} the database was migrated by a newer TREK (${unknown.length} unknown migration(s), latest ${unknown[unknown.length - 1]}). ` +
+      'Run that version again, or restore a backup taken with this one.',
+  );
 }

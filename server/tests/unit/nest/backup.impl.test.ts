@@ -2,7 +2,7 @@
  * Unit tests for backupService.
  * Covers BACKUP-031 to BACKUP-060.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must be defined before any vi.mock() calls
@@ -76,7 +76,9 @@ const logMock = vi.hoisted(() => ({ logInfo: vi.fn(), logError: vi.fn(), logWarn
 
 vi.mock('../../../src/db/database', () => dbMock);
 vi.mock('../../../src/db/repositories/MaintenanceRepository', () => ({
-  MaintenanceRepository: vi.fn().mockImplementation(() => maintenanceRepoMock),
+  MaintenanceRepository: vi.fn().mockImplementation(function () {
+    return maintenanceRepoMock;
+  }),
 }));
 vi.mock('../../../src/nest/audit/audit-log.logger', () => logMock);
 vi.mock('../../../src/config', () => ({
@@ -1260,6 +1262,45 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
     await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
 
     expect(callOrder.indexOf('closeDb')).toBeLessThan(callOrder.indexOf('copyFileSync'));
+  });
+
+  it('BACKUP-045g — keeps a copy of the database it replaces, before closing it', async () => {
+    setupSuccessfulExtraction();
+    setupAllTablesPresent();
+    const { RequestContext } = await import('@mikro-orm/core');
+    const em = vi.spyOn(RequestContext, 'getEntityManager').mockReturnValue({} as never);
+    onTestFinished(() => em.mockRestore());
+
+    const callOrder: string[] = [];
+    maintenanceRepoMock.vacuumInto.mockImplementation(async (target: string) => { callOrder.push(`vacuum:${target}`); });
+    dbMock.closeDb.mockImplementation(() => { callOrder.push('closeDb'); });
+    fsMock.unlinkSync.mockReturnValue(undefined);
+    fsMock.rmSync.mockReturnValue(undefined);
+    fsMock.existsSync.mockImplementation((p: string) => !String(p).includes('uploads'));
+
+    await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+
+    expect(callOrder[0]).toMatch(/^vacuum:.*pre-restore-\d+\.db$/);
+    expect(callOrder.indexOf('closeDb')).toBeGreaterThan(0);
+    expect(logMock.logInfo).toHaveBeenCalledWith(expect.stringContaining('the replaced database was kept as'));
+  });
+
+  it('BACKUP-045h — a database that cannot be copied does not block the restore', async () => {
+    setupSuccessfulExtraction();
+    setupAllTablesPresent();
+    const { RequestContext } = await import('@mikro-orm/core');
+    const em = vi.spyOn(RequestContext, 'getEntityManager').mockReturnValue({} as never);
+    onTestFinished(() => em.mockRestore());
+    maintenanceRepoMock.vacuumInto.mockRejectedValueOnce(new Error('database disk image is malformed'));
+    fsMock.unlinkSync.mockReturnValue(undefined);
+    fsMock.rmSync.mockReturnValue(undefined);
+    fsMock.existsSync.mockImplementation((p: string) => !String(p).includes('uploads'));
+
+    const result = await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+
+    expect(result.success).toBe(true);
+    expect(logMock.logWarn).toHaveBeenCalledWith(expect.stringContaining('could not keep a copy of the current database'));
+    expect(dbMock.closeDb).toHaveBeenCalled();
   });
 
   it('BACKUP-045c — reinitialize is called even when copyFileSync throws', async () => {

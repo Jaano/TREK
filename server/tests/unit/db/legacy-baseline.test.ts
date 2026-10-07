@@ -225,4 +225,17 @@ describe('planLegacyBaseline / migrateToHead', () => {
     expect(planned.at(-1)).toBe('Migration20200101041100_half_company_holidays_0_5_covers_the');
     expect(await recorded()).toEqual([]);
   });
+
+  it('LEGACYBASE-008: refuses a database a newer TREK migrated, before applying anything', async () => {
+    await migrate();
+    await rawExec(orm, "INSERT INTO mikro_orm_migrations (name, executed_at) VALUES ('Migration20990101000000_from_a_newer_release', CURRENT_TIMESTAMP)");
+    const before = await recorded();
+    await expect(migrate()).rejects.toThrow(/Refusing to boot: the database was migrated by a newer TREK \(1 unknown migration\(s\), latest Migration20990101000000_from_a_newer_release\)/);
+    expect(await recorded()).toEqual(before);
+  });
+
+  it('LEGACYBASE-009: a database at head of this build boots again without complaint', async () => {
+    await migrate();
+    await expect(migrate()).resolves.toBeUndefined();
+  });
 });

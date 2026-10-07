@@ -6,7 +6,7 @@ import fs from 'fs';
 import { RequestContext } from '@mikro-orm/core';
 import { closeDb, reinitialize } from '../../db/database';
 import { MaintenanceRepository } from '../../db/repositories/MaintenanceRepository';
-import { logWarn } from '../audit/audit-log.logger';
+import { logInfo, logWarn } from '../audit/audit-log.logger';
 import { VALID_INTERVALS } from './auto-backup.settings';
 import { checkBackupDatabase, extractBackupArchive } from './backup-archive';
 import { invalidatePermissionsCache } from '../permissions/permissions-cache';
@@ -415,6 +415,24 @@ export async function rehydrateUploads(storage: StorageService, extractedUploads
   }
 }
 
+/**
+ * A copy of the database a restore is about to replace, next to it in data/.
+ * The swap below deletes the current file, and a restore of the wrong archive
+ * used to leave nothing to go back to. Best effort: a database broken enough to
+ * need the restore may not snapshot, and that must not block the recovery.
+ */
+async function snapshotBeforeRestore(): Promise<void> {
+  const target = path.join(dataDir, `pre-restore-${Date.now()}.db`);
+  try {
+    const em = RequestContext.getEntityManager();
+    if (!em) throw new Error('no EntityManager available for VACUUM INTO');
+    await new MaintenanceRepository(em).vacuumInto(target);
+    logInfo(`Restore: the replaced database was kept as ${target}`);
+  } catch (err) {
+    logWarn(`Restore: could not keep a copy of the current database (${err instanceof Error ? err.message : String(err)})`);
+  }
+}
+
 export async function restoreFromZip(storage: StorageService, zipPath: string): Promise<RestoreResult> {
   const extractDir = path.join(dataDir, `restore-${Date.now()}`);
   let reinitFailed: unknown = null;
@@ -429,6 +447,7 @@ export async function restoreFromZip(storage: StorageService, zipPath: string): 
     }
     const extractedDb = path.join(extractDir, 'travel.db');
 
+    await snapshotBeforeRestore();
     closeDb();
 
     try {
