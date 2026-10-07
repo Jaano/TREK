@@ -1,5 +1,7 @@
 import { Controller, Get, Res } from '@nestjs/common';
+import { EntityManager } from '@mikro-orm/core';
 import type { Response } from 'express';
+import { MaintenanceRepository } from '../../db/repositories/MaintenanceRepository';
 import { KitineraryExtractorService } from '../booking-import/kitinerary-extractor.service';
 import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
@@ -13,6 +15,7 @@ export class FeaturesController {
   constructor(
     private readonly extractor: KitineraryExtractorService,
     private readonly addons: AddonsService,
+    private readonly em: EntityManager,
   ) {}
 
   /** The container/uptime probe. The forced-HTTPS redirect and HSTS exempt this
@@ -22,6 +25,23 @@ export class FeaturesController {
   health(@Res() res: Response): void {
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.json({ status: 'ok' });
+  }
+
+  /**
+   * The readiness probe: 503 while the database does not answer (a restore
+   * swapping it, a boot still migrating), so an orchestrator stops sending
+   * traffic without killing the process. Liveness stays on the plain probe
+   * above, which a long restore must not fail.
+   */
+  @Get('ready')
+  async ready(@Res() res: Response): Promise<void> {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    try {
+      await new MaintenanceRepository(this.em).ping();
+      res.json({ status: 'ready' });
+    } catch {
+      res.status(503).json({ status: 'unavailable' });
+    }
   }
 
   @Get('features')

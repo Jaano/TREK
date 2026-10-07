@@ -39,6 +39,12 @@ export class MaintenanceRepository {
     this.em.getContext();
   }
 
+  /** `SELECT 1`: whether the database answers at all, for the readiness probe. */
+  async ping(): Promise<void> {
+    this.validateRequestContext();
+    await this.em.getConnection().execute('SELECT 1');
+  }
+
   /**
    * `PRAGMA wal_checkpoint(TRUNCATE)` — rendered text pinned, identical to
    * the legacy `db.exec('PRAGMA wal_checkpoint(TRUNCATE)')` it replaces at

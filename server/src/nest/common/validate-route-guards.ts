@@ -114,8 +114,9 @@ export const PUBLIC_ROUTE_ALLOW_LIST: string[] = [
   // run. It never reads the request body as data.
   'DocSyncWebhookController.nudge',
   'FeaturesController.features',
-  // The container/uptime probe.
+  // The container/uptime probe, and the readiness probe beside it.
   'FeaturesController.health',
+  'FeaturesController.ready',
   // Subscribable ICS feeds. The token in the path is the credential, and the
   // calendar client polling it has no TREK session to send.
   'FeedsPublicController.tripFeed',

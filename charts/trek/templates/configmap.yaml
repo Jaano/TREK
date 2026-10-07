@@ -16,6 +16,12 @@ data:
   {{- if .Values.env.TREK_WIKI_DIR }}
   TREK_WIKI_DIR: {{ .Values.env.TREK_WIKI_DIR | quote }}
   {{- end }}
+  {{- if .Values.env.DEFAULT_LANGUAGE }}
+  DEFAULT_LANGUAGE: {{ .Values.env.DEFAULT_LANGUAGE | quote }}
+  {{- end }}
+  {{- if .Values.env.MCP_MAX_SESSION_PER_USER }}
+  MCP_MAX_SESSION_PER_USER: {{ .Values.env.MCP_MAX_SESSION_PER_USER | quote }}
+  {{- end }}
   {{- if .Values.env.ALLOWED_ORIGINS }}
   ALLOWED_ORIGINS: {{ .Values.env.ALLOWED_ORIGINS | quote }}
   {{- end }}

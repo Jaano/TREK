@@ -348,7 +348,7 @@ export function applyGlobalMiddleware(
 
   if (shouldForceHttps) {
     app.use((req: Request, res: Response, next: NextFunction) => {
-      if (req.path === '/api/health') return next();
+      if (req.path === '/api/health' || req.path === '/api/health/ready') return next();
       if (req.secure || req.headers['x-forwarded-proto'] === 'https') return next();
       res.redirect(301, 'https://' + (configuredHost ?? req.headers.host) + req.url);
     });
@@ -358,7 +358,7 @@ export function applyGlobalMiddleware(
 
   // Request logging with sensitive field redaction (SENSITIVE_KEYS/redact above)
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path === '/api/health') return next();
+    if (req.path === '/api/health' || req.path === '/api/health/ready') return next();
     const startedAt = Date.now();
     res.on('finish', () => {
       const ms = Date.now() - startedAt;

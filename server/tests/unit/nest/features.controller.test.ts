@@ -16,7 +16,7 @@ function make(available: boolean, aiEnabled: boolean) {
   return {
     extractor,
     addons,
-    controller: new FeaturesController(extractor as Extractor as KitineraryExtractorService, addons as never),
+    controller: new FeaturesController(extractor as Extractor as KitineraryExtractorService, addons as never, {} as never),
   };
 }
 
@@ -82,5 +82,32 @@ describe('FeaturesController (GET /api/health/features)', () => {
     controller.health(res as never);
     expect(res.headers['Cache-Control']).toBe('no-store, must-revalidate');
     expect(res.body).toEqual({ status: 'ok' });
+  });
+
+  describe('the readiness probe (GET /api/health/ready)', () => {
+    function response() {
+      const res = { setHeader: vi.fn(), status: vi.fn(), json: vi.fn() };
+      res.status.mockReturnValue(res);
+      return res;
+    }
+
+    it('FEAT-010: answers ready while the database answers, and 503 when it does not', async () => {
+      const execute = vi.fn().mockResolvedValue([]);
+      const em = { getConnection: () => ({ execute }), getContext: () => em };
+      const extractor = { isAvailable: vi.fn(() => true) };
+      const controller = new FeaturesController(extractor as Extractor as KitineraryExtractorService, {} as never, em as never);
+
+      const ok = response();
+      await controller.ready(ok as never);
+      expect(execute).toHaveBeenCalledWith('SELECT 1');
+      expect(ok.json).toHaveBeenCalledWith({ status: 'ready' });
+      expect(ok.status).not.toHaveBeenCalled();
+
+      execute.mockRejectedValueOnce(new Error('connection is not available (restore in progress?)'));
+      const down = response();
+      await controller.ready(down as never);
+      expect(down.status).toHaveBeenCalledWith(503);
+      expect(down.json).toHaveBeenCalledWith({ status: 'unavailable' });
+    });
   });
 });

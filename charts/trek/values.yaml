@@ -4,9 +4,10 @@ image:
   # tag: latest
   pullPolicy: IfNotPresent
 
-# Deployment update strategy. Recreate is the safe default for the single-writer SQLite
-# DB on a ReadWriteOnce volume (the old pod is torn down before the new one starts).
-# Set to RollingUpdate only if you back the data volume with ReadWriteMany storage.
+# Deployment update strategy. Keep Recreate: TREK is a single-writer SQLite app, and
+# during a RollingUpdate the new pod migrates the database while the old one still
+# writes to it. A ReadWriteMany volume does not make that safe; SQLite's WAL needs both
+# processes on one host, which network filesystems do not provide.
 updateStrategy: Recreate
 
 # Optional image pull secrets for private registries
@@ -33,7 +34,7 @@ env:
   # DEFAULT_LANGUAGE: "en"
   # Default language on the login page for users with no saved preference.
   # Browser/OS language is auto-detected first; this is the fallback when no match is found.
-  # Supported: de, en, es, fr, hu, nl, br, cs, pl, ru, zh, zh-TW, it, ar
+  # Supported: ar, az, br, ca, cs, de, en, es, et, fr, gr, hu, id, it, ja, ko, nl, pl, ru, sk, sv, th, tr, uk, vi, zh, zh-TW
   # ALLOWED_ORIGINS: ""
   # NOTE: If using ingress, ensure env.ALLOWED_ORIGINS matches the domains in ingress.hosts for proper CORS configuration.
   # APP_URL: "https://trek.example.com"
@@ -168,15 +169,19 @@ secretEnv:
   # Leave both empty to let TREK keep a generated pair in its database.
   VAPID_PRIVATE_KEY: ""
 
-# If true, a random ENCRYPTION_KEY is generated at install and preserved across upgrades
+# If true, a random ENCRYPTION_KEY is generated at install and preserved across upgrades.
+# Only with helm install/upgrade against the cluster: under `helm template`, ArgoCD or Flux
+# the chart cannot read the existing secret and renders a new key every time. TREK then
+# refuses to start rather than lose its secrets; use existingSecret in those setups.
 generateEncryptionKey: false
 
 # If set, the chart renders no Secret of its own and instead reads every secret env
 # var from this existing Kubernetes secret. Expected keys: ENCRYPTION_KEY (rename via
 # existingSecretKey), ADMIN_EMAIL, ADMIN_PASSWORD, OIDC_CLIENT_SECRET,
 # UNSPLASH_ACCESS_KEY, PLACES_API_KEY, AMAP_API_KEY, AMAP_API_SECRET,
-# VAPID_PRIVATE_KEY. Missing keys are simply left unset (they are optional), so only
-# provide the ones your setup needs.
+# VAPID_PRIVATE_KEY, SMTP_PASS, MAPBOX_ACCESS_TOKEN, CARTO_API_KEY, DEMO_ADMIN_PASS.
+# Missing keys are simply left unset (they are optional), so only provide the ones your
+# setup needs.
 existingSecret: ""
 existingSecretKey: ENCRYPTION_KEY
 
@@ -202,19 +207,39 @@ persistence:
 # httpGet handler. Switching handler means clearing the old one in the same override
 # (httpGet: null together with tcpSocket), otherwise the API rejects the pod with
 # "may not specify more than 1 handler type". Set probes.liveness to null to drop a probe.
+#
+# The startup probe gives a first boot, a long migration or a restore at boot up to ten
+# minutes before liveness takes over; liveness alone killed such a boot after about
+# 105 s, and the next start began it again. Readiness asks the database, so a pod whose
+# database does not answer stops getting traffic without being restarted.
 probes:
+  startup:
+    httpGet:
+      path: /api/health
+      port: http
+    periodSeconds: 10
+    failureThreshold: 60
   liveness:
     httpGet:
       path: /api/health
-      port: 3000
-    initialDelaySeconds: 15
+      port: http
     periodSeconds: 30
   readiness:
     httpGet:
-      path: /api/health
-      port: 3000
-    initialDelaySeconds: 5
+      path: /api/health/ready
+      port: http
     periodSeconds: 10
+
+# Further environment variables, for any setting the env block above does not list.
+#   extraEnv:
+#     - name: SESSION_DURATION
+#       value: 7d
+extraEnv: []
+# Whole ConfigMaps or Secrets:
+#   extraEnvFrom:
+#     - secretRef:
+#         name: trek-smtp
+extraEnvFrom: []
 
 resources:
   requests:

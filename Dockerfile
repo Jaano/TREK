@@ -3,7 +3,9 @@
 # Go stdlib (Debian's apt gosu is built with an old Go that trips CVE scanners).
 # The binary and its runtime behaviour are identical to the apt package.
 FROM golang:1.25-alpine AS gosu-build
-RUN CGO_ENABLED=0 GOBIN=/out go install github.com/tianon/gosu@latest
+# Pinned to the commit of gosu's 1.19 tag: @latest made every build pick up whatever
+# was pushed last, and the tag itself is not a semver version go install accepts.
+RUN CGO_ENABLED=0 GOBIN=/out go install github.com/tianon/gosu@6456aaa0f3c854d199d0f037f068eb97515b7513
 
 # ── Stage 1: shared ──────────────────────────────────────────────────────────
 FROM node:24-alpine AS shared-builder
@@ -71,7 +73,7 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends tzdata dumb-init wget ca-certificates \
     libkitinerary-bin libsqlite3-0 && \
     npm ci --workspace=server --omit=dev --ignore-scripts && \
-    ln -sf "$(find /usr/lib -name kitinerary-extractor -type f | head -1)" /usr/local/bin/kitinerary-extractor; \
+    { ln -sf "$(find /usr/lib -name kitinerary-extractor -type f | head -1)" /usr/local/bin/kitinerary-extractor || true; } && \
     rm -rf /var/lib/apt/lists/* /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx && \
     chown -R node:node /app
 
@@ -146,7 +148,7 @@ LABEL org.opencontainers.image.title="TREK" \
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-  CMD wget -qO- http://localhost:3000/api/health || exit 1
+  CMD wget -qO- "http://localhost:${PORT:-3000}/api/health" || exit 1
 
 # Start-up lives in a script, not an inline `sh -c` string: container management
 # UIs re-tokenise Config.Cmd when you edit a container in place, and a command
