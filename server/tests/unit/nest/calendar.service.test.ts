@@ -1072,6 +1072,22 @@ describe('accommodations', () => {
     expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Paris');
   });
 
+  it('CAL-026z: a stay across the change to summer time spells out both offsets', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris in spring' });
+    createStay(trip.id, { start: '2026-03-27', end: '2026-04-02', check_in: '15:00', check_out: '11:00' });
+
+    const { ics } = await svc.exportICS(trip.id);
+    const vtz = ics.slice(ics.indexOf('BEGIN:VTIMEZONE'), ics.indexOf('END:VTIMEZONE'));
+
+    // Winter until the last Sunday of March 2026, 02:00 local, then summer, then
+    // winter again in October: a client that reads the block literally shows the
+    // check-out at 11:00 summer time, not an hour off.
+    expect(vtz).toContain('BEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100');
+    expect(vtz).toContain('BEGIN:DAYLIGHT\r\nDTSTART:20260329T020000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0200');
+    expect(vtz).toContain('BEGIN:STANDARD\r\nDTSTART:20261025T030000\r\nTZOFFSETFROM:+0200\r\nTZOFFSETTO:+0100');
+  });
+
   it('CAL-026b: a check-in without an until-clock reads as one hour, not a point (#2136)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris' });

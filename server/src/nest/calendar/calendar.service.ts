@@ -62,7 +62,7 @@ export function foldICS(ics: string): string {
 
 // A stored/plugin-provided timezone (e.g. a transport endpoint's `timezone`) is a
 // free string that need not be a real IANA zone. Intl.DateTimeFormat throws a
-// RangeError on an unknown zone, which — via buildVTimezone → tzOffsetString —
+// RangeError on an unknown zone, which — via buildVTimezone → offsetMinutesAt —
 // would crash the whole ICS export (and drop the trip from the all-trips feed).
 // Validate once so an invalid zone degrades to a floating local time instead.
 // Module-scoped on purpose (like the permissions/FX caches): the bridge instance
@@ -85,38 +85,122 @@ function isValidTimeZone(zone: string): boolean {
   return ok;
 }
 
-// UTC offset ("+0200") the zone uses on the given YYYYMMDD date. Only feeds the
-// fallback VTIMEZONE offset; iOS/Google resolve the named zone from their own
-// IANA database, so a single representative offset is sufficient.
-function tzOffsetString(zone: string, yyyymmdd: string): string {
-  const iso = `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}T12:00:00Z`;
-  const probe = new Date(iso);
-  if (Number.isNaN(probe.getTime())) return '+0000';
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: zone,
-    timeZoneName: 'longOffset',
-  }).formatToParts(probe);
-  const raw = parts.find((p) => p.type === 'timeZoneName')?.value ?? 'GMT';
-  const m = raw.match(/GMT([+-])(\d{2}):?(\d{2})?/);
-  if (!m) return '+0000'; // "GMT" (UTC) has no offset digits
-  return `${m[1]}${m[2]}${m[3] ?? '00'}`;
+// One formatter per zone: the transition scan below asks it about once a day
+// across the calendar's span.
+const _offsetFormatters = new Map<string, Intl.DateTimeFormat>();
+function offsetFormatter(zone: string): Intl.DateTimeFormat {
+  let f = _offsetFormatters.get(zone);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' });
+    if (_offsetFormatters.size >= 1000) _offsetFormatters.clear();
+    _offsetFormatters.set(zone, f);
+  }
+  return f;
 }
 
-// Minimal but RFC-valid VTIMEZONE. Smart clients override it with their own tz
-// rules; dumb clients fall back to this fixed offset.
-function buildVTimezone(zone: string, yyyymmdd: string): string {
-  const off = tzOffsetString(zone, yyyymmdd);
+/** The zone's UTC offset at instant `ms`, in minutes east of UTC. */
+function offsetMinutesAt(zone: string, ms: number): number {
+  const raw = offsetFormatter(zone).formatToParts(new Date(ms)).find((p) => p.type === 'timeZoneName')?.value ?? 'GMT';
+  const m = raw.match(/GMT([+-])(\d{2}):?(\d{2})?/);
+  if (!m) return 0; // "GMT" (UTC) has no offset digits
+  return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3] ?? 0));
+}
+
+/** An offset in minutes as iCalendar writes it: "+0200", "-0330". */
+function formatOffset(minutes: number): string {
+  const abs = Math.abs(minutes);
+  return `${minutes < 0 ? '-' : '+'}${String(Math.floor(abs / 60)).padStart(2, '0')}${String(abs % 60).padStart(2, '0')}`;
+}
+
+/** Midnight UTC of a YYYYMMDD date, or NaN when it is no date. */
+function utcDay(yyyymmdd: string): number {
+  return Date.parse(`${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}T00:00:00Z`);
+}
+
+interface ZoneTransition {
+  /** The instant the new offset starts, ms since the epoch. */
+  at: number;
+  from: number;
+  to: number;
+}
+
+const DAY_MS = 86_400_000;
+/** Ten years at most: a span longer than that is a typo, not a trip. */
+const MAX_SCAN_DAYS = 3660;
+
+/** Every offset change in [startMs, endMs), to the minute. */
+function zoneTransitions(zone: string, startMs: number, endMs: number): ZoneTransition[] {
+  const found: ZoneTransition[] = [];
+  const stop = Math.min(endMs, startMs + MAX_SCAN_DAYS * DAY_MS);
+  let before = offsetMinutesAt(zone, startMs);
+  for (let t = startMs; t < stop; t += DAY_MS) {
+    const after = offsetMinutesAt(zone, t + DAY_MS);
+    if (after === before) continue;
+    let lo = t;
+    let hi = t + DAY_MS;
+    while (hi - lo > 60_000) {
+      const mid = lo + Math.floor((hi - lo) / 120_000) * 60_000;
+      if (offsetMinutesAt(zone, mid) === before) lo = mid;
+      else hi = mid;
+    }
+    found.push({ at: hi, from: before, to: after });
+    before = after;
+  }
+  return found;
+}
+
+/** A local wall-clock time as iCalendar writes it, from an instant and the offset in force. */
+function localStamp(ms: number, offsetMinutes: number): string {
+  return new Date(ms + offsetMinutes * 60_000).toISOString().slice(0, 19).replace(/[-:]/g, '');
+}
+
+function observance(kind: 'STANDARD' | 'DAYLIGHT', dtstart: string, from: number, to: number, zone: string): string {
   return (
-    'BEGIN:VTIMEZONE\r\n' +
-    `TZID:${zone}\r\n` +
-    'BEGIN:STANDARD\r\n' +
-    'DTSTART:19700101T000000\r\n' +
-    `TZOFFSETFROM:${off}\r\n` +
-    `TZOFFSETTO:${off}\r\n` +
+    `BEGIN:${kind}\r\n` +
+    `DTSTART:${dtstart}\r\n` +
+    `TZOFFSETFROM:${formatOffset(from)}\r\n` +
+    `TZOFFSETTO:${formatOffset(to)}\r\n` +
     `TZNAME:${zone}\r\n` +
-    'END:STANDARD\r\n' +
-    'END:VTIMEZONE\r\n'
+    `END:${kind}\r\n`
   );
+}
+
+/**
+ * The zone's VTIMEZONE for the dates its events fall on (YYYYMMDD, inclusive).
+ *
+ * Smart clients replace it with their own IANA rules, but a client that reads
+ * it literally shows every event at the offset written here. One fixed offset
+ * put a June flight in Paris an hour off once the trip crossed the change to
+ * summer time, so each change inside the span is written out as its own
+ * observance, with the offset that held before it as the first one. A zone
+ * without changes in the span, or a span with no readable date, keeps the one
+ * fixed offset it always had.
+ */
+function buildVTimezone(zone: string, firstDay: string, lastDay: string): string {
+  const start = utcDay(firstDay);
+  const end = utcDay(lastDay);
+  let body: string;
+  if (Number.isNaN(start)) {
+    body = observance('STANDARD', '19700101T000000', 0, 0, zone);
+  } else {
+    // Whole calendar years around the events, so a client that expands the
+    // rules a little past the last event still finds the offset in force.
+    const from = Date.UTC(new Date(start).getUTCFullYear(), 0, 1);
+    const to = Date.UTC(new Date(Number.isNaN(end) ? start : Math.max(start, end)).getUTCFullYear() + 1, 0, 1);
+    const changes = zoneTransitions(zone, from, to);
+    const initial = offsetMinutesAt(zone, from);
+    if (changes.length === 0) {
+      const at = offsetMinutesAt(zone, start + DAY_MS / 2);
+      body = observance('STANDARD', '19700101T000000', at, at, zone);
+    } else {
+      const firstIsSummer = changes[0].to < changes[0].from;
+      body = observance(firstIsSummer ? 'DAYLIGHT' : 'STANDARD', '19700101T000000', initial, initial, zone);
+      for (const c of changes) {
+        body += observance(c.to > c.from ? 'DAYLIGHT' : 'STANDARD', localStamp(c.at, c.from), c.from, c.to, zone);
+      }
+    }
+  }
+  return `BEGIN:VTIMEZONE\r\nTZID:${zone}\r\n${body}END:VTIMEZONE\r\n`;
 }
 /**
  * Everything TREK knows how to say in iCalendar. Moved out of TripsService
@@ -191,9 +275,10 @@ export class CalendarService {
       return d.replace(/[-:]/g, '');
     };
 
-    // Zones referenced by timed events → representative YYYYMMDD (for the fallback
-    // VTIMEZONE offset). Populated by dtLine; emitted once as VTIMEZONE blocks.
-    const usedZones = new Map<string, string>();
+    // Zones referenced by timed events → the first and last YYYYMMDD they are
+    // used on, the span the VTIMEZONE has to cover. Populated by dtLine; emitted
+    // once as VTIMEZONE blocks.
+    const usedZones = new Map<string, { first: string; last: string }>();
 
     // Emit a DTSTART/DTEND line, attaching TZID when the event's zone is known so
     // subscribers see the time in TREK's zone. Falls back to a floating local time
@@ -206,7 +291,13 @@ export class CalendarService {
     ): string => {
       const val = fmtDateTime(wallClock, refDate);
       if (zone && isValidTimeZone(zone) && /^\d{8}T\d{6}$/.test(val)) {
-        if (!usedZones.has(zone)) usedZones.set(zone, val.slice(0, 8));
+        const day = val.slice(0, 8);
+        const span = usedZones.get(zone);
+        if (!span) usedZones.set(zone, { first: day, last: day });
+        else {
+          if (day < span.first) span.first = day;
+          if (day > span.last) span.last = day;
+        }
         return `${prop};TZID=${zone}:${val}\r\n`;
       }
       return `${prop}:${val}\r\n`;
@@ -752,7 +843,7 @@ export class CalendarService {
     // event so the TZID references resolve; keyed by TZID so a merged calendar
     // can define each one once.
     const timezones = new Map<string, string>();
-    for (const [zone, yyyymmdd] of usedZones) timezones.set(zone, buildVTimezone(zone, yyyymmdd));
+    for (const [zone, span] of usedZones) timezones.set(zone, buildVTimezone(zone, span.first, span.last));
 
     // \w + space/tab, not \s: JS \s admits U+3000 and friends — codepoints
     // Node's header validation refuses, so they 500'd the export (#2165).
