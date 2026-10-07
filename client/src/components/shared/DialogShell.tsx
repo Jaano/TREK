@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes, type ClipboardEvent, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type ClipboardEvent, type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Trash2, X } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 import { lockBodyScroll } from '../../utils/bodyScrollLock'
 import { Tooltip } from './Tooltip'
 import { focusDialog, trapTab } from './dialogFocus'
+import { useDiscardGuard } from './useDiscardGuard'
 
 /** A font size that follows the user's text size setting for its tier. */
 export const fs = (px: number, tier: 'caption' | 'body' | 'subtitle' = 'caption'): CSSProperties => ({ fontSize: `calc(${px}px * var(--fs-scale-${tier}, 1))` })
@@ -51,10 +52,6 @@ export interface DialogShellProps {
 
 const DISCARD_BUTTON = 'inline-flex items-center gap-1.5 rounded-[10px] bg-danger px-4 py-2 font-medium text-white hover:opacity-90' // theme-lint-disable: white on the danger fill, as ConfirmDialog draws it
 
-const snapshot = (value: unknown): string | null => {
-  try { return JSON.stringify(value) ?? null } catch { return null }
-}
-
 /**
  * The frame of the planner's dialogs: dimmed backdrop, the rounded panel, a
  * head band that stays put, a body that scrolls and a bar that stays in reach.
@@ -69,19 +66,9 @@ function DialogFrame({ onClose, labelledBy, width = 'detail', align = 'center', 
   const pressedOn = useRef<EventTarget | null>(null)
   // Read while rendering, before a field inside can take the focus with autoFocus.
   const [focusedBefore] = useState(() => document.activeElement)
-  // The unsaved-changes question (#2253): the state at the first touch, and
-  // whether the question is on screen.
-  const baseline = useRef<string | null>(null)
-  const guarded = discardGuard !== undefined
-  const guardRef = useRef(discardGuard)
-  useEffect(() => { guardRef.current = discardGuard })
-  const [asking, setAsking] = useState(false)
-  const markStart = () => { if (guarded && baseline.current === null) baseline.current = snapshot(discardGuard) }
-  // The backdrop and Escape: the two ways out a hand can take by accident.
-  const requestClose = useCallback(() => {
-    if (guardRef.current !== undefined && baseline.current !== null && snapshot(guardRef.current) !== baseline.current) setAsking(true)
-    else onClose()
-  }, [onClose])
+  // The unsaved-changes question (#2253). The backdrop and Escape are the two
+  // ways out a hand can take by accident; both go through requestClose.
+  const { asking, markStart, requestClose, keepEditing, discard } = useDiscardGuard(discardGuard, onClose)
   const held = blocked || asking
 
   useEffect(() => {
@@ -93,10 +80,10 @@ function DialogFrame({ onClose, labelledBy, width = 'detail', align = 'center', 
 
   useEffect(() => {
     if (!asking) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); setAsking(false) } }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); keepEditing() } }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [asking])
+  }, [asking, keepEditing])
 
   // The page stays put behind the dialog, the focus moves into it (the first text
   // field on a desktop, #1302), and whatever opened it gets the focus back.
@@ -152,8 +139,8 @@ function DialogFrame({ onClose, labelledBy, width = 'detail', align = 'center', 
               <div id={`${labelledBy}-discard`} className="font-semibold text-content" style={fs(15, 'subtitle')}>{t('common.unsavedTitle')}</div>
               <p className="m-0 mt-1.5 text-content-muted" style={fs(12.5, 'body')}>{t('common.unsavedMessage')}</p>
               <div className="mt-4 flex justify-end gap-2">
-                <DialogButton autoFocus onClick={() => setAsking(false)}>{t('common.keepEditing')}</DialogButton>
-                <button type="button" onClick={() => { setAsking(false); onClose() }} className={DISCARD_BUTTON} style={fs(13, 'body')}>
+                <DialogButton autoFocus onClick={keepEditing}>{t('common.keepEditing')}</DialogButton>
+                <button type="button" onClick={discard} className={DISCARD_BUTTON} style={fs(13, 'body')}>
                   {t('common.discard')}
                 </button>
               </div>

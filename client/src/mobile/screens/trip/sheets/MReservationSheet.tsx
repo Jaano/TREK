@@ -305,6 +305,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
       onClose={handleClose}
       material="opaque"
       ariaLabel={res ? t('reservations.editTitle') : t('reservations.newTitle')}
+      discardGuard={showReservationModal ? { form, files: pendingFiles.length, travelers: [...travelerIds] } : undefined}
     >
       <FormSheetHeader
         icon={Ticket}

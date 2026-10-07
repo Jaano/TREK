@@ -349,7 +349,13 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
         : t('common.add')
 
   return (
-    <MSheet open={showPlaceForm} onClose={handleClose} material="opaque" ariaLabel={sheetPlace ? t('places.editPlace') : t('places.addPlace')}>
+    <MSheet
+      open={showPlaceForm}
+      onClose={handleClose}
+      material="opaque"
+      ariaLabel={sheetPlace ? t('places.editPlace') : t('places.addPlace')}
+      discardGuard={showPlaceForm ? { form, files: pendingFiles.length } : undefined}
+    >
       <FormSheetHeader
         icon={MapPin}
         title={sheetPlace ? t('places.editPlace') : t('places.addPlace')}

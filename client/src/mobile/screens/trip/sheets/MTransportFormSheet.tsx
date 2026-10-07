@@ -620,6 +620,7 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
       onClose={handleClose}
       material="opaque"
       ariaLabel={headerTitle}
+      discardGuard={showTransportModal ? { form, waypoints, trainWaypoints, carStops, files: pendingFiles.length, travelers: [...travelerIds] } : undefined}
     >
       <FormSheetHeader
         icon={TrainFront}
