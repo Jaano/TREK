@@ -21,6 +21,7 @@ import { useToast } from '../components/shared/Toast'
 import { getApiErrorMessage } from '../types'
 import HelpAnchor from '../components/Help/HelpAnchor'
 import AtlasCountryPlaces from '../components/Atlas/AtlasCountryPlaces'
+import { getIntlLanguage } from '@trek/shared'
 
 // Fixed ids rather than useId: the page body stays free of hooks, and there is only one atlas.
 const COUNTRY_DIALOG_TITLE = 'atlas-country-dialog-title'
@@ -421,7 +422,7 @@ function AtlasPageDesktop(): React.ReactElement {
                     placeholder={t('atlas.month')}
                     options={[
                       { value: '0', label: t('common.none') },
-                      ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2000, i).toLocaleString(language, { month: 'long' }) })),
+                      ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2000, i).toLocaleString(getIntlLanguage(language), { month: 'long' }) })),
                     ]}
                     size="sm"
                   />
@@ -585,7 +586,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
           <span className="text-xs font-semibold text-center leading-tight" style={{ color: tp, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
           {item.target_date && (() => {
             const [y, m] = item.target_date.split('-')
-            const label = m ? new Date(Number(y), Number(m) - 1).toLocaleString(language, { month: 'short', year: 'numeric' }) : y
+            const label = m ? new Date(Number(y), Number(m) - 1).toLocaleString(getIntlLanguage(language), { month: 'short', year: 'numeric' }) : y
             return <span className="text-[9px] mt-0.5 text-center" style={{ color: tf }}>{label}</span>
           })()}
           {!item.target_date && item.notes && <span className="text-[9px] mt-0.5 text-center" style={{ color: tf, maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.notes}</span>}
@@ -611,7 +612,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
                   style={{ fontSize: 'calc(9px * var(--fs-scale-caption, 1))', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit' }}
                 >
                   <Check size={9} />
-                  {new Date(item.visited_at).toLocaleDateString(language)}
+                  {new Date(item.visited_at).toLocaleDateString(getIntlLanguage(language))}
                 </button>
               ) : (
                 <span
@@ -619,7 +620,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
                   style={{ fontSize: 'calc(9px * var(--fs-scale-caption, 1))' }}
                 >
                   <Check size={9} />
-                  {new Date(item.visited_at).toLocaleDateString(language)}
+                  {new Date(item.visited_at).toLocaleDateString(getIntlLanguage(language))}
                 </span>
               )}
             </Tooltip>
@@ -707,7 +708,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
         <div style={{ display: 'flex', gap: 6 }}>
           <div style={{ flex: 1 }}>
             <CustomSelect value={String(bucketPoiMonth)} onChange={v => setBucketPoiMonth(Number(v))} placeholder={t('atlas.month')} size="sm"
-              options={[{ value: '0', label: '—' }, ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2000, i).toLocaleString(language, { month: 'short' }) }))]} />
+              options={[{ value: '0', label: '—' }, ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2000, i).toLocaleString(getIntlLanguage(language), { month: 'short' }) }))]} />
           </div>
           <div style={{ flex: 1 }}>
             <CustomSelect value={String(bucketPoiYear)} onChange={v => setBucketPoiYear(Number(v))} placeholder={t('atlas.year')} size="sm"

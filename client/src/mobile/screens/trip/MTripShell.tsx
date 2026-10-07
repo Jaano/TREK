@@ -24,6 +24,7 @@ import { useAuthStore } from '../../../store/authStore'
 import { canManageDocSync } from '../../../components/Files/docsync/useDocSync'
 import { useDocSyncOffered } from '../../../components/Files/docsync/useDocSyncOffered'
 import type { Day, Trip } from '../../../types'
+import { getIntlLanguage } from '@trek/shared'
 
 /**
  * Mobile trip screen frame. Owns the chrome the design shares across every
@@ -190,7 +191,7 @@ function dayChipLabel(day: Day, language: string, fallback: string): string {
   if (day.date) {
     const date = new Date(`${day.date.slice(0, 10)}T00:00:00`)
     if (!Number.isNaN(date.getTime())) {
-      return `${new Intl.DateTimeFormat(language, { weekday: 'short' }).format(date)} ${date.getDate()}`
+      return `${new Intl.DateTimeFormat(getIntlLanguage(language), { weekday: 'short' }).format(date)} ${date.getDate()}`
     }
   }
   return fallback

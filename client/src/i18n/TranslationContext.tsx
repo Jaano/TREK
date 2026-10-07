@@ -113,7 +113,7 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
   const [strings, setStrings] = useState<TranslationStrings>(en)
 
   useEffect(() => {
-    document.documentElement.lang = language
+    document.documentElement.lang = getIntlLanguage(language)
     document.documentElement.dir = isRtlLanguage(language) ? 'rtl' : 'ltr'
   }, [language])
 

@@ -5,6 +5,7 @@ import MIconBtn from '../../components/MIconBtn'
 import { A2_TO_A3 } from '../../../pages/atlas/atlasModel'
 import type { BucketItem } from '../../../pages/atlas/atlasModel'
 import type { AtlasController } from './atlasController'
+import { getIntlLanguage } from '@trek/shared'
 
 interface MAtlasBucketSheetProps {
   atlas: AtlasController
@@ -69,7 +70,7 @@ export default function MAtlasBucketSheet({ atlas, open, onClose }: MAtlasBucket
 
   const fmtTarget = (targetDate: string): string => {
     const [y, m] = targetDate.split('-')
-    return m ? new Date(Number(y), Number(m) - 1).toLocaleDateString(language, { month: 'short', year: 'numeric' }) : y
+    return m ? new Date(Number(y), Number(m) - 1).toLocaleDateString(getIntlLanguage(language), { month: 'short', year: 'numeric' }) : y
   }
 
   const itemSub = (item: BucketItem): string => {
@@ -257,7 +258,7 @@ function MMonthYearField({ value, onChange, placeholder, language, t }: {
   const [year, setYear] = useState(selYear ?? new Date().getFullYear())
 
   const display = selYear
-    ? new Date(selYear, (selMonth ?? 1) - 1).toLocaleDateString(language, { month: 'long', year: 'numeric' })
+    ? new Date(selYear, (selMonth ?? 1) - 1).toLocaleDateString(getIntlLanguage(language), { month: 'long', year: 'numeric' })
     : ''
 
   return (
@@ -288,7 +289,7 @@ function MMonthYearField({ value, onChange, placeholder, language, t }: {
                   onClick={() => { onChange(`${year}-${String(m + 1).padStart(2, '0')}`); setOpen(false) }}
                   className={`rounded-[10px] py-2 text-[0.71875rem] font-bold capitalize ${on ? 'bg-m-act text-m-actfg' : 'bg-[color:var(--m-ic)] text-m-ink'}`}
                 >
-                  {new Date(2000, m, 1).toLocaleDateString(language, { month: 'short' })}
+                  {new Date(2000, m, 1).toLocaleDateString(getIntlLanguage(language), { month: 'short' })}
                 </button>
               )
             })}

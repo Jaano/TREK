@@ -43,9 +43,14 @@ export function getLocaleForLanguage(language: string): string {
   return LOCALES[language] ?? LOCALES['en'] ?? 'en-US';
 }
 
-// Returns a BCP-47 tag suitable for Intl APIs.
+// Two codes TREK uses are not the BCP-47 tag of their language: 'br' is Breton
+// and 'gr' is no language at all.
+const INTL_LANGUAGE: Partial<Record<string, string>> = { br: 'pt-BR', gr: 'el' };
+
+// Returns a BCP-47 tag suitable for Intl APIs and the document's lang attribute.
 export function getIntlLanguage(language: string): string {
-  if (language === 'br') return 'pt-BR';
+  const tag = INTL_LANGUAGE[language];
+  if (tag) return tag;
   return SUPPORTED_LANGUAGE_CODES.includes(language) ? language : 'en';
 }
 

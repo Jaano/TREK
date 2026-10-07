@@ -1,3 +1,5 @@
+import { getIntlLanguage } from '@trek/shared'
+
 export interface PlaceLocality {
   /** The country's name in the reader's language, or as the address spells it. */
   country: string | null
@@ -34,7 +36,7 @@ function countryFromAddress(address: string | null | undefined): string | null {
 export function placeLocality(place: LocatedPlace, language: string): PlaceLocality {
   let country: string | null = null
   if (place.country_code) {
-    try { country = new Intl.DisplayNames([language], { type: 'region' }).of(place.country_code.toUpperCase()) ?? null } catch { country = null }
+    try { country = new Intl.DisplayNames([getIntlLanguage(language)], { type: 'region' }).of(place.country_code.toUpperCase()) ?? null } catch { country = null }
   }
   return {
     country: country ?? countryFromAddress(place.address),
