@@ -57,20 +57,27 @@ export default function LocationSelect({ value, onChange, placeholder, style, pl
       setResults([])
       return
     }
+    // Clearing the timer does nothing to a request already out: an answer for
+    // text the user has since changed, or that lands after a pick, is dropped.
+    let stale = false
     debounceRef.current = setTimeout(async () => {
       setLoading(true)
       try {
         const data = await mapsApi.search(trimmed, placeLang, locationBias)
+        if (stale) return
         setResults(data.places || [])
         setHighlight(-1)
       } catch {
-        setResults([])
+        if (!stale) setResults([])
       } finally {
-        setLoading(false)
+        if (!stale) setLoading(false)
       }
     }, 320)
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
-  }, [query, value, locale])
+    return () => {
+      stale = true
+      if (debounceRef.current) clearTimeout(debounceRef.current)
+    }
+  }, [query, value, locale, placeLang])
 
   const pick = (r: any) => {
     const lat = Number(r.lat)

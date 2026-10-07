@@ -1,4 +1,4 @@
-// FE-PLANNER-LOCSEL-001 to FE-PLANNER-LOCSEL-024
+// FE-PLANNER-LOCSEL-001 to FE-PLANNER-LOCSEL-025
 import { useState } from 'react';
 import { delay, http, HttpResponse } from 'msw';
 import userEvent from '@testing-library/user-event';
@@ -340,5 +340,28 @@ describe('LocationSelect', () => {
 
     await user.keyboard('{ArrowDown}{Enter}');
     expect(onPick).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Bach Suites Saigon' }));
+  });
+
+  it('FE-PLANNER-LOCSEL-025: an answer for text the user has since changed never replaces the newer results', async () => {
+    const user = userEvent.setup();
+    server.use(http.post('/api/maps/search', async ({ request }) => {
+      const { query } = (await request.json()) as { query: string };
+      if (query === 'Gare') {
+        await delay(600);
+        return HttpResponse.json({ places: [GARE] });
+      }
+      return HttpResponse.json({ places: [LYON] });
+    }));
+
+    render(<Host />);
+    const input = screen.getByRole('textbox');
+    await user.type(input, 'Gare');
+    await settle(400);
+    await user.type(input, ' de Lyon');
+    expect(await screen.findByText('Gare de Lyon')).toBeInTheDocument();
+
+    await settle(800);
+    expect(screen.queryByText('Gare du Nord')).not.toBeInTheDocument();
+    expect(screen.getByText('Gare de Lyon')).toBeInTheDocument();
   });
 });

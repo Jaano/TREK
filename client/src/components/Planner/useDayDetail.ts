@@ -47,19 +47,26 @@ export function useDayDetail(day: Day | null, days: Day[], tripId: number, lat: 
 
   const isForDay = (a: Accommodation) => day ? isDayInAccommodationRange(day, a.start_day_id, a.end_day_id, days) : false
 
+  // Both effects drop an answer that arrives after the day changed: the panel
+  // stays mounted across a day switch, and the previous day's late response
+  // would otherwise overwrite the new day's forecast and hotel.
   useEffect(() => {
     if (!day?.date || !lat || !lng) { setWeather(null); return }
+    let cancelled = false
     setLoading(true)
     weatherApi.getDetailed(lat, lng, day.date, language)
-      .then(data => setWeather(data.error ? null : data))
-      .catch(() => setWeather(null))
-      .finally(() => setLoading(false))
+      .then(data => { if (!cancelled) setWeather(data.error ? null : data) })
+      .catch(() => { if (!cancelled) setWeather(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [day?.date, lat, lng, language])
 
   useEffect(() => {
     if (!tripId) return
+    let cancelled = false
     accommodationsApi.list(tripId)
       .then(data => {
+        if (cancelled) return
         const all: Accommodation[] = data.accommodations || []
         setAccommodations(all)
         const allForDay = all.filter(isForDay)
@@ -67,6 +74,7 @@ export function useDayDetail(day: Day | null, days: Day[], tripId: number, lat: 
         setAccommodation(allForDay[0] || null)
       })
       .catch(() => {})
+    return () => { cancelled = true }
   }, [tripId, day?.id])
 
   useEffect(() => { if (day) setHotelDayRange(defaultHotelDayRange(day)) }, [day?.id])

@@ -1,4 +1,4 @@
-// FE-PLANNER-DAYDETAIL-001 to FE-PLANNER-DAYDETAIL-098
+// FE-PLANNER-DAYDETAIL-001 to FE-PLANNER-DAYDETAIL-101
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within, act } from '../../../tests/helpers/render';
 import userEvent from '@testing-library/user-event';
@@ -154,6 +154,28 @@ describe('DayDetailPanel', () => {
     // The spinner announces itself as a loading status
     const spinner = await screen.findByRole('status', { name: 'Loading...' });
     expect(spinner.querySelector('.animate-spin')).not.toBeNull();
+  });
+
+  it('FE-PLANNER-DAYDETAIL-101: a late forecast for the previous day never replaces the one for the current day', async () => {
+    const { delay } = await import('msw');
+    server.use(
+      http.get('/api/weather/detailed', async ({ request }) => {
+        const date = new URL(request.url).searchParams.get('date');
+        if (date === '2025-06-15') {
+          await delay(400);
+          return HttpResponse.json({ main: 'Rain', temp: 11, temp_min: 9, temp_max: 13, description: 'rain' });
+        }
+        return HttpResponse.json({ main: 'Clear', temp: 27, temp_min: 20, temp_max: 30, description: 'sunny' });
+      }),
+    );
+    const next = buildDay({ id: 2, trip_id: 1, date: '2025-06-16', title: 'Day two' });
+    const { rerender } = render(<DayDetailPanel {...defaultProps} days={[day, next]} lat={48.8566} lng={2.3522} />);
+    rerender(<DayDetailPanel {...defaultProps} day={next} days={[day, next]} lat={48.8566} lng={2.3522} />);
+
+    expect(await screen.findByText(/27°C/)).toBeInTheDocument();
+    await act(async () => { await new Promise((r) => setTimeout(r, 600)); });
+    expect(screen.queryByText(/11°C/)).toBeNull();
+    expect(screen.getByText(/27°C/)).toBeInTheDocument();
   });
 
   it('FE-PLANNER-DAYDETAIL-010: weather data renders temperature in Celsius', async () => {
