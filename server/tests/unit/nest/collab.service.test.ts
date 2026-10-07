@@ -874,6 +874,10 @@ describe('repository parity', () => {
     // CB6's narrow attachment projection.
     const legacyAttachments = testDb.prepare('SELECT id, filename, original_name, file_size, mime_type FROM trip_files WHERE note_id = ? ORDER BY id ASC').all(note.id);
     expect(await notesRepo.listAttachmentsForNote(note.id)).toEqual(legacyAttachments);
+
+    // A file moved to the trash from the file manager leaves the note.
+    testDb.prepare("UPDATE trip_files SET deleted_at = CURRENT_TIMESTAMP WHERE note_id = ? AND original_name = 'b.png'").run(note.id);
+    expect((await notesRepo.listAttachmentsForNote(note.id)).map(a => a.original_name)).toEqual(['a.pdf']);
   });
 
   it('COLLAB-REPO-002: CollabPollsRepository/CollabPollVotesRepository match the legacy queries for a multiple-choice poll voted on every option', async () => {

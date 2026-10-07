@@ -56,7 +56,9 @@ const sessionSweepInterval = setInterval(() => {
   for (const [key, entry] of rateLimitMap) {
     if (entry.windowStart < rateCutoff) rateLimitMap.delete(key);
   }
-  if (cleaned > 0 || sessions.size > 0) {
+  // Only when something was cleaned: logging every minute while any session
+  // is open wrote 1,440 lines a day into a log nothing rotates.
+  if (cleaned > 0) {
     console.log(`[MCP] Session sweep: cleaned ${cleaned}, active ${sessions.size}`);
   }
 }, 60 * 1000); // sweep every 1 minute

@@ -28,10 +28,6 @@ vi.mock('../../src/websocket', () => ({
   broadcastToUser: vi.fn(),
   getOnlineUserIds: vi.fn(() => []),
 }));
-vi.mock('../../src/services/memories/immichService', () => ({
-  uploadToImmich: vi.fn(async () => null),
-  getImmichCredentials: vi.fn(() => null),
-}));
 
 import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';

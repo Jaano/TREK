@@ -68,6 +68,12 @@ services:
       - ./uploads:/app/uploads
 #      - ./storage-config.json:/app/data/storage-config.json:ro # optional seed-once storage provisioning (wiki: Admin-Storage)
     restart: unless-stopped
+    # Docker's json-file driver keeps every line forever by default.
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
     healthcheck:
       # Through a shell so a changed PORT is followed.
       test: ["CMD-SHELL", "wget -qO- http://localhost:$${PORT:-3000}/api/health || exit 1"]

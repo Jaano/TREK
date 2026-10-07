@@ -192,12 +192,18 @@ export class CollabNotesRepository extends TrekRepository<CollabNotes> {
   // `TripFilesRepository`.
   // -------------------------------------------------------------------------
 
-  /** CB6 (`formatNote`'s hydration read) — `SELECT id, filename, original_name, file_size, mime_type FROM trip_files WHERE note_id = ?`. */
+  /**
+   * CB6 (`formatNote`'s hydration read) — `SELECT id, filename, original_name,
+   * file_size, mime_type FROM trip_files WHERE note_id = ? AND deleted_at IS
+   * NULL`. A note's file can be moved to the trash from the file manager; it
+   * leaves the note then, as a chat attachment leaves its message.
+   */
   async listAttachmentsForNote(note_id: number): Promise<NoteAttachmentRow[]> {
     return await this.kysely<NoteAttachmentsKyselyDB>()
       .selectFrom('trip_files')
       .select(['id', 'filename', 'original_name', 'file_size', 'mime_type'])
       .where('note_id', '=', note_id)
+      .where('deleted_at', 'is', null)
       .execute();
   }
 

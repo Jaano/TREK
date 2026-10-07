@@ -87,10 +87,6 @@ vi.mock('../components/Planner/DayDetailPanel', () => ({
   },
 }));
 
-vi.mock('../components/Memories/MemoriesPanel', () => ({
-  default: () => React.createElement('div', { 'data-testid': 'memories-panel' }),
-}));
-
 vi.mock('../components/Collab/CollabPanel', () => ({
   default: () => React.createElement('div', { 'data-testid': 'collab-panel' }),
 }));
