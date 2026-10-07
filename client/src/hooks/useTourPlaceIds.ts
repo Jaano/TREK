@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import type { TourListItem } from '@trek/shared'
 import { toursApi } from '../api/client'
 
@@ -95,13 +95,18 @@ export function useTourPlaceIds(tripId: number, enabled: boolean) {
   const visibleTours = enabled && tourData?.tripId === tripId ? tourData.tours : []
   const pendingIds = enabled && pendingPlaceIds?.tripId === tripId ? pendingPlaceIds.ids : []
   const currentRequest = requestState?.tripId === tripId ? requestState : null
+  // One Set per change, not per render: consumers memoise on it.
+  const tourPlaceIds = useMemo(
+    () => new Set([...visibleTours.map(tour => tour.place_id), ...pendingIds]),
+    [visibleTours, pendingIds],
+  )
 
   return {
     tours: visibleTours,
     toursLoading: enabled && (currentRequest?.loading ?? false),
     tourLoadError: enabled && (currentRequest?.error ?? false),
     tourDataReady,
-    tourPlaceIds: new Set([...visibleTours.map(tour => tour.place_id), ...pendingIds]),
+    tourPlaceIds,
     reloadTourPlaceIds: reload,
     invalidateTourPlaceIds,
     upsertTour,

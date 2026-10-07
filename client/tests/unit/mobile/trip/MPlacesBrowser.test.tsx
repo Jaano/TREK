@@ -369,7 +369,7 @@ describe('MPlacesBrowser', () => {
       tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
     }
     seedStore(useAddonStore, { addons: [{ id: 'collections', enabled: true }, { id: 'tours', enabled: true }] })
-    vi.spyOn(toursApi, 'list').mockResolvedValue({ tours: [ridge] })
+    const list = vi.spyOn(toursApi, 'list').mockResolvedValue({ tours: [ridge] })
     const planner = makePlanner({
       places: [...PLACES, TOUR],
       tours: [ridge],
@@ -379,7 +379,8 @@ describe('MPlacesBrowser', () => {
 
     await waitFor(() => expect(screen.getByText('places.count:3')).toBeInTheDocument())
     expect(screen.queryByText('Ridge walk')).not.toBeInTheDocument()
-    expect(toursApi.list).toHaveBeenCalledWith(planner.tripId)
+    // The planner owns the tour list; the browser does not fetch a second one.
+    expect(list).not.toHaveBeenCalled()
 
     fireEvent.click(screen.getByRole('tab', { name: /^Tours$/i }))
     expect(screen.getByRole('option', { name: /Ridge walk/ })).toBeInTheDocument()

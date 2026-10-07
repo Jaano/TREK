@@ -36,7 +36,7 @@ afterAll(async () => { await t.close(); testDb.close(); });
  */
 function legacyGetPlaceWithTags(placeId: number): unknown {
   const place = testDb
-    .prepare('SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?')
+    .prepare('SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon, t.place_id as tour_place_id FROM places p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN tours t ON t.place_id = p.id WHERE p.id = ?')
     .get(placeId) as (Record<string, unknown> & { category_id: number | null; category_name: string | null; category_color: string | null; category_icon: string | null }) | undefined;
   if (!place) return null;
   const tags = testDb.prepare('SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?').all(placeId);
@@ -56,6 +56,17 @@ function legacyGetPlaceWithTags(placeId: number): unknown {
 }
 
 describe('PlacesRepository.findWithTagsAndRatings — parity with the legacy getPlaceWithTags', () => {
+  it('PLACEREPO-011b: the single-place read carries the tour mark, as the list does', async () => {
+    const { user: owner } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    const plain = createPlace(testDb, trip.id, { name: 'Plain' });
+    const tour = createPlace(testDb, trip.id, { name: 'Ridge walk' });
+    testDb.prepare("INSERT INTO tours (place_id, tour_type) VALUES (?, 'hike')").run(tour.id);
+
+    expect((await places.findWithTagsAndRatings(tour.id))?.tour_place_id).toBe(tour.id);
+    expect((await places.findWithTagsAndRatings(plain.id))?.tour_place_id).toBeNull();
+  });
+
   it('PLACEREPO-011 (0b security review F-B6): full key-for-key parity with the legacy statement, on a place with a category, two tags and two ratings', async () => {
     const { user: owner } = createUser(testDb);
     const { user: voterA } = createUser(testDb, { username: 'parity_voter_a' });

@@ -24,7 +24,6 @@ import MPlacesSaveToCollectionSheet from './MPlacesSaveToCollectionSheet'
 import MPlacesToursModeSwitch from './MPlacesToursModeSwitch'
 import MToursSelectionList from './MToursSelectionList'
 import { filterPool, firstPlannedDayNumbers, plannedPlaceIds } from './placesBrowserModel'
-import { useTourPlaceIds } from '../../../../hooks/useTourPlaceIds'
 import { MCategoryFilterList, MRatingFloorChips, SquareCheck } from './MPlacesFilterControls'
 import { countActivePlacesFilters } from '../../../../utils/placesFilter'
 
@@ -46,9 +45,6 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
   const canEditPlaces = planner.can('place_edit', trip)
   const collectionsEnabled = useAddonStore(s => s.isEnabled('collections'))
   const toursEnabled = useAddonStore(s => s.isEnabled('tours'))
-  // Places that are tours (a `tours` facet row exists) — kept out of the
-  // Places pool entirely while the addon is on.
-  const { tourPlaceIds } = useTourPlaceIds(tripId, toursEnabled)
   // Top level of the places browser, mirroring the desktop right add-panel's
   // Places <-> Tours switch placement.
   const [toursMode, setToursMode] = useState(false)
@@ -84,8 +80,11 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
   )
   const dayNumberByPlace = useMemo(() => firstPlannedDayNumbers(assignments, days), [assignments, days])
   const poolPlaces = useMemo(
-    () => toursEnabled ? places.filter(place => !tourPlaceIds.has(place.id)) : places,
-    [places, toursEnabled, tourPlaceIds],
+    // Places that are tours stay out of the Places pool while the addon is on.
+    // The planner's answer, not a second list of its own: that one is kept up
+    // to date by the trip's realtime events and knows the mark on each place.
+    () => toursEnabled ? places.filter(place => !planner.isTourPlace(place.id)) : places,
+    [places, toursEnabled, planner.isTourPlace],
   )
   const filtered = useMemo(() => {
     return filterPool(poolPlaces, { filter, categoryFilters, ratingFilter, search, plannedIds })

@@ -53,14 +53,14 @@ export interface PlaceWithCategoryRow extends PlaceRow {
   category_name: string | null;
   category_color: string | null;
   category_icon: string | null;
+  /** The place's own id when it is a Tour (it has a `tours` facet row), else null. */
+  tour_place_id: number | null;
 }
 
 /** {@link PlacesRepository.listForTrip}'s row: the category join plus the atlas' cached region (#2537), null when none resolved yet. */
 export interface PlaceListRow extends PlaceWithCategoryRow {
   country_code: string | null;
   region_name: string | null;
-  /** The place's own id when it is a Tour (it has a `tours` facet row), else null. */
-  tour_place_id: number | null;
 }
 
 /** {@link PlacesRepository.findActiveTripFile}'s narrow `trip_files` shape. */
@@ -140,9 +140,17 @@ export class PlacesRepository extends TrekRepository<Places> {
     // raw-bind seam (`legacy getPlaceWithTags(placeId: number | string)`
     // bound the raw value with no `Number()` conversion). `p.id` is the
     // physical column name.
+    const platform = this.getEntityManager().getPlatform();
+    // The tour mark rides along like it does on the list read: this row is
+    // what place:created and place:updated carry, and a client that only knew
+    // the list's mark showed a tour another member made as a plain place.
     const place = await this.qb('p')
       .leftJoin('p.category', 'c')
-      .select(['p.*', 'c.name as category_name', 'c.color as category_color', 'c.icon as category_icon'])
+      .leftJoin('p.tours', 't')
+      .select([
+        'p.*', 'c.name as category_name', 'c.color as category_color', 'c.icon as category_icon',
+        columnRef(platform, 't.place_id').as('tour_place_id'),
+      ])
       .where('p.id = ?', [place_id])
       .execute<PlaceWithCategoryRow | undefined>('get', false);
     if (!place) return null;
@@ -165,7 +173,6 @@ export class PlacesRepository extends TrekRepository<Places> {
     // column, `'pr.user as user_id'` was tried and is still `u__id` — both
     // verified directly, not assumed (same finding independently reproduced
     // in `PlaceRatingsRepository.listForPlaces`'s docstring, Plan 3c Task 1).
-    const platform = this.getEntityManager().getPlatform();
     const ratings = await this.qb('p')
       .join('p.place_ratings_collection', 'pr')
       .join('pr.user', 'u')
