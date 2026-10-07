@@ -530,6 +530,34 @@ async function main() {
       }
     }
 
+    // --- addons: the AI Parsing addon's instance-wide API key ---
+    // Stored encrypted as `apiKey` inside the addon's JSON config
+    // (llm-parse/llm-config.ts). Left out, LLM parsing quietly runs without a
+    // key after the rotation, since a failed decrypt reads as "no key".
+    if (tableExists('addons')) {
+      const addonRows = db
+        .prepare('SELECT id, config FROM addons WHERE config IS NOT NULL')
+        .all() as { id: string; config: string }[];
+      for (const row of addonRows) {
+        let config: unknown;
+        try {
+          config = JSON.parse(row.config);
+        } catch {
+          continue;
+        }
+        if (!config || typeof config !== 'object' || Array.isArray(config)) continue;
+        const apiKey = (config as Record<string, unknown>).apiKey;
+        if (typeof apiKey !== 'string' || !apiKey) continue;
+        const newVal = migrateApiKeyValue(apiKey, `addons[${row.id}].config.apiKey`);
+        if (newVal !== null) {
+          db.prepare('UPDATE addons SET config = ? WHERE id = ?').run(
+            JSON.stringify({ ...(config as Record<string, unknown>), apiKey: newVal }),
+            row.id,
+          );
+        }
+      }
+    }
+
     // --- trip_album_links: passphrase ---
     const albumLinks = db.prepare('SELECT id, passphrase FROM trip_album_links WHERE passphrase IS NOT NULL').all() as { id: number; passphrase: string }[];
     for (const row of albumLinks) {
@@ -618,6 +646,16 @@ async function main() {
     process.exit(1);
   } else {
     console.log('\nAll secrets successfully re-encrypted.');
+    // The server refuses to start when ENCRYPTION_KEY and the key file disagree
+    // (src/config.ts), so the file follows the rotation. Only an existing file
+    // next to the database is touched; anything else is left to the operator.
+    const keyFile = path.join(path.dirname(dbPath), '.encryption_key');
+    if (fs.existsSync(keyFile)) {
+      fs.writeFileSync(keyFile, newKey, { mode: 0o600 });
+      console.log(`Key file updated: ${keyFile}`);
+    } else {
+      console.log('No key file next to the database. Store the new key wherever TREK reads it from (ENCRYPTION_KEY or data/.encryption_key).');
+    }
     console.log(`Backup retained at: ${backupPath}`);
   }
 }

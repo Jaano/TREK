@@ -391,4 +391,36 @@ describe('migrate-encryption.ts rotates the stores the app writes', () => {
     expect(output).toMatch(/Already on new key:\s+1\b/);
     expect(output).toContain('All secrets successfully re-encrypted.');
   }, 30000);
+
+  it("ROTPAR-013: re-encrypts the AI Parsing addon key and moves the key file to the new key", () => {
+    const seed = new Database(dbPath);
+    seed.exec(BASE_SCHEMA);
+    seed.exec('CREATE TABLE addons (id TEXT PRIMARY KEY, config TEXT)');
+    seed.prepare('INSERT INTO addons (id, config) VALUES (?, ?)').run(
+      'llm_parse',
+      JSON.stringify({ provider: 'openai', apiKey: encryptWith('old-key', 'sk-addon') }),
+    );
+    seed.prepare('INSERT INTO addons (id, config) VALUES (?, ?)').run('packing', '{"x":1}');
+    seed.close();
+    const keyFile = path.join(path.dirname(dbPath), '.encryption_key');
+    fs.writeFileSync(keyFile, 'old-key');
+
+    execFileSync(process.execPath, ['--import', 'tsx', 'scripts/migrate-encryption.ts'], {
+      cwd: SERVER_ROOT,
+      env: { ...process.env, DB_PATH: dbPath },
+      input: ['old-key', 'new-key', 'yes', ''].join(String.fromCharCode(10)),
+      stdio: 'pipe',
+      encoding: 'utf8',
+    });
+
+    const after = new Database(dbPath, { readonly: true });
+    const llm = JSON.parse((after.prepare("SELECT config AS v FROM addons WHERE id = 'llm_parse'").get() as { v: string }).v);
+    expect(decryptWith('new-key', llm.apiKey)).toBe('sk-addon');
+    expect(llm.provider).toBe('openai');
+    const other = (after.prepare("SELECT config AS v FROM addons WHERE id = 'packing'").get() as { v: string }).v;
+    expect(other).toBe('{"x":1}');
+    after.close();
+    // The server refuses an ENCRYPTION_KEY that disagrees with this file.
+    expect(fs.readFileSync(keyFile, 'utf8')).toBe('new-key');
+  }, 30000);
 });
