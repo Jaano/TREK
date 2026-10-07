@@ -1,11 +1,13 @@
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { TourCreateRequest, TourCreateResponse, TourDetailResponse, TourListItem, TourWaypoint } from '@trek/shared';
 import { Places } from '../../db/entities/Places.entity';
 import { Tours } from '../../db/entities/Tours.entity';
+import { TourTypes } from '../../db/entities/TourTypes.entity';
 import { TourWaypoints } from '../../db/entities/TourWaypoints.entity';
 import type { PlacesRepository } from '../../db/repositories/Places.repository';
 import type { TourListRow, ToursRepository, TourUpdate } from '../../db/repositories/Tours.repository';
+import type { TourTypesRepository } from '../../db/repositories/TourTypes.repository';
 import type { TourWaypointsRepository } from '../../db/repositories/TourWaypoints.repository';
 import { toRowId } from '../common/row-id';
 import { UnitOfWork } from '../database/unit-of-work';
@@ -33,6 +35,7 @@ export class ToursService {
     private readonly uow: UnitOfWork,
     private readonly places: PlacesService,
     @InjectRepository(Tours) private readonly toursRepo: ToursRepository,
+    @InjectRepository(TourTypes) private readonly tourTypesRepo: TourTypesRepository,
     @InjectRepository(TourWaypoints) private readonly waypointsRepo: TourWaypointsRepository,
     @InjectRepository(Places) private readonly placesRepo: PlacesRepository,
   ) {}
@@ -49,7 +52,6 @@ export class ToursService {
       difficulty: r.difficulty,
       wanderer_ref: r.wanderer_ref,
       match_confidence: r.match_confidence,
-      tour_group_id: r.tour_group_id,
       max_hiking_difficulty: r.max_hiking_difficulty ?? 2,
       planned: Boolean(r.planned),
       caution: r.match_confidence !== null && r.match_confidence < LOW_CONFIDENCE_THRESHOLD,
@@ -69,6 +71,15 @@ export class ToursService {
       match_confidence: 1,
       max_hiking_difficulty: input.max_hiking_difficulty,
     };
+  }
+
+  /**
+   * `tour_types` knows every key the contract accepts, most of them disabled.
+   * Checked before the write, so a disabled type is a 400 and not a tour the
+   * planner cannot show.
+   */
+  private async assertTourTypeEnabled(key: string): Promise<void> {
+    if (!(await this.tourTypesRepo.isEnabled(key))) throw new BadRequestException('Tour type is not available');
   }
 
   /** All tours (the facet + owning place) for a trip, newest first. */
@@ -111,6 +122,7 @@ export class ToursService {
   async createTour(tripId: string, input: TourCreateRequest, socketId?: string): Promise<TourCreateResponse> {
     // The controller's TripAccessGuard already resolved this trip id.
     const tid = toRowId(tripId)!;
+    await this.assertTourTypeEnabled(input.tour_type);
     const start = input.route_geometry[0];
     const fields = this.routeFields(input);
 
@@ -144,6 +156,7 @@ export class ToursService {
     const tid = toRowId(tripId);
     const pid = toRowId(placeId);
     if (tid === null || pid === null) throw new NotFoundException('Tour not found');
+    await this.assertTourTypeEnabled(input.tour_type);
     const start = input.route_geometry[0];
     const fields = this.routeFields(input);
 
@@ -226,7 +239,6 @@ export class ToursService {
           difficulty: null,
           wanderer_ref: null,
           match_confidence: matchConfidence,
-          tour_group_id: null,
           max_hiking_difficulty: 2,
           planned: 0,
           has_waypoints: 0,

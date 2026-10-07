@@ -52,7 +52,7 @@ import {
   createTestJourneysRepo, createTestJourneyContributorsRepo, createTestJourneyTripsRepo, createTestJourneyEntriesRepo,
   createTestJourneyPhotosRepo, createTestJourneyEntryPhotosRepo,
 } from '../../helpers/journey-repos';
-import { createTestToursRepo, createTestTourWaypointsRepo } from '../../helpers/tours-repos';
+import { createTestToursRepo, createTestTourTypesRepo, createTestTourWaypointsRepo } from '../../helpers/tours-repos';
 
 const mixedGpx = Buffer.from(`<gpx>
   <wpt lat="1" lon="2"><name>Ignored POI</name></wpt>
@@ -111,7 +111,7 @@ beforeAll(async () => {
   uow = await createTestUnitOfWork(testDb);
   places = await makePlacesService();
   tours = new ToursService(
-    uow, places, await createTestToursRepo(testDb), await createTestTourWaypointsRepo(testDb), await createTestPlacesRepo(testDb),
+    uow, places, await createTestToursRepo(testDb), await createTestTourTypesRepo(testDb), await createTestTourWaypointsRepo(testDb), await createTestPlacesRepo(testDb),
   );
 });
 

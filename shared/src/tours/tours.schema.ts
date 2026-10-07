@@ -42,7 +42,6 @@ export const tourSchema = z.object({
   // Nullable reference to a tour in wanderer.
   wanderer_ref: z.string().nullable(),
   match_confidence: z.number().min(0).max(1).nullable(),
-  tour_group_id: z.number().int().nullable(),
   max_hiking_difficulty: tourMaxHikingDifficultySchema,
 });
 export type Tour = z.infer<typeof tourSchema>;

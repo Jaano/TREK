@@ -2,6 +2,7 @@ import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { Module } from '@nestjs/common';
 import { Places } from '../../db/entities/Places.entity';
 import { Tours } from '../../db/entities/Tours.entity';
+import { TourTypes } from '../../db/entities/TourTypes.entity';
 import { TourWaypoints } from '../../db/entities/TourWaypoints.entity';
 import { ToursController } from './tours.controller';
 import { ToursImportController } from './tours-import.controller';
@@ -24,7 +25,7 @@ import { AddonsModule } from '../addons/addons.module';
     PermissionsModule,
     AuthModule,
     AddonsModule,
-    MikroOrmModule.forFeature([Tours, TourWaypoints, Places]),
+    MikroOrmModule.forFeature([Tours, TourTypes, TourWaypoints, Places]),
   ],
   controllers: [ToursController, ToursImportController],
   providers: [ToursService],

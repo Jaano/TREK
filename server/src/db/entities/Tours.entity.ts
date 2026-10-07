@@ -17,7 +17,6 @@ export class Tours {
   difficulty?: string | null;
   wanderer_ref?: string | null;
   match_confidence?: number | null;
-  tour_group_id?: number | null;
   created_at?: string | null;
   max_hiking_difficulty: number & Opt = 2;
   tourTypeRef!: Ref<TourTypes>;
@@ -38,7 +37,6 @@ export const ToursSchema = defineEntity({
     difficulty: p.text().nullable(),
     wanderer_ref: p.text().nullable(),
     match_confidence: p.double().nullable(),
-    tour_group_id: p.integer().nullable(),
     created_at: p.text().nullable().defaultRaw(`CURRENT_TIMESTAMP`),
     max_hiking_difficulty: p.integer().default(2),
     tourTypeRef: () => p.manyToOne(TourTypes).ref().joinColumn('tour_type').hidden().index('idx_tours_tour_type'),

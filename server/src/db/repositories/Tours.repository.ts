@@ -19,7 +19,6 @@ export interface TourListRow {
   difficulty: string | null;
   wanderer_ref: string | null;
   match_confidence: number | null;
-  tour_group_id: number | null;
   max_hiking_difficulty: number;
   planned: number;
   has_waypoints: number;
@@ -36,7 +35,6 @@ export interface TourRow {
   difficulty: string | null;
   wanderer_ref: string | null;
   match_confidence: number | null;
-  tour_group_id: number | null;
   created_at: string | null;
   max_hiking_difficulty: number;
 }
@@ -95,7 +93,6 @@ export class ToursRepository extends TrekRepository<Tours> {
         't.difficulty as difficulty',
         't.wanderer_ref as wanderer_ref',
         't.match_confidence as match_confidence',
-        't.tour_group_id as tour_group_id',
         't.max_hiking_difficulty as max_hiking_difficulty',
         eb.exists(eb.selectFrom('day_assignments as da').select('da.id').whereRef('da.place_id', '=', 'p.id')).as('planned'),
         eb.exists(eb.selectFrom('tour_waypoints as tw').select('tw.id').whereRef('tw.place_id', '=', 'p.id')).as('has_waypoints'),

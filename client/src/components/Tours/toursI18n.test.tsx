@@ -21,7 +21,7 @@ vi.mock('better-sqlite3', () => { throw new Error('SQLite imports are forbidden 
 const tour: TourListItem = {
   place_id: 42, name: 'Ridge walk', tour_type: 'hike', distance: 4,
   elevation_gain: 100, elevation_loss: 80, duration: 60, difficulty: null,
-  wanderer_ref: null, match_confidence: 1, tour_group_id: null,
+  wanderer_ref: null, match_confidence: 1,
   max_hiking_difficulty: 2, planned: false, caution: false,
 }
 

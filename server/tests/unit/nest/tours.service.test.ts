@@ -8,7 +8,7 @@
  * real PlacesService, is covered by tours.gpx.atomic.test.ts.
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 
 vi.mock('../../../src/db/database', async () => {
   const { createSnapshotTestDb, buildDbMock } = await import('../../helpers/db-mock');
@@ -27,7 +27,7 @@ import type { PlacesService } from '../../../src/nest/places/places.service';
 import { resetTestDb } from '../../helpers/test-db';
 import { createPlace, createTrip, createUser } from '../../helpers/factories';
 import { createTestPlacesRepo, createTestUnitOfWork, sharedTestOrm } from '../../helpers/test-uow';
-import { createTestToursRepo, createTestTourWaypointsRepo, createTour } from '../../helpers/tours-repos';
+import { createTestToursRepo, createTestTourTypesRepo, createTestTourWaypointsRepo, createTour } from '../../helpers/tours-repos';
 
 const request: TourCreateRequest = {
   name: 'Ridge walk',
@@ -59,6 +59,7 @@ beforeAll(async () => {
     await createTestUnitOfWork(testDb),
     { broadcast } as unknown as PlacesService,
     await createTestToursRepo(testDb),
+    await createTestTourTypesRepo(testDb),
     await createTestTourWaypointsRepo(testDb),
     await createTestPlacesRepo(testDb),
   );
@@ -131,6 +132,30 @@ describe('ToursService planner creation', () => {
     const { duration_seconds: _omitted, ...withoutDuration } = request;
     const result = await service.createTour(tripId, withoutDuration);
     expect(result.tour.duration).toBeNull();
+  });
+
+  it('TOURS-SVC-010: a type the catalogue holds but has not enabled is a 400 without a write', async () => {
+    // The contract only lets `hike` through today; this pins what happens the
+    // day it lets more keys in before the planner offers them.
+    const bike = { ...request, tour_type: 'bike' } as unknown as typeof request;
+
+    await expect(service.createTour(tripId, bike)).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(count('places')).toBe(0);
+    expect(count('tours')).toBe(0);
+    expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it('TOURS-SVC-011: an edit to a disabled type is a 400 and leaves the saved tour alone', async () => {
+    const created = await service.createTour(tripId, request);
+    broadcast.mockReset();
+    const bike = { ...request, name: 'Renamed', tour_type: 'bike' } as unknown as typeof request;
+
+    await expect(service.updateTour(tripId, String(created.tour.place_id), bike)).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(testDb.prepare('SELECT t.tour_type, p.name FROM tours t JOIN places p ON p.id = t.place_id').get())
+      .toEqual({ tour_type: 'hike', name: 'Ridge walk' });
+    expect(broadcast).not.toHaveBeenCalled();
   });
 
   it('keeps a committed create successful when Tours invalidation publication fails', async () => {

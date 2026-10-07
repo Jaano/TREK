@@ -667,7 +667,7 @@ describe('useTripPlanner — map derivations', () => {
     const tour: TourListItem = {
       place_id: 7, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
       elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
-      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+      max_hiking_difficulty: 2, planned: false, caution: false,
     }
     useAddonStore.setState({ addons: [{ id: 'tours', enabled: true } as never], loaded: true })
     vi.mocked(addonsApi.enabled).mockResolvedValue({ addons: [{ id: 'tours' }] })
@@ -1439,7 +1439,6 @@ describe('useTripPlanner — place CRUD', () => {
       difficulty: null,
       wanderer_ref: null,
       match_confidence: 1,
-      tour_group_id: null,
       max_hiking_difficulty: 2,
       planned: false,
       caution: false,
@@ -1638,7 +1637,7 @@ describe('useTripPlanner — day plan CRUD', () => {
     const tour: TourListItem = {
       place_id: 1, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
       elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
-      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+      max_hiking_difficulty: 2, planned: false, caution: false,
     }
     const tourPlace = buildPlace({ id: 1, name: 'Ridge walk', tour_place_id: 1 })
     const ordinaryPlace = buildPlace({ id: 2, name: 'Ordinary place' })
@@ -1669,7 +1668,7 @@ describe('useTripPlanner — day plan CRUD', () => {
     const unplanned: TourListItem = {
       place_id: 1, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
       elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
-      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+      max_hiking_difficulty: 2, planned: false, caution: false,
     }
     const planned = { ...unplanned, planned: true }
     useAddonStore.setState({ addons: [{ id: 'tours', enabled: true } as never], loaded: true })
@@ -1707,7 +1706,7 @@ describe('useTripPlanner — day plan CRUD', () => {
     const unplanned: TourListItem = {
       place_id: 1, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
       elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
-      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+      max_hiking_difficulty: 2, planned: false, caution: false,
     }
     useAddonStore.setState({ addons: [{ id: 'tours', enabled: true } as never], loaded: true })
     const listTours = vi.spyOn(toursApi, 'list').mockResolvedValue({ tours: [unplanned] })
@@ -1729,7 +1728,7 @@ describe('useTripPlanner — day plan CRUD', () => {
     const unplanned: TourListItem = {
       place_id: 1, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
       elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
-      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+      max_hiking_difficulty: 2, planned: false, caution: false,
     }
     const planned: TourListItem = { ...unplanned, planned: true }
     useAddonStore.setState({ addons: [{ id: 'tours', enabled: true } as never], loaded: true })

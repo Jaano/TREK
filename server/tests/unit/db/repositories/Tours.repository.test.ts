@@ -60,12 +60,12 @@ describe('ToursRepository reads', () => {
     expect(await repo.listForTrip(trip.id)).toEqual([
       {
         place_id: newer.id, name: 'Newer', tour_type: 'hike', distance: null, elevation_gain: null, elevation_loss: null,
-        duration: null, difficulty: null, wanderer_ref: null, match_confidence: null, tour_group_id: null,
+        duration: null, difficulty: null, wanderer_ref: null, match_confidence: null,
         max_hiking_difficulty: 5, planned: 0, has_waypoints: 1,
       },
       {
         place_id: older.id, name: 'Older', tour_type: 'hike', distance: 5, elevation_gain: null, elevation_loss: null,
-        duration: null, difficulty: null, wanderer_ref: null, match_confidence: 0.3, tour_group_id: null,
+        duration: null, difficulty: null, wanderer_ref: null, match_confidence: 0.3,
         max_hiking_difficulty: 2, planned: 1, has_waypoints: 0,
       },
     ]);
@@ -128,7 +128,7 @@ describe('ToursRepository writes', () => {
     await repo.insertTour({ place_id: place.id, ...METRICS });
 
     expect(await repo.findInTrip(trip.id, place.id)).toEqual({
-      place_id: place.id, name: 'Drawn', ...METRICS, difficulty: null, wanderer_ref: null, tour_group_id: null,
+      place_id: place.id, name: 'Drawn', ...METRICS, difficulty: null, wanderer_ref: null,
       planned: 0, has_waypoints: 0,
     });
   });
@@ -149,12 +149,12 @@ describe('ToursRepository writes', () => {
     const { trip, other } = fixture();
     const source = createPlace(testDb, trip.id);
     createTour(testDb, source.id, { created_at: '2026-03-04 05:06:07', distance: 3.5, max_hiking_difficulty: 4 });
-    testDb.prepare("UPDATE tours SET difficulty = 'T3', wanderer_ref = 'w-1', tour_group_id = 9 WHERE place_id = ?").run(source.id);
+    testDb.prepare("UPDATE tours SET difficulty = 'T3', wanderer_ref = 'w-1' WHERE place_id = ?").run(source.id);
 
     const rows = await repo.listRowsForTrip(trip.id);
     expect(rows).toEqual([{
       place_id: source.id, tour_type: 'hike', distance: 3.5, elevation_gain: null, elevation_loss: null, duration: null,
-      difficulty: 'T3', wanderer_ref: 'w-1', match_confidence: null, tour_group_id: 9, created_at: '2026-03-04 05:06:07',
+      difficulty: 'T3', wanderer_ref: 'w-1', match_confidence: null, created_at: '2026-03-04 05:06:07',
       max_hiking_difficulty: 4,
     }]);
     expect(await repo.listRowsForTrip(other.id)).toEqual([]);

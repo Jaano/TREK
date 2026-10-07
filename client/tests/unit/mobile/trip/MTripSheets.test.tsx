@@ -440,7 +440,7 @@ describe('MTripSheets', () => {
       const mobileTour = {
         place_id: 42, name: 'Mobile ridge', tour_type: 'hike', distance: 1,
         elevation_gain: 10, elevation_loss: 0, duration: null, difficulty: null,
-        wanderer_ref: null, match_confidence: 1, tour_group_id: null,
+        wanderer_ref: null, match_confidence: 1,
         max_hiking_difficulty: 2, planned: false, caution: false,
       } as TourListItem
       const readOnlyFile = {

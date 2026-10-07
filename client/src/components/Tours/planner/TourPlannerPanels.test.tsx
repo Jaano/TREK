@@ -25,7 +25,6 @@ const tour: TourListItem = {
   difficulty: null,
   wanderer_ref: null,
   match_confidence: 1,
-  tour_group_id: null,
   max_hiking_difficulty: 2,
   planned: false,
   caution: false,

@@ -49,6 +49,7 @@ import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env
 import type { StorageService } from '../../../src/nest/storage/storage.service';
 import type { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import type { PlacesRepository } from '../../../src/db/repositories/Places.repository';
+import type { TourTypesRepository } from '../../../src/db/repositories/TourTypes.repository';
 import type { ToursRepository } from '../../../src/db/repositories/Tours.repository';
 import type { TourWaypointsRepository } from '../../../src/db/repositories/TourWaypoints.repository';
 import type { User } from '../../../src/types';
@@ -203,7 +204,7 @@ function tourRepositoryFixture(ownerTripId: number) {
   const row = {
     place_id: 42, name: 'Ridge walk', tour_type: 'hike', distance: 3,
     elevation_gain: 30, elevation_loss: 0, duration: null, difficulty: null,
-    wanderer_ref: null, match_confidence: 1, tour_group_id: null,
+    wanderer_ref: null, match_confidence: 1,
     max_hiking_difficulty: 2, planned: 0, has_waypoints: 1,
   };
   const uow = { transactional: vi.fn(async <T>(fn: () => Promise<T>): Promise<T> => await fn()) };
@@ -226,6 +227,7 @@ function tourRepositoryFixture(ownerTripId: number) {
     uow as unknown as UnitOfWork,
     places as unknown as PlacesService,
     toursRepo as unknown as ToursRepository,
+    { isEnabled: vi.fn(async () => true) } as unknown as TourTypesRepository,
     waypointsRepo as unknown as TourWaypointsRepository,
     placesRepo as unknown as PlacesRepository,
   );

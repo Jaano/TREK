@@ -366,7 +366,7 @@ describe('MPlacesBrowser', () => {
     const ridge: TourListItem = {
       place_id: TOUR.id, name: 'Ridge walk', tour_type: 'hike', distance: 4, elevation_gain: 100,
       elevation_loss: 80, duration: null, difficulty: null, wanderer_ref: null, match_confidence: 1,
-      tour_group_id: null, max_hiking_difficulty: 2, planned: false, caution: false,
+      max_hiking_difficulty: 2, planned: false, caution: false,
     }
     seedStore(useAddonStore, { addons: [{ id: 'collections', enabled: true }, { id: 'tours', enabled: true }] })
     const list = vi.spyOn(toursApi, 'list').mockResolvedValue({ tours: [ridge] })

@@ -1900,7 +1900,7 @@ describe('copy: Tours (#2586)', () => {
     const place = createPlace(testDb, tripId, { name });
     testDb.prepare("UPDATE places SET transport_mode = 'walking', route_geometry = '[[47,11],[47.2,11.2]]' WHERE id = ?").run(place.id);
     createTour(testDb, place.id, { distance: 12.5, match_confidence: 0.9, max_hiking_difficulty: 4, created_at: '2025-01-02 03:04:05' });
-    testDb.prepare("UPDATE tours SET elevation_gain = 800, elevation_loss = 790, duration = 5.5, difficulty = 'T3', wanderer_ref = 'w-1', tour_group_id = 7 WHERE place_id = ?").run(place.id);
+    testDb.prepare("UPDATE tours SET elevation_gain = 800, elevation_loss = 790, duration = 5.5, difficulty = 'T3', wanderer_ref = 'w-1' WHERE place_id = ?").run(place.id);
     const insert = testDb.prepare('INSERT INTO tour_waypoints (place_id, lat, lng, role, sequence) VALUES (?, ?, ?, ?, ?)');
     insert.run(place.id, 47, 11, 'start', 0);
     insert.run(place.id, 47.1, 11.1, 'via', 1);
@@ -1927,7 +1927,7 @@ describe('copy: Tours (#2586)', () => {
     const newPlain = testDb.prepare("SELECT id FROM places WHERE trip_id = ? AND name = 'Plain stop'").get(newTripId) as { id: number };
     expect(newTour.id).not.toBe(tour.id);
     expect(tourColumns(newTour.id)).toEqual(tourColumns(tour.id));
-    expect(tourColumns(newTour.id)).toMatchObject({ tour_type: 'hike', created_at: '2025-01-02 03:04:05', max_hiking_difficulty: 4, tour_group_id: 7 });
+    expect(tourColumns(newTour.id)).toMatchObject({ tour_type: 'hike', created_at: '2025-01-02 03:04:05', max_hiking_difficulty: 4 });
     expect(waypoints(newTour.id)).toEqual(waypoints(tour.id));
     expect(waypoints(newTour.id)).toHaveLength(3);
     // The plain place stays plain, and the source keeps its own rows.

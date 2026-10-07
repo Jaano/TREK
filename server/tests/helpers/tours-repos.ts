@@ -2,6 +2,8 @@ import type Database from 'better-sqlite3';
 import { sharedTestOrm } from './test-uow';
 import { Tours } from '../../src/db/entities/Tours.entity';
 import type { ToursRepository } from '../../src/db/repositories/Tours.repository';
+import { TourTypes } from '../../src/db/entities/TourTypes.entity';
+import type { TourTypesRepository } from '../../src/db/repositories/TourTypes.repository';
 import { TourWaypoints } from '../../src/db/entities/TourWaypoints.entity';
 import type { TourWaypointsRepository } from '../../src/db/repositories/TourWaypoints.repository';
 
@@ -13,6 +15,10 @@ import type { TourWaypointsRepository } from '../../src/db/repositories/TourWayp
  */
 export function createTestToursRepo(db: Database.Database): Promise<ToursRepository> {
   return sharedTestOrm(db).then((t) => t.repo(Tours));
+}
+
+export function createTestTourTypesRepo(db: Database.Database): Promise<TourTypesRepository> {
+  return sharedTestOrm(db).then((t) => t.repo(TourTypes));
 }
 
 export function createTestTourWaypointsRepo(db: Database.Database): Promise<TourWaypointsRepository> {

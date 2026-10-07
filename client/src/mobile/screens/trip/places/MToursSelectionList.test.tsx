@@ -19,7 +19,6 @@ const tour: TourListItem = {
   difficulty: null,
   wanderer_ref: null,
   match_confidence: null,
-  tour_group_id: null,
   has_waypoints: true,
   max_hiking_difficulty: 2,
   planned: false,
