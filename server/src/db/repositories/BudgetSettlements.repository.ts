@@ -153,6 +153,20 @@ export class BudgetSettlementsRepository extends TrekRepository<BudgetSettlement
     await this.kysely<BudgetSettlementsKyselyDB>().deleteFrom('budget_settlements').where('id', '=', id).execute();
   }
 
+  /**
+   * `UPDATE budget_settlements SET created_by_user_id = NULL WHERE
+   * created_by_user_id = ?`. The column has no ON DELETE action, so deleting a
+   * user who recorded a payment between two other members failed on the
+   * foreign key. The payment itself belongs to those two and stays.
+   */
+  async clearCreatedBy(user_id: number): Promise<void> {
+    await this.kysely<BudgetSettlementsKyselyDB>()
+      .updateTable('budget_settlements')
+      .set({ created_by_user_id: null })
+      .where('created_by_user_id', '=', user_id)
+      .execute();
+  }
+
   /** BG17's `budget_settlements` half — `UPDATE budget_settlements SET currency = ? WHERE trip_id = ? AND (currency IS NULL OR currency = '')`. */
   async pinCurrency(trip_id: number | string, prev_currency: string): Promise<void> {
     await this.kysely<BudgetSettlementsKyselyDB>()

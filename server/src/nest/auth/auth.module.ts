@@ -1,4 +1,5 @@
 import { BudgetItems } from '../../db/entities/BudgetItems.entity';
+import { BudgetSettlements } from '../../db/entities/BudgetSettlements.entity';
 import { RateLimitModule } from '../common/rate-limit.module';
 import { Module } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
@@ -114,7 +115,7 @@ import { AllowedFileTypesModule } from '../files/allowed-file-types.module';
     // .enqueueUserErasure` rather than re-implementing the same filter twice.
     // PushSubscriptions: AuthService drops every Web Push device of the user
     // on password change/reset (Web Push, #894), owned by `nest/notifications`.
-    MikroOrmModule.forFeature([AppSettings, Users, WebauthnCredentials, WebauthnChallenges, InviteTokens, McpTokens, OauthTokens, PasswordResetTokens, BudgetItems, JourneyShareTokens, Journeys, JourneyEntries, JourneyContributors, ShareTokens, Trips, TripMembers, Plugins, PluginUserErasureQueue, PushSubscriptions])],
+    MikroOrmModule.forFeature([AppSettings, Users, WebauthnCredentials, WebauthnChallenges, InviteTokens, McpTokens, OauthTokens, PasswordResetTokens, BudgetItems, BudgetSettlements, JourneyShareTokens, Journeys, JourneyEntries, JourneyContributors, ShareTokens, Trips, TripMembers, Plugins, PluginUserErasureQueue, PushSubscriptions])],
   controllers: [AuthPublicController, AuthController, PasskeyController],
   providers: [AuthService, UserProfileService, RegistrationInvitesService, PasskeyService, UserCleanupService, WebauthnConfigService, AuthMcp],
   exports: [AuthService, RegistrationInvitesService, PasskeyService, UserCleanupService],

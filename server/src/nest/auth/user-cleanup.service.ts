@@ -15,6 +15,8 @@ import { TripMembers } from '../../db/entities/TripMembers.entity';
 import type { TripMembersRepository } from '../../db/repositories/TripMembers.repository';
 import { BudgetItems } from '../../db/entities/BudgetItems.entity';
 import type { BudgetItemsRepository } from '../../db/repositories/BudgetItems.repository';
+import { BudgetSettlements } from '../../db/entities/BudgetSettlements.entity';
+import type { BudgetSettlementsRepository } from '../../db/repositories/BudgetSettlements.repository';
 import { JourneyShareTokens } from '../../db/entities/JourneyShareTokens.entity';
 import type { JourneyShareTokensRepository } from '../../db/repositories/JourneyShareTokens.repository';
 import { Journeys } from '../../db/entities/Journeys.entity';
@@ -58,6 +60,7 @@ export class UserCleanupService {
     @InjectRepository(TripMembers) private readonly tripMembersRepo: TripMembersRepository,
     // Plan 3e Task 2 (budget) — additive, UC5 only.
     @InjectRepository(BudgetItems) private readonly budgetItemsRepo: BudgetItemsRepository,
+    @InjectRepository(BudgetSettlements) private readonly settlementsRepo: BudgetSettlementsRepository,
     // Plan 3g Task 4 (UC7-10) — the genuinely-journey GDPR-erasure deletes.
     @InjectRepository(JourneyShareTokens) private readonly journeyShareTokensRepo: JourneyShareTokensRepository,
     @InjectRepository(Journeys) private readonly journeysRepo: JourneysRepository,
@@ -153,6 +156,7 @@ export class UserCleanupService {
   private async cleanupUserReferences(userId: number): Promise<void> {
     await this.tripMembersRepo.clearInvitedBy(userId); // UC4 — converted (Plan 4 Task 1)
     await this.budgetItemsRepo.clearPaidByUser(userId); // UC5 — Plan 3e Task 2, converted.
+    await this.settlementsRepo.clearCreatedBy(userId);
     await this.budget.removeUserFromBudgetItems(userId);
     await this.shareTokensRepo.deleteByCreator(userId); // UC6 — converted (Plan 3h Task 6)
     await this.journeyShareTokensRepo.deleteByCreatedBy(userId); // UC7 — converted (Plan 3g Task 4)

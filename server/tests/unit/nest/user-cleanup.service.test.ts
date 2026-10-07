@@ -56,6 +56,7 @@ import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
 import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourneyContributorsRepo } from '../../helpers/journey-repos';
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
 import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
+import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 
 let em: EntityManager;
 let budget: BudgetService;
@@ -70,7 +71,7 @@ beforeAll(async () => {
     em, budget, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb),
     // Plan 4 Task 1 constructor-ripple: UC4's repository.
     await createTestTripMembersRepo(testDb),
-    await createTestBudgetItemsRepo(testDb),
+    await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb),
     // Plan 3g Task 4 constructor-ripple: UC7-10's repositories.
     await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb),
     await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb),
@@ -219,6 +220,21 @@ describe('deleteUserCompletely', () => {
     expect(testDb.prepare('SELECT COUNT(*) AS c FROM share_tokens').get()).toEqual({ c: 0 });
   });
 
+  it('USER-CLEANUP-011: deletes a user who recorded a payment between two other members, and keeps the payment', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: payer } = createUser(testDb, { username: 'payer' });
+    const { user: recorder } = createUser(testDb, { username: 'recorder' });
+    const trip = createTrip(testDb, owner.id);
+    testDb.prepare('INSERT INTO budget_settlements (trip_id, from_user_id, to_user_id, amount, created_by_user_id) VALUES (?, ?, ?, 12.5, ?)')
+      .run(trip.id, payer.id, owner.id, recorder.id);
+
+    await svc.deleteUserCompletely(recorder.id);
+
+    expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(recorder.id)).toBeUndefined();
+    expect(testDb.prepare('SELECT from_user_id, to_user_id, amount, created_by_user_id FROM budget_settlements').get())
+      .toEqual({ from_user_id: payer.id, to_user_id: owner.id, amount: 12.5, created_by_user_id: null });
+  });
+
   it('USER-CLEANUP-007: deletes their journeys and the entries they authored elsewhere', async () => {
     const { user: owner } = createUser(testDb);
     const { user: victim } = createUser(testDb, { username: 'victim' });
@@ -327,7 +343,7 @@ describe('deleteUserCompletely', () => {
       await expect(new UserCleanupService(
         em, budget, await createTestUnitOfWork(testDb), usersRepo,
         await createTestTripMembersRepo(testDb),
-        await createTestBudgetItemsRepo(testDb),
+        await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb),
         await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb),
         await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb),
         await createTestShareTokensRepo(testDb),
