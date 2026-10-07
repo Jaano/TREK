@@ -1,8 +1,8 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { server } from '../../../tests/helpers/msw/server'
 import { useSettingsStore } from '../../store/settingsStore'
-import { valhallaBase, valhallaAvailable, valhallaRouteAvoiding, valhallaRun, valhallaAlternates, alternatesFrom, runFrom, legAvoids } from './valhallaRoute'
+import { valhallaBase, valhallaAvailable, valhallaTurn, resetValhallaTurns, valhallaRouteAvoiding, valhallaRun, valhallaAlternates, alternatesFrom, runFrom, legAvoids } from './valhallaRoute'
 
 const FOSSGIS_VALHALLA = 'https://valhalla1.openstreetmap.de/route'
 
@@ -37,6 +37,55 @@ const setSettings = (patch: Record<string, string>) =>
 
 afterEach(() => {
   setSettings({ routing_base_url: '', valhalla_base_url: '' })
+  resetValhallaTurns()
+})
+
+describe('valhallaTurn', () => {
+  const PUBLIC = 'https://valhalla1.openstreetmap.de'
+
+  afterEach(() => vi.useRealTimers())
+
+  it('spaces questions to the public instance a little over a second apart, across callers', async () => {
+    vi.useFakeTimers()
+    const done: number[] = []
+    const start = Date.now()
+    await valhallaTurn(PUBLIC)
+    done.push(Date.now() - start)
+    const second = valhallaTurn(PUBLIC).then(() => done.push(Date.now() - start))
+    const third = valhallaTurn(PUBLIC).then(() => done.push(Date.now() - start))
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await Promise.all([second, third])
+
+    expect(done[0]).toBe(0)
+    expect(done[1]).toBeGreaterThanOrEqual(1100)
+    expect(done[2] - done[1]).toBeGreaterThanOrEqual(1100)
+  })
+
+  it("does not pace an operator's own host", async () => {
+    vi.useFakeTimers()
+    await valhallaTurn('https://valhalla.example.org')
+    let through = false
+    void valhallaTurn('https://valhalla.example.org').then(() => { through = true })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(through).toBe(true)
+  })
+
+  it('lets a caller that gives up go without taking the turn', async () => {
+    vi.useFakeTimers()
+    await valhallaTurn(PUBLIC)
+    const controller = new AbortController()
+    const waiting = valhallaTurn(PUBLIC, controller.signal)
+    controller.abort()
+    await vi.advanceTimersByTimeAsync(0)
+    await waiting
+    // The abandoned wait claimed nothing, so the next caller only waits out the first turn.
+    const start = Date.now()
+    const next = valhallaTurn(PUBLIC)
+    await vi.advanceTimersByTimeAsync(1100)
+    await next
+    expect(Date.now() - start).toBeLessThanOrEqual(1100)
+  })
 })
 
 const HAMBURG = { lat: 53.5511, lng: 9.9937 }

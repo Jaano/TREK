@@ -1,5 +1,5 @@
 import type { Waypoint } from '../../../types'
-import { valhallaBase, valhallaRun } from '../../Map/valhallaRoute'
+import { valhallaBase, valhallaRun, valhallaTurn } from '../../Map/valhallaRoute'
 
 export interface TourRouteResult {
   coordinates: [number, number][]
@@ -68,6 +68,11 @@ export async function enrichTourElevations(
     const chunk = coordinates.slice(offset, offset + HEIGHT_CHUNK_SIZE)
     if (chunk.length === 1 && offset > 0) break
     try {
+      // The route came from the same host a moment ago, and the public one allows a
+      // request a second: without the wait the first height question is refused and
+      // the tour cannot be saved for want of elevation.
+      await valhallaTurn(base, signal)
+      if (signal?.aborted) return null
       const response = await fetch(`${base}/height`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'trek' },

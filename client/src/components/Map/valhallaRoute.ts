@@ -254,6 +254,35 @@ function pause(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+/** When this tab last put a question to the public instance. */
+let lastPublicAskAt = 0
+
+/**
+ * Waits for this tab's turn at the public instance, which allows about one request a
+ * second per client. Every request to it goes through here, the route and the Tours
+ * elevation alike, so a tour's route and the height question right behind it, or two
+ * features asking at once, no longer reach it inside the same second and come back 429.
+ * The pauses the callers keep themselves still stand; this only adds the wait they
+ * cannot see, the one between unrelated callers.
+ *
+ * Another host is not paced: an operator's own Valhalla sets its own limits.
+ */
+export async function valhallaTurn(base: string, signal?: AbortSignal): Promise<void> {
+  if (base !== FOSSGIS_VALHALLA) return
+  for (let wait = lastPublicAskAt + CHUNK_PAUSE_MS - Date.now(); wait > 0; wait = lastPublicAskAt + CHUNK_PAUSE_MS - Date.now()) {
+    await pause(wait, signal)
+    if (signal?.aborted) return
+  }
+  // Taken in the same synchronous step as the check, so two callers woken together
+  // cannot both see a free turn.
+  lastPublicAskAt = Date.now()
+}
+
+/** Forget the last turn, for tests that start from a quiet host. */
+export function resetValhallaTurns(): void {
+  lastPublicAskAt = 0
+}
+
 /**
  * Waits out the host's one request a second before the next question is put.
  *
@@ -306,6 +335,8 @@ function routeBody(
 /** The parsed answer to one POST, or null for every failure. */
 async function postRoute(base: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
   try {
+    await valhallaTurn(base, signal)
+    if (signal?.aborted) return null
     const response = await fetch(`${base}/route`, {
       method: 'POST',
       // A browser cannot set User-Agent, so this is the whole of what FOSSGIS asks a

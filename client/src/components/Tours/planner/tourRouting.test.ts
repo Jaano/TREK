@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { valhallaBase, valhallaRun } = vi.hoisted(() => ({
+const { valhallaBase, valhallaRun, valhallaTurn } = vi.hoisted(() => ({
   valhallaBase: vi.fn(),
   valhallaRun: vi.fn(),
+  valhallaTurn: vi.fn(async () => {}),
 }))
 
 vi.mock('../../Map/valhallaRoute', () => ({
   valhallaBase,
   valhallaRun,
+  valhallaTurn,
 }))
 
 import { enrichTourElevations, parseValhallaElevation, routeWalkingTour } from './tourRouting'
@@ -65,6 +67,33 @@ describe('routeWalkingTour', () => {
     await expect(enrichTourElevations(coordinates)).resolves.toEqual([
       [48, 11, 0], [48.01, 11.01], [48.02, 11.02],
     ])
+  })
+
+  it('waits for its turn at the host before every height question', async () => {
+    const order: string[] = []
+    valhallaTurn.mockImplementation(async () => { order.push('turn') })
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      order.push('fetch')
+      const shape = (JSON.parse(init.body) as { shape: unknown[] }).shape
+      return { ok: true, json: async () => ({ range_height: shape.map((_, i) => [i, 100]) }) }
+    }))
+    const coordinates = Array.from({ length: 600 }, (_, i) => [48 + i / 1000, 11] as [number, number])
+
+    const result = await enrichTourElevations(coordinates)
+
+    expect(order).toEqual(['turn', 'fetch', 'turn', 'fetch'])
+    expect(valhallaTurn).toHaveBeenCalledWith('https://valhalla.test', undefined)
+    expect(result!.every(point => point.length === 3)).toBe(true)
+  })
+
+  it('asks nothing once the caller gave up while waiting for its turn', async () => {
+    const controller = new AbortController()
+    valhallaTurn.mockImplementation(async () => { controller.abort() })
+    const fetchSpy = vi.fn()
+    vi.stubGlobal('fetch', fetchSpy)
+
+    await expect(enrichTourElevations([[48, 11], [48.01, 11.01]], controller.signal)).resolves.toBeNull()
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 
   it('keeps the full route as 2D geometry when height enrichment is unavailable', async () => {
