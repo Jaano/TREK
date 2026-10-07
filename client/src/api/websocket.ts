@@ -22,6 +22,9 @@ let shouldReconnect = false
 let refetchCallback: RefetchCallback | null = null
 let mySocketId: string | null = null
 let connecting = false
+// Bumped by disconnect(): a connect that was still waiting for its token when
+// the user logged out must not open a socket afterwards.
+let generation = 0
 /** Hook run before refetchCallback on reconnect. Awaited so mutations land first. */
 let preReconnectHook: (() => Promise<void>) | null = null
 
@@ -106,8 +109,12 @@ async function connectInternal(_isReconnect = false): Promise<void> {
   }
 
   connecting = true
+  const started = generation
   const wsToken = await fetchWsToken()
   connecting = false
+  // Logged out while the token was on its way: opening now would leave a socket
+  // authenticated as the previous user, which the next login would reuse.
+  if (started !== generation || !shouldReconnect) return
 
   if (!wsToken) {
     if (shouldReconnect) scheduleReconnect()
@@ -163,6 +170,17 @@ async function connectInternal(_isReconnect = false): Promise<void> {
   }
 }
 
+/**
+ * The network came back or the tab became visible: a socket waiting out its
+ * backoff (up to 30 s) reconnects now. Does nothing while logged out or while
+ * a socket is open or opening.
+ */
+export function reconnectNow(): void {
+  if (!shouldReconnect) return
+  if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return
+  connect()
+}
+
 export function connect(): void {
   shouldReconnect = true
   reconnectDelay = 1000
@@ -175,6 +193,7 @@ export function connect(): void {
 
 export function disconnect(): void {
   shouldReconnect = false
+  generation++
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
