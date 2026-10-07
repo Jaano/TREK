@@ -975,7 +975,7 @@ describe('createUser — the pre-existing uniqueness-check TOCTOU window (AD2-4,
     // INSERT — the two statements are two separate, un-transacted repository
     // calls, exactly as the legacy raw SQL was.
     const usersRepo = await createTestUsersRepo(testDb);
-    const spy = vi.spyOn(usersRepo, 'findIdByEmailExact').mockResolvedValueOnce(null);
+    const spy = vi.spyOn(usersRepo, 'findIdByEmailCI').mockResolvedValueOnce(null);
 
     // The pre-check said "clear," but `users.email` carries its own UNIQUE
     // index (`Migration20200101000000_baseline_schema.ts`) — that's what
@@ -989,5 +989,16 @@ describe('createUser — the pre-existing uniqueness-check TOCTOU window (AD2-4,
     ).rejects.toThrow();
 
     spy.mockRestore();
+  });
+
+  it('ADMIN-SVC-095 — an address that differs only in case is already taken, on create and on update', async () => {
+    const { user: existing } = createUser(testDb, { email: 'Case@Test.example.com' });
+    const { user: other } = createUser(testDb, { email: 'other-case@test.example.com' });
+
+    await expect(svcCreateUser({ username: 'caseuser', email: 'case@test.example.com', password: 'ValidPass1!' }))
+      .resolves.toEqual({ error: 'Email already taken', status: 409 });
+    await expect(updateUser(String(other.id), { email: 'CASE@TEST.EXAMPLE.COM' }))
+      .resolves.toEqual({ error: 'Email already taken', status: 409 });
+    expect(existing.id).toBeGreaterThan(0);
   });
 });

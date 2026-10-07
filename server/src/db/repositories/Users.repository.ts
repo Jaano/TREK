@@ -693,15 +693,15 @@ export class UsersRepository extends TrekRepository<Users> {
   // ---------------------------------------------------------------------
 
   /**
-   * `SELECT id, email, password_hash, oidc_sub FROM users WHERE email = ?
-   *  AND COALESCE(is_guest, 0) = 0` — case-SENSITIVE on `email`, unlike
-   * every other email lookup in this repository (no `LOWER()` in the legacy
-   * statement here); kept exactly as written, not "fixed" to match the
-   * others (parity is law).
+   * `SELECT id, email, password_hash, oidc_sub FROM users WHERE LOWER(email)
+   *  = LOWER(?) AND COALESCE(is_guest, 0) = 0`. Case-insensitive like login:
+   * the caller lowercases the address it was given, and an exact match never
+   * found an account stored as `Foo@x.com`, which then got no reset mail.
    */
   async findForPasswordReset(email: string): Promise<PasswordResetLookup | null> {
+    const platform = this.getEntityManager().getPlatform();
     const row = await this.findOne(
-      { email, is_guest: 0 },
+      { [lower(platform, 'email')]: lowerParam(platform, email), is_guest: 0 },
       { fields: ['id', 'email', 'password_hash', 'oidc_sub'] },
     );
     return row ? { id: row.id, email: row.email, password_hash: row.password_hash, oidc_sub: row.oidc_sub ?? null } : null;
@@ -928,15 +928,22 @@ export class UsersRepository extends TrekRepository<Users> {
   // ---------------------------------------------------------------------
 
   /**
-   * `SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id != ? AND COALESCE(is_guest, 0) = 0`
+   * `SELECT id FROM users WHERE LOWER(email) = LOWER(?) [AND id != ?] AND COALESCE(is_guest, 0) = 0`
    *
    * Both sides folded by SQLite's own `LOWER()` (`lowerParam` binds the RAW
-   * value) — program rule 18.
+   * value) — program rule 18. Every email collision check goes through here
+   * (profile, admin create and update), because login and the OIDC fallback
+   * match case-insensitively: a second account that differs only in case
+   * would make them pick whichever row comes first.
    */
-  async findIdByEmailCI(email: string, excludeId: number): Promise<number | null> {
+  async findIdByEmailCI(email: string, excludeId?: number): Promise<number | null> {
     const platform = this.getEntityManager().getPlatform();
     const row = await this.findOne(
-      { [lower(platform, 'email')]: lowerParam(platform, email), id: { $ne: excludeId }, is_guest: 0 },
+      {
+        [lower(platform, 'email')]: lowerParam(platform, email),
+        ...(excludeId === undefined ? {} : { id: { $ne: excludeId } }),
+        is_guest: 0,
+      },
       { fields: ['id'] },
     );
     return row?.id ?? null;
@@ -1513,12 +1520,6 @@ export class UsersRepository extends TrekRepository<Users> {
     return row?.id ?? null;
   }
 
-  /** AD3 (`createUser`) — `SELECT id FROM users WHERE email = ? AND COALESCE(is_guest, 0) = 0`. Case-sensitive, same reasoning as {@link findIdByUsernameExact}. */
-  async findIdByEmailExact(email: string): Promise<number | null> {
-    const row = await this.findOne({ email, is_guest: 0 }, { fields: ['id'] });
-    return row?.id ?? null;
-  }
-
   /**
    * AD4 (`createUser`'s write) — `INSERT INTO users (username, email,
    * password_hash, role) VALUES (?, ?, ?, ?)`. Only these four columns are
@@ -1561,12 +1562,6 @@ export class UsersRepository extends TrekRepository<Users> {
    */
   async findIdByUsernameExactExcluding(username: string, excludeId: number): Promise<number | null> {
     const row = await this.findOne({ username, id: { $ne: excludeId }, is_guest: 0 }, { fields: ['id'] });
-    return row?.id ?? null;
-  }
-
-  /** AD8 (`updateUser`) — `SELECT id FROM users WHERE email = ? AND id != ? AND COALESCE(is_guest, 0) = 0`. Case-sensitive, excludes self, same reasoning as {@link findIdByUsernameExactExcluding}. */
-  async findIdByEmailExactExcluding(email: string, excludeId: number): Promise<number | null> {
-    const row = await this.findOne({ email, id: { $ne: excludeId }, is_guest: 0 }, { fields: ['id'] });
     return row?.id ?? null;
   }
 

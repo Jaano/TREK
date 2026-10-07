@@ -514,12 +514,12 @@ describe('UsersRepository', () => {
     });
   });
 
-  describe('findForPasswordReset (AU36) — case-SENSITIVE email, unlike every other email lookup here', () => {
-    it('USERSREPO-035: matches the exact case only', async () => {
+  describe('findForPasswordReset (AU36) — case-insensitive, like login', () => {
+    it('USERSREPO-035: finds an address stored with capitals from the lowercased input the service passes', async () => {
       const { user } = createUser(testDb, { email: 'Exact@Example.com' });
-      const row = await users.findForPasswordReset('Exact@Example.com');
-      expect(row?.id).toBe(user.id);
-      expect(await users.findForPasswordReset('exact@example.com')).toBeNull(); // no LOWER() in the legacy statement
+      expect((await users.findForPasswordReset('exact@example.com'))?.id).toBe(user.id);
+      expect((await users.findForPasswordReset('Exact@Example.com'))?.id).toBe(user.id);
+      expect(await users.findForPasswordReset('other@example.com')).toBeNull();
     });
 
     it('USERSREPO-036: excludes a guest', async () => {
@@ -1063,13 +1063,13 @@ describe('UsersRepository — admin (AD1-AD17) read methods, full-key parity', (
     expect(rows.map((r) => r.id)).toEqual(expect.arrayContaining([admin.id, plain.id]));
   });
 
-  it('USERSREPO-079 (AD2/AD3): findIdByUsernameExact/findIdByEmailExact are case-sensitive and exclude guests', async () => {
+  it('USERSREPO-079 (AD2/AD3): findIdByUsernameExact is case-sensitive, the email check is not, and both exclude guests', async () => {
     expect(await users.findIdByUsernameExact('ad-admin')).toBe(admin.id);
     expect(await users.findIdByUsernameExact('AD-ADMIN')).toBeNull(); // case-sensitive, unlike findIdByUsernameCIAny
     expect(await users.findIdByUsernameExact('ad-guest')).toBeNull(); // guest excluded
-    expect(await users.findIdByEmailExact('ad-plain@example.com')).toBe(plain.id);
-    expect(await users.findIdByEmailExact('AD-PLAIN@EXAMPLE.COM')).toBeNull();
-    expect(await users.findIdByEmailExact('ad-guest@example.com')).toBeNull();
+    expect(await users.findIdByEmailCI('ad-plain@example.com')).toBe(plain.id);
+    expect(await users.findIdByEmailCI('AD-PLAIN@EXAMPLE.COM')).toBe(plain.id);
+    expect(await users.findIdByEmailCI('ad-guest@example.com')).toBeNull();
   });
 
   it('USERSREPO-080 (AD4/AD5): insertAdminCreatedUser stores exactly the four named columns, every other column left to the entity default, then findAdminSummary re-selects it', async () => {
@@ -1097,14 +1097,15 @@ describe('UsersRepository — admin (AD1-AD17) read methods, full-key parity', (
     expect(await users.findAdminSummary(999999)).toBeNull();
   });
 
-  it('USERSREPO-082 (AD7/AD8): findIdByUsernameExactExcluding/findIdByEmailExactExcluding exclude the caller\'s own row, case-sensitive, guests excluded', async () => {
+  it('USERSREPO-082 (AD7/AD8): findIdByUsernameExactExcluding/findIdByEmailCI exclude the caller\'s own row and guests', async () => {
     // Renaming plain to admin's own username, excluding plain's own id, must
     // still find admin's row — that's the whole point of the check.
     expect(await users.findIdByUsernameExactExcluding('ad-admin', plain.id)).toBe(admin.id);
     expect(await users.findIdByUsernameExactExcluding('ad-plain', plain.id)).toBeNull(); // excludes self
     expect(await users.findIdByUsernameExactExcluding('ad-guest', plain.id)).toBeNull(); // guest excluded
-    expect(await users.findIdByEmailExactExcluding('ad-admin@example.com', plain.id)).toBe(admin.id);
-    expect(await users.findIdByEmailExactExcluding('ad-plain@example.com', plain.id)).toBeNull();
+    expect(await users.findIdByEmailCI('ad-admin@example.com', plain.id)).toBe(admin.id);
+    expect(await users.findIdByEmailCI('AD-ADMIN@example.com', plain.id)).toBe(admin.id);
+    expect(await users.findIdByEmailCI('ad-plain@example.com', plain.id)).toBeNull();
   });
 
   it('USERSREPO-083 (AD11): applyAdminEdit only touches the keys supplied (coalesceParam semantics) and always stamps updated_at', async () => {

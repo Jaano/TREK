@@ -170,7 +170,7 @@ export class AdminService {
     const existingUsername = await this.users.findIdByUsernameExact(username);
     if (existingUsername) return { error: 'Username already taken', status: 409 };
 
-    const existingEmail = await this.users.findIdByEmailExact(email);
+    const existingEmail = await this.users.findIdByEmailCI(email);
     if (existingEmail) return { error: 'Email already taken', status: 409 };
 
     const passwordHash = bcrypt.hashSync(password, BCRYPT_COST);
@@ -211,7 +211,7 @@ export class AdminService {
       if (conflict) return { error: 'Username already taken', status: 409 };
     }
     if (email && email !== user.email) {
-      const conflict = await this.users.findIdByEmailExactExcluding(email, userId);
+      const conflict = await this.users.findIdByEmailCI(email, userId);
       if (conflict) return { error: 'Email already taken', status: 409 };
     }
 
