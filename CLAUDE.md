@@ -32,7 +32,7 @@ npm run test --workspace=server                    # vitest run (server); also t
 npm run test:e2e                                   # server e2e (boots Nest against a temp SQLite)
 npm run test:cov                                   # coverage (lcov) for all four packages incl. plugin-sdk
 cd client && npm run test                          # client vitest run
-cd client && npm run e2e                           # Playwright (local only)
+cd client && npm run e2e                           # Playwright (CI runs the public and app projects; the screenshot and help-media ones are local)
 cd client && npm run lint:pages                    # enforce the Page pattern (CI gate)
 cd client && npm run lint:rtl                      # physical left/right sides may only shrink per file (CI gate)
 cd client && npm run theme:lint                    # flag styling that bypasses appearance tokens (local only)
@@ -108,7 +108,7 @@ These principles come out of a full-repo audit and shape all new code:
 
 ## Quality gates in CI
 
-`.github/workflows/test.yml` runs, per package: typecheck (server also `typecheck:tests`), `lint:check`, `lint:pages`, `lint:rtl`, `check:plugin-facts`, `i18n:parity:strict`, the S3 contract suite, coverage for all four packages, then a SonarCloud scan. `lint-prettier.yml` additionally runs `lint` + `format:check` on `shared/`. `plugin-sdk` has no lint script and is outside the eslint gates. **Not in CI**: `theme:lint`, Playwright, `check:gl-split` — run them locally. There are no git hooks; nothing runs before a commit except you. Other workflows build Docker images, scan them, and publish `trek-plugin-sdk` on `plugin-sdk-v*` tags.
+`.github/workflows/test.yml` runs, per package: typecheck (server also `typecheck:tests`), `lint:check`, `lint:pages`, `lint:rtl`, `check:plugin-facts`, `i18n:parity:strict`, the S3 contract suite, the browser end-to-end flows (Chromium and WebKit), a client build with `check:gl-split`, coverage for all four packages, then a SonarCloud scan. `lint-prettier.yml` additionally runs `lint` + `format:check` on `shared/`. `plugin-sdk` has no lint script and is outside the eslint gates. **Not in CI**: `theme:lint` and the screenshot and help-media Playwright projects; run them locally. There are no git hooks; nothing runs before a commit except you. Other workflows build Docker images, scan them, and publish `trek-plugin-sdk` on `plugin-sdk-v*` tags.
 
 **SonarCloud** (project `liketrek_TREK`, the built-in Sonar way gate; the run takes 20–25 min, so get it right before pushing) measures **new code only** on a PR; any failing condition blocks it:
 

@@ -12,10 +12,10 @@ npm run lint              # eslint .   (lint:check in CI)
 npm run lint:pages        # enforce the Page pattern (CI gate)
 npm run lint:rtl          # physical left/right sides may only shrink per file (CI gate; --list shows them, --update lowers the baseline)
 npm run test              # vitest run (tests/** + co-located src/**/*.test.{ts,tsx}); also test:unit / test:integration / test:coverage
-npm run e2e               # Playwright (local only; e2e:report opens the last report)
+npm run e2e               # Playwright (CI runs --project=public --project=app; e2e:report opens the last report)
 npm run shots             # Playwright screenshot project (shots:promote to accept)
 npm run theme:lint        # theme conformance audit (theme:lint:strict exits 1; local only)
-npm run check:gl-split    # after build: fails if one chunk bundles both mapbox-gl and maplibre-gl (local only)
+npm run check:gl-split    # after build: fails if one chunk bundles both mapbox-gl and maplibre-gl (CI gate)
 ```
 
 Single test: `npx vitest run src/store/slices/budgetSlice.test.ts`, or `npx vitest run -t "optimistically adds the place"`.

@@ -18,6 +18,9 @@ permissions:
 #   - Tests: the *-coverage jobs run the suites and upload lcov; s3-contract
 #     runs the MinIO contract suite. Coverage jobs run tests only — with the
 #     gates cleared in preflight, they can only fail because tests failed.
+#     client-e2e drives the real app in Chromium and WebKit, and client-bundle
+#     builds the client and checks each map engine keeps a chunk of its own.
+#     Neither feeds the scan.
 #   - Scan `needs:` exactly the four coverage jobs. A coverage job failing
 #     must stop the scan — a missing lcov file would make every line of that
 #     package report as uncovered, and the dashboard would show a collapse
@@ -260,6 +263,93 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  client-bundle:
+    name: Client Bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --workspace shared && npm ci --workspace client
+
+      - name: Build shared
+        run: npm run build --workspace=shared
+
+      - name: Build client
+        run: cd client && npm run build
+
+      - name: Each map engine in a chunk of its own
+        # One static import of mapbox-gl or maplibre-gl in the map tree folds
+        # both engines into one chunk again, and nothing else notices: the build
+        # stays green and the app still works, only every map user downloads
+        # both. scripts/check-gl-split.mjs explains the markers it looks for.
+        run: cd client && npm run check:gl-split
+
+  client-e2e:
+    name: Client End-to-End
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # The run boots the real server (e2e/server-launch.mjs builds it and
+      # starts it against a throwaway SQLite file) and the Vite dev server in
+      # front of it, so it needs every workspace.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared
+        run: npm run build --workspace=shared
+
+      # Keyed on the lockfile, which pins @playwright/test and with it the
+      # browser builds. The system libraries the browsers need are not cached
+      # and are installed on every run.
+      - name: Cache browsers
+        id: browsers
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Chromium for the desktop and phone flows, WebKit for the iPad and
+      # iPhone ones (every browser on iOS and iPadOS is WebKit underneath).
+      - name: Install browsers
+        if: steps.browsers.outputs.cache-hit != 'true'
+        run: cd client && npx playwright install --with-deps chromium webkit
+
+      - name: Install browser dependencies
+        if: steps.browsers.outputs.cache-hit == 'true'
+        run: cd client && npx playwright install-deps chromium webkit
+
+      # The public and app projects are the regression flows. The screenshot
+      # and help-media projects make pictures for the wiki and the help center
+      # and assert nothing, so they stay out of CI.
+      - name: Run the end-to-end flows
+        run: cd client && npx playwright test --project=public --project=app
+
+      - name: Upload traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: e2e-results
+          path: client/test-results/
+          retention-days: 7
 
   s3-contract:
     name: S3 Driver Contract (MinIO)
