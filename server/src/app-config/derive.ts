@@ -29,6 +29,7 @@ import {
   resolveSessionTtlMs,
   stripTrailingSlashes,
 } from './parsers';
+import { imageVersion } from './image-version';
 
 export type RawEnv = Record<string, string | undefined>;
 
@@ -43,8 +44,13 @@ export function deriveApp(raw: RawEnv) {
     isTest: nodeEnv === 'test',
     port: numberOr(raw.PORT, 3001),
     host: raw.HOST,
-    /** Raw APP_VERSION — fallbacks differ per site ('0.0.0' vs package.json vs semver-validated); each keeps its own. */
-    appVersion: raw.APP_VERSION,
+    /**
+     * The image's own VERSION file, else raw APP_VERSION. Fallbacks differ per
+     * site ('0.0.0' vs package.json vs semver-validated); each keeps its own.
+     * The file wins because a container keeps its env across image updates
+     * (image-version.ts).
+     */
+    appVersion: imageVersion() ?? raw.APP_VERSION,
     /** Raw APP_URL — trailing-slash stripping differs per site (feeds strips one, notifications strips all). */
     appUrl: raw.APP_URL,
     tz: raw.TZ,

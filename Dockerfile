@@ -24,6 +24,9 @@ COPY client/scripts/patch-maplibre.mjs ./client/scripts/
 RUN npm ci --workspace=client
 COPY --from=shared-builder /app/shared/dist ./shared/dist
 COPY client/ ./client/
+# A prerelease build does not bump client/package.json, so the bundle takes its
+# version from the same build argument the server's VERSION file comes from.
+ARG APP_VERSION=dev
 RUN npm run build --workspace=client
 
 # ── Stage 3: server ──────────────────────────────────────────────────────────
@@ -120,8 +123,14 @@ RUN mkdir -p /app/data/logs /app/uploads/files /app/uploads/covers /app/uploads/
 ENV NODE_ENV=production
 ENV NODE_USE_ENV_PROXY=1
 ENV PORT=3000
+# The version goes into a file, not into ENV. A container keeps its environment
+# when it is recreated on a newer image (Portainer's recreate, a copied run
+# config), so an APP_VERSION env var would keep announcing the old release and
+# the clients would never pick up the new bundle. The server reads this file
+# first (server/src/app-config/image-version.ts).
 ARG APP_VERSION=dev
-ENV APP_VERSION=${APP_VERSION}
+RUN if [ "$APP_VERSION" != "dev" ]; then printf '%s
+' "$APP_VERSION" > /app/server/VERSION; fi
 
 # OCI metadata: Renovate, Watchtower and the registries read the source label to
 # link an image update to its release notes (#1498). The release workflows add

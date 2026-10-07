@@ -5,11 +5,12 @@ import { visualizer } from 'rollup-plugin-visualizer';
 import { rtlTextAlias, plyrSpriteAlias } from './rtlTextAlias.js';
 import { readFileSync } from 'node:fs';
 
-// The version this bundle is built as, baked in at build time. The release image
-// bumps every package.json before it builds, so this matches the server's
-// APP_VERSION there; a source checkout matches the server's own package.json.
+// The version this bundle is built as, baked in at build time. The Docker build
+// passes APP_VERSION, which the prerelease images need because they do not bump
+// package.json; a source checkout matches the server's own package.json.
 // The server hands the release notice only to a bundle built for its version.
-const UI_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
+const BUILD_VERSION = process.env.APP_VERSION && process.env.APP_VERSION !== 'dev' ? process.env.APP_VERSION : null;
+const UI_VERSION = BUILD_VERSION ?? JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 
 // `npm run build:analyze` writes dist/stats.html — a treemap of what actually ended
 // up in each chunk. The plain build only reports chunk sizes, which tells you a chunk
