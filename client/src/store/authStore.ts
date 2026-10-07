@@ -7,7 +7,8 @@ import { getApiErrorMessage } from '../types'
 import { tripSyncManager } from '../sync/tripSyncManager'
 import { reopenForUser, deleteCurrentUserDb } from '../db/offlineDb'
 import { setAuthed } from '../sync/authGate'
-import { setForcedOffline } from '../sync/networkMode'
+import { isEffectivelyOffline, setForcedOffline } from '../sync/networkMode'
+import { mutationQueue } from '../sync/mutationQueue'
 import { registerSyncTriggers, unregisterSyncTriggers } from '../sync/syncTriggers'
 import { useSystemNoticeStore } from './systemNoticeStore.js'
 import { clearAppearanceSnapshot } from '../theme/applyAppearance'
@@ -17,6 +18,9 @@ import { forgetServerLanguage } from './settingsStore'
 import { forgetResumeRoute } from '../utils/resumeRoute'
 import { markSignedOut, clearSignedOut } from '../utils/signedOut'
 import { forgetPushDeviceOnLogout, resyncPushSubscription } from '../push/webPush'
+
+/** How long a logout waits for the queued changes to go out. */
+const LOGOUT_FLUSH_MS = 5000
 
 interface AuthResponse {
   user: User
@@ -238,6 +242,15 @@ export const useAuthStore = create<AuthState>()(
   },
 
   logout: async () => {
+    // 0. Send what is still queued while the session can. Step 6 deletes this
+    // user's offline database, and an edit made offline and not yet sent would
+    // go with it. Bounded, so a slow server never holds the logout.
+    if (!isEffectivelyOffline()) {
+      await Promise.race([
+        mutationQueue.flush().catch(() => {}),
+        new Promise(resolve => setTimeout(resolve, LOGOUT_FLUSH_MS)),
+      ])
+    }
     // 1. Gate first so any in-flight flush/syncAll bails before we wipe the DB.
     setAuthed(false)
     // Flagged in the same update that drops the session: clearing isAuthenticated

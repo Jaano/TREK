@@ -147,6 +147,36 @@ describe('authStore', () => {
       expect(state.user).toBeNull();
       expect(state.isAuthenticated).toBe(false);
     });
+
+    it('sends the queued changes before the offline database is deleted', async () => {
+      const { mutationQueue } = await import('../../../src/sync/mutationQueue');
+      useAuthStore.setState({ user: buildUser(), isAuthenticated: true });
+      setAuthed(true);
+      let authedDuringFlush: boolean | null = null;
+      const flush = vi.spyOn(mutationQueue, 'flush').mockImplementation(async () => { authedDuringFlush = isAuthed(); });
+
+      await useAuthStore.getState().logout();
+
+      expect(flush).toHaveBeenCalledOnce();
+      expect(authedDuringFlush).toBe(true);
+      expect(isAuthed()).toBe(false);
+    });
+
+    it('does not wait on a flush that hangs', async () => {
+      vi.useFakeTimers();
+      try {
+        const { mutationQueue } = await import('../../../src/sync/mutationQueue');
+        vi.spyOn(mutationQueue, 'flush').mockImplementation(() => new Promise(() => {}));
+        useAuthStore.setState({ user: buildUser(), isAuthenticated: true });
+        const done = useAuthStore.getState().logout();
+        await vi.advanceTimersByTimeAsync(5001);
+        await vi.runAllTimersAsync();
+        await done;
+        expect(useAuthStore.getState().user).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe('FE-AUTH-007: Register success', () => {
