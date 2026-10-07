@@ -33,7 +33,7 @@ The encryption derives a key from `ENCRYPTION_KEY` using SHA-256 (with a domain 
 
 On startup, TREK resolves the encryption key in this order:
 
-1. **`ENCRYPTION_KEY` environment variable**: explicit, always takes priority. When set, the value is also written to `./data/.encryption_key` so it survives container restarts if the env var is later removed.
+1. **`ENCRYPTION_KEY` environment variable**: explicit, always takes priority. When set, the value is also written to `./data/.encryption_key` so it survives container restarts if the env var is later removed. If that file already holds a **different** key, TREK refuses to start: the stored secrets are encrypted with the file's key, and starting with another one would make them unreadable and overwrite the only copy of the old key. Set the variable back to the value in the file, remove it, or rotate the key with the script below.
 2. **`./data/.encryption_key` file**: present on any install that has started at least once.
 3. **`./data/.jwt_secret` file**: one-time fallback for older installs that pre-date the dedicated encryption key. The value is immediately persisted to `./data/.encryption_key` so future JWT rotations cannot break decryption.
 4. **Auto-generated**: fresh install with none of the above. A random 32-byte hex key is generated and written to `./data/.encryption_key`.
@@ -85,13 +85,13 @@ The script:
    - `trek_photos`: `passphrase`
    - `document_connections`: `secrets` (the one encrypted blob per store and trip, including tokens the store handed out itself, such as Synology's device token)
    - `trip_document_links`: `webhook_secret`
+   - `addons.config`: the instance-wide API key of the AI Parsing addon
 5. Reports counts of migrated, already-migrated, skipped (empty), and errored values.
-
-**Not covered by the script:** the instance-wide API key of the AI Parsing addon (`addons.config`). It stays encrypted under the old key and reads back as empty afterwards, so enter it again under **Admin > Addons** (the fields under **AI Parsing**).
+6. Writes the new key to `.encryption_key` next to the database, when that file exists, so the file and the secrets agree again.
 
 After a successful migration:
 
-1. Update `ENCRYPTION_KEY` in your environment to the new value.
+1. If you supply the key through `ENCRYPTION_KEY`, update it to the new value. (TREK refuses to start while the variable and the key file disagree.)
 2. Restart TREK.
 
 If any secrets could not be migrated, the script exits with a non-zero status and the original database backup is retained.

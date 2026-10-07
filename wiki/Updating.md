@@ -143,6 +143,8 @@ Open the **Stacks** list, click the TREK stack, then click **Redeploy**.
 
 ![Edit stack page with an arrow pointing to the Update the stack button](assets/portainer-update-stack.png)
 
+Portainer's **Recreate** on a single container keeps that container's environment, which on images before 4.4 included the previous release's `APP_VERSION`. TREK then kept reporting the old version and open apps did not switch to the new interface. Images from 4.4 on take the version from a file inside the image, so a recreated container reports the image it actually runs.
+
 See [Install-Portainer](Install-Portainer) for the full installation walkthrough.
 
 ## Unraid

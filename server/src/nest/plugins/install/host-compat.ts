@@ -36,7 +36,7 @@ let warnedUnparseable = false;
  * rc of 4.0 IS 4.0.
  *
  * A null host NEVER blocks anything (see {@link hostSatisfies}). This is deliberate:
- * APP_VERSION is a Docker build ARG that defaults to the literal string `dev`, and an
+ * a source install can set APP_VERSION to anything (`dev`, a branch name), and an
  * unversioned build must stay fully usable. The warning exists so that a MISCONFIGURED
  * APP_VERSION in production — which silently switches this whole gate off — is visible
  * in the logs instead of being discovered when an incompatible plugin misbehaves.

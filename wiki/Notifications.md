@@ -43,7 +43,7 @@ The following events are configurable in user settings:
 |-------|-------------|
 | `trip_invite` | Someone invited you to a trip |
 | `booking_change` | A booking was added, updated, or removed in a trip you're part of |
-| `trip_reminder` | Reminder before a trip starts |
+| `trip_reminder` | Reminder before a trip starts. Sent once per start date, at 09:00 in the instance's `TZ`; a day the server was down is caught up on the next run, and a trip moved to a new start date is reminded again |
 | `todo_due` | A to-do assigned to you, or in a trip you're part of, is due soon |
 | `vacay_invite` | You were invited to fuse vacation plans |
 | `vacay_share` | Someone shared their vacation calendar with you (view only) |

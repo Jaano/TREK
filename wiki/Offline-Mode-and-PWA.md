@@ -92,7 +92,7 @@ If a change you made offline collides with a newer change on the server, it is s
 
 ### Stats & cache
 
-The stats panel shows cached trips, pending changes, conflicts and failed changes. **Clear cache** removes all offline data from IndexedDB after you confirm it in TREK's dialog (you can re-sync any time while online). Each cached trip entry shows its date range, place/file count and last successful sync.
+The stats panel shows cached trips, pending changes, conflicts and failed changes. A change the server keeps refusing with a server error is retried with growing gaps (from 30 seconds up to about two hours) and only holds back the other changes of its own trip; after eight attempts it counts as failed. Failed changes come with **Try again** and **Discard**: discarding keeps the server's version, and the next sync puts it back on the device. **Clear cache** removes all offline data from IndexedDB after you confirm it in TREK's dialog (you can re-sync any time while online). Each cached trip entry shows its date range, place/file count and last successful sync.
 
 ## Limitations
 

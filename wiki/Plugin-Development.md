@@ -1451,9 +1451,10 @@ can run rather than the newest published, so shipping a 2.0.0 that needs TREK 4
 doesn't strand 3.x users. And an **update** that would move a working plugin out of
 compatibility is refused rather than performed.
 
-One gap, by design: a host whose `APP_VERSION` is not a semver version — the Docker
-build arg defaults to the literal `dev` — has nothing to compare a range against, so
-the check is skipped and an unversioned build installs anything. Plugins should still
+One gap, by design: a host whose version is not a semver version (a source install
+with `APP_VERSION` set to something like `dev`) has nothing to compare a range
+against, so the check is skipped and an unversioned build installs anything. An image
+built without a version argument reports the version in its `package.json`. Plugins should still
 guard optional `ctx.*` namespaces.
 
 **Permissions** — the commonly-used core subset below; the **full list of 65**

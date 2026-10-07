@@ -62,6 +62,8 @@ If `existingSecret` uses a different key name than `ENCRYPTION_KEY`, specify it 
 
 > **Note:** If both `generateEncryptionKey` and `existingSecret` are set, `existingSecret` takes precedence. Only one method should be active at a time.
 
+> **GitOps:** `generateEncryptionKey` reads the existing secret from the cluster to keep the key across upgrades. Under `helm template`, ArgoCD or Flux the chart cannot do that and renders a new key on every sync. TREK then refuses to start rather than lose every stored secret (see [Encryption-Key-Rotation](Encryption-Key-Rotation#key-resolution-order)). Use `existingSecret` in those setups.
+
 > **Note:** If `ENCRYPTION_KEY` is left empty, the server resolves it automatically: existing installs fall back to `data/.jwt_secret` (encrypted data stays readable after upgrade); fresh installs auto-generate a key persisted to the data PVC.
 
 > **Note:** `JWT_SECRET` is managed entirely by the server — auto-generated on first start and persisted to the data PVC. It can be rotated via the admin panel (Settings → Danger Zone → Rotate JWT Secret). No Helm configuration is needed or supported for it.
@@ -196,15 +198,32 @@ resources:
 
 ### Health Probes
 
-Liveness and readiness probes are configurable under `probes`. The defaults hit `/api/health` on port 3000 and match what the chart shipped before, so an existing install renders the same manifest.
+Startup, liveness and readiness probes are configurable under `probes`:
+
+- **startup** hits `/api/health` and gives a first boot, a long migration or a restore at boot up to ten minutes (`failureThreshold: 60` × `periodSeconds: 10`) before liveness takes over.
+- **liveness** hits `/api/health`, which only says the process answers. A long restore does not fail it.
+- **readiness** hits `/api/health/ready`, which also asks the database. While the database does not answer, the pod stops getting traffic without being restarted.
 
 ```bash
-helm install trek trek/trek   --set probes.liveness.initialDelaySeconds=60   --set probes.readiness.periodSeconds=20
+helm install trek trek/trek   --set probes.startup.failureThreshold=120   --set probes.readiness.periodSeconds=20
 ```
 
-Raise `initialDelaySeconds` on slow storage or after a large migration, where the first start can outlast the default and leave the pod restarting in a loop. Overrides are merged over the defaults, so setting one key keeps the rest. To switch a probe to `exec` or `tcpSocket`, clear the shipped handler in the same override (`--set probes.liveness.httpGet=null`), otherwise Kubernetes rejects the pod with "may not specify more than 1 handler type". Set `probes.liveness=null` to drop a probe entirely.
+Overrides are merged over the defaults, so setting one key keeps the rest. To switch a probe to `exec` or `tcpSocket`, clear the shipped handler in the same override (`--set probes.liveness.httpGet=null`), otherwise Kubernetes rejects the pod with "may not specify more than 1 handler type". Set `probes.startup=null` to drop a probe entirely.
 
-Leave `env.PORT` at `3000`. The chart passes it to the server, but `containerPort` in `deployment.yaml` and `targetPort` in `service.yaml` are fixed at 3000, so a different value makes the server listen where nothing routes to it. Changing it means patching both templates as well as `service.port` and `probes.*.httpGet.port`; `service.port` alone is not enough.
+`env.PORT` can be changed: the container port is named `http`, and the Service and every probe point at that name, so they follow it.
+
+### Further environment variables
+
+The `env` block lists the common settings. Anything else goes in `extraEnv` (plain values) or `extraEnvFrom` (whole ConfigMaps or Secrets):
+
+```yaml
+extraEnv:
+  - name: SESSION_DURATION
+    value: 7d
+extraEnvFrom:
+  - secretRef:
+      name: trek-smtp
+```
 
 ### Ingress
 
