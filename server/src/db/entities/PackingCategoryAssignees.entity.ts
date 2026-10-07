@@ -22,7 +22,7 @@ export const PackingCategoryAssigneesSchema = defineEntity({
     trip: () => p.manyToOne(Trips).ref().deleteRule('cascade').hidden(),
     trip_id: p.integer().persist(false),
     category_name: p.text(),
-    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden(),
-    user_id: p.integer().persist(false),
+    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden().index('idx_packing_category_assignees_user_id'),
+    user_id: p.integer().persist(false).index('idx_packing_category_assignees_user_id'),
   },
 });

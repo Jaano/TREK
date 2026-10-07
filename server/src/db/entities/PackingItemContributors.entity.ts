@@ -22,8 +22,8 @@ export const PackingItemContributorsSchema = defineEntity({
   properties: {
     item: () => p.manyToOne(PackingItems).primary().ref().hidden(),
     item_id: p.integer().persist(false),
-    user: () => p.manyToOne(Users).primary().ref().hidden(),
-    user_id: p.integer().persist(false),
+    user: () => p.manyToOne(Users).primary().ref().hidden().index('idx_packing_item_contributors_user_id'),
+    user_id: p.integer().persist(false).index('idx_packing_item_contributors_user_id'),
     status: p.text().default('accepted'),
     created_at: p.type(DbTimestampType).nullable().defaultRaw(`CURRENT_TIMESTAMP`),
   },

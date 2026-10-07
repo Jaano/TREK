@@ -22,8 +22,8 @@ export const VacayEntriesSchema = defineEntity({
   uniques: [{ properties: ['user', 'plan', 'date'] }],
   properties: {
     id: p.integer().primary(),
-    plan: () => p.manyToOne(VacayPlans).ref().deleteRule('cascade').hidden(),
-    plan_id: p.integer().persist(false),
+    plan: () => p.manyToOne(VacayPlans).ref().deleteRule('cascade').hidden().index('idx_vacay_entries_plan_id'),
+    plan_id: p.integer().persist(false).index('idx_vacay_entries_plan_id'),
     user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden(),
     user_id: p.integer().persist(false),
     date: p.text(),

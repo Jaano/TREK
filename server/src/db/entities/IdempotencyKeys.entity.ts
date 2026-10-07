@@ -21,8 +21,8 @@ export const IdempotencyKeysSchema = defineEntity({
   uniques: [{ properties: ['key', 'user', 'method', 'path'] }],
   properties: {
     key: p.text().primary(),
-    user: () => p.manyToOne(Users).primary().ref().deleteRule('cascade').hidden(),
-    user_id: p.integer().persist(false),
+    user: () => p.manyToOne(Users).primary().ref().deleteRule('cascade').hidden().index('idx_idempotency_keys_user_id'),
+    user_id: p.integer().persist(false).index('idx_idempotency_keys_user_id'),
     method: p.text().primary(),
     path: p.text().primary(),
     status_code: p.integer(),

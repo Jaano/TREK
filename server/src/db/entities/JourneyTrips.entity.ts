@@ -20,8 +20,8 @@ export const JourneyTripsSchema = defineEntity({
   properties: {
     journey: () => p.manyToOne(Journeys).primary().ref().hidden().index('idx_journey_trips_journey'),
     journey_id: p.integer().persist(false).index('idx_journey_trips_journey'),
-    trip: () => p.manyToOne(Trips).primary().ref().hidden(),
-    trip_id: p.integer().persist(false),
+    trip: () => p.manyToOne(Trips).primary().ref().hidden().index('idx_journey_trips_trip_id'),
+    trip_id: p.integer().persist(false).index('idx_journey_trips_trip_id'),
     added_at: p.integer(),
   },
 });

@@ -29,10 +29,10 @@ export const ShareTokensSchema = defineEntity({
   uniques: [{ properties: ['token'] }],
   properties: {
     id: p.integer().primary(),
-    trip: () => p.manyToOne(Trips).ref().deleteRule('cascade').hidden(),
-    trip_id: p.integer().persist(false),
+    trip: () => p.manyToOne(Trips).ref().deleteRule('cascade').hidden().index('idx_share_tokens_trip_id'),
+    trip_id: p.integer().persist(false).index('idx_share_tokens_trip_id'),
     token: p.text().index('idx_share_tokens_token'),
-    created_by: p.integer().persist(false),
+    created_by: p.integer().persist(false).index('idx_share_tokens_created_by'),
     share_map: p.integer().nullable(),
     share_bookings: p.integer().nullable(),
     share_packing: p.integer().nullable(),
@@ -42,6 +42,6 @@ export const ShareTokensSchema = defineEntity({
     expires_at: p.text().nullable(),
     share_travel_only: p.integer().default(0),
     share_hide_images: p.integer().default(0),
-    createdByRef: () => p.manyToOne(Users).ref().joinColumn('created_by').hidden(),
+    createdByRef: () => p.manyToOne(Users).ref().joinColumn('created_by').hidden().index('idx_share_tokens_created_by'),
   },
 });

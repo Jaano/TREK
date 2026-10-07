@@ -21,8 +21,8 @@ export const AuditLogSchema = defineEntity({
   properties: {
     id: p.integer().primary(),
     created_at: p.type(DbTimestampType).nullable().defaultRaw(`CURRENT_TIMESTAMP`).index('idx_audit_log_created'),
-    user: () => p.manyToOne(Users).ref().nullable().hidden(),
-    user_id: p.integer().nullable().persist(false),
+    user: () => p.manyToOne(Users).ref().nullable().hidden().index('idx_audit_log_user_id'),
+    user_id: p.integer().nullable().persist(false).index('idx_audit_log_user_id'),
     action: p.text(),
     resource: p.text().nullable(),
     details: p.text().nullable(),

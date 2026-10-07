@@ -25,9 +25,9 @@ export const TripInviteTokensSchema = defineEntity({
     trip: () => p.manyToOne(Trips).ref().deleteRule('cascade').hidden(),
     trip_id: p.integer().persist(false),
     token: p.text().index('idx_trip_invite_tokens_token'),
-    created_by: p.integer().nullable().persist(false),
+    created_by: p.integer().nullable().persist(false).index('idx_trip_invite_tokens_created_by'),
     expires_at: p.text().nullable(),
     created_at: p.type(DbTimestampType).nullable().defaultRaw(`CURRENT_TIMESTAMP`),
-    createdByRef: () => p.manyToOne(Users).ref().joinColumn('created_by').nullable().hidden(),
+    createdByRef: () => p.manyToOne(Users).ref().joinColumn('created_by').nullable().hidden().index('idx_trip_invite_tokens_created_by'),
   },
 });

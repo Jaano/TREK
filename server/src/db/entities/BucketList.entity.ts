@@ -28,8 +28,8 @@ export const BucketListSchema = defineEntity({
   repository: () => BucketListRepository,
   properties: {
     id: p.integer().primary(),
-    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden(),
-    user_id: p.integer().persist(false),
+    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden().index('idx_bucket_list_user_id'),
+    user_id: p.integer().persist(false).index('idx_bucket_list_user_id'),
     name: p.text(),
     lat: p.double().nullable(),
     lng: p.double().nullable(),

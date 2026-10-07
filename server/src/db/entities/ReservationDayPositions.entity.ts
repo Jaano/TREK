@@ -20,8 +20,8 @@ export const ReservationDayPositionsSchema = defineEntity({
   properties: {
     reservation: () => p.manyToOne(Reservations).primary().ref().hidden(),
     reservation_id: p.integer().persist(false),
-    day: () => p.manyToOne(Days).primary().ref().hidden(),
-    day_id: p.integer().persist(false),
+    day: () => p.manyToOne(Days).primary().ref().hidden().index('idx_reservation_day_positions_day_id'),
+    day_id: p.integer().persist(false).index('idx_reservation_day_positions_day_id'),
     position: p.double(),
   },
 });

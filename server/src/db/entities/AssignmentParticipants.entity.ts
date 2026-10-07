@@ -20,7 +20,7 @@ export const AssignmentParticipantsSchema = defineEntity({
     id: p.integer().primary(),
     assignment: () => p.manyToOne(DayAssignments).ref().deleteRule('cascade').hidden().index('idx_assignment_participants_assignment'),
     assignment_id: p.integer().persist(false).index('idx_assignment_participants_assignment'),
-    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden(),
-    user_id: p.integer().persist(false),
+    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden().index('idx_assignment_participants_user_id'),
+    user_id: p.integer().persist(false).index('idx_assignment_participants_user_id'),
   },
 });

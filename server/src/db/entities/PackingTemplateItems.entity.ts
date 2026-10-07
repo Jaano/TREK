@@ -19,8 +19,8 @@ export const PackingTemplateItemsSchema = defineEntity({
   repository: () => PackingTemplateItemsRepository,
   properties: {
     id: p.integer().primary(),
-    category: () => p.manyToOne(PackingTemplateCategories).ref().deleteRule('cascade').hidden(),
-    category_id: p.integer().persist(false),
+    category: () => p.manyToOne(PackingTemplateCategories).ref().deleteRule('cascade').hidden().index('idx_packing_template_items_category_id'),
+    category_id: p.integer().persist(false).index('idx_packing_template_items_category_id'),
     name: p.text(),
     sort_order: p.integer().default(0),
     weight_grams: p.integer().nullable(),

@@ -21,8 +21,8 @@ export const BudgetItemPayersSchema = defineEntity({
     id: p.integer().primary(),
     budgetItem: () => p.manyToOne(BudgetItems).ref().deleteRule('cascade').hidden().index('idx_budget_item_payers_item'),
     budget_item_id: p.integer().persist(false).index('idx_budget_item_payers_item'),
-    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden(),
-    user_id: p.integer().persist(false),
+    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden().index('idx_budget_item_payers_user_id'),
+    user_id: p.integer().persist(false).index('idx_budget_item_payers_user_id'),
     amount: p.double().defaultRaw(`0`),
   },
 });

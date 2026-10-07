@@ -18,8 +18,8 @@ export const PackingTemplateCategoriesSchema = defineEntity({
   repository: () => PackingTemplateCategoriesRepository,
   properties: {
     id: p.integer().primary(),
-    template: () => p.manyToOne(PackingTemplates).ref().deleteRule('cascade').hidden(),
-    template_id: p.integer().persist(false),
+    template: () => p.manyToOne(PackingTemplates).ref().deleteRule('cascade').hidden().index('idx_packing_template_categories_template_id'),
+    template_id: p.integer().persist(false).index('idx_packing_template_categories_template_id'),
     name: p.text(),
     sort_order: p.integer().default(0),
     packing_template_items_collection: () => p.oneToMany(PackingTemplateItems).mappedBy('category').hidden(),

@@ -20,9 +20,9 @@ export const PackingTemplatesSchema = defineEntity({
   properties: {
     id: p.integer().primary(),
     name: p.text(),
-    created_by: p.integer().persist(false),
+    created_by: p.integer().persist(false).index('idx_packing_templates_created_by'),
     created_at: p.type(DbTimestampType).nullable().defaultRaw(`CURRENT_TIMESTAMP`),
-    createdByRef: () => p.manyToOne(Users).ref().joinColumn('created_by').deleteRule('cascade').hidden(),
+    createdByRef: () => p.manyToOne(Users).ref().joinColumn('created_by').deleteRule('cascade').hidden().index('idx_packing_templates_created_by'),
     packing_template_categories_collection: () => p.oneToMany(PackingTemplateCategories).mappedBy('template').hidden(),
   },
 });

@@ -30,8 +30,8 @@ export const CollectionsSchema = defineEntity({
   repository: () => CollectionsRepository,
   properties: {
     id: p.integer().primary(),
-    owner: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden(),
-    owner_id: p.integer().persist(false),
+    owner: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden().index('idx_collections_owner_id'),
+    owner_id: p.integer().persist(false).index('idx_collections_owner_id'),
     name: p.text(),
     description: p.text().nullable(),
     color: p.text().nullable(),

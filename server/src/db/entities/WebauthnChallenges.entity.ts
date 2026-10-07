@@ -21,8 +21,8 @@ export const WebauthnChallengesSchema = defineEntity({
   properties: {
     id: p.integer().primary(),
     challenge: p.text(),
-    user: () => p.manyToOne(Users).ref().deleteRule('cascade').nullable().hidden(),
-    user_id: p.integer().nullable().persist(false),
+    user: () => p.manyToOne(Users).ref().deleteRule('cascade').nullable().hidden().index('idx_webauthn_challenges_user_id'),
+    user_id: p.integer().nullable().persist(false).index('idx_webauthn_challenges_user_id'),
     type: p.text(),
     expires_at: p.integer().index('idx_webauthn_challenges_expires'),
     created_at: p.type(DbTimestampType).nullable().defaultRaw(`CURRENT_TIMESTAMP`),

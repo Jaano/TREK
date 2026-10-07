@@ -19,8 +19,8 @@ export const VacayHolidayCalendarsSchema = defineEntity({
   repository: () => VacayHolidayCalendarsRepository,
   properties: {
     id: p.integer().primary(),
-    plan: () => p.manyToOne(VacayPlans).ref().deleteRule('cascade').hidden(),
-    plan_id: p.integer().persist(false),
+    plan: () => p.manyToOne(VacayPlans).ref().deleteRule('cascade').hidden().index('idx_vacay_holiday_calendars_plan_id'),
+    plan_id: p.integer().persist(false).index('idx_vacay_holiday_calendars_plan_id'),
     type: p.text().default('public_holiday'),
     region: p.text(),
     label: p.text().nullable(),

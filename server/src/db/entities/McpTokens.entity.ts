@@ -23,8 +23,8 @@ export const McpTokensSchema = defineEntity({
   repository: () => McpTokensRepository,
   properties: {
     id: p.integer().primary(),
-    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden(),
-    user_id: p.integer().persist(false),
+    user: () => p.manyToOne(Users).ref().deleteRule('cascade').hidden().index('idx_mcp_tokens_user_id'),
+    user_id: p.integer().persist(false).index('idx_mcp_tokens_user_id'),
     name: p.text(),
     token_hash: p.text().unique('idx_mcp_tokens_hash'),
     token_prefix: p.text(),
