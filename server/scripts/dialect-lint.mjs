@@ -58,7 +58,9 @@ export const RULES = [
   },
   {
     name: 'datetime',
-    test: (text) => /\b(datetime|julianday|unixepoch)\s*\(/i.test(text),
+    // The call in SQL text, or the bare name the query builder takes in eb.fn('datetime', [...]).
+    test: (text) =>
+      /\b(datetime|julianday|unixepoch)\s*\(/i.test(text) || /^(datetime|julianday|unixepoch)$/i.test(text.trim()),
     advice: 'use currentTimestamp/nowMinusDays/nowPlusSeconds and friends from sql-functions.ts',
     migrations: true,
   },

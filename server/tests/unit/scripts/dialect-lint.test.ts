@@ -72,6 +72,7 @@ describe('dialect-lint.mjs', () => {
     ['insert-or', "void 'INSERT OR IGNORE INTO t (a) VALUES (?)';"],
     ['insert-or', 'void `INSERT OR REPLACE INTO t (a) VALUES (?)`;'],
     ['datetime', "void \"UPDATE t SET at = datetime('now')\";"],
+    ['datetime', "declare function fn(name: string, args: string[]): void;\nfn('julianday', ['now']);"],
     ['strftime', "void `SELECT strftime('%s', 'now')`;"],
     ['json', "void 'SELECT json_extract(settings, ?) FROM users';"],
     ['glob', "void 'SELECT id FROM t WHERE name GLOB ?';"],
