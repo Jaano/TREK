@@ -219,7 +219,7 @@ export class ReservationsService {
    * booking event on this surface is echo-suppressed because the client already
    * drew what it sent, and it never sent this.
    */
-  private async announceStayMirror(tripId: string | number, mirror: AccommodationMirror): Promise<void> {
+  async announceStayMirror(tripId: string | number, mirror: AccommodationMirror): Promise<void> {
     await this.accommodations.announceMirror(tripId, mirror, (event, payload) => this.realtime.broadcast(tripId, event, payload));
   }
 
@@ -654,20 +654,19 @@ export class ReservationsService {
     return written;
   }
 
-  /**
-   * create and the linked cost the booking carries, as one write. The price's rate
-   * is frozen before (withFrozenRate, network I/O). REST, the plugin RPC and MCP
-   * all come through here and send the cost events after the commit.
-   */
+  /** create and the booking's linked cost as one write; the rate is frozen before (withFrozenRate, network I/O). */
   async createWithCost(tripId: string, data: CreateReservationData, entry: BudgetEntry) {
-    const costEvents: CostEvent[] = [];
-    const { stayMirror, ...written } = await this.uow.transactional(async () => {
-      const done = await this.createInTx(tripId, data);
-      await this.syncBudgetOnCreate(tripId, done.reservation.id, data.title, data.type, entry, undefined, costEvents);
-      return done;
-    });
+    const { stayMirror, ...written } = await this.uow.transactional(() => this.createWithCostInTx(tripId, data, entry));
     await this.announceStayMirror(tripId, stayMirror);
-    return { ...written, costEvents };
+    return written;
+  }
+
+  /** createWithCost's writes, for a caller whose transaction holds more (an imported venue). It announces after. */
+  async createWithCostInTx(tripId: string, data: CreateReservationData, entry: BudgetEntry) {
+    const costEvents: CostEvent[] = [];
+    const done = await this.createInTx(tripId, data);
+    await this.syncBudgetOnCreate(tripId, done.reservation.id, data.title, data.type, entry, undefined, costEvents);
+    return { ...done, costEvents };
   }
 
   /** update and the linked cost it moves, as one write, the way createWithCost is. */

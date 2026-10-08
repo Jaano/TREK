@@ -4,6 +4,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { PlacesService } from '../places/places.service';
+import { UnitOfWork } from '../database/unit-of-work';
 import { BudgetService } from '../budget/budget.service';
 import { imageMimeType } from '../llm-parse/image-input';
 import { AddonsService } from '../addons/addons.service';
@@ -35,6 +36,7 @@ export class BookingImportService {
     private readonly realtime: RealtimeService,
     private readonly maps: MapsService,
     private readonly places: PlacesService,
+    private readonly uow: UnitOfWork,
   ) {}
 
   /**
@@ -266,9 +268,13 @@ export class BookingImportService {
 
   /**
    * Persist a confirmed list of parsed items.
-   * Creates place rows for hotel/restaurant/event venues, then writes each booking with
-   * its linked cost (createWithCost). Broadcasts reservation:created, accommodation:created
-   * if applicable and the cost per item, after each write commits.
+   * Per item, the network work runs first (venue and endpoint geocoding, the cost's
+   * frozen rate). Then the venue's place row, the booking and its linked cost are one
+   * transaction, so a booking that fails leaves no stray place behind. place:created,
+   * reservation:created, accommodation:created and the cost go out after the commit.
+   *
+   * @txIndependent one transaction per imported item: each booking lands whole with its
+   * venue and cost, and one that fails is skipped without undoing the ones before it.
    */
   async confirm(
     tripId: string,
@@ -282,8 +288,8 @@ export class BookingImportService {
       try {
         const { _venue, _accommodation, source: _src, ...reservationData } = item;
 
-        // Auto-create a place row for venue-based reservations
-        let placeId: number | undefined;
+        // A place row for venue-based reservations, written with the booking below.
+        let venue: Parameters<PlacesService['create']>[1] | undefined;
         if (_venue?.name) {
           // Geocode before creating so the broadcast carries the coordinates
           let lat = _venue.lat;
@@ -309,7 +315,7 @@ export class BookingImportService {
             }
           }
 
-          const place = await this.places.create(tripId, {
+          venue = {
             name: _venue.name,
             lat,
             lng,
@@ -318,9 +324,7 @@ export class BookingImportService {
             // it lands as https or not at all (#2483).
             website: normalizePlaceWebsite(_venue.website) ?? undefined,
             phone: _venue.phone,
-          });
-          placeId = (place as any).id;
-          this.realtime.broadcast(tripId, 'place:created', { place }, socketId);
+          };
         }
 
         // The same lookup preview() runs, through the same helper. On anything
@@ -346,7 +350,6 @@ export class BookingImportService {
           const startDayId = await this.resolveDayId(tripId, _accommodation.check_in);
           const endDayId   = await this.resolveDayId(tripId, _accommodation.check_out);
           createAccommodation = {
-            place_id: placeId,
             start_day_id: startDayId ?? undefined,
             end_day_id:   endDayId   ?? undefined,
             check_in:     _accommodation.check_in,
@@ -355,20 +358,27 @@ export class BookingImportService {
           };
         }
 
-        // The booking and its linked cost are one write, through the same service
-        // method REST, MCP and the plugin RPC take. The cost's rate is frozen first,
-        // outside that write, since freezing it can fetch rates over the network.
+        // The venue, the booking and its linked cost are one write; the booking goes
+        // through the same service core REST, MCP and the plugin RPC take. The cost's
+        // rate is frozen first, outside that write, since it can fetch rates over the network.
         const cost = await this.linkedCost(tripId, item);
-        const { reservation, accommodationCreated, costEvents } = await this.reservations.createWithCost(tripId, {
-          ...reservationData,
-          place_id: placeId,
-          create_accommodation: createAccommodation,
-        } as any, cost);
+        const { place, reservation, accommodationCreated, costEvents, stayMirror } = await this.uow.transactional(async () => {
+          const placeRow = venue ? await this.places.create(tripId, venue) : null;
+          const placeId = placeRow?.id;
+          const written = await this.reservations.createWithCostInTx(tripId, {
+            ...reservationData,
+            place_id: placeId,
+            create_accommodation: createAccommodation && { ...createAccommodation, place_id: placeId },
+          } as never, cost);
+          return { place: placeRow, ...written };
+        });
 
+        if (place) this.realtime.broadcast(tripId, 'place:created', { place }, socketId);
         this.realtime.broadcast(tripId, 'reservation:created', { reservation }, socketId);
         if (accommodationCreated) {
           this.realtime.broadcast(tripId, 'accommodation:created', {}, socketId);
         }
+        await this.reservations.announceStayMirror(tripId, stayMirror);
         this.reservations.announceCost(tripId, costEvents, socketId);
 
         created.push(reservation);
