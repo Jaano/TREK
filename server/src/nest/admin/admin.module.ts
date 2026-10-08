@@ -24,6 +24,10 @@ import { PackingModule } from '../packing/packing.module';
 // not @Global, so the import must be explicit.
 import { PermissionsModule } from '../permissions/permissions.module';
 import { AppConfigModule } from '../app-config/app-config.module';
+// AdminService and DemoResetJob inject DATABASE_BACKUP, which the @Global
+// DatabaseBackupModule (nest/backup/) provides once BackupModule is in the
+// graph. It is not imported here on purpose: see that module for the cycle an
+// import would close.
 import { Users } from '../../db/entities/Users.entity';
 import { AuditLog } from '../../db/entities/AuditLog.entity';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
