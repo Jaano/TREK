@@ -51,6 +51,7 @@ import { withinDriveRange } from '@trek/shared/roadtrip'
 import { formatDate, formatTime, formatMoneySum, splitReservationDateTime } from '../../utils/formatters'
 import { dayHeadingParts } from '../../utils/dayLabel'
 import { pendingStayIds } from '../../utils/pendingStays'
+import { dayWeatherAnchor } from '../../utils/dayWeather'
 import { planCosts } from './planCosts'
 import { useDayNotes } from '../../hooks/useDayNotes'
 import { useExchangeRates } from '../../hooks/useExchangeRates'
@@ -1806,10 +1807,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
           // Day-local anchor only (#2167): the day's first located stop, else the
           // hotel you wake up in. No trip-wide fallback — on a roadtrip that
           // silently showed another city's weather with nothing naming the place.
-          const weatherHotel = loc == null ? dayBookends.morning : undefined
-          const wLat = loc?.place?.lat ?? weatherHotel?.place_lat
-          const wLng = loc?.place?.lng ?? weatherHotel?.place_lng
-          const weatherName = loc?.place?.name ?? weatherHotel?.place_name ?? null
+          const { lat: wLat, lng: wLng, name: weatherName } = dayWeatherAnchor(da, () => dayBookends.morning)
           const hasWeather = !!(day.date && wLat != null && wLng != null)
           const dayAccs = accommodations.filter(a => isDayInAccommodationRange(day, a.start_day_id, a.end_day_id, days))
             // Sort: check-out first, then ongoing stays, then check-in last

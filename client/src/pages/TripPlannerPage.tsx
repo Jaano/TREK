@@ -32,6 +32,7 @@ import type { BudgetItem } from '../types'
 import PluginFrame from '../components/Plugins/PluginFrame'
 import ErrorBoundary from '../components/shared/ErrorBoundary'
 import { getDayBookendHotels } from '../utils/dayOrder'
+import { dayWeatherAnchor } from '../utils/dayWeather'
 import TripWarningsBanner from '../components/Planner/TripWarningsBanner'
 import Navbar from '../components/Layout/Navbar'
 import HelpAnchor from '../components/Help/HelpAnchor'
@@ -538,11 +539,9 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
               // Day-local weather anchor only (#2167): first located stop of THIS day,
               // else the hotel you wake up in (unconditional bookend lookup, mirroring
               // useMPlanTimeline) — never a place from another day.
-              const locatedPlace = dayAssignments.find(a => a.place?.lat && a.place?.lng)?.place
-              const weatherHotel = locatedPlace ? undefined : getDayBookendHotels(currentDay, days, tripAccommodations).morning
-              const weatherLat = locatedPlace?.lat ?? weatherHotel?.place_lat ?? null
-              const weatherLng = locatedPlace?.lng ?? weatherHotel?.place_lng ?? null
-              const weatherPlaceName = locatedPlace?.name ?? weatherHotel?.place_name ?? null
+              const { lat: weatherLat, lng: weatherLng, name: weatherPlaceName } = dayWeatherAnchor(
+                dayAssignments, () => getDayBookendHotels(currentDay, days, tripAccommodations).morning,
+              )
               return (
                 <DayDetailPanel
                   day={currentDay}

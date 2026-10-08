@@ -4,6 +4,7 @@ import { useRouteCalculation } from '../../../../hooks/useRouteCalculation'
 import { assignmentsApi, reservationsApi, weatherApi } from '../../../../api/client'
 import { useRouteModeOptions } from '../../../../components/Planner/routeModes'
 import { getDayBookendHotels } from '../../../../utils/dayOrder'
+import { dayWeatherAnchor } from '../../../../utils/dayWeather'
 import { getDisplayTimeForDay, getMergedItems, getTransportForDay, hasCarrierEndpointOnDay, isCarrierTransport } from '../../../../utils/dayMerge'
 import { dayCoMapsUrl, dayExportStops, dayGoogleMapsUrl, optimizeDayOrder, type DayCarrier } from '../lib/dayRoute'
 import { buildTransitLeg, buildTransitNameIndex, type TransitLeg } from '../../../../components/Planner/transitLeg'
@@ -107,13 +108,12 @@ export function useMPlanTimeline(planner: TripPlanner) {
 
   // ── Weather chip — anchored to the day's first located stop, else its hotel ──
   const weatherAnchor = useMemo<{ lat: number; lng: number; name: string | null } | null>(() => {
-    const located = dayAssignments.find(a => a.place?.lat != null && a.place?.lng != null)
-    if (located) return { lat: located.place!.lat!, lng: located.place!.lng!, name: located.place!.name ?? null }
-    const hotel = day ? getDayBookendHotels(day, days, tripAccommodations).morning : undefined
-    if (hotel && hotel.place_lat != null && hotel.place_lng != null) {
-      return { lat: hotel.place_lat, lng: hotel.place_lng, name: hotel.place_name ?? null }
-    }
-    return null
+    const { lat, lng, name } = dayWeatherAnchor(
+      dayAssignments,
+      () => (day ? getDayBookendHotels(day, days, tripAccommodations).morning : undefined),
+      a => a.place?.lat != null && a.place?.lng != null,
+    )
+    return lat != null && lng != null ? { lat, lng, name } : null
   }, [day, dayAssignments, days, tripAccommodations])
 
   const [weather, setWeather] = useState<WeatherResult | null>(null)

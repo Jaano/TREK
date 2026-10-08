@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
-import { Cloud, CloudLightning, CloudRain, CloudSnow, Sun, Wind } from 'lucide-react'
 import {
   breaksChronology, buildPlanRows, cityPillsForDay, findUpNext, getTransitMeta, hotelChipsForDay,
-  hotelLegsForDay, itemHasTime, parseReservationMeta, transportSubtitle, weatherIconFor,
+  hotelLegsForDay, itemHasTime, parseReservationMeta, transportSubtitle,
   type TransportEntry,
 } from '../../../../src/mobile/screens/trip/plan/planTimelineModel'
 import { getDisplayTimeForDay, getMergedItems, getTransportForDay, type MergedItem } from '../../../../src/utils/dayMerge'
@@ -845,17 +844,5 @@ describe('planTimelineModel — chronology helpers', () => {
     const getDisplayTime = vi.fn(getDisplayTimeForDay)
     expect(breaksChronology([nine, bus], 2, getDisplayTime)).toBe(true)
     expect(getDisplayTime).toHaveBeenCalledWith(bus.data, 2)
-  })
-})
-
-describe('planTimelineModel — weatherIconFor', () => {
-  it('FE-MOB-PTLM-041: maps the known conditions and defaults to a cloud', () => {
-    expect(weatherIconFor('Clear')).toBe(Sun)
-    expect(weatherIconFor('Rain')).toBe(CloudRain)
-    expect(weatherIconFor('Thunderstorm')).toBe(CloudLightning)
-    expect(weatherIconFor('Snow')).toBe(CloudSnow)
-    expect(weatherIconFor('Haze')).toBe(Wind)
-    expect(weatherIconFor('Tornado')).toBe(Cloud)
-    expect(weatherIconFor(undefined)).toBe(Cloud)
   })
 })

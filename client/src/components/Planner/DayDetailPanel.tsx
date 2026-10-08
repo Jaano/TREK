@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useId, type ReactNode } from 'react'
-import { X, Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Pencil, ChevronsDown, ChevronsUp, ArrowRight, Check, Moon, type LucideIcon } from 'lucide-react'
+import { X, CloudRain, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Pencil, ChevronsDown, ChevronsUp, ArrowRight, Check, Moon, type LucideIcon } from 'lucide-react'
 import type { WeatherResult } from '@trek/shared'
 import { usePluginViewContributions, PluginCardFooter } from '../Plugins/PluginContributions'
 import { usePluginStore } from '../../store/pluginStore'
@@ -24,14 +24,10 @@ import { INPUT, PANEL, EditorField, AddRowButton, PillSelect } from '../shared/d
 import { BOX, Eyebrow, Field, RoundAction, TypeTile, toneOf, toneColor, toneTint } from './bookings/bookingParts'
 import { SoftPill, TimePill, tintOf } from './planParts'
 import { typeInfo } from './bookings/bookingsModel'
-
-const WEATHER_ICON_MAP: Record<string, LucideIcon> = {
-  Clear: Sun, Clouds: Cloud, Rain: CloudRain, Drizzle: CloudDrizzle,
-  Thunderstorm: CloudLightning, Snow: CloudSnow, Mist: Wind, Fog: Wind, Haze: Wind,
-}
+import { weatherIconFor } from '../Weather/weatherIcons'
 
 function WIcon({ main, size = 14 }: { main: string; size?: number }) {
-  const Icon = WEATHER_ICON_MAP[main] || Cloud
+  const Icon = weatherIconFor(main)
   return <Icon size={size} strokeWidth={1.8} />
 }
 

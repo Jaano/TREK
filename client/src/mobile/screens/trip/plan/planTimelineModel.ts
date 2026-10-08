@@ -1,5 +1,3 @@
-import { Cloud, CloudDrizzle, CloudLightning, CloudRain, CloudSnow, Sun, Wind } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
 import {
   TRANSPORT_TYPES, getAssignmentReservations, getDisplayTimeForDay, getSpanPhase, getTransportRouteEndpoints, hidesOnMiddleDay,
   parseTimeToMinutes,
@@ -337,13 +335,4 @@ export function breaksChronology(
     })
     .filter((m): m is number => m != null)
   return times.some((m, i) => i > 0 && m < times[i - 1])
-}
-
-const WEATHER_ICON_MAP: Record<string, LucideIcon> = {
-  Clear: Sun, Clouds: Cloud, Rain: CloudRain, Drizzle: CloudDrizzle,
-  Thunderstorm: CloudLightning, Snow: CloudSnow, Mist: Wind, Fog: Wind, Haze: Wind,
-}
-
-export function weatherIconFor(main: string | undefined): LucideIcon {
-  return (main && WEATHER_ICON_MAP[main]) || Cloud
 }

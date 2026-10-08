@@ -18,7 +18,8 @@ import { dayCoMapsUrl, dayGoogleMapsUrl, optimizeDayOrder } from '../lib/dayRout
 import GoogleMapsIcon from '../../../../components/shared/GoogleMapsIcon'
 import { BlurredCode } from '../../../../components/shared/BookingCode'
 import { splitNoteTime } from '../lib/dayNotes'
-import { weatherIconFor } from '../plan/planTimelineModel'
+import { weatherIconFor } from '../../../../components/Weather/weatherIcons'
+import { dayWeatherAnchor } from '../../../../utils/dayWeather'
 import type { Assignment, DayNote, Reservation } from '../../../../types'
 import { Eyebrow, INNER_CLS, StatBox, TileHeader, displayTime } from './MTripSheetUi'
 
@@ -61,13 +62,10 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
   // hotel you wake up in (unconditional bookend lookup, mirroring useMPlanTimeline).
   // Never a place from another day — on a roadtrip that silently showed another
   // city's weather with nothing naming the place.
-  const locatedPlace = dayAssignments.find(a => a.place?.lat && a.place?.lng)?.place
-  const weatherHotel = day && !locatedPlace
-    ? getDayBookendHotels(day, planner.days, planner.tripAccommodations).morning
-    : undefined
-  const lat = locatedPlace?.lat ?? weatherHotel?.place_lat ?? null
-  const lng = locatedPlace?.lng ?? weatherHotel?.place_lng ?? null
-  const weatherPlaceName = locatedPlace?.name ?? weatherHotel?.place_name ?? null
+  const { lat, lng, name: weatherPlaceName } = dayWeatherAnchor(
+    dayAssignments,
+    () => (day ? getDayBookendHotels(day, planner.days, planner.tripAccommodations).morning : undefined),
+  )
 
   const [weather, setWeather] = useState<WeatherResult | null>(null)
   const [weatherLoading, setWeatherLoading] = useState(false)

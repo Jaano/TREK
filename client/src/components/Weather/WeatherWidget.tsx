@@ -1,20 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Sun, Cloud, CloudRain, CloudSnow, CloudDrizzle, CloudLightning, Wind } from 'lucide-react'
 import { fetchWeather } from '../../services/weatherQueue'
 import { useSettingsStore } from '../../store/settingsStore'
 import { Tooltip } from '../shared/Tooltip'
-
-const WEATHER_ICON_MAP = {
-  Clear: Sun,
-  Clouds: Cloud,
-  Rain: CloudRain,
-  Drizzle: CloudDrizzle,
-  Thunderstorm: CloudLightning,
-  Snow: CloudSnow,
-  Mist: Wind,
-  Fog: Wind,
-  Haze: Wind,
-}
+import { weatherIconFor } from './weatherIcons'
 
 interface WeatherIconProps {
   main: string
@@ -22,7 +10,7 @@ interface WeatherIconProps {
 }
 
 function WeatherIcon({ main, size = 13 }: WeatherIconProps) {
-  const Icon = WEATHER_ICON_MAP[main] || Cloud
+  const Icon = weatherIconFor(main)
   return <Icon size={size} strokeWidth={1.8} />
 }
 
