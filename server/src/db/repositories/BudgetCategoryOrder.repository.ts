@@ -1,9 +1,8 @@
 import type { BudgetCategoryOrder } from '../entities/BudgetCategoryOrder.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
-interface BudgetCategoryOrderKyselyDB {
-  budget_category_order: { trip_id: number; category: string; sort_order: number };
-}
+type BudgetCategoryOrderKyselyDB = Pick<DB, 'budget_category_order'>;
 
 /**
  * `budget_category_order` — a composite-PK `(trip_id, category)` table (no

@@ -3,6 +3,7 @@ import { columnRef } from '../dialect/sql-functions';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import { presenceSet } from './_shared/presence-set';
+import type { DB } from '../kysely/db';
 
 /** A bare `budget_items` row — every scalar column, incl. the four `persist(false)` relation mirrors (the program-wide trap this class goes through Kysely to avoid). */
 export interface BudgetItemRow {
@@ -55,37 +56,18 @@ export interface BudgetItemMoneyRow {
   exchange_rate: number;
 }
 
-interface BudgetKyselyDB {
-  budget_items: BudgetItemRow;
-  budget_item_members: { id: number; budget_item_id: number; user_id: number; paid: number; amount: number | null };
-  budget_category_order: { trip_id: number; category: string; sort_order: number };
-  users: { id: number; username: string; display_name: string | null; avatar: string | null };
-  trip_files: { id: number; filename: string; original_name: string; file_size: number | null; mime_type: string | null; trip_id: number; deleted_at: string | null; created_at: string | null };
-  file_links: { id: number; file_id: number; reservation_id: number | null; assignment_id: number | null; place_id: number | null; budget_item_id: number | null; created_at: string | null };
-}
+type BudgetKyselyDB = Pick<DB, 'budget_items' | 'budget_item_members' | 'budget_category_order' | 'users' | 'trip_files' | 'file_links'>;
 
 /**
- * The insert-only shape for `create` (BG25) — omits `id`/`created_at`
- * (autoincrement/`DEFAULT CURRENT_TIMESTAMP`, matching the legacy column
- * list) and `paid_by_user_id` (never written by `BudgetService` — R11/§17
- * surprise 7, only `UserCleanupService`'s UC5 touches it).
+ * The table `create` (BG25) inserts into. It binds the legacy column list:
+ * `id`/`created_at` are filled by the schema and `paid_by_user_id` is never
+ * written by `BudgetService` (R11/§17 surprise 7, only `UserCleanupService`'s
+ * UC5 touches it); the columns the statement leaves out (the rowid, defaulted and nullable ones) are `InsertOptional` in the generated type, so `.values()` may omit them.
  */
-interface BudgetItemsInsertKyselyDB {
-  budget_items: {
-    trip_id: number | string; category: string; name: string; total_price: number; currency: string | null;
-    exchange_rate: number; persons: number | null; days: number | null; note: string | null; ticket_json: string | null;
-    sort_order: number; expense_date: string | null; reservation_id: number | null; place_id: number | null;
-  };
-}
+type BudgetItemsInsertKyselyDB = Pick<DB, 'budget_items'>;
 
-/** The insert-only shape for `insertCopy` (TP61) — a distinct column set/order from `create`'s, carrying `paid_by_user_id` verbatim (§17). */
-interface BudgetItemsCopyInsertKyselyDB {
-  budget_items: {
-    trip_id: number | string; category: string; name: string; total_price: number; persons: number | null; days: number | null;
-    note: string | null; sort_order: number | null; reservation_id: number | null; currency: string | null;
-    exchange_rate: number; expense_date: string | null; ticket_json: string | null; paid_by_user_id: number | null;
-  };
-}
+/** The table `insertCopy` (TP61) inserts into, with a distinct column set/order from `create`'s, carrying `paid_by_user_id` verbatim (§17). */
+type BudgetItemsCopyInsertKyselyDB = Pick<DB, 'budget_items'>;
 
 /**
  * `budget_items` — the expense rows themselves, plus this domain's own view
@@ -171,7 +153,7 @@ export class BudgetItemsRepository extends TrekRepository<BudgetItems> {
     exchange_rate: number; persons: number | null; days: number | null; note: string | null; ticket_json: string | null;
     sort_order: number; expense_date: string | null; reservation_id: number | null; place_id: number | null;
   }): Promise<number> {
-    const result = await this.kysely<BudgetItemsInsertKyselyDB>().insertInto('budget_items').values(row).executeTakeFirstOrThrow();
+    const result = await this.kysely<BudgetItemsInsertKyselyDB>().insertInto('budget_items').values({ ...row, trip_id: row.trip_id as number }).executeTakeFirstOrThrow();
     return Number(result.insertId);
   }
 
@@ -188,7 +170,7 @@ export class BudgetItemsRepository extends TrekRepository<BudgetItems> {
     note: string | null; sort_order: number | null; reservation_id: number | null; currency: string | null;
     exchange_rate: number; expense_date: string | null; ticket_json: string | null; paid_by_user_id: number | null;
   }): Promise<number> {
-    const result = await this.kysely<BudgetItemsCopyInsertKyselyDB>().insertInto('budget_items').values(row).executeTakeFirstOrThrow();
+    const result = await this.kysely<BudgetItemsCopyInsertKyselyDB>().insertInto('budget_items').values({ ...row, trip_id: row.trip_id as number }).executeTakeFirstOrThrow();
     return Number(result.insertId);
   }
 
@@ -447,7 +429,7 @@ export class BudgetItemsRepository extends TrekRepository<BudgetItems> {
 
   /** BG28/BG45 — `INSERT OR IGNORE INTO file_links (file_id, budget_item_id) VALUES (?, ?)`. */
   async insertReceiptLink(file_id: number, budget_item_id: number | string): Promise<void> {
-    await this.kysely<{ file_links: { file_id: number; budget_item_id: number } }>()
+    await this.kysely<Pick<DB, 'file_links'>>()
       .insertInto('file_links')
       .values({ file_id, budget_item_id: budget_item_id as number })
       .onConflict((oc) => oc.doNothing())

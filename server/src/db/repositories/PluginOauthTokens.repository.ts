@@ -1,6 +1,7 @@
 import type { PluginOauthTokens } from '../entities/PluginOauthTokens.entity';
 import { currentTimestampKysely } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * Plan 3j Task 2 note: this repository's ONLY method today is the uninstall
@@ -20,23 +21,8 @@ export interface PluginOauthTokenRow {
   expires_at: number | null;
 }
 
-/**
- * PO11's insert-only shape (`storeToken`'s VALUES list — `updated_at` is always
- * `datetime('now')`/`CURRENT_TIMESTAMP`, never caller-supplied, same reasoning
- * `DocumentSyncItemsRepository`'s own write-only Kysely interface docstring gives
- * for a SEPARATE interface rather than widening the read-shaped row above).
- */
-interface PluginOauthTokensWriteKyselyDB {
-  plugin_oauth_tokens: {
-    plugin_id: string;
-    user_id: number;
-    access_token: string | null;
-    refresh_token: string | null;
-    expires_at: number | null;
-    scope: string | null;
-    updated_at: string;
-  };
-}
+/** PO11's insert table (`storeToken`'s VALUES list): `updated_at` is always `CURRENT_TIMESTAMP`, never caller-supplied. */
+type PluginOauthTokensWriteKyselyDB = Pick<DB, 'plugin_oauth_tokens'>;
 
 export class PluginOauthTokensRepository extends TrekRepository<PluginOauthTokens> {
   /** PR42 (uninstall cascade, `deleteData` branch) — `DELETE FROM plugin_oauth_tokens WHERE plugin_id = ?`. */

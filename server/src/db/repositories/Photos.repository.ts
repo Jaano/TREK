@@ -1,10 +1,9 @@
 import type { Photos } from '../entities/Photos.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
-/** The narrow `photos` shape {@link PhotosRepository.findTripIdByFilename} needs. */
-interface PhotosKyselyDB {
-  photos: { filename: string; trip_id: number };
-}
+/** The `photos` tables {@link PhotosRepository.findTripIdByFilename} reads. */
+type PhotosKyselyDB = Pick<DB, 'photos'>;
 
 /**
  * `photos` (Plan 4 Task 1's platform.routes.ts pickup — the last table with no

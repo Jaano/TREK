@@ -1,6 +1,7 @@
 import type { JourneyEntry } from '../../types';
 import type { JourneyEntries } from '../entities/JourneyEntries.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** JG55's wider reconciliation projection (`reconcileTripSkeletons`) — a distinct column set from JG35's dedup-key-only read. */
 export interface ReconcileEntryRow {
@@ -26,16 +27,11 @@ export interface JourneyTrackSourceRow {
   route_geometry: string;
 }
 
-/** The narrow `journey_entries`/`places` shape {@link JourneyEntriesRepository.listTracksSource} needs. */
-interface JourneyTracksKyselyDB {
-  journey_entries: { journey_id: number; source_trip_id: number | null };
-  places: { id: number; trip_id: number; name: string | null; route_color: string | null; route_geometry: string | null };
-}
+/** The `journey_entries`/`places` tables {@link JourneyEntriesRepository.listTracksSource} reads. */
+type JourneyTracksKyselyDB = Pick<DB, 'journey_entries' | 'places'>;
 
-/** The narrow `journey_entries` shape a bare `entry_date`/`sort_order` MAX-per-date read needs. */
-interface JourneyEntriesDateSortKyselyDB {
-  journey_entries: { journey_id: number; entry_date: string; sort_order: number | null };
-}
+/** The `journey_entries` tables a bare `entry_date`/`sort_order` MAX-per-date read reads. */
+type JourneyEntriesDateSortKyselyDB = Pick<DB, 'journey_entries'>;
 
 /** An entry waiting for a place and the geotagged photo that can give it one (#1003), {@link JourneyEntriesRepository.listPhotoPlacementCandidates}. */
 export interface PhotoPlacementRow {
@@ -45,19 +41,11 @@ export interface PhotoPlacementRow {
   lng: number;
 }
 
-/** The narrow `trek_photos`/`journey_photos`/`journey_entry_photos`/`journey_entries`/`journeys` shape {@link JourneyEntriesRepository.listPhotoPlacementCandidates} needs. */
-interface PhotoPlacementKyselyDB {
-  trek_photos: { id: number; lat: number | null; lng: number | null };
-  journey_photos: { id: number; photo_id: number };
-  journey_entry_photos: { entry_id: number; journey_photo_id: number; sort_order: number | null };
-  journey_entries: { id: number; journey_id: number; location_lat: number | null; location_lng: number | null; type: string };
-  journeys: { id: number; photo_location: number };
-}
+/** The `trek_photos`/`journey_photos`/`journey_entry_photos`/`journey_entries`/`journeys` tables {@link JourneyEntriesRepository.listPhotoPlacementCandidates} reads. */
+type PhotoPlacementKyselyDB = Pick<DB, 'trek_photos' | 'journey_photos' | 'journey_entry_photos' | 'journey_entries' | 'journeys'>;
 
 /** `journey_entry_photos`, read cross-table (no `JourneyEntryPhotosRepository` yet — Task 2's own; the two `hasPhotos` guards in Part A only ever check existence). */
-interface JourneyEntryPhotosExistsKyselyDB {
-  journey_entry_photos: { entry_id: number };
-}
+type JourneyEntryPhotosExistsKyselyDB = Pick<DB, 'journey_entry_photos'>;
 
 /** JG64's narrow `journeyStats` projection — NOT the same text as JG14/JG71 (a wider `SELECT *`); a distinct, narrower column list read directly off the current source, not the inventory's (stale) "same text as JG14" annotation. */
 export interface StatsEntryRow {
@@ -101,28 +89,14 @@ export interface TripPickerRow {
   place_count: number;
 }
 
-/** The narrow `journey_entries`/`journey_trips`/`trips`/`places`/`day_assignments`/`days` shape `journeyStats`'s cross-domain reads (JG65-67) need. */
-interface StatsKyselyDB {
-  journey_trips: { journey_id: number; trip_id: number };
-  trips: { id: number; title: string | null; start_date: string | null; end_date: string | null };
-  places: { id: number; trip_id: number; name: string | null; lat: number | null; lng: number | null };
-  day_assignments: { id: number; place_id: number; day_id: number; order_index: number | null };
-  days: { id: number; date: string | null };
-}
+/** The `journey_entries`/`journey_trips`/`trips`/`places`/`day_assignments`/`days` tables `journeyStats`'s cross-domain reads (JG65-67) read. */
+type StatsKyselyDB = Pick<DB, 'journey_trips' | 'trips' | 'places' | 'day_assignments' | 'days'>;
 
 /** JG70's chunked cached-country probe (`journeyStats`, `place_regions` — atlas-owned, 3f-DONE, read-only here). */
-interface PlaceRegionsKyselyDB {
-  place_regions: { place_id: number; country_code: string | null };
-}
+type PlaceRegionsKyselyDB = Pick<DB, 'place_regions'>;
 
-/** The narrow `trips`/`trip_members`/`places`/`day_assignments`/`journey_trips` shape JG120/JG121's trip-picker reads need. */
-interface TripPickerKyselyDB {
-  trips: { id: number; title: string; start_date: string | null; end_date: string | null; cover_image: string | null; user_id: number };
-  trip_members: { trip_id: number; user_id: number };
-  places: { id: number; trip_id: number };
-  day_assignments: { id: number; place_id: number };
-  journey_trips: { trip_id: number };
-}
+/** The `trips`/`trip_members`/`places`/`day_assignments`/`journey_trips` tables JG120/JG121's trip-picker reads read. */
+type TripPickerKyselyDB = Pick<DB, 'trips' | 'trip_members' | 'places' | 'day_assignments' | 'journey_trips'>;
 
 /**
  * `journey_entries` — first cut (Plan 3g Task 1, R9's Part A): every

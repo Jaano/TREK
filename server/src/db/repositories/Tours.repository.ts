@@ -1,6 +1,7 @@
 import type { AssertRowKeys } from './_shared/rows';
 import type { Tours } from '../entities/Tours.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * A tour as the Tours list and detail read it: the `tours` facet joined with
@@ -55,12 +56,7 @@ export interface TourInsert {
 /** What a route edit replaces on an existing tour. */
 export type TourUpdate = Omit<TourInsert, 'place_id'>;
 
-interface ToursKyselyDB {
-  tours: TourRow;
-  places: { id: number; trip_id: number; name: string };
-  day_assignments: { id: number; day_id: number; place_id: number };
-  tour_waypoints: { id: number; place_id: number };
-}
+type ToursKyselyDB = Pick<DB, 'tours' | 'places' | 'day_assignments' | 'tour_waypoints'>;
 
 /**
  * `tours` — the facet that makes a place a tour (#2586). Keyed on the owning

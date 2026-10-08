@@ -1,5 +1,6 @@
 import type { CollectionMembers } from '../entities/CollectionMembers.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `buildMembers`'s owner row — `collections` joined to `users` (CL12). */
 export interface CollectionOwnerMemberRow {
@@ -15,19 +16,11 @@ export interface CollectionMemberRow extends CollectionOwnerMemberRow {
   role: string;
 }
 
-interface CollectionOwnerKyselyDB {
-  collections: { id: number; owner_id: number };
-  users: { id: number; username: string; email: string; avatar: string | null };
-}
+type CollectionOwnerKyselyDB = Pick<DB, 'collections' | 'users'>;
 
-interface CollectionMembersKyselyDB {
-  collection_members: { collection_id: number; user_id: number; status: string; role: string };
-  users: { id: number; username: string; email: string; avatar: string | null };
-}
+type CollectionMembersKyselyDB = Pick<DB, 'collection_members' | 'users'>;
 
-interface CollectionMemberUserIdsKyselyDB {
-  collection_members: { collection_id: number; user_id: number; status: string };
-}
+type CollectionMemberUserIdsKyselyDB = Pick<DB, 'collection_members'>;
 
 /** `listCollections`'s incoming-invites read — a genuine statement missing
  *  its own CL number in the plan's inventory gather (jumped CL15 → CL16
@@ -42,11 +35,7 @@ export interface CollectionIncomingInviteRow {
   from_username: string;
 }
 
-interface CollectionIncomingInvitesKyselyDB {
-  collection_members: { collection_id: number; user_id: number; status: string };
-  collections: { id: number; name: string; owner_id: number };
-  users: { id: number; username: string };
-}
+type CollectionIncomingInvitesKyselyDB = Pick<DB, 'collection_members' | 'collections' | 'users'>;
 
 /**
  * `collection_members` — Plan 3h Task 1's first cut (`roleOf`'s own member
@@ -190,8 +179,5 @@ export class CollectionMembersRepository extends TrekRepository<CollectionMember
   }
 }
 
-/** {@link CollectionMembersRepository.availableUsers}'s narrow `users`/`collection_members` shape. */
-interface CollectionAvailableUsersKyselyDB {
-  users: { id: number; username: string; is_guest: number };
-  collection_members: { collection_id: number; user_id: number };
-}
+/** The `users`/`collection_members` tables {@link CollectionMembersRepository.availableUsers} reads. */
+type CollectionAvailableUsersKyselyDB = Pick<DB, 'users' | 'collection_members'>;

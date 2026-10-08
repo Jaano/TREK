@@ -1,6 +1,7 @@
 import type { Platform } from '@mikro-orm/core';
 import type { ExpressionBuilder, ExpressionWrapper, ReferenceExpression, SqlBool } from 'kysely';
 import { coalesceParam } from '../../dialect/sql-functions';
+import type { DB } from '../../kysely/db';
 
 /**
  * The visibility predicate an anonymous viewer's reads are filtered
@@ -119,23 +120,19 @@ export function publicReservationExpr<DB, TB extends keyof DB>(
 }
 
 /**
- * `reservations`/`day_accommodations`'s REAL table names, the shape
- * `publicStayExists` needs. A consumer's own local Kysely `DB` interface
- * (the `AssignmentTimeSortKyselyDB`/`RoadtripVisitsKyselyDB`/
- * `TripSelectKyselyDB` per-query-interface precedent) satisfies this by
- * structural extension — declaring `day_accommodations`/`reservations`
- * with at least these columns is enough; `Kysely<DB>` typed against it and
- * queried via `.selectFrom('day_accommodations as a')` (the fixed alias
- * every known legacy caller uses — see this file's module docstring) is
- * what actually produces the aliased `a` member `publicStayExists`
- * requires; Kysely computes that from THIS interface's `day_accommodations`
- * entry, not from a hand-declared `a` key (a table's alias is a property of
- * the QUERY, never of the `DB` interface itself).
+ * `reservations`/`day_accommodations`'s REAL table names, the tables
+ * `publicStayExists` needs. A consumer's own alias (the
+ * `AssignmentTimeSortKyselyDB`/`RoadtripVisitsKyselyDB`/`TripSelectKyselyDB`
+ * per-query precedent) satisfies this by picking the same generated tables.
+ * `Kysely<DB>` typed against it and queried via
+ * `.selectFrom('day_accommodations as a')` (the fixed alias every known
+ * legacy caller uses, see this file's module docstring) is what actually
+ * produces the aliased `a` member `publicStayExists` requires; Kysely
+ * computes that from THIS alias's `day_accommodations` entry, not from a
+ * hand-declared `a` key (a table's alias is a property of the QUERY, never
+ * of the `DB` type itself).
  */
-export interface ReservationVisibilityKyselyDB {
-  day_accommodations: { id: number };
-  reservations: { id: number; accommodation_id: number | string | null; ingest_state: string | null };
-}
+export type ReservationVisibilityKyselyDB = Pick<DB, 'day_accommodations' | 'reservations'>;
 
 /**
  * RV2 as a Kysely predicate: `(NOT EXISTS (…) OR EXISTS (… AND <RV1>))`,

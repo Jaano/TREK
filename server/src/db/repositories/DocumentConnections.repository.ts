@@ -2,6 +2,7 @@ import { currentTimestamp, coalesceOverride } from '../dialect/sql-functions';
 import type { DocumentConnections } from '../entities/DocumentConnections.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * A bare `document_connections` row. `secrets` is opaque encrypted TEXT here
@@ -29,11 +30,7 @@ export interface DocumentConnectionRow {
 
 const _connectionRowKeys: AssertRowKeys<DocumentConnectionRow, DocumentConnections> = true;
 
-interface OwnerLeftKyselyDB {
-  document_connections: { id: number; trip_id: number; owner_user_id: number };
-  trip_members: { trip_id: number; user_id: number };
-  trips: { id: number; user_id: number };
-}
+type OwnerLeftKyselyDB = Pick<DB, 'document_connections' | 'trip_members' | 'trips'>;
 
 /**
  * `document_connections` — one provider credential per trip (R7's encrypted

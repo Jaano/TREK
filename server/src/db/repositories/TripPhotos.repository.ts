@@ -1,55 +1,27 @@
 import type { TripPhotos } from '../entities/TripPhotos.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
- * `trip_photos`'s single-table write/lookup shape (Plan 3e Task 7,
- * UM4/UM5/UM6/UM8/UM9). `trip_id`/`album_link_id` are typed `number |
- * string` — the legacy statements bound `tripId`/`albumLinkId` raw, straight
- * from the route param, with no `Number()`/`toRowId` conversion (the same
- * T5 raw-bind seam `TripsRepository.findForViewer`'s docstring documents),
- * so this Kysely shape has to accept both to bind the identical value.
+ * `trip_photos`'s single-table writes and lookups (Plan 3e Task 7,
+ * UM4/UM5/UM6/UM8/UM9). The `tripId`/`albumLinkId` the callers pass stay
+ * `number | string` (the legacy statements bound them raw, straight from the
+ * route param, with no `Number()`/`toRowId` conversion: the same T5 raw-bind
+ * seam `TripsRepository.findForViewer`'s docstring documents) and are cast to
+ * the column type only at the bind, so the identical value is bound.
  */
-interface TripPhotosKyselyDB {
-  trip_photos: {
-    id: number;
-    trip_id: number | string;
-    user_id: number;
-    photo_id: number;
-    shared: number;
-    album_link_id: number | string | null;
-    added_at: string | null;
-  };
-}
+type TripPhotosKyselyDB = Pick<DB, 'trip_photos'>;
 
 /**
- * UM4's insert-only shape — `id`/`added_at` are autoincrement/`DEFAULT
+ * UM4's insert table. `id`/`added_at` are autoincrement/`DEFAULT
  * CURRENT_TIMESTAMP` and omitted from `.values()` (the legacy statement's
- * own column list omits them too), so Kysely's `InsertObject` needs a
- * SEPARATE interface that doesn't declare them (the `FileLinksWriteKyselyDB`
- * precedent) — {@link TripPhotosKyselyDB} declares every column, so passing
- * it to `.insertInto()` would require `id`/`added_at` in every `.values()`.
+ * own column list omits them too); the generated type marks them
+ * `InsertOptional`.
  */
-interface TripPhotosInsertKyselyDB {
-  trip_photos: {
-    trip_id: number | string;
-    user_id: number;
-    photo_id: number;
-    shared: number;
-    album_link_id: number | string | null;
-  };
-}
+type TripPhotosInsertKyselyDB = Pick<DB, 'trip_photos'>;
 
-/**
- * UM2's joined projection (`UnifiedMemoriesService.listTripPhotos`) — three
- * tables, so its own Kysely shape rather than folding onto
- * {@link TripPhotosKyselyDB} (one purpose-shaped interface per statement,
- * the `FileLinksRepository` precedent).
- */
-interface TripPhotosListKyselyDB {
-  trip_photos: { trip_id: number | string; user_id: number; photo_id: number; shared: number; added_at: string | null };
-  trek_photos: { id: number; asset_id: string | null; provider: string };
-  users: { id: number; username: string | null; avatar: string | null };
-}
+/** UM2's joined projection (`UnifiedMemoriesService.listTripPhotos`) over three tables. */
+type TripPhotosListKyselyDB = Pick<DB, 'trip_photos' | 'trek_photos' | 'users'>;
 
 /** UM2's row shape — `tp.photo_id, tkp.asset_id, tkp.provider, tp.user_id, tp.shared, tp.added_at, u.username, u.avatar`. */
 export interface TripPhotoListRow {
@@ -129,7 +101,7 @@ export class TripPhotosRepository extends TrekRepository<TripPhotos> {
   async insertIgnore(row: { trip_id: number | string; user_id: number; photo_id: number; shared: number; album_link_id: number | string | null }): Promise<boolean> {
     const result = await this.kysely<TripPhotosInsertKyselyDB>()
       .insertInto('trip_photos')
-      .values({ trip_id: row.trip_id, user_id: row.user_id, photo_id: row.photo_id, shared: row.shared, album_link_id: row.album_link_id })
+      .values({ trip_id: row.trip_id as number, user_id: row.user_id, photo_id: row.photo_id, shared: row.shared, album_link_id: row.album_link_id as number })
       .onConflict((oc) => oc.columns(['trip_id', 'user_id', 'photo_id']).doNothing())
       .executeTakeFirst();
     return (result?.numInsertedOrUpdatedRows ?? 0n) > 0n;
@@ -140,7 +112,7 @@ export class TripPhotosRepository extends TrekRepository<TripPhotos> {
     await this.kysely<TripPhotosKyselyDB>()
       .updateTable('trip_photos')
       .set({ shared })
-      .where('trip_id', '=', trip_id)
+      .where('trip_id', '=', trip_id as number)
       .where('user_id', '=', user_id)
       .where('photo_id', '=', photo_id)
       .execute();
@@ -150,7 +122,7 @@ export class TripPhotosRepository extends TrekRepository<TripPhotos> {
   async deleteForUserPhoto(trip_id: number | string, user_id: number, photo_id: number): Promise<void> {
     await this.kysely<TripPhotosKyselyDB>()
       .deleteFrom('trip_photos')
-      .where('trip_id', '=', trip_id)
+      .where('trip_id', '=', trip_id as number)
       .where('user_id', '=', user_id)
       .where('photo_id', '=', photo_id)
       .execute();
@@ -161,8 +133,8 @@ export class TripPhotosRepository extends TrekRepository<TripPhotos> {
     const rows = await this.kysely<TripPhotosKyselyDB>()
       .selectFrom('trip_photos')
       .select(['photo_id'])
-      .where('trip_id', '=', trip_id)
-      .where('album_link_id', '=', album_link_id)
+      .where('trip_id', '=', trip_id as number)
+      .where('album_link_id', '=', album_link_id as number)
       .execute();
     return rows.map((r) => r.photo_id);
   }
@@ -171,8 +143,8 @@ export class TripPhotosRepository extends TrekRepository<TripPhotos> {
   async deleteForAlbumLink(trip_id: number | string, album_link_id: number | string): Promise<void> {
     await this.kysely<TripPhotosKyselyDB>()
       .deleteFrom('trip_photos')
-      .where('trip_id', '=', trip_id)
-      .where('album_link_id', '=', album_link_id)
+      .where('trip_id', '=', trip_id as number)
+      .where('album_link_id', '=', album_link_id as number)
       .execute();
   }
 
@@ -202,7 +174,7 @@ export class TripPhotosRepository extends TrekRepository<TripPhotos> {
         'u.username as username',
         'u.avatar as avatar',
       ])
-      .where('tp.trip_id', '=', trip_id)
+      .where('tp.trip_id', '=', trip_id as number)
       .where((eb) => eb.or([eb('tp.user_id', '=', user_id), eb('tp.shared', '=', 1)]))
       .where('tkp.provider', 'in', enabled_providers)
       .orderBy('tp.added_at', 'asc')

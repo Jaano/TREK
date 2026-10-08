@@ -1,9 +1,8 @@
 import type { HiddenCountries } from '../entities/HiddenCountries.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
-interface HiddenCountriesKyselyDB {
-  hidden_countries: { user_id: number; country_code: string };
-}
+type HiddenCountriesKyselyDB = Pick<DB, 'hidden_countries'>;
 
 /**
  * `hidden_countries` — the #1490 tombstone table: a country derived from a

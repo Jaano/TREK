@@ -1,6 +1,7 @@
 import type { VacayPlanMembers } from '../entities/VacayPlanMembers.entity';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `vacay_plan_members` row as the legacy `SELECT *` returned it (VC51). */
 export interface VacayPlanMemberRow {
@@ -98,9 +99,7 @@ export class VacayPlanMembersRepository extends TrekRepository<VacayPlanMembers>
    * instead.
    */
   async findInvitableUser(id: number): Promise<{ id: number; username: string } | null> {
-    interface UsersKyselyDB {
-      users: { id: number; username: string; is_guest: number | null };
-    }
+    type UsersKyselyDB = Pick<DB, 'users'>;
     const row = await this.kysely<UsersKyselyDB>()
       .selectFrom('users')
       .select(['id', 'username'])
@@ -166,11 +165,7 @@ export class VacayPlanMembersRepository extends TrekRepository<VacayPlanMembers>
    * subqueries (§13) — Kysely, no `sql` tag, every operand builder-expressed.
    */
   async listAvailableForFusion(userId: number, planId: number): Promise<VacayMemberUserRow[]> {
-    interface FusionCandidateKyselyDB {
-      users: { id: number; username: string; email: string; is_guest: number | null };
-      vacay_plan_members: { id: number; plan_id: number; user_id: number; status: string | null };
-      vacay_plans: { id: number; owner_id: number };
-    }
+    type FusionCandidateKyselyDB = Pick<DB, 'users' | 'vacay_plan_members' | 'vacay_plans'>;
     return this.kysely<FusionCandidateKyselyDB>()
       .selectFrom('users as u')
       .select(['u.id', 'u.username', 'u.email'])

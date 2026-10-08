@@ -1,6 +1,7 @@
 import type { SchoolHolidayCountries } from '../entities/SchoolHolidayCountries.entity';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `school_holiday_countries` row as the API emits it (SH1/SH3 — `SchoolHolidayCountryRequest`'s exact shape, `@trek/shared`). */
 export interface SchoolHolidayCountryRow {
@@ -64,6 +65,4 @@ export class SchoolHolidayCountriesRepository extends TrekRepository<SchoolHolid
   }
 }
 
-interface SchoolHolidayCountriesKyselyDB {
-  school_holiday_countries: { code: string; name: string };
-}
+type SchoolHolidayCountriesKyselyDB = Pick<DB, 'school_holiday_countries'>;

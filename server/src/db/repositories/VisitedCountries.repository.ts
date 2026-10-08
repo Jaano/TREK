@@ -1,5 +1,6 @@
 import type { VisitedCountries } from '../entities/VisitedCountries.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `visited_countries` — every scalar column, `AT10`'s own read shape. */
 export interface VisitedCountryRow {
@@ -9,25 +10,15 @@ export interface VisitedCountryRow {
 }
 
 /**
- * Two separate table shapes for the SAME `visited_countries` table, not one
- * shared interface: {@link listForUser} SELECTs `created_at`, while
- * {@link markVisited}/{@link markFromRegion} INSERT it never — the legacy
+ * The generated `visited_countries` table, under one alias for the reads
+ * ({@link listForUser} SELECTs `created_at`) and one for the writes
+ * ({@link markVisited}/{@link markFromRegion} never bind it: the legacy
  * statements' own column lists omit it, leaving the schema's `DEFAULT
- * CURRENT_TIMESTAMP` to fill it in. Kysely validates `.values()` against
- * exactly the columns its `DB` type parameter declares (it has no notion of
- * "this column exists in the real table but is optional here" short of the
- * `Generated<>` wrapper, which — unlike every other column type in this
- * program — did not resolve `created_at` out of `InsertObject`'s required
- * set when tried here); declaring a NARROWER write-only shape that never
- * mentions `created_at` at all reproduces the legacy statement's own column
- * list exactly, with no wrapper needed.
+ * CURRENT_TIMESTAMP` to fill it in, and the generated type marks it
+ * `InsertOptional`).
  */
-interface VisitedCountriesReadKyselyDB {
-  visited_countries: { user_id: number; country_code: string; source: string; created_at: string | null };
-}
-interface VisitedCountriesWriteKyselyDB {
-  visited_countries: { user_id: number; country_code: string; source: string };
-}
+type VisitedCountriesReadKyselyDB = Pick<DB, 'visited_countries'>;
+type VisitedCountriesWriteKyselyDB = Pick<DB, 'visited_countries'>;
 
 /**
  * `visited_countries` — the user's own explicit "I've been here" marks

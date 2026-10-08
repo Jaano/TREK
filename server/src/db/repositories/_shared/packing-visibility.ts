@@ -1,4 +1,5 @@
 import type { Expression, ExpressionBuilder, ExpressionWrapper, SqlBool } from 'kysely';
+import type { DB } from '../../kysely/db';
 
 /**
  * The per-actor visibility predicate packing's three-tier sharing model
@@ -118,15 +119,11 @@ export function packingVisibleToActorCondition(actorId: number | undefined) {
 }
 
 /**
- * `packing_items`/`packing_item_recipients`'s REAL table names — the shape
- * `packingVisibleToActorExpr` needs. A consumer's own local Kysely `DB`
- * interface satisfies this by structural extension, the same
- * `ReservationVisibilityKyselyDB` precedent.
+ * `packing_items`/`packing_item_recipients`'s REAL table names, the tables
+ * `packingVisibleToActorExpr` needs. A consumer's own alias satisfies this by
+ * intersecting it, the same `ReservationVisibilityKyselyDB` precedent.
  */
-export interface PackingVisibilityKyselyDB {
-  packing_items: { id: number; is_private: number; owner_id: number | null };
-  packing_item_recipients: { item_id: number; user_id: number };
-}
+export type PackingVisibilityKyselyDB = Pick<DB, 'packing_items' | 'packing_item_recipients'>;
 
 export function packingVisibleToActorExpr(
   eb: ExpressionBuilder<PackingVisibilityKyselyDB, 'packing_items'>,

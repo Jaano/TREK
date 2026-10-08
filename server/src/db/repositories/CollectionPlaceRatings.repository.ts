@@ -1,5 +1,6 @@
 import type { CollectionPlaceRatings } from '../entities/CollectionPlaceRatings.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * `collection_place_ratings` (Plan 3h Task 2, part B — #1435's per-voter
@@ -63,7 +64,7 @@ export class CollectionPlaceRatingsRepository extends TrekRepository<CollectionP
    * mirror column silently dropped" trap (3d/3e ledgers).
    */
   async listForPlace(collectionPlaceId: number): Promise<{ user_id: number; rating: number }[]> {
-    return await this.kysely<{ collection_place_ratings: { collection_place_id: number; user_id: number; rating: number } }>()
+    return await this.kysely<Pick<DB, 'collection_place_ratings'>>()
       .selectFrom('collection_place_ratings')
       .select(['user_id', 'rating'])
       .where('collection_place_id', '=', collectionPlaceId)

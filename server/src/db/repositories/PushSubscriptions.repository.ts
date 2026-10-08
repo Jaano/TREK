@@ -2,6 +2,7 @@ import type { PushSubscriptions } from '../entities/PushSubscriptions.entity';
 import { columnIncrementedBy, currentTimestamp, currentTimestampKysely } from '../dialect/sql-functions';
 import type { AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `push_subscriptions` row exactly as `SELECT *` reads it (Web Push, #894). */
 export interface PushSubscriptionRow {
@@ -19,23 +20,10 @@ export interface PushSubscriptionRow {
 
 const _pushSubscriptionRowKeys: AssertRowKeys<PushSubscriptionRow, PushSubscriptions> = true;
 
-interface PushSubscriptionsKyselyDB {
-  push_subscriptions: PushSubscriptionRow;
-}
+type PushSubscriptionsKyselyDB = Pick<DB, 'push_subscriptions'>;
 
-/** The columns PS1's INSERT binds; the rest come from their defaults. */
-interface PushSubscriptionsInsertKyselyDB {
-  push_subscriptions: {
-    user_id: number;
-    endpoint: string;
-    p256dh: string;
-    auth: string;
-    vapid_public_key: string;
-    user_agent: string | null;
-    created_at: string;
-    failure_count: number;
-  };
-}
+/** The table PS1's INSERT binds; the columns it leaves out come from their defaults. */
+type PushSubscriptionsInsertKyselyDB = Pick<DB, 'push_subscriptions'>;
 
 /** `push_subscriptions` — one row per browser a user switched Web Push on in. */
 export class PushSubscriptionsRepository extends TrekRepository<PushSubscriptions> {

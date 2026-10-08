@@ -2,6 +2,7 @@ import type { CollabMessages } from '../entities/CollabMessages.entity';
 import type { TripFileRow } from './TripFiles.repository';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `collab_messages` row — every scalar column of the entity, incl. the three `persist(false)` mirrors (`trip_id`, `user_id`, `reply_to`). */
 export interface CollabMessageRow {
@@ -30,15 +31,10 @@ export interface SharePublicCollabMessageRow extends CollabMessageRow {
   avatar: string | null;
 }
 
-interface CollabMessagesKyselyDB {
-  collab_messages: CollabMessageRow;
-  users: { id: number; username: string; avatar: string | null };
-}
+type CollabMessagesKyselyDB = Pick<DB, 'collab_messages' | 'users'>;
 
-/** Only the `trip_files` columns the message-attachment methods below touch — the `CollabNotesRepository` class docstring explains why they live on the OWNING collab entity's repository rather than on `TripFilesRepository`. */
-interface MessageAttachmentsKyselyDB {
-  trip_files: TripFileRow;
-}
+/** The `trip_files` table the message-attachment methods below touch (the `CollabNotesRepository` class docstring explains why they live on the OWNING collab entity's repository rather than on `TripFilesRepository`). */
+type MessageAttachmentsKyselyDB = Pick<DB, 'trip_files'>;
 
 /** CB43's narrow attachment projection (`formatMessage`'s hydration read). `message_id` keeps `TripFileRow`'s own nullable typing even though the WHERE clause below always matches a non-null value — no narrowing cast. */
 export interface MessageAttachmentRow {
@@ -51,18 +47,8 @@ export interface MessageAttachmentRow {
   mime_type: string | null;
 }
 
-/** CB49's insert-only shape — every OTHER `trip_files` column is autoincrement/nullable-defaulted and omitted, matching the legacy statement's own seven-column list (the `NoteAttachmentInsertKyselyDB` precedent, `CollabNotes.repository.ts`). */
-interface MessageAttachmentInsertKyselyDB {
-  trip_files: {
-    trip_id: number | string;
-    message_id: number | string;
-    filename: string;
-    original_name: string;
-    file_size: number;
-    mime_type: string;
-    uploaded_by: number;
-  };
-}
+/** CB49's insert table: it binds the legacy statement's own seven-column list, and every other `trip_files` column is `InsertOptional` in the generated type. */
+type MessageAttachmentInsertKyselyDB = Pick<DB, 'trip_files'>;
 
 /**
  * `collab_messages` — trip chat, plus (second half of this class) the
@@ -206,8 +192,8 @@ export class CollabMessagesRepository extends TrekRepository<CollabMessages> {
     await this.kysely<MessageAttachmentInsertKyselyDB>()
       .insertInto('trip_files')
       .values({
-        trip_id: row.trip_id,
-        message_id: row.message_id,
+        trip_id: row.trip_id as number,
+        message_id: row.message_id as number,
         filename: row.filename,
         original_name: row.original_name,
         file_size: row.file_size,

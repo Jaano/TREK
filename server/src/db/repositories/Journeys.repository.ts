@@ -1,5 +1,6 @@
 import type { Journeys } from '../entities/Journeys.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * `SELECT * FROM journeys WHERE id = ?`'s row — every scalar column the
@@ -39,37 +40,11 @@ export interface JourneyListRow extends JourneyRow {
   trip_date_max: string | null;
 }
 
-/** The narrow `journeys`/`journey_contributors`/`journey_entries`/`journey_photos`/`journey_trips`/`trips` shape {@link JourneysRepository.listForUser} needs. */
-interface JourneyListKyselyDB {
-  journeys: {
-    id: number;
-    user_id: number;
-    title: string;
-    subtitle: string | null;
-    cover_gradient: string | null;
-    status: string | null;
-    created_at: number;
-    updated_at: number;
-    cover_image: string | null;
-    show_trip_tracks: number;
-    show_verdict: number;
-    show_mood: number;
-    show_weather: number;
-    status_override: string | null;
-    photo_location: number;
-  };
-  journey_contributors: { journey_id: number; user_id: number };
-  journey_entries: { journey_id: number; type: string; location_name: string | null };
-  journey_photos: { journey_id: number };
-  journey_trips: { journey_id: number; trip_id: number };
-  trips: { id: number; start_date: string | null; end_date: string | null };
-}
+/** The `journeys`/`journey_contributors`/`journey_entries`/`journey_photos`/`journey_trips`/`trips` tables {@link JourneysRepository.listForUser} reads. */
+type JourneyListKyselyDB = Pick<DB, 'journeys' | 'journey_contributors' | 'journey_entries' | 'journey_photos' | 'journey_trips' | 'trips'>;
 
-/** The narrow `journeys`/`journey_contributors` shape {@link JourneysRepository.listRecipientUserIds} needs. */
-interface JourneyRecipientsKyselyDB {
-  journeys: { id: number; user_id: number };
-  journey_contributors: { journey_id: number; user_id: number };
-}
+/** The `journeys`/`journey_contributors` tables {@link JourneysRepository.listRecipientUserIds} reads. */
+type JourneyRecipientsKyselyDB = Pick<DB, 'journeys' | 'journey_contributors'>;
 
 /**
  * `journeys` — the root of the journey cluster (Plan 3g Task 1, R9's Part A).

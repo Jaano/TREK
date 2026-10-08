@@ -1,6 +1,7 @@
 import type { CollectionLabels } from '../entities/CollectionLabels.entity';
 import { lower, lowerParam } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `collection_labels` — `loadLabelsByCollection`'s (CL7) shape. */
 export interface CollectionLabelRow {
@@ -11,21 +12,10 @@ export interface CollectionLabelRow {
   sort_order: number | null;
 }
 
-interface CollectionLabelsKyselyDB {
-  collection_labels: {
-    id: number;
-    collection_id: number;
-    name: string;
-    color: string | null;
-    sort_order: number | null;
-    created_at: string | null;
-  };
-}
+type CollectionLabelsKyselyDB = Pick<DB, 'collection_labels'>;
 
-/** CL20's own `INSERT INTO collection_labels (collection_id, name, color, sort_order)` column list, exactly — no `id`/`created_at`, the `BucketListInsertKyselyDB` narrower-insert-interface precedent. */
-interface CollectionLabelsInsertKyselyDB {
-  collection_labels: { collection_id: number; name: string; color: string; sort_order: number };
-}
+/** CL20's insert table: it binds `INSERT INTO collection_labels (collection_id, name, color, sort_order)` exactly, and `id`/`created_at` are `InsertOptional` in the generated type. */
+type CollectionLabelsInsertKyselyDB = Pick<DB, 'collection_labels'>;
 
 /**
  * `collection_labels` — Plan 3h Task 1's first cut. Owns Part A's own

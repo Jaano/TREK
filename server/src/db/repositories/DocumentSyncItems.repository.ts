@@ -3,6 +3,7 @@ import { coalesceOverride, currentTimestamp, currentTimestampKysely, foundAgainS
 import type { DocumentSyncItems } from '../entities/DocumentSyncItems.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `document_sync_items` row (every scalar column). */
 export interface DocumentSyncItemRow {
@@ -73,53 +74,15 @@ export interface DocumentSyncHoldingsRow {
   missing: number;
 }
 
-interface DocumentSyncItemsKyselyDB {
-  document_sync_items: DocumentSyncItemRow;
-  trip_files: { id: number; original_name: string };
-}
+type DocumentSyncItemsKyselyDB = Pick<DB, 'document_sync_items' | 'trip_files'>;
 
 /**
- * DS24's insert-only shape — `id`/`first_seen_at`/`last_seen_at` are
- * autoincrement/`DEFAULT CURRENT_TIMESTAMP` and `remote_missing_at`/
- * `remote_trashed_at` are always NULL on a brand-new row (matching the
- * legacy statement's own 16-column list, which omits all five) — a
- * SEPARATE interface from {@link DocumentSyncItemsKyselyDB} rather than
- * making those columns optional there, the same one-purpose-shaped-interface
- * reasoning `FileLinksRepository`'s own `FileLinksWriteKyselyDB` docstring
- * gives.
+ * DS24's insert table. It binds the legacy statement's own 16-column list:
+ * `id`/`first_seen_at`/`last_seen_at` are autoincrement/`DEFAULT
+ * CURRENT_TIMESTAMP` and `remote_missing_at`/`remote_trashed_at` are always
+ * NULL on a brand-new row; the columns the statement leaves out (the rowid, defaulted and nullable ones) are `InsertOptional` in the generated type, so `.values()` may omit them.
  */
-interface DocumentSyncItemsWriteKyselyDB {
-  document_sync_items: {
-    link_id: number;
-    trip_id: number;
-    file_id: number | null;
-    trek_doc_uid: string;
-    remote_id: string | null;
-    remote_name: string | null;
-    remote_version: string | null;
-    remote_size: number | null;
-    remote_modified_at: string | null;
-    content_sha256: string | null;
-    pushed_sha256: string | null;
-    state: string;
-    error_code: string | null;
-    attempts: number;
-    next_attempt_at: string | null;
-    synced_at: string | null;
-    /**
-     * Not part of DS24's legacy `VALUES` column list (the row is brand new,
-     * so SQLite's own `DEFAULT CURRENT_TIMESTAMP` would fire identically) —
-     * set explicitly here anyway, to the SAME `CURRENT_TIMESTAMP` value,
-     * because Kysely's typed insert-expression callback form requires every
-     * declared column of an `ON CONFLICT ... DO UPDATE` target table to be
-     * present in `.values()` (a plain `?:` optional marker on this
-     * interface is not honoured by that callback form, verified directly —
-     * `tsc` still demanded it). Behaviourally identical either way: both
-     * paths evaluate to the DB clock at insert time.
-     */
-    last_seen_at: string;
-  };
-}
+type DocumentSyncItemsWriteKyselyDB = Pick<DB, 'document_sync_items'>;
 
 const ISSUE_STATES = ['conflict', 'rejected_type', 'too_large', 'remote_missing', 'error'] as const;
 

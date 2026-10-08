@@ -1,6 +1,7 @@
 import type { FileLinks } from '../entities/FileLinks.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `file_links` row — every scalar column of the entity, incl. its five `persist(false)` relation mirrors. */
 export interface FileLinkRow {
@@ -28,32 +29,16 @@ export interface FileLinkTargetRow {
   budget_item_id: number | null;
 }
 
-interface FileLinksKyselyDB {
-  file_links: FileLinkRow;
-  reservations: { id: number; title: string };
-}
+type FileLinksKyselyDB = Pick<DB, 'file_links' | 'reservations'>;
 
 /**
- * The insert-only shape — `id`/`created_at` are autoincrement/`DEFAULT
+ * The insert's table. `id`/`created_at` are autoincrement/`DEFAULT
  * CURRENT_TIMESTAMP` and omitted from `.values()` below (the legacy
- * statement's own column list omits them too, matching this exactly), so a
- * SEPARATE interface from {@link FileLinksKyselyDB} rather than making those
- * two columns optional there — that would also loosen every SELECT method's
- * inferred `id`/`created_at` to `T | undefined`, which is wrong for a row
- * that unquestionably has both once read back (the `ReservationJoinKyselyDB`
- * / `ReservationRestampKyselyDB` precedent, `Reservations.repository.ts`:
- * one purpose-shaped Kysely interface per statement, not one reused
- * everywhere).
+ * statement's own column list omits them too). Both are `InsertOptional` in
+ * the generated type, which keeps them optional for the insert while every
+ * SELECT still reads them as present.
  */
-interface FileLinksWriteKyselyDB {
-  file_links: {
-    file_id: number;
-    reservation_id: number | null;
-    assignment_id: number | null;
-    place_id: number | null;
-    budget_item_id: number | null;
-  };
-}
+type FileLinksWriteKyselyDB = Pick<DB, 'file_links'>;
 
 /**
  * `file_links` — the many-to-many between a `trip_files` row and the

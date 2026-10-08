@@ -1,5 +1,6 @@
 import type { PluginOauthState } from '../entities/PluginOauthState.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * Plan 3j Task 2 note: this repository's ONLY method today is the uninstall
@@ -18,15 +19,7 @@ export interface PluginOauthStateRow {
 }
 
 /** `consumeByState`'s own Kysely DB shape. */
-interface PluginOauthStateKyselyDB {
-  plugin_oauth_state: {
-    state: string;
-    plugin_id: string;
-    user_id: number;
-    verifier: string;
-    created_at: number;
-  };
-}
+type PluginOauthStateKyselyDB = Pick<DB, 'plugin_oauth_state'>;
 
 export class PluginOauthStateRepository extends TrekRepository<PluginOauthState> {
   /** PR43 (uninstall cascade, `deleteData` branch) — `DELETE FROM plugin_oauth_state WHERE plugin_id = ?`. */

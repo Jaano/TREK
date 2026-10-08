@@ -1,10 +1,9 @@
 import { dateAdd } from '../dialect/sql-functions';
 import type { VacayEntries } from '../entities/VacayEntries.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
-interface VacayEntriesKyselyDB {
-  vacay_entries: { id: number; plan_id: number; user_id: number; date: string; note: string | null; fraction: number; kind: string };
-}
+type VacayEntriesKyselyDB = Pick<DB, 'vacay_entries'>;
 
 /** VC111's joined grid projection (`getEntries`) — the full entry row plus the author's username and color. */
 export interface VacayEntryWithPersonRow {
@@ -156,11 +155,7 @@ export class VacayEntriesRepository extends TrekRepository<VacayEntries> {
    * `.onRef(...).onRef(...)` shape).
    */
   async listForRangeWithPerson(planId: number, start: string, end: string): Promise<VacayEntryWithPersonRow[]> {
-    interface EntriesWithPersonKyselyDB {
-      vacay_entries: { id: number; plan_id: number; user_id: number; date: string; note: string | null; fraction: number; kind: string };
-      users: { id: number; username: string };
-      vacay_user_colors: { id: number; user_id: number; plan_id: number; color: string | null };
-    }
+    type EntriesWithPersonKyselyDB = Pick<DB, 'vacay_entries' | 'users' | 'vacay_user_colors'>;
     return this.kysely<EntriesWithPersonKyselyDB>()
       .selectFrom('vacay_entries as e')
       .innerJoin('users as u', 'u.id', 'e.user_id')

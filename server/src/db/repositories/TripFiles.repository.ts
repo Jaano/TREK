@@ -2,6 +2,7 @@ import { currentTimestamp } from '../dialect/sql-functions';
 import type { TripFiles } from '../entities/TripFiles.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * A bare `trip_files` row — every scalar column of the entity, incl. the SIX
@@ -38,11 +39,7 @@ export interface TripFileJoinRow extends TripFileRow {
   uploaded_by_avatar: string | null;
 }
 
-interface TripFilesKyselyDB {
-  trip_files: TripFileRow;
-  reservations: { id: number; title: string };
-  users: { id: number; username: string; avatar: string | null };
-}
+type TripFilesKyselyDB = Pick<DB, 'trip_files' | 'reservations' | 'users'>;
 
 /**
  * `trip_files` — trip attachments (uploads, expense receipts). Every read

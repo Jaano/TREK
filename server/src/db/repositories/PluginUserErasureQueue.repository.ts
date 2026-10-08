@@ -1,5 +1,6 @@
 import type { PluginUserErasureQueue } from '../entities/PluginUserErasureQueue.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** The drain's own pending-row projection. */
 export interface PendingErasureRow {
@@ -8,11 +9,8 @@ export interface PendingErasureRow {
   user_id: number;
 }
 
-/** `plugin_id`/`id` — the columns the orphan-scan's correlated `NOT IN (SELECT id FROM plugins)` subquery needs. */
-interface PluginUserErasureQueueKyselyDB {
-  plugin_user_erasure_queue: { id: number; plugin_id: string; user_id: number };
-  plugins: { id: string };
-}
+/** The tables the orphan-scan's correlated `NOT IN (SELECT id FROM plugins)` subquery reads. */
+type PluginUserErasureQueueKyselyDB = Pick<DB, 'plugin_user_erasure_queue' | 'plugins'>;
 
 export class PluginUserErasureQueueRepository extends TrekRepository<PluginUserErasureQueue> {
   /** PR8 — `INSERT OR IGNORE INTO plugin_user_erasure_queue (plugin_id, user_id) VALUES (?, ?)` (idempotent — a duplicate enqueue for the same pair is a no-op). */

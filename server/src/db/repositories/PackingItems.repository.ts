@@ -4,6 +4,7 @@ import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import { presenceSet } from './_shared/presence-set';
 import { packingVisibleToActorExpr, type PackingVisibilityKyselyDB } from './_shared/packing-visibility';
+import type { DB } from '../kysely/db';
 
 /** A bare `packing_items` row — every scalar column, incl. the three `persist(false)` relation mirrors (`trip_id`, `bag_id`, `owner_id`) — the program-wide trap this class goes through Kysely throughout to avoid. */
 export interface PackingItemRow {
@@ -42,19 +43,13 @@ export interface PackingItemExportRow {
 }
 
 /**
- * `packing_items`'s own Kysely shape, extended from `_shared/packing-visibility.ts`'s
- * `PackingVisibilityKyselyDB` (Task 0, R1) — `PackingItemRow` is a structural
- * superset of that file's narrower `{id, is_private, owner_id}` requirement,
- * so `packingVisibleToActorExpr` type-checks directly against a query built
- * from this interface (the `CalendarStayKyselyDB extends
- * ReservationVisibilityKyselyDB` precedent, `Reservations.repository.ts`).
+ * `packing_items`'s own tables, joined with `_shared/packing-visibility.ts`'s
+ * `PackingVisibilityKyselyDB` (Task 0, R1), so `packingVisibleToActorExpr`
+ * type-checks directly against a query built from this alias (the
+ * `CalendarStayKyselyDB`/`ReservationVisibilityKyselyDB` precedent,
+ * `Reservations.repository.ts`).
  */
-interface PackingItemsKyselyDB extends PackingVisibilityKyselyDB {
-  packing_items: PackingItemRow;
-  packing_item_recipients: { item_id: number; user_id: number };
-  users: { id: number; username: string; display_name: string | null };
-  packing_bags: { id: number; name: string };
-}
+type PackingItemsKyselyDB = PackingVisibilityKyselyDB & Pick<DB, 'packing_items' | 'packing_item_recipients' | 'users' | 'packing_bags'>;
 
 /**
  * `packing_items` — the checklist rows themselves, plus (this class's own

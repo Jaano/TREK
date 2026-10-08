@@ -2,6 +2,7 @@ import type { DayAccommodations } from '../entities/DayAccommodations.entity';
 import { coalesceOverride, columnRef } from '../dialect/sql-functions';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * A `day_accommodations` row exactly as AC34 (`AccommodationsService
@@ -47,38 +48,7 @@ export interface DayAccommodationListRow extends DayAccommodationWithPlaceRow {
  * the QueryBuilder's relation-path `.join()` cannot express `LEFT JOIN
  * reservations r ON r.accommodation_id = a.id` at all.
  */
-interface DayAccommodationListKyselyDB {
-  day_accommodations: {
-    id: number;
-    // `number | string` — `ReservationsRepository.listForTrip`'s own
-    // `trip_id` widening: the raw-bind flexibility a `.where(col, '=',
-    // value)` call keeps regardless of how loosely its value is typed
-    // (program rule 23 bans a raw SQL-text condition, not a loosely-typed
-    // bound value).
-    trip_id: number | string;
-    place_id: number | null;
-    start_day_id: number;
-    end_day_id: number;
-    check_in: string | null;
-    check_in_end: string | null;
-    check_out: string | null;
-    confirmation: string | null;
-    notes: string | null;
-    created_at: string | null;
-  };
-  places: {
-    id: number;
-    name: string;
-    address: string | null;
-    image_url: string | null;
-    lat: number | null;
-    lng: number | null;
-  };
-  reservations: {
-    accommodation_id: string | null;
-    title: string;
-  };
-}
+type DayAccommodationListKyselyDB = Pick<DB, 'day_accommodations' | 'places' | 'reservations'>;
 
 /**
  * Plan 3d Task 2 (`ReservationsService`'s `day_accommodations` writes — RS27,
@@ -274,7 +244,7 @@ export class DayAccommodationsRepository extends TrekRepository<DayAccommodation
         'p.lng as place_lng',
         'r.title as reservation_title',
       ])
-      .where('a.trip_id', '=', trip_id)
+      .where('a.trip_id', '=', trip_id as number)
       .orderBy('a.created_at', 'asc')
       .execute();
     return rows as DayAccommodationListRow[];
@@ -517,24 +487,4 @@ export interface RoadtripStayRow {
 }
 
 /** Kysely typing for RPL3 (`listRoadtripStays`). */
-interface RoadtripStaysKyselyDB {
-  day_accommodations: {
-    id: number;
-    trip_id: number;
-    place_id: number | null;
-    start_day_id: number;
-    end_day_id: number;
-    check_in: string | null;
-    check_out: string | null;
-  };
-  places: {
-    id: number;
-    name: string;
-    lat: number | null;
-    lng: number | null;
-  };
-  reservations: {
-    id: number;
-    accommodation_id: string | null;
-  };
-}
+type RoadtripStaysKyselyDB = Pick<DB, 'day_accommodations' | 'places' | 'reservations'>;

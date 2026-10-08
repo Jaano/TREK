@@ -1,6 +1,7 @@
 import { AuditLog } from '../entities/AuditLog.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * An `audit_log` row as the API emits it (Plan 3i's `admin.service.ts`
@@ -47,11 +48,8 @@ export interface AuditLogPageRow {
   ip: string | null;
 }
 
-/** Kysely shape for the `listPage` join — only the columns it actually selects. */
-interface AuditLogKyselyDB {
-  audit_log: AuditLogRow;
-  users: { id: number; username: string; email: string };
-}
+/** The tables the `listPage` join reads. */
+type AuditLogKyselyDB = Pick<DB, 'audit_log' | 'users'>;
 
 export class AuditLogRepository extends TrekRepository<AuditLog> {
   /**

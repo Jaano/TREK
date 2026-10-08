@@ -7,6 +7,7 @@ import { TrekRepository } from './_shared/trek-repository';
 // declaration of the same shape is exactly the duplication Sonar flags and
 // the program's "single source of truth" rule (root CLAUDE.md) forbids.
 import type { TagRow } from './Tags.repository';
+import type { DB } from '../kysely/db';
 
 /** A `places` row as the API emits it — every scalar column of the entity. */
 export interface PlaceRow {
@@ -63,10 +64,8 @@ export interface PlaceListRow extends PlaceWithCategoryRow {
   region_name: string | null;
 }
 
-/** {@link PlacesRepository.findActiveTripFile}'s narrow `trip_files` shape. */
-interface PlacesTripFileKyselyDB {
-  trip_files: { id: number; trip_id: number; filename: string; original_name: string; mime_type: string | null; file_size: number | null; deleted_at: string | null };
-}
+/** {@link PlacesRepository.findActiveTripFile}'s `trip_files` tables. */
+type PlacesTripFileKyselyDB = Pick<DB, 'trip_files'>;
 
 /**
  * {@link PlacesRepository.listPublicForShare}'s projection (SH12) — the
@@ -81,14 +80,7 @@ export type SharePublicPlaceRow = Pick<
   | 'created_at' | 'updated_at' | 'category_name' | 'category_color' | 'category_icon'
 >;
 
-interface SharePublicPlaceKyselyDB {
-  places: Pick<PlaceRow,
-    | 'id' | 'trip_id' | 'name' | 'description' | 'lat' | 'lng' | 'address' | 'category_id' | 'price' | 'currency'
-    | 'place_time' | 'end_time' | 'duration_minutes' | 'notes' | 'image_url' | 'website' | 'phone' | 'transport_mode'
-    | 'created_at' | 'updated_at'
-  >;
-  categories: { id: number; name: string; color: string | null; icon: string | null };
-}
+type SharePublicPlaceKyselyDB = Pick<DB, 'places' | 'categories'>;
 
 interface PlaceRatingRow {
   user_id: number;
@@ -896,7 +888,7 @@ export class PlacesRepository extends TrekRepository<Places> {
    * `image_url`.
    */
   async existsByTripAndImageUrl(trip_id: number | string, imageUrl: string): Promise<boolean> {
-    const row = await this.kysely<{ places: { id: number; trip_id: number; image_url: string | null } }>()
+    const row = await this.kysely<Pick<DB, 'places'>>()
       .selectFrom('places')
       .select('id')
       .where('trip_id', '=', trip_id as number)
@@ -1392,12 +1384,8 @@ export interface PublicApiAssignedPlaceRow extends PublicApiPlaceColumns {
   category: string | null;
 }
 
-/** {@link PlacesRepository.listAssignedForPublicApi}'s narrow `day_assignments`/`places`/`categories` shape. */
-interface PublicApiAssignedPlacesKyselyDB {
-  day_assignments: { day_id: number; place_id: number; accommodation_id: number | null; order_index: number | null };
-  places: PublicApiPlaceColumns & Pick<PlaceRow, 'id' | 'trip_id' | 'category_id'>;
-  categories: { id: number; name: string };
-}
+/** {@link PlacesRepository.listAssignedForPublicApi}'s `day_assignments`/`places`/`categories` tables. */
+type PublicApiAssignedPlacesKyselyDB = Pick<DB, 'day_assignments' | 'places' | 'categories'>;
 
 /** {@link PlacesRepository.listImportable}'s row shape (CL45). */
 export interface ImportablePlaceRow {
@@ -1426,39 +1414,11 @@ export interface PlaceMatchRow {
   osm_id: string | null;
 }
 
-/** {@link PlacesRepository.listImportable}'s narrow `places`/`day_assignments`/`days` shape (CL45). */
-interface ImportablePlacesKyselyDB {
-  places: { id: number; trip_id: number; name: string; address: string | null; lat: number | null; lng: number | null; category_id: number | null; image_url: string | null; google_place_id: string | null; google_ftid: string | null; osm_id: string | null };
-  day_assignments: { place_id: number; day_id: number };
-  days: { id: number; trip_id: number; day_number: number; date: string };
-}
+/** {@link PlacesRepository.listImportable}'s `places`/`day_assignments`/`days` tables (CL45). */
+type ImportablePlacesKyselyDB = Pick<DB, 'places' | 'day_assignments' | 'days'>;
 
-/** {@link PlacesRepository.insertFromCollectionPlace}'s narrow insert-only shape (CL64). */
-interface PlacesNarrowInsertKyselyDB {
-  places: {
-    trip_id: number;
-    name: string;
-    description: string | null;
-    lat: number | null;
-    lng: number | null;
-    address: string | null;
-    category_id: number | null;
-    price: number | null;
-    currency: string | null;
-    notes: string | null;
-    image_url: string | null;
-    google_place_id: string | null;
-    google_ftid: string | null;
-    website: string | null;
-    phone: string | null;
-    osm_id: string | null;
-  };
-}
+/** The table {@link PlacesRepository.insertFromCollectionPlace} (CL64) inserts into. */
+type PlacesNarrowInsertKyselyDB = Pick<DB, 'places'>;
 
-/** {@link PlacesRepository.listAddressesForUser}'s narrow `places`/`trips`/`trip_members`/`place_regions` shape. */
-interface PlacesAddressesForUserKyselyDB {
-  places: { id: number; trip_id: number; address: string | null; lat: number | null; lng: number | null };
-  trips: { id: number; user_id: number };
-  trip_members: { trip_id: number; user_id: number };
-  place_regions: { place_id: number; region_name: string | null };
-}
+/** {@link PlacesRepository.listAddressesForUser}'s `places`/`trips`/`trip_members`/`place_regions` tables. */
+type PlacesAddressesForUserKyselyDB = Pick<DB, 'places' | 'trips' | 'trip_members' | 'place_regions'>;

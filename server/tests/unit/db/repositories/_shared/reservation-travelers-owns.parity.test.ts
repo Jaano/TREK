@@ -53,9 +53,8 @@ async function typedQbOwnedIds(tripId: number, userId: number): Promise<number[]
   return rows.map((row) => row.id);
 }
 
-interface TestDB extends ReservationTravelersOwnsKyselyDB {
-  reservations: { id: number; trip_id: number };
-}
+// The generated tables carry every column, `reservations.trip_id` included.
+type TestDB = ReservationTravelersOwnsKyselyDB;
 
 async function typedKyselyOwnedIds(tripId: number, userId: number): Promise<number[]> {
   const rows = await t.em

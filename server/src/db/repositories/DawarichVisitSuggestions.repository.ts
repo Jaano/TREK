@@ -2,6 +2,7 @@ import { coalesceParam, columnRef } from '../dialect/sql-functions';
 import type { DawarichVisitSuggestions } from '../entities/DawarichVisitSuggestions.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `dawarich_visit_suggestions` — every scalar column, DWS6/DSY3's `SELECT *` shape. */
 export interface SuggestionRow {
@@ -40,21 +41,15 @@ export interface SuggestionJoinRow extends SuggestionRow {
   matched_bucket_name: string | null;
 }
 
-/** The narrow `dawarich_visit_suggestions`/`trips`/`bucket_list` shape DWS1/DWS3's join needs. */
-interface SuggestionJoinKyselyDB {
-  dawarich_visit_suggestions: SuggestionRow;
-  trips: { id: number; title: string | null };
-  bucket_list: { id: number; name: string };
-}
+/** The `dawarich_visit_suggestions`/`trips`/`bucket_list` tables DWS1/DWS3's join reads. */
+type SuggestionJoinKyselyDB = Pick<DB, 'dawarich_visit_suggestions' | 'trips' | 'bucket_list'>;
 
-/** The narrow `dawarich_visit_suggestions` shape a bare `SELECT *` read needs (DWS6/DSY3). */
-interface SuggestionAllKyselyDB {
-  dawarich_visit_suggestions: SuggestionRow;
-}
+/** The `dawarich_visit_suggestions` table a bare `SELECT *` read (DWS6/DSY3) needs. */
+type SuggestionAllKyselyDB = Pick<DB, 'dawarich_visit_suggestions'>;
 
 /**
- * The narrow `dawarich_visit_suggestions`/`journey_entries` shape DWS2's
- * `reopenOrphaned` needs. `journey_entries` is 3g's table, read cross-domain
+ * The `dawarich_visit_suggestions`/`journey_entries` tables DWS2's
+ * `reopenOrphaned` reads. `journey_entries` is 3g's table, read cross-domain
  * over `this.kysely()` — the same "a repository may query any table"
  * convention `JourneyEntriesRepository`'s own cross-domain reads
  * (`listStatsTrips`/`listSuggestedTrips`) already establish — rather than a
@@ -66,10 +61,7 @@ interface SuggestionAllKyselyDB {
  * statement's one-round-trip shape more faithfully than a JS-side
  * per-row `existsById` loop would have.
  */
-interface ReopenOrphanedKyselyDB {
-  dawarich_visit_suggestions: SuggestionRow;
-  journey_entries: { id: number };
-}
+type ReopenOrphanedKyselyDB = Pick<DB, 'dawarich_visit_suggestions' | 'journey_entries'>;
 
 /** The narrow shape DSY7's window-candidates read needs. */
 interface CandidateRow {

@@ -1,6 +1,7 @@
 import type { CollabPolls } from '../entities/CollabPolls.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `collab_polls` row — every scalar column of the entity, incl. the two `persist(false)` relation mirrors (`trip_id`, `user_id`). */
 export interface CollabPollRow {
@@ -23,10 +24,7 @@ export interface CollabPollJoinRow extends CollabPollRow {
   avatar: string | null;
 }
 
-interface CollabPollsKyselyDB {
-  collab_polls: CollabPollRow;
-  users: { id: number; username: string; avatar: string | null };
-}
+type CollabPollsKyselyDB = Pick<DB, 'collab_polls' | 'users'>;
 
 /**
  * `collab_polls` — decision polls. Kysely throughout: `trip_id`/`user_id`

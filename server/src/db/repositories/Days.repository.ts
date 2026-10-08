@@ -2,6 +2,7 @@ import type { Days } from '../entities/Days.entity';
 import { columnRef } from '../dialect/sql-functions';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `days` row as the API emits it. */
 export interface DayRow {
@@ -46,13 +47,8 @@ export interface DayGridReadRow {
   has_plan_items: number;
 }
 
-/** The narrow table shape TP77/TP78 read (`this.kysely()`'s typed `DB` argument). */
-interface DayGridKyselyDB {
-  days: { id: number; trip_id: number; day_number: number; date: string | null };
-  day_assignments: { id: number; day_id: number };
-  day_notes: { id: number; day_id: number };
-  day_accommodations: { id: number; start_day_id: number; end_day_id: number };
-}
+/** The tables TP77/TP78 read (`this.kysely()`'s typed `DB` argument). */
+type DayGridKyselyDB = Pick<DB, 'days' | 'day_assignments' | 'day_notes' | 'day_accommodations'>;
 
 export class DaysRepository extends TrekRepository<Days> {
   /** `SELECT * FROM days WHERE trip_id = ? ORDER BY day_number ASC` */

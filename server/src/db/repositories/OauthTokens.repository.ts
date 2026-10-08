@@ -2,6 +2,7 @@ import { OauthTokens } from '../entities/OauthTokens.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { columnRef, currentTimestamp } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * The Kysely-side table shape `em.getKysely()` needs for `collectChainIds`'s
@@ -13,19 +14,7 @@ import { TrekRepository } from './_shared/trek-repository';
  * `.referencedColumnNames('client_id')` for `OauthTokens.client` (Plan 3b
  * interlude A) — see those methods' docstrings.
  */
-interface OauthTokensKyselyDB {
-  oauth_tokens: {
-    id: number;
-    client_id: string;
-    user_id: number;
-    scopes: string;
-    access_token_expires_at: string;
-    refresh_token_expires_at: string;
-    revoked_at: string | null;
-    created_at: string | null;
-    parent_token_id: number | null;
-  };
-}
+type OauthTokensKyselyDB = Pick<DB, 'oauth_tokens'>;
 
 /** `OauthService.issueTokens`/`issueClientCredentialsToken`'s write (OA13/OA14) — same column set, one method. */
 export interface NewOauthTokenRow {

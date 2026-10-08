@@ -1,5 +1,6 @@
 import type { VisitedRegions } from '../entities/VisitedRegions.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `visited_regions` — the columns `AT21`'s read needs. */
 export interface VisitedRegionRow {
@@ -9,18 +10,12 @@ export interface VisitedRegionRow {
 }
 
 /**
- * Two separate table shapes for the SAME `visited_regions` table (the
- * `VisitedCountriesRepository`'s own docstring explains why: {@link
- * listForUser} SELECTs `created_at`, `markVisited` INSERTs it never — the
- * legacy statement's own column list omits it, leaving the schema's
- * `DEFAULT CURRENT_TIMESTAMP` to fill it).
+ * The generated `visited_regions` table, under one alias for the reads
+ * ({@link listForUser} SELECTs `created_at`) and one for `markVisited`,
+ * which never binds it (see {@link VisitedCountriesRepository}).
  */
-interface VisitedRegionsReadKyselyDB {
-  visited_regions: { user_id: number; region_code: string; region_name: string; country_code: string; created_at: string | null };
-}
-interface VisitedRegionsWriteKyselyDB {
-  visited_regions: { user_id: number; region_code: string; region_name: string; country_code: string };
-}
+type VisitedRegionsReadKyselyDB = Pick<DB, 'visited_regions'>;
+type VisitedRegionsWriteKyselyDB = Pick<DB, 'visited_regions'>;
 
 /**
  * `visited_regions` — the user's own explicit region-level marks, plus the

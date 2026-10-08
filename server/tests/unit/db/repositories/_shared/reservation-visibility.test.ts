@@ -185,16 +185,14 @@ describe('reservation-visibility parity (RV1 Kysely form: publicReservationExpr 
  * types every other repository's Kysely escape hatch — here obtained
  * directly off the test ORM's EntityManager (this module has no repository
  * of its own; it is a shared predicate builder, not a `TrekRepository`
- * subclass). Extends `ReservationVisibilityKyselyDB`'s real-table-name
- * shape with the one extra column this test's own WHERE clause needs
- * (`day_accommodations.trip_id`) — `.selectFrom('day_accommodations as a')`
+ * subclass). `ReservationVisibilityKyselyDB` picks the generated tables,
+ * which already carry the column this test's own WHERE clause needs
+ * (`day_accommodations.trip_id`); `.selectFrom('day_accommodations as a')`
  * below derives the aliased `a` member FROM `day_accommodations` (see
  * `ReservationVisibilityKyselyDB`'s own docstring), so the resulting `eb` is
  * exactly the shape `publicStayExists` requires.
  */
-interface StayVisibilityTestDB extends ReservationVisibilityKyselyDB {
-  day_accommodations: { id: number; trip_id: number };
-}
+type StayVisibilityTestDB = ReservationVisibilityKyselyDB;
 
 describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)', () => {
   it('RESVIS-004: no reservation points at the stay — public (the NOT EXISTS branch)', async () => {

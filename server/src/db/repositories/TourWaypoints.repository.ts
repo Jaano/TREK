@@ -1,5 +1,6 @@
 import type { TourWaypoints } from '../entities/TourWaypoints.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** One saved routing control point of a tour, in route order. */
 export interface TourWaypointRow {
@@ -14,10 +15,10 @@ export interface TourWaypointWithPlaceRow extends TourWaypointRow {
   place_id: number;
 }
 
-interface TourWaypointsKyselyDB {
-  tour_waypoints: { id: number; place_id: number; lat: number; lng: number; role: TourWaypointRow['role']; sequence: number };
-  places: { id: number; trip_id: number };
-}
+/** `role` narrowed to the three values the column's CHECK constraint allows. */
+type TourWaypointsKyselyDB = Pick<DB, 'places'> & {
+  tour_waypoints: Omit<DB['tour_waypoints'], 'role'> & { role: TourWaypointRow['role'] };
+};
 
 /**
  * `tour_waypoints` — the start, via and end points the route editor saved

@@ -3,6 +3,7 @@ import type { DayAssignments } from '../entities/DayAssignments.entity';
 import { caseWhenNotNull, coalesce, columnIncrementedBy, columnRef } from '../dialect/sql-functions';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * The DY1/DY3/AS1/AS3 assignment-with-place projection row (Plan 3c Task 2's
@@ -140,27 +141,7 @@ export interface DaySeatRow {
  * next step down D3's escape-hatch order (`find/findOne → nativeUpdate →
  * qb() → em.getKysely()`).
  */
-interface AssignmentTimeSortKyselyDB {
-  day_assignments: {
-    id: number;
-    day_id: number;
-    place_id: number;
-    order_index: number | null;
-    assignment_time: string | null;
-    accommodation_id: number | null;
-    created_at: string | null;
-  };
-  places: {
-    id: number;
-    place_time: string | null;
-    lat: number | null;
-    lng: number | null;
-  };
-  day_accommodations: {
-    id: number;
-    check_in: string | null;
-  };
-}
+type AssignmentTimeSortKyselyDB = Pick<DB, 'day_assignments' | 'places' | 'day_accommodations'>;
 
 /**
  * RPL2's row, exactly as `RoadtripPlanService.context`'s old local `VisitRow`
@@ -200,45 +181,7 @@ export interface RoadtripVisitRow {
  * `AssignmentTimeSortKyselyDB` above uses. `days` is joined twice under two
  * aliases (`d`, `checkout`) — both resolve against this one `days` entry.
  */
-interface RoadtripVisitsKyselyDB {
-  day_assignments: {
-    id: number;
-    day_id: number;
-    place_id: number;
-    order_index: number | null;
-    accommodation_id: number | null;
-    created_at: string | null;
-    assignment_time: string | null;
-    assignment_end_time: string | null;
-    end_day: number;
-    leg_transport_mode: string | null;
-    incoming_leg_transport_mode: string | null;
-  };
-  days: {
-    id: number;
-    trip_id: number;
-    day_number: number;
-  };
-  places: {
-    id: number;
-    name: string;
-    lat: number | null;
-    lng: number | null;
-    place_time: string | null;
-    end_time: string | null;
-    duration_minutes: number | null;
-    stop_type: string | null;
-    fill_percent: number | null;
-  };
-  day_accommodations: {
-    id: number;
-    place_id: number;
-    start_day_id: number;
-    end_day_id: number | null;
-    check_in: string | null;
-    check_out: string | null;
-  };
-}
+type RoadtripVisitsKyselyDB = Pick<DB, 'day_assignments' | 'days' | 'places' | 'day_accommodations'>;
 
 export class DayAssignmentsRepository extends TrekRepository<DayAssignments> {
   /** The DY1/DY3/AS1/AS3 projection's SELECT list, shared by all three query shapes below. */

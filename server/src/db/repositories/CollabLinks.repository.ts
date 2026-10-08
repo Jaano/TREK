@@ -2,6 +2,7 @@ import type { CollabLinks } from '../entities/CollabLinks.entity';
 import { currentTimestamp } from '../dialect/sql-functions';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `collab_links` row — every scalar column of the entity, incl. the two `persist(false)` relation mirrors (`trip_id`, `user_id`). */
 export interface CollabLinkRow {
@@ -22,10 +23,7 @@ export interface CollabLinkJoinRow extends CollabLinkRow {
   username: string;
 }
 
-interface CollabLinksKyselyDB {
-  collab_links: CollabLinkRow;
-  users: { id: number; username: string };
-}
+type CollabLinksKyselyDB = Pick<DB, 'collab_links' | 'users'>;
 
 /**
  * `collab_links` — pinned/shared trip links. Kysely throughout: `trip_id`/

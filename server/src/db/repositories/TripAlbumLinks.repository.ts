@@ -1,6 +1,7 @@
 import type { TripAlbumLinks } from '../entities/TripAlbumLinks.entity';
 import { currentTimestamp } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** MA7/MA8's shared row shape — album_id always needed, passphrase only by the sync path (MA8). */
 export interface TripAlbumLinkSyncRow {
@@ -9,57 +10,24 @@ export interface TripAlbumLinkSyncRow {
 }
 
 /**
- * `trip_album_links`'s single-table write shape (Plan 3e Task 7,
- * UM7/UM10). `trip_id`/`id` are typed `number | string` — the legacy
- * statements bound `tripId`/`linkId` raw (T5's raw-bind seam), including the
- * primary-key `id` column in UM10's `DELETE ... WHERE id = ?`.
+ * `trip_album_links`'s single-table writes (Plan 3e Task 7, UM7/UM10). The
+ * `tripId`/`linkId` the callers pass stay `number | string` (the legacy
+ * statements bound them raw, T5's raw-bind seam, including the primary-key
+ * `id` column in UM10's `DELETE ... WHERE id = ?`) and are cast to the
+ * column type only at the bind.
  */
-interface TripAlbumLinksWriteKyselyDB {
-  trip_album_links: {
-    id: number | string;
-    trip_id: number | string;
-    user_id: number;
-    provider: string;
-    album_id: string;
-    album_name: string;
-    passphrase: string | null;
-  };
-}
+type TripAlbumLinksWriteKyselyDB = Pick<DB, 'trip_album_links'>;
 
 /**
- * UM7's insert-only shape — `id`/`sync_enabled`/`last_synced_at`/`created_at`
- * are autoincrement/defaulted and omitted from `.values()` (the legacy
- * statement's own column list omits them too), so a SEPARATE interface from
- * {@link TripAlbumLinksWriteKyselyDB} (the `FileLinksWriteKyselyDB` /
- * `TripPhotosInsertKyselyDB` precedent) — that one declares `id` as
- * required, which `.insertInto()` would then also require in `.values()`.
+ * UM7's insert table. `id`/`sync_enabled`/`last_synced_at`/`created_at` are
+ * autoincrement/defaulted and omitted from `.values()` (the legacy
+ * statement's own column list omits them too); the generated type marks
+ * them `InsertOptional`.
  */
-interface TripAlbumLinksInsertKyselyDB {
-  trip_album_links: {
-    trip_id: number | string;
-    user_id: number;
-    provider: string;
-    album_id: string;
-    album_name: string;
-    passphrase: string | null;
-  };
-}
+type TripAlbumLinksInsertKyselyDB = Pick<DB, 'trip_album_links'>;
 
-/** UM3's joined projection (`UnifiedMemoriesService.listTripAlbumLinks`) — own Kysely shape, one purpose-shaped interface per statement. */
-interface TripAlbumLinksListKyselyDB {
-  trip_album_links: {
-    id: number;
-    trip_id: number | string;
-    user_id: number;
-    provider: string;
-    album_id: string;
-    album_name: string;
-    sync_enabled: number;
-    last_synced_at: string | null;
-    created_at: string | null;
-  };
-  users: { id: number; username: string | null };
-}
+/** UM3's joined projection (`UnifiedMemoriesService.listTripAlbumLinks`). */
+type TripAlbumLinksListKyselyDB = Pick<DB, 'trip_album_links' | 'users'>;
 
 /** UM3's row shape — `tal.*, u.username`. */
 export interface TripAlbumLinkListRow {
@@ -116,7 +84,7 @@ export class TripAlbumLinksRepository extends TrekRepository<TripAlbumLinks> {
   async insertIgnore(row: { trip_id: number | string; user_id: number; provider: string; album_id: string; album_name: string; passphrase: string | null }): Promise<boolean> {
     const result = await this.kysely<TripAlbumLinksInsertKyselyDB>()
       .insertInto('trip_album_links')
-      .values({ trip_id: row.trip_id, user_id: row.user_id, provider: row.provider, album_id: row.album_id, album_name: row.album_name, passphrase: row.passphrase })
+      .values({ trip_id: row.trip_id as number, user_id: row.user_id, provider: row.provider, album_id: row.album_id, album_name: row.album_name, passphrase: row.passphrase })
       .onConflict((oc) => oc.columns(['trip_id', 'user_id', 'provider', 'album_id']).doNothing())
       .executeTakeFirst();
     return (result?.numInsertedOrUpdatedRows ?? 0n) > 0n;
@@ -126,8 +94,8 @@ export class TripAlbumLinksRepository extends TrekRepository<TripAlbumLinks> {
   async deleteScoped(id: number | string, trip_id: number | string, user_id: number): Promise<void> {
     await this.kysely<TripAlbumLinksWriteKyselyDB>()
       .deleteFrom('trip_album_links')
-      .where('id', '=', id)
-      .where('trip_id', '=', trip_id)
+      .where('id', '=', id as number)
+      .where('trip_id', '=', trip_id as number)
       .where('user_id', '=', user_id)
       .execute();
   }
@@ -156,7 +124,7 @@ export class TripAlbumLinksRepository extends TrekRepository<TripAlbumLinks> {
         'tal.created_at as created_at',
         'u.username as username',
       ])
-      .where('tal.trip_id', '=', trip_id)
+      .where('tal.trip_id', '=', trip_id as number)
       .where('tal.provider', 'in', enabled_providers)
       .orderBy('tal.created_at', 'asc')
       .execute();

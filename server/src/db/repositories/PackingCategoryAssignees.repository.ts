@@ -1,5 +1,6 @@
 import type { PackingCategoryAssignees } from '../entities/PackingCategoryAssignees.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** PK58/PK61's joined projection. */
 export interface PackingCategoryAssigneeRow {
@@ -9,14 +10,9 @@ export interface PackingCategoryAssigneeRow {
   avatar: string | null;
 }
 
-interface PackingCategoryAssigneesKyselyDB {
-  packing_category_assignees: { id: number; trip_id: number; category_name: string; user_id: number };
-  users: { id: number; username: string; display_name: string | null; avatar: string | null };
-}
+type PackingCategoryAssigneesKyselyDB = Pick<DB, 'packing_category_assignees' | 'users'>;
 
-interface PackingCategoryAssigneesInsertKyselyDB {
-  packing_category_assignees: { trip_id: number | string; category_name: string; user_id: number };
-}
+type PackingCategoryAssigneesInsertKyselyDB = Pick<DB, 'packing_category_assignees'>;
 
 /**
  * `packing_category_assignees` — who is "on the hook" for a packing
@@ -75,7 +71,7 @@ export class PackingCategoryAssigneesRepository extends TrekRepository<PackingCa
     for (const user_id of user_ids) {
       await this.kysely<PackingCategoryAssigneesInsertKyselyDB>()
         .insertInto('packing_category_assignees')
-        .values({ trip_id, category_name, user_id })
+        .values({ trip_id: trip_id as number, category_name, user_id })
         .onConflict((oc) => oc.doNothing())
         .execute();
     }

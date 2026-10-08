@@ -1,5 +1,6 @@
 import type { PackingItemContributors } from '../entities/PackingItemContributors.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** PK3's contributor projection (`enrichItems`). */
 export interface PackingItemContributorRow {
@@ -9,10 +10,7 @@ export interface PackingItemContributorRow {
   username: string;
 }
 
-interface PackingItemContributorsKyselyDB {
-  packing_item_contributors: { item_id: number; user_id: number; status: string; created_at: string | null };
-  users: { id: number; username: string; display_name: string | null };
-}
+type PackingItemContributorsKyselyDB = Pick<DB, 'packing_item_contributors' | 'users'>;
 
 /**
  * `packing_item_contributors` — "I can bring that too" co-contributors on a

@@ -1,6 +1,7 @@
 import type { Notifications } from '../entities/Notifications.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * A bare `notifications` row — every scalar column of the entity, incl. the
@@ -69,12 +70,7 @@ export interface NotificationInsertRow {
  * constructs `NotificationsService`, per the BOOT GATE note) for reads that
  * are each a single, narrow, already-indexed lookup.
  */
-interface NotificationsKyselyDB {
-  notifications: NotificationRow;
-  users: { id: number; username: string; avatar: string | null; is_guest: number; role: string };
-  trips: { id: number; user_id: number };
-  trip_members: { trip_id: number; user_id: number };
-}
+type NotificationsKyselyDB = Pick<DB, 'notifications' | 'users' | 'trips' | 'trip_members'>;
 
 /**
  * `notifications` — the in-app notification store. Kysely throughout for

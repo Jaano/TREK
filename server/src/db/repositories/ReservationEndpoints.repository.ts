@@ -3,6 +3,7 @@ import { type AssertRowKeys } from './_shared/rows';
 import { columnRef } from '../dialect/sql-functions';
 import { travelerOwnsExpr, type ReservationTravelersOwnsKyselyDB } from './_shared/reservation-travelers-owns';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `reservation_endpoints` row exactly as `r.*`/`SELECT *` read it (every scalar column). */
 export interface ReservationEndpointRow {
@@ -273,14 +274,8 @@ export interface TravelerOwnedEndpointRow {
   fallback_time: string | null;
 }
 
-/** {@link ReservationEndpointsRepository.listOwnedEndpointsForTrips}'s narrow `reservation_endpoints`/`reservations`/`reservation_travelers` shape (`r` aliased for `travelerOwnsExpr`, R7). */
-interface TravelerOwnedEndpointsKyselyDB extends ReservationTravelersOwnsKyselyDB {
-  reservation_endpoints: { id: number; reservation_id: number; role: string; sequence: number; code: string | null; lat: number; lng: number; local_date: string | null; local_time: string | null };
-  reservations: ReservationTravelersOwnsKyselyDB['reservations'] & { trip_id: number; type: string | null; status: string | null; reservation_time: string | null; reservation_end_time: string | null };
-}
+/** {@link ReservationEndpointsRepository.listOwnedEndpointsForTrips}'s `reservation_endpoints`/`reservations`/`reservation_travelers` tables (`r` aliased for `travelerOwnsExpr`, R7). */
+type TravelerOwnedEndpointsKyselyDB = ReservationTravelersOwnsKyselyDB & Pick<DB, 'reservation_endpoints' | 'reservations'>;
 
-/** {@link ReservationEndpointsRepository.listOwnedEndpointsForUser}/{@link ReservationEndpointsRepository.listOwnedFlightLegsForUser}'s narrow shape, adding `trips`/`trip_members` to {@link TravelerOwnedEndpointsKyselyDB}. */
-interface TravelerOwnedEndpointsWithTripsKyselyDB extends TravelerOwnedEndpointsKyselyDB {
-  trips: { id: number; user_id: number; start_date: string | null; end_date: string | null };
-  trip_members: { trip_id: number; user_id: number };
-}
+/** {@link ReservationEndpointsRepository.listOwnedEndpointsForUser}/{@link ReservationEndpointsRepository.listOwnedFlightLegsForUser}'s tables, adding `trips`/`trip_members` to {@link TravelerOwnedEndpointsKyselyDB}. */
+type TravelerOwnedEndpointsWithTripsKyselyDB = TravelerOwnedEndpointsKyselyDB & Pick<DB, 'trips' | 'trip_members'>;

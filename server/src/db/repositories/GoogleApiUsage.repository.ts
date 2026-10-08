@@ -2,6 +2,7 @@ import type { GoogleApiUsage } from '../entities/GoogleApiUsage.entity';
 import { nowDateOffset } from '../dialect/sql-functions';
 import type { AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `google_api_usage` row: Google API calls counted per UTC day (#1582). */
 export interface GoogleApiUsageRow {
@@ -11,9 +12,7 @@ export interface GoogleApiUsageRow {
 
 const _googleApiUsageRowKeys: AssertRowKeys<GoogleApiUsageRow, GoogleApiUsage> = true;
 
-interface GoogleApiUsageKyselyDB {
-  google_api_usage: GoogleApiUsageRow;
-}
+type GoogleApiUsageKyselyDB = Pick<DB, 'google_api_usage'>;
 
 /**
  * `google_api_usage` — one row a day, nothing about who searched. Kysely

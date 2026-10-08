@@ -1,9 +1,8 @@
 import type { HiddenRegions } from '../entities/HiddenRegions.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
-interface HiddenRegionsKyselyDB {
-  hidden_regions: { user_id: number; region_code: string; country_code: string };
-}
+type HiddenRegionsKyselyDB = Pick<DB, 'hidden_regions'>;
 
 /**
  * `hidden_regions` — the region-level sibling of `hidden_countries`'s

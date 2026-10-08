@@ -1,5 +1,6 @@
 import type { TodoCategoryAssignees } from '../entities/TodoCategoryAssignees.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** TD11/TD14's joined projection — the assignee row plus the display fields the picker needs. */
 export interface TodoCategoryAssigneeRow {
@@ -8,14 +9,9 @@ export interface TodoCategoryAssigneeRow {
   avatar: string | null;
 }
 
-interface TodoCategoryAssigneesKyselyDB {
-  todo_category_assignees: { id: number; trip_id: number; category_name: string; user_id: number };
-  users: { id: number; username: string; avatar: string | null };
-}
+type TodoCategoryAssigneesKyselyDB = Pick<DB, 'todo_category_assignees' | 'users'>;
 
-interface TodoCategoryAssigneesInsertKyselyDB {
-  todo_category_assignees: { trip_id: number | string; category_name: string; user_id: number };
-}
+type TodoCategoryAssigneesInsertKyselyDB = Pick<DB, 'todo_category_assignees'>;
 
 /**
  * `todo_category_assignees` — which trip members are pinned to a to-do

@@ -1,5 +1,6 @@
 import type { JourneyTrips } from '../entities/JourneyTrips.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** JG17's trip-link row (`getJourneyFull`) — the junction plus the joined trip summary and its place count. */
 export interface JourneyTripLinkRow {
@@ -13,12 +14,8 @@ export interface JourneyTripLinkRow {
   place_count: number;
 }
 
-/** The narrow `journey_trips`/`trips`/`places` shape {@link JourneyTripsRepository.listForJourney} needs. */
-interface JourneyTripLinkKyselyDB {
-  journey_trips: { journey_id: number; trip_id: number; added_at: number };
-  trips: { id: number; title: string; start_date: string | null; end_date: string | null; cover_image: string | null; currency: string | null };
-  places: { id: number; trip_id: number };
-}
+/** The `journey_trips`/`trips`/`places` tables {@link JourneyTripsRepository.listForJourney} reads. */
+type JourneyTripLinkKyselyDB = Pick<DB, 'journey_trips' | 'trips' | 'places'>;
 
 /**
  * The sync engine's per-assignment place row (JG34/onPlaceCreated's JG39,
@@ -48,12 +45,8 @@ export interface AssignmentTimeRow {
   assignment_time: string | null;
 }
 
-/** The narrow `places`/`day_assignments`/`days` shape the sync-engine reads need. */
-interface SyncPlacesKyselyDB {
-  places: { id: number; trip_id: number; name: string; address: string | null; lat: number | null; lng: number | null; place_time: string | null };
-  day_assignments: { id: number; place_id: number; day_id: number; assignment_time: string | null; order_index: number | null };
-  days: { id: number; date: string | null; day_number: number };
-}
+/** The `places`/`day_assignments`/`days` tables the sync-engine reads read. */
+type SyncPlacesKyselyDB = Pick<DB, 'places' | 'day_assignments' | 'days'>;
 
 /**
  * `journey_trips` — a genuine TWO-column composite primary key (`journey` +

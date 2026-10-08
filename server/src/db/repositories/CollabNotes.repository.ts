@@ -3,6 +3,7 @@ import { currentTimestamp } from '../dialect/sql-functions';
 import type { TripFileRow } from './TripFiles.repository';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `collab_notes` row — every scalar column of the entity, incl. the two `persist(false)` relation mirrors (`trip_id`, `user_id`). */
 export interface CollabNoteRow {
@@ -36,36 +37,17 @@ export interface NoteAttachmentRow {
   mime_type: string | null;
 }
 
-interface CollabNotesKyselyDB {
-  collab_notes: CollabNoteRow;
-  users: { id: number; username: string; avatar: string | null };
-}
+type CollabNotesKyselyDB = Pick<DB, 'collab_notes' | 'users'>;
 
-/** Only the `trip_files` columns the note-attachment methods below touch — see the class docstring's second half. */
-interface NoteAttachmentsKyselyDB {
-  trip_files: TripFileRow;
-}
+/** The `trip_files` table the note-attachment methods below touch (see the class docstring's second half). */
+type NoteAttachmentsKyselyDB = Pick<DB, 'trip_files'>;
 
 /**
- * CB18's insert-only shape — `id`/`place_id`/`reservation_id`/`description`/
- * `created_at`/`uploaded_by`/`starred`/`deleted_at`/`message_id` are
- * autoincrement/nullable-defaulted and omitted from `.values()` below (the
- * legacy statement's own six-column list omits them too), so a SEPARATE
- * interface from {@link NoteAttachmentsKyselyDB} rather than widening that
- * one's required columns (the `TripAlbumLinksInsertKyselyDB` /
- * `FileLinksWriteKyselyDB` precedent: one purpose-shaped Kysely interface per
- * statement).
+ * CB18's insert table. It binds the legacy statement's own six-column list;
+ * `id`/`place_id`/`reservation_id`/`description`/`created_at`/`uploaded_by`/
+ * `starred`/`deleted_at`/`message_id` stay unbound, and the columns the statement leaves out (the rowid, defaulted and nullable ones) are `InsertOptional` in the generated type, so `.values()` may omit them.
  */
-interface NoteAttachmentInsertKyselyDB {
-  trip_files: {
-    trip_id: number | string;
-    note_id: number | string;
-    filename: string;
-    original_name: string;
-    file_size: number;
-    mime_type: string;
-  };
-}
+type NoteAttachmentInsertKyselyDB = Pick<DB, 'trip_files'>;
 
 /**
  * `collab_notes` — shared trip notes, plus (second half of this class) the
@@ -226,7 +208,7 @@ export class CollabNotesRepository extends TrekRepository<CollabNotes> {
   async insertAttachmentForNote(row: { trip_id: number | string; note_id: number | string; filename: string; original_name: string; file_size: number; mime_type: string }): Promise<number> {
     const result = await this.kysely<NoteAttachmentInsertKyselyDB>()
       .insertInto('trip_files')
-      .values({ trip_id: row.trip_id, note_id: row.note_id, filename: row.filename, original_name: row.original_name, file_size: row.file_size, mime_type: row.mime_type })
+      .values({ trip_id: row.trip_id as number, note_id: row.note_id as number, filename: row.filename, original_name: row.original_name, file_size: row.file_size, mime_type: row.mime_type })
       .executeTakeFirstOrThrow();
     return Number(result.insertId);
   }

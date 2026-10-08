@@ -2,6 +2,7 @@ import { lowerTrim, lowerTrimParam } from '../dialect/sql-functions';
 import type { BucketList } from '../entities/BucketList.entity';
 import { presenceSet } from './_shared/presence-set';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `bucket_list` — every scalar column, `AT30`/`AT33`/`AT34`'s `SELECT *` shape. */
 export interface BucketListRow {
@@ -20,31 +21,17 @@ export interface BucketListRow {
 }
 
 /**
- * Three separate table shapes for the SAME `bucket_list` table (the
- * `VisitedCountriesRepository`'s own docstring explains why one shared
- * shape doesn't work for both reads and writes): the full row for
- * {@link listForUser}/{@link findById}/{@link findForUser}'s `SELECT *`;
- * the exact 8-column legacy `INSERT` list for {@link insertItem} (`id`,
- * `created_at`, `visited_at`, `visited_source` are never bound —
- * `created_at` via the schema's `DEFAULT CURRENT_TIMESTAMP`, the rest via
- * SQLite's ordinary "omitted nullable column ⇒ NULL"); `id`/`user_id` plus
- * the six settable columns for {@link update}/{@link deleteForUser}, which
- * only ever `.set()`/`.where()` — never `.values()` — so no insert-only
- * column needs excluding there.
+ * The generated `bucket_list` table, under one alias per statement family:
+ * the `SELECT *` reads ({@link listForUser}/{@link findById}/{@link findForUser}),
+ * the 8-column legacy `INSERT` of {@link insertItem} (`id`, `created_at`,
+ * `visited_at` and `visited_source` stay unbound: the columns the statement leaves out (the rowid, defaulted and nullable ones) are `InsertOptional` in the generated type, so `.values()` may omit them) and the
+ * `.set()`/`.where()` writes of {@link update}/{@link deleteForUser}.
  */
-interface BucketListReadKyselyDB {
-  bucket_list: BucketListRow;
-}
-interface BucketListInsertKyselyDB {
-  bucket_list: { user_id: number; name: string; lat: number | null; lng: number | null; country_code: string | null; notes: string | null; target_date: string | null; region_code: string | null };
-}
-interface BucketListWriteKyselyDB {
-  bucket_list: { id: number; user_id: number; name: string; notes: string | null; lat: number | null; lng: number | null; country_code: string | null; target_date: string | null };
-}
-/** The narrow `bucket_list` shape Plan 3h Task 3's visited-tick writes (DWS9/13/15) need. */
-interface BucketListVisitKyselyDB {
-  bucket_list: { id: number; user_id: number; visited_at: string | null; visited_source: string | null };
-}
+type BucketListReadKyselyDB = Pick<DB, 'bucket_list'>;
+type BucketListInsertKyselyDB = Pick<DB, 'bucket_list'>;
+type BucketListWriteKyselyDB = Pick<DB, 'bucket_list'>;
+/** The `bucket_list` table Plan 3h Task 3's visited-tick writes (DWS9/13/15) touch. */
+type BucketListVisitKyselyDB = Pick<DB, 'bucket_list'>;
 
 /** The six columns `findDuplicate`'s #1898 dedup identity compares (`AT31`). */
 export interface BucketListIdentity {

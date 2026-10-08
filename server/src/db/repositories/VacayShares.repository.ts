@@ -1,6 +1,7 @@
 import type { VacayShares } from '../entities/VacayShares.entity';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `vacay_shares` row as the legacy `SELECT *` returned it. */
 export interface VacayShareRow {
@@ -45,9 +46,7 @@ export class VacaySharesRepository extends TrekRepository<VacayShares> {
    * docstring) — a direct `users`-table Kysely read here instead.
    */
   async existsInvitableUser(id: number): Promise<boolean> {
-    interface UsersKyselyDB {
-      users: { id: number; is_guest: number | null };
-    }
+    type UsersKyselyDB = Pick<DB, 'users'>;
     const row = await this.kysely<UsersKyselyDB>()
       .selectFrom('users')
       .select('id')
@@ -133,9 +132,7 @@ export class VacaySharesRepository extends TrekRepository<VacayShares> {
   /** VC20 — `SELECT DISTINCT user_id FROM vacay_shares WHERE owner_id IN (${dynamic})` (`notifyShareViewers`'s fan-out list). Empty `ownerIds` short-circuits before any query, matching the caller's own guard. */
   async listDistinctViewerIdsForOwners(ownerIds: number[]): Promise<number[]> {
     if (ownerIds.length === 0) return [];
-    interface VacaySharesKyselyDB {
-      vacay_shares: { id: number; owner_id: number; user_id: number; hidden: number; created_at: string | null };
-    }
+    type VacaySharesKyselyDB = Pick<DB, 'vacay_shares'>;
     const rows = await this.kysely<VacaySharesKyselyDB>()
       .selectFrom('vacay_shares')
       .select('user_id')
@@ -155,12 +152,7 @@ export class VacaySharesRepository extends TrekRepository<VacayShares> {
    * subquery (§13) — Kysely, no `sql` tag.
    */
   async listAvailableForShare(userId: number, planId: number): Promise<{ id: number; username: string }[]> {
-    interface ShareCandidateKyselyDB {
-      users: { id: number; username: string; is_guest: number | null };
-      vacay_shares: { id: number; owner_id: number; user_id: number };
-      vacay_plans: { id: number; owner_id: number };
-      vacay_plan_members: { id: number; plan_id: number; user_id: number; status: string | null };
-    }
+    type ShareCandidateKyselyDB = Pick<DB, 'users' | 'vacay_shares' | 'vacay_plans' | 'vacay_plan_members'>;
     return this.kysely<ShareCandidateKyselyDB>()
       .selectFrom('users as u')
       .select(['u.id', 'u.username'])

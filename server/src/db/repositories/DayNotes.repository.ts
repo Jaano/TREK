@@ -1,6 +1,7 @@
 import type { DayNotes } from '../entities/DayNotes.entity';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 export interface DayNoteRow {
   id: number;
@@ -203,7 +204,5 @@ export class DayNotesRepository extends TrekRepository<DayNotes> {
   }
 }
 
-/** {@link DayNotesRepository.listForPublicApi}'s narrow `day_notes` shape. */
-interface DayNotesPublicApiKyselyDB {
-  day_notes: { day_id: number; trip_id: number; text: string; time: string | null; sort_order: number | null };
-}
+/** The `day_notes` table {@link DayNotesRepository.listForPublicApi} reads. */
+type DayNotesPublicApiKyselyDB = Pick<DB, 'day_notes'>;

@@ -4,6 +4,7 @@ import { coalesceParam, currentTimestamp, nowDateOffset } from '../dialect/sql-f
 import type { AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import { tripAccessExpr } from './_shared/trip-access';
+import type { DB } from '../kysely/db';
 
 /** What a trip-scoped request learns about the trip once access is verified. */
 export interface TripAccess {
@@ -55,35 +56,8 @@ export interface TripSelectRow extends Omit<TripRawRow, 'feed_token'> {
   shared_count: number;
 }
 
-/** The narrow `trips`/`users`/`days`/`places`/`trip_members` shape `tripSelectQuery` needs (`this.kysely()`'s typed `DB` argument). */
-interface TripSelectKyselyDB {
-  trips: {
-    // `number | string`, not a bare `number`: the raw-bind seam (D4's T5
-    // escape hatch) — `findForViewer`'s `WHERE t.id = ?` accepts the route's
-    // unconverted id with no coercion, the same seam every QB-based method
-    // in this file documents. Widening the TYPE (not spelling `sql\`...\``,
-    // which `no-restricted-syntax` bans in `src/db/repositories/**`) is what
-    // lets `.where('t.id', '=', trip_id)` accept a `string` here.
-    id: number | string;
-    user_id: number;
-    title: string;
-    description: string | null;
-    start_date: string | null;
-    end_date: string | null;
-    currency: string | null;
-    cover_image: string | null;
-    is_archived: number | null;
-    reminder_days: number | null;
-    feed_token: string | null;
-    created_at: string | null;
-    updated_at: string | null;
-    reminder_sent_for: string | null;
-  };
-  users: { id: number; username: string };
-  trip_members: { id: number; trip_id: number; user_id: number };
-  days: { id: number; trip_id: number };
-  places: { id: number; trip_id: number };
-}
+/** The `trips`/`users`/`days`/`places`/`trip_members` tables `tripSelectQuery` reads (`this.kysely()`'s typed `DB` argument). */
+type TripSelectKyselyDB = Pick<DB, 'trips' | 'users' | 'trip_members' | 'days' | 'places'>;
 
 // Task 7 review L4, absorbed here (Task 8 touches the same file): the 13
 // hand-listed columns of `TripSelectKyselyDB['trips']` above are a second,
@@ -104,11 +78,8 @@ export interface ActiveTripRow {
   relevance: number;
 }
 
-/** The narrow `trips`/`trip_members` shape `activeTrip` needs. */
-interface ActiveTripKyselyDB {
-  trips: { id: number; title: string; start_date: string | null; end_date: string | null; user_id: number; is_archived: number | null };
-  trip_members: { id: number; trip_id: number; user_id: number };
-}
+/** The `trips`/`trip_members` tables `activeTrip` reads. */
+type ActiveTripKyselyDB = Pick<DB, 'trips' | 'trip_members'>;
 
 export class TripsRepository extends TrekRepository<Trips> {
   /**
@@ -428,7 +399,7 @@ export class TripsRepository extends TrekRepository<Trips> {
    * same apart from `is_owner`.
    */
   async findListShapeById(trip_id: number | string, user_id: number): Promise<TripSelectRow | undefined> {
-    const row = await this.tripSelectQuery(user_id).where('t.id', '=', trip_id).executeTakeFirst();
+    const row = await this.tripSelectQuery(user_id).where('t.id', '=', trip_id as number).executeTakeFirst();
     return row as TripSelectRow | undefined;
   }
 
@@ -454,7 +425,7 @@ export class TripsRepository extends TrekRepository<Trips> {
   async findForViewer(trip_id: number | string, user_id: number): Promise<TripSelectRow | undefined> {
     const row = await this.tripSelectQuery(user_id)
       .leftJoin('trip_members as m', (join) => join.onRef('m.trip_id', '=', 't.id').on('m.user_id', '=', user_id))
-      .where('t.id', '=', trip_id)
+      .where('t.id', '=', trip_id as number)
       .where((eb) => tripAccessExpr(eb, 't.user_id', 'm.user_id', user_id))
       .executeTakeFirst();
     return row as TripSelectRow | undefined;
@@ -849,7 +820,7 @@ export class TripsRepository extends TrekRepository<Trips> {
 
   /** BG15/BG16/BGM2/BGM3 — `SELECT currency FROM trips WHERE id = ?`, four legacy call sites, one statement. */
   async getCurrency(id: number | string): Promise<string | null | undefined> {
-    const row = await this.kysely<{ trips: { id: number; currency: string | null } }>()
+    const row = await this.kysely<Pick<DB, 'trips'>>()
       .selectFrom('trips')
       .select('currency')
       .where('id', '=', id as number)
@@ -1077,23 +1048,14 @@ export class TripsRepository extends TrekRepository<Trips> {
   }
 }
 
-/** {@link TripsRepository.listIdTitleOrderedByTitle}'s narrow `trips` shape. */
-interface TripIdTitleKyselyDB {
-  trips: { id: number; title: string };
-}
+/** {@link TripsRepository.listIdTitleOrderedByTitle}'s `trips` tables. */
+type TripIdTitleKyselyDB = Pick<DB, 'trips'>;
 
-/** {@link TripsRepository.lastStartedTrip}'s and {@link TripsRepository.nextUpcomingTrip}'s narrow `trips`/`trip_members` shape. */
-interface LastStartedTripKyselyDB {
-  trips: { id: number; title: string; start_date: string | null; end_date: string | null; user_id: number };
-  trip_members: { trip_id: number; user_id: number };
-}
+/** {@link TripsRepository.lastStartedTrip}'s and {@link TripsRepository.nextUpcomingTrip}'s `trips`/`trip_members` tables. */
+type LastStartedTripKyselyDB = Pick<DB, 'trips' | 'trip_members'>;
 
-/** {@link TripsRepository.countTripsAndDaysForUser}'s narrow `trips`/`days`/`trip_members` shape. */
-interface CountTripsAndDaysKyselyDB {
-  trips: { id: number; user_id: number };
-  days: { id: number; trip_id: number };
-  trip_members: { trip_id: number; user_id: number };
-}
+/** {@link TripsRepository.countTripsAndDaysForUser}'s `trips`/`days`/`trip_members` tables. */
+type CountTripsAndDaysKyselyDB = Pick<DB, 'trips' | 'days' | 'trip_members'>;
 
 /** {@link TripsRepository.listReminderCandidates}'s row — `t.user` selected bare (not joined here), so it aliases to the physical `user_id` column per `findAccessible`'s documented precedent. */
 export interface TripReminderCandidateRow {
@@ -1134,9 +1096,5 @@ export interface TravellerUsernameRow {
   is_owner: number;
 }
 
-/** The narrow `trips`/`users`/`trip_members` shape `listTravellerUsernames` needs. */
-interface TravellerUsernameKyselyDB {
-  trips: { id: number; user_id: number };
-  users: { id: number; username: string };
-  trip_members: { id: number; trip_id: number; user_id: number };
-}
+/** The `trips`/`users`/`trip_members` tables `listTravellerUsernames` reads. */
+type TravellerUsernameKyselyDB = Pick<DB, 'trips' | 'users' | 'trip_members'>;

@@ -3,6 +3,7 @@ import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import { presenceSet } from './_shared/presence-set';
 import { columnRef, currentTimestamp, nowMinusHours } from '../dialect/sql-functions';
+import type { DB } from '../kysely/db';
 
 /** A bare `todo_items` row — every scalar column, incl. the two `persist(false)` relation mirrors (`trip_id`, `assigned_user_id`). */
 export interface TodoItemRow {
@@ -22,25 +23,13 @@ export interface TodoItemRow {
 
 const _todoItemRowKeys: AssertRowKeys<TodoItemRow, TodoItems> = true;
 
-interface TodoItemsKyselyDB {
-  todo_items: TodoItemRow;
-}
+type TodoItemsKyselyDB = Pick<DB, 'todo_items'>;
 
-/** The insert-only shape for `insertItem` (TD3) — omits `id`/`created_at`/`reminded_at` (autoincrement / `DEFAULT CURRENT_TIMESTAMP` / never written here). */
-interface TodoItemsInsertKyselyDB {
-  todo_items: {
-    trip_id: number | string; name: string; checked: number; category: string | null; sort_order: number;
-    due_date: string | null; description: string | null; assigned_user_id: number | null; priority: number;
-  };
-}
+/** The table `insertItem` (TD3) inserts into; it leaves `id`/`created_at`/`reminded_at` unbound (autoincrement / `DEFAULT CURRENT_TIMESTAMP` / never written here). */
+type TodoItemsInsertKyselyDB = Pick<DB, 'todo_items'>;
 
-/** The insert-only shape for `insertCopy` (TP73) — a distinct column set from {@link TodoItemsRepository.insertItem}'s: no `assigned_user_id` parameter at all (always written `NULL`, never taken from the caller). */
-interface TodoItemsCopyInsertKyselyDB {
-  todo_items: {
-    trip_id: number | string; name: string; checked: number; category: string | null; sort_order: number | null;
-    due_date: string | null; description: string | null; assigned_user_id: null; priority: number | null;
-  };
-}
+/** The table `insertCopy` (TP73) inserts into, with a distinct column set from {@link TodoItemsRepository.insertItem}'s: no `assigned_user_id` parameter at all (always written `NULL`, never taken from the caller). */
+type TodoItemsCopyInsertKyselyDB = Pick<DB, 'todo_items'>;
 
 /** `isoDate` + 1 calendar day, in UTC — turns {@link TodoItemsRepository.listDueForReminder}'s inclusive cutoff into an exclusive `$lt` bound (L2, task-7-review.md). */
 function dayAfter(isoDate: string): string {
@@ -88,7 +77,7 @@ export class TodoItemsRepository extends TrekRepository<TodoItems> {
   }): Promise<number> {
     const result = await this.kysely<TodoItemsInsertKyselyDB>()
       .insertInto('todo_items')
-      .values({ ...row, checked: 0 })
+      .values({ ...row, trip_id: row.trip_id as number, checked: 0 })
       .executeTakeFirstOrThrow();
     return Number(result.insertId);
   }
@@ -170,7 +159,7 @@ export class TodoItemsRepository extends TrekRepository<TodoItems> {
   }): Promise<number> {
     const result = await this.kysely<TodoItemsCopyInsertKyselyDB>()
       .insertInto('todo_items')
-      .values({ ...row, checked: 0, assigned_user_id: null })
+      .values({ ...row, trip_id: row.trip_id as number, checked: 0, assigned_user_id: null })
       .executeTakeFirstOrThrow();
     return Number(result.insertId);
   }

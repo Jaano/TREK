@@ -5,6 +5,7 @@ import { castIntegerKysely, coalesceOverride, columnRef, concatKysely, dayDistan
 import { publicReservationExpr, publicStayExists, type ReservationVisibilityKyselyDB } from './_shared/reservation-visibility';
 import type { DayAssignmentRow } from './DayAssignments.repository';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * RS18/RR1's shared joined projection — `SELECT r.*, d.day_number, p.name as
@@ -60,46 +61,18 @@ export interface ReservationJoinRow {
  * relation-path `.join()` cannot express `LEFT JOIN day_accommodations ap ON
  * r.accommodation_id = ap.id` at all — the same escape hatch
  * `DayAssignmentsRepository.effectiveStart`/`TripsRepository.tripSelectQuery`
- * use. `id`/`trip_id` stay `number | string` (raw-bind, D4's T5 seam): a
- * Kysely `.where(col, '=', value)` call is a TYPED condition regardless of
- * how loosely its value is typed (program rule 23 bans a raw SQL-text
- * condition string, not a loosely-typed bound value), so this join keeps the
- * legacy statement's exact raw-bind flexibility.
+ * use. The `id`/`trip_id` the callers pass stay `number | string` (raw-bind,
+ * D4's T5 seam) and are cast to the column type only at the bind, so this
+ * join keeps the legacy statement's exact raw-bind flexibility.
  */
-interface ReservationJoinKyselyDB {
-  reservations: {
-    id: number | string;
-    trip_id: number | string;
-    day_id: number | null;
-    end_day_id: number | null;
-    place_id: number | null;
-    assignment_id: number | null;
-    title: string;
-    accommodation_id: string | null;
-    reservation_time: string | null;
-    reservation_end_time: string | null;
-    location: string | null;
-    confirmation_number: string | null;
-    notes: string | null;
-    status: string | null;
-    type: string | null;
-    created_at: string | null;
-    metadata: string | null;
-    day_plan_position: number | null;
-    needs_review: number;
-    external_source: string | null;
-    external_id: string | null;
-    external_owner_user_id: number | null;
-    external_synced_at: string | null;
-    sync_enabled: number | null;
-    external_hash: string | null;
-    url: string | null;
-    ingest_state: string;
-  };
-  days: { id: number; day_number: number };
-  places: { id: number; name: string };
-  day_accommodations: { id: number; place_id: number | null; start_day_id: number; end_day_id: number };
-}
+type ReservationJoinKyselyDB = Pick<DB, 'reservations' | 'days' | 'places' | 'day_accommodations'>;
+
+/**
+ * `reservations` as the two aliases below bind it: `accommodation_id` is a
+ * TEXT column, widened to `string | number | null` so the plain `number`
+ * their statements bind against it type-checks (R2's ruling).
+ */
+type ReservationsNumericAccommodationBind = Omit<DB['reservations'], 'accommodation_id'> & { accommodation_id: string | number | null };
 
 /**
  * Kysely typing for `restampLinkedReservation` (DY23). `accommodation_id:
@@ -111,15 +84,7 @@ interface ReservationJoinKyselyDB {
  * time regardless of which JS type bound the value — see the method's own
  * docstring).
  */
-interface ReservationRestampKyselyDB {
-  reservations: {
-    id: number;
-    accommodation_id: string | number | null;
-    type: string | null;
-    day_id: number | null;
-    reservation_time: string | null;
-  };
-}
+type ReservationRestampKyselyDB = { reservations: ReservationsNumericAccommodationBind };
 
 /**
  * Kysely typing for AC37/AC40 (`listIdMetadataByStay`/`listIdsByStay`).
@@ -151,18 +116,7 @@ interface ReservationRestampKyselyDB {
  * comparison used a `CAST`, not a bound number — this interface's two
  * consumers are not that case.
  */
-interface ReservationsByAccommodationKyselyDB {
-  reservations: {
-    id: number;
-    // `string | number | null`, not just `string` (R2's ruling, the same
-    // widening {@link ReservationRestampKyselyDB} documents for DY23): the
-    // column is TEXT, but the bind below is a plain `number`, matching the
-    // legacy's own `Number(id)` bind — the interface only needs to
-    // type-check that bind, not describe the column's storage type.
-    accommodation_id: string | number | null;
-    metadata: string | null;
-  };
-}
+type ReservationsByAccommodationKyselyDB = { reservations: ReservationsNumericAccommodationBind };
 
 // ---------------------------------------------------------------------------
 // Plan 3d Task 4 (calendar, `listUpcoming`, the visibility-predicate
@@ -213,12 +167,7 @@ export interface CalendarReservationRow extends ReservationAllColumnsRow {
   end_day_date: string | null;
 }
 
-interface CalendarReservationKyselyDB {
-  reservations: ReservationJoinKyselyDB['reservations'];
-  places: { id: number; lat: number | null; lng: number | null };
-  day_accommodations: { id: number; start_day_id: number | null; end_day_id: number | null; check_in: string | null; check_out: string | null };
-  days: { id: number; date: string | null };
-}
+type CalendarReservationKyselyDB = Pick<DB, 'reservations' | 'places' | 'day_accommodations' | 'days'>;
 
 /**
  * CL4 (`CalendarService.buildTripCalendar`'s per-day assignment read,
@@ -244,15 +193,7 @@ export interface CalendarStopRow extends DayAssignmentRow {
   effective_end_time: string | null;
 }
 
-interface CalendarStopsKyselyDB {
-  day_assignments: {
-    id: number; day_id: number; place_id: number; order_index: number | null; notes: string | null;
-    reservation_status: string | null; reservation_notes: string | null; reservation_datetime: string | null;
-    created_at: string | null; assignment_time: string | null; assignment_end_time: string | null;
-    leg_transport_mode: string | null; incoming_leg_transport_mode: string | null; end_day: number; accommodation_id: number | null;
-  };
-  places: { id: number; name: string; address: string | null; lat: number | null; lng: number | null; place_time: string | null; end_time: string | null };
-}
+type CalendarStopsKyselyDB = Pick<DB, 'day_assignments' | 'places'>;
 
 /**
  * CL7 (`CalendarService.buildTripCalendar`'s check-in/check-out stay read)
@@ -286,15 +227,7 @@ export interface CalendarStayRow {
   reservation_title: string | null;
 }
 
-interface CalendarStayKyselyDB extends ReservationVisibilityKyselyDB {
-  day_accommodations: {
-    id: number; trip_id: number | string; place_id: number | null; start_day_id: number | null; end_day_id: number | null;
-    check_in: string | null; check_in_end: string | null; check_out: string | null;
-  };
-  reservations: ReservationVisibilityKyselyDB['reservations'] & { title: string };
-  days: { id: number; date: string | null };
-  places: { id: number; name: string | null; address: string | null; lat: number | null; lng: number | null };
-}
+type CalendarStayKyselyDB = ReservationVisibilityKyselyDB & Pick<DB, 'day_accommodations' | 'reservations' | 'days' | 'places'>;
 
 /**
  * RS20 (`ReservationsService.listUpcoming`) — the CTE + `UNION ALL`
@@ -344,21 +277,7 @@ interface EntriesRow extends UpcomingReservationRow {
   at_time: string | null;
 }
 
-interface UpcomingReservationsKyselyDB {
-  trips: { id: number; user_id: number; title: string; cover_image: string | null; is_archived: number };
-  trip_members: { trip_id: number; user_id: number };
-  reservations: {
-    id: number; trip_id: number; title: string; type: string | null; status: string | null;
-    location: string | null; reservation_time: string | null; confirmation_number: string | null;
-    day_id: number | null; place_id: number | null; accommodation_id: string | null;
-  };
-  days: { id: number; date: string | null };
-  places: { id: number; name: string | null; image_url: string | null };
-  day_accommodations: {
-    id: number; trip_id: number; place_id: number | null; start_day_id: number; end_day_id: number;
-    check_in: string | null; check_out: string | null; confirmation: string | null;
-  };
-}
+type UpcomingReservationsKyselyDB = Pick<DB, 'trips' | 'trip_members' | 'reservations' | 'days' | 'places' | 'day_accommodations'>;
 
 /**
  * `share.service.ts:251` (`publicEndpointsByReservation`) — `SELECT
@@ -384,13 +303,7 @@ export interface ShareEndpointRow {
   local_time: string | null;
 }
 
-interface ShareEndpointsKyselyDB {
-  reservation_endpoints: {
-    reservation_id: number; role: string; sequence: number; name: string; code: string | null;
-    lat: number; lng: number; timezone: string | null; local_date: string | null; local_time: string | null;
-  };
-  reservations: { id: number; trip_id: number | string };
-}
+type ShareEndpointsKyselyDB = Pick<DB, 'reservation_endpoints' | 'reservations'>;
 
 /**
  * `share.service.ts:368` (`getSharedTripData`'s day-position read) —
@@ -406,10 +319,7 @@ export interface ShareDayPositionRow {
   position: number;
 }
 
-interface ShareDayPositionsKyselyDB {
-  reservation_day_positions: { reservation_id: number; day_id: number; position: number };
-  reservations: { id: number; trip_id: number | string };
-}
+type ShareDayPositionsKyselyDB = Pick<DB, 'reservation_day_positions' | 'reservations'>;
 
 /**
  * `share.service.ts:387` (`getSharedTripData`'s public booking read) —
@@ -440,15 +350,7 @@ export interface SharePublicReservationRow {
   created_at: string | null;
 }
 
-interface SharePublicReservationKyselyDB {
-  reservations: ReservationVisibilityKyselyDB['reservations'] & {
-    trip_id: number | string;
-    day_id: number | null; end_day_id: number | null; place_id: number | null; title: string;
-    type: string | null; status: string | null; location: string | null;
-    reservation_time: string | null; reservation_end_time: string | null;
-    notes: string | null; url: string | null; metadata: string | null; created_at: string | null;
-  };
-}
+type SharePublicReservationKyselyDB = Pick<DB, 'reservations'>;
 
 /**
  * `share.service.ts:401` (`getSharedTripData`'s public stay read) —
@@ -476,13 +378,7 @@ export interface SharePublicAccommodationRow {
   place_lng: number | null;
 }
 
-interface SharePublicAccommodationKyselyDB extends ReservationVisibilityKyselyDB {
-  day_accommodations: {
-    id: number; trip_id: number | string; place_id: number | null; start_day_id: number | null; end_day_id: number | null;
-    check_in: string | null; check_in_end: string | null; check_out: string | null; notes: string | null;
-  };
-  places: { id: number; name: string | null; address: string | null; lat: number | null; lng: number | null };
-}
+type SharePublicAccommodationKyselyDB = ReservationVisibilityKyselyDB & Pick<DB, 'day_accommodations' | 'places'>;
 
 /**
  * `public-api.service.ts::reservationsByDay` (Task 5's `// Task 2` pickup)
@@ -508,13 +404,7 @@ export interface PublicApiScheduledReservationRow {
  */
 export type PublicApiUnscheduledReservationRow = Omit<PublicApiScheduledReservationRow, 'day_id'>;
 
-interface PublicApiReservationKyselyDB {
-  reservations: {
-    id: number; trip_id: number; day_id: number | null; type: string | null; title: string | null;
-    location: string | null; reservation_time: string | null; reservation_end_time: string | null;
-    status: string | null; notes: string | null;
-  };
-}
+type PublicApiReservationKyselyDB = Pick<DB, 'reservations'>;
 
 /**
  * `public-api.service.ts::buildAccommodations` (Task 5's `// Task 3`
@@ -536,11 +426,7 @@ export interface PublicApiAccommodationRow {
   notes: string | null;
 }
 
-interface PublicApiAccommodationKyselyDB {
-  day_accommodations: { id: number; trip_id: number; place_id: number | null; start_day_id: number | null; end_day_id: number | null; check_in: string | null; check_out: string | null; notes: string | null };
-  places: { id: number; name: string | null; address: string | null; lat: number | null; lng: number | null };
-  days: { id: number; date: string | null };
-}
+type PublicApiAccommodationKyselyDB = Pick<DB, 'day_accommodations' | 'places' | 'days'>;
 
 /**
  * `public-api.service.ts::buildUnplannedPlaces` (Task 5's `// Task 3`
@@ -567,26 +453,14 @@ export interface PublicApiUnplannedPlaceRow {
   category: string | null;
 }
 
-interface PublicApiUnplannedPlaceKyselyDB {
-  places: {
-    id: number; trip_id: number; name: string; address: string | null; lat: number | null; lng: number | null;
-    place_time: string | null; end_time: string | null; duration_minutes: number | null; notes: string | null;
-    transport_mode: string | null; category_id: number | null; created_at: string | null;
-  };
-  categories: { id: number; name: string };
-  day_assignments: { id: number; place_id: number };
-  day_accommodations: { id: number; place_id: number | null };
-}
+type PublicApiUnplannedPlaceKyselyDB = Pick<DB, 'places' | 'categories' | 'day_assignments' | 'day_accommodations'>;
 
 /**
  * Plan 3h Task 4 (`AirportsService.backfillFlightEndpoints`, AIR1) —
- * additive. The narrow `reservations`/`reservation_endpoints` shape the
- * `NOT EXISTS` guard needs.
+ * additive. The `reservations`/`reservation_endpoints` tables the
+ * `NOT EXISTS` guard reads.
  */
-interface FlightsMissingEndpointsKyselyDB {
-  reservations: { id: number; metadata: string | null; reservation_time: string | null; reservation_end_time: string | null; type: string | null };
-  reservation_endpoints: { id: number; reservation_id: number };
-}
+type FlightsMissingEndpointsKyselyDB = Pick<DB, 'reservations' | 'reservation_endpoints'>;
 
 export class ReservationsRepository extends TrekRepository<Reservations> {
   private joinedQuery() {
@@ -613,7 +487,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
    */
   async listForTrip(trip_id: number | string): Promise<ReservationJoinRow[]> {
     const rows = await this.joinedQuery()
-      .where('r.trip_id', '=', trip_id)
+      .where('r.trip_id', '=', trip_id as number)
       .orderBy('r.reservation_time', 'asc')
       .orderBy('r.created_at', 'asc')
       .execute();
@@ -625,7 +499,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
    * projection for one reservation, no `ORDER BY` (a single row).
    */
   async findWithJoins(id: number | string): Promise<ReservationJoinRow | undefined> {
-    const row = await this.joinedQuery().where('r.id', '=', id).executeTakeFirst();
+    const row = await this.joinedQuery().where('r.id', '=', id as number).executeTakeFirst();
     return row as ReservationJoinRow | undefined;
   }
 
@@ -1009,7 +883,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
    * second, differently-named copy of the same fields.
    */
   async listAllForTrip(trip_id: number): Promise<ReservationAllColumnsRow[]> {
-    return await this.kysely<{ reservations: ReservationAllColumnsRow }>()
+    return await this.kysely<Pick<DB, 'reservations'>>()
       .selectFrom('reservations')
       .selectAll()
       .where('trip_id', '=', trip_id)
@@ -1113,7 +987,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
         'rd.date as day_date',
         'red.date as end_day_date',
       ])
-      .where('r.trip_id', '=', trip_id)
+      .where('r.trip_id', '=', trip_id as number)
       .where((eb) => publicReservationExpr(eb, 'r.ingest_state'))
       .execute();
     return rows as CalendarReservationRow[];
@@ -1145,7 +1019,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
   async listPublicStaysForCalendar(trip_id: number | string): Promise<CalendarStayRow[]> {
     const rows = await this.kysely<CalendarStayKyselyDB>()
       .selectFrom('day_accommodations as a')
-      .where('a.trip_id', '=', trip_id)
+      .where('a.trip_id', '=', trip_id as number)
       .where((eb) => publicStayExists(eb))
       .leftJoin('days as sd', 'sd.id', 'a.start_day_id')
       .leftJoin('days as ed', 'ed.id', 'a.end_day_id')
@@ -1343,7 +1217,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
       .selectFrom('reservation_endpoints as e')
       .innerJoin('reservations as r', 'r.id', 'e.reservation_id')
       .select(['e.reservation_id', 'e.role', 'e.sequence', 'e.name', 'e.code', 'e.lat', 'e.lng', 'e.timezone', 'e.local_date', 'e.local_time'])
-      .where('r.trip_id', '=', trip_id)
+      .where('r.trip_id', '=', trip_id as number)
       .orderBy('e.reservation_id', 'asc')
       .orderBy('e.sequence', 'asc')
       .execute();
@@ -1356,7 +1230,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
       .selectFrom('reservation_day_positions as rdp')
       .innerJoin('reservations as r', 'r.id', 'rdp.reservation_id')
       .select(['rdp.reservation_id', 'rdp.day_id', 'rdp.position'])
-      .where('r.trip_id', '=', trip_id)
+      .where('r.trip_id', '=', trip_id as number)
       .execute();
     return rows as ShareDayPositionRow[];
   }
@@ -1370,7 +1244,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
         'r.title', 'r.type', 'r.status', 'r.location', 'r.reservation_time', 'r.reservation_end_time',
         'r.notes', 'r.url', 'r.metadata', 'r.created_at',
       ])
-      .where('r.trip_id', '=', trip_id)
+      .where('r.trip_id', '=', trip_id as number)
       .where((eb) => publicReservationExpr(eb, 'r.ingest_state'))
       .orderBy('r.reservation_time', 'asc')
       .execute();
@@ -1381,7 +1255,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
   async listPublicAccommodationsForShare(trip_id: number | string): Promise<SharePublicAccommodationRow[]> {
     const rows = await this.kysely<SharePublicAccommodationKyselyDB>()
       .selectFrom('day_accommodations as a')
-      .where('a.trip_id', '=', trip_id)
+      .where('a.trip_id', '=', trip_id as number)
       .where((eb) => publicStayExists(eb))
       .innerJoin('places as p', 'p.id', 'a.place_id')
       .select([
@@ -1402,7 +1276,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
   async listPublicStayPlaceIdsForShare(trip_id: number | string): Promise<number[]> {
     const rows = await this.kysely<SharePublicAccommodationKyselyDB>()
       .selectFrom('day_accommodations as a')
-      .where('a.trip_id', '=', trip_id)
+      .where('a.trip_id', '=', trip_id as number)
       .where((eb) => publicStayExists(eb))
       .select('a.place_id')
       .distinct()
@@ -1502,7 +1376,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
 
   /** BG54/BG85 — `SELECT id, metadata FROM reservations WHERE id = ? AND trip_id = ?`. */
   async getIdAndMetadata(id: number | string, trip_id: number | string): Promise<{ id: number; metadata: string | null } | undefined> {
-    return await this.kysely<{ reservations: { id: number; trip_id: number; metadata: string | null } }>()
+    return await this.kysely<Pick<DB, 'reservations'>>()
       .selectFrom('reservations')
       .select(['id', 'metadata'])
       .where('id', '=', id as number)
@@ -1512,7 +1386,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
 
   /** BG55/BG86 — `UPDATE reservations SET metadata = ? WHERE id = ?`. */
   async setMetadata(id: number | string, metadata: string): Promise<void> {
-    await this.kysely<{ reservations: { id: number; metadata: string } }>()
+    await this.kysely<Pick<DB, 'reservations'>>()
       .updateTable('reservations')
       .set({ metadata })
       .where('id', '=', id as number)
@@ -1521,7 +1395,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
 
   /** BG56/BG87 — `SELECT * FROM reservations WHERE id = ?`, the mirrored-price re-select for the `reservation:updated` broadcast. */
   async getFull(id: number | string): Promise<ReservationAllColumnsRow | undefined> {
-    return await this.kysely<{ reservations: ReservationAllColumnsRow }>()
+    return await this.kysely<Pick<DB, 'reservations'>>()
       .selectFrom('reservations')
       .selectAll()
       .where('id', '=', id as number)

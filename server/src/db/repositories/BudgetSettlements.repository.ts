@@ -2,6 +2,7 @@ import type { BudgetSettlements } from '../entities/BudgetSettlements.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import { presenceSet } from './_shared/presence-set';
+import type { DB } from '../kysely/db';
 
 /** A bare `budget_settlements` row — every scalar column, incl. the `persist(false)` relation mirrors. */
 export interface BudgetSettlementRow {
@@ -28,26 +29,15 @@ export interface BudgetSettlementWithUsersRow extends BudgetSettlementRow {
   to_avatar: string | null;
 }
 
-interface BudgetSettlementsKyselyDB {
-  budget_settlements: BudgetSettlementRow;
-  users: { id: number; username: string; display_name: string | null; avatar: string | null };
-}
+type BudgetSettlementsKyselyDB = Pick<DB, 'budget_settlements' | 'users'>;
 
 /**
- * The insert-only shape — `id`/`created_at` are autoincrement/`DEFAULT
+ * The insert's table. `id`/`created_at` are autoincrement/`DEFAULT
  * CURRENT_TIMESTAMP` and omitted from `.values()` below (the legacy
- * statement's own column list omits them too), matching the
- * `FileLinksWriteKyselyDB`/`FileLinksRepository` precedent: a separate
- * interface rather than making those two columns optional on
- * {@link BudgetSettlementRow}, which would also loosen every SELECT
- * method's inferred type.
+ * statement's own column list omits them too); both are `InsertOptional`
+ * in the generated type, so every SELECT still reads them as present.
  */
-interface BudgetSettlementsWriteKyselyDB {
-  budget_settlements: {
-    trip_id: number; from_user_id: number; to_user_id: number; amount: number;
-    currency: string | null; exchange_rate: number; settled_at: string | null; note: string | null; created_by_user_id: number | null;
-  };
-}
+type BudgetSettlementsWriteKyselyDB = Pick<DB, 'budget_settlements'>;
 
 /**
  * `budget_settlements` — recorded settle-up transfers. Kysely throughout,

@@ -1,4 +1,5 @@
 import type { ExpressionBuilder, ExpressionWrapper, SqlBool } from 'kysely';
+import type { DB } from '../../kysely/db';
 
 /**
  * The `TRAVELER_OWNS` predicate atlas's `AtlasService` inlines as a
@@ -95,17 +96,13 @@ export function travelerOwnsCondition(userId: number) {
 }
 
 /**
- * `reservation_travelers`/`reservations`' REAL table names, the shape
- * `travelerOwnsExpr` needs (fixed alias `r` for `reservations` — see this
+ * `reservation_travelers`/`reservations`' REAL table names, the tables
+ * `travelerOwnsExpr` needs (fixed alias `r` for `reservations`: see this
  * file's module docstring for why, unlike RV1's genuinely-multi-alias
- * shape). A consumer's own local Kysely `DB` interface satisfies this by
- * structural extension, the same `ReservationVisibilityKyselyDB`/
- * `PackingVisibilityKyselyDB` precedent.
+ * shape). A consumer's own alias satisfies this by intersecting it, the same
+ * `ReservationVisibilityKyselyDB`/`PackingVisibilityKyselyDB` precedent.
  */
-export interface ReservationTravelersOwnsKyselyDB {
-  reservation_travelers: { reservation_id: number; user_id: number };
-  reservations: { id: number };
-}
+export type ReservationTravelersOwnsKyselyDB = Pick<DB, 'reservation_travelers' | 'reservations'>;
 
 /**
  * `TRAVELER_OWNS` as a Kysely predicate: `(NOT EXISTS (…) OR EXISTS (… AND

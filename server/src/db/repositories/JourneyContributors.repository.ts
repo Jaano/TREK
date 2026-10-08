@@ -1,5 +1,6 @@
 import type { JourneyContributors } from '../entities/JourneyContributors.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** JG18's contributor-list row (`getJourneyFull`) — the junction plus the joined username/avatar. */
 export interface JourneyContributorListRow {
@@ -11,11 +12,8 @@ export interface JourneyContributorListRow {
   avatar: string | null;
 }
 
-/** The narrow `journey_contributors`/`users` shape {@link JourneyContributorsRepository.listForJourney} needs. */
-interface JourneyContributorListKyselyDB {
-  journey_contributors: { journey_id: number; user_id: number; role: string; added_at: number };
-  users: { id: number; username: string; avatar: string | null };
-}
+/** The `journey_contributors`/`users` tables {@link JourneyContributorsRepository.listForJourney} reads. */
+type JourneyContributorListKyselyDB = Pick<DB, 'journey_contributors' | 'users'>;
 
 /**
  * `journey_contributors` — a genuine TWO-column composite primary key

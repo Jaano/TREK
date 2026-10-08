@@ -1,5 +1,6 @@
 import type { PluginErrorLog } from '../entities/PluginErrorLog.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** PR2 delivery row / plugins.service.ts `errors()`'s own projection. */
 export interface PluginErrorLogRow {
@@ -8,10 +9,8 @@ export interface PluginErrorLogRow {
   message: string;
 }
 
-/** `pruneKeepingRecent`'s own `this.kysely()` escape hatch (`_shared/trek-repository.ts`) — the `id`/`plugin_id` columns its correlated subquery needs. */
-interface PluginErrorLogKyselyDB {
-  plugin_error_log: { id: number; plugin_id: string };
-}
+/** The tables `pruneKeepingRecent`'s own `this.kysely()` escape hatch (`_shared/trek-repository.ts`) reads, for its correlated subquery on `id`/`plugin_id`. */
+type PluginErrorLogKyselyDB = Pick<DB, 'plugin_error_log'>;
 
 export class PluginErrorLogRepository extends TrekRepository<PluginErrorLog> {
   /** PR2 — `INSERT INTO plugin_error_log (plugin_id, level, message) VALUES (?, ?, ?)` (the supervisor's `onLog` callback — §4a, lazily resolved, own try/catch swallow unchanged in the caller). */

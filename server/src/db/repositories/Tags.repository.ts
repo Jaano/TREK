@@ -2,6 +2,7 @@ import type { Tags } from '../entities/Tags.entity';
 import { findOwnedByUser, listForOwner } from './_shared/owned-lookup';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A `tags` row as the API emits it. */
 export interface TagRow {
@@ -42,21 +43,16 @@ export interface TagForPlaceRow {
  * `TrekRepository.kysely()` (D3's sanctioned next escape hatch) is the only
  * API that reaches it.
  */
-interface PlaceTagsKyselyDB {
-  place_tags: { place_id: number; tag_id: number };
-}
+type PlaceTagsKyselyDB = Pick<DB, 'place_tags'>;
 
 /**
  * `place_tags` joined to `places` for TP46 (`trips.service.ts::copy`'s
- * place-tags read) — `trip_id` widened to `number | string` (D4's T5 escape
- * hatch, `TripsRepository.findAccessible`'s precedent) so the raw-bind seam
- * matches `TripsService.copy`'s own `sourceTripId: string | number`
- * parameter.
+ * place-tags read). The `trip_id` the caller passes stays `number | string`
+ * (D4's T5 escape hatch, `TripsRepository.findAccessible`'s precedent, to
+ * match `TripsService.copy`'s own `sourceTripId: string | number`) and is
+ * cast to the column type only at the bind.
  */
-interface PlaceTagsForTripKyselyDB {
-  place_tags: { place_id: number; tag_id: number };
-  places: { id: number; trip_id: number | string };
-}
+type PlaceTagsForTripKyselyDB = Pick<DB, 'place_tags' | 'places'>;
 
 export class TagsRepository extends TrekRepository<Tags> {
   /**
@@ -269,7 +265,7 @@ export class TagsRepository extends TrekRepository<Tags> {
       .selectFrom('place_tags as pt')
       .innerJoin('places as p', 'p.id', 'pt.place_id')
       .select(['pt.place_id', 'pt.tag_id'])
-      .where('p.trip_id', '=', trip_id)
+      .where('p.trip_id', '=', trip_id as number)
       .execute();
   }
 }

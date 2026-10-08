@@ -1,6 +1,7 @@
 import type { BudgetItemMembers } from '../entities/BudgetItemMembers.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `budget_item_members` row — every scalar column, incl. the two `persist(false)` relation mirrors. */
 export interface BudgetItemMemberRow {
@@ -22,15 +23,10 @@ export interface BudgetItemMemberWithUserRow {
   avatar: string | null;
 }
 
-interface BudgetItemMembersKyselyDB {
-  budget_item_members: BudgetItemMemberRow;
-  users: { id: number; username: string; display_name: string | null; avatar: string | null };
-}
+type BudgetItemMembersKyselyDB = Pick<DB, 'budget_item_members' | 'users'>;
 
-/** The insert-only shape — `id` is autoincrement and omitted from `.values()` below, matching `FileLinksWriteKyselyDB`'s precedent. */
-interface BudgetItemMembersWriteKyselyDB {
-  budget_item_members: { budget_item_id: number; user_id: number; paid: number; amount: number | null };
-}
+/** The insert's table: `id` is the rowid and `InsertOptional` in the generated type, so `.values()` below omits it. */
+type BudgetItemMembersWriteKyselyDB = Pick<DB, 'budget_item_members'>;
 
 /**
  * `budget_item_members` — who splits a budget item, and whether they've
@@ -74,7 +70,7 @@ export class BudgetItemMembersRepository extends TrekRepository<BudgetItemMember
 
   /** TP62 (`TripsService.copy`'s bare member read) — `SELECT bm.* FROM budget_item_members bm JOIN budget_items b ON b.id = bm.budget_item_id WHERE b.trip_id = ?`. */
   async listRawForTrip(trip_id: number | string): Promise<BudgetItemMemberRow[]> {
-    return await this.kysely<BudgetItemMembersKyselyDB & { budget_items: { id: number; trip_id: number } }>()
+    return await this.kysely<BudgetItemMembersKyselyDB & Pick<DB, 'budget_items'>>()
       .selectFrom('budget_item_members as bm')
       .innerJoin('budget_items as b', 'b.id', 'bm.budget_item_id')
       .select(['bm.id', 'bm.budget_item_id', 'bm.user_id', 'bm.paid', 'bm.amount'])
@@ -84,7 +80,7 @@ export class BudgetItemMembersRepository extends TrekRepository<BudgetItemMember
 
   /** BG73 (`calculateSettlement`'s member read) — the `budget_item_id IN (SELECT id FROM budget_items WHERE trip_id = ?)` subquery, re-expressed as a join (rule 23) — same result set. No `paid` column — unlike {@link listForItem}, this legacy statement never selected it. */
   async listForTripWithUsers(trip_id: number | string): Promise<{ budget_item_id: number; user_id: number; amount: number | null; username: string; avatar: string | null }[]> {
-    return await this.kysely<BudgetItemMembersKyselyDB & { budget_items: { id: number; trip_id: number } }>()
+    return await this.kysely<BudgetItemMembersKyselyDB & Pick<DB, 'budget_items'>>()
       .selectFrom('budget_item_members as bm')
       .innerJoin('budget_items as b', 'b.id', 'bm.budget_item_id')
       .innerJoin('users as u', 'u.id', 'bm.user_id')
@@ -101,7 +97,7 @@ export class BudgetItemMembersRepository extends TrekRepository<BudgetItemMember
    * bi.trip_id = ?`. Like {@link listForTripWithUsers}, plus `paid`.
    */
   async listForTripWithUsersAndPaid(trip_id: number | string): Promise<(BudgetItemMemberWithUserRow & { budget_item_id: number })[]> {
-    return await this.kysely<BudgetItemMembersKyselyDB & { budget_items: { id: number; trip_id: number } }>()
+    return await this.kysely<BudgetItemMembersKyselyDB & Pick<DB, 'budget_items'>>()
       .selectFrom('budget_item_members as bm')
       .innerJoin('budget_items as bi', 'bi.id', 'bm.budget_item_id')
       .innerJoin('users as u', 'u.id', 'bm.user_id')

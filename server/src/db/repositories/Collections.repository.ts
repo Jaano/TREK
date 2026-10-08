@@ -1,5 +1,6 @@
 import type { Collections } from '../entities/Collections.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `collections` — every scalar column, `getCollectionRow`'s (CL14) `SELECT *` shape. */
 export interface CollectionRow {
@@ -58,75 +59,29 @@ export interface CollectionPlaceRow {
   category_icon: string | null;
 }
 
-interface CollectionsKyselyDB {
-  collections: CollectionRow;
-}
+type CollectionsKyselyDB = Pick<DB, 'collections'>;
 
 /**
- * CL29's own `INSERT INTO collections (owner_id, name, description, color,
- * icon, cover_image, links, sort_order)` column list, exactly — no `id`/
- * `created_at`/`updated_at` (never bound; the schema's own
- * `DEFAULT CURRENT_TIMESTAMP`/autoincrement fill them), the
- * `BucketListRepository`/`BucketListInsertKyselyDB` precedent for a
- * narrower insert-only Kysely interface instead of `Generated<>` markers.
+ * CL29's insert table: it binds `INSERT INTO collections (owner_id, name,
+ * description, color, icon, cover_image, links, sort_order)` exactly, and
+ * `id`/`created_at`/`updated_at` (filled by the schema's own
+ * `DEFAULT CURRENT_TIMESTAMP`/autoincrement) are `InsertOptional` in the
+ * generated type.
  */
-interface CollectionsInsertKyselyDB {
-  collections: {
-    owner_id: number;
-    name: string;
-    description: string | null;
-    color: string | null;
-    icon: string | null;
-    cover_image: string | null;
-    links: string | null;
-    sort_order: number;
-  };
-}
+type CollectionsInsertKyselyDB = Pick<DB, 'collections'>;
 
-interface CollectionIdsKyselyDB {
-  collections: { id: number; owner_id: number };
-  collection_members: { collection_id: number; user_id: number; status: string };
-}
+type CollectionIdsKyselyDB = Pick<DB, 'collections' | 'collection_members'>;
 
-interface CollectionPlacesReadKyselyDB {
-  collection_places: Omit<CollectionPlaceRow, 'category_name' | 'category_color' | 'category_icon'>;
-  categories: { id: number; name: string; color: string | null; icon: string | null };
-}
+type CollectionPlacesReadKyselyDB = Pick<DB, 'collection_places' | 'categories'>;
 
 /**
- * CL23's own `INSERT INTO collection_places (21 cols)` list, exactly — no
- * `id`/`created_at`/`updated_at`, the same narrower-insert-interface shape
- * as {@link CollectionsInsertKyselyDB} above.
+ * CL23's insert table: it binds `INSERT INTO collection_places (21 cols)`
+ * exactly, and `id`/`created_at`/`updated_at` are `InsertOptional` in the
+ * generated type, as for {@link CollectionsInsertKyselyDB} above.
  */
-interface CollectionPlacesWriteKyselyDB {
-  collection_places: {
-    collection_id: number;
-    owner_id: number;
-    saved_by: number | null;
-    name: string;
-    description: string | null;
-    lat: number | null;
-    lng: number | null;
-    address: string | null;
-    category_id: number | null;
-    price: number | null;
-    currency: string | null;
-    notes: string | null;
-    image_url: string | null;
-    google_place_id: string | null;
-    google_ftid: string | null;
-    osm_id: string | null;
-    website: string | null;
-    phone: string | null;
-    status: string;
-    links: string | null;
-    sort_order: number | null;
-  };
-}
+type CollectionPlacesWriteKyselyDB = Pick<DB, 'collection_places'>;
 
-interface CollectionPlaceLabelsKyselyDB {
-  collection_place_labels: { collection_place_id: number; label_id: number };
-}
+type CollectionPlaceLabelsKyselyDB = Pick<DB, 'collection_place_labels'>;
 
 /**
  * `collections` — the root of the collections cluster (Plan 3h Task 1, part
@@ -361,7 +316,7 @@ export class CollectionsRepository extends TrekRepository<Collections> {
    */
   async loadTagsByPlaceIds(placeIds: number[]): Promise<{ pid: number; id: number; name: string; color: string }[]> {
     if (placeIds.length === 0) return [];
-    return await this.kysely<{ collection_place_tags: { collection_place_id: number; tag_id: number }; tags: { id: number; name: string; color: string } }>()
+    return await this.kysely<Pick<DB, 'collection_place_tags' | 'tags'>>()
       .selectFrom('collection_place_tags as cpt')
       .innerJoin('tags as t', 't.id', 'cpt.tag_id')
       .select(['cpt.collection_place_id as pid', 't.id', 't.name', 't.color'])
@@ -391,10 +346,7 @@ export class CollectionsRepository extends TrekRepository<Collections> {
     placeIds: number[],
   ): Promise<{ pid: number; user_id: number; username: string; avatar: string | null; rating: number }[]> {
     if (placeIds.length === 0) return [];
-    return await this.kysely<{
-      collection_place_ratings: { collection_place_id: number; user_id: number; rating: number; created_at: string | null };
-      users: { id: number; username: string; avatar: string | null };
-    }>()
+    return await this.kysely<Pick<DB, 'collection_place_ratings' | 'users'>>()
       .selectFrom('collection_place_ratings as cpr')
       .innerJoin('users as u', 'u.id', 'cpr.user_id')
       .select(['cpr.collection_place_id as pid', 'cpr.user_id', 'u.username', 'u.avatar', 'cpr.rating'])

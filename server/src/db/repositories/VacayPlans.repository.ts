@@ -1,6 +1,7 @@
 import type { VacayPlans } from '../entities/VacayPlans.entity';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * A `vacay_plans` row as the legacy `SELECT *` returned it (Plan 3f Task 5,
@@ -114,9 +115,7 @@ export class VacayPlansRepository extends TrekRepository<VacayPlans> {
    * than risk a conflicting concurrent edit to a file this task does not own.
    */
   async findVacayUser(id: number): Promise<{ id: number; username: string; email: string } | null> {
-    interface UsersKyselyDB {
-      users: { id: number; username: string; email: string };
-    }
+    type UsersKyselyDB = Pick<DB, 'users'>;
     const row = await this.kysely<UsersKyselyDB>().selectFrom('users').select(['id', 'username', 'email']).where('id', '=', id).executeTakeFirst();
     return row ?? null;
   }

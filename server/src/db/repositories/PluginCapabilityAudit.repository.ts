@@ -1,5 +1,6 @@
 import type { PluginCapabilityAudit } from '../entities/PluginCapabilityAudit.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * Plan 3j Task 2 note: this repository's ONLY method today is the uninstall
@@ -164,18 +165,5 @@ export interface AuditForPluginRow {
   code: string;
 }
 
-/** Kysely shape for `pruneKeepingNewest`/`forUser`/`budgetSeed`'s escape-hatch queries — only the columns/tables they actually touch. */
-interface PluginCapabilityAuditKyselyDB {
-  plugin_capability_audit: {
-    id: number;
-    plugin_id: string;
-    acting_user_id: number | null;
-    method: string;
-    resource: string | null;
-    code: string;
-    ts: string;
-    prev_hash: string | null;
-    hash: string;
-  };
-  plugins: { id: string; name: string };
-}
+/** The tables `pruneKeepingNewest`/`forUser`/`budgetSeed`'s escape-hatch queries touch. */
+type PluginCapabilityAuditKyselyDB = Pick<DB, 'plugin_capability_audit' | 'plugins'>;

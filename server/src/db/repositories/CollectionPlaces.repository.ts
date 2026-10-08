@@ -2,6 +2,7 @@ import type { CollectionPlaces } from '../entities/CollectionPlaces.entity';
 import { currentTimestamp } from '../dialect/sql-functions';
 import type { CollectionPlaceRow } from './Collections.repository';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * `collection_places` (Plan 3h Task 2, part B — saved places CRUD, dedup,
@@ -474,13 +475,6 @@ export interface CollectionPlaceCopyRow {
   phone: string | null;
 }
 
-interface CollectionPlacesKyselyDB {
-  collection_places: Omit<CollectionPlaceRow, 'category_name' | 'category_color' | 'category_icon'>;
-  collection_place_tags: { collection_place_id: number; tag_id: number };
-  collection_place_labels: { collection_place_id: number; label_id: number };
-}
+type CollectionPlacesKyselyDB = Pick<DB, 'collection_places' | 'collection_place_tags' | 'collection_place_labels'>;
 
-interface CollectionPlacesMembershipKyselyDB {
-  collection_places: Pick<CollectionPlaceRow, 'id' | 'collection_id' | 'google_place_id' | 'google_ftid' | 'lat' | 'lng' | 'status'>;
-  collections: { id: number; name: string };
-}
+type CollectionPlacesMembershipKyselyDB = Pick<DB, 'collection_places' | 'collections'>;

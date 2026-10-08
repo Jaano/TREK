@@ -5,6 +5,7 @@ import type { JourneyPhotos } from '../entities/JourneyPhotos.entity';
 import { concatKysely, unixEpochToIsoKysely } from '../dialect/sql-functions';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `SELECT * FROM journey_photos WHERE id = ?`'s row (JG105) — every scalar column of the entity. */
 export interface JourneyPhotoFullRow {
@@ -22,36 +23,8 @@ export interface JourneyPhotoFullRow {
 
 const _journeyPhotoFullRowKeys: AssertRowKeys<JourneyPhotoFullRow, JourneyPhotos> = true;
 
-/** The narrow `journey_photos`/`trek_photos`/`journey_entry_photos`/`journey_entries` shape the gallery reads (JG19/JG101/JG102, `galleryChronologicalOrderExpr`) need. */
-interface GalleryKyselyDB {
-  journey_photos: {
-    id: number;
-    journey_id: number;
-    photo_id: number;
-    caption: string | null;
-    shared: number | null;
-    sort_order: number | null;
-    created_at: number;
-  };
-  trek_photos: {
-    id: number;
-    provider: string;
-    asset_id: string | null;
-    owner_id: number | null;
-    file_path: string | null;
-    thumbnail_path: string | null;
-    width: number | null;
-    height: number | null;
-    media_type: string | null;
-    duration_ms: number | null;
-    taken_at: string | null;
-    lat: number | null;
-    lng: number | null;
-  };
-  journey_entry_photos: { entry_id: number; journey_photo_id: number };
-  journey_entries: { id: number; entry_date: string; entry_time: string | null; is_draft: number };
-  journeys: { id: number; user_id: number };
-}
+/** The `journey_photos`/`trek_photos`/`journey_entry_photos`/`journey_entries` tables the gallery reads (JG19/JG101/JG102, `galleryChronologicalOrderExpr`) read. */
+type GalleryKyselyDB = Pick<DB, 'journey_photos' | 'trek_photos' | 'journey_entry_photos' | 'journey_entries' | 'journeys'>;
 
 /** JS7 (Plan 4 Task 8b relocation) — the public photo-validation join's row (`journey_photos` + `trek_photos`). */
 export interface JourneyPublicPhotoValidationRow {

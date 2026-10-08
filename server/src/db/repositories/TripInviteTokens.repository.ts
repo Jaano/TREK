@@ -1,6 +1,7 @@
 import type { TripInviteTokens } from '../entities/TripInviteTokens.entity';
 import { currentTimestamp } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `trip-invite.service.ts::get`'s projection. */
 export interface TripInviteInfoRow {
@@ -16,10 +17,7 @@ export interface TripInviteResolvedRow {
   expires_at: string | null;
 }
 
-interface TripInviteResolveKyselyDB {
-  trip_invite_tokens: { token: string; trip_id: number; expires_at: string | null };
-  trips: { id: number; title: string };
-}
+type TripInviteResolveKyselyDB = Pick<DB, 'trip_invite_tokens' | 'trips'>;
 
 /**
  * `trip_invite_tokens` (Plan 4 Task 1). One row per trip (`uniques: [{

@@ -1,6 +1,7 @@
 import type { PackingTemplateCategories } from '../entities/PackingTemplateCategories.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `packing_template_categories` row — every scalar column, incl. the `persist(false)` `template_id` relation mirror. */
 export interface PackingTemplateCategoryRow {
@@ -12,14 +13,10 @@ export interface PackingTemplateCategoryRow {
 
 const _packingTemplateCategoryRowKeys: AssertRowKeys<PackingTemplateCategoryRow, PackingTemplateCategories> = true;
 
-interface PackingTemplateCategoriesKyselyDB {
-  packing_template_categories: PackingTemplateCategoryRow;
-}
+type PackingTemplateCategoriesKyselyDB = Pick<DB, 'packing_template_categories'>;
 
-/** The insert-only shape for `insertCategory` (PK56/PK77) — `id` is autoincrement and omitted. */
-interface PackingTemplateCategoriesInsertKyselyDB {
-  packing_template_categories: { template_id: number | string; name: string; sort_order: number };
-}
+/** The table `insertCategory` (PK56/PK77) inserts into; `id` is the rowid and `InsertOptional` in the generated type. */
+type PackingTemplateCategoriesInsertKyselyDB = Pick<DB, 'packing_template_categories'>;
 
 /** `packing_template_categories` — the middle tier of the packing template tree. Kysely throughout: `template_id` is `persist(false)`. */
 export class PackingTemplateCategoriesRepository extends TrekRepository<PackingTemplateCategories> {
@@ -40,7 +37,7 @@ export class PackingTemplateCategoriesRepository extends TrekRepository<PackingT
    * with `TrekRepository`/`EntityRepository`'s own same-named method.
    */
   async insertCategory(template_id: number | string, name: string, sort_order: number): Promise<number> {
-    const result = await this.kysely<PackingTemplateCategoriesInsertKyselyDB>().insertInto('packing_template_categories').values({ template_id, name, sort_order }).executeTakeFirstOrThrow();
+    const result = await this.kysely<PackingTemplateCategoriesInsertKyselyDB>().insertInto('packing_template_categories').values({ template_id: template_id as number, name, sort_order }).executeTakeFirstOrThrow();
     return Number(result.insertId);
   }
 

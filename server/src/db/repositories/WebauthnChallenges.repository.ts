@@ -1,5 +1,6 @@
 import type { WebauthnChallenges } from '../entities/WebauthnChallenges.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `PasskeyService.storeChallenge` (PK2). */
 export interface NewChallengeRow {
@@ -10,19 +11,11 @@ export interface NewChallengeRow {
 }
 
 /**
- * The `webauthn_challenges` table shape as `claimChallenge`'s
- * `em.getKysely()` call needs it — an explicit type argument rather than
- * relying on `getKysely()`'s automatic entity-metadata inference (kept
- * narrow to the one column this repository ever reads back).
+ * The `webauthn_challenges` table as `claimChallenge`'s `em.getKysely()`
+ * call needs it: an explicit type argument rather than relying on
+ * `getKysely()`'s automatic entity-metadata inference.
  */
-interface WebauthnChallengesKyselyDB {
-  webauthn_challenges: {
-    challenge: string;
-    user_id: number | null;
-    type: string;
-    expires_at: number;
-  };
-}
+type WebauthnChallengesKyselyDB = Pick<DB, 'webauthn_challenges'>;
 
 /** The single-use, TTL'd WebAuthn ceremony challenge store — PK1–PK3. */
 export class WebauthnChallengesRepository extends TrekRepository<WebauthnChallenges> {

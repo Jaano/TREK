@@ -1,6 +1,7 @@
 import type { PackingTemplates } from '../entities/PackingTemplates.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `packing_templates` row — every scalar column, incl. the `persist(false)` `created_by` relation mirror. */
 export interface PackingTemplateRow {
@@ -26,17 +27,10 @@ export interface PackingTemplateAdminRow extends PackingTemplateRow {
   category_count: number;
 }
 
-interface PackingTemplatesKyselyDB {
-  packing_templates: PackingTemplateRow;
-  packing_template_categories: { id: number; template_id: number; name: string; sort_order: number };
-  packing_template_items: { id: number; category_id: number; name: string; sort_order: number };
-  users: { id: number; username: string };
-}
+type PackingTemplatesKyselyDB = Pick<DB, 'packing_templates' | 'packing_template_categories' | 'packing_template_items' | 'users'>;
 
-/** The insert-only shape for `insertTemplate` (PK55/PK68) — `id`/`created_at` are autoincrement/`DEFAULT CURRENT_TIMESTAMP` and omitted. */
-interface PackingTemplatesInsertKyselyDB {
-  packing_templates: { name: string; created_by: number };
-}
+/** The table `insertTemplate` (PK55/PK68) inserts into; `id`/`created_at` are `InsertOptional` in the generated type. */
+type PackingTemplatesInsertKyselyDB = Pick<DB, 'packing_templates'>;
 
 /**
  * `packing_templates` — the top level of the (admin-managed) packing

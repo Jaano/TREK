@@ -2,6 +2,7 @@ import type { PackingBags } from '../entities/PackingBags.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import { presenceSet } from './_shared/presence-set';
+import type { DB } from '../kysely/db';
 
 /** A bare `packing_bags` row — every scalar column, incl. the two `persist(false)` relation mirrors (`trip_id`, `user_id`). */
 export interface PackingBagRow {
@@ -37,21 +38,13 @@ export interface PackingBagMemberForTripRow {
   avatar: string | null;
 }
 
-interface PackingBagsKyselyDB {
-  packing_bags: PackingBagRow;
-  packing_bag_members: { bag_id: number; user_id: number };
-  users: { id: number; username: string; display_name: string | null; avatar: string | null };
-}
+type PackingBagsKyselyDB = Pick<DB, 'packing_bags' | 'packing_bag_members' | 'users'>;
 
-/** The insert-only shape for `insertMinimal` (PK32) — `id`/`created_at` are autoincrement/`DEFAULT CURRENT_TIMESTAMP` and omitted, matching the legacy 3-column list. */
-interface PackingBagsMinimalInsertKyselyDB {
-  packing_bags: { trip_id: number | string; name: string; color: string };
-}
+/** The table `insertMinimal` (PK32) inserts into, binding the legacy 3-column list; `id`/`created_at` are `InsertOptional` in the generated type. */
+type PackingBagsMinimalInsertKyselyDB = Pick<DB, 'packing_bags'>;
 
-/** The insert-only shape for `insertBag` (PK42/TP67) — a distinct, wider column set from {@link PackingBagsMinimalInsertKyselyDB}'s. */
-interface PackingBagsInsertKyselyDB {
-  packing_bags: { trip_id: number | string; name: string; color: string; sort_order: number | null; weight_limit_grams: number | null };
-}
+/** The table `insertBag` (PK42/TP67) inserts into, with a wider column set than {@link PackingBagsMinimalInsertKyselyDB}'s. */
+type PackingBagsInsertKyselyDB = Pick<DB, 'packing_bags'>;
 
 /**
  * `packing_bags` — bags themselves, plus (this class's own relation, no
@@ -119,7 +112,7 @@ export class PackingBagsRepository extends TrekRepository<PackingBags> {
    * the new row's id.
    */
   async insertMinimal(trip_id: number | string, name: string, color: string): Promise<number> {
-    const result = await this.kysely<PackingBagsMinimalInsertKyselyDB>().insertInto('packing_bags').values({ trip_id, name, color }).executeTakeFirstOrThrow();
+    const result = await this.kysely<PackingBagsMinimalInsertKyselyDB>().insertInto('packing_bags').values({ trip_id: trip_id as number, name, color }).executeTakeFirstOrThrow();
     return Number(result.insertId);
   }
 
@@ -129,7 +122,7 @@ export class PackingBagsRepository extends TrekRepository<PackingBags> {
    * set from {@link insertMinimal}'s. Returns the new row's id.
    */
   async insertBag(row: { trip_id: number | string; name: string; color: string; sort_order: number | null; weight_limit_grams: number | null }): Promise<number> {
-    const result = await this.kysely<PackingBagsInsertKyselyDB>().insertInto('packing_bags').values(row).executeTakeFirstOrThrow();
+    const result = await this.kysely<PackingBagsInsertKyselyDB>().insertInto('packing_bags').values({ ...row, trip_id: row.trip_id as number }).executeTakeFirstOrThrow();
     return Number(result.insertId);
   }
 

@@ -1,6 +1,7 @@
 import type { RouteUsageDaily } from '../entities/RouteUsageDaily.entity';
 import { nowDateOffset } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * A `route_usage_daily` row exactly as `SELECT *` reads it (RU3's shape,
@@ -20,18 +21,7 @@ export interface RouteUsageDailyRow {
   failed: number;
 }
 
-interface RouteUsageDailyKyselyDB {
-  route_usage_daily: {
-    day: string;
-    profile: string;
-    surface: string;
-    self_hosted: number;
-    requests: number;
-    waypoints: number;
-    km: number;
-    failed: number;
-  };
-}
+type RouteUsageDailyKyselyDB = Pick<DB, 'route_usage_daily'>;
 
 /**
  * `route_usage_daily` — a composite-PK `(day, profile, surface, self_hosted)`

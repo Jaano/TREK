@@ -1921,11 +1921,11 @@ export function applyTextPasses(source: string, fixups: RuleFixups): string {
 // side effect and needs nothing from those modules.
 // ---------------------------------------------------------------------------
 
-function tempDbPath(): string {
+export function tempDbPath(): string {
   return path.join(os.tmpdir(), `trek-gen-entities-${crypto.randomUUID()}.db`);
 }
 
-async function migrateTempDb(dbPath: string): Promise<void> {
+export async function migrateTempDb(dbPath: string): Promise<void> {
   const orm = await SqliteMikroORM.init({
     entities: [],
     discovery: { warnWhenNoEntities: false },

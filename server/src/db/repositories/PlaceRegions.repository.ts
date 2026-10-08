@@ -1,5 +1,6 @@
 import type { PlaceRegions } from '../entities/PlaceRegions.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `place_regions` — the columns `AT28`'s `SELECT *` needs. */
 export interface PlaceRegionRow {
@@ -9,12 +10,7 @@ export interface PlaceRegionRow {
   region_name: string;
 }
 
-interface PlaceRegionsKyselyDB {
-  place_regions: { place_id: number; country_code: string; region_code: string; region_name: string };
-  places: { id: number; trip_id: number; lat: number | null; lng: number | null; address: string | null };
-  trips: { id: number; user_id: number; start_date: string | null; end_date: string | null };
-  trip_members: { trip_id: number; user_id: number };
-}
+type PlaceRegionsKyselyDB = Pick<DB, 'place_regions' | 'places' | 'trips' | 'trip_members'>;
 
 /**
  * `place_regions` — the geocoded-country/region cache for a place (Plan 3f

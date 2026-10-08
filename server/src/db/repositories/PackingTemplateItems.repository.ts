@@ -1,6 +1,7 @@
 import type { PackingTemplateItems } from '../entities/PackingTemplateItems.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** A bare `packing_template_items` row — every scalar column, incl. the `persist(false)` `category_id` relation mirror. */
 export interface PackingTemplateItemRow {
@@ -24,15 +25,10 @@ export interface PackingTemplateApplyRow {
   bag_name: string | null;
 }
 
-interface PackingTemplateItemsKyselyDB {
-  packing_template_items: PackingTemplateItemRow;
-  packing_template_categories: { id: number; template_id: number; name: string; sort_order: number };
-}
+type PackingTemplateItemsKyselyDB = Pick<DB, 'packing_template_items' | 'packing_template_categories'>;
 
-/** The insert-only shape for `insertTemplateItem` (PK57/PK86) — `id` is autoincrement and omitted. */
-interface PackingTemplateItemsInsertKyselyDB {
-  packing_template_items: { category_id: number | string; name: string; sort_order: number; weight_grams?: number | null; quantity?: number; bag_name?: string | null };
-}
+/** The table `insertTemplateItem` (PK57/PK86) inserts into; `id` is the rowid and `InsertOptional` in the generated type. */
+type PackingTemplateItemsInsertKyselyDB = Pick<DB, 'packing_template_items'>;
 
 /** `packing_template_items` — the leaf tier of the packing template tree. Kysely throughout: `category_id` is `persist(false)`. */
 export class PackingTemplateItemsRepository extends TrekRepository<PackingTemplateItems> {
@@ -99,7 +95,7 @@ export class PackingTemplateItemsRepository extends TrekRepository<PackingTempla
     const result = await this.kysely<PackingTemplateItemsInsertKyselyDB>()
       .insertInto('packing_template_items')
       .values({
-        category_id: row.category_id,
+        category_id: row.category_id as number,
         name: row.name,
         sort_order: row.sort_order,
         weight_grams: row.weight_grams,

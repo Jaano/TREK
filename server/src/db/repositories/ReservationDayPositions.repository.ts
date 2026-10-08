@@ -1,28 +1,10 @@
 import type { ReservationDayPositions } from '../entities/ReservationDayPositions.entity';
 import { columnRef } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** `reservation_day_positions`/`reservations`/`days`'s shape for RS31's Kysely upsert. */
-interface ReservationDayPositionsKyselyDB {
-  reservation_day_positions: {
-    reservation_id: number;
-    day_id: number;
-    position: number;
-  };
-  reservations: {
-    id: number;
-    // `number | string`: the legacy statement raw-binds `tripId` exactly as
-    // the caller received it (D4's T5 escape hatch) — the Kysely column type
-    // here is widened to accept both without narrowing which non-canonical
-    // ids match, never actually persisted (this table has no `trip_id`
-    // column of its own).
-    trip_id: number | string;
-  };
-  days: {
-    id: number;
-    trip_id: number | string;
-  };
-}
+type ReservationDayPositionsKyselyDB = Pick<DB, 'reservation_day_positions' | 'reservations' | 'days'>;
 
 export class ReservationDayPositionsRepository extends TrekRepository<ReservationDayPositions> {
   /**
@@ -72,7 +54,7 @@ export class ReservationDayPositionsRepository extends TrekRepository<Reservatio
           .select(['r.id as reservation_id', 'd.id as day_id', eb.val(position).as('position')])
           .where('r.id', '=', reservation_id)
           .where('d.id', '=', day_id)
-          .where('r.trip_id', '=', trip_id),
+          .where('r.trip_id', '=', trip_id as number),
       )
       .execute();
   }

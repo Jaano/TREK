@@ -1,6 +1,7 @@
 import type { ShareTokens } from '../entities/ShareTokens.entity';
 import { currentTimestampKysely } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * `share_tokens` — public trip-share links (Plan 3h Task 6). `trip_id` and
@@ -29,9 +30,7 @@ export interface ShareTokenRow {
   share_hide_images: number;
 }
 
-interface ShareTokensKyselyDB {
-  share_tokens: ShareTokenRow;
-}
+type ShareTokensKyselyDB = Pick<DB, 'share_tokens'>;
 
 export class ShareTokensRepository extends TrekRepository<ShareTokens> {
   private db_() {

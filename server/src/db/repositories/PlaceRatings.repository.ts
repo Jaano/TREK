@@ -1,5 +1,6 @@
 import type { PlaceRatings } from '../entities/PlaceRatings.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /** One rated place, from `QueryHelpersService.loadRatingsByPlaceIds` (QH2). */
 export interface PlaceRatingForPlaceRow {
@@ -89,7 +90,7 @@ export class PlaceRatingsRepository extends TrekRepository<PlaceRatings> {
    * variant of the same finding).
    */
   async listVotesForPlace(place_id: number): Promise<{ user_id: number; rating: number }[]> {
-    return await this.kysely<{ place_ratings: { place_id: number; user_id: number; rating: number } }>()
+    return await this.kysely<Pick<DB, 'place_ratings'>>()
       .selectFrom('place_ratings')
       .select(['user_id', 'rating'])
       .where('place_id', '=', place_id)

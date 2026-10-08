@@ -2,28 +2,10 @@ import type { JourneyPhoto } from '../../types';
 import type { JourneyEntryPhotos } from '../entities/JourneyEntryPhotos.entity';
 import type { JourneyPublicGalleryRow } from './JourneyShareTokens.repository';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
-/** The narrow `journey_entry_photos`/`journey_photos`/`trek_photos`/`journey_entries` shape the `JP_SELECT`/`JP_JOIN`-shaped reads need. */
-interface JourneyPhotoJoinKyselyDB {
-  journey_entry_photos: { entry_id: number; journey_photo_id: number; sort_order: number | null; created_at: number };
-  journey_photos: { id: number; journey_id: number; photo_id: number; caption: string | null; shared: number | null; sort_order: number | null; created_at: number };
-  trek_photos: {
-    id: number;
-    provider: string;
-    asset_id: string | null;
-    owner_id: number | null;
-    file_path: string | null;
-    thumbnail_path: string | null;
-    width: number | null;
-    height: number | null;
-    media_type: string | null;
-    duration_ms: number | null;
-    taken_at: string | null;
-    lat: number | null;
-    lng: number | null;
-  };
-  journey_entries: { id: number; journey_id: number };
-}
+/** The `journey_entry_photos`/`journey_photos`/`trek_photos`/`journey_entries` tables the `JP_SELECT`/`JP_JOIN`-shaped reads read. */
+type JourneyPhotoJoinKyselyDB = Pick<DB, 'journey_entry_photos' | 'journey_photos' | 'trek_photos' | 'journey_entries'>;
 
 /** `JP_SELECT`'s exact column list (`journey-domain.service.ts`'s module const), aliased `jep`/`gp`/`tp` — shared by every `JP_SELECT`/`JP_JOIN`-shaped read below. */
 const JP_COLUMNS = [
