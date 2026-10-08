@@ -714,8 +714,8 @@ describe('ReservationsService (DI-native, real SQL)', () => {
     });
 
     it('RESV-TX-001: updateWithCost rolls the booking edit back when its cost write fails', async () => {
-      const { trip, res } = linkedItem({ category: 'other' });
-      testDb.prepare("UPDATE reservations SET title = 'Old', type = 'other' WHERE id = ?").run(res.id);
+      const { trip, res } = await linkedItem({ category: 'other' });
+      await updateRows(orm, Reservations, { id: res.id }, { title: 'Old', type: 'other' });
       const current = (await svc.getReservation(String(res.id), String(trip.id)))!;
       budget.updateBudgetItem.mockRejectedValueOnce(new Error('boom'));
 
@@ -723,13 +723,13 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       await expect(svc.updateWithCost(String(res.id), String(trip.id), { title: 'New', type: 'flight' } as never, current, undefined))
         .rejects.toThrow('boom');
 
-      expect(testDb.prepare('SELECT title, type FROM reservations WHERE id = ?').get(res.id)).toEqual({ title: 'Old', type: 'other' });
+      expect(await findRow(orm, Reservations, { id: res.id })).toMatchObject({ title: 'Old', type: 'other' });
       expect(broadcast).not.toHaveBeenCalled();
     });
 
     it('RESV-TX-006: updateWithCost rolls the booking edit back when the new price cannot be written', async () => {
-      const { trip, res, item } = linkedItem({ total_price: 100 });
-      testDb.prepare("UPDATE reservations SET title = 'Old' WHERE id = ?").run(res.id);
+      const { trip, res, item } = await linkedItem({ total_price: 100 });
+      await updateRows(orm, Reservations, { id: res.id }, { title: 'Old' });
       const current = (await svc.getReservation(String(res.id), String(trip.id)))!;
       budget.updateBudgetItem.mockRejectedValueOnce(new Error('boom'));
 
@@ -737,13 +737,13 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       await expect(svc.updateWithCost(String(res.id), String(trip.id), { title: 'New' } as never, current, { total_price: 250 }))
         .rejects.toThrow('boom');
 
-      expect(testDb.prepare('SELECT title FROM reservations WHERE id = ?').get(res.id)).toEqual({ title: 'Old' });
-      expect(testDb.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(item.id)).toEqual({ total_price: 100 });
+      expect(await findRow(orm, Reservations, { id: res.id })).toMatchObject({ title: 'Old' });
+      expect(await findRow(orm, BudgetItems, { id: item.id })).toMatchObject({ total_price: 100 });
       expect(broadcast).not.toHaveBeenCalled();
     });
 
     it('RESV-TX-002: updateWithCost hands the cost events back instead of sending them inside the write', async () => {
-      const { trip, res, item } = linkedItem();
+      const { trip, res, item } = await linkedItem();
       const current = (await svc.getReservation(String(res.id), String(trip.id)))!;
       budget.updateBudgetItem.mockReturnValue({ id: item.id });
 
@@ -775,7 +775,7 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       await expect(svc.createWithCost(String(trip.id), { title: 'Hotel', type: 'other' } as never, { total_price: 200 }))
         .rejects.toThrow('boom');
 
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM reservations WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+      expect(await countRows(orm, Reservations, { trip: trip.id })).toBe(0);
       expect(broadcast).not.toHaveBeenCalled();
     });
 

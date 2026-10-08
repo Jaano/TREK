@@ -47,8 +47,7 @@ import type { MemoriesAccessService } from '../../../src/nest/memories/memories-
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
-import { createTestUnitOfWork, createTestUsersRepo } from '../../helpers/test-uow';
-import { createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
 import { deleteRows, upsertRow } from '../../helpers/factories/rows';
 import { readUser } from '../../helpers/factories/users';
 import { Users } from '../../../src/db/entities/Users.entity';
@@ -195,14 +194,14 @@ describe('saveImmichSettings', () => {
   });
 
   it('IMMICH-052: writes auto_upload with the connection, and keeps it when the flag is absent', async () => {
-    const autoUpload = () => (testDb.prepare('SELECT immich_auto_upload FROM users WHERE id = ?').get(USER) as { immich_auto_upload: number }).immich_auto_upload;
+    const autoUpload = async () => (await readUser(await sharedTestOrm(testDb), USER)).immich_auto_upload;
 
     await svc.saveImmichSettings(USER, 'https://new.test', 'k2', null, undefined, true);
-    expect(autoUpload()).toBe(1);
+    expect(await autoUpload()).toBe(1);
     await svc.saveImmichSettings(USER, 'https://new.test', 'k2', null);
-    expect(autoUpload()).toBe(1);
+    expect(await autoUpload()).toBe(1);
     await svc.saveImmichSettings(USER, undefined, undefined, null, undefined, false);
-    expect(autoUpload()).toBe(0);
+    expect(await autoUpload()).toBe(0);
   });
 
   it('IMMICH-053: a refused URL writes no auto_upload either', async () => {
@@ -210,7 +209,7 @@ describe('saveImmichSettings', () => {
 
     await svc.saveImmichSettings(USER, 'http://169.254.169.254', 'k', null, undefined, true);
 
-    expect(testDb.prepare('SELECT immich_auto_upload FROM users WHERE id = ?').get(USER)).toEqual({ immich_auto_upload: 0 });
+    expect((await readUser(await sharedTestOrm(testDb), USER)).immich_auto_upload).toBe(0);
   });
 
   it('IMMICH-054: a failing auto_upload write rolls the new connection back with it', async () => {

@@ -2,7 +2,7 @@
  * Unit tests for backupService.
  * Covers BACKUP-031 to BACKUP-060.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, onTestFinished } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks — must be defined before any vi.mock() calls
@@ -1405,7 +1405,7 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
     fsMock.rmSync.mockReturnValue(undefined);
     fsMock.existsSync.mockImplementation((p: string) => !String(p).includes('uploads') && !String(p).endsWith('.encryption_key'));
 
-    const result = await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+    const result = await restoreFromZip(deps(stubStorage()), '/data/tmp/upload.zip');
 
     expect(result).toEqual({ success: true });
     expect(callOrder).toEqual(['read', 'closeDb', 'reinitialize', 'restore']);
@@ -1430,14 +1430,14 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
     fsMock.rmSync.mockReturnValue(undefined);
     fsMock.existsSync.mockImplementation((p: string) => !String(p).includes('uploads') && !String(p).endsWith('.encryption_key'));
 
-    const unreadable = await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+    const unreadable = await restoreFromZip(deps(stubStorage()), '/data/tmp/upload.zip');
     expect(unreadable).toEqual({ success: true });
     expect(logMock.logWarn).toHaveBeenCalledWith(expect.stringContaining('could not read the active sessions (no such table: user_sessions)'));
     expect(sessionsRepo.restoreCarried).not.toHaveBeenCalled();
 
     setupSuccessfulExtraction();
     setupAllTablesPresent();
-    const unwritable = await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+    const unwritable = await restoreFromZip(deps(stubStorage()), '/data/tmp/upload.zip');
     expect(unwritable).toEqual({ success: true });
     expect(logMock.logWarn).toHaveBeenCalledWith(expect.stringContaining('could not keep the active sessions (database is locked)'));
   });

@@ -286,7 +286,7 @@ describe('importAirtrailFlights writes a booking with its link', () => {
       spy.mockRestore();
       quiet.mockRestore();
     }
-    expect(tripReservations(tripId)).toEqual([]);
+    expect(await tripReservations(tripId)).toEqual([]);
     expect(broadcast).not.toHaveBeenCalled();
   });
 
@@ -303,7 +303,7 @@ describe('importAirtrailFlights writes a booking with its link', () => {
       spy.mockRestore();
       quiet.mockRestore();
     }
-    expect(tripReservations(tripId)).toEqual([]);
+    expect(await tripReservations(tripId)).toEqual([]);
     expect(broadcast).not.toHaveBeenCalled();
   });
 });

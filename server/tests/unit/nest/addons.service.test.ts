@@ -420,7 +420,7 @@ describe('AddonsService addon/feature flags', () => {
 
     await expect(svc.updateCollabFeatures({ chat: false, notes: false })).rejects.toThrow('disk full');
 
-    expect(rawAppSetting('collab_chat_enabled')?.value).not.toBe('false');
+    expect((await storedAppSetting('collab_chat_enabled'))?.value).not.toBe('false');
     expect(await svc.getCollabFeatures()).toEqual({ chat: true, notes: true, links: true, polls: true, whatsnext: true });
     setValueSpy.mockRestore();
   });
