@@ -17,6 +17,7 @@
     "test:coverage": "vitest run --coverage",
     "lint": "eslint .",
     "lint:check": "eslint .",
+    "lint:warnings": "node scripts/eslint-ratchet.mjs",
     "lint:pages": "node scripts/check-page-pattern.mjs",
     "lint:rtl": "node scripts/rtl-lint.mjs",
     "lint:size": "node scripts/size-lint.mjs",
