@@ -13,8 +13,11 @@ const VIEW = ['components', 'mobile', 'pages', 'hooks']
  * may use a shared hook, and the phone screens reuse both. Nothing below the
  * views (stores, repos, sync, api, the Dexie schema and the helpers) knows a
  * view exists, a repo sits under the stores, and the Dexie schema under all
- * of them. Directories without an entry (mobile, pages, the app root) are
- * free.
+ * of them. help/ (the help center's screen registry, plain data) and vacay/
+ * (date helpers) are helpers like utils/. Directories without an entry are
+ * free on purpose: mobile and pages sit at the top, the app root wires
+ * everything, and managed/ is the slot an operator fills with whole screens
+ * at build time.
  */
 export const RULES = {
   components: ['pages', 'mobile'],
@@ -29,6 +32,8 @@ export const RULES = {
   services: VIEW,
   push: VIEW,
   types: VIEW,
+  help: VIEW,
+  vacay: VIEW,
   repo: [...VIEW, 'store'],
   db: [...VIEW, 'store', 'repo', 'sync', 'api'],
 }

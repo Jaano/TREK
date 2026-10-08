@@ -110,6 +110,21 @@ describe('lint:layers', () => {
     expect(JSON.parse(readFileSync(tree.path(BASELINE), 'utf8'))).toEqual({ 'src/components/A.tsx': 1 });
   });
 
+  it('LAYERS-007: help/ and vacay/ are helpers and import no view', () => {
+    for (const helper of ['help', 'vacay']) {
+      expect(RULES[helper as keyof typeof RULES]).toEqual(
+        expect.arrayContaining(['components', 'mobile', 'pages', 'hooks'])
+      );
+    }
+    const files = {
+      'src/help/contexts/trip.ts': "import { Panel } from '../../components/Help/Panel'\n",
+      'src/vacay/yearWindow.ts': "import { useIsPhone } from '../hooks/useIsPhone'\n",
+    };
+    expect(run({}, files)).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/src\/help\/contexts\/trip\.ts: 1 import\(s\) against the layering/);
+    expect(tree.error.join('\n')).toMatch(/src\/vacay\/yearWindow\.ts: 1 import\(s\) against the layering/);
+  });
+
   it('LAYERS-006: a missing baseline stops the check', () => {
     tree = ratchetTree({ 'src/a.ts': '' });
     expect(() => check({ root: tree.root, baselinePath: tree.path(BASELINE), ...tree.out })).toThrow(RatchetError);
