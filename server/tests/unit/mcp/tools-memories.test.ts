@@ -31,6 +31,12 @@ import { createMcpHarness, parseToolResult, type McpHarness } from '../../helper
 import { ImmichService } from '../../../src/nest/memories/immich.service';
 import { SynologyService } from '../../../src/nest/memories/synology.service';
 import { PhotoCaptureBackfillService } from '../../../src/nest/memories/photo-capture-backfill.service';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, deleteRows, findRow, findRows, upsertRow } from '../../helpers/factories/rows';
+import { JourneyEntryPhotos } from '../../../src/db/entities/JourneyEntryPhotos.entity';
+import { JourneyPhotos } from '../../../src/db/entities/JourneyPhotos.entity';
+import { PhotoProviders } from '../../../src/db/entities/PhotoProviders.entity';
+import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
 
 const immichSearch = vi.spyOn(ImmichService.prototype, 'searchPhotos');
 const immichAlbums = vi.spyOn(ImmichService.prototype, 'listAlbums');
@@ -50,21 +56,19 @@ const SYNOLOGY_ASSET = { id: 's1', takenAt: '2026-07-02T10:00:00.000Z', lat: 48.
  * photo_providers is seed data, so resetTestDb leaves it alone and a toggle
  * leaks into the next case. Every case states what it needs.
  */
-function setProviderEnabled(id: string, enabled: boolean): void {
-  testDb.prepare(
-    'INSERT INTO photo_providers (id, name, enabled) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET enabled = excluded.enabled',
-  ).run(id, id, enabled ? 1 : 0);
+async function setProviderEnabled(id: string, enabled: boolean): Promise<void> {
+  await upsertRow(orm, PhotoProviders, { id, name: id, enabled: enabled ? 1 : 0 }, ['enabled']);
 }
 
-function removeProvider(id: string): void {
-  testDb.prepare('DELETE FROM photo_providers WHERE id = ?').run(id);
+async function removeProvider(id: string): Promise<void> {
+  await deleteRows(orm, PhotoProviders, { id });
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   setAddonEnabled(testDb, ADDON_IDS.JOURNEY, true);
-  setProviderEnabled('immich', true);
-  setProviderEnabled('synologyphotos', true);
+  await setProviderEnabled('immich', true);
+  await setProviderEnabled('synologyphotos', true);
   broadcastMock.mockClear();
   delete process.env.DEMO_MODE;
 
@@ -77,7 +81,14 @@ beforeEach(() => {
   backfillRun.mockClear();
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -146,7 +157,7 @@ describe('Tool: search_provider_photos', () => {
 
   it('refuses a provider the admin has switched off, without calling it', async () => {
     const { user } = createUser(testDb);
-    setProviderEnabled('synologyphotos', false);
+    await setProviderEnabled('synologyphotos', false);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'search_provider_photos',
@@ -160,7 +171,7 @@ describe('Tool: search_provider_photos', () => {
 
   it('refuses a provider that is not in the provider table at all', async () => {
     const { user } = createUser(testDb);
-    removeProvider('synologyphotos');
+    await removeProvider('synologyphotos');
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'search_provider_photos',
@@ -207,8 +218,8 @@ describe('Tool: search_provider_photos', () => {
 
   it('is not registered when every photo provider is switched off', async () => {
     const { user } = createUser(testDb);
-    setProviderEnabled('immich', false);
-    setProviderEnabled('synologyphotos', false);
+    await setProviderEnabled('immich', false);
+    await setProviderEnabled('synologyphotos', false);
     await withHarness(user.id, async (h) => {
       const names = (await h.client.listTools()).tools.map(t => t.name);
       expect(names).not.toContain('search_provider_photos');
@@ -245,8 +256,8 @@ describe('Tool: search_provider_photos', () => {
 
   it('is registered again as soon as one provider is on', async () => {
     const { user } = createUser(testDb);
-    setProviderEnabled('immich', true);
-    setProviderEnabled('synologyphotos', false);
+    await setProviderEnabled('immich', true);
+    await setProviderEnabled('synologyphotos', false);
     await withHarness(user.id, async (h) => {
       expect((await h.client.listTools()).tools.map(t => t.name)).toContain('search_provider_photos');
     });
@@ -288,7 +299,7 @@ describe('Tool: list_provider_albums', () => {
 
   it('refuses a disabled provider', async () => {
     const { user } = createUser(testDb);
-    setProviderEnabled('immich', false);
+    await setProviderEnabled('immich', false);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_provider_albums', arguments: { provider: 'immich' } });
       expect(result.isError).toBe(true);
@@ -337,7 +348,7 @@ describe('Tool: list_provider_album_photos', () => {
 
   it('refuses a disabled provider', async () => {
     const { user } = createUser(testDb);
-    setProviderEnabled('synologyphotos', false);
+    await setProviderEnabled('synologyphotos', false);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'list_provider_album_photos', arguments: { provider: 'synologyphotos', album_id: '7' },
@@ -364,15 +375,29 @@ describe('Tool: list_provider_album_photos', () => {
 // add_journey_provider_photos
 // ---------------------------------------------------------------------------
 
-function entryPhotoRows(entryId: number) {
-  return testDb.prepare(`
-    SELECT tp.provider, tp.asset_id, tp.owner_id, tp.media_type, gp.journey_id, gp.caption
-    FROM journey_entry_photos jep
-    JOIN journey_photos gp ON gp.id = jep.journey_photo_id
-    JOIN trek_photos tp ON tp.id = gp.photo_id
-    WHERE jep.entry_id = ?
-    ORDER BY tp.asset_id
-  `).all(entryId) as Array<Record<string, unknown>>;
+/** The provider photo behind each gallery row, the way the journey_photos to trek_photos join reads it. */
+async function withTrekPhotos(galleryRows: Array<{ photo_id?: number; journey_id?: number; caption?: string | null }>) {
+  const rows = [];
+  for (const gp of galleryRows) {
+    const tp = await findRow(orm, TrekPhotos, { id: gp.photo_id });
+    if (tp) rows.push({ gp, tp });
+  }
+  return rows;
+}
+
+async function entryPhotoRows(entryId: number) {
+  const links = await findRows(orm, JourneyEntryPhotos, { entry: entryId });
+  const gallery = [];
+  for (const link of links) {
+    const gp = await findRow(orm, JourneyPhotos, { id: link.journey_photo_id });
+    if (gp) gallery.push(gp);
+  }
+  return (await withTrekPhotos(gallery))
+    .map(({ gp, tp }) => ({
+      provider: tp.provider, asset_id: tp.asset_id, owner_id: tp.owner_id, media_type: tp.media_type,
+      journey_id: gp.journey_id, caption: gp.caption,
+    }))
+    .sort((a, b) => ((a.asset_id ?? '') < (b.asset_id ?? '') ? -1 : (a.asset_id ?? '') > (b.asset_id ?? '') ? 1 : 0));
 }
 
 describe('Tool: add_journey_provider_photos', () => {
@@ -393,7 +418,7 @@ describe('Tool: add_journey_provider_photos', () => {
       expect(data.added).toBe(2);
       expect(data.skipped).toBe(0);
 
-      const rows = entryPhotoRows(entry.id);
+      const rows = await entryPhotoRows(entry.id);
       expect(rows).toHaveLength(2);
       expect(rows.map(r => r.asset_id)).toEqual(['a1', 'a2']);
       expect(rows.every(r => r.provider === 'immich' && r.owner_id === user.id)).toBe(true);
@@ -414,11 +439,10 @@ describe('Tool: add_journey_provider_photos', () => {
       })) as any;
       expect(data.added).toBe(1);
 
-      const gallery = testDb.prepare(
-        'SELECT tp.asset_id, tp.provider FROM journey_photos gp JOIN trek_photos tp ON tp.id = gp.photo_id WHERE gp.journey_id = ?',
-      ).all(journey.id) as Array<Record<string, unknown>>;
+      const gallery = (await withTrekPhotos(await findRows(orm, JourneyPhotos, { journey: journey.id })))
+        .map(({ tp }) => ({ asset_id: tp.asset_id, provider: tp.provider }));
       expect(gallery).toEqual([{ asset_id: 'g1', provider: 'synologyphotos' }]);
-      expect(entryPhotoRows(entry.id)).toHaveLength(0);
+      expect(await entryPhotoRows(entry.id)).toHaveLength(0);
     });
   });
 
@@ -432,7 +456,7 @@ describe('Tool: add_journey_provider_photos', () => {
       const second = parseToolResult(await h.client.callTool({ name: 'add_journey_provider_photos', arguments: args })) as any;
       expect(second.added).toBe(0);
       expect(second.skipped).toBe(1);
-      expect(entryPhotoRows(entry.id)).toHaveLength(1);
+      expect(await entryPhotoRows(entry.id)).toHaveLength(1);
     });
   });
 
@@ -445,7 +469,7 @@ describe('Tool: add_journey_provider_photos', () => {
         name: 'add_journey_provider_photos',
         arguments: { journeyId: journey.id, entryId: entry.id, provider: 'immich', asset_ids: ['bf-1'] },
       });
-      const photoId = (testDb.prepare('SELECT id FROM trek_photos WHERE asset_id = ? AND owner_id = ?').get('bf-1', user.id) as { id: number }).id;
+      const photoId = (await findRow(orm, TrekPhotos, { asset_id: 'bf-1', owner: user.id }))?.id;
       expect(backfillRun).toHaveBeenCalledWith([photoId], user.id);
     });
   });
@@ -481,7 +505,7 @@ describe('Tool: add_journey_provider_photos', () => {
       });
       expect(result.isError).toBe(true);
       expect((result as any).content[0].text).toBe('Journey not found or access denied.');
-      expect(entryPhotoRows(entry.id)).toHaveLength(0);
+      expect(await entryPhotoRows(entry.id)).toHaveLength(0);
     });
   });
 
@@ -509,7 +533,7 @@ describe('Tool: add_journey_provider_photos', () => {
       });
       expect(result.isError).toBe(true);
       expect((result as any).content[0].text).toBe('Entry not found in this journey.');
-      expect(entryPhotoRows(foreignEntry.id)).toHaveLength(0);
+      expect(await entryPhotoRows(foreignEntry.id)).toHaveLength(0);
     });
   });
 
@@ -524,7 +548,7 @@ describe('Tool: add_journey_provider_photos', () => {
         arguments: { journeyId: journey.id, entryId: entry.id, provider: 'immich', asset_ids: ['x1'] },
       });
       expect(result.isError).toBe(true);
-      expect(entryPhotoRows(entry.id)).toHaveLength(0);
+      expect(await entryPhotoRows(entry.id)).toHaveLength(0);
     });
   });
 
@@ -541,7 +565,7 @@ describe('Tool: add_journey_provider_photos', () => {
         },
       });
       expect(result.isError).toBe(true);
-      expect(entryPhotoRows(entry.id)).toHaveLength(0);
+      expect(await entryPhotoRows(entry.id)).toHaveLength(0);
     });
   });
 
@@ -554,7 +578,7 @@ describe('Tool: add_journey_provider_photos', () => {
         arguments: { journeyId: journey.id, provider: 'local', asset_ids: ['x1'] },
       });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT COUNT(*) c FROM journey_photos').get()).toEqual({ c: 0 });
+      expect(await countRows(orm, JourneyPhotos)).toBe(0);
     });
   });
 

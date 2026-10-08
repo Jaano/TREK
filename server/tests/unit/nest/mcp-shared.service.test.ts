@@ -21,7 +21,12 @@ import { McpToolGuardsService } from '../../../src/nest/mcp-shared/mcp-tool-guar
 import { McpSharedModule } from '../../../src/nest/mcp-shared/mcp-shared.module';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, createTestUsersRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { deleteRows, updateRows } from '../../helpers/factories/rows';
+import { makeTrip } from '../../helpers/factories/trips';
+import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 let svc: McpToolGuardsService;
 beforeAll(async () => {
@@ -35,16 +40,16 @@ beforeAll(async () => {
   );
 });
 
-function createTrip(ownerId: number): number {
-  const r = testDb.prepare("INSERT INTO trips (user_id, title) VALUES (?, 'T')").run(ownerId);
-  return Number(r.lastInsertRowid);
+async function createTrip(ownerId: number): Promise<number> {
+  return (await makeTrip(await sharedTestOrm(testDb), ownerId, { title: 'T' })).id;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
-  testDb.prepare('DELETE FROM trip_members').run();
-  testDb.prepare('DELETE FROM trips').run();
-  testDb.prepare('DELETE FROM users').run();
+  const orm = await sharedTestOrm(testDb);
+  await deleteRows(orm, TripMembers);
+  await deleteRows(orm, Trips);
+  await deleteRows(orm, Users);
 });
 
 describe('hasTripPermission', () => {
@@ -56,22 +61,22 @@ describe('hasTripPermission', () => {
   it('GRD-002: the owner passes owner-level actions; a stranger does not', async () => {
     const { user: owner } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const tripId = createTrip(owner.id);
+    const tripId = await createTrip(owner.id);
     expect(await svc.hasTripPermission('trip_delete', tripId, owner.id)).toBe(true);
     expect(await svc.hasTripPermission('trip_delete', tripId, stranger.id)).toBe(false);
   });
 
   it('GRD-003: an unknown user falls back to the plain user role', async () => {
     const { user: owner } = createUser(testDb);
-    const tripId = createTrip(owner.id);
+    const tripId = await createTrip(owner.id);
     expect(await svc.hasTripPermission('trip_delete', tripId, 424242)).toBe(false);
   });
 
   it('GRD-004: a global admin passes regardless of membership', async () => {
     const { user: owner } = createUser(testDb);
     const { user: admin } = createUser(testDb);
-    testDb.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
-    const tripId = createTrip(owner.id);
+    await updateRows(await sharedTestOrm(testDb), Users, { id: admin.id }, { role: 'admin' });
+    const tripId = await createTrip(owner.id);
     expect(await svc.hasTripPermission('trip_delete', tripId, admin.id)).toBe(true);
   });
 });
@@ -80,7 +85,7 @@ describe('isAdminUser', () => {
   it('GRD-010: reflects the users.role column and is false for unknown ids', async () => {
     const { user } = createUser(testDb);
     expect(await svc.isAdminUser(user.id)).toBe(false);
-    testDb.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(user.id);
+    await updateRows(await sharedTestOrm(testDb), Users, { id: user.id }, { role: 'admin' });
     expect(await svc.isAdminUser(user.id)).toBe(true);
     expect(await svc.isAdminUser(424242)).toBe(false);
   });

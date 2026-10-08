@@ -3,7 +3,7 @@
  * public /api/shared/:token endpoints through the real JwtAuthGuard against a
  * temp SQLite db. ShareService runs its real SQL via DatabaseModule (the
  * DATABASE_CONNECTION factory picks up the mocked db singleton); trip access
- * resolves through a real-SQL canAccessTrip over the temp db. Only the
+ * resolves through the real repositories over the temp db. Only the
  * permission check and the photo-cache path lookup stay mocked. Focuses on
  * auth, trip-access 404, permission 403, the create-201-vs-update-200 split
  * and the unguarded public read.
@@ -20,14 +20,6 @@ vi.mock('../../src/db/database', async () => {
   const db = createSnapshotTestDb();
   return {
     db,
-    // Real-SQL trip access over the temp db — ShareService.verifyTripAccess and
-    // DatabaseModule both read the mocked singleton.
-    canAccessTrip: (tripId: number | string, userId: number) =>
-      db.prepare(`
-      SELECT t.id, t.user_id FROM trips t
-      LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-      WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-    `).get(userId, tripId, userId),
     isOwner: () => false,
     getPlaceWithTags: () => null,
     closeDb: () => {},
@@ -53,7 +45,14 @@ import { PlacePhotoCacheService } from '../../src/nest/place-photos/place-photo-
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+import { makeTrip } from '../helpers/factories/trips';
+import { findRow, insertRow } from '../helpers/factories/rows';
+import { Places } from '../../src/db/entities/Places.entity';
+import { ShareTokens } from '../../src/db/entities/ShareTokens.entity';
+
+let orm: TestOrm;
 
 describe('Share-link e2e (real auth guard + real SQL over temp SQLite)', () => {
   let server: Server;
@@ -75,31 +74,31 @@ describe('Share-link e2e (real auth guard + real SQL over temp SQLite)', () => {
   }
 
   beforeAll(async () => {
-    // seedUser() omits password_hash, which the real schema requires NOT NULL.
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user')",
-    ).run();
+    orm = await createTestOrm(db);
+    // Pinned id: sessionCookie(1) signs for exactly this user.
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test' });
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db.exec('DELETE FROM share_tokens');
     db.exec('DELETE FROM places');
     db.exec('DELETE FROM trip_members');
     db.exec('DELETE FROM trips');
-    tripId = Number(db.prepare('INSERT INTO trips (user_id, title) VALUES (1, ?)').run('Trip').lastInsertRowid);
+    tripId = (await makeTrip(orm, 1, { title: 'Trip' })).id;
     checkPermission.mockReturnValue(true);
     serveKey.mockReset();
   });
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   function tokenRow() {
-    return db.prepare('SELECT * FROM share_tokens WHERE trip_id = ?').get(tripId) as any;
+    return findRow(orm, ShareTokens, { trip: tripId });
   }
 
   it('401 without a session cookie', async () => {
@@ -109,7 +108,7 @@ describe('Share-link e2e (real auth guard + real SQL over temp SQLite)', () => {
   it('201 on first create, 200 on a subsequent update', async () => {
     const created = await request(server).post(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1)).send({ share_map: true });
     expect(created.status).toBe(201);
-    expect(created.body).toEqual({ token: tokenRow().token });
+    expect(created.body).toEqual({ token: (await tokenRow())?.token });
 
     const updated = await request(server).post(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1)).send({});
     expect(updated.status).toBe(200);
@@ -121,7 +120,7 @@ describe('Share-link e2e (real auth guard + real SQL over temp SQLite)', () => {
     const res = await request(server).post(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1)).send({});
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'No permission' });
-    expect(tokenRow()).toBeUndefined();
+    expect(await tokenRow()).toBeNull();
   });
 
   it('404 when the trip is not accessible', async () => {
@@ -134,12 +133,12 @@ describe('Share-link e2e (real auth guard + real SQL over temp SQLite)', () => {
     await request(server).post(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1)).send({ share_budget: true });
     const info = await request(server).get(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1));
     expect(info.status).toBe(200);
-    expect(info.body).toEqual(expect.objectContaining({ token: tokenRow().token, share_budget: true, share_packing: false }));
+    expect(info.body).toEqual(expect.objectContaining({ token: (await tokenRow())?.token, share_budget: true, share_packing: false }));
 
     const removed = await request(server).delete(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1));
     expect(removed.status).toBe(200);
     expect(removed.body).toEqual({ success: true });
-    expect(tokenRow()).toBeUndefined();
+    expect(await tokenRow()).toBeNull();
 
     const after = await request(server).get(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1));
     expect(after.body).toEqual({ token: null });
@@ -186,8 +185,7 @@ describe('Share-link e2e (real auth guard + real SQL over temp SQLite)', () => {
 
     it('streams cached bytes with no cookie (unguarded) for a valid token + place', async () => {
       const created = await request(server).post(`/api/trips/${tripId}/share-link`).set('Cookie', sessionCookie(1)).send({});
-      db.prepare('INSERT INTO places (trip_id, name, image_url) VALUES (?, ?, ?)')
-        .run(tripId, 'Louvre', '/api/maps/place-photo/ChIJabc/bytes');
+      await insertRow(orm, Places, { trip: tripId, name: 'Louvre', image_url: '/api/maps/place-photo/ChIJabc/bytes' });
       serveKey.mockReturnValueOnce(photoName);
       const res = await request(server).get(`/api/shared/${created.body.token}/place-photo/ChIJabc/bytes`);
       expect(res.status).toBe(200);

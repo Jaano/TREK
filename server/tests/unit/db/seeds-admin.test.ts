@@ -13,20 +13,25 @@
 import { AdminSeeder } from '../../../src/db/seeders/AdminSeeder';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow } from '../../helpers/factories/rows';
+import { makeAdmin } from '../../helpers/factories/users';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 import type Database from 'better-sqlite3';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 const ENV_KEYS = ['ADMIN_EMAIL', 'ADMIN_PASSWORD', 'DEMO_MODE', 'OIDC_ONLY', 'OIDC_ISSUER', 'OIDC_CLIENT_ID'];
 
-function countUsers(db: Database.Database): number {
-  return (db.prepare('SELECT COUNT(*) as c FROM users').get() as { c: number }).c;
+function countUsers(orm: TestOrm): Promise<number> {
+  return countRows(orm, Users);
 }
 
-function insertExistingUser(db: Database.Database): void {
-  db.prepare(
-    "INSERT INTO users (username, email, password_hash, role) VALUES ('admin', 'admin@trek.local', 'x', 'admin')",
-  ).run();
+async function insertExistingUser(orm: TestOrm): Promise<void> {
+  await makeAdmin(orm, { username: 'admin', email: 'admin@trek.local' });
+}
+
+function userByEmail(orm: TestOrm, email: string) {
+  return findRow(orm, Users, { email });
 }
 
 describe('AdminSeeder — first-run admin', () => {
@@ -61,36 +66,34 @@ describe('AdminSeeder — first-run admin', () => {
 
     await new AdminSeeder().run(t.em);
 
-    const user = db
-      .prepare('SELECT email, role, must_change_password FROM users WHERE email = ?')
-      .get('me@example.com') as { email: string; role: string; must_change_password: number } | undefined;
-    expect(user).toBeDefined();
+    const user = await userByEmail(t, 'me@example.com');
+    expect(user).not.toBeNull();
     expect(user!.role).toBe('admin');
     expect(user!.must_change_password).toBe(1);
     expect(warn).not.toHaveBeenCalled();
   });
 
   it('warns and creates nothing when ADMIN_* is set but a user already exists', async () => {
-    insertExistingUser(db);
+    await insertExistingUser(t);
     process.env.ADMIN_EMAIL = 'new@example.com';
     process.env.ADMIN_PASSWORD = 'whatever';
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await new AdminSeeder().run(t.em);
 
-    expect(countUsers(db)).toBe(1);
-    expect(db.prepare('SELECT 1 FROM users WHERE email = ?').get('new@example.com')).toBeUndefined();
+    expect(await countUsers(t)).toBe(1);
+    expect(await userByEmail(t, 'new@example.com')).toBeNull();
     const msg = warn.mock.calls.map((c) => c.join(' ')).join('\n');
     expect(msg).toContain('only apply on first run');
   });
 
   it('stays silent when no admin env is set and a user already exists', async () => {
-    insertExistingUser(db);
+    await insertExistingUser(t);
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await new AdminSeeder().run(t.em);
 
-    expect(countUsers(db)).toBe(1);
+    expect(await countUsers(t)).toBe(1);
     expect(warn).not.toHaveBeenCalled();
   });
 
@@ -101,8 +104,8 @@ describe('AdminSeeder — first-run admin', () => {
     await new AdminSeeder().run(t.em);
 
     // Falls back to the default local admin, NOT the provided email.
-    expect(db.prepare('SELECT 1 FROM users WHERE email = ?').get('admin@trek.local')).toBeDefined();
-    expect(db.prepare('SELECT 1 FROM users WHERE email = ?').get('me@example.com')).toBeUndefined();
+    expect(await userByEmail(t, 'admin@trek.local')).not.toBeNull();
+    expect(await userByEmail(t, 'me@example.com')).toBeNull();
     const msg = warn.mock.calls.map((c) => c.join(' ')).join('\n');
     expect(msg).toContain('Only one of ADMIN_EMAIL/ADMIN_PASSWORD');
   });

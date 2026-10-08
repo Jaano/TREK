@@ -11,6 +11,12 @@ import { GoogleApiUsage } from '../../../src/db/entities/GoogleApiUsage.entity';
 import type { GoogleApiUsageRepository } from '../../../src/db/repositories/GoogleApiUsage.repository';
 import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
 import { createTestAppSettingsRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { countRows, deleteRows, findRow, insertRow, insertRows } from '../../helpers/factories/rows';
+import { readAppSetting } from '../../helpers/factories/settings';
+import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
+
+/** The UTC calendar day `days` before today, the text SQLite's date('now', '-N days') gives. */
+const utcDaysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 
 /** GQUOTA-001..007 — the daily ceiling on Google API calls (#1582). */
 
@@ -24,9 +30,9 @@ describe('GoogleQuotaService', () => {
     usage = (await sharedTestOrm(db)).repo(GoogleApiUsage);
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db.exec('DELETE FROM google_api_usage');
-    db.prepare('DELETE FROM app_settings WHERE key = ?').run(GOOGLE_DAILY_LIMIT_SETTING);
+    await deleteRows(await sharedTestOrm(db), AppSettings, { key: GOOGLE_DAILY_LIMIT_SETTING });
     // A fresh service per case, so the once-a-day warning state starts clean.
     quota = new GoogleQuotaService(appSettings, usage);
   });
@@ -57,29 +63,32 @@ describe('GoogleQuotaService', () => {
 
   it('GQUOTA-003: yesterday does not count against today', async () => {
     await quota.setDailyLimit(1);
-    db.prepare("INSERT INTO google_api_usage (day, calls) VALUES (date('now', '-1 day'), 50)").run();
+    await insertRow(await sharedTestOrm(db), GoogleApiUsage, { day: utcDaysAgo(1), calls: 50 });
     expect(await quota.usedToday()).toBe(0);
     expect(await quota.exhausted()).toBe(false);
   });
 
   it('GQUOTA-004: 0 and null remove the ceiling', async () => {
     await quota.setDailyLimit(10);
-    expect(db.prepare('SELECT value FROM app_settings WHERE key = ?').get(GOOGLE_DAILY_LIMIT_SETTING)).toEqual({ value: '10' });
+    expect(await readAppSetting(await sharedTestOrm(db), GOOGLE_DAILY_LIMIT_SETTING)).toBe('10');
     expect((await quota.setDailyLimit(0)).daily_limit).toBeNull();
     await quota.setDailyLimit(10);
     expect((await quota.setDailyLimit(null)).daily_limit).toBeNull();
-    expect(db.prepare('SELECT value FROM app_settings WHERE key = ?').get(GOOGLE_DAILY_LIMIT_SETTING)).toBeUndefined();
+    expect(await findRow(await sharedTestOrm(db), AppSettings, { key: GOOGLE_DAILY_LIMIT_SETTING })).toBeNull();
   });
 
   it('GQUOTA-005: a stored value that is not a positive number means no ceiling', async () => {
-    db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run(GOOGLE_DAILY_LIMIT_SETTING, 'lots');
+    await insertRow(await sharedTestOrm(db), AppSettings, { key: GOOGLE_DAILY_LIMIT_SETTING, value: 'lots' });
     expect(await quota.dailyLimit()).toBeNull();
   });
 
   it('GQUOTA-006: the status prunes days past the retention window', async () => {
-    db.prepare("INSERT INTO google_api_usage (day, calls) VALUES (date('now', '-500 days'), 9), (date('now', '-10 days'), 4)").run();
+    await insertRows(await sharedTestOrm(db), GoogleApiUsage, [
+      { day: utcDaysAgo(500), calls: 9 },
+      { day: utcDaysAgo(10), calls: 4 },
+    ]);
     await quota.status();
-    expect(db.prepare('SELECT COUNT(*) AS n FROM google_api_usage').get()).toEqual({ n: 1 });
+    expect(await countRows(await sharedTestOrm(db), GoogleApiUsage)).toBe(1);
   });
 
   it('GQUOTA-007: raising the ceiling reopens the day at once', async () => {

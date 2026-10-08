@@ -15,6 +15,8 @@ import { AssignmentParticipants } from '../../../../src/db/entities/AssignmentPa
 import type { AssignmentParticipantsRepository } from '../../../../src/db/repositories/AssignmentParticipants.repository';
 import { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
 import { withRequestContext } from '../../../../src/nest/database/request-context';
+import { Users } from '../../../../src/db/entities/Users.entity';
+import { findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -29,8 +31,12 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function addParticipant(assignmentId: number, userId: number): void {
-  testDb.prepare('INSERT INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)').run(assignmentId, userId);
+async function addParticipant(assignmentId: number, userId: number): Promise<void> {
+  await insertRow(t, AssignmentParticipants, { assignment: assignmentId, user: userId });
+}
+
+async function participantUserIds(assignmentId: number) {
+  return (await findRows(t, AssignmentParticipants, { assignment: assignmentId })).map((r) => ({ user_id: r.user_id }));
 }
 
 async function withQueryCount<T>(fn: () => Promise<T>): Promise<{ value: T; queries: number }> {
@@ -54,12 +60,12 @@ describe('AssignmentParticipantsRepository.listForAssignments', () => {
   it('ASSIGNPARTREPO-002: joins the user\'s username/avatar, with NO COALESCE(display_name, username) — raw username only', async () => {
     const { user: owner } = createUser(testDb);
     const { user: participant } = createUser(testDb, { username: 'raw-username' });
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('A Display Name', participant.id);
+    await updateRows(t, Users, { id: participant.id }, { display_name: 'A Display Name' });
     const trip = createTrip(testDb, owner.id);
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(assignment.id, participant.id);
+    await addParticipant(assignment.id, participant.id);
 
     const rows = await participants.listForAssignments([assignment.id]);
     expect(rows).toEqual([{ assignment_id: assignment.id, user_id: participant.id, username: 'raw-username', avatar: null }]);
@@ -75,8 +81,8 @@ describe('AssignmentParticipantsRepository.listForAssignments', () => {
     const placeB = createPlace(testDb, trip.id, { name: 'B' });
     const a1 = createDayAssignment(testDb, day.id, placeA.id);
     const a2 = createDayAssignment(testDb, day.id, placeB.id);
-    addParticipant(a1.id, p1.id);
-    addParticipant(a2.id, p2.id);
+    await addParticipant(a1.id, p1.id);
+    await addParticipant(a2.id, p2.id);
 
     const rows = await participants.listForAssignments([a1.id, a2.id]);
     expect(rows.map((r) => r.assignment_id).sort()).toEqual([a1.id, a2.id].sort());
@@ -110,7 +116,7 @@ describe('AssignmentParticipantsRepository.listForAssignments', () => {
     // nothing here, but the mechanical fix is applied uniformly rather than
     // singled out.
     await t.repo(AssignmentParticipants).find({}, { disableIdentityMap: false }); // populate the identity map with an unrelated (empty) read
-    addParticipant(assignment.id, participant.id);
+    await addParticipant(assignment.id, participant.id);
     const rows = await participants.listForAssignments([assignment.id]);
     expect(rows).toEqual([{ assignment_id: assignment.id, user_id: participant.id, username: 'fresh-participant', avatar: null }]);
   });
@@ -125,6 +131,7 @@ describe('AssignmentParticipantsRepository.listForAssignments', () => {
 
 /** The AS2/AS15/AS31 statement, run raw — the parity oracle every assertion below is checked against. */
 function legacyParticipantRows(assignmentId: number): unknown {
+  // test-sql-allow: the legacy statement is this parity test's oracle and has to run as written.
   return testDb.prepare(`
     SELECT ap.user_id, COALESCE(u.display_name, u.username) AS username, u.avatar
     FROM assignment_participants ap
@@ -141,7 +148,7 @@ describe('AssignmentParticipantsRepository.listWithDisplayName (AS2/AS15/AS31)',
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(assignment.id, participant.id);
+    await addParticipant(assignment.id, participant.id);
 
     const rows = await participants.listWithDisplayName(assignment.id);
     expect(rows).toStrictEqual(legacyParticipantRows(assignment.id));
@@ -151,14 +158,14 @@ describe('AssignmentParticipantsRepository.listWithDisplayName (AS2/AS15/AS31)',
   it('ASSIGNPARTREPO-007: username COALESCEs display_name over username, when set', async () => {
     const { user: owner } = createUser(testDb);
     const { user: withDisplayName } = createUser(testDb, { username: 'raw-username' });
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Fancy Name', withDisplayName.id);
+    await updateRows(t, Users, { id: withDisplayName.id }, { display_name: 'Fancy Name' });
     const { user: withoutDisplayName } = createUser(testDb, { username: 'plain-username' });
     const trip = createTrip(testDb, owner.id);
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(assignment.id, withDisplayName.id);
-    addParticipant(assignment.id, withoutDisplayName.id);
+    await addParticipant(assignment.id, withDisplayName.id);
+    await addParticipant(assignment.id, withoutDisplayName.id);
 
     const rows = await participants.listWithDisplayName(assignment.id);
     expect(rows).toEqual(expect.arrayContaining([
@@ -189,7 +196,7 @@ describe('AssignmentParticipantsRepository.listWithDisplayName (AS2/AS15/AS31)',
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
     await t.repo(AssignmentParticipants).find({}, { disableIdentityMap: false });
-    addParticipant(assignment.id, participant.id);
+    await addParticipant(assignment.id, participant.id);
     const rows = await participants.listWithDisplayName(assignment.id);
     expect(rows).toEqual([{ user_id: participant.id, username: 'fresh-participant-2', avatar: null }]);
   });
@@ -205,8 +212,8 @@ describe('AssignmentParticipantsRepository.deleteForAssignment / insertIgnore (A
     const place = createPlace(testDb, trip.id);
     const a1 = createDayAssignment(testDb, day.id, place.id);
     const a2 = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(a1.id, p1.id);
-    addParticipant(a2.id, p2.id);
+    await addParticipant(a1.id, p1.id);
+    await addParticipant(a2.id, p2.id);
 
     await withRequestContext(t.orm, async () => {
       await participants.deleteForAssignment(a1.id);
@@ -228,7 +235,7 @@ describe('AssignmentParticipantsRepository.deleteForAssignment / insertIgnore (A
       await participants.insertIgnore(assignment.id, [p1.id, p1.id]);
     });
 
-    const rows = testDb.prepare('SELECT user_id FROM assignment_participants WHERE assignment_id = ?').all(assignment.id);
+    const rows = await participantUserIds(assignment.id);
     expect(rows).toEqual([{ user_id: p1.id }]);
   });
 
@@ -240,7 +247,7 @@ describe('AssignmentParticipantsRepository.deleteForAssignment / insertIgnore (A
     const place = createPlace(testDb, trip.id);
     const a1 = createDayAssignment(testDb, day.id, place.id);
     const a2 = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(a1.id, shared.id);
+    await addParticipant(a1.id, shared.id);
 
     await withRequestContext(t.orm, async () => {
       await participants.insertIgnore(a2.id, [shared.id]);
@@ -271,7 +278,7 @@ describe('AssignmentParticipantsRepository.deleteForAssignment / insertIgnore (A
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(assignment.id, p1.id);
+    await addParticipant(assignment.id, p1.id);
 
     let caught: unknown;
     try {
@@ -285,7 +292,7 @@ describe('AssignmentParticipantsRepository.deleteForAssignment / insertIgnore (A
     } catch (e) { caught = e; }
     expect((caught as Error).message).toBe('force rollback');
 
-    const rows = testDb.prepare('SELECT user_id FROM assignment_participants WHERE assignment_id = ?').all(assignment.id);
+    const rows = await participantUserIds(assignment.id);
     expect(rows).toEqual([{ user_id: p1.id }]);
   });
 });
@@ -302,13 +309,13 @@ describe('AssignmentParticipantsRepository.listForTrip (TP53)', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(assignment.id, p1.id);
-    addParticipant(assignment.id, p2.id);
+    await addParticipant(assignment.id, p1.id);
+    await addParticipant(assignment.id, p2.id);
 
     const otherDay = createDay(testDb, other.id);
     const otherPlace = createPlace(testDb, other.id);
     const otherAssignment = createDayAssignment(testDb, otherDay.id, otherPlace.id);
-    addParticipant(otherAssignment.id, p1.id);
+    await addParticipant(otherAssignment.id, p1.id);
 
     const rows = await participants.listForTrip(trip.id);
     expect(rows.map((r) => r.user_id).sort((a, b) => a - b)).toEqual([p1.id, p2.id].sort((a, b) => a - b));
