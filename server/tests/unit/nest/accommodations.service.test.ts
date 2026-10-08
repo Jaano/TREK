@@ -42,7 +42,7 @@ import { AccommodationsModule } from '../../../src/nest/accommodations/accommoda
 import { AccommodationsDomainModule } from '../../../src/nest/accommodations/accommodations-domain.module';
 import { AccommodationsController } from '../../../src/nest/accommodations/accommodations.controller';
 import { expectRegisteredProvider, expectRegisteredController } from '../../helpers/module-providers';
-import { createTestUnitOfWork, createTestAppSettingsRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestReservationsRepo } from '../../helpers/test-uow';
 
 // Named `svc` so the moved cases read exactly as they did on DaysService.
 let svc: Awaited<ReturnType<typeof makeAccommodationsService>>;
@@ -177,6 +177,23 @@ describe('getAccommodation', () => {
 });
 
 describe('updateAccommodation', () => {
+  it('DAY-SVC-TX-001: a failing booking sync rolls the stay edit back with it', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    const place = createPlace(testDb, trip.id, { name: 'Hotel' });
+    await svc.createAccommodation(trip.id, { place_id: place.id, start_day_id: day.id, end_day_id: day.id, check_in: '14:00' });
+    const { id } = testDb.prepare('SELECT id FROM day_accommodations WHERE trip_id = ?').get(trip.id) as { id: number };
+    const existing = (await svc.getAccommodation(id, trip.id))!;
+    const reservations = await createTestReservationsRepo(testDb);
+    const spy = vi.spyOn(reservations, 'setMetadataAndConfirmation').mockRejectedValueOnce(new Error('boom'));
+
+    await expect(svc.updateAccommodation(id, existing, { check_in: '18:00' })).rejects.toThrow('boom');
+
+    expect(testDb.prepare('SELECT check_in FROM day_accommodations WHERE id = ?').get(id)).toEqual({ check_in: '14:00' });
+    spy.mockRestore();
+  });
+
   it('DAY-SVC-023 — updates check-in and check-out times', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);

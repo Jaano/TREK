@@ -16,6 +16,7 @@ import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
 import { Users } from '../../db/entities/Users.entity';
 import type { UsersRepository } from '../../db/repositories/Users.repository';
+import { UnitOfWork } from '../database/unit-of-work';
 
 /**
  * Thin wrapper around the enabled-addons + photo-provider read that the legacy
@@ -45,6 +46,7 @@ export class AddonsService {
     @InjectRepository(PhotoProviderFields) private readonly photoProviderFields: PhotoProviderFieldsRepository,
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
     @InjectRepository(Users) private readonly users: UsersRepository,
+    private readonly uow: UnitOfWork,
   ) {}
 
   async isAddonEnabled(addonId: string): Promise<boolean> {
@@ -88,13 +90,7 @@ export class AddonsService {
     };
   }
 
-  /**
-   * Ruling (plan §"Do not fix legacy behaviour"): the legacy handler wrote up
-   * to 5 `app_settings` rows one at a time, with no transaction around them —
-   * this stays exactly that way. `AppSettingsRepository.setValue` imposes no
-   * transaction of its own (Task 0 concern #5), so the loop below is still 0
-   * to 5 independent, individually-committed upserts.
-   */
+  /** Up to five `app_settings` rows, written together: a save lands whole or not at all. */
   async updateCollabFeatures(features: { chat?: boolean; notes?: boolean; links?: boolean; polls?: boolean; whatsnext?: boolean }) {
     const mapping: Record<string, string> = {
       chat: 'collab_chat_enabled',
@@ -104,10 +100,12 @@ export class AddonsService {
       whatsnext: 'collab_whatsnext_enabled',
     };
     const before = await this.getCollabFeatures();
-    for (const [feat, key] of Object.entries(mapping)) {
-      const value = features[feat as keyof typeof features];
-      if (value !== undefined) await this.appSettings.setValue(key, value ? 'true' : 'false');
-    }
+    await this.uow.transactional(async () => {
+      for (const [feat, key] of Object.entries(mapping)) {
+        const value = features[feat as keyof typeof features];
+        if (value !== undefined) await this.appSettings.setValue(key, value ? 'true' : 'false');
+      }
+    });
     const after = await this.getCollabFeatures();
     // Collab flags gate MCP tool/resource registration, so callers must know
     // whether anything actually flipped — a no-op save must not tear down every

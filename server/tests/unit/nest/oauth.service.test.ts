@@ -56,6 +56,7 @@ function makePkce() {
 }
 
 import { OauthService } from '../../../src/nest/oauth/oauth.service';
+import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { AuditService } from '../../../src/nest/audit/audit.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import { getMcpSafeUrl } from '../../../src/app-config';
@@ -119,7 +120,7 @@ beforeAll(async () => {
   clientsRepo = t.repo(OauthClients);
   tokensRepo = t.repo(OauthTokens);
   consentsRepo = t.repo(OauthConsents);
-  svc = new OauthService(clientsRepo, tokensRepo, consentsRepo, addonsStub, new AuditService(auditLogRepo, usersRepo));
+  svc = new OauthService(clientsRepo, tokensRepo, consentsRepo, addonsStub, new AuditService(auditLogRepo, usersRepo), new UnitOfWork(t.em));
 });
 
 beforeEach(() => {
@@ -490,6 +491,21 @@ describe('refreshTokens', () => {
     expect(result.error).toBeUndefined();
     expect(result.tokens).toBeDefined();
     expect(result.tokens!.access_token.startsWith('trekoa_')).toBe(true);
+  });
+
+  it('revoking the old pair and issuing the new one are one write: a failing issue keeps the old pair', async () => {
+    const { user } = createUser(testDb);
+    const created = await makeClient(user.id);
+    const clientId = created.client!.client_id as string;
+    const rawSecret = created.client!.client_secret as string;
+
+    const { access_token, refresh_token } = await issueTokens(clientId, user.id, ['trips:read']);
+    const spy = vi.spyOn(tokensRepo, 'insertToken').mockRejectedValueOnce(new Error('disk full'));
+    await expect(refreshTokens(refresh_token, clientId, rawSecret)).rejects.toThrow('disk full');
+    spy.mockRestore();
+
+    // Before, the old pair was already revoked here and the client logged out.
+    expect(await getUserByAccessToken(access_token)).not.toBeNull();
   });
 
   it('old tokens are revoked after refresh (rotation)', async () => {
@@ -1308,7 +1324,7 @@ describe('module-scoped OAuth state', () => {
       codeChallengeMethod: 'S256',
     }))!;
 
-    const secondInstance = new OauthService(clientsRepo, tokensRepo, consentsRepo, addonsStub, new AuditService(auditLogRepo, usersRepo));
+    const secondInstance = new OauthService(clientsRepo, tokensRepo, consentsRepo, addonsStub, new AuditService(auditLogRepo, usersRepo), new UnitOfWork(t.em));
     expect((await secondInstance.consumeAuthCode(code))?.userId).toBe(42);
   });
 });

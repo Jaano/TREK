@@ -7,17 +7,17 @@
   "src/db/repositories/Users.repository.ts": 1710,
   "src/nest/atlas/atlas-geo.ts": 1005,
   "src/nest/atlas/atlas.service.ts": 1182,
-  "src/nest/auth/auth.service.ts": 1166,
+  "src/nest/auth/auth.service.ts": 1165,
   "src/nest/budget/budget.service.ts": 1703,
   "src/nest/collections/collections.service.ts": 1488,
   "src/nest/doc-sync/doc-sync.service.ts": 1060,
   "src/nest/doc-sync/providers/synology-drive.client.ts": 1160,
   "src/nest/journey/journey-domain.service.ts": 1804,
   "src/nest/maps/maps.service.ts": 3252,
-  "src/nest/places/places.service.ts": 2022,
+  "src/nest/places/places.service.ts": 2020,
   "src/nest/plugins/plugin-runtime.service.ts": 1463,
   "src/nest/plugins/runtime/plugin-sdk.ts": 1094,
   "src/nest/reservations/reservations.service.ts": 1248,
-  "src/nest/trips/trips.service.ts": 1014,
-  "src/nest/vacay/vacay.service.ts": 1442
+  "src/nest/trips/trips.service.ts": 1013,
+  "src/nest/vacay/vacay.service.ts": 1440
 }

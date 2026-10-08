@@ -793,6 +793,23 @@ describe('findOrCreateUser', () => {
     expect(row.avatar).toBeNull();
   });
 
+  it('OIDC-SVC-062: the identity switch and the avatar are one write: a failing avatar keeps the old link', async () => {
+    const { user } = createUser(testDb, { email: 'switch4@example.com' });
+    testDb.prepare('UPDATE users SET oidc_sub = ?, oidc_issuer = ?, avatar = ? WHERE id = ?')
+      .run('sub-old-4', 'https://old-idp.example.com', 'https://old-idp.example.com/u/me.png', user.id);
+    const users = await createTestUsersRepo(testDb);
+    const spy = vi.spyOn(users, 'setAvatarRaw').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(svc.findOrCreateUser(
+      { sub: 'sub-new-4', email: 'switch4@example.com', name: 'Switcher', email_verified: true },
+      { ...MOCK_CONFIG, issuer: 'https://new-idp.example.com' },
+    )).rejects.toThrow('disk full');
+
+    expect(testDb.prepare('SELECT oidc_sub, oidc_issuer FROM users WHERE id = ?').get(user.id))
+      .toEqual({ oidc_sub: 'sub-old-4', oidc_issuer: 'https://old-idp.example.com' });
+    spy.mockRestore();
+  });
+
   it('OIDC-SVC-061: an uploaded avatar survives the same switch', async () => {
     const { user } = createUser(testDb, { email: 'switch2@example.com' });
     // A local upload is a bare filename, not a URL, and belongs to the user.

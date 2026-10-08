@@ -130,13 +130,16 @@ export class UnifiedMemoriesService {
       return providerResult as ServiceResult<boolean>;
     }
     try {
-      const photoId = await this.photos.getOrCreate(provider, assetId, userId, passphrase);
-      const added = await this.tripPhotos.insertIgnore({
-        trip_id: tripId,
-        user_id: userId,
-        photo_id: photoId,
-        shared: shared ? 1 : 0,
-        album_link_id: albumLinkId || null,
+      // The photo row and its trip link together: no registered photo without its link.
+      const added = await this.uow.transactional(async () => {
+        const photoId = await this.photos.getOrCreate(provider, assetId, userId, passphrase);
+        return await this.tripPhotos.insertIgnore({
+          trip_id: tripId,
+          user_id: userId,
+          photo_id: photoId,
+          shared: shared ? 1 : 0,
+          album_link_id: albumLinkId || null,
+        });
       });
       return success(added);
     }
@@ -222,9 +225,10 @@ export class UnifiedMemoriesService {
     }
 
     try {
-      await this.tripPhotos.deleteForUserPhoto(tripId, userId, photoId);
-
-      await this.photos.deleteIfOrphan(photoId);
+      await this.uow.transactional(async () => {
+        await this.tripPhotos.deleteForUserPhoto(tripId, userId, photoId);
+        await this.photos.deleteIfOrphan(photoId);
+      });
       this.realtime.broadcast(tripId, 'memories:updated', { userId }, sid);
 
       return success(true);
@@ -292,11 +296,8 @@ export class UnifiedMemoriesService {
       await this.uow.transactional(async () => {
         await this.tripPhotos.deleteForAlbumLink(tripId, linkId);
         await this.tripAlbumLinks.deleteScoped(linkId, tripId, userId);
+        for (const photo_id of linkedPhotoIds) await this.photos.deleteIfOrphan(photo_id);
       });
-
-      for (const photo_id of linkedPhotoIds) {
-        await this.photos.deleteIfOrphan(photo_id);
-      }
 
       return success(true);
     } catch (error) {

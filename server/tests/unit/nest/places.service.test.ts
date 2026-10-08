@@ -269,6 +269,19 @@ describe('create', () => {
     expect(Array.isArray(place.tags)).toBe(true);
   });
 
+  it('PLACE-SVC-007b: the place and its tags are one write: a failing tag insert leaves no place', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const tag = createTag(testDb, user.id, { name: 'Highlight' });
+    const tags = await createTestTagsRepo(testDb);
+    const spy = vi.spyOn(tags, 'insertIgnore').mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(svc.create(String(trip.id), { name: 'Half Place', tags: [tag.id] })).rejects.toThrow('disk full');
+
+    expect(testDb.prepare("SELECT id FROM places WHERE name = 'Half Place'").all()).toEqual([]);
+    spy.mockRestore();
+  });
+
   it('PLACE-SVC-008 — creates a place with tags', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);

@@ -27,6 +27,7 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { AddonsService } from '../../../src/nest/addons/addons.service';
+import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { PlaceShadowService } from '../../../src/nest/place-shadow/place-shadow.service';
 import { Addons } from '../../../src/db/entities/Addons.entity';
 import type { AddonsRepository } from '../../../src/db/repositories/Addons.repository';
@@ -169,7 +170,7 @@ beforeEach(() => {
   t.clear();
   getPhotoProviderConfig.mockReset();
   getPhotoProviderConfig.mockReturnValue({});
-  svc = new AddonsService(addonsRepo, photoProvidersRepo, photoProviderFieldsRepo, appSettingsRepo, usersRepo);
+  svc = new AddonsService(addonsRepo, photoProvidersRepo, photoProviderFieldsRepo, appSettingsRepo, usersRepo, new UnitOfWork(t.em));
 });
 
 afterEach(() => {
@@ -413,6 +414,19 @@ describe('AddonsService addon/feature flags', () => {
     expect(third.changed).toBe(false);
     expect(setValueSpy).not.toHaveBeenCalled();
 
+    setValueSpy.mockRestore();
+  });
+
+  it('updateCollabFeatures saves the flags together: a failing second write keeps the first one off disk', async () => {
+    const setValue = appSettingsRepo.setValue.bind(appSettingsRepo);
+    const setValueSpy = vi.spyOn(appSettingsRepo, 'setValue')
+      .mockImplementationOnce(setValue)
+      .mockRejectedValueOnce(new Error('disk full'));
+
+    await expect(svc.updateCollabFeatures({ chat: false, notes: false })).rejects.toThrow('disk full');
+
+    expect(rawAppSetting('collab_chat_enabled')?.value).not.toBe('false');
+    expect(await svc.getCollabFeatures()).toEqual({ chat: true, notes: true, links: true, polls: true, whatsnext: true });
     setValueSpy.mockRestore();
   });
 });

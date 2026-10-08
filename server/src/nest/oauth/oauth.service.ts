@@ -21,6 +21,7 @@ import { OauthTokens } from '../../db/entities/OauthTokens.entity';
 import type { OauthTokenRefreshRow, OauthTokensRepository } from '../../db/repositories/OauthTokens.repository';
 import { OauthConsents } from '../../db/entities/OauthConsents.entity';
 import type { OauthConsentsRepository } from '../../db/repositories/OauthConsents.repository';
+import { UnitOfWork } from '../database/unit-of-work';
 import {
   ACCESS_TOKEN_TTL_S,
   CODE_CHALLENGE_RE,
@@ -89,6 +90,7 @@ export class OauthService {
     @InjectRepository(OauthConsents) private readonly consents: OauthConsentsRepository,
     private readonly addons: AddonsService,
     private readonly audit: AuditService,
+    private readonly uow: UnitOfWork,
     private readonly pendingCodes: PendingCodeStore = pendingCodesSlot.get(),
   ) {}
 
@@ -202,10 +204,12 @@ export class OauthService {
     const rawSecret  = 'trekcs_' + randomBytes(24).toString('hex');
     const secretHash = hashToken(rawSecret);
 
-    await this.clients.updateSecretHash(clientRowId, secretHash);
-
-    // Revoke all existing tokens for this client so old sessions are invalidated
-    await this.tokens.revokeAllForClient(row.client_id);
+    // The new secret and the revocation of every token issued under the old one
+    // land together, so a failure never leaves old sessions alive on a new secret.
+    await this.uow.transactional(async () => {
+      await this.clients.updateSecretHash(clientRowId, secretHash);
+      await this.tokens.revokeAllForClient(row.client_id);
+    });
 
     // Terminate active MCP sessions for this (user, client) pair
     revokeUserSessionsForClient(userId, row.client_id);
@@ -499,14 +503,12 @@ export class OauthService {
     // request. Killing the session on every routine hourly refresh broke long-lived
     // MCP connections (#1475).
     //
-    // Stays NON-transactional with the issueTokens() call below — legacy
-    // parity (Task 4 brief ruling, §9.6 of the inventory): revoke-old then
-    // issue-new are two separate statements, not one transaction. A crash
-    // between the two would leave the old token revoked with no successor —
-    // the same window the legacy code always had.
-    await this.tokens.revokeById(row.id);
-
-    const tokens = await this.issueTokens(clientId, row.user_id, JSON.parse(row.scopes), row.id, row.audience ?? null);
+    // Revoke-old and issue-new are one transaction: a failure between the two used
+    // to leave the old token revoked with no successor, logging the client out.
+    const tokens = await this.uow.transactional(async () => {
+      await this.tokens.revokeById(row.id);
+      return await this.issueTokens(clientId, row.user_id, JSON.parse(row.scopes), row.id, row.audience ?? null);
+    });
     await this.audit.writeAudit({ userId: row.user_id, action: 'oauth.token.refresh', details: { client_id: clientId }, ip });
 
     return { tokens };

@@ -370,21 +370,16 @@ export class NotificationPreferencesService {
       }
     }
 
-    // Apply global prefs outside the transaction (they write to app_settings).
-    // Mixed atomicity, preserved as-is (plan3f-sql-inventory.md §4b's flag, R10):
-    // these are single-key upserts with no cross-row invariant, so a partial
-    // failure here is low-risk — widening this into the transaction below is a
-    // ruling this task does not make on its own.
-    for (const [eventType, channels] of Object.entries(globalPrefs)) {
-      if (!channels) continue;
-      for (const [channel, enabled] of Object.entries(channels)) {
-        if (!isAdminGlobalChannel(channel)) continue;
-        await this.setAdminGlobalPref(eventType as NotifEventType, channel, enabled);
-      }
-    }
-
-    // Apply per-user (inapp) prefs in a transaction
+    // The global rows (app_settings) and the admin's own in-app rows are one save:
+    // a failure halfway used to keep the email/webhook half of a form.
     await this.uow.transactional(async () => {
+      for (const [eventType, channels] of Object.entries(globalPrefs)) {
+        if (!channels) continue;
+        for (const [channel, enabled] of Object.entries(channels)) {
+          if (!isAdminGlobalChannel(channel)) continue;
+          await this.setAdminGlobalPref(eventType as NotifEventType, channel, enabled);
+        }
+      }
       await this.applyUserChannelPrefs(userId, userPrefs);
     });
   }

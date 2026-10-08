@@ -209,27 +209,13 @@ function parseAsUtcMillis(value: string): number {
  * legacy lazy require sat in; notifications stay fire-and-forget dynamic
  * imports.
  *
- * Post-migration fixes on top of the relocated legacy behavior: the
- * multi-statement writes (acceptInvite, dissolvePlan, deleteYear, updatePlan's
- * carry-over recompute) run in uow.transactional(); every outbound fetch carries
- * an AbortSignal timeout and the nager.at responses are ok-checked;
- * applyHolidayCalendars honors the cache TTL; addYear no longer swallows real
- * errors; the holiday cache is instance state instead of a module-level map.
- * All consumers are in-container since the trip fold (TripsService injects
- * this class); vacay.bridge.ts was deleted with its last outside-container
- * consumer.
+ * Multi-statement writes run in uow.transactional(), never around the
+ * nager.at fetch (timed out and ok-checked, cached per instance for the TTL);
+ * addYear does not swallow real errors. TripsService injects this class.
  *
- * R6 (this task): `removeShare`/`setShareHidden` no longer read an UNSCOPED
- * `vacay_shares` row and check ownership in JS — `VacaySharesRepository
- * .findScopedForRemoval`/`.findScopedForHide` scope the SAME two checks IN
- * the SQL statement itself (two distinct methods, not one with a mode flag —
- * see that repository's docstrings). Behaviorally identical to the legacy
- * shape on every input (the JS check ran before any mutation either way),
- * flagged as a genuine SQL-shape tightening per the plan's "For the user"
- * note. `getStats` (VC126) now wraps its per-request carry-over write in
- * `uow.transactional`, matching every OTHER multi-row write loop in this
- * file (plan3f-inputs.md correction #7's "wrap it, flag it" default) —
- * flagged here rather than left silently un-transacted either way.
+ * `removeShare`/`setShareHidden` scope their ownership check in the SQL
+ * itself (`VacaySharesRepository.findScopedForRemoval`/`.findScopedForHide`),
+ * and `getStats` writes its per-request carry-over in `uow.transactional`.
  */
 @Injectable()
 export class VacayService {
@@ -382,19 +368,28 @@ export class VacayService {
   // Plan management
   // -------------------------------------------------------------------------
 
+  /**
+   * The caller's own plan, created with its first year, allowance and colour on
+   * first use, in one transaction whose second look keeps two first requests
+   * from creating two plans.
+   * @txStandalone an idempotent lazy provision, whatever the caller does next.
+   */
   async getOwnPlan(userId: number): Promise<VacayPlan> {
-    let plan = await this.plans.findByOwner(userId);
-    if (!plan) {
+    const existing = await this.plans.findByOwner(userId);
+    if (existing) return existing;
+    return await this.uow.transactional(async () => {
+      const raced = await this.plans.findByOwner(userId);
+      if (raced) return raced;
       await this.plans.insertForOwner(userId);
-      plan = (await this.plans.findByOwner(userId))!;
+      const plan = (await this.plans.findByOwner(userId))!;
       // Seed the period today falls into — with a shifted leave year (#737) that is
       // not necessarily the current calendar year.
       const yr = await this.currentPeriodYear(userId);
       await this.years.insertIgnore(plan.id, yr);
       await this.userYears.insertIgnore(userId, plan.id, yr, 30, 0);
       await this.userColors.insertIgnore(userId, plan.id, '#6366f1');
-    }
-    return plan;
+      return plan;
+    });
   }
 
   async getActivePlan(userId: number): Promise<VacayPlan> {
@@ -498,10 +493,17 @@ export class VacayService {
   }
 
   async applyHolidayCalendars(planId: number): Promise<void> {
+    const dates = await this.holidayDatesToClear(planId);
+    if (dates.length > 0) await this.uow.transactional(() => this.clearHolidayDates(planId, dates));
+  }
+
+  /** The dates the plan's public-holiday calendars clear. Fetched first, outside any transaction. */
+  private async holidayDatesToClear(planId: number): Promise<string[]> {
+    const dates = new Set<string>();
     const holidaysEnabled = await this.plans.getHolidaysEnabled(planId);
-    if (!holidaysEnabled) return;
+    if (!holidaysEnabled) return [];
     const calendars = await this.holidayCalendars.listPublicForPlan(planId);
-    if (calendars.length === 0) return;
+    if (calendars.length === 0) return [];
     const years = await this.years.listForPlan(planId);
     // A shifted leave year (#737) runs into the next calendar year, so collect the
     // calendar years the members' windows actually touch — not just the period ids.
@@ -520,15 +522,19 @@ export class VacayService {
         if (!holidays) continue;
         const hasRegions = holidays.some((h: Holiday) => h.counties && h.counties.length > 0);
         if (hasRegions && !region) continue;
-        // Outside the fetch's catch: a failing delete is a real error, and
-        // swallowing it as "API error" left vacation days standing on holidays.
         for (const h of holidays) {
-          if (h.global || !h.counties || (region && h.counties.includes(region))) {
-            await this.entries.deleteForPlanAndDate(planId, h.date);
-            await this.companyHolidays.deleteForPlanAndDate(planId, h.date);
-          }
+          if (h.global || !h.counties || (region && h.counties.includes(region))) dates.add(h.date);
         }
       }
+    }
+    return [...dates];
+  }
+
+  /** Outside the fetch's catch: a failing delete is a real error, not an unanswered API. */
+  private async clearHolidayDates(planId: number, dates: string[]): Promise<void> {
+    for (const date of dates) {
+      await this.entries.deleteForPlanAndDate(planId, date);
+      await this.companyHolidays.deleteForPlanAndDate(planId, date);
     }
   }
 
@@ -557,25 +563,22 @@ export class VacayService {
     if (weekend_days !== undefined) patch.weekend_days = String(weekend_days);
     if (week_start !== undefined) patch.week_start = week_start === 0 ? 0 : 1;
 
-    await this.plans.update(planId, patch);
+    // Two transactions with the holiday fetch between them: network I/O never
+    // holds the connection. The settings land first, the clean-up they imply second.
+    await this.uow.transactional(async () => {
+      await this.plans.update(planId, patch);
+      if (company_holidays_enabled === true) {
+        const companyDates = await this.companyHolidays.listForPlan(planId);
+        for (const { date, fraction } of companyDates) await this.makeRoomForCompanyHoliday(planId, date, fraction);
+      }
+      await this.migrateHolidayCalendars(planId, (await this.plans.findById(planId))!);
+    });
+    const holidayDates = await this.holidayDatesToClear(planId);
 
-    if (company_holidays_enabled === true) {
-      const companyDates = await this.companyHolidays.listForPlan(planId);
-      for (const { date, fraction } of companyDates) await this.makeRoomForCompanyHoliday(planId, date, fraction);
-    }
-
-    const updatedPlan = (await this.plans.findById(planId))!;
-    await this.migrateHolidayCalendars(planId, updatedPlan);
-    await this.applyHolidayCalendars(planId);
-
-    if (carry_over_enabled === false) {
-      await this.userYears.resetCarriedOverForPlan(planId);
-    }
-
-    if (carry_over_enabled === true) {
-      // The chained per-year/per-user recompute is atomic — a failure mid-chain
-      // would otherwise leave later years carrying stale balances.
-      await this.uow.transactional(async () => {
+    await this.uow.transactional(async () => {
+      await this.clearHolidayDates(planId, holidayDates);
+      if (carry_over_enabled === false) await this.userYears.resetCarriedOverForPlan(planId);
+      if (carry_over_enabled === true) {
         const years = await this.years.listForPlan(planId);
         const users = await this.getPlanUsers(planId);
         for (let i = 0; i < years.length - 1; i++) {
@@ -584,20 +587,15 @@ export class VacayService {
           for (const u of users) {
             const used = await this.usedDays(u.id, planId, yr);
             const config = await this.userYears.findForYear(u.id, planId, yr);
-            // L1 (task-7-review.md): legacy bound `config.vacation_days`/
-            // `config.carried_over` into this total AS-IS, letting a NULL
-            // column pass through and coerce to 0 in the `+` (JS: `null + n
-            // = n`) — never defaulting a NULL vacation_days to 30. `?? 0`
-            // (not `?? 30`) reproduces that exact coercion under strict
-            // nullable typing; only the OUTER `config ? … : 30` (no row at
-            // all) is a genuine default.
+            // No row at all defaults to 30 days; a NULL column counts as 0, the
+            // way the legacy statement's arithmetic coerced it.
             const total = (config ? config.vacation_days ?? 0 : 30) + (config ? config.carried_over ?? 0 : 0);
             const carry = Math.max(0, total - used);
             await this.userYears.upsertCarriedOver(u.id, planId, nextYr, carry);
           }
         }
-      });
-    }
+      }
+    });
 
     await this.notifyPlanUsers(planId, socketId, 'vacay:settings');
 

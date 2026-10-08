@@ -41,6 +41,7 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser } from '../helpers/factories';
 import { OauthService } from '../../src/nest/oauth/oauth.service';
+import { UnitOfWork } from '../../src/nest/database/unit-of-work';
 import { createTestAddonsService } from '../helpers/test-addons';
 import { AuditService } from '../../src/nest/audit/audit.service';
 import { createTestOrm, type TestOrm } from '../helpers/test-orm';
@@ -86,7 +87,7 @@ beforeAll(async () => {
     nestApp = await buildApp();
     app = nestApp.getHttpAdapter().getInstance();
     t = await createTestOrm(testDb);
-    containerSideOauth = new OauthService(t.repo(OauthClients), t.repo(OauthTokens), t.repo(OauthConsents), await createTestAddonsService(testDb), new AuditService(t.repo(AuditLog), t.repo(Users)));
+    containerSideOauth = new OauthService(t.repo(OauthClients), t.repo(OauthTokens), t.repo(OauthConsents), await createTestAddonsService(testDb), new AuditService(t.repo(AuditLog), t.repo(Users)), new UnitOfWork(t.em));
 });
 
 beforeEach(async () => {

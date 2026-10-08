@@ -638,6 +638,78 @@ export class OidcService implements OnModuleDestroy {
     return userInfo.name || userInfo.preferred_username;
   }
 
+  /**
+   * A login by an account that already exists: link the OIDC identity when the
+   * verified email matched it, follow the role claim, keep the OIDC avatar current.
+   * Runs inside findOrCreateUser's transaction.
+   */
+  private async refreshLinkedUser(
+    user: UserRow,
+    sub: string,
+    config: OidcConfig,
+    userInfo: OidcUserInfo,
+    picture: string | null,
+  ): Promise<{ user: User; roleChange?: OidcRoleChange } | { error: string }> {
+    // Reaching here without an oidc_sub means we matched an existing local
+    // account by email. Only auto-link the OIDC identity when the IdP asserts
+    // the email is verified; an unverified email must not auto-link.
+    if (!user.oidc_sub) {
+      const emailVerified = userInfo.email_verified === true || userInfo.email_verified === 'true';
+      if (!emailVerified) {
+        return { error: 'email_not_verified' };
+      }
+      await this.usersRepo.linkOidcIdentity(user.id, sub, config.issuer);
+      user = { ...user, oidc_sub: sub, oidc_issuer: config.issuer };
+    } else if (user.oidc_issuer !== config.issuer || user.oidc_sub !== sub) {
+      // The admin pointed the instance at a different IdP. We got here through the
+      // verified-email lookup, so this is the same person arriving from the new
+      // provider; leaving the old sub and issuer on the row would keep the account
+      // pinned to a provider that no longer exists (#2110).
+      await this.usersRepo.linkOidcIdentity(user.id, sub, config.issuer);
+      user = { ...user, oidc_sub: sub, oidc_issuer: config.issuer };
+    }
+    // Update role based on OIDC claims on every login (if claim mapping is configured)
+    let roleChange: OidcRoleChange | undefined;
+    if (readEnv().oidc.adminValue) {
+      const resolution = this.resolveOidcRoleDetailed(userInfo, false);
+      const newRole = resolution.role;
+      if (resolution.claimMissing) {
+        this.warnMissingAdminClaim(resolution, { id: user.id, username: user.username, role: user.role === 'admin' ? 'admin' : 'user' });
+      } else if (user.role !== newRole) {
+        // Never let the claim-based downgrade strip the last admin. The bootstrap
+        // admin (first SSO user) usually doesn't carry the admin claim, so a forced
+        // re-login — e.g. after a JWT-secret rotation — would otherwise demote it and
+        // lock an OIDC-only instance out for good. #1274
+        const demotingLastAdmin =
+          user.role === 'admin' &&
+          newRole !== 'admin' &&
+          (await this.usersRepo.countAdmins()) <= 1;
+        if (demotingLastAdmin) {
+          console.warn(`[OIDC] Kept admin role for user ${user.id}: their OIDC claims map to '${newRole}', but they are the only admin — demoting would lock the instance out.`);
+        } else {
+          await this.usersRepo.setRole(user.id, newRole);
+          roleChange = { from: user.role === 'admin' ? 'admin' : 'user', to: newRole, claim: resolution.claimKey };
+          user = { ...user, role: newRole };
+        }
+      }
+    }
+    // Keep the avatar in sync with the OIDC picture, but never clobber a custom
+    // upload: only touch it when empty or when the current value is itself an OIDC
+    // picture URL, so the picture refreshes on each login without overriding an
+    // uploaded one. #1399
+    //
+    // "In sync" includes the provider having no picture for this user any more. That
+    // is what a provider switch looks like from here, and the old value points at a
+    // host this instance no longer talks to, so it renders as a broken image forever
+    // (#2110). An uploaded avatar is a bare filename and stays untouched either way.
+    const avatarIsOidc = !!user.avatar && /^https:\/\//i.test(user.avatar);
+    if (picture ? picture !== user.avatar && (!user.avatar || avatarIsOidc) : avatarIsOidc) {
+      await this.usersRepo.setAvatarRaw(user.id, picture);
+      user = { ...user, avatar: picture };
+    }
+    return { user: toClientUser(user), roleChange };
+  }
+
   async findOrCreateUser(
     userInfo: OidcUserInfo,
     config: OidcConfig,
@@ -663,64 +735,9 @@ export class OidcService implements OnModuleDestroy {
     }
 
     if (user) {
-      // Reaching here without an oidc_sub means we matched an existing local
-      // account by email. Only auto-link the OIDC identity when the IdP asserts
-      // the email is verified; an unverified email must not auto-link.
-      if (!user.oidc_sub) {
-        const emailVerified = userInfo.email_verified === true || userInfo.email_verified === 'true';
-        if (!emailVerified) {
-          return { error: 'email_not_verified' };
-        }
-        await this.usersRepo.linkOidcIdentity(user.id, sub, config.issuer);
-        user = { ...user, oidc_sub: sub, oidc_issuer: config.issuer };
-      } else if (user.oidc_issuer !== config.issuer || user.oidc_sub !== sub) {
-        // The admin pointed the instance at a different IdP. We got here through the
-        // verified-email lookup, so this is the same person arriving from the new
-        // provider; leaving the old sub and issuer on the row would keep the account
-        // pinned to a provider that no longer exists (#2110).
-        await this.usersRepo.linkOidcIdentity(user.id, sub, config.issuer);
-        user = { ...user, oidc_sub: sub, oidc_issuer: config.issuer };
-      }
-      // Update role based on OIDC claims on every login (if claim mapping is configured)
-      let roleChange: OidcRoleChange | undefined;
-      if (readEnv().oidc.adminValue) {
-        const resolution = this.resolveOidcRoleDetailed(userInfo, false);
-        const newRole = resolution.role;
-        if (resolution.claimMissing) {
-          this.warnMissingAdminClaim(resolution, { id: user.id, username: user.username, role: user.role === 'admin' ? 'admin' : 'user' });
-        } else if (user.role !== newRole) {
-          // Never let the claim-based downgrade strip the last admin. The bootstrap
-          // admin (first SSO user) usually doesn't carry the admin claim, so a forced
-          // re-login — e.g. after a JWT-secret rotation — would otherwise demote it and
-          // lock an OIDC-only instance out for good. #1274
-          const demotingLastAdmin =
-            user.role === 'admin' &&
-            newRole !== 'admin' &&
-            (await this.usersRepo.countAdmins()) <= 1;
-          if (demotingLastAdmin) {
-            console.warn(`[OIDC] Kept admin role for user ${user.id}: their OIDC claims map to '${newRole}', but they are the only admin — demoting would lock the instance out.`);
-          } else {
-            await this.usersRepo.setRole(user.id, newRole);
-            roleChange = { from: user.role === 'admin' ? 'admin' : 'user', to: newRole, claim: resolution.claimKey };
-            user = { ...user, role: newRole };
-          }
-        }
-      }
-      // Keep the avatar in sync with the OIDC picture, but never clobber a custom
-      // upload: only touch it when empty or when the current value is itself an OIDC
-      // picture URL, so the picture refreshes on each login without overriding an
-      // uploaded one. #1399
-      //
-      // "In sync" includes the provider having no picture for this user any more. That
-      // is what a provider switch looks like from here, and the old value points at a
-      // host this instance no longer talks to, so it renders as a broken image forever
-      // (#2110). An uploaded avatar is a bare filename and stays untouched either way.
-      const avatarIsOidc = !!user.avatar && /^https:\/\//i.test(user.avatar);
-      if (picture ? picture !== user.avatar && (!user.avatar || avatarIsOidc) : avatarIsOidc) {
-        await this.usersRepo.setAvatarRaw(user.id, picture);
-        user = { ...user, avatar: picture };
-      }
-      return { user: toClientUser(user), roleChange };
+      // The identity link, the role from the claims and the avatar are one write.
+      const existing = user;
+      return await this.uow.transactional(() => this.refreshLinkedUser(existing, sub, config, userInfo, picture));
     }
 
     // --- New user registration ---

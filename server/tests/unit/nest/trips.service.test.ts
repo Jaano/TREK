@@ -828,6 +828,19 @@ describe('resyncReservationDays (#1288)', () => {
     expect(res.day_id).toBe(dayFor(trip.id, '2025-06-02'));
   });
 
+  it('TRIP-SVC-018b: the trip row and its rebuilt days are one write: a failing rebuild keeps the old dates', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });
+    const days = await createTestDaysRepo(testDb);
+    const spy = vi.spyOn(days, 'listOrderedForReorder').mockRejectedValueOnce(new Error('boom'));
+
+    await expect(svc.updateTrip(trip.id, user.id, { start_date: '2025-06-02', end_date: '2025-06-06' }, 'user')).rejects.toThrow('boom');
+
+    expect(testDb.prepare('SELECT start_date, end_date FROM trips WHERE id = ?').get(trip.id))
+      .toEqual({ start_date: '2025-06-01', end_date: '2025-06-05' });
+    spy.mockRestore();
+  });
+
   it('TRIP-SVC-019: a reservation whose date falls outside the new range keeps its day_id (not nulled)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });

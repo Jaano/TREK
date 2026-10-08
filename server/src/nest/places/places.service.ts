@@ -393,43 +393,42 @@ export class PlacesService {
     // the value as a stay, and a stop added from the corridor search brings its own
     // figure — ten minutes for fuel, twenty for a rest area — so the kinds that would
     // be misread as an hour never take the default in the first place.
-    const placeId = await this.placesRepo.insertPlace({
-      trip_id: tid,
-      name,
-      description: description || null,
-      lat: lat ?? null,
-      lng: lng ?? null,
-      address: address || null,
-      category_id: category_id || null,
-      price: price ?? null,
-      currency: currency || null,
-      place_time: place_time || null,
-      end_time: end_time || null,
-      duration_minutes: duration_minutes ?? 60,
-      notes: notes || null,
-      image_url: image_url || null,
-      google_place_id: google_place_id || null,
-      google_ftid: google_ftid || null,
-      osm_id: osm_id || null,
-      amap_poi_id: amap_poi_id || null,
-      website: website || null,
-      phone: phone || null,
-      transport_mode: transport_mode || 'walking',
-      route_geometry: route_geometry || null,
-      route_color: route_color || null,
-      stop_type: stop_type || null,
-      fill_percent: fill_percent ?? null,
-      email: email?.trim() || null,
-      opening_hours: opening_hours || null,
+    const placeId = await this.uow.transactional(async () => {
+      const id = await this.placesRepo.insertPlace({
+        trip_id: tid,
+        name,
+        description: description || null,
+        lat: lat ?? null,
+        lng: lng ?? null,
+        address: address || null,
+        category_id: category_id || null,
+        price: price ?? null,
+        currency: currency || null,
+        place_time: place_time || null,
+        end_time: end_time || null,
+        duration_minutes: duration_minutes ?? 60,
+        notes: notes || null,
+        image_url: image_url || null,
+        google_place_id: google_place_id || null,
+        google_ftid: google_ftid || null,
+        osm_id: osm_id || null,
+        amap_poi_id: amap_poi_id || null,
+        website: website || null,
+        phone: phone || null,
+        transport_mode: transport_mode || 'walking',
+        route_geometry: route_geometry || null,
+        route_color: route_color || null,
+        stop_type: stop_type || null,
+        fill_percent: fill_percent ?? null,
+        email: email?.trim() || null,
+        opening_hours: opening_hours || null,
+      });
+
+      // PL5: the row and its tags are one write.
+      if (tags && tags.length > 0) await this.tagsRepo.insertIgnore(id, await this.tagsOnTrip(tid, tags));
+      return id;
     });
-
-    // PL5 — `INSERT OR IGNORE INTO place_tags (place_id, tag_id) VALUES (?, ?)`.
-    if (tags && tags.length > 0) {
-      await this.tagsRepo.insertIgnore(placeId, await this.tagsOnTrip(tid, tags));
-    }
-
-    // PL6 — `findWithTagsAndRatings` replaces the `getPlaceWithTags` delegation.
-    return (await this.placesRepo.findWithTagsAndRatings(placeId))!;
+    return (await this.placesRepo.findWithTagsAndRatings(placeId))!; // PL6
   }
 
   // -------------------------------------------------------------------------
@@ -453,8 +452,7 @@ export class PlacesService {
     const tid = toRowId(tripId);
     if (tid === null) return null;
     if (!(await this.placesRepo.existsInTrip(id, tid))) return null;
-    // PL8 — `findWithTagsAndRatings` replaces the `getPlaceWithTags` delegation.
-    return await this.placesRepo.findWithTagsAndRatings(id);
+    return await this.placesRepo.findWithTagsAndRatings(id); // PL8
   }
 
   // -------------------------------------------------------------------------
@@ -467,7 +465,7 @@ export class PlacesService {
     body: PlaceUpdateInput,
     ifMatch?: string,
   ): Promise<PlaceWithTags | UpdateConflict | null> {
-    const { result, reclaim } = await this.applyUpdate(tripId, placeId, body, ifMatch);
+    const { result, reclaim } = await this.uow.transactional(() => this.applyUpdate(tripId, placeId, body, ifMatch));
     if (reclaim !== undefined) await this.reclaimPlaceImage(reclaim);
     return result;
   }
@@ -571,12 +569,8 @@ export class PlacesService {
     });
 
     if (tags !== undefined) {
-      // PL12 — `DELETE FROM place_tags WHERE place_id = ?`.
-      await this.tagsRepo.deleteForPlace(id);
-      if (tags.length > 0) {
-        // PL13 — `INSERT OR IGNORE INTO place_tags (place_id, tag_id) VALUES (?, ?)`.
-        await this.tagsRepo.insertIgnore(id, await this.tagsOnTrip(tid, tags));
-      }
+      await this.tagsRepo.deleteForPlace(id); // PL12
+      if (tags.length > 0) await this.tagsRepo.insertIgnore(id, await this.tagsOnTrip(tid, tags)); // PL13
     }
 
     // A custom uploaded thumbnail (#1136) that was just replaced or cleared leaves
@@ -586,8 +580,7 @@ export class PlacesService {
       ? existingPlace.image_url
       : undefined;
 
-    // PL14 — `findWithTagsAndRatings` replaces the `getPlaceWithTags` delegation.
-    return { result: await this.placesRepo.findWithTagsAndRatings(id), reclaim };
+    return { result: await this.placesRepo.findWithTagsAndRatings(id), reclaim }; // PL14
   }
 
   // -------------------------------------------------------------------------
@@ -864,9 +857,12 @@ export class PlacesService {
   // -------------------------------------------------------------------------
 
   async importGpx(tripId: string, fileBuffer: Buffer, opts: GpxImportOptions = {}): Promise<GpxImportResult | null> {
-    const result = await this.importGpxRows(tripId, fileBuffer, opts);
-    await this.colorizeImportedTracks(tripId, result);
-    return result;
+    // The rows and their track colours are one write, as for KML below.
+    return await this.uow.transactional(async () => {
+      const result = await this.importGpxRows(tripId, fileBuffer, opts);
+      await this.colorizeImportedTracks(tripId, result);
+      return result;
+    });
   }
 
   /**
@@ -1076,9 +1072,11 @@ export class PlacesService {
   // -------------------------------------------------------------------------
 
   async importMapFile(tripId: string, fileBuffer: Buffer, filename: string, opts: KmlImportOptions = {}): Promise<PlaceImportResult> {
-    const result = await this.importMapFileRows(tripId, fileBuffer, filename, opts);
-    await this.colorizeImportedTracks(tripId, result);
-    return result;
+    return await this.uow.transactional(async () => {
+      const result = await this.importMapFileRows(tripId, fileBuffer, filename, opts);
+      await this.colorizeImportedTracks(tripId, result);
+      return result;
+    });
   }
 
   private async importMapFileRows(tripId: string, fileBuffer: Buffer, filename: string, opts: KmlImportOptions = {}): Promise<PlaceImportResult> {
@@ -1242,15 +1240,13 @@ export class PlacesService {
     const tracks = result?.places?.filter((p) => p.route_geometry && !p.route_color) ?? [];
     if (tracks.length === 0) return;
 
-    // PL36+PL37 — read (`distinctRouteColors`) and write (`setRouteColor`) in
-    // ONE transaction so two concurrent imports cannot both read the same set
-    // of free colours.
+    // PL36+PL37: read and write in ONE transaction so two concurrent imports
+    // cannot both read the same set of free colours.
     await this.uow.transactional(async () => {
       const taken = new Set(await this.placesRepo.distinctRouteColors(tripId));
       const free = TRACK_COLORS.filter((c) => !taken.has(c));
       for (const [i, track] of tracks.entries()) {
-        // Free ones first, then wrap through the whole palette — never reuse a
-        // free colour twice within the same import.
+        // Free ones first, then wrap through the palette: never a free colour twice.
         const color = i < free.length ? free[i] : TRACK_COLORS[(i - free.length) % TRACK_COLORS.length];
         await this.placesRepo.setRouteColor(track.id, color);
         track.route_color = color;
@@ -1854,6 +1850,7 @@ export class PlacesService {
    * The Google pass for places a file brought in (#2536). Only its points: a track
    * or a drawn path is a line, and looking a line up by its name finds a stranger.
    * Detached like the list imports, and just as quietly a no-op without a key.
+   * @txStandalone detached, after the import has committed.
    */
   enrichImportedFilePlaces(tripId: string, userId: number, places: ImportedPlace[]): void {
     const points = (places as (ImportedPlace & EnrichablePlace)[]).filter(p => !p.route_geometry);
@@ -1973,21 +1970,22 @@ export class PlacesService {
       // PL51 — the only explicit `ON CONFLICT … DO UPDATE` in the cluster; never touches `places.updated_at`.
       await this.placeRatingsRepo.upsertRating(id, userId, rating);
     }
-    // PL52 — `findWithTagsAndRatings` replaces the `getPlaceWithTags` delegation.
-    return await this.placesRepo.findWithTagsAndRatings(id);
+    return await this.placesRepo.findWithTagsAndRatings(id); // PL52
   }
 
-  // Journey hooks — non-fatal, mirroring the route's try/catch wrappers.
+  /** @txStandalone a journey hook: a non-fatal sync after the place write, like the route's try/catch. */
   async onCreated(tripId: string, placeId: number): Promise<void> {
     try {
       await this.journey.onPlaceCreated(Number(tripId), placeId);
     } catch { /* non-fatal */ }
   }
+  /** @txStandalone the same non-fatal journey hook. */
   async onUpdated(placeId: number): Promise<void> {
     try {
       await this.journey.onPlaceUpdated(placeId);
     } catch { /* non-fatal */ }
   }
+  /** @txStandalone the same non-fatal journey hook. */
   async onDeleted(placeId: number): Promise<void> {
     try {
       await this.journey.onPlaceDeleted(placeId);

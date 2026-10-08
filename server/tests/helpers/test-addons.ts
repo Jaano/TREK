@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3';
 import { AddonsService } from '../../src/nest/addons/addons.service';
 import { sharedTestOrm } from './test-uow';
+import { UnitOfWork } from '../../src/nest/database/unit-of-work';
 import { Addons } from '../../src/db/entities/Addons.entity';
 import { PhotoProviders } from '../../src/db/entities/PhotoProviders.entity';
 import { PhotoProviderFields } from '../../src/db/entities/PhotoProviderFields.entity';
@@ -40,5 +41,6 @@ export async function createTestAddonsService(db: Database.Database): Promise<Ad
     t.repo(PhotoProviderFields),
     t.repo(AppSettings),
     t.repo(Users),
+    new UnitOfWork(t.em),
   );
 }

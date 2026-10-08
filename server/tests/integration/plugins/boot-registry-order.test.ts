@@ -232,6 +232,7 @@ describe('plugin boot vs registry scan ordering', () => {
         t2.repo(PhotoProviderFields),
         t2.repo(AppSettings),
         t2.repo(Users),
+        new UnitOfWork(t2.em),
       );
       const auditLogRepo2 = t2.repo(AuditLog);
       const usersRepo2 = t2.repo(Users);

@@ -7,6 +7,7 @@ import { ReservationsRepository } from '../../db/repositories/Reservations.repos
 import { ReservationEndpoints } from '../../db/entities/ReservationEndpoints.entity';
 import { ReservationEndpointsRepository } from '../../db/repositories/ReservationEndpoints.repository';
 import { CronRegistrarService } from '../scheduling/cron-registrar.service';
+import { UnitOfWork } from '../database/unit-of-work';
 
 /**
  * The in-container face of the airport dataset, plus the flight-endpoint
@@ -42,6 +43,7 @@ export class AirportsService implements OnApplicationBootstrap {
     @InjectRepository(Reservations) private readonly reservationsRepo: ReservationsRepository,
     @InjectRepository(ReservationEndpoints) private readonly endpointsRepo: ReservationEndpointsRepository,
     private readonly registrar: CronRegistrarService,
+    private readonly uow: UnitOfWork,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -66,6 +68,14 @@ export class AirportsService implements OnApplicationBootstrap {
     return findByIata(code) as Airport | null;
   }
 
+  /**
+   * Endpoints for every flight booked before they existed, from the IATA codes in
+   * its metadata; a flight without usable codes is flagged for review instead.
+   *
+   * @txIndependent one transaction per flight: its two endpoints land together or
+   * not at all (half a pair hid the flight from every later run), and a flight that
+   * failed is picked up again on the next boot.
+   */
   async backfillFlightEndpoints(): Promise<void> {
     const pending = await this.reservationsRepo.listFlightsMissingEndpoints();
 
@@ -76,36 +86,42 @@ export class AirportsService implements OnApplicationBootstrap {
     let filled = 0;
     let flagged = 0;
     for (const r of pending) {
-      if (!r.metadata) { await this.reservationsRepo.markNeedsReview(r.id); flagged++; continue; }
-      let meta: any;
-      try { meta = JSON.parse(r.metadata); } catch { await this.reservationsRepo.markNeedsReview(r.id); flagged++; continue; }
-
-      const dep = meta.departure_airport ? findByIata(String(meta.departure_airport).slice(0, 3)) : null;
-      const arr = meta.arrival_airport ? findByIata(String(meta.arrival_airport).slice(0, 3)) : null;
-
-      if (!dep || !arr) { await this.reservationsRepo.markNeedsReview(r.id); flagged++; continue; }
-
-      const split = (iso: string | null) => {
-        if (!iso) return { date: null as string | null, time: null as string | null };
-        const [date, time] = iso.split('T');
-        return { date: date || null, time: time ? time.slice(0, 5) : null };
-      };
-      const depParts = split(r.reservation_time);
-      const arrParts = split(r.reservation_end_time);
-
-      await this.endpointsRepo.insertEndpoint({
-        reservation_id: r.id, role: 'from', sequence: 0,
-        name: dep.city ? `${dep.city} (${dep.iata})` : dep.name, code: dep.iata,
-        lat: dep.lat, lng: dep.lng, timezone: dep.tz, local_time: depParts.time, local_date: depParts.date,
-      });
-      await this.endpointsRepo.insertEndpoint({
-        reservation_id: r.id, role: 'to', sequence: 1,
-        name: arr.city ? `${arr.city} (${arr.iata})` : arr.name, code: arr.iata,
-        lat: arr.lat, lng: arr.lng, timezone: arr.tz, local_time: arrParts.time, local_date: arrParts.date,
-      });
-      filled++;
+      if (await this.uow.transactional(() => this.backfillOne(r))) filled++;
+      else flagged++;
     }
 
     console.log(`[airports] Backfill: ${filled} filled, ${flagged} flagged for review`);
+  }
+
+  /** One flight's endpoints, or its review flag. True when it was filled. */
+  private async backfillOne(r: { id: number; metadata: string | null; reservation_time: string | null; reservation_end_time: string | null }): Promise<boolean> {
+    if (!r.metadata) { await this.reservationsRepo.markNeedsReview(r.id); return false; }
+    let meta: any;
+    try { meta = JSON.parse(r.metadata); } catch { await this.reservationsRepo.markNeedsReview(r.id); return false; }
+
+    const dep = meta.departure_airport ? findByIata(String(meta.departure_airport).slice(0, 3)) : null;
+    const arr = meta.arrival_airport ? findByIata(String(meta.arrival_airport).slice(0, 3)) : null;
+
+    if (!dep || !arr) { await this.reservationsRepo.markNeedsReview(r.id); return false; }
+
+    const split = (iso: string | null) => {
+      if (!iso) return { date: null as string | null, time: null as string | null };
+      const [date, time] = iso.split('T');
+      return { date: date || null, time: time ? time.slice(0, 5) : null };
+    };
+    const depParts = split(r.reservation_time);
+    const arrParts = split(r.reservation_end_time);
+
+    await this.endpointsRepo.insertEndpoint({
+      reservation_id: r.id, role: 'from', sequence: 0,
+      name: dep.city ? `${dep.city} (${dep.iata})` : dep.name, code: dep.iata,
+      lat: dep.lat, lng: dep.lng, timezone: dep.tz, local_time: depParts.time, local_date: depParts.date,
+    });
+    await this.endpointsRepo.insertEndpoint({
+      reservation_id: r.id, role: 'to', sequence: 1,
+      name: arr.city ? `${arr.city} (${arr.iata})` : arr.name, code: arr.iata,
+      lat: arr.lat, lng: arr.lng, timezone: arr.tz, local_time: arrParts.time, local_date: arrParts.date,
+    });
+    return true;
   }
 }

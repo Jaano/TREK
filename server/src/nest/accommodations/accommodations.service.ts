@@ -619,8 +619,8 @@ export class AccommodationsService {
     const newConfirmation = fields.confirmation !== undefined ? fields.confirmation : existing.confirmation;
     const newNotes = fields.notes !== undefined ? fields.notes : existing.notes;
 
-    // The stay row and the day stop that mirrors it describe the same booking, so a
-    // move that wrote only one of the two must not survive.
+    // The stay row, the day stop that mirrors it and the linked bookings' times all
+    // describe the same booking, so a write that landed only some of them must not survive.
     const mirror = await this.uow.transactional(async () => {
       // AC36 — `existing.id`, the SAME id AC34's gate (`getAccommodation`)
       // already resolved (rule 21): the caller always reads `existing` from
@@ -636,25 +636,24 @@ export class AccommodationsService {
         confirmation: newConfirmation,
         notes: newNotes,
       });
-      return await this.remirrorStay(existing.id, newPlaceId, newStartDayId, newCheckIn, {
+      const moved = await this.remirrorStay(existing.id, newPlaceId, newStartDayId, newCheckIn, {
         checkInChanged: fields.check_in !== undefined && (fields.check_in || null) !== (existing.check_in || null),
       });
-    });
 
-    // Sync check-in/out/confirmation to every linked reservation. The booking form
-    // lets more than one hotel booking point at the same block and there is no
-    // unique constraint on reservations.accommodation_id, so a single .get() would
-    // silently leave the others on the old times.
-    // AC37 — runs AFTER the transaction above commits (§18.6, R5 class: pre-existing, flagged not fixed).
-    const linkedRes = await this.reservationsRepo.listIdMetadataByStay(existing.id);
-    for (const res of linkedRes) {
-      const meta = res.metadata ? JSON.parse(res.metadata) : {};
-      if (newCheckIn) meta.check_in_time = newCheckIn;
-      if (newCheckInEnd) meta.check_in_end_time = newCheckInEnd;
-      if (newCheckOut) meta.check_out_time = newCheckOut;
-      // AC38
-      await this.reservationsRepo.setMetadataAndConfirmation(res.id, JSON.stringify(meta), newConfirmation || null);
-    }
+      // Sync check-in/out/confirmation to every linked reservation (AC37/AC38). The
+      // booking form lets more than one hotel booking point at the same block and there
+      // is no unique constraint on reservations.accommodation_id, so a single .get()
+      // would silently leave the others on the old times.
+      const linkedRes = await this.reservationsRepo.listIdMetadataByStay(existing.id);
+      for (const res of linkedRes) {
+        const meta = res.metadata ? JSON.parse(res.metadata) : {};
+        if (newCheckIn) meta.check_in_time = newCheckIn;
+        if (newCheckInEnd) meta.check_in_end_time = newCheckInEnd;
+        if (newCheckOut) meta.check_out_time = newCheckOut;
+        await this.reservationsRepo.setMetadataAndConfirmation(res.id, JSON.stringify(meta), newConfirmation || null);
+      }
+      return moved;
+    });
 
     return { accommodation: await this.getAccommodationWithPlace(existing.id), mirror };
   }

@@ -437,11 +437,8 @@ export class AuthService {
     if (!invite) return { error: 'Invalid invite link', status: 404 };
     if (invite.max_uses > 0 && invite.used_count >= invite.max_uses) return { error: 'Invite link has been fully used', status: 410 };
     if (invite.expires_at && new Date(invite.expires_at) < new Date()) return { error: 'Invite link has expired', status: 410 };
-    // Rule 16 (nullable columns stay null on the wire, docs/superpowers/plans/
-    // 2026-09-21-orm-migration-program.md:45; task-5-review-security.md F1 /
-    // task-5-review-template.md T1): pass the repository's `string | null`
-    // through unchanged — `?? undefined` made JSON.stringify drop the key
-    // entirely for a never-expiring invite instead of emitting `null`.
+    // A nullable column stays null on the wire: `?? undefined` would make
+    // JSON.stringify drop the key for a never-expiring invite.
     return { valid: true, max_uses: invite.max_uses, used_count: invite.used_count, expires_at: invite.expires_at };
   }
 
@@ -777,26 +774,28 @@ export class AuthService {
     // the whole form in one request.
     const { blocked } = splitManagedKeys(body as Record<string, unknown>, readEnv().managed.enabled);
 
-    for (const key of ADMIN_SETTINGS_KEYS) {
-      if (blocked.includes(key)) continue;
-      if (body[key] !== undefined) {
-        let val = String(body[key]);
-        if (key === 'require_mfa') {
-          val = body[key] === true || val === 'true' ? 'true' : 'false';
+    await this.uow.transactional(async () => { // the whole form lands, or none of it
+      for (const key of ADMIN_SETTINGS_KEYS) {
+        if (blocked.includes(key)) continue;
+        if (body[key] !== undefined) {
+          let val = String(body[key]);
+          if (key === 'require_mfa') {
+            val = body[key] === true || val === 'true' ? 'true' : 'false';
+          }
+          // An unknown provider name is dropped, not stored: the maps service
+          // degrades an unrecognised row to 'auto', so writing one would show the
+          // admin a saved setting that quietly does nothing.
+          if (key === 'places_provider' && !isPlacesProviderChoice(val)) continue;
+          if (key === 'smtp_pass' && val === '••••••••') continue;
+          if (key === 'smtp_pass') val = encrypt_api_key(val);
+          if (key === 'admin_webhook_url' && val === '••••••••') continue;
+          if (key === 'admin_webhook_url' && val) val = maybe_encrypt_api_key(val) ?? val;
+          if (key === 'admin_ntfy_token' && val === '••••••••') continue;
+          if (key === 'admin_ntfy_token' && val) val = maybe_encrypt_api_key(val) ?? val;
+          await this.appSettings.setValue(key, val);
         }
-        // An unknown provider name is dropped, not stored: the maps service
-        // degrades an unrecognised row to 'auto', so writing one would show the
-        // admin a saved setting that quietly does nothing.
-        if (key === 'places_provider' && !isPlacesProviderChoice(val)) continue;
-        if (key === 'smtp_pass' && val === '••••••••') continue;
-        if (key === 'smtp_pass') val = encrypt_api_key(val);
-        if (key === 'admin_webhook_url' && val === '••••••••') continue;
-        if (key === 'admin_webhook_url' && val) val = maybe_encrypt_api_key(val) ?? val;
-        if (key === 'admin_ntfy_token' && val === '••••••••') continue;
-        if (key === 'admin_ntfy_token' && val) val = maybe_encrypt_api_key(val) ?? val;
-        await this.appSettings.setValue(key, val);
       }
-    }
+    });
 
     const changedKeys = ADMIN_SETTINGS_KEYS.filter(k => !blocked.includes(k) && body[k] !== undefined && !(k === 'smtp_pass' && String(body[k]) === '••••••••'));
 
@@ -1010,15 +1009,15 @@ export class AuthService {
       return { tokenForDelivery: null, userId: user.id, userEmail: user.email, reason: 'oidc_only' };
     }
 
-    // Invalidate any prior unconsumed tokens for this user so there is
-    // always at most one live reset link in flight.
-    await this.passwordResetTokens.consumeAllLiveForUser(user.id);
-
     const raw = randomBytes(PASSWORD_RESET_TOKEN_BYTES).toString('base64url');
     const token_hash = hashResetToken(raw);
     const expires_at = new Date(Date.now() + PASSWORD_RESET_TTL_MS).toISOString();
-
-    await this.passwordResetTokens.insertToken({ user_id: user.id, token_hash, expires_at, created_ip: createdIp });
+    // Invalidate any prior unconsumed tokens for this user and issue the new one
+    // together, so there is always exactly one live reset link in flight.
+    await this.uow.transactional(async () => {
+      await this.passwordResetTokens.consumeAllLiveForUser(user.id);
+      await this.passwordResetTokens.insertToken({ user_id: user.id, token_hash, expires_at, created_ip: createdIp });
+    });
 
     return { tokenForDelivery: raw, userId: user.id, userEmail: user.email, reason: 'issued' };
   }

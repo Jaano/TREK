@@ -524,28 +524,30 @@ export class TripsService {
       : oldReminder;
 
     const tripIdNum = Number(tripId); // safe: `trip` above only resolved through the raw-bind seam on a real row (Task 6 review's own ruling on this exact conversion)
-    await this.tripsRepo.updateTripRow(tripIdNum, { // TP25
-      title: newTitle,
-      description: newDesc ?? null,
-      start_date: newStart || null,
-      end_date: newEnd || null,
-      currency: newCurrency,
-      // Task 7 security review L1 (absorbed here): `newArchived` is already
-      // `trip.is_archived` verbatim when `data.is_archived` was never sent —
-      // the legacy statement bound that value AS-IS, including a stored
-      // `NULL`. A `?? 0` fold here would write `0` in that case instead,
-      // silently un-nulling a column the caller never asked to change.
-      is_archived: newArchived,
-      cover_image: newCover ?? null,
-      reminder_days: newReminder,
-    });
-
-    if (trip.start_date && trip.end_date && newStart && newStart !== trip.start_date)
-      await this.vacay.shiftOwnerEntriesForTripWindow(trip.user_id, trip.start_date, trip.end_date, newStart);
-
+    // The row, the leave entries that follow its dates and the rebuilt day grid are
+    // one write: a failure halfway used to leave a trip whose days missed its dates.
     let removedDays: DayGridRemoval[] = [];
-    if (regenerate) {
-      await this.uow.transactional(async () => {
+    await this.uow.transactional(async () => {
+      await this.tripsRepo.updateTripRow(tripIdNum, { // TP25
+        title: newTitle,
+        description: newDesc ?? null,
+        start_date: newStart || null,
+        end_date: newEnd || null,
+        currency: newCurrency,
+        // Task 7 security review L1 (absorbed here): `newArchived` is already
+        // `trip.is_archived` verbatim when `data.is_archived` was never sent —
+        // the legacy statement bound that value AS-IS, including a stored
+        // `NULL`. A `?? 0` fold here would write `0` in that case instead,
+        // silently un-nulling a column the caller never asked to change.
+        is_archived: newArchived,
+        cover_image: newCover ?? null,
+        reminder_days: newReminder,
+      });
+
+      if (trip.start_date && trip.end_date && newStart && newStart !== trip.start_date)
+        await this.vacay.shiftOwnerEntriesForTripWindow(trip.user_id, trip.start_date, trip.end_date, newStart);
+
+      if (regenerate) {
         // Accommodations have no absolute date columns, so their pre-change dates must be
         // snapshotted before generateDays re-dates the day rows in place.
         const prevDays = await this.daysRepo.listOrderedForReorder(tripIdNum); // TP26
@@ -556,9 +558,6 @@ export class TripsService {
           // so re-stamp reservation_time to follow — same rules as reorderDays/insertDay.
           const newDays = await this.daysRepo.listOrderedForReorder(tripIdNum); // TP27
           const newDateByDayId = new Map(newDays.map(d => [d.id, d.date]));
-          // `tripIdNum`, not `tripId` (Task 9 fix wave, H2): `restampReservationDates`
-          // now takes the parsed row id, the same value every other DaysService
-          // survivor takes — see its own docstring.
           await this.days.restampReservationDates(tripIdNum, prevDateByDayId, newDateByDayId);
         } else {
           // Default: generateDays re-dates day rows positionally; re-anchor dated bookings to
@@ -567,8 +566,8 @@ export class TripsService {
           await this.reservations.resyncReservationDays(tripId);
           await this.days.resyncAccommodationDays(tripIdNum, prevDateByDayId);
         }
-      });
-    }
+      }
+    });
 
     const changes: Record<string, unknown> = {};
     if (title && title !== trip.title) changes.title = title;
