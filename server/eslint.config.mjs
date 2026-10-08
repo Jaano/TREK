@@ -46,6 +46,27 @@ const RAW_SQL_SELECTORS = [
   },
 ];
 
+// A guarded call whose options object (third argument) sets `timeoutMs` has a
+// deadline over the whole exchange, so it does not need a signal in the init.
+// esquery only resolves `:nth-child` inside `:has` when each step is its own
+// nested `:has`, hence the shape.
+const FETCH_CALL = `CallExpression[callee.name=${FETCH_CALLEE}]:not(:has(> ObjectExpression.arguments:nth-child(3):has(> Property[key.name='timeoutMs'])))`;
+
+// An argument that stands for "no init": undefined, null or void 0, also behind an `as` cast.
+const NO_INIT = [
+  "Identifier[name='undefined']",
+  "Literal[raw='null']",
+  "UnaryExpression[operator='void']",
+  // esquery compares String(value), so a missing `name` would read as 'undefined':
+  // the cast's inner node type is pinned first.
+  "TSAsExpression[expression.type='Identifier'][expression.name='undefined']",
+  "TSAsExpression[expression.type='Literal'][expression.raw='null']",
+  "TSAsExpression[expression.type='UnaryExpression'][expression.operator='void']",
+].join(', ');
+
+const FETCH_TIMEOUT_MESSAGE =
+  'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }, or { timeoutMs } in the options of safeFetch/safeFetchFollow.';
+
 const FETCH_SELECTORS = [
   {
     // Every outbound fetch needs a timeout (server/CLAUDE.md): a provider
@@ -55,17 +76,17 @@ const FETCH_SELECTORS = [
     // wrappers in utils/ssrfGuard.ts are held to the same rule: they hand
     // the platform a spread init, so the rule cannot see through them, and
     // their own fallback only bounds the wait for the headers.
-    selector: `CallExpression[callee.name=${FETCH_CALLEE}][arguments.length=1]`,
-    message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+    selector: `${FETCH_CALL}[arguments.length=1]`,
+    message: FETCH_TIMEOUT_MESSAGE,
   },
   {
-    selector: `CallExpression[callee.name=${FETCH_CALLEE}] > ObjectExpression.arguments:nth-child(2):not(:has(Property[key.name='signal'])):not(:has(SpreadElement))`,
-    message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+    selector: `${FETCH_CALL} > ObjectExpression.arguments:nth-child(2):not(:has(Property[key.name='signal'])):not(:has(SpreadElement))`,
+    message: FETCH_TIMEOUT_MESSAGE,
   },
   {
     // `safeFetch(url, undefined, options)` is the same call without an init.
-    selector: `CallExpression[callee.name=${FETCH_CALLEE}] > Identifier.arguments:nth-child(2)[name='undefined']`,
-    message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+    selector: `${FETCH_CALL} > :matches(${NO_INIT}).arguments:nth-child(2)`,
+    message: FETCH_TIMEOUT_MESSAGE,
   },
 ];
 

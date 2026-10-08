@@ -51,7 +51,8 @@ declare const init: object;
 declare const signal: AbortSignal;
 `;
 
-const TIMEOUT = 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.';
+const TIMEOUT =
+  'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }, or { timeoutMs } in the options of safeFetch/safeFetchFollow.';
 
 describe('outbound fetch timeout selectors', () => {
   let options: unknown[];
@@ -67,6 +68,14 @@ describe('outbound fetch timeout selectors', () => {
     ['safeFetchFollow(url, undefined, { bypassInternalIpAllowed: true })'],
     ["safeFetchFollow(url, { headers: { a: 'b' } })"],
     ['safeFetchAdminConfigured(url, {})'],
+    // Other spellings of "no init" must not slip past the undefined case.
+    ['safeFetch(url, void 0, { rejectUnauthorized: false })'],
+    ['safeFetch(url, null, { rejectUnauthorized: false })'],
+    ['safeFetch(url, null as never, { maxBytes: 1024 })'],
+    ['safeFetch(url, undefined as never, {})'],
+    // A timeoutMs nested in the init is not the options deadline.
+    ['safeFetch(url, { headers: { timeoutMs: 5 } })'],
+    ['safeFetch(url, undefined, { maxBytes: 1024 }, { timeoutMs: 5000 })'],
   ])('flags %s', (call) => {
     expect(messages(options, `${PRELUDE}\nvoid ${call};`)).toEqual([TIMEOUT]);
   });
@@ -81,6 +90,14 @@ describe('outbound fetch timeout selectors', () => {
     ['safeFetchFollow(url, { signal }, { bypassInternalIpAllowed: true })'],
     // safeFetchLlm takes its deadline from LLM_TIMEOUT_MS inside the wrapper.
     ["safeFetchLlm(url, { method: 'POST' })"],
+    // timeoutMs in the options is a deadline over the whole exchange.
+    ['safeFetch(url, undefined, { timeoutMs: 5000 })'],
+    ['safeFetch(url, void 0, { timeoutMs: 5000, maxBytes: 1024 })'],
+    ['safeFetch(url, { headers: {} }, { timeoutMs: 5000 })'],
+    ['safeFetchFollow(url, undefined, { timeoutMs: 5000 })'],
+    // A cast init is still an init: the "no init" casts must not match it.
+    ['fetch(url, { ...init, signal } as object)'],
+    ['safeFetch(url, init as object, { maxBytes: 1024 })'],
   ])('accepts %s', (call) => {
     expect(messages(options, `${PRELUDE}\nvoid ${call};`)).toEqual([]);
   });
