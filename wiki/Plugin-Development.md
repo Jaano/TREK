@@ -247,23 +247,34 @@ parser would ignore one if you added it.
 **What the reads return.** Every method's result is one of three kinds, and the SDK
 exports the list per method as `PLUGIN_METHOD_RESULT`:
 
-- **Entity rows** (`trip`, `place`, `day`, `reservation`, `packingItem`, `tripFile`,
-  `budgetItem`, `assignment`, `user`). A row carries exactly the fields TREK publishes
-  for that entity (`PLUGIN_ENTITY_FIELDS` in the SDK): the table's columns in
-  snake_case, then what TREK adds on top, such as a trip's `day_count`,
-  `place_count`, `is_owner`, `owner_username` and `shared_count`, a place's
-  `category`, `tags` and `ratings`, a reservation's `endpoints`, `travelers` and
-  `day_positions`, or a day's `assignments` and `notes_items`. A field appears only
-  where the method's read produces it (`trips.getById` has no `day_count`,
+- **Entity rows**: the trip data (`trip`, `place`, `day`, `reservation`,
+  `accommodation`, `packingItem`, `packingBag`, `tripFile`, `fileLink`, `budgetItem`,
+  `assignment`, `dayNote`, `todo`, `user`), the collab board (`collabNote`,
+  `collabPoll`, `collabMessage`) and the acting user's own data (`tag`, `category`,
+  `journey`, `journalEntry`, `bucketItem`, `collection`). A row carries exactly the
+  fields TREK publishes for that entity (`PLUGIN_ENTITY_FIELDS` in the SDK): the
+  table's columns in snake_case, then what TREK adds on top, such as a trip's
+  `day_count`, `place_count`, `is_owner`, `owner_username` and `shared_count`, a
+  place's `category`, `tags` and `ratings`, a reservation's `endpoints`, `travelers`
+  and `day_positions`, or a day's `assignments` and `notes_items`. A field appears
+  only where the method's read produces it (`trips.getById` has no `day_count`,
   `trips.listMine` has). Credentials are never part of a row: a trip's calendar
   `feed_token` is withheld, and a user is only `id`, `username`, `display_name` and
   `avatar`. A column TREK adds in a later release is **not** delivered until TREK
   publishes it in that list, so the rows your plugin reads do not change shape on an
-  update. `Place.day_id` in the SDK types is deprecated and never set: a place's days
-  are the `assignments` of `getDays`.
-- **Read models** (tags, to-dos, collab notes, polls and messages, journals and
-  entries, bags, collections, accommodations, Atlas and Vacay data): the same shape
-  TREK's own REST route returns, passed on unchanged. The SDK types them `unknown`.
+  update. That holds for the rows inside a row too: the fields listed in
+  `PLUGIN_ENTITY_NESTED` hold rows of another entity (a day's `notes_items` are
+  `dayNote` rows, a reservation's `endpoints` are `reservationEndpoint` rows) and
+  carry that entity's published fields only, however deep they sit; every other
+  added field is a value TREK builds field by field. `collections.listMine`,
+  `collections.get` and `vacay.mine` return envelopes around such rows
+  (`collectionListing`, `collectionDetail`, `vacayPlanData`). `Place.day_id` in the
+  SDK types is deprecated and never set: a place's days are the `assignments` of
+  `getDays`.
+- **Read models**: small results TREK builds field by field from named columns, so
+  no stored row passes through them whole (a bag's members, the Atlas `visited`
+  codes, what a Vacay toggle did, a saved collection place or a copy summary, a
+  journal photo). The SDK types them `unknown`.
 - **Host values**: `{ deleted }`, `{ sent }`, a model's answer, an access token, and
   your own data (`ctx.db`, `ctx.meta`, another plugin's answer), returned as they are.
 

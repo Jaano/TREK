@@ -11,6 +11,7 @@ import { PluginRpcHost } from '../../../src/nest/plugins/host/rpc-host';
 import { KNOWN_METHODS, UNCONDITIONAL_METHODS, type RpcResponse } from '../../../src/nest/plugins/protocol/envelope';
 import {
   PLUGIN_ENTITY_CONTRACT,
+  PLUGIN_ENTITY_NESTED,
   PLUGIN_METHOD_OUTPUT,
   pluginEntityFields,
   returnsEntity,
@@ -34,6 +35,28 @@ describe('the contract table', () => {
     }
   });
 
+  it.each(Object.entries(PLUGIN_ENTITY_NESTED))(
+    'OUTCONTRACT-UNIT-012 %s nests defined entities under its own derived keys',
+    (entity, nested) => {
+      const derived: readonly string[] = contractOf(entity as PluginEntityName).derived;
+      for (const [key, child] of Object.entries(nested ?? {})) {
+        expect(derived).toContain(key);
+        expect(ENTITIES).toContain(child);
+      }
+    },
+  );
+
+  it.each(ENTITIES.filter((e) => contractOf(e).table === null))(
+    'OUTCONTRACT-UNIT-013 the envelope %s has no columns of its own',
+    (entity) => {
+      const contract = contractOf(entity);
+      expect(contract.columns).toEqual([]);
+      expect(contract.withheld).toEqual([]);
+      expect(contract.wholeRow).toBe(false);
+      expect(contract.derived.length).toBeGreaterThan(0);
+    },
+  );
+
   it.each(ENTITIES)('OUTCONTRACT-UNIT-003 %s lists each field once and never publishes a withheld column', (entity) => {
     const contract = contractOf(entity);
     const fields = pluginEntityFields(entity);
@@ -50,8 +73,9 @@ describe('the contract table', () => {
   it('OUTCONTRACT-UNIT-005 returnsEntity tells the entity methods from the rest', () => {
     expect(returnsEntity('trips.getById')).toBe(true);
     expect(returnsEntity('costs.listMine')).toBe(true);
+    expect(returnsEntity('tags.list')).toBe(true);
     expect(returnsEntity('db.query')).toBe(false);
-    expect(returnsEntity('tags.list')).toBe(false);
+    expect(returnsEntity('atlas.visited')).toBe(false);
     expect(returnsEntity('no.such.method')).toBe(false);
   });
 });
@@ -71,17 +95,51 @@ describe('shapePluginOutput', () => {
     expect(Object.keys(shaped as object)).toEqual(['title', 'id', 'day_count']);
   });
 
-  it('OUTCONTRACT-UNIT-007 shapes every row of a list and leaves nested values untouched', () => {
-    const assignments = [{ id: 1, place: { id: 2, anything: true } }];
+  it('OUTCONTRACT-UNIT-007 shapes every row of a list and the child rows it carries', () => {
+    const place = { id: 2, anything: true };
     const shaped = shapePluginOutput('trips.getDays', [
-      { id: 1, date: '2026-05-01', assignments, secret_new: 1 },
+      {
+        id: 1,
+        date: '2026-05-01',
+        assignments: [{ id: 1, place, assignment_new_column: 1 }],
+        notes_items: [{ id: 5, text: 'Breakfast', day_note_new_column: 'x' }],
+        secret_new: 1,
+      },
       { id: 2, date: '2026-05-02', notes_items: [] },
     ]) as Array<Record<string, unknown>>;
     expect(shaped).toEqual([
-      { id: 1, date: '2026-05-01', assignments },
+      { id: 1, date: '2026-05-01', assignments: [{ id: 1, place }], notes_items: [{ id: 5, text: 'Breakfast' }] },
       { id: 2, date: '2026-05-02', notes_items: [] },
     ]);
-    expect(shaped[0].assignments).toBe(assignments);
+    // A derived value without a nested entity (the assignment's place, built field by
+    // field) is passed on as the same object.
+    expect((shaped[0].assignments as Array<Record<string, unknown>>)[0].place).toBe(place);
+  });
+
+  it('OUTCONTRACT-UNIT-014 a child row is cut down however deep it sits', () => {
+    const shaped = shapePluginOutput('vacay.mine', {
+      plan: { id: 1, owner_id: 2, plan_new_column: 1, holiday_calendars: [{ id: 3, label: 'DE', calendar_new_column: 1 }] },
+      users: [{ id: 2, username: 'ana', color: '#fff' }],
+      isOwner: true,
+      envelope_new_key: 1,
+    });
+    expect(shaped).toEqual({
+      plan: { id: 1, owner_id: 2, holiday_calendars: [{ id: 3, label: 'DE' }] },
+      users: [{ id: 2, username: 'ana', color: '#fff' }],
+      isOwner: true,
+    });
+  });
+
+  it('OUTCONTRACT-UNIT-015 a single child row is shaped and a missing one keeps its form', () => {
+    expect(shapePluginOutput('collections.get', { collection: { id: 1, name: 'Rome', new_column: 1 }, places: [] })).toEqual({
+      collection: { id: 1, name: 'Rome' },
+      places: [],
+    });
+    expect(shapePluginOutput('collections.get', { collection: null, places: [] })).toEqual({ collection: null, places: [] });
+    expect(shapePluginOutput('trips.getReservations', [{ id: 1, endpoints: null }])).toEqual([{ id: 1, endpoints: null }]);
+    expect(shapePluginOutput('trips.getReservations', [{ id: 1, endpoints: [{ id: 2, code: 'FRA', secret: 1 }, 7] }])).toEqual([
+      { id: 1, endpoints: [{ id: 2, code: 'FRA' }, 7] },
+    ]);
   });
 
   it('OUTCONTRACT-UNIT-008 a missing row keeps its wire form', () => {
@@ -97,9 +155,9 @@ describe('shapePluginOutput', () => {
   it('OUTCONTRACT-UNIT-009 a host or read-model result is returned as the same object', () => {
     const own = [{ anything: 1 }];
     expect(shapePluginOutput('db.query', own)).toBe(own);
-    const tags = [{ id: 1, name: 'work', brand_new_column: true }];
-    expect(shapePluginOutput('tags.list', tags)).toBe(tags);
-    expect(shapePluginOutput('no.such.method', tags)).toBe(tags);
+    const visited = { countries: [{ country_code: 'DE', brand_new_column: true }], regions: [] };
+    expect(shapePluginOutput('atlas.visited', visited)).toBe(visited);
+    expect(shapePluginOutput('no.such.method', visited)).toBe(visited);
   });
 });
 
@@ -111,9 +169,9 @@ class ProbeRpc {
     return { id: 1, title: 'Japan', feed_token: 'secret', added_later: ctx.actingUserId };
   }
 
-  @PluginMethod('tags.list', { permission: 'db:read:tags' })
-  tags() {
-    return [{ id: 1, name: 'work', added_later: true }];
+  @PluginMethod('atlas.visited', { permission: 'db:read:atlas' })
+  visited() {
+    return { countries: [{ country_code: 'DE', added_later: true }], regions: [] };
   }
 }
 
@@ -130,6 +188,9 @@ describe('the router applies the contract', () => {
   });
 
   it('OUTCONTRACT-UNIT-011 a read-model result reaches the plugin with every key', async () => {
-    expect(await dispatch('tags.list', 'db:read:tags')).toEqual([{ id: 1, name: 'work', added_later: true }]);
+    expect(await dispatch('atlas.visited', 'db:read:atlas')).toEqual({
+      countries: [{ country_code: 'DE', added_later: true }],
+      regions: [],
+    });
   });
 });

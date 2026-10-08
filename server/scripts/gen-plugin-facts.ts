@@ -24,7 +24,8 @@ import {
 } from '../src/nest/plugins/protocol/envelope';
 import { SNAPSHOT_GRANT, ENTITY_ID_KEYS } from '../src/plugin-event-sink';
 import {
-  PLUGIN_ENTITY_CONTRACT, PLUGIN_METHOD_OUTPUT, pluginEntityFields, type PluginEntityName, type PluginMethodOutput,
+  PLUGIN_ENTITY_CONTRACT, PLUGIN_ENTITY_NESTED, PLUGIN_METHOD_OUTPUT, pluginEntityFields, type PluginEntityName,
+  type PluginMethodOutput,
 } from '../src/nest/plugins/protocol/output-contract';
 import { ADDON_IDS } from '../src/addons';
 // A relative import of the shared SOURCE, not @trek/shared: the plugin-facts CI job
@@ -66,6 +67,13 @@ const describeOutput = (output: PluginMethodOutput): string =>
 const fieldList = (fields: readonly string[]) => fields.map((f) => `    '${f}',`).join('\n');
 const ENTITY_FIELDS = (Object.keys(PLUGIN_ENTITY_CONTRACT) as PluginEntityName[])
   .map((entity) => `  ${entity}: [\n${fieldList(pluginEntityFields(entity))}\n  ],`)
+  .join('\n');
+
+const ENTITY_NESTED = (Object.keys(PLUGIN_ENTITY_NESTED) as PluginEntityName[])
+  .map((entity) => {
+    const children = Object.entries(PLUGIN_ENTITY_NESTED[entity] ?? {}).map(([key, child]) => `${key}: '${child}'`);
+    return `  ${entity}: { ${children.join(', ')} },`;
+  })
   .join('\n');
 
 const METHOD_RESULT = Object.fromEntries(
@@ -137,6 +145,16 @@ ${list(Object.values(ADDON_IDS))}
 export const PLUGIN_ENTITY_FIELDS = {
 ${ENTITY_FIELDS}
 } as const;
+
+/**
+ * The fields of an entity that hold rows of another entity (one row or a list),
+ * and which one. Those rows carry that entity's PLUGIN_ENTITY_FIELDS and no others,
+ * however deep they sit, so a column TREK adds to a child table is held back the
+ * same way. A field not listed here holds a value TREK builds field by field.
+ */
+export const PLUGIN_ENTITY_NESTED: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+${ENTITY_NESTED}
+};
 
 /**
  * What each ctx method returns: an entity from PLUGIN_ENTITY_FIELDS (\`trip\`, or

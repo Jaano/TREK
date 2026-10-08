@@ -1007,8 +1007,9 @@ export {
 export {
   EVENT_FAMILIES, EVENT_SNAPSHOT_GRANT, KNOWN_PERMISSIONS,
 } from './generated/host-facts.js';
-// What ctx results carry: the published fields of each entity, and what each method returns.
-export { PLUGIN_ENTITY_FIELDS, PLUGIN_METHOD_RESULT } from './generated/host-facts.js';
+// What ctx results carry: the published fields of each entity, the fields holding rows
+// of another entity, and what each method returns.
+export { PLUGIN_ENTITY_FIELDS, PLUGIN_ENTITY_NESTED, PLUGIN_METHOD_RESULT } from './generated/host-facts.js';
 // The lucide icons a `capabilities.poiCategories` entry may use, and the per-plugin cap.
 export { POI_CATEGORY_ICONS, POI_CATEGORY_MAX } from './generated/host-facts.js';
 

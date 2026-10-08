@@ -5,7 +5,7 @@
  * runtime side: what the exports hold and that they cover the method vocabulary.
  */
 import { describe, it, expect } from 'vitest';
-import { PLUGIN_ENTITY_FIELDS, PLUGIN_METHOD_RESULT } from '../src/index.js';
+import { PLUGIN_ENTITY_FIELDS, PLUGIN_ENTITY_NESTED, PLUGIN_METHOD_RESULT } from '../src/index.js';
 import { KNOWN_ADDONS } from '../src/manifest.js';
 import { KNOWN_METHODS } from '../src/generated/host-facts.js';
 
@@ -26,6 +26,20 @@ describe('PLUGIN_ENTITY_FIELDS', () => {
   });
 });
 
+describe('PLUGIN_ENTITY_NESTED', () => {
+  it('points the fields that hold rows at entities with a field list', () => {
+    const fields: Readonly<Record<string, readonly string[]>> = PLUGIN_ENTITY_FIELDS;
+    for (const [entity, nested] of Object.entries(PLUGIN_ENTITY_NESTED)) {
+      for (const [field, child] of Object.entries(nested)) {
+        expect(fields[entity]).toContain(field);
+        expect(fields[child]).toBeDefined();
+      }
+    }
+    expect(PLUGIN_ENTITY_NESTED.day).toEqual({ assignments: 'assignment', notes_items: 'dayNote' });
+    expect(PLUGIN_ENTITY_NESTED.reservation).toEqual({ endpoints: 'reservationEndpoint' });
+  });
+});
+
 describe('PLUGIN_METHOD_RESULT', () => {
   it('describes every wire method plus the three unconditional ones', () => {
     for (const method of KNOWN_METHODS) expect(PLUGIN_METHOD_RESULT[method]).toBeDefined();
@@ -41,6 +55,8 @@ describe('PLUGIN_METHOD_RESULT', () => {
     expect(PLUGIN_METHOD_RESULT['trips.getById']).toBe('trip');
     expect(PLUGIN_METHOD_RESULT['trips.getPlaces']).toBe('place[]');
     expect(PLUGIN_METHOD_RESULT['db.query']).toBe('host');
+    expect(PLUGIN_METHOD_RESULT['tags.list']).toBe('tag[]');
+    expect(PLUGIN_METHOD_RESULT['atlas.visited']).toBe('readModel');
   });
 });
 

@@ -30,7 +30,7 @@ Because the package ships standalone it cannot import server code, so several fi
 
 | SDK copy | Source of truth | Parity test |
 |---|---|---|
-| `src/generated/host-facts.ts` (permissions, RPC methods, hooks, event catalog, `KNOWN_ADDONS`, the output contract `PLUGIN_ENTITY_FIELDS` / `PLUGIN_METHOD_RESULT`) | `server/src/nest/plugins/protocol/envelope.ts`, `protocol/output-contract.ts` and `server/src/addons.ts` via `server/scripts/gen-plugin-facts.ts` — **machine-written, never hand-edit** | server `check:plugin-facts` CI gate; the entity interfaces in `src/index.ts` are type-checked against `PLUGIN_ENTITY_FIELDS` |
+| `src/generated/host-facts.ts` (permissions, RPC methods, hooks, event catalog, `KNOWN_ADDONS`, the output contract `PLUGIN_ENTITY_FIELDS` / `PLUGIN_ENTITY_NESTED` / `PLUGIN_METHOD_RESULT`) | `server/src/nest/plugins/protocol/envelope.ts`, `protocol/output-contract.ts` and `server/src/addons.ts` via `server/scripts/gen-plugin-facts.ts` (**machine-written, never hand-edit**) | server `check:plugin-facts` CI gate; the entity interfaces in `src/index.ts` are type-checked against `PLUGIN_ENTITY_FIELDS` |
 | `src/egress-policy.ts` (pure helpers, kept **byte-identical**) | `server/src/nest/plugins/runtime/egress-policy.ts` | `test/permissions-parity.test.ts` |
 | `src/manifest.ts` (validation rules incl. the `trek` version range) | `server/src/nest/plugins/install/` | kept in sync by hand |
 | `src/cli/checks/*` (registry gates) | TREK-Plugins registry repo (`scripts/validate-entry.mjs`, `check-readme.mjs`) | `test/checks-parity.test.ts` (runs the registry's real script; `TREK_PLUGINS_REPO` points at a checkout) |

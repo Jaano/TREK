@@ -132,25 +132,39 @@ ungranted call throws `PERMISSION_DENIED`.
 Every ctx method falls into one of three kinds, listed per method in the exported
 `PLUGIN_METHOD_RESULT`:
 
-- **An entity** (`trip`, `place`, `day`, `reservation`, `packingItem`, `tripFile`,
-  `budgetItem`, `assignment`, `user`; a list where the entry ends in `[]`). Each row
-  carries exactly the fields in `PLUGIN_ENTITY_FIELDS[entity]` and no others: the
-  table's published columns in snake_case, then what TREK adds on top (for a trip
-  `day_count`, `place_count`, `is_owner`, `owner_username` and `shared_count`; for a
-  place `category`, `tags` and `ratings`; for a reservation `endpoints`, `travelers`
-  and `day_positions`; for a day its `assignments` and `notes_items`). A field is only
-  present when the method's read produces it, so `trips.getById` has no `day_count`
-  while `trips.listMine` does. Credentials are never part of a row (a trip's
-  calendar `feed_token`, any account data beyond a user's id, username, display name
-  and avatar). A column TREK adds later is not delivered until TREK publishes it in
-  this list, so a row never changes shape behind your back. The `Trip`, `Place`, ...
-  interfaces name the commonly used fields and are checked against these lists when
-  the SDK is built; `Place.day_id` is deprecated and never delivered, since a place's
-  days are the `assignments` of `ctx.trips.getDays()`.
-- **`readModel`**: the app's own read model for that data (tags, to-dos, collab
-  notes, journal entries, bags, collections, accommodations and the like), passed on
-  as TREK's REST route returns it. These are typed `unknown`; treat a field you did
-  not check for as optional.
+- **An entity** (a list where the entry ends in `[]`). The trip data: `trip`,
+  `place`, `day`, `reservation`, `accommodation`, `packingItem`, `packingBag`,
+  `tripFile`, `fileLink`, `budgetItem`, `assignment`, `dayNote`, `todo` and `user`;
+  the collab board: `collabNote`, `collabPoll` and `collabMessage`; the acting
+  user's own data: `tag`, `category`, `journey`, `journalEntry`, `bucketItem` and
+  `collection`. Each row carries exactly the fields in `PLUGIN_ENTITY_FIELDS[entity]`
+  and no others: the table's published columns in snake_case, then what TREK adds on
+  top (for a trip `day_count`, `place_count`, `is_owner`, `owner_username` and
+  `shared_count`; for a place `category`, `tags` and `ratings`; for a reservation
+  `endpoints`, `travelers` and `day_positions`; for a day its `assignments` and
+  `notes_items`). A field is only present when the method's read produces it, so
+  `trips.getById` has no `day_count` while `trips.listMine` does. Credentials are
+  never part of a row (a trip's calendar `feed_token`, any account data beyond a
+  user's id, username, display name and avatar). A column TREK adds later is not
+  delivered until TREK publishes it in this list, so a row never changes shape behind
+  your back.
+
+  The same holds for the rows inside a row. `PLUGIN_ENTITY_NESTED` names, per entity,
+  the fields that hold rows of another entity (a day's `notes_items` are `dayNote`
+  rows, a reservation's `endpoints` are `reservationEndpoint` rows), and those carry
+  that entity's fields and no others, however deep they sit. Every other added field
+  (counts, `{ user_id, username }` lists, id lists, a place's `category`) is a value
+  TREK builds field by field. Three results are envelopes around rows rather than a
+  row: `collections.listMine` (`collectionListing`), `collections.get`
+  (`collectionDetail`) and `vacay.mine` (`vacayPlanData`).
+
+  The `Trip`, `Place`, ... interfaces name the commonly used fields and are checked
+  against these lists when the SDK is built; `Place.day_id` is deprecated and never
+  delivered, since a place's days are the `assignments` of `ctx.trips.getDays()`.
+- **`readModel`**: a small result TREK builds field by field from named columns, so
+  no stored row passes through it whole: a bag's members, the Atlas `visited` codes,
+  what a Vacay toggle did, a collection's saved place or copy summary, and a journal
+  photo. These are typed `unknown`; treat a field you did not check for as optional.
 - **`host`**: a value the host builds itself (`{ deleted }`, `{ sent }`, a model's
   answer, an access token) or data you own (`ctx.db`, `ctx.meta`, another plugin's
   answer), returned as it is.
@@ -375,7 +389,7 @@ npx trek-plugin-sdk publish --repo you/repo --tag v1.1.0 --sign   # or just answ
 
 - `definePlugin(def)` + all the plugin types (`PluginContext`, `PluginRoute`, `PluginJob`, `PhotoProvider`, `CalendarSource`).
 - `PLUGIN_API_VERSION` — embed as `apiVersion` in your manifest.
-- `PLUGIN_ENTITY_FIELDS`, `PLUGIN_METHOD_RESULT`: what each ctx method returns and which fields each entity row carries (see [What a ctx call returns](#what-a-ctx-call-returns)).
+- `PLUGIN_ENTITY_FIELDS`, `PLUGIN_ENTITY_NESTED`, `PLUGIN_METHOD_RESULT`: what each ctx method returns, which fields each entity row carries and which of them hold rows of another entity (see [What a ctx call returns](#what-a-ctx-call-returns)).
 - `validateManifest(json)` — the manifest rules the server loader uses.
 - `settingDefaults(manifest, scope)` — the `default`s of one settings scope, keyed by field: what the host resolves for an unset field, and what `dev` seeds `ctx.config` / `ctx.settings` with. Spread it under your own fixtures when calling `createMockHost` to mirror the host. `SETTING_FIELD_KEYS` is the attribute list the host stores.
 - `createMockHost(opts)` (from `trek-plugin-sdk/testing`).
