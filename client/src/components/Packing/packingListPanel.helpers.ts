@@ -1,3 +1,4 @@
+import type { PackingBag, PackingItem } from '../../types'
 import { KAT_COLORS, PACKING_PLACEHOLDER_NAME } from './packingListPanel.constants'
 
 // Stable color assignment: category name → index via simple hash
@@ -66,6 +67,29 @@ export const unassignedTotalWeight = (
   serverFresh && serverTotal != null
     ? serverTotal
     : visibleItems.reduce((sum, i) => sum + itemWeight(i), 0)
+
+/**
+ * What every bag surface adds up: the bag sidebar and the bag dialog on the desktop
+ * and the bag sheet on the phone. The item lists describe what you carry (#1767),
+ * the weights what the bags hold, whoever packed them (#2191). The heaviest bag is
+ * the scale for bags without a limit of their own, worked out once for all of them.
+ */
+export function bagLoadSummary(
+  bags: PackingBag[],
+  items: PackingItem[],
+  currentUserId: number | null | undefined,
+  unassignedWeightGrams: number | null | undefined,
+  serverWeightsFresh: boolean,
+) {
+  const myItems = items.filter(i => countsTowardsMyLoad(i, currentUserId))
+  const bagItemsOf = (bag: PackingBag) => myItems.filter(i => i.bag_id === bag.id)
+  const bagWeightOf = (bag: PackingBag) => bagTotalWeight(bag, bagItemsOf(bag), serverWeightsFresh)
+  const heaviestBagWeight = Math.max(...bags.map(bagWeightOf), 1)
+  const unassigned = myItems.filter(i => !i.bag_id)
+  const unassignedWeight = unassignedTotalWeight(unassignedWeightGrams, unassigned, serverWeightsFresh)
+  const totalWeight = bags.reduce((s, b) => s + bagWeightOf(b), 0) + unassignedWeight
+  return { myItems, bagItemsOf, bagWeightOf, heaviestBagWeight, unassigned, unassignedWeight, totalWeight }
+}
 
 /**
  * How full a bag's bar reads. A bag with a weight limit is measured against that limit —

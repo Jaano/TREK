@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { katColor, itemWeight, bagFillPct, bagTotalWeight, countsTowardsMyLoad, isMarkdownList, newItemSharing, packedWeight, parseCsvLine, perPersonLoads, parseImportLines, sortItemsByName, unassignedTotalWeight } from './packingListPanel.helpers'
+import { katColor, itemWeight, bagFillPct, bagLoadSummary, bagTotalWeight, countsTowardsMyLoad, isMarkdownList, newItemSharing, packedWeight, parseCsvLine, perPersonLoads, parseImportLines, sortItemsByName, unassignedTotalWeight } from './packingListPanel.helpers'
+import { buildPackingItem } from '../../../tests/helpers/factories'
+import type { PackingBag } from '../../types'
 import { KAT_COLORS } from './packingListPanel.constants'
 
 describe('packingListPanel.helpers', () => {
@@ -292,3 +294,43 @@ describe('packedWeight / perPersonLoads (#1131)', () => {
   })
 })
 
+
+describe('bagLoadSummary: what every bag surface adds up (#1767, #2191)', () => {
+  const bag = (over: Partial<PackingBag>): PackingBag => ({ id: 1, trip_id: 1, name: 'Bag', color: '#000', sort_order: 0, ...over })
+  const backpack = bag({ id: 1, total_weight_grams: 4000, weight_limit_grams: 7000 })
+  const duffel = bag({ id: 2 })
+  const items = [
+    buildPackingItem({ id: 1, bag_id: 1, weight_grams: 500 }),
+    buildPackingItem({ id: 2, bag_id: 2, weight_grams: 300, quantity: 2 }),
+    buildPackingItem({ id: 3, bag_id: null, weight_grams: 200 }),
+    // Shared with me, but Ada brings it: not part of my load.
+    buildPackingItem({ id: 4, bag_id: 2, weight_grams: 900, is_private: 1, owner_id: 2 }),
+    buildPackingItem({ id: 5, bag_id: null, weight_grams: 50, is_private: 1, owner_id: 9 }),
+  ]
+
+  it('lists only what I carry, and weighs bags by the server figure while it is fresh', () => {
+    const s = bagLoadSummary([backpack, duffel], items, 9, 1200, true)
+    expect(s.myItems.map(i => i.id)).toEqual([1, 2, 3, 5])
+    expect(s.bagItemsOf(duffel).map(i => i.id)).toEqual([2])
+    expect(s.bagWeightOf(backpack)).toBe(4000)
+    // No server figure on the bag: the visible items count.
+    expect(s.bagWeightOf(duffel)).toBe(600)
+    expect(s.heaviestBagWeight).toBe(4000)
+    expect(s.unassigned.map(i => i.id)).toEqual([3, 5])
+    expect(s.unassignedWeight).toBe(1200)
+    expect(s.totalWeight).toBe(4000 + 600 + 1200)
+  })
+
+  it('sums what it can see while offline', () => {
+    const s = bagLoadSummary([backpack, duffel], items, 9, 1200, false)
+    expect(s.bagWeightOf(backpack)).toBe(500)
+    expect(s.unassignedWeight).toBe(250)
+    expect(s.totalWeight).toBe(500 + 600 + 250)
+    expect(s.heaviestBagWeight).toBe(600)
+  })
+
+  it('scales against at least one gram when there are no bags or they weigh nothing', () => {
+    expect(bagLoadSummary([], [], 9, null, true)).toMatchObject({ heaviestBagWeight: 1, unassignedWeight: 0, totalWeight: 0 })
+    expect(bagLoadSummary([duffel], [], null, undefined, true).heaviestBagWeight).toBe(1)
+  })
+})

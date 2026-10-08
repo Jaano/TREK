@@ -1,7 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { Briefcase, Plus, X } from 'lucide-react'
 import type { PackingState } from './usePackingListPanel'
-import { bagFillPct, bagTotalWeight, countsTowardsMyLoad, packedWeight, perPersonLoads, unassignedTotalWeight } from './packingListPanel.helpers'
+import { bagFillPct, bagLoadSummary, packedWeight, perPersonLoads } from './packingListPanel.helpers'
 import { BagCard } from './PackingListPanelBagCard'
 import { PackingWeightSummary } from './PackingWeightSummary'
 import { COMPOSER, composerConfirm, useDismissOnOutside } from './packingPopoverStyles'
@@ -19,17 +19,10 @@ export function BagSidebar(S: PackingState) {
     showAddBag, setShowAddBag, newBagName, setNewBagName, handleCreateBag, unassignedWeightGrams, serverWeightsFresh,
   } = S
   // The ITEM LISTS still describe what you are carrying — an item someone shared
-  // with you stays in your list, but they are the one bringing it (#1767).
-  const myItems = items.filter(i => countsTowardsMyLoad(i, currentUserId))
-  // The WEIGHTS no longer do: a bag's load is the bag's, whoever packed it (#2191).
-  const bagWeightOf = (bag: typeof bags[number]) =>
-    bagTotalWeight(bag, myItems.filter(i => i.bag_id === bag.id), serverWeightsFresh)
-  // Reference for bags without a limit of their own — computed once instead of per bag.
-  const heaviestBagWeight = Math.max(...bags.map(bagWeightOf), 1)
-  const unassigned = myItems.filter(i => !i.bag_id)
-  const unassignedWeight = unassignedTotalWeight(unassignedWeightGrams, unassigned, serverWeightsFresh)
-  // Same rule as the rows above it (#2191).
-  const totalWeight = bags.reduce((s, b) => s + bagWeightOf(b), 0) + unassignedWeight
+  // with you stays in your list, but they are the one bringing it (#1767). The
+  // WEIGHTS no longer do: a bag's load is the bag's, whoever packed it (#2191).
+  const { myItems, bagItemsOf, bagWeightOf, heaviestBagWeight, unassigned, unassignedWeight, totalWeight } =
+    bagLoadSummary(bags, items, currentUserId, unassignedWeightGrams, serverWeightsFresh)
   const hairline = (first: boolean): React.CSSProperties => ({ borderTop: first ? 'none' : '1px solid var(--border-faint)' })
   const composerRef = useRef<HTMLDivElement>(null)
   const closeComposer = useCallback(() => { setShowAddBag(false); setNewBagName('') }, [setShowAddBag, setNewBagName])
@@ -69,7 +62,7 @@ export function BagSidebar(S: PackingState) {
 
         <div style={{ padding: '0 14px' }}>
           {bags.map((bag, index) => {
-            const bagItems = myItems.filter(i => i.bag_id === bag.id)
+            const bagItems = bagItemsOf(bag)
             const weight = bagWeightOf(bag)
             const pct = bagFillPct(weight, bag.weight_limit_grams, heaviestBagWeight)
             return (

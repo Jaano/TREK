@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus } from 'lucide-react'
 import type { PackingItem, PackingBag } from '../../types'
@@ -6,6 +6,7 @@ import type { TripMember } from './usePackingListPanel'
 import { PopoverItem } from './PackingPopover'
 import { POPOVER, POPOVER_CAPTION, useDismissOnOutside } from './packingPopoverStyles'
 import { useAnchoredPosition } from '../../hooks/useAnchoredPosition'
+import { useBagCardEditor } from './useBagCardEditor'
 
 interface BagCardProps {
   bag: PackingBag; bagItems: PackingItem[]; totalWeight: number; pct: number; tripId: number
@@ -15,8 +16,6 @@ interface BagCardProps {
 }
 
 export function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, canEdit, onDelete, onUpdate, onSetMembers, t, compact }: BagCardProps) {
-  const [editingName, setEditingName] = useState(false)
-  const [nameVal, setNameVal] = useState(bag.name)
   const [showUserPicker, setShowUserPicker] = useState(false)
   const membersRef = useRef<HTMLDivElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
@@ -24,39 +23,10 @@ export function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, 
   useDismissOnOutside(membersRef, showUserPicker, closePicker, pickerRef)
   // The bag sidebar scrolls and would clip the list, so it hangs off the body under the faces.
   const pickerBox = useAnchoredPosition(membersRef, showUserPicker, { estimatedHeight: 260, offset: 6 })
-  useEffect(() => setNameVal(bag.name), [bag.name])
-
-  const saveName = () => {
-    if (nameVal.trim() && nameVal.trim() !== bag.name) onUpdate(bag.id, { name: nameVal.trim() })
-    setEditingName(false)
-  }
-
-  // Limits are entered in kg — that is how airlines state them — and stored in grams.
-  const limitToInput = (grams?: number | null) => (grams ? String(grams / 1000) : '')
-  const [editingLimit, setEditingLimit] = useState(false)
-  const [limitVal, setLimitVal] = useState(limitToInput(bag.weight_limit_grams))
-  useEffect(() => setLimitVal(limitToInput(bag.weight_limit_grams)), [bag.weight_limit_grams])
-
-  const saveLimit = () => {
-    setEditingLimit(false)
-    const raw = limitVal.trim().replace(',', '.')
-    if (raw === '') {
-      // Clearing the field removes the limit and puts the bar back on relative scaling.
-      if (bag.weight_limit_grams != null) onUpdate(bag.id, { weight_limit_grams: null })
-      return
-    }
-    const kg = Number(raw)
-    // Anything unparseable or negative leaves the stored limit alone rather than wiping it.
-    if (!Number.isFinite(kg) || kg <= 0) { setLimitVal(limitToInput(bag.weight_limit_grams)); return }
-    const grams = Math.round(kg * 1000)
-    if (grams !== bag.weight_limit_grams) onUpdate(bag.id, { weight_limit_grams: grams })
-  }
-
-  const memberIds = (bag.members || []).map(m => m.user_id)
-  const toggleMember = (userId: number) => {
-    const next = memberIds.includes(userId) ? memberIds.filter(id => id !== userId) : [...memberIds, userId]
-    onSetMembers(bag.id, next)
-  }
+  const {
+    editingName, setEditingName, nameVal, setNameVal, saveName, cancelName,
+    editingLimit, setEditingLimit, limitVal, setLimitVal, saveLimit, cancelLimit, memberIds, toggleMember,
+  } = useBagCardEditor({ bag, onUpdate: data => onUpdate(bag.id, data), onSetMembers: ids => onSetMembers(bag.id, ids), followBag: true })
 
   const sz = compact ? { dot: 10, name: 12, weight: 11, bar: 6, count: 10, gap: 6, mb: 14, icon: 11, avatar: 18 } : { dot: 12, name: 14, weight: 13, bar: 8, count: 11, gap: 8, mb: 16, icon: 13, avatar: 22 }
 
@@ -68,7 +38,7 @@ export function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, 
         <span style={{ width: sz.dot, height: sz.dot, borderRadius: '50%', background: bag.color, flexShrink: 0 }} />
         {editingName && canEdit ? (
           <input autoFocus value={nameVal} onChange={e => setNameVal(e.target.value)}
-            onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') { setEditingName(false); setNameVal(bag.name) } }}
+            onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') saveName(); if (e.key === 'Escape') cancelName() }}
             style={{ flex: 1, fontSize: sz.name, fontWeight: 600, padding: '1px 4px', borderRadius: 4, border: '1px solid var(--border-primary)', outline: 'none', fontFamily: 'inherit', color: 'var(--text-primary)', background: 'transparent' }} />
         ) : (
           <button type="button" disabled={!canEdit} onClick={() => setEditingName(true)}
@@ -133,7 +103,7 @@ export function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, 
               <span>/</span>
               <input autoFocus value={limitVal} onChange={e => setLimitVal(e.target.value)}
                 onBlur={saveLimit}
-                onKeyDown={e => { if (e.key === 'Enter') saveLimit(); if (e.key === 'Escape') { setLimitVal(limitToInput(bag.weight_limit_grams)); setEditingLimit(false) } }}
+                onKeyDown={e => { if (e.key === 'Enter') saveLimit(); if (e.key === 'Escape') cancelLimit() }}
                 inputMode="decimal" aria-label={t('packing.bagLimit')} placeholder={t('packing.bagLimit')}
                 style={{ width: 42, fontSize: sz.weight, padding: '1px 3px', borderRadius: 4, border: '1px solid var(--border-primary)', outline: 'none', fontFamily: 'inherit', color: 'var(--text-primary)', background: 'transparent' }} />
               <span>kg</span>
