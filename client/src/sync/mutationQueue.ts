@@ -287,7 +287,7 @@ export const mutationQueue = {
    */
   flush(): Promise<void> {
     if (isEffectivelyOffline() || !isAuthed()) return Promise.resolve()
-    if (_flushRun) {
+    if (_flushRun !== null) {
       _flushAgain = true
       return _flushRun
     }
