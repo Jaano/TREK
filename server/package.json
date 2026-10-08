@@ -13,6 +13,7 @@
     "typecheck:scripts": "tsc -p tsconfig.scripts.json --noEmit",
     "db:call-graph": "node scripts/db-call-graph.mjs",
     "lint:size": "node scripts/size-lint.mjs",
+    "lint:boundaries": "node scripts/import-boundaries.mjs",
     "gen:plugin-facts": "node --import tsx scripts/gen-plugin-facts.ts",
     "check:plugin-facts": "node --import tsx scripts/gen-plugin-facts.ts --check",
     "gen:entities": "node --import tsx scripts/generate-entities.ts",

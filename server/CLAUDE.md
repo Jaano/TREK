@@ -18,7 +18,10 @@ npm run check:plugin-facts # CI gate — fails if the generated copies drifted
 node scripts/coverage-thresholds.mjs  # after test:coverage — prints the ratchet block for vitest.config.ts
 npm run db:call-graph -- --sync --tx [--domains nest/days,…]  # sync DB-touching methods + transaction sites (exit 1 if any)
 npm run lint:size         # no file in src/ or scripts/ past 1000 lines, longer ones only shrink (CI gate)
+npm run lint:boundaries   # import cycles and cross-domain reach-ins may only shrink (CI gate)
 ```
+
+**`lint:boundaries`** (`scripts/import-boundaries.mjs`) parses every import under `src/` and holds five lists in `scripts/import-boundaries-baseline.json`: load-time file cycles (type-only and lazy imports, and the MikroORM entity relations, do not count), dependencies between two `nest/<domain>` folders that already depend on each other, shared-kernel files (`nest/common`, `nest/database`, `nest/app-config`) importing a domain, a domain importing another domain's internals, and `src/db` importing `src/nest`. A domain's public surface is its `*.module`, `*.service`, `*.guard`, `*.decorator`, `*.types`, `*.interface`, `*.contract`, `*.constants` and `*.logger` files plus the short `PUBLIC_FILES` list in the script; anything else is an internal. A new entry fails the check; `npm run lint:boundaries -- --update` drops the ones that no longer occur and never adds one.
 
 **`lint:size`** (`scripts/size-lint.mjs`) counts a line longer than 120 columns once per 120 columns it spans, so joining lines does not make room. Files that were already longer are held at their length in `scripts/size-baseline.json`; a file that needs to grow past its entry is split by concern instead. After a split, `npm run lint:size -- --update` lowers the baseline (it never raises or adds an entry).
 
