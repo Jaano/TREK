@@ -21,14 +21,6 @@ vi.mock('../../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`
-        SELECT t.id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
     return mock;
 });
@@ -83,7 +75,15 @@ import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { notificationsStub } from '../../helpers/notifications';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
 import { RateLimitService } from '../../../src/nest/common/rate-limit.service';
-import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, sharedTestOrm } from '../../helpers/test-uow';
+import type { TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { dbNow } from '../../../src/db/types/db-timestamp.type';
+import { CollabMessageReactions } from '../../../src/db/entities/CollabMessageReactions.entity';
+import { CollabMessages } from '../../../src/db/entities/CollabMessages.entity';
+import { CollabNotes } from '../../../src/db/entities/CollabNotes.entity';
+import { CollabPollVotes } from '../../../src/db/entities/CollabPollVotes.entity';
+import { TripFiles } from '../../../src/db/entities/TripFiles.entity';
 import {
   createTestCollabNotesRepo,
   createTestCollabMessageReactionsRepo,
@@ -132,7 +132,15 @@ async function buildCollabService(storage = collabFx.storage, rl = rateLimit): P
   );
 }
 
+let orm: TestOrm;
+
+/** A note attachment row, straight in, as another domain's upload would leave it. */
+function attachToNote(tripId: number, noteId: number, filename: string, originalName: string): Promise<number> {
+  return insertRow(orm, TripFiles, { trip: tripId, note: noteId, filename, original_name: originalName });
+}
+
 beforeAll(async () => {
+  orm = await sharedTestOrm(testDb);
   svc = await buildCollabService();
   notesRepo = await createTestCollabNotesRepo(testDb);
   messageReactionsRepo = await createTestCollabMessageReactionsRepo(testDb);
@@ -349,7 +357,7 @@ describe('listMessages', () => {
     const { user1, trip } = setup();
     const r = await svc.createMessage(trip.id, user1.id, 'React me');
     const msgId = r.message!.id;
-    testDb.prepare('INSERT INTO collab_message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(msgId, user1.id, '👍');
+    await insertRow(orm, CollabMessageReactions, { message: msgId, user: user1.id, emoji: '👍' });
 
     const msgs = await svc.listMessages(trip.id);
     expect(msgs[0].reactions).toBeDefined();
@@ -405,8 +413,8 @@ describe('deleteMessage', () => {
     // because only the owner may delete their own message).
     expect(result.username).toBeUndefined();
 
-    const row = testDb.prepare('SELECT deleted FROM collab_messages WHERE id = ?').get(r.message!.id) as any;
-    expect(row.deleted).toBe(1);
+    const row = await findRow(orm, CollabMessages, { id: r.message!.id });
+    expect(row?.deleted).toBe(1);
   });
 });
 
@@ -419,10 +427,10 @@ describe('updateNote', () => {
 
     await svc.updateNote(trip.id, note.id, { title: 'Updated' });
 
-    const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
-    expect(updated.title).toBe('Updated');
-    expect(updated.content).toBe('Some content'); // unchanged
-    expect(updated.website).toBe('https://example.com'); // unchanged
+    const updated = (await findRow(orm, CollabNotes, { id: note.id }));
+    expect(updated?.title).toBe('Updated');
+    expect(updated?.content).toBe('Some content'); // unchanged
+    expect(updated?.website).toBe('https://example.com'); // unchanged
   });
 
   it('COLLAB-SVC-020: clears content when content is explicitly set to empty string', async () => {
@@ -431,8 +439,8 @@ describe('updateNote', () => {
 
     await svc.updateNote(trip.id, note.id, { content: '' });
 
-    const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
-    expect(updated.content).toBe('');
+    const updated = (await findRow(orm, CollabNotes, { id: note.id }));
+    expect(updated?.content).toBe('');
   });
 
   it('COLLAB-SVC-021: updates website when website is defined', async () => {
@@ -441,8 +449,8 @@ describe('updateNote', () => {
 
     await svc.updateNote(trip.id, note.id, { website: 'https://new.example.com' });
 
-    const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
-    expect(updated.website).toBe('https://new.example.com');
+    const updated = (await findRow(orm, CollabNotes, { id: note.id }));
+    expect(updated?.website).toBe('https://new.example.com');
   });
 
   it('COLLAB-SVC-022: clears website when website is explicitly set to empty string', async () => {
@@ -451,8 +459,8 @@ describe('updateNote', () => {
 
     await svc.updateNote(trip.id, note.id, { website: '' });
 
-    const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
-    expect(updated.website).toBe('');
+    const updated = (await findRow(orm, CollabNotes, { id: note.id }));
+    expect(updated?.website).toBe('');
   });
 
   it('COLLAB-SVC-023: returns null when note does not exist', async () => {
@@ -469,8 +477,8 @@ describe('updateNote', () => {
     const result = await svc.updateNote(trip.id, noteB.id, { title: 'Hijacked' });
 
     expect(result).toBeNull();
-    const untouched = testDb.prepare('SELECT title FROM collab_notes WHERE id = ?').get(noteB.id) as { title: string };
-    expect(untouched.title).toBe('Foreign note');
+    const untouched = (await findRow(orm, CollabNotes, { id: noteB.id }));
+    expect(untouched?.title).toBe('Foreign note');
   });
 
   it('COLLAB-SVC-024: updates pinned flag', async () => {
@@ -479,8 +487,8 @@ describe('updateNote', () => {
 
     await svc.updateNote(trip.id, note.id, { pinned: true });
 
-    const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
-    expect(updated.pinned).toBe(1);
+    const updated = (await findRow(orm, CollabNotes, { id: note.id }));
+    expect(updated?.pinned).toBe(1);
   });
 });
 
@@ -810,7 +818,7 @@ describe('hardening', () => {
     await expect(failing.votePoll(trip.id, poll!.id, user1.id, 1)).rejects.toThrow('boom');
     spy.mockRestore();
 
-    const votes = testDb.prepare('SELECT option_index FROM collab_poll_votes WHERE poll_id = ?').all(poll!.id) as { option_index: number }[];
+    const votes = (await findRows(orm, CollabPollVotes, { poll: poll!.id })).map((v) => ({ option_index: v.option_index }));
     expect(votes).toEqual([{ option_index: 0 }]);
   });
 
@@ -818,8 +826,7 @@ describe('hardening', () => {
     const { user1, trip } = setup();
     const failing = await buildCollabService();
     const note = await failing.createNote(trip.id, user1.id, { title: 'With file' });
-    testDb.prepare('INSERT INTO trip_files (trip_id, note_id, filename, original_name) VALUES (?, ?, ?, ?)')
-      .run(trip.id, note.id, 'files/a.pdf', 'a.pdf');
+    await attachToNote(trip.id, note.id, 'files/a.pdf', 'a.pdf');
 
     // Repository-level spy (not `dbs.run`): the row delete this proof targets
     // now goes through `notesRepo.delete`, the last statement inside
@@ -828,8 +835,8 @@ describe('hardening', () => {
     await expect(failing.deleteNote(trip.id, note.id)).rejects.toThrow('boom');
     spy.mockRestore();
 
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM trip_files WHERE note_id = ?').get(note.id)).toEqual({ c: 1 });
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM collab_notes WHERE id = ?').get(note.id)).toEqual({ c: 1 });
+    expect(await countRows(orm, TripFiles, { note: note.id })).toBe(1);
+    expect(await countRows(orm, CollabNotes, { id: note.id })).toBe(1);
   });
 
   it('COLLAB-SVC-036: a failing storage delete is swallowed — note + file deletes still succeed', async () => {
@@ -837,17 +844,17 @@ describe('hardening', () => {
     const failingStorage = { delete: vi.fn().mockRejectedValue(new Error('EACCES')) };
     const failing = await buildCollabService(failingStorage as unknown as import('../../../src/nest/storage/storage.service').StorageService);
     const note = await failing.createNote(trip.id, user1.id, { title: 'Sticky file' });
-    testDb.prepare('INSERT INTO trip_files (trip_id, note_id, filename, original_name) VALUES (?, ?, ?, ?)')
-      .run(trip.id, note.id, 'stuck.pdf', 'stuck.pdf');
-    const fileId = (testDb.prepare('SELECT id FROM trip_files WHERE note_id = ?').get(note.id) as { id: number }).id;
+    await attachToNote(trip.id, note.id, 'stuck.pdf', 'stuck.pdf');
+    const attachment = await findRow(orm, TripFiles, { note: note.id });
+    if (!attachment) throw new Error('the note attachment was not written');
+    const fileId = attachment.id;
 
     expect(await failing.deleteNoteFile(trip.id, note.id, fileId)).toBe(true);
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM trip_files WHERE id = ?').get(fileId)).toEqual({ c: 0 });
+    expect(await countRows(orm, TripFiles, { id: fileId })).toBe(0);
 
-    testDb.prepare('INSERT INTO trip_files (trip_id, note_id, filename, original_name) VALUES (?, ?, ?, ?)')
-      .run(trip.id, note.id, 'stuck2.pdf', 'stuck2.pdf');
+    await attachToNote(trip.id, note.id, 'stuck2.pdf', 'stuck2.pdf');
     expect(await failing.deleteNote(trip.id, note.id)).toBe(true);
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM collab_notes WHERE id = ?').get(note.id)).toEqual({ c: 0 });
+    expect(await countRows(orm, CollabNotes, { id: note.id })).toBe(0);
   });
 
   it('COLLAB-SVC-036: getFormattedNoteById is trip-scoped and null-safe', async () => {
@@ -866,7 +873,7 @@ describe('hardening', () => {
 
     expect((await svc.votePoll(trip.id, poll!.id, user1.id, '0' as unknown as number)).error).toBe('invalid_index');
     expect((await svc.votePoll(trip.id, poll!.id, user1.id, 0.5)).error).toBe('invalid_index');
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM collab_poll_votes WHERE poll_id = ?').get(poll!.id)).toEqual({ c: 0 });
+    expect(await countRows(orm, CollabPollVotes, { poll: poll!.id })).toBe(0);
   });
 
   it('COLLAB-SVC-038: linkPreview returns the fallback for a malformed URL without throwing', async () => {
@@ -889,16 +896,18 @@ describe('repository parity', () => {
     await svc.addNoteFile(trip.id, note.id, { filename: 'b.png', originalname: 'b.png', size: 20, mimetype: 'image/png' });
 
     // CB9/CB12/CB20's shared shape.
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyNote = testDb.prepare('SELECT n.*, u.username, u.avatar FROM collab_notes n JOIN users u ON n.user_id = u.id WHERE n.id = ?').get(note.id);
     expect(await notesRepo.findWithUser(note.id)).toEqual(legacyNote);
     expect(await notesRepo.findWithUserInTrip(note.id, trip.id)).toEqual(legacyNote);
 
     // CB6's narrow attachment projection.
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyAttachments = testDb.prepare('SELECT id, filename, original_name, file_size, mime_type FROM trip_files WHERE note_id = ? ORDER BY id ASC').all(note.id);
     expect(await notesRepo.listAttachmentsForNote(note.id)).toEqual(legacyAttachments);
 
     // A file moved to the trash from the file manager leaves the note.
-    testDb.prepare("UPDATE trip_files SET deleted_at = CURRENT_TIMESTAMP WHERE note_id = ? AND original_name = 'b.png'").run(note.id);
+    await updateRows(orm, TripFiles, { note: note.id, original_name: 'b.png' }, { deleted_at: dbNow() });
     expect((await notesRepo.listAttachmentsForNote(note.id)).map(a => a.original_name)).toEqual(['a.pdf']);
   });
 
@@ -911,6 +920,7 @@ describe('repository parity', () => {
     await svc.votePoll(trip.id, poll!.id, user2.id, 0);
 
     // CB23's poll half.
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyPoll = testDb.prepare('SELECT p.*, u.username, u.avatar FROM collab_polls p JOIN users u ON p.user_id = u.id WHERE p.id = ?').get(poll!.id);
     expect(await pollsRepo.findWithUser(poll!.id)).toEqual(legacyPoll);
 
@@ -918,6 +928,7 @@ describe('repository parity', () => {
     // multi-select case (user1 voted twice). No ORDER BY on either side, so
     // both are sorted the same deterministic way before comparing.
     const sortVotes = (rows: { option_index: number; user_id: number }[]) => [...rows].sort((a, b) => a.option_index - b.option_index || a.user_id - b.user_id);
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyVotes = testDb.prepare('SELECT v.option_index, v.user_id, u.username, u.avatar FROM collab_poll_votes v JOIN users u ON v.user_id = u.id WHERE v.poll_id = ?').all(poll!.id) as { option_index: number; user_id: number }[];
     const repoVotes = await pollVotesRepo.listForPoll(poll!.id);
     expect(sortVotes(repoVotes)).toEqual(sortVotes(legacyVotes));
@@ -930,6 +941,7 @@ describe('repository parity', () => {
     const reply = await svc.createMessage(trip.id, user1.id, 'Reply text', original.message!.id);
     await svc.deleteMessage(trip.id, original.message!.id, user1.id);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`
       SELECT m.*, u.username, u.avatar,
         CASE WHEN rm.deleted = 1 THEN '' ELSE rm.text END AS reply_text,
@@ -955,18 +967,20 @@ describe('repository parity', () => {
     const { user1, user2, trip } = setup();
     const msg = await svc.createMessage(trip.id, user1.id, 'React away');
     const msgId = msg.message!.id;
-    testDb.prepare('INSERT INTO collab_message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(msgId, user1.id, '👍');
-    testDb.prepare('INSERT INTO collab_message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(msgId, user2.id, '👍');
-    testDb.prepare('INSERT INTO collab_message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(msgId, user2.id, '🎉');
+    await insertRow(orm, CollabMessageReactions, { message: msgId, user: user1.id, emoji: '👍' });
+    await insertRow(orm, CollabMessageReactions, { message: msgId, user: user2.id, emoji: '👍' });
+    await insertRow(orm, CollabMessageReactions, { message: msgId, user: user2.id, emoji: '🎉' });
 
     const sortReactions = (rows: { emoji: string; user_id: number }[]) => [...rows].sort((a, b) => a.emoji.localeCompare(b.emoji) || a.user_id - b.user_id);
 
     // CB1.
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacySingle = testDb.prepare('SELECT r.emoji, r.user_id, u.username FROM collab_message_reactions r JOIN users u ON r.user_id = u.id WHERE r.message_id = ?').all(msgId) as { emoji: string; user_id: number }[];
     const repoSingle = await messageReactionsRepo.listForMessage(msgId);
     expect(sortReactions(repoSingle)).toEqual(sortReactions(legacySingle));
 
     // CB46 (the batch form `listMessages` uses).
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyBatch = testDb.prepare('SELECT r.message_id, r.emoji, r.user_id, u.username FROM collab_message_reactions r JOIN users u ON r.user_id = u.id WHERE r.message_id IN (?)').all(msgId) as { emoji: string; user_id: number }[];
     const repoBatch = await messageReactionsRepo.listForMessages([msgId]);
     expect(sortReactions(repoBatch)).toEqual(sortReactions(legacyBatch));
@@ -977,9 +991,11 @@ describe('repository parity', () => {
     const { user1, trip } = setup();
     const link = await svc.createLink(trip.id, user1.id, { title: 'Guide', url: 'https://example.com/guide', pinned: true });
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare('SELECT l.*, u.username FROM collab_links l JOIN users u ON u.id = l.user_id WHERE l.id = ?').get(link!.id);
     expect(await linksRepo.findWithUser(link!.id)).toEqual(legacy);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyList = testDb.prepare('SELECT l.*, u.username FROM collab_links l JOIN users u ON u.id = l.user_id WHERE l.trip_id = ? ORDER BY l.pinned DESC, l.created_at DESC').all(trip.id);
     expect(await linksRepo.listForTrip(trip.id)).toEqual(legacyList);
   });
@@ -1006,7 +1022,7 @@ describe('deleteNoteFile IDOR guard', () => {
     // note1's scope with a file that actually belongs to note2) — red if the
     // guard's `note_id` column were dropped.
     expect(await svc.deleteNoteFile(trip.id, note1.id, file2!.file.id)).toBe(false);
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM trip_files WHERE id = ?').get(file2!.file.id)).toEqual({ c: 1 });
+    expect(await countRows(orm, TripFiles, { id: file2!.file.id })).toBe(1);
 
     // A note (and its file) that live in a DIFFERENT trip. `id` and `note_id`
     // both match the real row; only `trip_id` is wrong (the attacker's own
@@ -1018,7 +1034,7 @@ describe('deleteNoteFile IDOR guard', () => {
     const foreignFile = await svc.addNoteFile(otherTrip.id, foreignNote.id, { filename: 'foreign.pdf', originalname: 'foreign.pdf', size: 1, mimetype: 'application/pdf' });
 
     expect(await svc.deleteNoteFile(trip.id, foreignNote.id, foreignFile!.file.id)).toBe(false);
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM trip_files WHERE id = ?').get(foreignFile!.file.id)).toEqual({ c: 1 });
+    expect(await countRows(orm, TripFiles, { id: foreignFile!.file.id })).toBe(1);
 
     // Sanity: the SAME file, scoped correctly, does succeed — the guard
     // isn't just refusing everything.
