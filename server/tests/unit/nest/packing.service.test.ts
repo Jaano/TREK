@@ -19,24 +19,10 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 // ── DB setup ──────────────────────────────────────────────────────────────────
 
 vi.mock('../../../src/db/database', async () => {
-
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-    return mock;
+  // Trip access reads through TripsRepository now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
 
@@ -64,7 +50,39 @@ import { PackingService, isInvalidBagRef } from '../../../src/nest/packing/packi
 const bridgeListItems = (tripId: string | number, viewerId?: number) => svc.listItems(tripId, viewerId);
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { notificationsStub } from '../../helpers/notifications';
-import { createTestUnitOfWork, createTestTripsRepo, createTestTripMembersRepo } from '../../helpers/test-uow';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { addTripMember as addTripMemberRow } from '../../helpers/factories/trips';
+import { PackingBags } from '../../../src/db/entities/PackingBags.entity';
+import { PackingItems } from '../../../src/db/entities/PackingItems.entity';
+import { PackingTemplateCategories } from '../../../src/db/entities/PackingTemplateCategories.entity';
+import { PackingTemplateItems } from '../../../src/db/entities/PackingTemplateItems.entity';
+import { PackingTemplates } from '../../../src/db/entities/PackingTemplates.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+
+const orm = () => sharedTestOrm(testDb);
+
+/** An unchecked item on the list, the way the old fixtures wrote them. */
+async function addItem(tripId: number, name: string, category: string, sortOrder: number): Promise<number> {
+  return insertRow(await orm(), PackingItems, { trip: tripId, name, category, checked: 0, sort_order: sortOrder });
+}
+
+async function tripItems(tripId: number) {
+  return findRows(await orm(), PackingItems, { trip: tripId });
+}
+
+/** The stored item; fails the case when it is gone. */
+async function itemRow(id: number) {
+  const row = await findRow(await orm(), PackingItems, { id });
+  if (!row) throw new Error(`no packing item ${id}`);
+  return row;
+}
+
+/** Every item of every category of the template. */
+async function templateItems(templateId: number) {
+  const categoryIds = (await findRows(await orm(), PackingTemplateCategories, { template: templateId })).map((c) => c.id);
+  return findRows(await orm(), PackingTemplateItems, { category: { $in: categoryIds } });
+}
+import { createTestUnitOfWork, createTestTripsRepo, createTestTripMembersRepo, sharedTestOrm } from '../../helpers/test-uow';
 import {
   createTestPackingItemsRepo,
   createTestPackingItemContributorsRepo,
@@ -123,9 +141,9 @@ describe('saveAsTemplate', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Shirt', 'Clothes', 0);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Shorts', 'Clothes', 1);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Toothbrush', 'Toiletries', 2);
+    await addItem(trip.id, 'Shirt', 'Clothes', 0);
+    await addItem(trip.id, 'Shorts', 'Clothes', 1);
+    await addItem(trip.id, 'Toothbrush', 'Toiletries', 2);
 
     const result = await svc.saveAsTemplate(trip.id, user.id, 'My Template');
 
@@ -134,10 +152,10 @@ describe('saveAsTemplate', () => {
     expect(result!.categoryCount).toBe(2);
     expect(result!.itemCount).toBe(3);
 
-    const template = testDb.prepare('SELECT * FROM packing_templates WHERE id = ?').get(result!.id) as any;
-    expect(template).toBeDefined();
-    expect(template.name).toBe('My Template');
-    expect(template.created_by).toBe(user.id);
+    const template = await findRow(await orm(), PackingTemplates, { id: result!.id });
+    expect(template).not.toBeNull();
+    expect(template!.name).toBe('My Template');
+    expect(template!.created_by).toBe(user.id);
   });
 
   it('PACK-SVC-002: returns null when trip has no packing items', async () => {
@@ -154,14 +172,16 @@ describe('templates carry weight, quantity and bag (#1131)', () => {
   it('PACK-SVC-1131-1: a saved template keeps each item\'s weight, count and bag name, and applying it restores them', async () => {
     const { user } = createUser(testDb);
     const source = createTrip(testDb, user.id);
-    const bagId = testDb.prepare('INSERT INTO packing_bags (trip_id, name, color) VALUES (?, ?, ?)').run(source.id, 'Backpack', '#111111').lastInsertRowid;
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order, weight_grams, quantity, bag_id) VALUES (?, ?, ?, 1, 0, ?, ?, ?)')
-      .run(source.id, 'Socks', 'Clothes', 60, 4, bagId);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, 1)').run(source.id, 'Charger', 'Tech');
+    const bagId = await insertRow(await orm(), PackingBags, { trip: source.id, name: 'Backpack', color: '#111111' });
+    await insertRow(await orm(), PackingItems, {
+      trip: source.id, name: 'Socks', category: 'Clothes', checked: 1, sort_order: 0, weight_grams: 60, quantity: 4, bag: bagId,
+    });
+    await addItem(source.id, 'Charger', 'Tech', 1);
 
     const saved = (await svc.saveAsTemplate(source.id, user.id, 'Hiking'))!;
-    const rows = testDb.prepare(`SELECT ti.name, ti.weight_grams, ti.quantity, ti.bag_name FROM packing_template_items ti
-      JOIN packing_template_categories tc ON tc.id = ti.category_id WHERE tc.template_id = ? ORDER BY ti.name`).all(saved.id);
+    const rows = (await templateItems(saved.id))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(({ name, weight_grams, quantity, bag_name }) => ({ name, weight_grams, quantity, bag_name }));
     expect(rows).toEqual([
       { name: 'Charger', weight_grams: null, quantity: 1, bag_name: null },
       { name: 'Socks', weight_grams: 60, quantity: 4, bag_name: 'Backpack' },
@@ -172,22 +192,22 @@ describe('templates carry weight, quantity and bag (#1131)', () => {
     const added = (await svc.applyTemplate(target.id, saved.id)) as any[];
     const socks = added.find(i => i.name === 'Socks');
     expect(socks).toMatchObject({ weight_grams: 60, quantity: 4, checked: 0 });
-    const bag = testDb.prepare('SELECT id, name FROM packing_bags WHERE trip_id = ?').get(target.id) as { id: number; name: string };
-    expect(bag.name).toBe('Backpack');
-    expect(socks.bag_id).toBe(bag.id);
+    const bag = await findRow(await orm(), PackingBags, { trip: target.id });
+    expect(bag?.name).toBe('Backpack');
+    expect(socks.bag_id).toBe(bag?.id);
     expect(added.find(i => i.name === 'Charger')).toMatchObject({ weight_grams: null, quantity: 1, bag_id: null });
   });
 
   it('PACK-SVC-1131-2: applying reuses a bag the trip already has under that name', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const existing = testDb.prepare('INSERT INTO packing_bags (trip_id, name, color) VALUES (?, ?, ?)').run(trip.id, 'Duffel', '#222222').lastInsertRowid;
-    const templateId = seedTemplate(user.id, ['Towel']);
-    testDb.prepare("UPDATE packing_template_items SET bag_name = 'Duffel', weight_grams = 400 WHERE name = 'Towel'").run();
+    const existing = await insertRow(await orm(), PackingBags, { trip: trip.id, name: 'Duffel', color: '#222222' });
+    const templateId = await seedTemplate(user.id, ['Towel']);
+    await updateRows(await orm(), PackingTemplateItems, { name: 'Towel' }, { bag_name: 'Duffel', weight_grams: 400 });
 
     const [towel] = (await svc.applyTemplate(trip.id, templateId)) as any[];
     expect(towel).toMatchObject({ bag_id: Number(existing), weight_grams: 400 });
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM packing_bags WHERE trip_id = ?').get(trip.id)).toEqual({ n: 1 });
+    expect(await countRows(await orm(), PackingBags, { trip: trip.id })).toBe(1);
   });
 });
 
@@ -198,8 +218,8 @@ describe('listTemplates', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Shirt', 'Clothes', 0);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Toothbrush', 'Toiletries', 1);
+    await addItem(trip.id, 'Shirt', 'Clothes', 0);
+    await addItem(trip.id, 'Toothbrush', 'Toiletries', 1);
     const saved = await svc.saveAsTemplate(trip.id, user.id, 'Weekend');
 
     const templates = await svc.listTemplates();
@@ -215,12 +235,12 @@ describe('listTemplates', () => {
 // ── applyTemplate ─────────────────────────────────────────────────────────────
 
 /** A one-category template with the given item names. Returns its id. */
-function seedTemplate(userId: number, itemNames: string[]): number {
-  const templateId = testDb.prepare('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)').run('Camping', userId).lastInsertRowid as number;
-  const catId = testDb.prepare('INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, ?, ?)').run(templateId, 'Gear', 0).lastInsertRowid as number;
-  itemNames.forEach((name, i) => {
-    testDb.prepare('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)').run(catId, name, i);
-  });
+async function seedTemplate(userId: number, itemNames: string[]): Promise<number> {
+  const templateId = await insertRow(await orm(), PackingTemplates, { name: 'Camping', createdByRef: userId });
+  const catId = await insertRow(await orm(), PackingTemplateCategories, { template: templateId, name: 'Gear', sort_order: 0 });
+  for (const [i, name] of itemNames.entries()) {
+    await insertRow(await orm(), PackingTemplateItems, { category: catId, name, sort_order: i });
+  }
   return templateId;
 }
 
@@ -246,14 +266,12 @@ describe('applyTemplate', () => {
     const trip = createTrip(testDb, user.id);
 
     // Insert a template with one category and two items directly
-    const templateResult = testDb.prepare('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)').run('Camping', user.id);
-    const templateId = templateResult.lastInsertRowid as number;
+    const templateId = await insertRow(await orm(), PackingTemplates, { name: 'Camping', createdByRef: user.id });
 
-    const catResult = testDb.prepare('INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, ?, ?)').run(templateId, 'Gear', 0);
-    const catId = catResult.lastInsertRowid as number;
+    const catId = await insertRow(await orm(), PackingTemplateCategories, { template: templateId, name: 'Gear', sort_order: 0 });
 
-    testDb.prepare('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)').run(catId, 'Tent', 0);
-    testDb.prepare('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)').run(catId, 'Sleeping Bag', 1);
+    await insertRow(await orm(), PackingTemplateItems, { category: catId, name: 'Tent', sort_order: 0 });
+    await insertRow(await orm(), PackingTemplateItems, { category: catId, name: 'Sleeping Bag', sort_order: 1 });
 
     const result = await svc.applyTemplate(trip.id, templateId);
 
@@ -261,7 +279,7 @@ describe('applyTemplate', () => {
     expect(Array.isArray(result)).toBe(true);
     expect((result as any[]).length).toBe(2);
 
-    const items = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ?').all(trip.id) as any[];
+    const items = await tripItems(trip.id);
     expect(items.length).toBe(2);
     expect(items.map((i: any) => i.name)).toContain('Tent');
     expect(items.map((i: any) => i.name)).toContain('Sleeping Bag');
@@ -271,8 +289,7 @@ describe('applyTemplate', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const templateResult = testDb.prepare('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)').run('Empty Template', user.id);
-    const templateId = templateResult.lastInsertRowid as number;
+    const templateId = await insertRow(await orm(), PackingTemplates, { name: 'Empty Template', createdByRef: user.id });
 
     const result = await svc.applyTemplate(trip.id, templateId);
 
@@ -283,7 +300,7 @@ describe('applyTemplate', () => {
   it('PACK-SVC-046: applies into the personal list when visibility is personal', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const templateId = seedTemplate(user.id, ['Tent']);
+    const templateId = await seedTemplate(user.id, ['Tent']);
 
     const result = await svc.applyTemplate(trip.id, templateId, 'personal', user.id) as any[];
 
@@ -296,8 +313,8 @@ describe('applyTemplate', () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
     const trip = createTrip(testDb, user.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(trip.id, other.id);
-    const templateId = seedTemplate(user.id, ['Tent']);
+    await addTripMemberRow(await orm(), trip.id, other.id);
+    const templateId = await seedTemplate(user.id, ['Tent']);
 
     await svc.applyTemplate(trip.id, templateId, 'personal', user.id);
 
@@ -307,7 +324,7 @@ describe('applyTemplate', () => {
   it('PACK-SVC-048: applies into the common pool by default, leaving items unowned', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const templateId = seedTemplate(user.id, ['Tent']);
+    const templateId = await seedTemplate(user.id, ['Tent']);
 
     const result = await svc.applyTemplate(trip.id, templateId, 'common', user.id) as any[];
 
@@ -319,7 +336,7 @@ describe('applyTemplate', () => {
   it('PACK-SVC-049: falls back to common when no owner is given, so items stay visible', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const templateId = seedTemplate(user.id, ['Tent']);
+    const templateId = await seedTemplate(user.id, ['Tent']);
 
     // A private item with no owner would be invisible to everyone.
     const result = await svc.applyTemplate(trip.id, templateId, 'personal') as any[];
@@ -343,9 +360,9 @@ describe('createBag / deleteBag', () => {
     expect(result.color).toBe('#ff0000');
     expect(result.trip_id).toBe(trip.id);
 
-    const bag = testDb.prepare('SELECT * FROM packing_bags WHERE id = ?').get(result.id) as any;
-    expect(bag).toBeDefined();
-    expect(bag.name).toBe('Carry-On');
+    const bag = await findRow(await orm(), PackingBags, { id: result.id });
+    expect(bag).not.toBeNull();
+    expect(bag!.name).toBe('Carry-On');
   });
 
   it('PACK-SVC-005b: bags and items created at the same time take one position each', async () => {
@@ -371,8 +388,7 @@ describe('createBag / deleteBag', () => {
 
     expect(deleted).toBe(true);
 
-    const row = testDb.prepare('SELECT * FROM packing_bags WHERE id = ?').get(bag.id);
-    expect(row).toBeUndefined();
+    expect(await findRow(await orm(), PackingBags, { id: bag.id })).toBeNull();
   });
 
   it('PACK-SVC-007: deleteBag returns false for non-existent bag', async () => {
@@ -441,13 +457,13 @@ describe('setBagMembers', () => {
 
     // assigning to an outsider must not stick — the CASE keeps user_id null
     await svc.updateBag(trip.id, bag.id, { user_id: outsider.id }, ['user_id']);
-    const stored = testDb.prepare('SELECT user_id FROM packing_bags WHERE id = ?').get(bag.id) as { user_id: number | null };
-    expect(stored.user_id).toBeNull();
+    const stored = await findRow(await orm(), PackingBags, { id: bag.id });
+    expect(stored!.user_id).toBeNull();
 
     // assigning to the owner (on the roster) does stick
     await svc.updateBag(trip.id, bag.id, { user_id: user.id }, ['user_id']);
-    const stored2 = testDb.prepare('SELECT user_id FROM packing_bags WHERE id = ?').get(bag.id) as { user_id: number | null };
-    expect(stored2.user_id).toBe(user.id);
+    const stored2 = await findRow(await orm(), PackingBags, { id: bag.id });
+    expect(stored2!.user_id).toBe(user.id);
   });
 });
 
@@ -463,10 +479,10 @@ describe('bulkImport with bag field', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toBeDefined();
 
-    const bags = testDb.prepare('SELECT * FROM packing_bags WHERE trip_id = ? AND name = ?').all(trip.id, 'Carry-On') as any[];
+    const bags = await findRows(await orm(), PackingBags, { trip: trip.id, name: 'Carry-On' });
     expect(bags).toHaveLength(1);
 
-    const items = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ?').all(trip.id) as any[];
+    const items = await tripItems(trip.id);
     expect(items).toHaveLength(1);
     expect(items[0].bag_id).toBe(bags[0].id);
   });
@@ -482,10 +498,10 @@ describe('bulkImport with bag field', () => {
 
     expect(result).toHaveLength(2);
 
-    const bags = testDb.prepare('SELECT * FROM packing_bags WHERE trip_id = ? AND name = ?').all(trip.id, 'Carry-On') as any[];
+    const bags = await findRows(await orm(), PackingBags, { trip: trip.id, name: 'Carry-On' });
     expect(bags).toHaveLength(1);
 
-    const items = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ?').all(trip.id) as any[];
+    const items = await tripItems(trip.id);
     expect(items).toHaveLength(2);
     expect(items[0].bag_id).toBe(bags[0].id);
     expect(items[1].bag_id).toBe(bags[0].id);
@@ -506,13 +522,12 @@ describe('bulkImport with quantity field', () => {
       { name: 'Charger', quantity: 0 },
     ]);
 
-    const byName = (n: string) =>
-      testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ? AND name = ?').get(trip.id, n) as any;
+    const byName = async (n: string) => (await findRow(await orm(), PackingItems, { trip: trip.id, name: n }))!;
 
-    expect(byName('Socks').quantity).toBe(5);
-    expect(byName('Toothbrush').quantity).toBe(1);
-    expect(byName('Batteries').quantity).toBe(999);
-    expect(byName('Charger').quantity).toBe(1);
+    expect((await byName('Socks')).quantity).toBe(5);
+    expect((await byName('Toothbrush')).quantity).toBe(1);
+    expect((await byName('Batteries')).quantity).toBe(999);
+    expect((await byName('Charger')).quantity).toBe(1);
   });
 });
 
@@ -555,7 +570,7 @@ describe('private items (#858)', () => {
     const trip = createTrip(testDb, user.id);
 
     // Legacy-style row with no owner.
-    const id = Number((testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, sort_order) VALUES (?, ?, 0, 0)').run(trip.id, 'Legacy') as any).lastInsertRowid);
+    const id = await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Legacy', checked: 0, sort_order: 0 });
 
     const updated = await svc.updateItem(trip.id, id, { is_private: true }, ['is_private'], undefined, user.id) as any;
     expect(updated.is_private).toBe(1);
@@ -584,10 +599,10 @@ describe('private items (#858)', () => {
     const trip = createTrip(testDb, user.id);
 
     await svc.bulkImport(trip.id, [{ name: 'A' }, { name: 'B', is_private: true }], user.id);
-    const rows = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ? ORDER BY name').all(trip.id) as any[];
+    const rows = await findRows(await orm(), PackingItems, { trip: trip.id }, { name: 'asc' });
     expect(rows.every(r => r.owner_id === user.id)).toBe(true);
-    expect(rows.find(r => r.name === 'B').is_private).toBe(1);
-    expect(rows.find(r => r.name === 'A').is_private).toBe(0);
+    expect(rows.find(r => r.name === 'B')!.is_private).toBe(1);
+    expect(rows.find(r => r.name === 'A')!.is_private).toBe(0);
   });
 });
 
@@ -601,7 +616,7 @@ describe('three-tier packing sharing (#858)', () => {
     const { user: other } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     // A legacy-style row written directly (is_private defaults 0) = Common.
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, sort_order) VALUES (?, ?, 0, 0)').run(trip.id, 'Tent');
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Tent', checked: 0, sort_order: 0 });
     await svc.createItem(trip.id, { name: 'Stove', visibility: 'common' }, owner.id);
 
     expect(names(await svc.listItems(trip.id, owner.id) as any[])).toEqual(['Stove', 'Tent']);
@@ -883,7 +898,7 @@ describe('create-path fields + bag trip scope (#2154)', () => {
     expect(await svc.createItem(trip.id, { name: 'Tent', bag_id: foreignBag.id }, user.id)).toEqual({ invalidBag: true });
     // A dead id refuses the same way (it used to be an SQLite FK error).
     expect(isInvalidBagRef(await svc.createItem(trip.id, { name: 'Tent', bag_id: 99999 }, user.id))).toBe(true);
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM packing_items WHERE trip_id = ?').get(trip.id) as any).n).toBe(0);
+    expect(await countRows(await orm(), PackingItems, { trip: trip.id })).toBe(0);
   });
 
   it('PACK-SVC-056: updateItem refuses a cross-trip bag_id and leaves the row alone; null still clears', async () => {
@@ -896,7 +911,7 @@ describe('create-path fields + bag trip scope (#2154)', () => {
 
     const refused = await svc.updateItem(trip.id, item.id, { bag_id: foreign.id }, ['bag_id'], undefined, user.id);
     expect(isInvalidBagRef(refused)).toBe(true);
-    expect((testDb.prepare('SELECT bag_id FROM packing_items WHERE id = ?').get(item.id) as any).bag_id).toBe(own.id);
+    expect((await findRow(await orm(), PackingItems, { id: item.id }))!.bag_id).toBe(own.id);
 
     // Clearing the bag with an explicit null is untouched by the check.
     const cleared = await svc.updateItem(trip.id, item.id, { bag_id: null }, ['bag_id'], undefined, user.id) as any;
@@ -988,7 +1003,7 @@ describe('notifyTagged', () => {
   it('queries the trip title and dispatches the notification with the resolved title', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const { title } = testDb.prepare('SELECT title FROM trips WHERE id = ?').get(trip.id) as { title: string };
+    const { title } = (await findRow(await orm(), Trips, { id: trip.id }))!;
 
     await svc.notifyTagged(String(trip.id), { id: 1, email: 'a@b.c' } as never, 'Clothes', [2, 3]);
     // Flush the dynamic import().then microtask chain.
@@ -1197,8 +1212,7 @@ describe('Template items', () => {
     const item = await svc.createTemplateItem(String(tpl.template.id), String(cat.category.id), 'To Delete') as any;
     const result = await svc.deleteTemplateItem(String(tpl.template.id), String(item.item.id)) as any;
     expect(result.error).toBeUndefined();
-    const check = testDb.prepare('SELECT id FROM packing_template_items WHERE id = ?').get(item.item.id);
-    expect(check).toBeUndefined();
+    expect(await findRow(await orm(), PackingTemplateItems, { id: item.item.id })).toBeNull();
   });
 
   it('ADMIN-SVC-064 — deleteTemplateItem returns 404 for non-existent item', async () => {
@@ -1222,7 +1236,7 @@ describe('Template item scoping (post-fold quirk fix)', () => {
       .toMatchObject({ status: 404 });
     expect(await svc.deleteTemplateItem(String(tplB.template.id), String(item.item.id)) as any)
       .toMatchObject({ status: 404 });
-    expect((testDb.prepare('SELECT name FROM packing_template_items WHERE id = ?').get(item.item.id) as any).name)
+    expect((await findRow(await orm(), PackingTemplateItems, { id: item.item.id }))!.name)
       .toBe('Tent');
 
     // The owning template still works.
@@ -1257,7 +1271,7 @@ describe('packing item object-level authorization', () => {
   it('PACK-SVC-101: a non-viewer cannot update someone else\'s Personal item', async () => {
     const { trip, personal, intruder } = await restrictedTrip();
     expect(await svc.updateItem(trip.id, personal.id, { name: 'pwned' }, ['name'], undefined, intruder.id)).toBeNull();
-    expect(testDb.prepare('SELECT name FROM packing_items WHERE id = ?').get(personal.id)).toEqual({ name: 'Diary' });
+    expect((await itemRow(personal.id)).name).toBe('Diary');
   });
 
   it('PACK-SVC-102: a non-recipient cannot update a Shared item', async () => {
@@ -1268,7 +1282,7 @@ describe('packing item object-level authorization', () => {
   it('PACK-SVC-103: a non-viewer cannot delete a restricted item', async () => {
     const { trip, personal, intruder } = await restrictedTrip();
     expect(await svc.deleteItem(trip.id, personal.id, intruder.id)).toBeNull();
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM packing_items WHERE id = ?').get(personal.id)).toEqual({ n: 1 });
+    expect(await countRows(await orm(), PackingItems, { id: personal.id })).toBe(1);
   });
 
   it('PACK-SVC-104: a non-viewer cannot clone a restricted item into their own list', async () => {
@@ -1288,7 +1302,7 @@ describe('packing item object-level authorization', () => {
     // which is U3's own hole below) — even so, an intruder with no view
     // access to a Personal item must not be able to touch it.
     expect(await svc.removeContributor(trip.id, personal.id, intruder.id)).toBeNull();
-    expect(testDb.prepare('SELECT owner_id FROM packing_items WHERE id = ?').get(personal.id)).toEqual({ owner_id: owner.id });
+    expect((await itemRow(personal.id)).owner_id).toBe(owner.id);
   });
 
   it('U3 HOLE — contributor removal checks the path user\'s visibility, not the caller\'s: an intruder who cannot see a Personal item still gets it back by naming the owner as :userId', async () => {
@@ -1325,22 +1339,20 @@ describe('packing item object-level authorization', () => {
   it('PACK-SVC-105: a non-owner cannot re-share a restricted item they cannot see', async () => {
     const { trip, personal, intruder } = await restrictedTrip();
     expect(await svc.setItemSharing(trip.id, personal.id, intruder.id, 'common', [])).toBeNull();
-    expect(testDb.prepare('SELECT is_private FROM packing_items WHERE id = ?').get(personal.id)).toEqual({ is_private: 1 });
+    expect((await itemRow(personal.id)).is_private).toBe(1);
   });
 
   it('M2-PACKING-001: refuses to update a visible-shaped item from a different trip (PackingItems.findVisibleInTrip trip-scoping)', async () => {
     const { user } = createUser(testDb);
     const tripA = createTrip(testDb, user.id);
     const tripB = createTrip(testDb, user.id);
-    const itemBId = Number(
-      testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked) VALUES (?, ?, ?, 0)').run(tripB.id, 'Foreign item', 'Clothing').lastInsertRowid,
-    );
+    const itemBId = await insertRow(await orm(), PackingItems, { trip: tripB.id, name: 'Foreign item', category: 'Clothing', checked: 0 });
 
     // itemB is a Common item the caller can see — the guard that must refuse
     // this is the trip filter, not the privacy predicate.
     const result = await svc.updateItem(tripA.id, itemBId, { name: 'Hijacked' }, ['name'], undefined, user.id);
     expect(result).toBeNull();
-    expect(testDb.prepare('SELECT name FROM packing_items WHERE id = ?').get(itemBId)).toEqual({ name: 'Foreign item' });
+    expect((await itemRow(itemBId)).name).toBe('Foreign item');
   });
 
   // Missing actor must deny rather than fall through unfiltered.
@@ -1362,11 +1374,7 @@ describe('packing item object-level authorization', () => {
   it('PACK-SVC-108: a template captures only the Common list and the actor\'s own items', async () => {
     const { trip, intruder } = await restrictedTrip();
     const templateId = (await svc.saveAsTemplate(trip.id, intruder.id, 'Snapshot') as { id: number }).id;
-    const rows = testDb.prepare(`
-      SELECT i.name FROM packing_template_items i
-      JOIN packing_template_categories c ON c.id = i.category_id
-      WHERE c.template_id = ?
-    `).all(templateId) as { name: string }[];
+    const rows = await templateItems(templateId);
     expect(rows.map(r => r.name).sort()).toEqual(['Tent']);
   });
 });
@@ -1398,6 +1406,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
 
     for (const [actor, label] of [[owner, 'owner'], [friend, 'recipient'], [stranger, 'plain member']] as const) {
       const converted = await packingItemsRepoDirect.listVisibleToActor(trip.id, actor.id);
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = testDb.prepare(`
         SELECT * FROM packing_items WHERE trip_id = ? AND ${VISIBLE_TO_ACTOR}
         ORDER BY sort_order ASC, created_at ASC
@@ -1416,10 +1425,12 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     const trip = createTrip(testDb, user.id);
     const bag = (await svc.createBag(trip.id, { name: 'Backpack', color: '#123456' }))!;
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyUnassigned = testDb.prepare('SELECT b.*, COALESCE(u.display_name, u.username) as assigned_username FROM packing_bags b LEFT JOIN users u ON b.user_id = u.id WHERE b.id = ?').get(bag.id);
     expect(await packingBagsRepoDirect.findWithAssignee(bag.id)).toEqual(legacyUnassigned);
 
     await packingBagsRepoDirect.update(bag.id, { user_id: [true, user.id] });
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyAssigned = testDb.prepare('SELECT b.*, COALESCE(u.display_name, u.username) as assigned_username FROM packing_bags b LEFT JOIN users u ON b.user_id = u.id WHERE b.id = ?').get(bag.id);
     const convertedAssigned = await packingBagsRepoDirect.findWithAssignee(bag.id);
     expect(convertedAssigned).toEqual(legacyAssigned);
@@ -1435,6 +1446,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     await svc.saveAsTemplate(trip.id, owner.id, 'Empty-ish'); // second template, 0 extra items beyond dedupe
 
     const converted = await packingTemplatesRepoDirect.listWithItemCount();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT pt.id, pt.name,
         (SELECT COUNT(*) FROM packing_template_items ti JOIN packing_template_categories tc ON ti.category_id = tc.id WHERE tc.template_id = pt.id) as item_count
@@ -1453,6 +1465,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     await svc.updateCategoryAssignees(trip.id, 'Clothing', [alice.id, bob.id]);
 
     const converted = await packingCategoryAssigneesRepoDirect.listForCategory(trip.id, 'Clothing');
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT pca.user_id, COALESCE(u.display_name, u.username) AS username, u.avatar
       FROM packing_category_assignees pca JOIN users u ON pca.user_id = u.id
@@ -1474,6 +1487,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     await svc.createItem(trip.id, { name: 'Other diary', visibility: 'personal' }, other.id);
 
     const converted = await packingItemsRepoDirect.listExportable(trip.id, owner.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT i.name, i.category, i.weight_grams, i.quantity, b.name AS bag_name
       FROM packing_items i LEFT JOIN packing_bags b ON b.id = i.bag_id
