@@ -18,9 +18,10 @@ permissions:
 #   - Tests: the *-coverage jobs run the suites and upload lcov; s3-contract
 #     runs the MinIO contract suite. Coverage jobs run tests only — with the
 #     gates cleared in preflight, they can only fail because tests failed.
-#     client-e2e drives the real app in Chromium and WebKit, and client-bundle
-#     builds the client and checks each map engine keeps a chunk of its own.
-#     Neither feeds the scan.
+#     client-e2e drives the real app in Chromium and WebKit, client-bundle
+#     builds the client and checks each map engine keeps a chunk of its own,
+#     and postgres-probe runs the dialect helpers and every repository
+#     statement against a Postgres service. None of them feeds the scan.
 #   - Scan `needs:` exactly the four coverage jobs. A coverage job failing
 #     must stop the scan — a missing lcov file would make every line of that
 #     package report as uncovered, and the dashboard would show a collapse
@@ -521,6 +522,74 @@ jobs:
           TREK_TEST_S3_SECRET_ACCESS_KEY: trekci-secret
         run: cd server && npx vitest run tests/unit/nest/storage/s3.driver.contract.test.ts
 
+  # What of the server's SQL runs on Postgres today (server/scripts/pg-probe.ts).
+  # TREK runs on SQLite; the dialect layer in server/src/db/dialect/ is written
+  # so a second engine is a branch there and not a sweep through the
+  # repositories, and this is the job that holds it to that. Against an empty
+  # Postgres it derives a schema from the entities, runs every dialect helper
+  # on SQLite and Postgres (every case must pass), and calls every public
+  # repository method once, each statement in its own rolled-back transaction.
+  # The statements Postgres refuses are held per method to
+  # server/scripts/pg-probe-baseline.json, which may only shrink. The measured
+  # baseline and the full report are uploaded either way, so a change that
+  # fixes a statement can lower the baseline without a local Postgres.
+  postgres-probe:
+    name: Postgres Probe
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    needs: [changes, plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
+    if: needs.changes.outputs.code == 'true'
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: probe
+          POSTGRES_DB: trek_probe
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d trek_probe"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The probe reads the repositories' parameter types, some of which come
+      # from @trek/shared's built declarations.
+      - name: Build shared
+        run: npm run build --workspace=shared
+
+      - name: Run the Postgres probe
+        env:
+          TREK_PG_PROBE_URL: postgres://postgres:probe@127.0.0.1:5432/trek_probe
+        run: >-
+          cd server && npm run probe:pg --
+          --next-baseline="$RUNNER_TEMP/pg-probe-baseline.json"
+          --report="$RUNNER_TEMP/pg-probe-report.json"
+
+      - name: Upload the measured baseline and the report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: pg-probe-baseline
+          path: |
+            ${{ runner.temp }}/pg-probe-baseline.json
+            ${{ runner.temp }}/pg-probe-report.json
+          if-no-files-found: ignore
+          retention-days: 14
+
   server-coverage:
     name: Server Coverage
     runs-on: ubuntu-24.04
@@ -884,6 +953,7 @@ jobs:
       - client-bundle
       - client-e2e
       - s3-contract
+      - postgres-probe
       - server-coverage
       - client-coverage
       - shared-coverage
