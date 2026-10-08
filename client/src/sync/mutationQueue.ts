@@ -40,16 +40,19 @@ export function generateUUID(): string {
   return randomId()
 }
 
-let _flushing = false
+// The flush in progress, from the moment flush() is called until its last pass is
+// done, including the time it waits for another tab's lock. A second call gets
+// this same promise, so no caller resolves while a pass is still to come.
+let _flushRun: Promise<void> | null = null
 // Set when flush() is called while a pass is already running. That pass read its
 // pending rows when it began, so a write queued since then waits for one more
-// pass, which the running one starts once it is done.
+// pass, which the running flush starts once that pass is done.
 let _flushAgain = false
 
 /**
  * Take the cross-tab flush lock, waiting while another tab holds it. Every open
  * tab of the account shares the queue and runs its own triggers, and the
- * _flushing flag only covers its own tab: two tabs read the same pending rows
+ * in-progress flush only covers its own tab: two tabs read the same pending rows
  * and replay each of them twice, leaning on the server's replay cache to answer
  * the second. Waiting rather than skipping matters to the callers: the online
  * trigger re-seeds Dexie from the server once flush() resolves, and the socket
@@ -276,18 +279,44 @@ export const mutationQueue = {
    * failed or as a conflict holds back the later writes to the same entity, so
    * they keep their order whatever the user decides about it.
    *
-   * A call that arrives while a pass is running returns at once, but asks that
-   * pass for one more round: the running pass read the pending rows when it
-   * began and would not see a write queued since.
+   * A call that arrives while a flush is running, or still waiting for another
+   * tab's lock, asks it for one more round (the running pass read the pending
+   * rows when it began and would not see a write queued since) and resolves with
+   * it. So whoever refetches once flush() resolves, like the socket's reconnect
+   * hook, never does so while this tab or another one is still replaying.
    */
-  async flush(): Promise<void> {
-    if (isEffectivelyOffline() || !isAuthed()) return
-    if (_flushing) {
+  flush(): Promise<void> {
+    if (isEffectivelyOffline() || !isAuthed()) return Promise.resolve()
+    if (_flushRun) {
       _flushAgain = true
-      return
+      return _flushRun
     }
-    _flushing = true
-    _flushAgain = false
+    const run = (async () => {
+      try {
+        // A "mine wins" auto-resolution dropped its base token; one more pass now
+        // overwrites the server unconditionally. Bounded: the retried write carries
+        // no token, so it cannot 409 for the same reason. A flush asked for while a
+        // pass ran gets its pass here too. Bounded as well: the flag is only set by
+        // a call made during a pass, and every pass clears it when it starts.
+        let again = true
+        while (again) {
+          _flushAgain = false
+          const needsRetry = await this._flushPass()
+          again = (needsRetry || _flushAgain) && !isEffectivelyOffline() && isAuthed()
+        }
+      } finally {
+        _flushRun = null
+      }
+    })()
+    _flushRun = run
+    return run
+  },
+
+  /**
+   * One pass over the pending rows, under the cross-tab lock. Only flush() calls
+   * it. Resolves to true when a write was re-queued for another pass.
+   */
+  async _flushPass(): Promise<boolean> {
     const release = await acquireFlushLock()
     // tempId → realId learned during this flush, so a dependent edit/delete
     // queued against an offline-created entity (still holding the negative id)
@@ -528,16 +557,8 @@ export const mutationQueue = {
       }
     } finally {
       release()
-      _flushing = false
     }
-    // A "mine wins" auto-resolution dropped its base token; one more pass now
-    // overwrites the server unconditionally. Bounded: the retried write carries
-    // no token, so it cannot 409 for the same reason. A flush asked for while
-    // this pass ran gets its pass here too. Bounded as well: the flag is only set
-    // by a call made during a pass, and every pass clears it when it starts.
-    if ((needsRetry || _flushAgain) && !isEffectivelyOffline()) {
-      await this.flush()
-    }
+    return needsRetry
   },
 
   /**
@@ -647,7 +668,7 @@ export const mutationQueue = {
 
   /** Reset internal flushing flag and timestamp counters — useful in tests. */
   _resetFlushing(): void {
-    _flushing = false
+    _flushRun = null
     _flushAgain = false
     _lastTs = 0
     _lastTempId = 0

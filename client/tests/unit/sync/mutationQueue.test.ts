@@ -810,6 +810,57 @@ describe('mutationQueue.flush: one tab at a time', () => {
     expect(await offlineDb.mutationQueue.get(id)).toBeUndefined();
   });
 
+  it('a second flush while the first waits for the lock resolves only with it', async () => {
+    const locks = fakeLocks();
+    const releaseOther = locks.holdElsewhere();
+    const id = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id }));
+    let sent = 0;
+    server.use(http.post('/api/trips/1/places', () => { sent++; return HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 64 }) }); }));
+
+    const first = mutationQueue.flush();
+    await settle();
+    // The socket's reconnect hook calls in here and refetches once this resolves.
+    let secondDone = false;
+    const second = mutationQueue.flush().then(() => { secondDone = true; });
+    await settle();
+    expect(secondDone).toBe(false);
+
+    releaseOther();
+    await Promise.all([first, second]);
+
+    expect(secondDone).toBe(true);
+    expect(sent).toBe(1);
+    // One lock request for the waiting pass and one for the extra pass it was asked for.
+    expect(locks.request).toHaveBeenCalledTimes(3);
+  });
+
+  it('a write queued during a pass goes out before the second caller resolves', async () => {
+    const first = generateUUID();
+    const later = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id: first }));
+    const sent: string[] = [];
+    let second: Promise<string[]> | undefined;
+    server.use(http.post('/api/trips/1/places', async ({ request }) => {
+      const { name } = await request.json() as { name: string };
+      sent.push(name);
+      if (name === 'Eiffel Tower') {
+        await mutationQueue.enqueue(makeMutation({ id: later, body: { name: 'Louvre' } }));
+        // What had been sent at the moment this second call resolved.
+        second = mutationQueue.flush().then(() => [...sent]);
+      }
+      return HttpResponse.json({ place: buildPlace({ trip_id: 1, id: sent.length + 70 }) });
+    }));
+
+    const firstRun = mutationQueue.flush();
+    await vi.waitFor(() => expect(second).toBeDefined());
+
+    // Resolved only after the extra pass sent the later write, not when it was asked for.
+    expect(await second).toEqual(['Eiffel Tower', 'Louvre']);
+    expect(await offlineDb.mutationQueue.count()).toBe(0);
+    await firstRun;
+  });
+
   it('flushes under the flag alone when the lock request is refused', async () => {
     Object.defineProperty(navigator, 'locks', {
       value: { request: vi.fn().mockRejectedValue(new DOMException('denied', 'SecurityError')) },
