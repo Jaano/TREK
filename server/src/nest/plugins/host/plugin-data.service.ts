@@ -129,12 +129,13 @@ export class PluginDataDb {
     const checkTime = this.startBudget('query');
     // iterate() pulls one row at a time, so a recursive CTE that would yield
     // unboundedly is halted at the cap instead of materializing via all(), and the
-    // clock is read between rows.
+    // clock is read between rows. It is read only once another row has come back, so
+    // a result that has been read to its end is returned, however long that took.
     const rows: unknown[] = [];
     for (const row of this.db.prepare(sql).iterate(...(args as never[]))) {
+      if (rows.length > 0) checkTime();
       rows.push(row);
       if (rows.length > maxRows) throw new Error(`query returned more than ${maxRows} rows`);
-      checkTime();
     }
     return rows;
   }
@@ -142,7 +143,7 @@ export class PluginDataDb {
   /**
    * Write statement(s). With bound args, exec() runs one statement. Without, it runs a
    * script of any number (e.g. a small setup script), one statement at a time and
-   * within the time budget, checked after each statement.
+   * within the time budget, checked before each statement after the first.
    */
   exec(sql: string, args: unknown[] = []): { changes: number } {
     this.guard(sql);
@@ -156,27 +157,33 @@ export class PluginDataDb {
 
   /**
    * Runs a script the way `Database#exec` did (statement after statement, each in
-   * autocommit unless the script opens a transaction), with `checkTime` read after
-   * every statement. A trigger body is gathered until SQLite stops calling it
-   * incomplete. A script that runs out of time inside a transaction it opened itself
-   * has that transaction rolled back, so the connection is not left holding it.
+   * autocommit unless the script opens a transaction), with `checkTime` read before
+   * every statement but the first. The clock is never read after the last one, so a
+   * script whose statements have all run (and committed) is reported as done. A
+   * trigger body is gathered until SQLite stops calling it incomplete. A script that
+   * runs out of time inside a transaction it opened itself has that transaction rolled
+   * back, so the connection is not left holding it.
    */
   private runScript(sql: string, checkTime: () => void): void {
     const openedNoTransaction = !this.db.inTransaction;
     let pending = '';
+    let ranOne = false;
     for (const piece of splitAfterSemicolons(sql)) {
       pending += piece;
       const stmt = this.prepareComplete(pending);
       if (stmt === 'incomplete') continue;
       pending = '';
       if (stmt === 'empty') continue;
-      stmt.run();
-      try {
-        checkTime();
-      } catch (e) {
-        if (openedNoTransaction && this.db.inTransaction) this.db.prepare('ROLLBACK').run();
-        throw e;
+      if (ranOne) {
+        try {
+          checkTime();
+        } catch (e) {
+          if (openedNoTransaction && this.db.inTransaction) this.db.prepare('ROLLBACK').run();
+          throw e;
+        }
       }
+      stmt.run();
+      ranOne = true;
     }
     // A statement still open at the end of the script: prepare it once more for
     // SQLite's own error, as Database#exec reports it.

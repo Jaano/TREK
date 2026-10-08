@@ -106,12 +106,24 @@ describe('PluginDataDb', () => {
     return () => (t += step);
   };
 
+  /**
+   * A clock that answers `reads` in order and repeats the last value after that. Set
+   * `reads` right before a call to say what each of its clock reads sees.
+   */
+  const scriptedClock = () => {
+    const clock = {
+      reads: [0] as number[],
+      now: () => (clock.reads.length > 1 ? (clock.reads.shift() as number) : (clock.reads[0] ?? 0)),
+    };
+    return clock;
+  };
+
   it('stops a query at the first row past its time budget', () => {
     const db = new PluginDataDb('budget-query', { timeBudgetMs: 100, now: steppingClock(30) });
     db.exec('CREATE TABLE seq (n INTEGER)');
     db.exec('INSERT INTO seq (n) VALUES ' + Array.from({ length: 50 }, (_, i) => `(${i})`).join(','));
-    // The start reads the clock and each row reads it again, 30 ms later every time:
-    // at the fourth row the call is 120 ms in, past the budget.
+    // The start reads the clock and every row after the first reads it again, 30 ms
+    // later every time: at the fifth row the call is 120 ms in, past the budget.
     expect(() => db.query('SELECT n FROM seq')).toThrow('query exceeded its 100 ms time budget');
     // A query that finishes inside the budget is untouched.
     expect(db.query('SELECT n FROM seq WHERE n < 2 ORDER BY n')).toEqual([{ n: 0 }, { n: 1 }]);
@@ -141,13 +153,14 @@ describe('PluginDataDb', () => {
   it('holds an exec script to the time budget between its statements', () => {
     const db = new PluginDataDb('budget-exec', { timeBudgetMs: 80, now: steppingClock(30) });
     db.exec('CREATE TABLE log (n INTEGER)');
-    // Start, then one read after each statement: 30, 60, then 90 ms after the third
-    // insert. The script stops there and the fourth insert never runs. Each statement
-    // committed on its own, as Database#exec ran them, so the three stay.
+    // Start, then one read before each statement after the first: 30, 60, then 90 ms
+    // before the fourth insert. The script stops there and the fourth insert never
+    // runs. Each statement committed on its own, as Database#exec ran them, so the
+    // three stay.
     expect(() =>
       db.exec('INSERT INTO log VALUES (1); INSERT INTO log VALUES (2); INSERT INTO log VALUES (3); INSERT INTO log VALUES (4);'),
     ).toThrow('exec exceeded its 80 ms time budget');
-    // One row back, so the check itself reads the clock once and stays in budget.
+    // One row back, so the check itself reads the clock only at its start.
     expect(db.query('SELECT group_concat(n) AS ns FROM (SELECT n FROM log ORDER BY n)')).toEqual([{ ns: '1,2,3' }]);
     // A script that opened its own transaction and ran out of time inside it is rolled
     // back, so the connection is not left in that transaction.
@@ -157,6 +170,40 @@ describe('PluginDataDb', () => {
     expect(db.query('SELECT count(*) AS c FROM log WHERE n > 4')).toEqual([{ c: 0 }]);
     db.exec('INSERT INTO log VALUES (8)');
     expect(db.query('SELECT count(*) AS c FROM log WHERE n > 4')).toEqual([{ c: 1 }]);
+    db.close();
+  });
+
+  it('reports a call whose last statement or row ran past the budget as done', () => {
+    const clock = scriptedClock();
+    const db = new PluginDataDb('budget-last', { timeBudgetMs: 100, now: clock.now });
+    db.exec('CREATE TABLE log (n INTEGER)');
+    // A single statement without args: the clock is read at the start only, so a
+    // slow insert that has run and committed is not reported as failed.
+    clock.reads = [0, 1000];
+    expect(db.exec('INSERT INTO log VALUES (1)')).toEqual({ changes: 0 });
+    // A script whose closing COMMIT is what takes the time: the reads before the
+    // INSERT and before the COMMIT are in budget, and nothing is read after it.
+    clock.reads = [0, 0, 0, 1000];
+    expect(db.exec('BEGIN; INSERT INTO log VALUES (2); COMMIT;')).toEqual({ changes: 0 });
+    clock.reads = [0];
+    expect(db.query('SELECT n FROM log ORDER BY n')).toEqual([{ n: 1 }, { n: 2 }]);
+    // The same budget running out before the COMMIT still stops the script and rolls
+    // the transaction back.
+    clock.reads = [0, 0, 1000];
+    expect(() => db.exec('BEGIN; INSERT INTO log VALUES (3); COMMIT;')).toThrow('exec exceeded its 100 ms time budget');
+    clock.reads = [0];
+    expect(db.query('SELECT count(*) AS c FROM log')).toEqual([{ c: 2 }]);
+    // A query read to its end is returned, even when its last row came in late: the
+    // clock is read after the second row only, and not again once the rows run out.
+    clock.reads = [0, 0, 1000];
+    expect(db.query('SELECT n FROM log ORDER BY n')).toEqual([{ n: 1 }, { n: 2 }]);
+    // A query stopped early leaves the connection free for the next call.
+    db.exec('INSERT INTO log VALUES (3)');
+    clock.reads = [0, 1000];
+    expect(() => db.query('SELECT n FROM log ORDER BY n')).toThrow('query exceeded its 100 ms time budget');
+    clock.reads = [0];
+    db.exec('INSERT INTO log VALUES (4)');
+    expect(db.query('SELECT count(*) AS c FROM log')).toEqual([{ c: 4 }]);
     db.close();
   });
 

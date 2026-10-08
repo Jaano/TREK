@@ -74,8 +74,10 @@ export interface PluginContext {
    * path or connection to directly. Quota: 256 MB per plugin (writes past it fail);
    * result sets are capped at 100,000 rows, and a `query`, a `tx` or an `exec` script
    * without args gets 2 s of wall-clock time, checked between the rows it reads and
-   * the statements it runs (past it, it throws, a `tx` rolls back and a script stops).
-   * A single statement and `migrate` are not timed.
+   * the statements it runs (past it, it throws, a `tx` rolls back and a script stops
+   * before its next statement). An `exec` with bound args (one statement) and
+   * `migrate` are not timed, and no single statement can be stopped midway (a read
+   * only between its rows).
    * See `tx()` below for the atomic-batch cap and README § Runtime limits. */
   db: {
     query<T = unknown>(sql: string, ...args: unknown[]): Promise<T[]>;
