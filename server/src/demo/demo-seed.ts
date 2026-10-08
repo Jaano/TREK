@@ -4,7 +4,7 @@ import { DEMO_PASS } from '../nest/common/demo';
 import { DemoRepository, type NewDemoPlaceRow } from '../db/repositories/DemoRepository';
 // Static like in demo-reset.job.ts: the module top is inert, everything that
 // touches the database happens inside the functions.
-import { requireEntityManager } from './demo-reset';
+import { markExampleTripsSeeded, requireEntityManager } from './demo-reset';
 
 // D6 (task-2-review.md's controller ruling / non-HTTP caller table): this runs
 // from `runSchemaBootstrap` before `app.init()`, outside any request context, but
@@ -63,8 +63,10 @@ async function seedDemoData(): Promise<{ adminId: number; demoId: number }> {
   console.log('[Demo] Seeding example trips...');
   await seedExampleTrips(demo, adminId, demoId);
 
-  // The first baseline is saved once the app is up, by DemoResetJob, through
-  // the injected backup port this boot-time seed has no access to.
+  // The first baseline follows this seed and only this seed. DemoResetJob saves
+  // it once the app is up, through the injected backup port this boot-time
+  // seed has no access to.
+  markExampleTripsSeeded();
   return { adminId, demoId };
 }
 

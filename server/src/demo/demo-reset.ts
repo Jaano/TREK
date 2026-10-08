@@ -153,4 +153,26 @@ function hasBaseline(): boolean {
   return fs.existsSync(baselinePath);
 }
 
-export { resetDemoUser, saveBaseline, hasBaseline };
+/**
+ * Whether the boot-time seed put the example trips in during this process.
+ *
+ * The first baseline is saved only after a real seed, as it always was: a demo
+ * database that already holds data but has no baseline keeps it that way, and
+ * the hourly reset stays a logged no-op until the admin saves one. The seed
+ * runs before the container exists, so it leaves this mark and DemoResetJob,
+ * which has the backup port, saves the baseline once the app is up.
+ */
+let seededExampleTrips = false;
+
+function markExampleTripsSeeded(): void {
+  seededExampleTrips = true;
+}
+
+/** Reads the mark and clears it, so one seed saves at most one baseline. */
+function takeExampleTripsSeeded(): boolean {
+  const seeded = seededExampleTrips;
+  seededExampleTrips = false;
+  return seeded;
+}
+
+export { resetDemoUser, saveBaseline, hasBaseline, markExampleTripsSeeded, takeExampleTripsSeeded };

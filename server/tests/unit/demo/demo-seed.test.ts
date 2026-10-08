@@ -30,6 +30,7 @@ vi.mock('../../../src/demo/demo-reset', async (importOriginal) => {
 });
 
 import { seedDemoData } from '../../../src/demo/demo-seed';
+import { takeExampleTripsSeeded } from '../../../src/demo/demo-reset';
 
 describe('demo seeding', () => {
   let db: Database.Database;
@@ -117,5 +118,20 @@ describe('demo seeding', () => {
     // reservation_time carries the full date (#1934), never a bare clock time.
     const reservationTimes = (db.prepare('SELECT reservation_time FROM reservations ORDER BY id').all() as { reservation_time: string }[]).map((r) => r.reservation_time);
     for (const t of reservationTimes) expect(t).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  });
+
+  it('DEMOSEED-005: marks a first baseline as due only on the boot that seeded the example trips', async () => {
+    // The mark is process state; earlier cases may have left it set.
+    takeExampleTripsSeeded();
+
+    await seed();
+    expect(takeExampleTripsSeeded()).toBe(true);
+    // Taking it clears it, so one seed saves at most one baseline.
+    expect(takeExampleTripsSeeded()).toBe(false);
+
+    // A later boot finds the trips in place and returns before seeding: no mark,
+    // so a database that already holds data never becomes a baseline on its own.
+    await seed();
+    expect(takeExampleTripsSeeded()).toBe(false);
   });
 });

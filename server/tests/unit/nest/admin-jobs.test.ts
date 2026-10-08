@@ -7,14 +7,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const logMock = vi.hoisted(() => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logError: vi.fn(), logWarn: vi.fn(), logDebug: vi.fn() }));
-const { resetDemoUserMock, saveBaselineMock, hasBaselineMock } = vi.hoisted(() => ({
+const { resetDemoUserMock, saveBaselineMock, hasBaselineMock, takeExampleTripsSeededMock } = vi.hoisted(() => ({
   resetDemoUserMock: vi.fn(),
   saveBaselineMock: vi.fn(async () => {}),
   hasBaselineMock: vi.fn(() => true),
+  takeExampleTripsSeededMock: vi.fn(() => false),
 }));
 
 vi.mock('../../../src/nest/audit/audit-log.logger', () => logMock);
-vi.mock('../../../src/demo/demo-reset', () => ({ resetDemoUser: resetDemoUserMock, saveBaseline: saveBaselineMock, hasBaseline: hasBaselineMock }));
+vi.mock('../../../src/demo/demo-reset', () => ({
+  resetDemoUser: resetDemoUserMock,
+  saveBaseline: saveBaselineMock,
+  hasBaseline: hasBaselineMock,
+  takeExampleTripsSeeded: takeExampleTripsSeededMock,
+}));
 
 import { VersionCheckJob } from '../../../src/nest/admin/version-check.job';
 import { DemoResetJob } from '../../../src/nest/admin/demo-reset.job';
@@ -35,6 +41,7 @@ function registrarStub(enabled = true) {
 beforeEach(() => {
   vi.clearAllMocks();
   hasBaselineMock.mockReturnValue(true);
+  takeExampleTripsSeededMock.mockReturnValue(false);
 });
 
 describe('VersionCheckJob', () => {
@@ -105,7 +112,8 @@ describe('DemoResetJob', () => {
     expect(logMock.logError).toHaveBeenCalledWith('Demo reset: baseline gone');
   });
 
-  it('AJOB-007: a demo boot without a baseline saves the first one through the port, gate or not', async () => {
+  it('AJOB-007: the boot that seeded the example trips saves the first baseline through the port, gate or not', async () => {
+    takeExampleTripsSeededMock.mockReturnValue(true);
     hasBaselineMock.mockReturnValue(false);
     const { job } = make(true, false);
     await job.onApplicationBootstrap();
@@ -113,6 +121,7 @@ describe('DemoResetJob', () => {
   });
 
   it('AJOB-008: an existing baseline is left alone, and so is a non-demo boot', async () => {
+    takeExampleTripsSeededMock.mockReturnValue(true);
     await make(true).job.onApplicationBootstrap();
     hasBaselineMock.mockReturnValue(false);
     await make(false).job.onApplicationBootstrap();
@@ -120,9 +129,18 @@ describe('DemoResetJob', () => {
   });
 
   it('AJOB-009: a first baseline that cannot be saved is logged, not thrown into the boot', async () => {
+    takeExampleTripsSeededMock.mockReturnValue(true);
     hasBaselineMock.mockReturnValue(false);
     saveBaselineMock.mockRejectedValueOnce(new Error('database or disk is full'));
     await expect(make(true).job.onApplicationBootstrap()).resolves.toBeUndefined();
     expect(logMock.logError).toHaveBeenCalledWith('Demo baseline: database or disk is full');
+  });
+
+  it('AJOB-010: a demo boot that seeded nothing saves no baseline, even with none on disk', async () => {
+    // A database that already holds data (possibly user edits) and has no
+    // baseline must not become the reset target behind the admin's back.
+    hasBaselineMock.mockReturnValue(false);
+    await make(true).job.onApplicationBootstrap();
+    expect(saveBaselineMock).not.toHaveBeenCalled();
   });
 });

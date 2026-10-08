@@ -5,7 +5,7 @@ import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import { CronRegistrarService } from '../scheduling/cron-registrar.service';
 import { DATABASE_BACKUP, type DatabaseBackupStrategy } from '../database/database-backup.interface';
 import { withRequestContext } from '../database/request-context';
-import { hasBaseline, resetDemoUser, saveBaseline } from '../../demo/demo-reset';
+import { hasBaseline, resetDemoUser, saveBaseline, takeExampleTripsSeeded } from '../../demo/demo-reset';
 
 /**
  * Demo mode: hourly reset of demo user data (moved from src/scheduler.ts).
@@ -15,9 +15,12 @@ import { hasBaseline, resetDemoUser, saveBaseline } from '../../demo/demo-reset'
  * side-effect-free, and the close/swap/reopen sequence runs inside
  * resetDemoUser at tick time, through the injected backup port.
  *
- * It also saves the first baseline, on a demo boot that has none. That used to
- * happen inside the boot-time demo seed, which runs before the container can
- * hand anything in; here the port is injected like everywhere else.
+ * It also saves the first baseline, on the boot whose seed has just put the
+ * example trips in and only when no baseline exists yet: the same trigger the
+ * save had inside the boot-time demo seed, which runs before the container can
+ * hand the port in. A demo database that already holds data without a baseline
+ * is left alone, so its hourly reset stays a logged no-op as before. Like the
+ * old save, it does not depend on the cron registrar being enabled.
  */
 @Injectable()
 export class DemoResetJob implements OnApplicationBootstrap {
@@ -36,7 +39,7 @@ export class DemoResetJob implements OnApplicationBootstrap {
       this.registrar.register('demo-reset', '0 * * * *', () => void this.tick(), { timezone: 'none' });
       logInfo('Demo hourly reset scheduled');
     }
-    if (!hasBaseline()) await this.saveFirstBaseline();
+    if (takeExampleTripsSeeded() && !hasBaseline()) await this.saveFirstBaseline();
   }
 
   async tick(): Promise<void> {
