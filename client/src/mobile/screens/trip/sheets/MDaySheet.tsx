@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { CalendarDays, Compass, Eraser, Hotel, MapPin, Pencil, Plus, RotateCcw, Route as RouteIcon, TramFront } from 'lucide-react'
-import type { WeatherResult } from '@trek/shared'
 import MSheet from '../../../components/MSheet'
 import type { MTripSheetsProps } from '../MTripShell'
 import { useTranslation } from '../../../../i18n'
-import { weatherApi } from '../../../../api/client'
 import { useSettingsStore } from '../../../../store/settingsStore'
 import { routeModeIcon, useRouteModeOptions } from '../../../../components/Planner/routeModes'
 import { dayHeadingParts } from '../../../../utils/dayLabel'
 import { stayDayTimes } from '../../../../components/Planner/stayDayTimes'
 import { useDayNotes } from '../../../../hooks/useDayNotes'
+import { useDayForecast, useDayRename } from '../../../../components/Planner/useDayDetail'
+import { dayBookings, stayDayLabel, toDisplayTemp } from '../../../../components/Planner/dayDetailModel'
 import { RES_ICONS, getNoteIcon } from '../../../../components/Planner/DayPlanSidebar.constants'
 import { getDayBookendHotels, isDayInAccommodationRange } from '../../../../utils/dayOrder'
 import { getTransportForDay, hasCarrierEndpointOnDay } from '../../../../utils/dayMerge'
@@ -67,29 +67,15 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
     () => (day ? getDayBookendHotels(day, planner.days, planner.tripAccommodations).morning : undefined),
   )
 
-  const [weather, setWeather] = useState<WeatherResult | null>(null)
-  const [weatherLoading, setWeatherLoading] = useState(false)
-  useEffect(() => {
-    if (!open || !day?.date || lat == null || lng == null) { setWeather(null); return }
-    let cancelled = false
-    setWeatherLoading(true)
-    weatherApi.getDetailed(lat, lng, day.date, planner.language)
-      .then(data => { if (!cancelled) setWeather(data.error ? null : data) })
-      .catch(() => { if (!cancelled) setWeather(null) })
-      .finally(() => { if (!cancelled) setWeatherLoading(false) })
-    return () => { cancelled = true }
-  }, [open, day?.date, lat, lng, planner.language])
+  const { weather, loading: weatherLoading } = useDayForecast(
+    open && !!day?.date && lat != null && lng != null, day?.date, lat, lng, planner.language,
+  )
 
   // Inline rename — the day sheet owns the pencil on mobile (#1065 parity).
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState('')
-  const titleInputRef = useRef<HTMLInputElement | null>(null)
-  useEffect(() => { if (editingTitle) titleInputRef.current?.focus() }, [editingTitle])
-  useEffect(() => { if (!open) setEditingTitle(false) }, [open])
-  const commitRename = () => {
-    setEditingTitle(false)
-    if (day) planner.handleUpdateDayTitle(day.id, titleDraft.trim())
-  }
+  const { editingTitle, setEditingTitle, titleDraft, setTitleDraft, titleInputRef, startRename, commitRename } = useDayRename(title => {
+    if (day) planner.handleUpdateDayTitle(day.id, title)
+  })
+  useEffect(() => { if (!open) setEditingTitle(false) }, [open, setEditingTitle])
 
   const notes = useDayNotes(planner.tripId)
   const dayNotes: DayNote[] = day
@@ -98,11 +84,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
 
   const dayReservations = useMemo(() => {
     if (!day) return []
-    return planner.reservations.filter(r => {
-      if (r.type === 'hotel') return false
-      if (r.assignment_id && dayAssignments.some(a => a.id === r.assignment_id)) return true
-      return r.day_id === day.id
-    })
+    return dayBookings(day.id, dayAssignments, planner.reservations)
   }, [day, planner.reservations, dayAssignments])
 
   const dayAccommodations = useMemo(() => {
@@ -218,7 +200,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
     planner.handlePlaceClick(placeId)
   }
 
-  const cTemp = (c: number) => Math.round(isFahrenheit ? c * 9 / 5 + 32 : c)
+  const cTemp = (c: number) => toDisplayTemp(c, isFahrenheit)
   const formattedDate = day?.date
     ? new Date(`${day.date.slice(0, 10)}T00:00:00Z`).toLocaleDateString(locale, {
         weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC',
@@ -230,11 +212,9 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
   const WeatherIcon = weatherIconFor(weather?.main)
 
   const stayBadge = (acc: (typeof dayAccommodations)[number]) => {
-    const isIn = acc.start_day_id === day?.id
-    const isOut = acc.end_day_id === day?.id
-    if (isIn && isOut) return { label: `${t('day.checkIn')} & ${t('day.checkOut')}`, cls: 'border-[color:var(--m-st-confirmed)] text-[color:var(--m-st-confirmed)]' }
-    if (isIn) return { label: t('day.checkIn'), cls: 'border-[color:var(--m-st-confirmed)] text-[color:var(--m-st-confirmed)]' }
-    if (isOut) return { label: t('day.checkOut'), cls: 'border-[color:var(--m-st-danger)] text-[color:var(--m-st-danger)]' }
+    const label = stayDayLabel(acc, day?.id, t)
+    if (label && acc.start_day_id === day?.id) return { label, cls: 'border-[color:var(--m-st-confirmed)] text-[color:var(--m-st-confirmed)]' }
+    if (label) return { label, cls: 'border-[color:var(--m-st-danger)] text-[color:var(--m-st-danger)]' }
     return { label: t('mobileTrip.stay'), cls: 'border-[color:var(--m-faint)] text-m-muted' }
   }
 
@@ -261,7 +241,7 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
                   {canEditDays && (
                     <button
                       type="button"
-                      onClick={() => { setTitleDraft(day.title || ''); setEditingTitle(true) }}
+                      onClick={() => startRename(day.title || '')}
                       aria-label={t('mobileTrip.renameDay')}
                       className="flex flex-none p-[3px] text-m-faint"
                     >

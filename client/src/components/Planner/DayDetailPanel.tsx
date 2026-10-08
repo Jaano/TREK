@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useId, type ReactNode } from 'react'
+import React, { useEffect, useRef, useId, type ReactNode } from 'react'
 import { X, CloudRain, Wind, Droplets, Sunrise, Sunset, Hotel, Calendar, MapPin, LogIn, LogOut, Pencil, ChevronsDown, ChevronsUp, ArrowRight, Check, Moon, type LucideIcon } from 'lucide-react'
 import type { WeatherResult } from '@trek/shared'
 import { usePluginViewContributions, PluginCardFooter } from '../Plugins/PluginContributions'
@@ -17,7 +17,8 @@ import { useToast } from '../shared/Toast'
 import { getLocaleForLanguage, useTranslation } from '../../i18n'
 import type { Day, Place, Category, Reservation, AssignmentsMap, Accommodation } from '../../types'
 import { formatClockTime, splitReservationDateTime } from '../../utils/formatters'
-import { useDayDetail, type HotelDayRange, type HotelForm, type HotelPickerMode } from './useDayDetail'
+import { useDayDetail, useDayRename, type HotelDayRange, type HotelForm, type HotelPickerMode } from './useDayDetail'
+import { dayBookings, stayDayLabel, toDisplayTemp } from './dayDetailModel'
 import { stayPlaces } from '../../utils/stayPlaces'
 import { DialogShell, DialogHeader, DialogSection, DialogFooter, DialogButton, FooterSpacer, NEUTRAL_TINT, PILL, fs } from '../shared/DialogShell'
 import { INPUT, PANEL, EditorField, AddRowButton, PillSelect } from '../shared/dialogParts'
@@ -30,8 +31,6 @@ function WIcon({ main, size = 14 }: { main: string; size?: number }) {
   const Icon = weatherIconFor(main)
   return <Icon size={size} strokeWidth={1.8} />
 }
-
-function cTemp(c: number | undefined, f: boolean) { return Math.round(f ? (c ?? Number.NaN) * 9 / 5 + 32 : (c ?? Number.NaN)) }
 
 /** What the server said when it refused a write, or the generic line. */
 function apiErrorMessage(err: unknown): string | undefined {
@@ -86,18 +85,12 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
 
   // Inline day rename (#1065) — took over from the sidebar's pencil, which the
   // transit search button replaced.
-  const [editingTitle, setEditingTitle] = useState(false)
-  const [titleDraft, setTitleDraft] = useState('')
-  const titleInputRef = useRef<HTMLInputElement | null>(null)
-  useEffect(() => { if (editingTitle) titleInputRef.current?.focus() }, [editingTitle])
+  const { editingTitle, setEditingTitle, titleDraft, setTitleDraft, titleInputRef, startRename: openRename, commitRename } = useDayRename(title => {
+    if (day && onUpdateDayTitle) onUpdateDayTitle(day.id, title)
+  })
   const startRename = (e: React.MouseEvent) => {
     e.stopPropagation()
-    setTitleDraft(day?.title || '')
-    setEditingTitle(true)
-  }
-  const commitRename = () => {
-    setEditingTitle(false)
-    if (day && onUpdateDayTitle) onUpdateDayTitle(day.id, titleDraft.trim())
+    openRename(day?.title || '')
   }
   const {
     weather, loading, accommodation, setAccommodation, dayAccommodations,
@@ -327,11 +320,11 @@ function DayWeather({ weather, loading, isFahrenheit, placeName }: { weather: We
         </span>
         <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
           <span className="font-bold leading-none tabular-nums tracking-[-0.01em] text-content" style={fs(22, 'subtitle')}>
-            {weather.type === 'climate' ? 'Ø ' : ''}{cTemp(weather.temp, isFahrenheit)}{unit}
+            {weather.type === 'climate' ? 'Ø ' : ''}{toDisplayTemp(weather.temp, isFahrenheit)}{unit}
           </span>
           {weather.temp_max != null && (
             <span className="tabular-nums text-content-faint" style={fs(12, 'body')}>
-              {cTemp(weather.temp_min, isFahrenheit)}° / {cTemp(weather.temp_max, isFahrenheit)}°
+              {toDisplayTemp(weather.temp_min, isFahrenheit)}° / {toDisplayTemp(weather.temp_max, isFahrenheit)}°
             </span>
           )}
           {weather.description && <span className="capitalize text-content-muted" style={fs(12.5, 'body')}>{weather.description}</span>}
@@ -360,7 +353,7 @@ function DayWeather({ weather, loading, isFahrenheit, placeName }: { weather: We
                 <div key={h.hour} className={`flex w-11 flex-none flex-col items-center gap-[3px] rounded-[8px] px-0.5 py-[5px] text-content ${h.precipitation_probability > 50 ? 'bg-info-soft' : ''}`}>
                   <span className="font-geist font-medium tabular-nums text-content-faint" style={fs(9)}>{String(h.hour).padStart(2, '0')}</span>
                   <WIcon main={h.main} size={12} />
-                  <span className="font-semibold tabular-nums text-content" style={fs(10.5)}>{cTemp(h.temp, isFahrenheit)}°</span>
+                  <span className="font-semibold tabular-nums text-content" style={fs(10.5)}>{toDisplayTemp(h.temp, isFahrenheit)}°</span>
                   {h.precipitation_probability > 0 && (
                     <span className="font-medium tabular-nums text-info" style={fs(8.5)}>{h.precipitation_probability}%</span>
                   )}
@@ -383,11 +376,7 @@ const OPENS_BOOKING = 'w-full cursor-pointer text-start transition-shadow hover:
 function DayReservations({ day, assignments, reservations, is12h, onOpen }: { day: Day; assignments: AssignmentsMap; reservations: Reservation[]; is12h: boolean; onOpen?: (r: Reservation) => void }) {
   const { t } = useTranslation()
   const dayAssignments = assignments[String(day.id)] || []
-  const dayReservations = reservations.filter(r => {
-    if (r.type === 'hotel') return false
-    if (r.assignment_id && dayAssignments.some(a => a.id === r.assignment_id)) return true
-    return r.day_id === day.id
-  })
+  const dayReservations = dayBookings(day.id, dayAssignments, reservations)
   if (dayReservations.length === 0) return null
   return (
     <DialogSection label={t('day.reservations')}>
@@ -449,10 +438,7 @@ function AccommodationCard({ acc, day, linked, canEdit, onEdit, onRemove, onOpen
   }
   const isCheckInDay = acc.start_day_id === day.id
   const isCheckOutDay = acc.end_day_id === day.id
-  const dayLabel = isCheckInDay && isCheckOutDay ? t('day.checkIn') + ' & ' + t('day.checkOut')
-    : isCheckInDay ? t('day.checkIn')
-    : isCheckOutDay ? t('day.checkOut')
-    : null
+  const dayLabel = stayDayLabel(acc, day.id, t)
   const leaving = isCheckOutDay && !isCheckInDay
   const tint = isCheckInDay ? tintOf('var(--success)') : isCheckOutDay ? tintOf('var(--danger)') : NEUTRAL_TINT
   const cells: { label: string; value: ReactNode }[] = []

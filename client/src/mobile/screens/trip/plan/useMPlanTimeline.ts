@@ -3,6 +3,7 @@ import { useTripStore } from '../../../../store/tripStore'
 import { useRouteCalculation } from '../../../../hooks/useRouteCalculation'
 import { reservationsApi, weatherApi } from '../../../../api/client'
 import { useLegModeActions } from '../../../../components/Planner/useLegModeActions'
+import { toDisplayTemp } from '../../../../components/Planner/dayDetailModel'
 import { getDayBookendHotels } from '../../../../utils/dayOrder'
 import { dayWeatherAnchor } from '../../../../utils/dayWeather'
 import { metadataWithLegPositions, planMergedOrder, withTransportPositions } from '../../../../utils/mergedOrder'
@@ -323,7 +324,7 @@ export function useMPlanTimeline(planner: TripPlanner) {
 
   // Rounded display temperature in the user's unit (the API always answers in °C).
   const weatherTemp = weather
-    ? Math.round(settings.temperature_unit === 'fahrenheit' ? weather.temp * 9 / 5 + 32 : weather.temp)
+    ? toDisplayTemp(weather.temp, settings.temperature_unit === 'fahrenheit')
     : null
 
   // ── Per-segment travel mode (#1281) ──

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import type { WeatherResult } from '@trek/shared'
 import { weatherApi, accommodationsApi } from '../../api/client'
 import { isDayInAccommodationRange } from '../../utils/dayOrder'
@@ -23,14 +23,57 @@ export type HotelPickerMode = boolean | 'edit'
 
 const EMPTY_HOTEL_FORM: HotelForm = { check_in: '', check_in_end: '', check_out: '', confirmation: '', place_id: null }
 
+/**
+ * A day's detailed forecast (Open-Meteo through the weather service, climate
+ * fallback), shared by the desktop day panel and the phone day sheet. `ready` says
+ * whether there is a day and a place to ask about; while it is false the forecast
+ * is cleared. An answer that arrives after the day or the place changed is dropped:
+ * the panel stays mounted across a day switch, and the previous day's late
+ * response would otherwise overwrite the new day's forecast.
+ */
+export function useDayForecast(ready: boolean, date: string | null | undefined, lat: number | null, lng: number | null, language: string) {
+  const [weather, setWeather] = useState<WeatherResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  useEffect(() => {
+    if (!ready || !date || lat == null || lng == null) { setWeather(null); return }
+    let cancelled = false
+    setLoading(true)
+    weatherApi.getDetailed(lat, lng, date, language)
+      .then(data => { if (!cancelled) setWeather(data.error ? null : data) })
+      .catch(() => { if (!cancelled) setWeather(null) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [ready, date, lat, lng, language])
+  return { weather, loading }
+}
+
+/**
+ * Renaming a day in place (#1065), shared by the desktop day panel and the phone
+ * day sheet: the field takes the focus when it opens, and committing closes it and
+ * hands the trimmed title on.
+ */
+export function useDayRename(onCommit: (title: string) => void) {
+  const [editingTitle, setEditingTitle] = useState(false)
+  const [titleDraft, setTitleDraft] = useState('')
+  const titleInputRef = useRef<HTMLInputElement | null>(null)
+  useEffect(() => { if (editingTitle) titleInputRef.current?.focus() }, [editingTitle])
+  const startRename = (title: string) => {
+    setTitleDraft(title)
+    setEditingTitle(true)
+  }
+  const commitRename = () => {
+    setEditingTitle(false)
+    onCommit(titleDraft.trim())
+  }
+  return { editingTitle, setEditingTitle, titleDraft, setTitleDraft, titleInputRef, startRename, commitRename }
+}
+
 /** Day-detail data + accommodation logic: weather load, accommodations list,
  *  hotel picker form state and create/update/delete handlers.
  *
  *  The write handlers let a failed request through to the caller, which is the
  *  one that can tell the user; the picker stays open with what was entered. */
 export function useDayDetail(day: Day | null, days: Day[], tripId: number, lat: number | null, lng: number | null, language: string, onAccommodationChange?: () => void) {
-  const [weather, setWeather] = useState<WeatherResult | null>(null)
-  const [loading, setLoading] = useState(false)
   const [accommodation, setAccommodation] = useState<Accommodation | null>(null)
   const [dayAccommodations, setDayAccommodations] = useState<Accommodation[]>([])
   const [accommodations, setAccommodations] = useState<Accommodation[]>([])
@@ -50,16 +93,7 @@ export function useDayDetail(day: Day | null, days: Day[], tripId: number, lat: 
   // Both effects drop an answer that arrives after the day changed: the panel
   // stays mounted across a day switch, and the previous day's late response
   // would otherwise overwrite the new day's forecast and hotel.
-  useEffect(() => {
-    if (!day?.date || !lat || !lng) { setWeather(null); return }
-    let cancelled = false
-    setLoading(true)
-    weatherApi.getDetailed(lat, lng, day.date, language)
-      .then(data => { if (!cancelled) setWeather(data.error ? null : data) })
-      .catch(() => { if (!cancelled) setWeather(null) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [day?.date, lat, lng, language])
+  const { weather, loading } = useDayForecast(!!(day?.date && lat && lng), day?.date, lat, lng, language)
 
   useEffect(() => {
     if (!tripId) return
