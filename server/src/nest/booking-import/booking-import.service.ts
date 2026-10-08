@@ -236,9 +236,39 @@ export class BookingImportService {
   }
 
   /**
+   * The linked cost an extracted price becomes (Costs addon), so the booking shows
+   * up as an expense and not just a price in metadata, or undefined when there is
+   * none to write. The live FX rate of a foreign-currency price is frozen here, so
+   * a settled position isn't re-opened when live rates drift (#1445). A rate that
+   * cannot be frozen leaves the booking without its cost, as before.
+   */
+  private async linkedCost(
+    tripId: string,
+    item: BookingImportPreviewItem,
+  ): Promise<{ total_price: number; category: string; currency?: string | null; exchange_rate?: number } | undefined> {
+    if (!(await this.addons.isAddonEnabled(ADDON_IDS.BUDGET))) return undefined;
+    const meta = item.metadata && typeof item.metadata === 'object' ? (item.metadata as Record<string, unknown>) : null;
+    const price = meta && meta.price != null ? Number(meta.price) : Number.NaN;
+    if (!Number.isFinite(price) || price <= 0) return undefined;
+    const entry: { total_price: number; category: string; currency?: string | null; exchange_rate?: number } = {
+      total_price: price,
+      category: typeToCostCategory(item.type),
+      currency: meta && typeof meta.priceCurrency === 'string' ? meta.priceCurrency : null,
+    };
+    try {
+      await this.budget.freezeForeignRate(tripId, entry);
+    } catch (err) {
+      console.error(`[booking-import] Failed to create cost for "${item.title}":`, err instanceof Error ? err.message : err);
+      return undefined;
+    }
+    return entry;
+  }
+
+  /**
    * Persist a confirmed list of parsed items.
-   * Creates place rows for hotel/restaurant/event venues, then calls createReservation.
-   * Broadcasts reservation:created (and accommodation:created if applicable) per item.
+   * Creates place rows for hotel/restaurant/event venues, then writes each booking with
+   * its linked cost (createWithCost). Broadcasts reservation:created, accommodation:created
+   * if applicable and the cost per item, after each write commits.
    */
   async confirm(
     tripId: string,
@@ -325,47 +355,21 @@ export class BookingImportService {
           };
         }
 
-        const { reservation, accommodationCreated } = await this.reservations.create(tripId, {
+        // The booking and its linked cost are one write, through the same service
+        // method REST, MCP and the plugin RPC take. The cost's rate is frozen first,
+        // outside that write, since freezing it can fetch rates over the network.
+        const cost = await this.linkedCost(tripId, item);
+        const { reservation, accommodationCreated, costEvents } = await this.reservations.createWithCost(tripId, {
           ...reservationData,
           place_id: placeId,
           create_accommodation: createAccommodation,
-        } as any);
+        } as any, cost);
 
         this.realtime.broadcast(tripId, 'reservation:created', { reservation }, socketId);
         if (accommodationCreated) {
           this.realtime.broadcast(tripId, 'accommodation:created', {}, socketId);
         }
-
-        // Turn an extracted price into a real linked cost (Costs addon), so the
-        // booking shows up as an expense — not just a price in metadata.
-        if ((await this.addons.isAddonEnabled(ADDON_IDS.BUDGET))) {
-          const meta =
-            reservationData.metadata && typeof reservationData.metadata === 'object'
-              ? (reservationData.metadata as Record<string, unknown>)
-              : null;
-          const price = meta && meta.price != null ? Number(meta.price) : Number.NaN;
-          if (Number.isFinite(price) && price > 0) {
-            try {
-              const budgetData = {
-                category: typeToCostCategory(item.type),
-                name: item.title,
-                total_price: price,
-                currency: meta && typeof meta.priceCurrency === 'string' ? meta.priceCurrency : null,
-                reservation_id: reservation.id,
-              };
-              // Freeze the live FX rate for a foreign-currency booking price so a
-              // settled position isn't re-opened when live rates drift (#1445).
-              await this.budget.freezeForeignRate(tripId, budgetData);
-              const budgetItem = await this.budget.createBudgetItem(tripId, budgetData);
-              this.realtime.broadcast(tripId, 'budget:created', { item: budgetItem }, socketId);
-            } catch (err) {
-              console.error(
-                `[booking-import] Failed to create cost for "${item.title}":`,
-                err instanceof Error ? err.message : err,
-              );
-            }
-          }
-        }
+        this.reservations.announceCost(tripId, costEvents, socketId);
 
         created.push(reservation);
       } catch (err) {

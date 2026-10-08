@@ -208,7 +208,7 @@ describe('BookingImportService.preview endpoint geocoding (#1969)', () => {
 // used to reach the place row exactly as the mail or the review form had it.
 describe('BookingImportService.confirm venue website (#2483)', () => {
   it('BOOKING-IMPORT-2483-01: a bare host is saved with https, a script link or nothing not at all', async () => {
-    const reservations = { create: vi.fn(() => ({ reservation: { id: 1 }, accommodationCreated: false })) };
+    const reservations = { createWithCost: vi.fn(() => ({ reservation: { id: 1 }, accommodationCreated: false, costEvents: [] })), announceCost: vi.fn() };
     const places = { create: vi.fn((_tripId: string, _input: { website?: string }) => ({ id: 7 })) };
     // No dates on a restaurant, so the day repositories are never reached.
     const svc = new BookingImportService(
@@ -231,5 +231,69 @@ describe('BookingImportService.confirm venue website (#2483)', () => {
       undefined,
       undefined,
     ]);
+  });
+});
+
+// The booking and the cost its extracted price becomes go in as one write, through
+// ReservationsService.createWithCost, with the FX rate frozen before it.
+describe('BookingImportService.confirm writes the booking with its cost', () => {
+  function makeConfirm(opts: { budget?: boolean; freeze?: (tripId: string, entry: { currency?: string | null; exchange_rate?: number }) => Promise<void> } = {}) {
+    const order: string[] = [];
+    const costEvents = [{ event: 'budget:created', payload: { item: { id: 9 } } }];
+    const reservations = {
+      createWithCost: vi.fn(async () => { order.push('write'); return { reservation: { id: 1 }, accommodationCreated: false, costEvents }; }),
+      announceCost: vi.fn(() => { order.push('announceCost'); }),
+    };
+    const budget = {
+      freezeForeignRate: vi.fn(async (tripId: string, entry: { currency?: string | null; exchange_rate?: number }) => {
+        order.push('freeze');
+        await (opts.freeze ?? (async (_t: string, e: { exchange_rate?: number }) => { e.exchange_rate = 0.5; }))(tripId, entry);
+      }),
+    };
+    const realtime = { broadcast: vi.fn((_tripId: string, event: string) => { order.push(event); }) };
+    const svc = new BookingImportService(
+      {} as never, {} as never, undefined as never, undefined as never, reservations as never, permissionsStub as never,
+      budget as never, { isAddonEnabled: async () => opts.budget ?? true } as never, realtime as never,
+      { geocodeQuery: vi.fn() } as never, { create: vi.fn() } as never,
+    );
+    return { svc, reservations, budget, order, costEvents };
+  }
+  const priced = { type: 'train', title: 'ICE 123', metadata: { price: '49.9', priceCurrency: 'CHF' }, source: { fileName: 'ticket.pdf', index: 0 } };
+
+  it('BOOKING-IMPORT-TX-001: freezes the rate first, writes booking and cost in one call, announces the cost after the booking', async () => {
+    const { svc, reservations, order, costEvents } = makeConfirm();
+
+    const res = await svc.confirm('5', [priced as never], 'sock');
+
+    expect(res.created).toEqual([{ id: 1 }]);
+    expect(reservations.createWithCost).toHaveBeenCalledWith('5', expect.objectContaining({ title: 'ICE 123', type: 'train' }), {
+      total_price: 49.9, category: 'transport', currency: 'CHF', exchange_rate: 0.5,
+    });
+    expect(reservations.announceCost).toHaveBeenCalledWith('5', costEvents, 'sock');
+    expect(order).toEqual(['freeze', 'write', 'reservation:created', 'announceCost']);
+  });
+
+  it('BOOKING-IMPORT-TX-002: no cost without the Costs addon or without a price', async () => {
+    const off = makeConfirm({ budget: false });
+    await off.svc.confirm('5', [priced as never], undefined);
+    expect(off.budget.freezeForeignRate).not.toHaveBeenCalled();
+    expect(off.reservations.createWithCost).toHaveBeenCalledWith('5', expect.anything(), undefined);
+
+    const free = makeConfirm();
+    await free.svc.confirm('5', [{ ...priced, metadata: { price: '0' } } as never], undefined);
+    expect(free.budget.freezeForeignRate).not.toHaveBeenCalled();
+    expect(free.reservations.createWithCost).toHaveBeenCalledWith('5', expect.anything(), undefined);
+  });
+
+  it('BOOKING-IMPORT-TX-003: a rate that cannot be frozen keeps the booking, without its cost', async () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const { svc, reservations } = makeConfirm({ freeze: async () => { throw new Error('rates down'); } });
+      const res = await svc.confirm('5', [priced as never], undefined);
+      expect(res.created).toEqual([{ id: 1 }]);
+      expect(reservations.createWithCost).toHaveBeenCalledWith('5', expect.anything(), undefined);
+    } finally {
+      quiet.mockRestore();
+    }
   });
 });

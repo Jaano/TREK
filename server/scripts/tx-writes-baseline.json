@@ -9,7 +9,7 @@
   "src/nest/auth/passkey.service.ts#PasskeyService.passkeyRegisterOptions": 2,
   "src/nest/auth/passkey.service.ts#PasskeyService.passkeyRegisterVerify": 2,
   "src/nest/auth/user-cleanup.service.ts#UserCleanupService.erasePluginUserData": 2,
-  "src/nest/booking-import/booking-import.service.ts#BookingImportService.confirm": 6,
+  "src/nest/booking-import/booking-import.service.ts#BookingImportService.confirm": 4,
   "src/nest/doc-sync/doc-sync-config.service.ts#DocSyncConfigService.upsertConnection": 3,
   "src/nest/doc-sync/doc-sync.controller.ts#DocSyncController.createLink": 4,
   "src/nest/doc-sync/doc-sync.controller.ts#DocSyncController.deleteConnection": 2,
