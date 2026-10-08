@@ -19,7 +19,7 @@ import { SEARCH_TEXT_FIELD_MASK } from '../maps/maps.helpers';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
 import { Users } from '../../db/entities/Users.entity';
-import type { UsersRepository, UserApiKeyColumns, UserProfilePatch } from '../../db/repositories/Users.repository';
+import { UserIdentityTakenError, type UsersRepository, type UserApiKeyColumns, type UserProfilePatch } from '../../db/repositories/Users.repository';
 
 /** A key check is a single request to a provider; one that hangs must not hold the settings page. */
 const KEY_CHECK_TIMEOUT_MS = 10_000;
@@ -233,10 +233,18 @@ export class UserProfileService {
     const changedKeys = keyLocked ? [] : await this.changedKeyNames(body, current, isAdmin, blocked);
 
     if (Object.keys(changes).length > 0) {
-      await this.uow.transactional(async () => {
-        await this.usersRepo.patchProfile(userId, changes);
-        if (!keyLocked) await this.mirrorInstanceKeys(body, isAdmin);
-      });
+      try {
+        await this.uow.transactional(async () => {
+          await this.usersRepo.patchProfile(userId, changes);
+          if (!keyLocked) await this.mirrorInstanceKeys(body, isAdmin);
+        });
+      } catch (err) {
+        // Another write took the name or address between the check above and this one.
+        if (err instanceof UserIdentityTakenError) {
+          return { error: err.field === 'email' ? 'Email already taken' : 'Username already taken', status: 409 };
+        }
+        throw err;
+      }
     }
 
     const updated = await this.usersRepo.findProfileWithKeys(userId);

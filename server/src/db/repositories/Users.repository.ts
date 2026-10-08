@@ -2,6 +2,7 @@ import { Users } from '../entities/Users.entity';
 import { toRow, type AssertRowKeys } from './_shared/rows';
 import { coalesce, coalesceOverrideWhileSame, columnIncrementedBy, currentTimestamp, lower, lowerParam } from '../dialect/sql-functions';
 import { TrekRepository } from './_shared/trek-repository';
+import { UniqueConstraintViolationException } from '@mikro-orm/core';
 
 /**
  * The three third-party keys that belong to the instance rather than to a
@@ -239,6 +240,32 @@ export interface NewAdminUserRow {
   role: string;
 }
 
+/**
+ * A write the database refused because another account already holds that
+ * email address (in any case, `idx_users_email_lower`) or username. The
+ * services check first and answer 409; this is the same answer for the write
+ * that lost a race against another one, instead of a 500.
+ */
+export class UserIdentityTakenError extends Error {
+  constructor(readonly field: 'email' | 'username') {
+    super(`${field} already taken`);
+    this.name = 'UserIdentityTakenError';
+  }
+}
+
+/** Runs a users write, turning a unique violation on email or username into {@link UserIdentityTakenError}. */
+async function guardIdentity<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (err) {
+    if (err instanceof UniqueConstraintViolationException) {
+      if (/users\.email|idx_users_email/.test(err.message)) throw new UserIdentityTakenError('email');
+      if (/users\.username/.test(err.message)) throw new UserIdentityTakenError('username');
+    }
+    throw err;
+  }
+}
+
 /** AD11 (`admin.service.ts#updateUser`, inside `uow.transactional`) — the columns the legacy COALESCE-shaped UPDATE can touch; a key the caller omits is left unchanged, the same net effect as binding NULL into `COALESCE(?, column)`. */
 export interface AdminEditPatch {
   username?: string;
@@ -429,17 +456,19 @@ export class UsersRepository extends TrekRepository<Users> {
    * `created_at` the same way a legacy INSERT-then-reselect pair did.
    */
   async insertUser(row: NewUserRow): Promise<UserRow> {
-    const id = await this.insert({
-      username: row.username,
-      email: row.email,
-      password_hash: row.password_hash,
-      role: row.role,
-      first_seen_version: row.first_seen_version,
-      login_count: 0,
-      oidc_sub: row.oidc_sub ?? null,
-      oidc_issuer: row.oidc_issuer ?? null,
-      avatar: row.avatar ?? null,
-    });
+    const id = await guardIdentity(() =>
+      this.insert({
+        username: row.username,
+        email: row.email,
+        password_hash: row.password_hash,
+        role: row.role,
+        first_seen_version: row.first_seen_version,
+        login_count: 0,
+        oidc_sub: row.oidc_sub ?? null,
+        oidc_issuer: row.oidc_issuer ?? null,
+        avatar: row.avatar ?? null,
+      }),
+    );
     const inserted = await this.findById(id);
     if (!inserted) {
       throw new Error('insertUser: read-back after insert found no row');
@@ -968,7 +997,7 @@ export class UsersRepository extends TrekRepository<Users> {
    */
   async patchProfile(id: number, changes: UserProfilePatch): Promise<void> {
     const platform = this.getEntityManager().getPlatform();
-    await this.nativeUpdate({ id }, { ...changes, updated_at: currentTimestamp(platform) });
+    await guardIdentity(() => this.nativeUpdate({ id }, { ...changes, updated_at: currentTimestamp(platform) }));
   }
 
   // ---------------------------------------------------------------------
@@ -1533,12 +1562,14 @@ export class UsersRepository extends TrekRepository<Users> {
    * statement handled by {@link findAdminSummary}.
    */
   async insertAdminCreatedUser(row: NewAdminUserRow): Promise<number> {
-    return await this.insert({
-      username: row.username,
-      email: row.email,
-      password_hash: row.password_hash,
-      role: row.role,
-    });
+    return await guardIdentity(() =>
+      this.insert({
+        username: row.username,
+        email: row.email,
+        password_hash: row.password_hash,
+        role: row.role,
+      }),
+    );
   }
 
   /**
@@ -1584,7 +1615,7 @@ export class UsersRepository extends TrekRepository<Users> {
    */
   async applyAdminEdit(id: number, patch: AdminEditPatch): Promise<void> {
     const platform = this.getEntityManager().getPlatform();
-    await this.nativeUpdate({ id }, { ...patch, updated_at: currentTimestamp(platform) });
+    await guardIdentity(() => this.nativeUpdate({ id }, { ...patch, updated_at: currentTimestamp(platform) }));
   }
 
   /**

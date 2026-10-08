@@ -5,6 +5,7 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser, createAdmin, type TestUser } from '../../../helpers/factories';
 import { Users } from '../../../../src/db/entities/Users.entity';
 import type { UsersRepository } from '../../../../src/db/repositories/Users.repository';
+import { UserIdentityTakenError } from '../../../../src/db/repositories/Users.repository';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -1200,5 +1201,27 @@ describe('UsersRepository — Immich settings write (IM4/IM5)', () => {
     testDb.prepare('UPDATE users SET immich_url = ?, immich_api_key = ?, immich_allow_insecure_tls = 1 WHERE id = ?').run('https://nas.local', 'enc-old', user.id);
     await users.clearImmichSettings(user.id, null);
     expect(read(user.id)).toEqual({ immich_url: null, immich_api_key: null, immich_allow_insecure_tls: 0 });
+  });
+});
+
+describe('a users write the unique indexes refuse', () => {
+  const row = (username: string, email: string) => ({
+    username, email, password_hash: 'hashed', role: 'user', first_seen_version: '1.0.0',
+  });
+
+  it('USERSREPO-IDENT-001: an email another account holds in different case is refused as the email', async () => {
+    createUser(testDb, { username: 'anna', email: 'anna@example.com' });
+    const refused = users.insertUser(row('anna2', 'ANNA@Example.com'));
+    await expect(refused).rejects.toBeInstanceOf(UserIdentityTakenError);
+    await expect(refused).rejects.toMatchObject({ field: 'email' });
+  });
+
+  it('USERSREPO-IDENT-002: a taken username is refused as the username, on insert and on update', async () => {
+    createUser(testDb, { username: 'anna', email: 'anna@example.com' });
+    const { user } = createUser(testDb, { username: 'carl', email: 'carl@example.com' });
+    await expect(users.insertAdminCreatedUser({ username: 'anna', email: 'new@example.com', password_hash: 'x', role: 'user' }))
+      .rejects.toMatchObject({ field: 'username' });
+    await expect(users.patchProfile(user.id, { email: 'Anna@example.com' })).rejects.toMatchObject({ field: 'email' });
+    await expect(users.applyAdminEdit(user.id, { username: 'anna' })).rejects.toMatchObject({ field: 'username' });
   });
 });

@@ -10,6 +10,7 @@
  * (it replaced ADMIN-BR-001 when the old admin bridge died with the cron move).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
+import { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import { ADDON_IDS, MCP_GATED_ADDON_IDS } from '../../../src/addons';
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
@@ -964,8 +965,8 @@ describe('updateUser — password-reset transaction boundary (AD11/12/13)', () =
   });
 });
 
-describe('createUser — the pre-existing uniqueness-check TOCTOU window (AD2-4, R4 "report, don\'t fix")', () => {
-  it('ADMIN-SVC-094 — a race between the email pre-check and the INSERT is not caught by a transaction; the row-level UNIQUE constraint is what actually stops the duplicate, surfacing as a thrown error rather than a clean 409', async () => {
+describe('createUser: the uniqueness-check TOCTOU window (AD2-4)', () => {
+  it('ADMIN-SVC-094: a race between the email pre-check and the INSERT is stopped by the row-level UNIQUE constraint and answered with the same clean 409', async () => {
     const { user: existing } = createUser(testDb, { email: 'race@test.example.com' });
 
     // Simulates the concurrent-request race AD2-4's non-transactional shape
@@ -978,15 +979,13 @@ describe('createUser — the pre-existing uniqueness-check TOCTOU window (AD2-4,
     const spy = vi.spyOn(usersRepo, 'findIdByEmailCI').mockResolvedValueOnce(null);
 
     // The pre-check said "clear," but `users.email` carries its own UNIQUE
-    // index (`Migration20200101000000_baseline_schema.ts`) — that's what
-    // actually stops the duplicate, at the SQL level, not this service's own
-    // TOCTOU-vulnerable pre-check. Because nothing here catches that
-    // failure, it propagates as an unhandled rejection rather than the
-    // clean `{ error: 'Email already taken', status: 409 }` a request that
-    // lost the race with more lead time would have gotten.
+    // index (`Migration20200101000000_baseline_schema.ts`), and that is what
+    // actually stops the duplicate, at the SQL level. The repository turns
+    // the refusal into UserIdentityTakenError, so the request that lost the
+    // race gets the same answer as one that lost it with more lead time.
     await expect(
       svcCreateUser({ username: 'raceuser', email: existing.email, password: 'ValidPass1!' }),
-    ).rejects.toThrow();
+    ).resolves.toEqual({ error: 'Email already taken', status: 409 });
 
     spy.mockRestore();
   });
@@ -1000,5 +999,29 @@ describe('createUser — the pre-existing uniqueness-check TOCTOU window (AD2-4,
     await expect(updateUser(String(other.id), { email: 'CASE@TEST.EXAMPLE.COM' }))
       .resolves.toEqual({ error: 'Email already taken', status: 409 });
     expect(existing.id).toBeGreaterThan(0);
+  });
+});
+
+describe('a create or edit that loses the race for an email or username', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('ADMIN-IDENT-001: createUser answers the same 409 when the database refuses what the check missed', async () => {
+    createUser(testDb, { username: 'anna', email: 'anna@example.com' });
+    // The other write lands between the check and the insert.
+    vi.spyOn(UsersRepository.prototype, 'findIdByEmailCI').mockResolvedValue(null);
+    expect(await svcCreateUser({ username: 'anna2', email: 'ANNA@example.com', password: 'Secure123!' })).toEqual({
+      error: 'Email already taken',
+      status: 409,
+    });
+  });
+
+  it('ADMIN-IDENT-002: updateUser does the same, and changes nothing', async () => {
+    createUser(testDb, { username: 'anna', email: 'anna@example.com' });
+    const { user } = createUser(testDb, { username: 'carl', email: 'carl@example.com' });
+    vi.spyOn(UsersRepository.prototype, 'findIdByEmailCI').mockResolvedValue(null);
+    expect(await updateUser(String(user.id), { email: 'Anna@Example.com' })).toEqual({ error: 'Email already taken', status: 409 });
+    expect(testDb.prepare('SELECT email FROM users WHERE id = ?').get(user.id)).toEqual({ email: 'carl@example.com' });
   });
 });

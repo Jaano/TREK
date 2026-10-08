@@ -46,7 +46,7 @@ import { splitManagedKeys } from '../common/managed';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';
 import { verifyJwtAndLoadUser } from './jwt-verify';
 import { User } from '../../types';
-import type { UserRow } from '../../db/repositories/Users.repository';
+import { UserIdentityTakenError, type UserRow } from '../../db/repositories/Users.repository';
 import { DEMO_EMAIL_PRIMARY, DEMO_PASS, isDemoEmail } from '../common/demo';
 import { avatarUrl } from '../common/avatarUrl';
 import { TripMembershipService } from '../trip-membership/trip-membership.service';
@@ -520,7 +520,12 @@ export class AuthService {
           auditDetails: { username, email, role },
         };
       });
-    } catch {
+    } catch (err) {
+      // The check above runs in the transaction, but a concurrent signup can
+      // still win the insert; the database's unique indexes refuse the second.
+      if (err instanceof UserIdentityTakenError) {
+        return { error: 'Registration failed. Please try different credentials.', status: 409 };
+      }
       return { error: 'Error creating user', status: 500 };
     }
   }

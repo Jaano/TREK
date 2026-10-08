@@ -30,7 +30,7 @@ import { PermissionsService } from '../permissions/permissions.service';
 import { PERMISSION_ACTIONS } from '../permissions/permissions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Users } from '../../db/entities/Users.entity';
-import type { UsersRepository, AdminEditPatch } from '../../db/repositories/Users.repository';
+import { UserIdentityTakenError, type UsersRepository, type AdminEditPatch } from '../../db/repositories/Users.repository';
 import { AuditLog } from '../../db/entities/AuditLog.entity';
 import type { AuditLogRepository } from '../../db/repositories/AuditLog.repository';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
@@ -99,6 +99,11 @@ const VERSION_FAILURE_TTL = 60_000;
  * and module-scoped pieces (compareVersions, isDocker, the version cache) live
  * in admin.helpers.ts.
  */
+/** The 409 the up-front checks give, for a write that lost the race to another one. */
+function identityTakenMessage(err: UserIdentityTakenError): string {
+  return err.field === 'email' ? 'Email already taken' : 'Username already taken';
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -175,9 +180,16 @@ export class AdminService {
 
     const passwordHash = bcrypt.hashSync(password, BCRYPT_COST);
 
-    const insertedId = await this.users.insertAdminCreatedUser({
-      username, email, password_hash: passwordHash, role: data.role || 'user',
-    });
+    let insertedId: number;
+    try {
+      insertedId = await this.users.insertAdminCreatedUser({
+        username, email, password_hash: passwordHash, role: data.role || 'user',
+      });
+    } catch (err) {
+      // Another write took the name or address between the check and the insert.
+      if (err instanceof UserIdentityTakenError) return { error: identityTakenMessage(err), status: 409 };
+      throw err;
+    }
 
     const user = await this.users.findAdminSummary(insertedId);
 
@@ -254,22 +266,27 @@ export class AdminService {
     // (R4): the users UPDATE, the mcp_tokens DELETE, the oauth_tokens revoke
     // and the push_subscriptions DELETE stay inside the SAME uow.transactional
     // call, never split across separate un-transacted repository calls.
-    await this.uow.transactional(async () => {
-      await this.users.applyAdminEdit(userId, patch);
+    try {
+      await this.uow.transactional(async () => {
+        await this.users.applyAdminEdit(userId, patch);
 
-      if (password) {
-        // The version bump only invalidates JWT cookies. These two stores carry
-        // their own credentials and are revoked separately, exactly as the
-        // self-service paths do it.
-        await this.mcpTokens.deleteAllForUser(userId);
-        try {
-          await this.oauthTokens.revokeAllForUser(userId);
-        } catch { /* very old installs predate oauth_tokens */ }
-        // Push devices outlive every session, so the intruder's browser would
-        // keep receiving this account's notifications. They go with the rest.
-        await this.pushSubscriptions.deleteAllForUser(userId);
-      }
-    });
+        if (password) {
+          // The version bump only invalidates JWT cookies. These two stores carry
+          // their own credentials and are revoked separately, exactly as the
+          // self-service paths do it.
+          await this.mcpTokens.deleteAllForUser(userId);
+          try {
+            await this.oauthTokens.revokeAllForUser(userId);
+          } catch { /* very old installs predate oauth_tokens */ }
+          // Push devices outlive every session, so the intruder's browser would
+          // keep receiving this account's notifications. They go with the rest.
+          await this.pushSubscriptions.deleteAllForUser(userId);
+        }
+      });
+    } catch (err) {
+      if (err instanceof UserIdentityTakenError) return { error: identityTakenMessage(err), status: 409 };
+      throw err;
+    }
 
     if (password) {
       try { revokeUserSessions(Number(id)); } catch { /* best-effort, same as elsewhere */ }

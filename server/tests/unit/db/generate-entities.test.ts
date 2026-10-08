@@ -34,6 +34,7 @@ import {
   RULE11_referencedColumns,
   RULE12_fixGarbledCheckExpressions,
   RULE13_pinDeleteRuleDrift,
+  RULE14_addExpressionIndexes,
   RULE_normalizeLiteralDefaults,
   applyTextPasses,
   checkEntities,
@@ -691,6 +692,33 @@ describe('collectForeignKeyDeleteRules', () => {
       await t.close();
       db.close();
     }
+  });
+});
+
+describe('RULE14_addExpressionIndexes', () => {
+  const sql = 'CREATE UNIQUE INDEX idx_users_email_lower ON users (lower(email))';
+
+  it('RULE14-001: a unique expression index becomes a named uniques: entry carrying its statement', () => {
+    const meta = fixtureMeta('Users', 'users', [fixtureProp({ name: 'email', primary: false })]);
+    RULE14_addExpressionIndexes([meta], new Map([['users', [{ name: 'idx_users_email_lower', unique: true, sql }]]]));
+    expect(meta.uniques).toEqual([{ name: 'idx_users_email_lower', expression: sql }]);
+    expect(meta.indexes).toEqual([]);
+  });
+
+  it('RULE14-002: a plain expression index goes to indexes:, and an introspected entry of the same name is replaced', () => {
+    const meta = fixtureMeta('X', 'x', [fixtureProp({ name: 'name', primary: false })]);
+    meta.indexes.push({ name: 'idx_x_name_lower', properties: [] });
+    const plain = 'CREATE INDEX idx_x_name_lower ON x (lower(name))';
+    RULE14_addExpressionIndexes([meta], new Map([['x', [{ name: 'idx_x_name_lower', unique: false, sql: plain }]]]));
+    expect(meta.indexes).toEqual([{ name: 'idx_x_name_lower', expression: plain }]);
+    expect(meta.uniques).toEqual([]);
+  });
+
+  it('RULE14-003: a table without expression indexes is left alone', () => {
+    const meta = fixtureMeta('X', 'x', [fixtureProp({ name: 'name', primary: false })]);
+    RULE14_addExpressionIndexes([meta], new Map([['users', [{ name: 'idx_users_email_lower', unique: true, sql }]]]));
+    expect(meta.uniques).toEqual([]);
+    expect(meta.indexes).toEqual([]);
   });
 });
 

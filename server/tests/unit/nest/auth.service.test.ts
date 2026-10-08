@@ -60,6 +60,7 @@ vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn() 
 
 import { db as testDb } from '../../../src/db/database';
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll, vi } from 'vitest';
+import { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, createInviteToken, createTrip, createPlace, createReservation } from '../../helpers/factories';
 import { AuthService } from '../../../src/nest/auth/auth.service';
@@ -1249,5 +1250,20 @@ describe('generateToken remember claim (#1927)', () => {
     const decoded = jwt.decode(await svc.generateToken({ id: user.id })) as { remember?: boolean; iat: number; exp: number };
     expect('remember' in decoded).toBe(false);
     expect(decoded.exp - decoded.iat).toBe(86400);
+  });
+});
+
+describe('registerUser loses the race for an email', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('AUTH-IDENT-001: a signup the database refuses after the check passed answers the same 409, not a 500', async () => {
+    createUser(testDb, { username: 'anna', email: 'anna@x.com' });
+    vi.spyOn(UsersRepository.prototype, 'findIdByEmailOrUsernameCI').mockResolvedValue(null);
+    expect(await svc.registerUser({ username: 'anna2', email: 'ANNA@x.com', password: 'Secure123!' })).toEqual({
+      error: 'Registration failed. Please try different credentials.',
+      status: 409,
+    });
   });
 });

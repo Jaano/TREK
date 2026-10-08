@@ -38,6 +38,7 @@ import { createUser, createAdmin } from '../../helpers/factories';
 import fs from 'node:fs';
 import path from 'node:path';
 import { UserProfileService } from '../../../src/nest/auth/user-profile.service';
+import { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
 import { createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo } from '../../helpers/test-uow';
 import { SEARCH_TEXT_FIELD_MASK } from '../../../src/nest/maps/maps.helpers';
@@ -502,6 +503,20 @@ describe('changedKeys', () => {
     } finally {
       if (prev === undefined) delete process.env.TREK_MANAGED;
       else process.env.TREK_MANAGED = prev;
+    }
+  });
+});
+
+describe('updateSettings loses the race for an email', () => {
+  it('AUTH-IDENT-002: the database refusing what the check missed answers the same 409', async () => {
+    createUser(testDb, { email: 'anna@example.com' });
+    const { user } = createUser(testDb, { email: 'carl@example.com' });
+    const check = vi.spyOn(UsersRepository.prototype, 'findIdByEmailCI').mockResolvedValue(null);
+    try {
+      const result = await profile.updateSettings(user.id, { email: 'ANNA@example.com' });
+      expect(result).toEqual({ error: 'Email already taken', status: 409 });
+    } finally {
+      check.mockRestore();
     }
   });
 });

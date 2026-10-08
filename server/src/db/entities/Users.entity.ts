@@ -207,6 +207,10 @@ export const UsersSchema = defineEntity({
     },
     { properties: ['email'] },
     { properties: ['username'] },
+    {
+      name: 'idx_users_email_lower',
+      expression: 'CREATE UNIQUE INDEX idx_users_email_lower ON users (lower(email))',
+    },
   ],
   properties: {
     id: p.integer().primary(),

@@ -768,6 +768,41 @@ export function RULE9_addImplicitUniqueConstraints(
   }
 }
 
+/** One index over an expression rather than plain columns, as Rule 14 hands it in. */
+export interface ExpressionIndex {
+  name: string;
+  unique: boolean;
+  /** The `CREATE [UNIQUE] INDEX` statement SQLite stored for it. */
+  sql: string;
+}
+
+/**
+ * Rule 14 (metadata level; DB-dependent half in `collectExpressionIndexes`):
+ * an index over an expression (`idx_users_email_lower ON users (lower(email))`)
+ * becomes a named `indexes:`/`uniques:` entry carrying its own `expression`.
+ *
+ * `SqliteSchemaHelper.getIndexes()` reads columns from `PRAGMA index_info`,
+ * which reports an expression column with a NULL name, so the introspected
+ * index has no column the generator can map and it never reaches the entity.
+ * PARITY-009c would then find a db index without an entity declaration. Any
+ * introspected entry under the same name is replaced, so the rule holds even
+ * if a later MikroORM keeps the broken entry instead of dropping it.
+ */
+export function RULE14_addExpressionIndexes(
+  metadata: EntityMetadata[],
+  expressionIndexes: ReadonlyMap<string, ExpressionIndex[]>,
+): void {
+  for (const meta of metadata) {
+    const indexes = expressionIndexes.get(meta.tableName);
+    if (!indexes) continue;
+    for (const index of indexes) {
+      meta.indexes = meta.indexes.filter((existing) => existing.name !== index.name);
+      meta.uniques = meta.uniques.filter((existing) => existing.name !== index.name);
+      (index.unique ? meta.uniques : meta.indexes).push({ name: index.name, expression: index.sql });
+    }
+  }
+}
+
 /** A repository-type marker to inject into one entity class — Rule 10. */
 export interface RepositoryTypeMarkerFixup {
   className: string;
@@ -1210,6 +1245,7 @@ export function applyRules(
   _platform: Platform,
   implicitUniques: ReadonlyMap<string, string[][]> = new Map(),
   fkDeleteRules: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map(),
+  expressionIndexes: ReadonlyMap<string, ExpressionIndex[]> = new Map(),
 ): RuleFixups {
   const retypedByRule1 = RULE1_fixUnknownScalarTypes(metadata);
   const jsonColumns = RULE1b_markJsonColumns(metadata);
@@ -1230,6 +1266,9 @@ export function applyRules(
   RULE7_dropNoActionRules(metadata);
   RULE8_bindRepositories(metadata);
   RULE9_addImplicitUniqueConstraints(metadata, implicitUniques);
+  // Like RULE9 it only appends to `meta.indexes`/`meta.uniques`, which the
+  // renderer dumps verbatim; no text pass depends on it.
+  RULE14_addExpressionIndexes(metadata, expressionIndexes);
   const defaults = RULE_normalizeLiteralDefaults(metadata);
   const repositoryMarkers = RULE10_repositoryTypeMarker(metadata);
   // Runs after RULE5 so it reads the FINAL (post-rename) owning-relation
@@ -1292,6 +1331,38 @@ export async function collectImplicitUniqueIndexes(
       perTable.push([...info].sort((a, b) => a.seqno - b.seqno).map((c) => c.name));
     }
     result.set(tableName, perTable);
+  }
+  return result;
+}
+
+/**
+ * DB-dependent half of Rule 14: every named index whose `PRAGMA index_info`
+ * has an expression column (a NULL name), with the statement `sqlite_master`
+ * stored for it, so `RULE14_addExpressionIndexes` stays a pure function.
+ */
+export async function collectExpressionIndexes(
+  connection: Connection,
+  tableNames: readonly string[],
+): Promise<Map<string, ExpressionIndex[]>> {
+  const result = new Map<string, ExpressionIndex[]>();
+  for (const tableName of tableNames) {
+    const indexList = (await connection.execute(`pragma index_list(\`${tableName}\`)`, [], 'all')) as {
+      name: string;
+      unique: number;
+    }[];
+    const perTable: ExpressionIndex[] = [];
+    for (const idx of indexList) {
+      if (idx.name.startsWith('sqlite_autoindex_')) continue;
+      const info = (await connection.execute(`pragma index_info(\`${idx.name}\`)`, [], 'all')) as {
+        name: string | null;
+      }[];
+      if (!info.some((column) => column.name === null)) continue;
+      const rows = (await connection.execute(`select sql from sqlite_master where type = 'index' and name = ?`, [idx.name], 'all')) as {
+        sql: string;
+      }[];
+      perTable.push({ name: idx.name, unique: idx.unique === 1, sql: rows[0].sql });
+    }
+    if (perTable.length > 0) result.set(tableName, perTable);
   }
   return result;
 }
@@ -1953,7 +2024,8 @@ export async function generateEntities(): Promise<GenerateResult> {
           const tableNames = metadata.map((meta) => meta.tableName);
           const implicitUniques = await collectImplicitUniqueIndexes(orm.em.getConnection(), tableNames);
           const fkDeleteRules = await collectForeignKeyDeleteRules(orm.em.getConnection(), tableNames);
-          fixups = applyRules(metadata, platform, implicitUniques, fkDeleteRules);
+          const expressionIndexes = await collectExpressionIndexes(orm.em.getConnection(), tableNames);
+          fixups = applyRules(metadata, platform, implicitUniques, fkDeleteRules, expressionIndexes);
         },
       });
 

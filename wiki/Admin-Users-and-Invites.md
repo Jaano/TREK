@@ -32,6 +32,10 @@ Click the pencil icon (**Edit User**) on any row to open the edit dialog. You ca
 
 Click **Save** to apply changes.
 
+An email address belongs to one account only, and case does not count: `Anna@Example.com` and `anna@example.com` are the same address. Saving an address another account already holds answers **Email already taken**, and creating such an account does the same.
+
+If an install from before 4.4 already holds two accounts whose addresses differ only in case, the update still starts, and the log names their user ids: `email address(es) belong to more than one account when case is ignored`. Give each of those accounts its own address here (or delete the one nobody uses). The next start then adds the database rule that keeps it that way.
+
 Below the fields sits **Reset passkeys**, which removes every passkey that user has registered: the recovery path when someone loses their authenticator. It asks for confirmation in a dialog, reports how many passkeys it removed, and takes effect immediately rather than on **Save**. The user can still sign in with their password. See [Passkeys](Passkeys).
 
 ### Delete a user

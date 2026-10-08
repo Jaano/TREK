@@ -1,5 +1,6 @@
 import mikroOrmConfig from '../mikro-orm.config';
 import { registerReinitializeHook, runDemoSeed } from './database';
+import { ensureEmailCaseIndex } from './email-case-index';
 import { migrateToHead, NO_SAFETY_NET } from './legacy-baseline';
 import { preMigrateSnapshot } from './pre-migrate-snapshot';
 import { withRequestContext } from '../nest/database/request-context';
@@ -45,6 +46,8 @@ export async function runSchemaBootstrap(orm: AnyOrm, { snapshot = true }: { sna
   // run would replay the whole history over it (see legacy-baseline.ts). Every
   // other database just gets its pending migrations.
   await migrateToHead(connection, migrator, undefined, undefined, snapshot ? preMigrateSnapshot(connection) : NO_SAFETY_NET);
+  // The one index a migration may have had to defer (see email-case-index.ts).
+  await ensureEmailCaseIndex(connection);
 
   const defaultSeeder = orm.config.get('seeder').defaultSeeder;
   if (defaultSeeder) await orm.seeder.seedString(defaultSeeder);
