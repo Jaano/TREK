@@ -31,6 +31,21 @@ vi.mock('../../../src/demo/demo-reset', async (importOriginal) => {
 
 import { seedDemoData } from '../../../src/demo/demo-seed';
 import { takeExampleTripsSeeded } from '../../../src/demo/demo-reset';
+import type { EntityClass } from '@mikro-orm/core';
+import { countRows, findRows } from '../../helpers/factories/rows';
+import { readAppSetting } from '../../helpers/factories/settings';
+import { readUser } from '../../helpers/factories/users';
+import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { DayNotes } from '../../../src/db/entities/DayNotes.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { PackingItems } from '../../../src/db/entities/PackingItems.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 describe('demo seeding', () => {
   let db: Database.Database;
@@ -91,32 +106,37 @@ describe('demo seeding', () => {
     // 10+6+8=24 packing items, 6+4+5=15 budget items, 2+1+3=6
     // reservations, 4+2+3=9 day notes, 3 trip_members rows (one per trip,
     // demo joined as a member alongside the admin owner).
-    const count = (table: string): number => (db.prepare(`SELECT COUNT(*) as n FROM ${table}`).get() as { n: number }).n;
-    expect(count('users')).toBe(2); // admin + demo
-    expect(count('trips')).toBe(3);
-    expect(count('days')).toBe(16);
-    expect(count('places')).toBe(32);
-    expect(count('day_assignments')).toBe(13 + 9 + 11); // per-day assignment counts, trip 1/2/3
-    expect(count('packing_items')).toBe(10 + 6 + 8);
-    expect(count('budget_items')).toBe(6 + 4 + 5);
-    expect(count('reservations')).toBe(2 + 1 + 3);
-    expect(count('day_notes')).toBe(4 + 2 + 3);
-    expect(count('trip_members')).toBe(3);
-    expect(count('app_settings')).toBeGreaterThanOrEqual(1);
+    const orm = await createTestOrm(db);
+    const tables = {
+      users: Users, trips: Trips, days: Days, places: Places, day_assignments: DayAssignments, packing_items: PackingItems,
+      budget_items: BudgetItems, reservations: Reservations, day_notes: DayNotes, trip_members: TripMembers, app_settings: AppSettings,
+    } as const;
+    const count = (table: keyof typeof tables): Promise<number> => countRows(orm, tables[table] as EntityClass<object>);
+    expect(await count('users')).toBe(2); // admin + demo
+    expect(await count('trips')).toBe(3);
+    expect(await count('days')).toBe(16);
+    expect(await count('places')).toBe(32);
+    expect(await count('day_assignments')).toBe(13 + 9 + 11); // per-day assignment counts, trip 1/2/3
+    expect(await count('packing_items')).toBe(10 + 6 + 8);
+    expect(await count('budget_items')).toBe(6 + 4 + 5);
+    expect(await count('reservations')).toBe(2 + 1 + 3);
+    expect(await count('day_notes')).toBe(4 + 2 + 3);
+    expect(await count('trip_members')).toBe(3);
+    expect(await count('app_settings')).toBeGreaterThanOrEqual(1);
 
-    const allowRegistration = db.prepare("SELECT value FROM app_settings WHERE key = 'allow_registration'").get() as { value: string } | undefined;
-    expect(allowRegistration?.value).toBe('false');
+    expect(await readAppSetting(orm, 'allow_registration')).toBe('false');
 
-    const admin = db.prepare('SELECT username, email, role FROM users WHERE id = ?').get(adminId) as { username: string; email: string; role: string };
+    const admin = await readUser(orm, adminId);
     expect(admin.role).toBe('admin');
-    const demoUser = db.prepare('SELECT username, email, role FROM users WHERE id = ?').get(demoId) as { username: string; email: string; role: string };
-    expect(demoUser).toEqual({ username: 'demo', email: 'demo@trek.app', role: 'user' });
+    const demoUser = await readUser(orm, demoId);
+    expect({ username: demoUser.username, email: demoUser.email, role: demoUser.role }).toEqual({ username: 'demo', email: 'demo@trek.app', role: 'user' });
 
-    const tripTitles = (db.prepare('SELECT title FROM trips ORDER BY id').all() as { title: string }[]).map((r) => r.title);
+    const tripTitles = (await findRows(orm, Trips, {}, { id: 'asc' })).map((r) => r.title);
     expect(tripTitles).toEqual(['Tokyo & Kyoto', 'Barcelona Long Weekend', 'New York City']);
 
     // reservation_time carries the full date (#1934), never a bare clock time.
-    const reservationTimes = (db.prepare('SELECT reservation_time FROM reservations ORDER BY id').all() as { reservation_time: string }[]).map((r) => r.reservation_time);
+    const reservationTimes = (await findRows(orm, Reservations, {}, { id: 'asc' })).map((r) => r.reservation_time);
+    await orm.close();
     for (const t of reservationTimes) expect(t).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 

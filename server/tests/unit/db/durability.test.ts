@@ -220,6 +220,7 @@ describe('standalone scripts honour the same configuration', () => {
     expect(readModes(dbPath)).toEqual({ journalMode: 'DELETE', synchronous: 2 });
 
     const db = new Database(dbPath);
+    // test-sql-allow: the file reset-admin.js just rewrote has no ORM bound to it; it is read as the script left it.
     const admin = db.prepare('SELECT role FROM users WHERE email = ?').get('locked-out@example.com') as
       | { role: string }
       | undefined;
@@ -230,6 +231,7 @@ describe('standalone scripts honour the same configuration', () => {
   it('reset-admin.js finds the account whatever the case, and ends its sessions', () => {
     seedWalDb();
     const seed = new Database(dbPath);
+    // test-sql-allow: the database file reset-admin.js works on has no ORM bound to it.
     seed.prepare("INSERT INTO users (username, email, password_hash, role, password_version) VALUES ('boss', 'Boss@Example.com', 'x', 'user', 3)").run();
     seed.close();
 
@@ -240,6 +242,7 @@ describe('standalone scripts honour the same configuration', () => {
     });
 
     const db = new Database(dbPath);
+    // test-sql-allow: the file reset-admin.js just rewrote has no ORM bound to it; it is read as the script left it.
     const rows = db.prepare('SELECT email, role, password_version, must_change_password FROM users').all();
     db.close();
     expect(rows).toEqual([{ email: 'Boss@Example.com', role: 'admin', password_version: 4, must_change_password: 1 }]);

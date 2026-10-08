@@ -4,7 +4,7 @@
  * bodies await DB work only." The server holds ONE better-sqlite3 connection, shared
  * by MikroORM's Kysely-backed driver (`orm-driver.ts`'s `BoundSqliteDriver`) and by
  * any code holding the raw `better-sqlite3` handle directly (Plan 4 Task 4 deleted
- * `DatabaseService`, the class that used to wrap `db.prepare(...)` this way — the
+ * `DatabaseService`, the class that used to wrap `db.prepare` statements this way — the
  * hazard below is unchanged, since `MaintenanceRepository`/`DemoRepository`'s own
  * `connection.execute()` calls and the still-exported `db` Proxy in
  * `db/database.ts` are the same kind of direct, non-Kysely-queued access). This
@@ -20,7 +20,7 @@
  *      Kysely's own `ConnectionMutex` for SQLite serialises every statement onto
  *      the one connection, so there is no interleaving: the queued statement's
  *      result only becomes observable after the holder's transaction settles.
- *   B. A raw `better-sqlite3` statement (`db.prepare(...).get/run(...)`, the same
+ *   B. A raw `better-sqlite3` statement (`db.prepare` then `.get`/`.run`, the same
  *      shape `DatabaseService` used to wrap) issued while that same transaction is
  *      open does NOT queue — it shares the connection directly, with no mutex of
  *      its own, so it runs INSIDE the open transaction: a "dirty read" of the
@@ -44,6 +44,7 @@ import { Trips } from '../../../src/db/entities/Trips.entity';
 import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { withRequestContext } from '../../../src/nest/database/request-context';
+import { findRow } from '../../helpers/factories/rows';
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -139,13 +140,15 @@ describe('transaction yield (rule 24)', () => {
     // uncommitted write, not the cross-request hazard rule 24 names). It
     // issues a raw `better-sqlite3` READ and WRITE directly against the
     // shared handle (the same shape `DatabaseService.get`/`.run` used to
-    // wrap — `this.conn.prepare(sql).get/run(...)`, bypassing MikroORM/
+    // wrap — `this.conn.prepare` then `.get`/`.run`, bypassing MikroORM/
     // Kysely entirely). Neither is behind Kysely's `ConnectionMutex` (probe
     // A), so both share the one better-sqlite3 connection directly and run
     // INSIDE the holder's still-open, uncommitted transaction.
     await withRequestContext(t.orm, async () => {
+      // test-sql-allow: a raw read on the shared handle, outside Kysely's mutex, is the hazard this probe measures.
       const row = testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(trip.id) as { end_date: string | null } | undefined;
       dirtyRead = row?.end_date;
+      // test-sql-allow: a raw write on the shared handle, outside Kysely's mutex, is the hazard this probe measures.
       testDb.prepare('UPDATE trips SET title = ? WHERE id = ?').run('DIRTY-WRITE-MARKER', trip.id);
     });
 
@@ -162,7 +165,7 @@ describe('transaction yield (rule 24)', () => {
     // production code: a raw statement issued mid-transaction by ANOTHER
     // request would otherwise report success on a write this rollback just
     // undid.
-    const after = testDb.prepare('SELECT end_date, title FROM trips WHERE id = ?').get(trip.id) as { end_date: string | null; title: string };
+    const after = (await findRow(t, Trips, { id: trip.id }))!;
     expect(after.end_date).toBe('2026-01-01');
     expect(after.title).toBe('Original Title');
   });
@@ -190,8 +193,8 @@ describe('transaction yield (rule 24)', () => {
 
     await expect(Promise.all([first, second])).resolves.toBeDefined();
 
-    const rowA = testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(tripA.id) as { end_date: string | null };
-    const rowB = testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(tripB.id) as { end_date: string | null };
+    const rowA = (await findRow(t, Trips, { id: tripA.id }))!;
+    const rowB = (await findRow(t, Trips, { id: tripB.id }))!;
     expect(rowA.end_date).toBe('2099-01-01');
     expect(rowB.end_date).toBe('2099-02-01');
   });

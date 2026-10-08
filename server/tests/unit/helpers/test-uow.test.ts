@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
-import { createTestUnitOfWork } from '../../helpers/test-uow';
+import { createTestUnitOfWork, sharedTestOrm } from '../../helpers/test-uow';
+import { countRows } from '../../helpers/factories/rows';
+import { Users } from '../../../src/db/entities/Users.entity';
 import { createUser } from '../../helpers/factories';
 import type { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 
@@ -14,7 +16,7 @@ beforeAll(async () => {
 beforeEach(() => resetTestDb(testDb));
 afterAll(() => testDb.close());
 
-const countUsers = () => (testDb.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+const countUsers = async () => countRows(await sharedTestOrm(testDb), Users);
 
 describe('createTestUnitOfWork', () => {
   it('TUOW-001: raw better-sqlite3 statements inside transactional() commit together', async () => {
@@ -22,7 +24,7 @@ describe('createTestUnitOfWork', () => {
       createUser(testDb);
       createUser(testDb);
     });
-    expect(countUsers()).toBe(2);
+    expect(await countUsers()).toBe(2);
   });
 
   it('TUOW-002: a throw rolls raw statements back', async () => {
@@ -32,7 +34,7 @@ describe('createTestUnitOfWork', () => {
         throw new Error('boom');
       }),
     ).rejects.toThrow('boom');
-    expect(countUsers()).toBe(0);
+    expect(await countUsers()).toBe(0);
   });
 
   it('TUOW-003: the helper is memoised per handle', async () => {
