@@ -430,6 +430,34 @@ describe('Task 6 review items — rollback and concurrency', () => {
     expect(after).toBe(before);
   });
 
+  it('MEMBERS-SVC-019: deleteGuest rolls the plugin erasure back with the user delete, so a guest that survives keeps its plugin rows and no erasure is queued', async () => {
+    const { user: owner } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    const { member: guest } = await roster.createGuest(trip.id, 'Rollback Ray', owner.id);
+    testDb.prepare('INSERT INTO plugins (id, name, version, permissions) VALUES (?, ?, ?, ?)')
+      .run('members-svc-019', 'members-svc-019', '1.0.0', JSON.stringify(['hook:user-data']));
+    testDb.prepare('INSERT INTO plugin_user_config (plugin_id, user_id, config) VALUES (?, ?, ?)')
+      .run('members-svc-019', guest.id, '{"token":"keep-me"}');
+
+    const spy = vi.spyOn(usersRepo, 'deleteGuest').mockRejectedValueOnce(new Error('boom'));
+    try {
+      await expect(roster.deleteGuest(trip.id, guest.id)).rejects.toThrow('boom');
+
+      // The erasure ran first, then the users delete rejected. Erasing outside the
+      // transaction would have left the host rows deleted and an erasure queued for
+      // a guest that still exists.
+      expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(guest.id)).toBeDefined();
+      expect(testDb.prepare('SELECT user_id FROM plugin_user_config WHERE user_id = ?').get(guest.id)).toBeDefined();
+      expect(testDb.prepare('SELECT plugin_id FROM plugin_user_erasure_queue WHERE user_id = ?').all(guest.id)).toEqual([]);
+    } finally {
+      spy.mockRestore();
+      // resetTestDb leaves the plugin tables alone, so this test cleans up its own rows.
+      for (const t of ['plugin_user_erasure_queue', 'plugin_user_config', 'plugins']) {
+        testDb.prepare(`DELETE FROM ${t} WHERE ${t === 'plugins' ? 'id' : 'plugin_id'} = ?`).run('members-svc-019');
+      }
+    }
+  });
+
   it('MEMBERS-SVC-018 (concurrency, §18.4, copies TRIP-JOIN-005): two concurrent addMember calls for the same (trip, user) race the TM5→TM6 check-then-act window', async () => {
     const { user: owner } = createUser(testDb);
     const { user: invitee } = createUser(testDb);

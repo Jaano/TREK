@@ -279,15 +279,15 @@ export class TripMembersService {
 
   async deleteGuest(tripId: string | number, guestUserId: number): Promise<boolean> {
     if (!(await this.guestOfTrip(tripId, guestUserId))) return false;
-    // A guest is still a user id a plugin may hold data for, so erase that too — the
-    // host-side per-user tables + a durable own-db erasure per granted plugin — exactly
-    // like a full account deletion (otherwise a deleted guest's plugin data lingers).
-    await this.userCleanup.erasePluginUserData(guestUserId);
-    // Quirk fix on top of the 1:1 move: the budget re-split and the user delete
-    // run in one transaction, so a failure mid-flow can't leave the expense
-    // divisors re-derived for a guest that still exists (or vice versa). The
-    // plugin-side erasure/notification keep their order around it.
+    // The plugin erasure, the budget re-split and the user delete run in one
+    // transaction, so a failure mid-flow can't leave the expense divisors re-derived,
+    // or the guest's plugin rows erased, for a guest that still exists (or vice
+    // versa). The plugin notification goes out after the commit.
     await this.uow.transactional(async () => {
+      // A guest is still a user id a plugin may hold data for, so erase that too (the
+      // host-side per-user tables plus a durable own-db erasure per granted plugin), exactly
+      // like a full account deletion; otherwise a deleted guest's plugin data lingers.
+      await this.userCleanup.erasePluginUserData(guestUserId);
       // Re-split the expenses they were part of before the cascade takes their member
       // rows away — the divisor is denormalized and cannot follow a foreign key (#1553).
       await this.budget.removeUserFromBudgetItems(guestUserId);

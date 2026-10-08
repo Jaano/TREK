@@ -8,7 +8,6 @@
   "src/nest/auth/passkey.service.ts#PasskeyService.passkeyLoginVerify": 2,
   "src/nest/auth/passkey.service.ts#PasskeyService.passkeyRegisterOptions": 2,
   "src/nest/auth/passkey.service.ts#PasskeyService.passkeyRegisterVerify": 2,
-  "src/nest/auth/user-cleanup.service.ts#UserCleanupService.erasePluginUserData": 2,
   "src/nest/booking-import/booking-import.service.ts#BookingImportService.confirm": 4,
   "src/nest/doc-sync/doc-sync-config.service.ts#DocSyncConfigService.upsertConnection": 3,
   "src/nest/doc-sync/doc-sync.controller.ts#DocSyncController.createLink": 4,
@@ -97,7 +96,6 @@
   "src/nest/plugins/plugins.controller.ts#PluginsController.update": 2,
   "src/nest/plugins/plugins.controller.ts#PluginsController.updateConfig": 3,
   "src/nest/reservations/reservations.controller.ts#ReservationsController.update": 2,
-  "src/nest/trip-members/trip-members.service.ts#TripMembersService.deleteGuest": 2,
   "src/nest/trips/trips.service.ts#TripsService.update": 2,
   "src/nest/vacay/vacay.service.ts#VacayService.updatePlan": 2
 }

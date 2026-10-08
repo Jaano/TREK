@@ -116,22 +116,29 @@ export class UserCleanupService {
    * here, now via the same repository.
    */
   async erasePluginUserData(userId: number): Promise<void> {
-    await this.maintenance.deletePluginUserData(userId); // UC1, Plan 4 Task 4
-    try {
-      const rows = await this.pluginsRepo.listIdsAndPermissions(); // UC2 — Plan 4 Task 8a
-      const installed = new Set(rows.map((r) => r.id));
-      await enqueueHookUserDataErasures(this.pluginUserErasureQueueRepo, rows, userId); // UC3 — Plan 4 Task 8a
-      // Also enqueue for plugins UNINSTALLED with their data retained (deleteData=false):
-      // their data dir still holds the user's rows and a same-id reinstall would re-adopt
-      // them. No permissions record survives uninstall, so we can't check hook:user-data —
-      // enqueue for every orphan data dir; the row sits inert (no FK) and drains only if
-      // that id is reinstalled + active (erasure delivery is a duty, not grant-gated).
+    // The delete and the erasures it queues are one write: the host rows never go
+    // without the queue rows that purge the plugins' own copies. Only DB writes and
+    // a synchronous readdir run in here, no network I/O. A caller that deletes the
+    // user (deleteUserCompletely, TripMembersService.deleteGuest) calls this inside
+    // its own transaction, so this becomes a savepoint of it.
+    await this.uow.transactional(async () => {
+      await this.maintenance.deletePluginUserData(userId); // UC1, Plan 4 Task 4
       try {
-        for (const entry of fs.readdirSync(pluginsDataRoot(), { withFileTypes: true })) {
-          if (entry.isDirectory() && !installed.has(entry.name)) await this.pluginUserErasureQueueRepo.insertIgnore(entry.name, userId);
-        }
-      } catch { /* no plugin data root yet */ }
-    } catch { /* plugins / queue table absent (slim schema) */ }
+        const rows = await this.pluginsRepo.listIdsAndPermissions(); // UC2, Plan 4 Task 8a
+        const installed = new Set(rows.map((r) => r.id));
+        await enqueueHookUserDataErasures(this.pluginUserErasureQueueRepo, rows, userId); // UC3, Plan 4 Task 8a
+        // Also enqueue for plugins UNINSTALLED with their data retained (deleteData=false):
+        // their data dir still holds the user's rows and a same-id reinstall would re-adopt
+        // them. No permissions record survives uninstall, so we can't check hook:user-data;
+        // enqueue for every orphan data dir; the row sits inert (no FK) and drains only if
+        // that id is reinstalled + active (erasure delivery is a duty, not grant-gated).
+        try {
+          for (const entry of fs.readdirSync(pluginsDataRoot(), { withFileTypes: true })) {
+            if (entry.isDirectory() && !installed.has(entry.name)) await this.pluginUserErasureQueueRepo.insertIgnore(entry.name, userId);
+          }
+        } catch { /* no plugin data root yet */ }
+      } catch { /* plugins / queue table absent (slim schema) */ }
+    });
   }
 
   /**
