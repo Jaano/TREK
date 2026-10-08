@@ -5,7 +5,7 @@
  *   offline create/update/delete → enqueue() → optimistic Dexie write (in repo)
  *   online trigger → flush() → replay REST with X-Idempotency-Key header → update Dexie
  */
-import { offlineDb } from '../db/offlineDb'
+import { offlineDb, MUTATION_SCHEMA_VERSION } from '../db/offlineDb'
 import { apiClient } from '../api/client'
 import { isAuthed } from './authGate'
 import { isEffectivelyOffline } from './networkMode'
@@ -146,6 +146,20 @@ function holdEntity(held: Map<string, number>, m: QueuedMutation): void {
   if (since === undefined || m.createdAt < since) held.set(key, m.createdAt)
 }
 
+// The UI build stamped onto each queued write, for diagnosis. Empty where the
+// bundler defined none.
+const BUILD_VERSION: string = typeof __TREK_UI_VERSION__ === 'string' ? __TREK_UI_VERSION__ : ''
+
+/**
+ * Was this write queued by a build whose row format this one does not know? A
+ * tab still on the previous bundle, or an install rolled back, would otherwise
+ * replay a shape it cannot read. Such a row stays in the queue as it is, for
+ * the build that wrote it; a row without a stamp predates it and is format 1.
+ */
+function isFromNewerFormat(m: QueuedMutation): boolean {
+  return (m.schemaVersion ?? 1) > MUTATION_SCHEMA_VERSION
+}
+
 /** Pull the server's current entity out of a 409 response body ({ server: {...} }). */
 function extractConflictServer(err: unknown): unknown {
   const data = (err as { response?: { data?: unknown } })?.response?.data
@@ -222,7 +236,7 @@ export const mutationQueue = {
    * Returns the UUID (= idempotency key).
    */
   async enqueue(
-    mutation: Omit<QueuedMutation, 'status' | 'attempts' | 'createdAt' | 'lastError'>,
+    mutation: Omit<QueuedMutation, 'status' | 'attempts' | 'createdAt' | 'lastError' | 'schemaVersion' | 'buildVersion'>,
   ): Promise<string> {
     const now = Date.now()
     _lastTs = now > _lastTs ? now : _lastTs + 1
@@ -232,6 +246,8 @@ export const mutationQueue = {
       attempts: 0,
       createdAt: _lastTs,
       lastError: null,
+      schemaVersion: MUTATION_SCHEMA_VERSION,
+      buildVersion: BUILD_VERSION,
     }
     await offlineDb.mutationQueue.put(item)
     return item.id
@@ -277,7 +293,9 @@ export const mutationQueue = {
    * holds back only its own trip, retried with growing gaps, and is parked as
    * failed once it has failed MAX_SERVER_ERROR_ATTEMPTS times. A write parked as
    * failed or as a conflict holds back the later writes to the same entity, so
-   * they keep their order whatever the user decides about it.
+   * they keep their order whatever the user decides about it. A write queued
+   * by a newer build (a higher schemaVersion) is skipped and left pending, and
+   * holds back the later writes to its entity the same way.
    *
    * A call that arrives while a flush is running, or still waiting for another
    * tab's lock, asks it for one more round (the running pass read the pending
@@ -362,6 +380,13 @@ export const mutationQueue = {
         const key = entityKey(mutation)
         const heldSince = key === undefined ? undefined : heldEntities.get(key)
         if (heldSince !== undefined && heldSince < mutation.createdAt) continue
+        // Queued by a newer build: not sent, not marked, not dropped. It keeps
+        // its place for that build, and the later writes to the same entity
+        // wait behind it as they do behind a parked one.
+        if (isFromNewerFormat(mutation)) {
+          holdEntity(heldEntities, mutation)
+          continue
+        }
         if (mutation.retryAfter !== undefined && mutation.retryAfter > Date.now()) {
           blockedTrips.add(mutation.tripId)
           continue

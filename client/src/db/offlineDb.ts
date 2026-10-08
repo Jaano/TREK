@@ -24,6 +24,19 @@ export interface CachedTour extends TourListItem {
 // to the user for a keep-mine / keep-theirs decision rather than dropped.
 export type MutationStatus = 'pending' | 'syncing' | 'failed' | 'conflict';
 
+/**
+ * The format of a queued write as this build writes and replays it. A queued
+ * row outlives the bundle that wrote it: it can be replayed by the next build
+ * after a deploy, or by an older one when a tab still runs the previous bundle
+ * or the install is rolled back. Bump this when a row's fields or the way the
+ * replay reads them change so that an older build would send it wrongly. A
+ * build replays rows stamped with its own format or an older one, and leaves a
+ * row stamped with a newer one in the queue untouched for a build that knows
+ * it (see mutationQueue's flush). Rows queued before the stamp existed carry
+ * none and read as format 1.
+ */
+export const MUTATION_SCHEMA_VERSION = 1;
+
 export interface QueuedMutation {
   /** UUID — also used as X-Idempotency-Key sent to the server */
   id: string;
@@ -75,6 +88,13 @@ export interface QueuedMutation {
    * on every trigger.
    */
   retryAfter?: number;
+  /**
+   * MUTATION_SCHEMA_VERSION of the build that queued the row. Optional because
+   * rows queued before it existed carry none; those read as format 1.
+   */
+  schemaVersion?: number;
+  /** The UI build that queued the row. For diagnosis only, never compared. */
+  buildVersion?: string;
 }
 
 export interface SyncMeta {
