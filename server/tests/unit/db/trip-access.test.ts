@@ -12,6 +12,8 @@ import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { CAN_ACCESS_TRIP_SQL, buildDbMock, resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Trips } from '../../../src/db/entities/Trips.entity';
+import { makeUser } from '../../helpers/factories/users';
+import { addTripMember, makeTrip } from '../../helpers/factories/trips';
 import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 
 const testDb = createSnapshotTestDb();
@@ -25,42 +27,31 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function seedUser(username: string): number {
-  return Number(
-    testDb.prepare("INSERT INTO users (username, email, password_hash, role) VALUES (?, ?, 'x', 'user')")
-      .run(username, `${username}@example.test`).lastInsertRowid,
-  );
+async function seedUser(username: string): Promise<number> {
+  return (await makeUser(t, { username, email: `${username}@example.test` })).user.id;
 }
 
 describe('TripsRepository.findAccessible (formerly canAccessTrip)', () => {
   it('returns the trip currency for the owner (#1543)', async () => {
-    const owner = seedUser('owner');
-    const tripId = Number(
-      testDb.prepare("INSERT INTO trips (user_id, title, currency) VALUES (?, 'Trip', 'RUB')")
-        .run(owner).lastInsertRowid,
-    );
+    const owner = await seedUser('owner');
+    const tripId = (await makeTrip(t, owner, { title: 'Trip', currency: 'RUB' })).id;
 
     expect(await trips.findAccessible(tripId, owner)).toMatchObject({ id: tripId, user_id: owner, currency: 'RUB' });
   });
 
   it('returns the trip currency for a member too', async () => {
-    const owner = seedUser('owner2');
-    const member = seedUser('member2');
-    const tripId = Number(
-      testDb.prepare("INSERT INTO trips (user_id, title, currency) VALUES (?, 'Trip', 'JPY')")
-        .run(owner).lastInsertRowid,
-    );
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member);
+    const owner = await seedUser('owner2');
+    const member = await seedUser('member2');
+    const tripId = (await makeTrip(t, owner, { title: 'Trip', currency: 'JPY' })).id;
+    await addTripMember(t, tripId, member);
 
     expect(await trips.findAccessible(tripId, member)).toMatchObject({ currency: 'JPY' });
   });
 
   it('returns undefined for a user with no access', async () => {
-    const owner = seedUser('owner3');
-    const stranger = seedUser('stranger3');
-    const tripId = Number(
-      testDb.prepare("INSERT INTO trips (user_id, title) VALUES (?, 'Trip')").run(owner).lastInsertRowid,
-    );
+    const owner = await seedUser('owner3');
+    const stranger = await seedUser('stranger3');
+    const tripId = (await makeTrip(t, owner, { title: 'Trip' })).id;
 
     expect(await trips.findAccessible(tripId, stranger)).toBeUndefined();
   });
@@ -69,8 +60,8 @@ describe('TripsRepository.findAccessible (formerly canAccessTrip)', () => {
   // before the value reaches the statement) survives the repository move —
   // pinned directly here rather than only inferred from the boot matrix.
   it('a non-numeric-looking id finds nothing, the same as the legacy raw-bind statement', async () => {
-    const owner = seedUser('owner4');
-    testDb.prepare("INSERT INTO trips (user_id, title) VALUES (?, 'Trip')").run(owner);
+    const owner = await seedUser('owner4');
+    await makeTrip(t, owner, { title: 'Trip' });
     expect(await trips.findAccessible('not-a-number', owner)).toBeUndefined();
   });
 });
@@ -82,18 +73,14 @@ describe('TripsRepository.findAccessible (formerly canAccessTrip)', () => {
 describe('the buildDbMock stand-in for canAccessTrip', () => {
   it('hands back the trip currency, like the real one', async () => {
     const dbmockDb = createSnapshotTestDb();
+    const seeder = await createTestOrm(dbmockDb);
     try {
-      const owner = Number(
-        dbmockDb.prepare("INSERT INTO users (username, email, password_hash, role) VALUES ('m', 'm@example.test', 'x', 'user')")
-          .run().lastInsertRowid,
-      );
-      const tripId = Number(
-        dbmockDb.prepare("INSERT INTO trips (user_id, title, currency) VALUES (?, 'Trip', 'ISK')")
-          .run(owner).lastInsertRowid,
-      );
+      const owner = (await makeUser(seeder, { username: 'm', email: 'm@example.test' })).user.id;
+      const tripId = (await makeTrip(seeder, owner, { title: 'Trip', currency: 'ISK' })).id;
 
       expect(await buildDbMock(dbmockDb).canAccessTrip(tripId, owner)).toMatchObject({ id: tripId, currency: 'ISK' });
     } finally {
+      await seeder.close();
       dbmockDb.close();
     }
   });

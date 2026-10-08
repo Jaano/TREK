@@ -9,6 +9,8 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { VacayYears } from '../../../../src/db/entities/VacayYears.entity';
+import { insertRow } from '../../../helpers/factories/rows';
+import { makeVacayPlan } from '../../../helpers/factories/vacay';
 import type { VacayYearsRepository } from '../../../../src/db/repositories/VacayYears.repository';
 
 const testDb = createSnapshotTestDb();
@@ -22,19 +24,20 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function insertPlan(ownerId: number): number {
-  return Number(testDb.prepare('INSERT INTO vacay_plans (owner_id) VALUES (?)').run(ownerId).lastInsertRowid);
+async function insertPlan(ownerId: number): Promise<number> {
+  return (await makeVacayPlan(t, ownerId)).id;
 }
 
 describe('VacayYearsRepository.listForPlan (VC33/94, VacayService.listYears)', () => {
   it('VACAYYEARREPO-001: matches SELECT year FROM vacay_years WHERE plan_id = ? ORDER BY year run raw, scoped to the plan', async () => {
     const { user } = createUser(testDb);
-    const planId = insertPlan(user.id);
-    const other = insertPlan(createUser(testDb).user.id);
-    testDb.prepare('INSERT INTO vacay_years (plan_id, year) VALUES (?, ?)').run(planId, 2027);
-    testDb.prepare('INSERT INTO vacay_years (plan_id, year) VALUES (?, ?)').run(planId, 2026);
-    testDb.prepare('INSERT INTO vacay_years (plan_id, year) VALUES (?, ?)').run(other, 2099);
+    const planId = await insertPlan(user.id);
+    const other = await insertPlan(createUser(testDb).user.id);
+    await insertRow(t, VacayYears, { plan: planId, year: 2027 });
+    await insertRow(t, VacayYears, { plan: planId, year: 2026 });
+    await insertRow(t, VacayYears, { plan: other, year: 2099 });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT year FROM vacay_years WHERE plan_id = ? ORDER BY year').all(planId);
     const years = await repo.listForPlan(planId);
 
@@ -44,7 +47,7 @@ describe('VacayYearsRepository.listForPlan (VC33/94, VacayService.listYears)', (
 
   it('VACAYYEARREPO-002: empty array for a plan with no years', async () => {
     const { user } = createUser(testDb);
-    const planId = insertPlan(user.id);
+    const planId = await insertPlan(user.id);
     expect(await repo.listForPlan(planId)).toEqual([]);
   });
 });

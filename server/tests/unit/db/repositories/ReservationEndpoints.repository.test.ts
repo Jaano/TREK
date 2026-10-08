@@ -10,6 +10,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createReservation, createTrip, createUser } from '../../../helpers/factories';
 import { ReservationEndpoints } from '../../../../src/db/entities/ReservationEndpoints.entity';
+import { insertRow } from '../../../helpers/factories/rows';
 import type { ReservationEndpointsRepository } from '../../../../src/db/repositories/ReservationEndpoints.repository';
 
 const testDb = createSnapshotTestDb();
@@ -23,40 +24,46 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-const insertEndpoint = (
+const insertEndpoint = async (
   reservationId: number,
   role: string,
   sequence: number,
   overrides: Partial<{ name: string; code: string | null; lat: number; lng: number; timezone: string | null; local_time: string | null; local_date: string | null }> = {},
 ) => {
-  testDb.prepare(`
-    INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    reservationId, role, sequence,
-    overrides.name ?? `${role} endpoint`, overrides.code ?? null, overrides.lat ?? 48.0, overrides.lng ?? 11.0,
-    overrides.timezone ?? null, overrides.local_time ?? null, overrides.local_date ?? null,
-  );
+  await insertRow(t, ReservationEndpoints, {
+    reservation: reservationId,
+    role,
+    sequence,
+    name: overrides.name ?? `${role} endpoint`,
+    code: overrides.code ?? null,
+    lat: overrides.lat ?? 48.0,
+    lng: overrides.lng ?? 11.0,
+    timezone: overrides.timezone ?? null,
+    local_time: overrides.local_time ?? null,
+    local_date: overrides.local_date ?? null,
+  });
 };
 
 describe('ReservationEndpointsRepository — fully seeded world', () => {
-  const seed = () => {
+  const seed = async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const flight = createReservation(testDb, trip.id, { title: 'Flight', type: 'flight' });
     const otherFlight = createReservation(testDb, trip.id, { title: 'Return flight', type: 'flight' });
-    insertEndpoint(flight.id, 'from', 0, { name: 'MUC', code: 'MUC', local_date: '2026-09-01' });
-    insertEndpoint(flight.id, 'to', 1, { name: 'JFK', code: 'JFK', local_date: '2026-09-01' });
-    insertEndpoint(otherFlight.id, 'from', 0, { name: 'JFK', code: 'JFK' });
+    await insertEndpoint(flight.id, 'from', 0, { name: 'MUC', code: 'MUC', local_date: '2026-09-01' });
+    await insertEndpoint(flight.id, 'to', 1, { name: 'JFK', code: 'JFK', local_date: '2026-09-01' });
+    await insertEndpoint(otherFlight.id, 'from', 0, { name: 'JFK', code: 'JFK' });
 
     const otherTrip = createTrip(testDb, user.id);
     const foreignFlight = createReservation(testDb, otherTrip.id, { title: 'Foreign', type: 'flight' });
-    insertEndpoint(foreignFlight.id, 'from', 0, { name: 'LHR', code: 'LHR' });
+    await insertEndpoint(foreignFlight.id, 'from', 0, { name: 'LHR', code: 'LHR' });
 
     return { trip, otherTrip, flight, otherFlight, foreignFlight };
   };
 
   it('RS3 listForTrip — matches the legacy JOIN reservations statement, ordered by reservation then sequence, scoped by trip', async () => {
-    const { trip, flight, otherFlight } = seed();
+    const { trip, flight, otherFlight } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT e.* FROM reservation_endpoints e JOIN reservations r ON e.reservation_id = r.id
       WHERE r.trip_id = ? ORDER BY e.reservation_id, e.sequence`).all(trip.id);
@@ -68,7 +75,8 @@ describe('ReservationEndpointsRepository — fully seeded world', () => {
   });
 
   it('RR2 listForReservation — matches the legacy statement, ordered by sequence, scoped to one reservation', async () => {
-    const { flight } = seed();
+    const { flight } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM reservation_endpoints WHERE reservation_id = ? ORDER BY sequence').all(flight.id);
     const typed = await repo.listForReservation(flight.id);
     expect(typed).toEqual(legacy);
@@ -76,7 +84,8 @@ describe('ReservationEndpointsRepository — fully seeded world', () => {
   });
 
   it('DY17 listIdAndDate — matches the legacy statement', async () => {
-    const { flight } = seed();
+    const { flight } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT id, local_date FROM reservation_endpoints WHERE reservation_id = ?').all(flight.id);
     const typed = await repo.listIdAndDate(flight.id);
     expect(typed).toEqual(legacy);
@@ -84,7 +93,8 @@ describe('ReservationEndpointsRepository — fully seeded world', () => {
   });
 
   it('RPL6 listRoadtripTerminals — matches the legacy JOIN reservations statement, ordered by reservation then sequence, scoped by trip', async () => {
-    const { trip, flight, otherFlight } = seed();
+    const { trip, flight, otherFlight } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT e.reservation_id, e.role, e.sequence, e.name, e.code, e.lat, e.lng FROM reservation_endpoints e
       JOIN reservations r ON r.id = e.reservation_id WHERE r.trip_id = ? ORDER BY e.reservation_id, e.sequence`).all(trip.id);

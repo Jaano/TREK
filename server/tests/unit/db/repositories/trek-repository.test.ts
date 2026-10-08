@@ -41,6 +41,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
+import { countRows, findRow } from '../../../helpers/factories/rows';
 import { Users } from '../../../../src/db/entities/Users.entity';
 import type { UsersRepository } from '../../../../src/db/repositories/Users.repository';
 import { WebauthnChallenges } from '../../../../src/db/entities/WebauthnChallenges.entity';
@@ -226,8 +227,8 @@ describe('TrekRepository — every overridden path succeeds inside withRequestCo
       await users.nativeDelete({ id: inserted as number });
     });
 
-    const row = testDb.prepare('SELECT username FROM users WHERE id = ?').get(user.id) as { username: string };
-    expect(row.username).toBe('inside-upserted'); // the upsert's merge is the last write and must stick
+    const row = await findRow(t, Users, { id: user.id });
+    expect(row?.username).toBe('inside-upserted'); // the upsert's merge is the last write and must stick
   });
 
   // Task 7 review, M4 — the same seven methods, inside a request context.
@@ -256,7 +257,7 @@ describe('TrekRepository — every overridden path succeeds inside withRequestCo
       // SQLite (via better-sqlite3) does not return one primary key per row
       // for a batch insert — only that it does not throw inside a request
       // context is what this test proves; the row count is verified below
-      // from the raw table, outside the context.
+      // from a fresh context of its own, outside this one.
       await users.insertMany([
         { username: 'm4-many-1', email: 'm4-many-1@example.test', password_hash: 'h', role: 'user', first_seen_version: '1.0' },
         { username: 'm4-many-2', email: 'm4-many-2@example.test', password_hash: 'h', role: 'user', first_seen_version: '1.0' },
@@ -269,10 +270,9 @@ describe('TrekRepository — every overridden path succeeds inside withRequestCo
       expect(upserted).toHaveLength(1);
     });
 
-    const row = testDb.prepare('SELECT username FROM users WHERE id = ?').get(user.id) as { username: string };
-    expect(row.username).toBe('m4-upserted');
-    const manyRows = testDb.prepare("SELECT username FROM users WHERE username LIKE 'm4-many-%'").all() as { username: string }[];
-    expect(manyRows).toHaveLength(2);
+    const row = await findRow(t, Users, { id: user.id });
+    expect(row?.username).toBe('m4-upserted');
+    expect(await countRows(t, Users, { username: { $like: 'm4-many-%' } })).toBe(2);
   });
 });
 
@@ -305,8 +305,8 @@ describe('TrekRepository — inside uow.transactional', () => {
       });
     });
 
-    const row = testDb.prepare('SELECT username, email FROM users WHERE id = ?').get(user.id) as { username: string; email: string };
-    expect(row.username).toBe('after'); // the nativeUpdate must stick
-    expect(row.email).toBe('before@example.test'); // untouched by either read
+    const row = await findRow(t, Users, { id: user.id });
+    expect(row?.username).toBe('after'); // the nativeUpdate must stick
+    expect(row?.email).toBe('before@example.test'); // untouched by either read
   });
 });

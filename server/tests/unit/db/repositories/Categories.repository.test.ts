@@ -4,6 +4,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createCategory, createUser } from '../../../helpers/factories';
 import { Categories } from '../../../../src/db/entities/Categories.entity';
+import { updateRows } from '../../../helpers/factories/rows';
 import type { CategoriesRepository } from '../../../../src/db/repositories/Categories.repository';
 
 const testDb = createSnapshotTestDb();
@@ -22,6 +23,7 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 function rawCategory(id: number): unknown {
+  // test-sql-allow: the row as SELECT * returns it is the oracle the repository's output is held to.
   return testDb.prepare('SELECT * FROM categories WHERE id = ?').get(id);
 }
 
@@ -93,10 +95,10 @@ describe('CategoriesRepository', () => {
     // without it this would risk being served from the identity map with
     // zero queries and the stale pre-UPDATE color. `queries === 1` proves
     // the real re-query happens.
-    it('CATREPO-008: a raw UPDATE on the same row then findById reads the new value, in one query', async () => {
+    it('CATREPO-008: an UPDATE from another context on the same row then findById reads the new value, in one query', async () => {
       const created = createCategory(testDb, { name: 'RepoStale', color: '#111111' });
       expect((await categories.findById(created.id))?.color).toBe('#111111'); // populate the identity map
-      testDb.prepare('UPDATE categories SET color = ? WHERE id = ?').run('#222222', created.id);
+      await updateRows(t, Categories, { id: created.id }, { color: '#222222' });
       const { value, queries } = await withQueryCount(() => categories.findById(created.id));
       expect(value?.color).toBe('#222222');
       expect(queries).toBe(1);
@@ -169,10 +171,10 @@ describe('CategoriesRepository', () => {
     // this doubles as the "list → raw UPDATE → patch" case the review
     // asked for. Without `refresh: true` in `patch`'s lookup, `icon` would
     // still read the pre-UPDATE 'OLD' (verified: fails without the fix).
-    it('CATREPO-018: an untouched column reflects a raw UPDATE made after the identity map was populated by list()', async () => {
+    it('CATREPO-018: an untouched column reflects an UPDATE from another context made after the identity map was populated by list()', async () => {
       const created = createCategory(testDb, { name: 'RepoRaceIcon', color: '#aaaaaa', icon: 'OLD' });
       await categories.list(); // populate the identity map with icon: 'OLD'
-      testDb.prepare('UPDATE categories SET icon = ? WHERE id = ?').run('NEW', created.id);
+      await updateRows(t, Categories, { id: created.id }, { icon: 'NEW' });
       const updated = await categories.patch(created.id, { color: '#bbbbbb' });
       expect(updated?.icon).toBe('NEW');
     });
@@ -184,10 +186,10 @@ describe('CategoriesRepository', () => {
     // though the method reports success. The raw-row assertion is what
     // catches it — `updated?.color` alone would still read '#111111'
     // either way (verified: fails without the fix).
-    it('CATREPO-019: a patch matching a concurrent raw write is not silently dropped', async () => {
+    it('CATREPO-019: a patch matching a concurrent write from another context is not silently dropped', async () => {
       const created = createCategory(testDb, { name: 'RepoRaceColor', color: '#111111' });
       await categories.findById(created.id); // populate the identity map with '#111111'
-      testDb.prepare('UPDATE categories SET color = ? WHERE id = ?').run('#333333', created.id);
+      await updateRows(t, Categories, { id: created.id }, { color: '#333333' });
       const updated = await categories.patch(created.id, { color: '#111111' });
       expect(updated?.color).toBe('#111111');
       expect(rawCategory(created.id)).toMatchObject({ color: '#111111' });

@@ -19,6 +19,10 @@ import { createReservation, createTrip, createUser, addTripMember } from '../../
 import { createTestReservationEndpointsRepo } from '../../../../helpers/test-uow';
 import type { ReservationEndpointsRepository } from '../../../../../src/db/repositories/ReservationEndpoints.repository';
 import { todayUtc } from '@trek/shared';
+import { createTestOrm, type TestOrm } from '../../../../helpers/test-orm';
+import { updateRows } from '../../../../helpers/factories/rows';
+import { addReservationTraveler, makeReservationEndpoint } from '../../../../helpers/factories/reservations';
+import { Reservations } from '../../../../../src/db/entities/Reservations.entity';
 
 const TRAVELER_OWNS = `
     (NOT EXISTS (SELECT 1 FROM reservation_travelers rt WHERE rt.reservation_id = r.id)
@@ -66,6 +70,7 @@ const AT46 = `
 
 const db = createSnapshotTestDb();
 let repo: ReservationEndpointsRepository;
+let orm: TestOrm;
 const users: number[] = [];
 const trips: number[] = [];
 const sortRows = (rows: unknown[]) => [...rows].sort((a, b) => (a as { id: number }).id - (b as { id: number }).id);
@@ -82,10 +87,27 @@ beforeAll(async () => {
   addTripMember(db, past, B);
   addTripMember(db, past, C);
   addTripMember(db, future, B);
-  const ep = db.prepare(
-    'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, local_date, local_time) VALUES (?,?,?,?,?,?,?,?,?)',
-  );
-  const trv = db.prepare('INSERT INTO reservation_travelers (reservation_id, user_id) VALUES (?, ?)');
+  orm = await createTestOrm(db);
+  const ep = (
+    reservationId: number,
+    role: string,
+    sequence: number,
+    code: string,
+    lat: number,
+    lng: number,
+    localDate: string | null,
+    localTime: string | null,
+  ) =>
+    makeReservationEndpoint(orm, reservationId, {
+      role,
+      sequence,
+      name: 'X',
+      code,
+      lat,
+      lng,
+      local_date: localDate,
+      local_time: localTime,
+    });
   let k = 0;
   for (const tid of [past, future, dateless]) {
     const shapes: [string, string | null, number[]][] = [
@@ -98,25 +120,28 @@ beforeAll(async () => {
     ];
     for (const [type, status, tr] of shapes) {
       const r = createReservation(db, tid, { type }).id;
-      db.prepare('UPDATE reservations SET status = ?, reservation_time = ?, reservation_end_time = ? WHERE id = ?').run(
-        status ?? 'pending',
-        k % 2 ? '2020-01-01T10:00' : null,
-        k % 3 ? '2020-01-01T14:00' : null,
-        r,
-      );
+      await updateRows(orm, Reservations, { id: r }, {
+        status: status ?? 'pending',
+        reservation_time: k % 2 ? '2020-01-01T10:00' : null,
+        reservation_end_time: k % 3 ? '2020-01-01T14:00' : null,
+      });
       k++;
-      ep.run(r, 'from', 0, 'X', 'FRA', 50.03 + k, 8.57, k % 2 ? '2020-01-01' : null, k % 2 ? '10:00' : null);
-      ep.run(r, 'stop', 1, 'X', 'DXB', 25.25, 55.36, null, null);
-      ep.run(r, 'to', 2, 'X', 'SIN', 1.36, 103.99 + k, '2020-01-02', null);
-      for (const u of tr) trv.run(r, u);
+      await ep(r, 'from', 0, 'FRA', 50.03 + k, 8.57, k % 2 ? '2020-01-01' : null, k % 2 ? '10:00' : null);
+      await ep(r, 'stop', 1, 'DXB', 25.25, 55.36, null, null);
+      await ep(r, 'to', 2, 'SIN', 1.36, 103.99 + k, '2020-01-02', null);
+      for (const u of tr) await addReservationTraveler(orm, r, u);
     }
   }
 });
-afterAll(() => db.close());
+afterAll(async () => {
+  await orm.close();
+  db.close();
+});
 
 describe('TRAVELER_OWNS consumers: repository vs legacy raw SQL, full rows', () => {
   it('AT6 — listOwnedEndpointsForTrips', async () => {
     for (const u of users) {
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = db.prepare(AT6(trips.length)).all(...trips, u);
       expect(sortRows(await repo.listOwnedEndpointsForTrips(trips, u))).toEqual(sortRows(legacy));
     }
@@ -124,6 +149,7 @@ describe('TRAVELER_OWNS consumers: repository vs legacy raw SQL, full rows', () 
 
   it('AT45 — listOwnedEndpointsForUser', async () => {
     for (const u of users) {
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = db.prepare(AT45).all(u, u, u);
       expect(sortRows(await repo.listOwnedEndpointsForUser(u, todayUtc()))).toEqual(sortRows(legacy));
     }
@@ -131,6 +157,7 @@ describe('TRAVELER_OWNS consumers: repository vs legacy raw SQL, full rows', () 
 
   it('AT46 — listOwnedFlightLegsForUser (ordered)', async () => {
     for (const u of users) {
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = db.prepare(AT46).all(u, u, u);
       expect(await repo.listOwnedFlightLegsForUser(u)).toEqual(legacy);
     }
@@ -141,11 +168,13 @@ describe('TRAVELER_OWNS consumers: repository vs legacy raw SQL, full rows', () 
     const ids = (u: number) =>
       JSON.stringify(
         [
+          // test-sql-allow: the legacy statement is the oracle the repository read is held to.
           ...new Set((db.prepare(AT6(trips.length)).all(...trips, u) as { reservation_id: number }[]).map((r) => r.reservation_id)),
         ].sort(),
       );
     const a = ids(A).length;
     const c = ids(C).length;
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const d = db.prepare(AT45).all(D, D, D).length;
     expect(a).toBeGreaterThan(0);
     expect(c).toBeGreaterThan(0);

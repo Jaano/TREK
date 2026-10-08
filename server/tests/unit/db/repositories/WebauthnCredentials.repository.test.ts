@@ -4,6 +4,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { WebauthnCredentials } from '../../../../src/db/entities/WebauthnCredentials.entity';
+import { findRows, insertRow, insertRows, updateRows } from '../../../helpers/factories/rows';
 import type { WebauthnCredentialsRepository } from '../../../../src/db/repositories/WebauthnCredentials.repository';
 import { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
 import { withRequestContext } from '../../../../src/nest/database/request-context';
@@ -20,9 +21,25 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 let _credSeq = 0;
-function insertCredential(userId: number, overrides: Record<string, unknown> = {}): { id: number } & Record<string, unknown> {
+
+interface CredentialColumns {
+  credential_id: string;
+  public_key: Buffer;
+  counter: number;
+  transports: string | null;
+  device_type: string | null;
+  backed_up: number;
+  name: string | null;
+  aaguid: string | null;
+  created_at?: string;
+}
+
+async function insertCredential(
+  userId: number,
+  overrides: Partial<CredentialColumns> = {},
+): Promise<{ id: number } & CredentialColumns> {
   _credSeq++;
-  const row = {
+  const row: CredentialColumns = {
     credential_id: `cred-${_credSeq}`,
     public_key: Buffer.from([1, 2, 3, _credSeq]),
     counter: 0,
@@ -33,19 +50,17 @@ function insertCredential(userId: number, overrides: Record<string, unknown> = {
     aaguid: null,
     ...overrides,
   };
-  const result = testDb.prepare(
-    `INSERT INTO webauthn_credentials
-       (user_id, credential_id, public_key, counter, transports, device_type, backed_up, name, aaguid)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(userId, row.credential_id, row.public_key, row.counter, row.transports, row.device_type, row.backed_up, row.name, row.aaguid);
-  return { id: Number(result.lastInsertRowid), ...row };
+  const id = await insertRow(t, WebauthnCredentials, { user: userId, ...row });
+  return { id, ...row };
 }
 
 function rawCredential(id: number): Record<string, unknown> | undefined {
+  // test-sql-allow: the stored row, BLOB bytes included, is what these cases check, past any ORM mapping.
   return testDb.prepare('SELECT * FROM webauthn_credentials WHERE id = ?').get(id) as Record<string, unknown> | undefined;
 }
 
 function rawCredentialByCredentialId(credentialId: string): Record<string, unknown> | undefined {
+  // test-sql-allow: the stored row, BLOB bytes included, is what these cases check, past any ORM mapping.
   return testDb.prepare('SELECT * FROM webauthn_credentials WHERE credential_id = ?').get(credentialId) as Record<string, unknown> | undefined;
 }
 
@@ -54,7 +69,7 @@ describe('WebauthnCredentialsRepository', () => {
     it('WEBAUTHN-CRED-REPO-001: true iff the user owns at least one credential', async () => {
       const { user } = createUser(testDb);
       expect(await creds.hasAny(user.id)).toBe(false);
-      insertCredential(user.id);
+      await insertCredential(user.id);
       expect(await creds.hasAny(user.id)).toBe(true);
     });
   });
@@ -63,9 +78,9 @@ describe('WebauthnCredentialsRepository', () => {
     it('WEBAUTHN-CRED-REPO-002: projects credential_id + transports for one user only', async () => {
       const { user } = createUser(testDb);
       const { user: other } = createUser(testDb);
-      insertCredential(user.id, { credential_id: 'mine-1', transports: JSON.stringify(['usb']) });
-      insertCredential(user.id, { credential_id: 'mine-2', transports: null });
-      insertCredential(other.id, { credential_id: 'theirs' });
+      await insertCredential(user.id, { credential_id: 'mine-1', transports: JSON.stringify(['usb']) });
+      await insertCredential(user.id, { credential_id: 'mine-2', transports: null });
+      await insertCredential(other.id, { credential_id: 'theirs' });
 
       const rows = await creds.listExcludeCredentials(user.id);
       expect(rows).toHaveLength(2);
@@ -81,7 +96,7 @@ describe('WebauthnCredentialsRepository', () => {
   describe('existsByCredentialId', () => {
     it('WEBAUTHN-CRED-REPO-003: true for a known credential_id, false otherwise', async () => {
       const { user } = createUser(testDb);
-      insertCredential(user.id, { credential_id: 'known-cred' });
+      await insertCredential(user.id, { credential_id: 'known-cred' });
       expect(await creds.existsByCredentialId('known-cred')).toBe(true);
       expect(await creds.existsByCredentialId('unknown-cred')).toBe(false);
     });
@@ -141,7 +156,7 @@ describe('WebauthnCredentialsRepository', () => {
   describe('findCreatedCredential (PK8) vs findByCredentialId (PK9)', () => {
     it('WEBAUTHN-CRED-REPO-006: findCreatedCredential projects only the panel columns', async () => {
       const { user } = createUser(testDb);
-      const cred = insertCredential(user.id, { name: 'Post-Reg' });
+      const cred = await insertCredential(user.id, { name: 'Post-Reg' });
 
       const row = await creds.findCreatedCredential(cred.credential_id as string);
       expect(row).toEqual({
@@ -157,8 +172,8 @@ describe('WebauthnCredentialsRepository', () => {
 
     it('WEBAUTHN-CRED-REPO-006b: name/created_at NULL come back null, not undefined (coverage: rule 16)', async () => {
       const { user } = createUser(testDb);
-      const cred = insertCredential(user.id, { name: null });
-      testDb.prepare('UPDATE webauthn_credentials SET created_at = NULL WHERE id = ?').run(cred.id);
+      const cred = await insertCredential(user.id, { name: null });
+      await updateRows(t, WebauthnCredentials, { id: cred.id }, { created_at: null });
       const row = await creds.findCreatedCredential(cred.credential_id as string);
       expect(row?.name).toBeNull();
       expect(row?.created_at).toBeNull();
@@ -171,7 +186,7 @@ describe('WebauthnCredentialsRepository', () => {
     it('WEBAUTHN-CRED-REPO-008: findByCredentialId returns the full row, public_key a real Buffer', async () => {
       const { user } = createUser(testDb);
       const pk = Buffer.from([1, 2, 3]);
-      const cred = insertCredential(user.id, { public_key: pk });
+      const cred = await insertCredential(user.id, { public_key: pk });
 
       const row = await creds.findByCredentialId(cred.credential_id as string);
       expect(row).not.toBeNull();
@@ -189,7 +204,7 @@ describe('WebauthnCredentialsRepository', () => {
   describe('updateCounterAndLastUsed', () => {
     it('WEBAUTHN-CRED-REPO-010: bumps counter and stamps last_used_at', async () => {
       const { user } = createUser(testDb);
-      const cred = insertCredential(user.id, { counter: 5 });
+      const cred = await insertCredential(user.id, { counter: 5 });
 
       await creds.updateCounterAndLastUsed(cred.id, 6);
 
@@ -203,11 +218,11 @@ describe('WebauthnCredentialsRepository', () => {
     it('WEBAUTHN-CRED-REPO-011: newest-first, scoped to one user, matches PK8\'s column set', async () => {
       const { user } = createUser(testDb);
       const { user: other } = createUser(testDb);
-      testDb.prepare(
-        `INSERT INTO webauthn_credentials (user_id, credential_id, public_key, counter, backed_up, name, created_at)
-         VALUES (?, 'old', x'01', 0, 0, 'Old', '2026-01-01 00:00:00'), (?, 'new', x'02', 0, 1, 'New', '2026-02-01 00:00:00')`,
-      ).run(user.id, user.id);
-      insertCredential(other.id);
+      await insertRows(t, WebauthnCredentials, [
+        { user: user.id, credential_id: 'old', public_key: Buffer.from([1]), counter: 0, backed_up: 0, name: 'Old', created_at: '2026-01-01 00:00:00' },
+        { user: user.id, credential_id: 'new', public_key: Buffer.from([2]), counter: 0, backed_up: 1, name: 'New', created_at: '2026-02-01 00:00:00' },
+      ]);
+      await insertCredential(other.id);
 
       const rows = await creds.listForPanel(user.id);
       expect(rows.map((r) => r.name)).toEqual(['New', 'Old']);
@@ -218,7 +233,7 @@ describe('WebauthnCredentialsRepository', () => {
   describe('renameOwned', () => {
     it('WEBAUTHN-CRED-REPO-012: renames when id + user_id both match, returns the affected count', async () => {
       const { user } = createUser(testDb);
-      const cred = insertCredential(user.id);
+      const cred = await insertCredential(user.id);
 
       expect(await creds.renameOwned(cred.id, user.id, 'Renamed')).toBe(1);
       expect(rawCredential(cred.id)!.name).toBe('Renamed');
@@ -227,7 +242,7 @@ describe('WebauthnCredentialsRepository', () => {
     it('WEBAUTHN-CRED-REPO-013: a foreign owner or unknown id affects 0 rows (404, never 403)', async () => {
       const { user } = createUser(testDb);
       const { user: other } = createUser(testDb);
-      const cred = insertCredential(user.id, { name: 'Original' });
+      const cred = await insertCredential(user.id, { name: 'Original' });
 
       expect(await creds.renameOwned(cred.id, other.id, 'Stolen')).toBe(0);
       expect(await creds.renameOwned(999_999, user.id, 'Ghost')).toBe(0);
@@ -238,7 +253,7 @@ describe('WebauthnCredentialsRepository', () => {
   describe('deleteOwned', () => {
     it('WEBAUTHN-CRED-REPO-014: deletes when id + user_id both match, returns the affected count', async () => {
       const { user } = createUser(testDb);
-      const cred = insertCredential(user.id);
+      const cred = await insertCredential(user.id);
       expect(await creds.deleteOwned(cred.id, user.id)).toBe(1);
       expect(rawCredential(cred.id)).toBeUndefined();
     });
@@ -246,7 +261,7 @@ describe('WebauthnCredentialsRepository', () => {
     it('WEBAUTHN-CRED-REPO-015: a foreign owner affects 0 rows and the row survives', async () => {
       const { user } = createUser(testDb);
       const { user: other } = createUser(testDb);
-      const cred = insertCredential(user.id);
+      const cred = await insertCredential(user.id);
       expect(await creds.deleteOwned(cred.id, other.id)).toBe(0);
       expect(rawCredential(cred.id)).toBeDefined();
     });
@@ -269,7 +284,7 @@ describe('WebauthnCredentialsRepository', () => {
     // describe-body top level, outside any request context).
     it('WEBAUTHN-CRED-REPO-017: a nativeUpdate inside uow.transactional is not discarded by a stale entity read earlier under a different projection', async () => {
       const { user } = createUser(testDb);
-      const cred = insertCredential(user.id, { counter: 1 });
+      const cred = await insertCredential(user.id, { counter: 1 });
       const uow = new UnitOfWork(t.em);
 
       await withRequestContext(t.orm, async () => {
@@ -302,13 +317,13 @@ describe('WebauthnCredentialsRepository', () => {
     it('WEBAUTHN-CRED-REPO-016: clears every credential for one user, returns the deleted count, other users untouched', async () => {
       const { user } = createUser(testDb);
       const { user: other } = createUser(testDb);
-      insertCredential(user.id);
-      insertCredential(user.id);
-      const kept = insertCredential(other.id);
+      await insertCredential(user.id);
+      await insertCredential(user.id);
+      const kept = await insertCredential(other.id);
 
       expect(await creds.deleteAllForUser(user.id)).toBe(2);
       expect(await creds.deleteAllForUser(user.id)).toBe(0); // already empty
-      expect((testDb.prepare('SELECT id FROM webauthn_credentials').all() as Array<{ id: number }>)).toEqual([{ id: kept.id }]);
+      expect((await findRows(t, WebauthnCredentials)).map((c) => ({ id: c.id }))).toEqual([{ id: kept.id }]);
     });
   });
 });

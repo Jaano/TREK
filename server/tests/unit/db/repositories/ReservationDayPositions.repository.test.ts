@@ -11,6 +11,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createDay, createReservation, createTrip, createUser } from '../../../helpers/factories';
 import { ReservationDayPositions } from '../../../../src/db/entities/ReservationDayPositions.entity';
+import { insertRow } from '../../../helpers/factories/rows';
 import type { ReservationDayPositionsRepository } from '../../../../src/db/repositories/ReservationDayPositions.repository';
 
 const testDb = createSnapshotTestDb();
@@ -25,25 +26,26 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 describe('ReservationDayPositionsRepository — fully seeded world', () => {
-  const seed = () => {
+  const seed = async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day1 = createDay(testDb, trip.id);
     const day2 = createDay(testDb, trip.id);
     const multiDay = createReservation(testDb, trip.id, { title: 'Rental car', type: 'car' });
-    testDb.prepare('INSERT INTO reservation_day_positions (reservation_id, day_id, position) VALUES (?, ?, ?)').run(multiDay.id, day1.id, 0);
-    testDb.prepare('INSERT INTO reservation_day_positions (reservation_id, day_id, position) VALUES (?, ?, ?)').run(multiDay.id, day2.id, 1);
+    await insertRow(t, ReservationDayPositions, { reservation: multiDay.id, day: day1.id, position: 0 });
+    await insertRow(t, ReservationDayPositions, { reservation: multiDay.id, day: day2.id, position: 1 });
 
     const otherTrip = createTrip(testDb, user.id);
     const otherDay = createDay(testDb, otherTrip.id);
     const foreignRes = createReservation(testDb, otherTrip.id, { title: 'Foreign rental', type: 'car' });
-    testDb.prepare('INSERT INTO reservation_day_positions (reservation_id, day_id, position) VALUES (?, ?, ?)').run(foreignRes.id, otherDay.id, 0);
+    await insertRow(t, ReservationDayPositions, { reservation: foreignRes.id, day: otherDay.id, position: 0 });
 
     return { trip, otherTrip, multiDay, day1, day2 };
   };
 
   it('RS19 listForTrip — matches the legacy JOIN statement, scoped by trip, both persist(false) mirror columns present', async () => {
-    const { trip, multiDay, day1, day2 } = seed();
+    const { trip, multiDay, day1, day2 } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT rdp.reservation_id, rdp.day_id, rdp.position FROM reservation_day_positions rdp
       JOIN reservations r ON rdp.reservation_id = r.id WHERE r.trip_id = ?`).all(trip.id);

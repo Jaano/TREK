@@ -12,6 +12,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { VisitedRegions } from '../../../../src/db/entities/VisitedRegions.entity';
+import { insertRow } from '../../../helpers/factories/rows';
 import type { VisitedRegionsRepository } from '../../../../src/db/repositories/VisitedRegions.repository';
 
 const testDb = createSnapshotTestDb();
@@ -29,13 +30,11 @@ describe('VisitedRegionsRepository.listForUser (AT21)', () => {
   it('VISREGREPO-001: matches SELECT region_code, region_name, country_code FROM visited_regions WHERE user_id = ? ORDER BY created_at DESC run raw', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
-    testDb.prepare('INSERT INTO visited_regions (user_id, region_code, region_name, country_code, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(user.id, 'DE-BY', 'Bavaria', 'DE', '2026-01-01T00:00:00.000Z');
-    testDb.prepare('INSERT INTO visited_regions (user_id, region_code, region_name, country_code, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(user.id, 'DE-BE', 'Berlin', 'DE', '2026-02-01T00:00:00.000Z');
-    testDb.prepare('INSERT INTO visited_regions (user_id, region_code, region_name, country_code, created_at) VALUES (?, ?, ?, ?, ?)')
-      .run(other.id, 'FR-IDF', 'Ile-de-France', 'FR', '2026-03-01T00:00:00.000Z');
+    await insertRow(t, VisitedRegions, { user: user.id, region_code: 'DE-BY', region_name: 'Bavaria', country_code: 'DE', created_at: '2026-01-01T00:00:00.000Z' });
+    await insertRow(t, VisitedRegions, { user: user.id, region_code: 'DE-BE', region_name: 'Berlin', country_code: 'DE', created_at: '2026-02-01T00:00:00.000Z' });
+    await insertRow(t, VisitedRegions, { user: other.id, region_code: 'FR-IDF', region_name: 'Ile-de-France', country_code: 'FR', created_at: '2026-03-01T00:00:00.000Z' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT region_code, region_name, country_code FROM visited_regions WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
     const rows = await repo.listForUser(user.id);
 
@@ -52,9 +51,10 @@ describe('VisitedRegionsRepository.listForUser (AT21)', () => {
 describe('VisitedRegionsRepository.listRegionCodesForCountry (AT24)', () => {
   it('VISREGREPO-003: matches SELECT region_code FROM visited_regions WHERE user_id = ? AND country_code = ? run raw', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO visited_regions (user_id, region_code, region_name, country_code) VALUES (?, ?, ?, ?)').run(user.id, 'DE-BY', 'Bavaria', 'DE');
-    testDb.prepare('INSERT INTO visited_regions (user_id, region_code, region_name, country_code) VALUES (?, ?, ?, ?)').run(user.id, 'FR-IDF', 'Ile-de-France', 'FR');
+    await insertRow(t, VisitedRegions, { user: user.id, region_code: 'DE-BY', region_name: 'Bavaria', country_code: 'DE' });
+    await insertRow(t, VisitedRegions, { user: user.id, region_code: 'FR-IDF', region_name: 'Ile-de-France', country_code: 'FR' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT region_code FROM visited_regions WHERE user_id = ? AND country_code = ?').all(user.id, 'DE');
     const codes = await repo.listRegionCodesForCountry(user.id, 'DE');
 
@@ -71,8 +71,9 @@ describe('VisitedRegionsRepository.listRegionCodesForCountry (AT24)', () => {
 describe('VisitedRegionsRepository.findCountryCode (AT25)', () => {
   it('VISREGREPO-005: matches SELECT country_code FROM visited_regions WHERE user_id = ? AND region_code = ? run raw', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO visited_regions (user_id, region_code, region_name, country_code) VALUES (?, ?, ?, ?)').run(user.id, 'DE-BY', 'Bavaria', 'DE');
+    await insertRow(t, VisitedRegions, { user: user.id, region_code: 'DE-BY', region_name: 'Bavaria', country_code: 'DE' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT country_code FROM visited_regions WHERE user_id = ? AND region_code = ?').get(user.id, 'DE-BY') as { country_code: string };
     expect(await repo.findCountryCode(user.id, 'DE-BY')).toEqual(legacy.country_code);
   });

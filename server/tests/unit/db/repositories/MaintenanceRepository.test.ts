@@ -19,10 +19,11 @@ afterAll(async () => { await t.close(); testDb.close(); });
 
 describe('MaintenanceRepository', () => {
   it('MAINTREPO-001: walCheckpoint renders PRAGMA wal_checkpoint(TRUNCATE) — pinned text, equivalent to the legacy raw call', async () => {
-    // Rendered-SQL-equivalence: the exact text a direct db.prepare(...) call
-    // on the same input executes without throwing, string-for-string what
-    // the legacy `db.exec('PRAGMA wal_checkpoint(TRUNCATE)')` issued.
+    // Rendered-SQL-equivalence: the exact text a direct statement on the
+    // handle executes without throwing, string-for-string what the legacy
+    // `db.exec('PRAGMA wal_checkpoint(TRUNCATE)')` issued.
     const RENDERED = 'PRAGMA wal_checkpoint(TRUNCATE)';
+    // test-sql-allow: the pragma text itself is under test, run as the raw statement it renders to.
     expect(() => testDb.prepare(RENDERED).run()).not.toThrow();
     await expect(maintenance.walCheckpoint()).resolves.toBeUndefined();
   });
@@ -41,6 +42,7 @@ describe('MaintenanceRepository', () => {
 
       const snap = new Database(scratchPath, { readonly: true });
       try {
+        // test-sql-allow: a snapshot file no ORM is bound to, read through sqlite_master.
         const row = snap.prepare('SELECT name FROM sqlite_master WHERE type = ? AND name = ?').get('table', 'users');
         expect(row).toBeTruthy();
       } finally {
@@ -60,6 +62,7 @@ describe('MaintenanceRepository', () => {
         // against another target path, succeeds identically.
         const directPath = path.join(dirWithQuote, 'snap-direct.db');
         const escaped = directPath.replaceAll("'", "''");
+        // test-sql-allow: the VACUUM INTO text itself is under test, run as the raw statement it renders to.
         expect(() => testDb.prepare(`VACUUM INTO '${escaped}'`).run()).not.toThrow();
         expect(fs.existsSync(directPath)).toBe(true);
         fs.rmSync(directPath, { force: true });

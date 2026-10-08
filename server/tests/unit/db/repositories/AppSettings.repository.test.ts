@@ -3,6 +3,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
+import { countRows, insertRow, updateRows } from '../../../helpers/factories/rows';
 import type { AppSettingsRepository } from '../../../../src/db/repositories/AppSettings.repository';
 
 const testDb = createSnapshotTestDb();
@@ -17,11 +18,12 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 function rawRow(key: string): unknown {
+  // test-sql-allow: the row as SELECT * returns it is the oracle the repository writes are held to.
   return testDb.prepare('SELECT * FROM app_settings WHERE key = ?').get(key);
 }
 
-function insertRaw(key: string, value: string | null): void {
-  testDb.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+async function insertRaw(key: string, value: string | null): Promise<void> {
+  await insertRow(t, AppSettings, { key, value });
 }
 
 /**
@@ -45,7 +47,7 @@ async function withQueryCount<T>(fn: () => Promise<T>): Promise<{ value: T; quer
 
 describe('AppSettingsRepository', () => {
   it('APPSETREPO-001: getValue reads the stored value', async () => {
-    insertRaw('bag_tracking_enabled', 'true');
+    await insertRaw('bag_tracking_enabled', 'true');
     expect(await appSettings.getValue('bag_tracking_enabled')).toBe('true');
   });
 
@@ -54,15 +56,15 @@ describe('AppSettingsRepository', () => {
   });
 
   it('APPSETREPO-003: getValues reads several keys into a Map, silently dropping keys with no row', async () => {
-    insertRaw('collab_chat_enabled', 'false');
-    insertRaw('collab_notes_enabled', 'true');
+    await insertRaw('collab_chat_enabled', 'false');
+    await insertRaw('collab_notes_enabled', 'true');
     const values = await appSettings.getValues(['collab_chat_enabled', 'collab_notes_enabled', 'collab_links_enabled']);
     expect(values).toEqual(new Map([['collab_chat_enabled', 'false'], ['collab_notes_enabled', 'true']]));
   });
 
   it('APPSETREPO-012 (M1): getValues also drops a key whose row exists but whose value is NULL, matching the "row present with a NULL value" case as absent, same as a missing row', async () => {
-    insertRaw('collab_chat_enabled', 'false');
-    insertRaw('collab_links_enabled', null); // present row, NULL value — legacy treated this as absent too
+    await insertRaw('collab_chat_enabled', 'false');
+    await insertRaw('collab_links_enabled', null); // present row, NULL value — legacy treated this as absent too
     const values = await appSettings.getValues(['collab_chat_enabled', 'collab_links_enabled', 'collab_notes_enabled']);
     expect(values).toEqual(new Map([['collab_chat_enabled', 'false']]));
     expect(values.has('collab_links_enabled')).toBe(false);
@@ -75,7 +77,7 @@ describe('AppSettingsRepository', () => {
   // fix at one query each.
   describe('getValue sees a raw write/delete on the same key in the same request (disableIdentityMap regression)', () => {
     it('APPSETREPO-013: deleteValue then getValue reads null, not the deleted row, in one query', async () => {
-      insertRaw('bag_tracking_enabled', 'v');
+      await insertRaw('bag_tracking_enabled', 'v');
       expect(await appSettings.getValue('bag_tracking_enabled')).toBe('v'); // populate the identity map
       await appSettings.deleteValue('bag_tracking_enabled');
       const { value, queries } = await withQueryCount(() => appSettings.getValue('bag_tracking_enabled'));
@@ -83,10 +85,10 @@ describe('AppSettingsRepository', () => {
       expect(queries).toBe(1);
     });
 
-    it('APPSETREPO-014: a raw UPDATE on the same key then getValue reads the new value, in one query', async () => {
-      insertRaw('bag_tracking_enabled', 'old');
+    it('APPSETREPO-014: an UPDATE from another context on the same key then getValue reads the new value, in one query', async () => {
+      await insertRaw('bag_tracking_enabled', 'old');
       expect(await appSettings.getValue('bag_tracking_enabled')).toBe('old'); // populate the identity map
-      testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run('new', 'bag_tracking_enabled');
+      await updateRows(t, AppSettings, { key: 'bag_tracking_enabled' }, { value: 'new' });
       const { value, queries } = await withQueryCount(() => appSettings.getValue('bag_tracking_enabled'));
       expect(value).toBe('new');
       expect(queries).toBe(1);
@@ -99,15 +101,15 @@ describe('AppSettingsRepository', () => {
   });
 
   it('APPSETREPO-005: setValue on an existing key replaces the value only — the row (key, value) is byte-identical to INSERT OR REPLACE/ON CONFLICT DO UPDATE, because app_settings has no third column for either to reset', async () => {
-    insertRaw('bag_tracking_enabled', 'false');
+    await insertRaw('bag_tracking_enabled', 'false');
     await appSettings.setValue('bag_tracking_enabled', 'true');
     expect(rawRow('bag_tracking_enabled')).toStrictEqual({ key: 'bag_tracking_enabled', value: 'true' });
     // Only the one row exists for that key — no duplicate/ghost row from upsert.
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM app_settings WHERE key = ?').get('bag_tracking_enabled')).toEqual({ c: 1 });
+    expect(await countRows(t, AppSettings, { key: 'bag_tracking_enabled' })).toBe(1);
   });
 
   it('APPSETREPO-006: deleteValue removes the row and returns the legacy DELETE-affected-row count', async () => {
-    insertRaw('whitespace_migration_collision', 'true');
+    await insertRaw('whitespace_migration_collision', 'true');
     expect(await appSettings.deleteValue('whitespace_migration_collision')).toBe(1);
     expect(rawRow('whitespace_migration_collision')).toBeUndefined();
   });
@@ -117,9 +119,9 @@ describe('AppSettingsRepository', () => {
   });
 
   it('APPSETREPO-008: findByKeyPrefix matches every key sharing the prefix, in whatever order the table returns them', async () => {
-    insertRaw('perm_view_days', '1');
-    insertRaw('perm_edit_budget', '2');
-    insertRaw('unrelated_key', '3');
+    await insertRaw('perm_view_days', '1');
+    await insertRaw('perm_edit_budget', '2');
+    await insertRaw('unrelated_key', '3');
     const rows = await appSettings.findByKeyPrefix('perm_');
     expect(rows.map((r) => r.key).sort()).toEqual(['perm_edit_budget', 'perm_view_days']);
     expect(rows).toEqual(expect.arrayContaining([
@@ -129,7 +131,7 @@ describe('AppSettingsRepository', () => {
   });
 
   it('APPSETREPO-009: findByKeyPrefix with no matches returns an empty array', async () => {
-    insertRaw('unrelated_key', 'x');
+    await insertRaw('unrelated_key', 'x');
     expect(await appSettings.findByKeyPrefix('perm_')).toEqual([]);
   });
 
@@ -140,8 +142,8 @@ describe('AppSettingsRepository', () => {
   // observable behavior on this table is identical (setValue's own
   // docstring explains why).
   it('APPSETREPO-015: countKeysPresent counts every matching ROW, including one whose value is NULL — unlike getValues, which drops it', async () => {
-    insertRaw('storage.backends', '[]');
-    insertRaw('storage.categories', null); // present row, NULL value
+    await insertRaw('storage.backends', '[]');
+    await insertRaw('storage.categories', null); // present row, NULL value
     expect(await appSettings.countKeysPresent(['storage.backends', 'storage.categories'])).toBe(2);
     expect(await appSettings.countKeysPresent(['storage.backends', 'storage.does_not_exist'])).toBe(1);
     expect(await appSettings.countKeysPresent(['storage.nope_a', 'storage.nope_b'])).toBe(0);
@@ -153,10 +155,10 @@ describe('AppSettingsRepository', () => {
   });
 
   it('APPSETREPO-017: upsertOrReplace on an existing key replaces the value only, with no duplicate/ghost row', async () => {
-    insertRaw('storage.usage', '{"computedAt":1}');
+    await insertRaw('storage.usage', '{"computedAt":1}');
     await appSettings.upsertOrReplace('storage.usage', '{"computedAt":2}');
     expect(rawRow('storage.usage')).toStrictEqual({ key: 'storage.usage', value: '{"computedAt":2}' });
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM app_settings WHERE key = ?').get('storage.usage')).toEqual({ c: 1 });
+    expect(await countRows(t, AppSettings, { key: 'storage.usage' })).toBe(1);
   });
 
   // LIKE-escaping finding: neither the legacy `LIKE 'prefix%'` literal nor
@@ -168,6 +170,7 @@ describe('AppSettingsRepository', () => {
   // legacy raw-SQL statement directly, not against a hand-picked expectation.
   describe('LIKE escaping — % and _ in the prefix are wildcards, not escaped, exactly as the legacy statement behaved', () => {
     function legacyPrefixMatch(prefix: string): { key: string; value: string }[] {
+      // test-sql-allow: the legacy LIKE statement is the oracle the repository read is held to.
       return testDb.prepare('SELECT key, value FROM app_settings WHERE key LIKE ?').all(`${prefix}%`) as {
         key: string;
         value: string;
@@ -177,9 +180,9 @@ describe('AppSettingsRepository', () => {
     it('APPSETREPO-010: an underscore in the prefix matches any single character there, like a raw LIKE pattern would', async () => {
       // 'ab_c%' as a LIKE pattern: '_' matches any one character, so both
       // 'ab_cd' (literal underscore) and 'abXcd' (any other character) match.
-      insertRaw('ab_cd', '1');
-      insertRaw('abXcd', '2');
-      insertRaw('abcd', '3'); // one character short at that position — no match
+      await insertRaw('ab_cd', '1');
+      await insertRaw('abXcd', '2');
+      await insertRaw('abcd', '3'); // one character short at that position — no match
       const rows = await appSettings.findByKeyPrefix('ab_c');
       expect(rows.map((r) => r.key).sort()).toEqual(legacyPrefixMatch('ab_c').map((r) => r.key).sort());
       expect(rows.map((r) => r.key).sort()).toEqual(['abXcd', 'ab_cd']);
@@ -188,9 +191,9 @@ describe('AppSettingsRepository', () => {
     it('APPSETREPO-011: a percent sign in the prefix matches zero or more characters there, like a raw LIKE pattern would', async () => {
       // 'ab%c%' as a LIKE pattern: '%' matches zero-or-more, so both
       // 'abc' (zero characters at the % position) and 'abZZc' match.
-      insertRaw('abc', '1');
-      insertRaw('abZZc', '2');
-      insertRaw('abd', '3'); // no 'c' after the gap — no match
+      await insertRaw('abc', '1');
+      await insertRaw('abZZc', '2');
+      await insertRaw('abd', '3'); // no 'c' after the gap — no match
       const rows = await appSettings.findByKeyPrefix('ab%c');
       expect(rows.map((r) => r.key).sort()).toEqual(legacyPrefixMatch('ab%c').map((r) => r.key).sort());
       expect(rows.map((r) => r.key).sort()).toEqual(['abZZc', 'abc']);
