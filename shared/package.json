@@ -71,7 +71,9 @@
     "lint": "eslint --fix \"src/**/*.ts\"",
     "i18n:parity": "node scripts/i18n-parity.mjs",
     "i18n:parity:strict": "node scripts/i18n-parity.mjs --strict",
-    "contracts:open": "node scripts/open-request-schemas.mjs"
+    "contracts:open": "node scripts/open-request-schemas.mjs",
+    "i18n:untranslated": "node scripts/i18n-untranslated.mjs",
+    "i18n:untranslated:update": "node scripts/i18n-untranslated.mjs --update"
   },
   "dependencies": {
     "isomorphic-dompurify": "^3.23.0",

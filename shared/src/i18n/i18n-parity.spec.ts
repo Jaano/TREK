@@ -62,5 +62,7 @@ describe('i18n count strings', () => {
   it('every count-bearing en string is a plural group or on NOT_PLURAL', () => {
     const report = checkParity();
     expect(report.countDrift).toEqual({ ungrouped: [], stale: [] });
+    expect(report.untranslated.error).toBeNull();
+    expect(report.untranslated.grown).toEqual([]);
   });
 });

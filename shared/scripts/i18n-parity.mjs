@@ -23,6 +23,9 @@
 //      `t()` picks a plural form by) must be a plural group, so every
 //      language gets the forms it needs. The exceptions are NOT_PLURAL: a
 //      number that is never a quantity ("Day {n}", a step, a multiplier).
+//   5. Untranslated strings: the marked `// en-fallback` and unmarked English
+//      copies per locale and file may only shrink (i18n-untranslated.mjs,
+//      which also lowers the baseline with --update).
 //
 // Limitations: we only parse *top-level* string keys (those declared as the
 // first column of the file, matching the regex below). Nested objects, function
@@ -34,6 +37,7 @@ import { join } from 'node:path';
 import { getIntlLanguage } from '../src/i18n/languages.ts';
 import { allPluralCategories, integerPluralCategories, pluralFormOf, pluralGroups } from '../src/i18n/plural.ts';
 import { I18N_ROOT, listDomainFiles, listLocales, readCatalog } from './i18n-catalog.mjs';
+import { compare, countUntranslated, formatGrown, readBaseline } from './i18n-untranslated.mjs';
 
 // Match a top-level translation key declaration: leading whitespace, then a
 // quoted key (must start with a lowercase letter), then a colon. This is the
@@ -115,6 +119,16 @@ function checkCountStrings(enFiles, notPlural = NOT_PLURAL, root = I18N_ROOT) {
   return { ungrouped, stale: [...allowed].filter((key) => !seen.has(key)) };
 }
 
+/** The untranslated ratchet's verdict, with a reading error reported rather than thrown. */
+function checkUntranslated() {
+  try {
+    const { grown, lowerable } = compare(countUntranslated(), readBaseline());
+    return { error: null, grown, lowerable };
+  } catch (err) {
+    return { error: err.message, grown: [], lowerable: 0 };
+  }
+}
+
 function diffSets(reference, candidate) {
   const missing = [];
   const extra = [];
@@ -173,6 +187,7 @@ function checkParity() {
   }
 
   report.countDrift = checkCountStrings(enFiles);
+  report.untranslated = checkUntranslated();
   return report;
 }
 
@@ -226,6 +241,21 @@ function formatReport(report) {
     }
   }
 
+  if (report.untranslated) {
+    const { error, grown, lowerable } = report.untranslated;
+    if (error) {
+      lines.push(`Untranslated strings: cannot check, ${error}`);
+    } else if (grown.length === 0) {
+      lines.push(
+        'Untranslated strings: OK' +
+          (lowerable ? ` (${lowerable} baseline entries can come down: node scripts/i18n-untranslated.mjs --update)` : ''),
+      );
+    } else {
+      lines.push('Untranslated strings: grew past scripts/i18n-untranslated-baseline.json');
+      lines.push(...formatGrown(grown));
+    }
+  }
+
   return lines.join('\n');
 }
 
@@ -239,13 +269,14 @@ if (isCli) {
   const strict = process.argv.includes('--strict');
   const filesOnly = process.argv.includes('--files-only');
   const report = checkParity();
-  const shown = filesOnly ? { ...report, keyDrift: [], pluralDrift: [], countDrift: null } : report;
+  const shown = filesOnly ? { ...report, keyDrift: [], pluralDrift: [], countDrift: null, untranslated: null } : report;
   process.stdout.write(formatReport(shown) + '\n');
 
   if (strict) {
     const hasFileDrift = report.fileDrift.length > 0;
     const hasKeyDrift = filesOnly ? false : report.keyDrift.length > 0 || report.pluralDrift.length > 0;
     const hasCountDrift = !filesOnly && (report.countDrift.ungrouped.length > 0 || report.countDrift.stale.length > 0);
-    if (hasFileDrift || hasKeyDrift || hasCountDrift) process.exit(1);
+    const hasUntranslated = !filesOnly && (report.untranslated.error !== null || report.untranslated.grown.length > 0);
+    if (hasFileDrift || hasKeyDrift || hasCountDrift || hasUntranslated) process.exit(1);
   }
 }
