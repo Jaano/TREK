@@ -217,11 +217,16 @@ export class UserSessionsRepository extends TrekRepository<UserSessions> {
   }
 
   /**
-   * The nightly purge: `DELETE FROM user_sessions WHERE expires_at <= ? OR revoked_at IS NOT NULL`.
-   * A row that is gone refuses its token just as a revoked one does, so
-   * nothing depends on keeping them.
+   * The nightly purge: `DELETE FROM user_sessions WHERE expires_at <= ?`.
+   *
+   * A revoked row stays until its own expiry. A session renewed from a token
+   * issued before sessions were tracked has an id derived from that token,
+   * and only its revoked row stops the still valid old token from inserting
+   * it again as a fresh, active session. Its `expires_at` is never earlier
+   * than the old token's expiry, so once it has passed, the old token is dead
+   * too and the row can go.
    */
   async deleteInactive(now: string): Promise<number> {
-    return await this.nativeDelete({ $or: [{ expires_at: { $lte: now } }, { revoked_at: { $ne: null } }] });
+    return await this.nativeDelete({ expires_at: { $lte: now } });
   }
 }

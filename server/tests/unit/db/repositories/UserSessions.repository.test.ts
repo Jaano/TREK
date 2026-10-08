@@ -127,17 +127,20 @@ describe('UserSessionsRepository', () => {
     expect(row('theirs')).toEqual(expect.objectContaining({ revoked_at: null }));
   });
 
-  it('SESSREPO-008: deleteInactive removes the expired and the revoked rows and keeps the live ones', async () => {
+  it('SESSREPO-008: deleteInactive removes the expired rows, revoked or not, and keeps the rest', async () => {
     const { user } = createUser(testDb);
     await add('live', user.id);
     await add('expired', user.id, { expires_at: NOW });
     await add('revoked', user.id);
-    testDb.prepare("UPDATE user_sessions SET revoked_at = ? WHERE id = 'revoked'").run(EARLIER);
+    await add('revoked-expired', user.id, { expires_at: EARLIER });
+    testDb.prepare("UPDATE user_sessions SET revoked_at = ? WHERE id IN ('revoked', 'revoked-expired')").run(EARLIER);
 
     expect(await sessions.deleteInactive(NOW)).toBe(2);
     expect(row('live')).toBeDefined();
     expect(row('expired')).toBeUndefined();
-    expect(row('revoked')).toBeUndefined();
+    expect(row('revoked-expired')).toBeUndefined();
+    // Revoked but not yet expired: kept, it still refuses the token it was derived from.
+    expect(row('revoked')).toEqual(expect.objectContaining({ revoked_at: EARLIER }));
   });
 
   it('SESSREPO-009: the rows go with their user', async () => {

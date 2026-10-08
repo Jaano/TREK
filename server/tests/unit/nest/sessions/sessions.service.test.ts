@@ -173,6 +173,34 @@ describe('SessionsService.renew of a token from before tracking', () => {
     expect(testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = ?').get(user.id)).toEqual({ n: 1 });
   });
 
+  it('SESS-017: a session derived from it that was ended stays ended through the nightly purge', async () => {
+    const { user } = createUser(testDb);
+    const legacy = untracked(user.id);
+    const first = claimsOf((await svc.renew({ id: user.id, pv: 0, token: legacy }))!);
+    expect(await svc.revoke(user.id, first.jti)).toBe(true);
+
+    // The purge that night, while the old token is still valid.
+    expect(await svc.purgeInactive(new Date())).toBe(0);
+    expect(await svc.renew({ id: user.id, pv: 0, token: legacy })).toBeNull();
+    expect(rowOf(first.jti)?.revoked_at).not.toBeNull();
+    expect(await svc.list(user.id)).toEqual([]);
+
+    // Once the old token has expired the row may go, since the token is refused by then.
+    const legacyExp = (jwt.decode(legacy) as { exp: number }).exp;
+    expect(await svc.purgeInactive(new Date((legacyExp + SESSION_DURATION_SECONDS + 60) * 1000))).toBe(1);
+    expect(() => jwt.verify(legacy, JWT_SECRET, { algorithms: ['HS256'], clockTimestamp: legacyExp + 60 })).toThrow();
+  });
+
+  it('SESS-018: the derived session is kept at least as long as the old token lives', async () => {
+    const { user } = createUser(testDb);
+    // An old token with a longer life than the one it is renewed into.
+    const legacy = jwt.sign({ id: user.id, pv: 0 }, JWT_SECRET, { algorithm: 'HS256', expiresIn: SESSION_DURATION_REMEMBER_SECONDS });
+    const renewed = claimsOf((await svc.renew({ id: user.id, pv: 0, token: legacy }))!);
+
+    expect(renewed.exp - renewed.iat).toBe(SESSION_DURATION_SECONDS);
+    expect(rowOf(renewed.jti)?.expires_at).toBe(textOf((jwt.decode(legacy) as { exp: number }).exp));
+  });
+
   it('SESS-014: two different tokens of the same user stay two sessions', async () => {
     const { user } = createUser(testDb);
     const a = claimsOf((await svc.renew({ id: user.id, pv: 0, token: untracked(user.id) }))!);
@@ -244,19 +272,23 @@ describe('SessionsService list and revoke', () => {
     expect(rowOf(mine.jti)?.revoked_at).not.toBeNull();
   });
 
-  it('SESS-011: purgeInactive removes the expired and revoked rows', async () => {
+  it('SESS-011: purgeInactive removes the expired rows and keeps a revoked one until it expires', async () => {
     const { user } = createUser(testDb);
     const live = claimsOf(await svc.issue({ id: user.id, pv: 0 }, true));
     const ended = claimsOf(await svc.issue({ id: user.id, pv: 0 }, true));
     const short = claimsOf(await svc.issue({ id: user.id, pv: 0 }, false));
     await svc.revoke(user.id, ended.jti);
 
-    // Just past the default lifetime: the short session has expired, the remembered one has not.
+    // Just past the default lifetime: the short session has expired, the remembered ones have not.
     expect(SESSION_DURATION_REMEMBER_SECONDS).toBeGreaterThan(SESSION_DURATION_SECONDS + 60);
-    expect(await svc.purgeInactive(new Date(Date.now() + (SESSION_DURATION_SECONDS + 60) * 1000))).toBe(2);
+    expect(await svc.purgeInactive(new Date(Date.now() + (SESSION_DURATION_SECONDS + 60) * 1000))).toBe(1);
     expect(rowOf(live.jti)).toBeDefined();
-    expect(rowOf(ended.jti)).toBeUndefined();
+    expect(rowOf(ended.jti)?.revoked_at).not.toBeNull();
     expect(rowOf(short.jti)).toBeUndefined();
+
+    // Past the long lifetime as well: the revoked row goes with the live one.
+    expect(await svc.purgeInactive(new Date(Date.now() + (SESSION_DURATION_REMEMBER_SECONDS + 60) * 1000))).toBe(2);
+    expect(rowOf(ended.jti)).toBeUndefined();
   });
 });
 

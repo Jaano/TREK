@@ -4,11 +4,11 @@ import { CronRegistrarService } from '../scheduling/cron-registrar.service';
 import { SessionsService } from './sessions.service';
 
 /**
- * Nightly removal of the `user_sessions` rows that no longer let anyone in:
- * expired ones, and revoked ones. Every sign-in writes a row, so without this
- * the table would grow by one row per login for as long as the install runs.
- * Deleting a revoked row changes nothing for its token, which a missing row
- * refuses just the same.
+ * Nightly removal of the expired `user_sessions` rows. Every sign-in writes a
+ * row, so without this the table would grow by one row per login for as long
+ * as the install runs. A revoked row waits for its own expiry: for a session
+ * renewed from a token from before sessions were tracked, that row is what
+ * keeps the old token from bringing the session back.
  */
 @Injectable()
 export class SessionPurgeJob implements OnApplicationBootstrap {
@@ -25,7 +25,7 @@ export class SessionPurgeJob implements OnApplicationBootstrap {
   async tick(now: Date = new Date()): Promise<void> {
     try {
       const removed = await this.sessions.purgeInactive(now);
-      if (removed > 0) logInfo(`Session purge: removed ${removed} expired or revoked session(s)`);
+      if (removed > 0) logInfo(`Session purge: removed ${removed} expired session(s)`);
     } catch (err: unknown) {
       logError(`Session purge: ${err instanceof Error ? err.message : String(err)}`);
     }

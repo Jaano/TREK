@@ -119,6 +119,12 @@ export class SessionsService {
    * only if it is not there yet, so all of them land on one session. If that
    * session was ended in the meantime, nothing is renewed.
    *
+   * The old token stays valid until its own expiry whatever happens to the
+   * session, so the row is what refuses it after an end. Its `expires_at` is
+   * therefore never earlier than the old token's, and the nightly purge
+   * keeps a revoked row until that has passed: a purged row would let the
+   * old token insert the session again as an active one.
+   *
    * @txStandalone one statement, standing on its own like `renew`.
    */
   private async renewUntracked(claims: RenewableSessionClaims, client: SessionClient): Promise<string | null> {
@@ -127,11 +133,12 @@ export class SessionsService {
     const jti = legacySessionId(claims.token);
     const token = this.sign(user, claims.remember, jti);
     const { iat, exp } = this.lifetimeOf(token);
+    const keepUntil = Math.max(exp, expiryOf(claims.token) ?? exp);
     await this.sessions.insertSessionIfAbsent({
       id: jti,
       user_id: user.id,
       created_at: dbNow(new Date(iat * 1000)),
-      expires_at: dbNow(new Date(exp * 1000)),
+      expires_at: dbNow(new Date(keepUntil * 1000)),
       user_agent: clipUserAgent(client.userAgent),
     });
     return (await this.sessions.findActive(jti, user.id, dbNow())) ? token : null;
@@ -185,7 +192,11 @@ export class SessionsService {
     return this.sessions.revokeAllForUser(userId, dbNow(), exceptId);
   }
 
-  /** Remove the rows that refuse their token anyway: expired or revoked. */
+  /**
+   * Remove the expired rows. A revoked row is kept until it expires too, so
+   * a session derived from a token from before tracking cannot come back
+   * (see `renewUntracked`).
+   */
   async purgeInactive(now: Date): Promise<number> {
     return this.sessions.deleteInactive(dbNow(now));
   }
@@ -206,6 +217,13 @@ export class SessionsService {
     const { iat, exp } = jwt.decode(token) as { iat: number; exp: number };
     return { iat, exp };
   }
+}
+
+/** The `exp` claim of a token, when it has a numeric one. */
+function expiryOf(token: string): number | undefined {
+  const decoded = jwt.decode(token);
+  const exp = decoded !== null && typeof decoded === 'object' ? (decoded as { exp?: unknown }).exp : undefined;
+  return typeof exp === 'number' ? exp : undefined;
 }
 
 function clipUserAgent(agent: string | null | undefined): string | null {

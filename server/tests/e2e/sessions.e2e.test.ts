@@ -336,7 +336,7 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     expect((await me(there)).status).toBe(401);
   }, 15000);
 
-  it('the nightly purge removes the ended and expired rows and leaves the live session working', async () => {
+  it('the nightly purge removes the expired rows, keeps an ended one until it expires, and leaves the live session working', async () => {
     const { user, password } = freshUser('sess-purge');
     const live = await signIn(user.email, password, 'Live');
     const ended = await signIn(user.email, password, 'Ended');
@@ -349,8 +349,30 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     const job = moduleRef.get(SessionPurgeJob);
     await withRequestContext(moduleRef.get(MikroORM), () => job.tick());
 
-    expect(sessionRows(db as never, user.id).map((row) => row.id)).toEqual([sessionIdOf(live)]);
+    expect(sessionRows(db as never, user.id).map((row) => row.id).sort()).toEqual([sessionIdOf(live), sessionIdOf(ended)].sort());
     expect((await me(live)).status).toBe(200);
     expect((await me(ended)).status).toBe(401);
+  }, 15000);
+
+  it('a session renewed from a token from before tracking stays ended through the nightly purge', async () => {
+    const { user } = freshUser('sess-legacy-purge');
+    const old = sessionCookie(user.id, 0, { lifetime: 86400, consumed: 60000 });
+
+    const first = await request(server).get('/api/auth/me').set('Cookie', old).set('User-Agent', 'Old');
+    const renewedCookie = ((first.headers['set-cookie'] ?? []) as unknown as string[]).find((c) => c.startsWith('trek_session='))!;
+    const renewed = /^(trek_session=[^;]+)/.exec(renewedCookie)![1];
+    expect((await request(server).post('/api/auth/logout').set('Cookie', renewed)).status).toBe(200);
+    expect((await me(renewed)).status).toBe(401);
+
+    const job = moduleRef.get(SessionPurgeJob);
+    await withRequestContext(moduleRef.get(MikroORM), () => job.tick());
+
+    // The old token itself lives out its own expiry, but it is not renewed into the ended session again.
+    const again = await request(server).get('/api/auth/me').set('Cookie', old).set('User-Agent', 'Old');
+    expect(again.status).toBe(200);
+    expect(((again.headers['set-cookie'] ?? []) as unknown as string[]).some((c) => c.startsWith('trek_session='))).toBe(false);
+    expect(sessionRows(db as never, user.id)).toEqual([expect.objectContaining({ id: sessionIdOf(renewed), revoked_at: expect.any(String) })]);
+    const list = await request(server).get('/api/auth/sessions').set('Cookie', old);
+    expect(list.body.sessions).toEqual([]);
   }, 15000);
 });

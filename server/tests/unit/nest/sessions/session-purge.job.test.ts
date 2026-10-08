@@ -34,7 +34,7 @@ describe('SessionPurgeJob', () => {
     const now = new Date('2026-10-08T03:45:00.000Z');
     await make(purge).job.tick(now);
     expect(purge).toHaveBeenCalledWith(now);
-    expect(logMock.logInfo).toHaveBeenCalledWith('Session purge: removed 3 expired or revoked session(s)');
+    expect(logMock.logInfo).toHaveBeenCalledWith('Session purge: removed 3 expired session(s)');
   });
 
   it('SESSPURGE-003: stays quiet when there was nothing to purge', async () => {
