@@ -691,7 +691,8 @@ describe('updateSyncTimeForAlbumLink (MA9)', () => {
     await access.updateSyncTimeForAlbumLink(String(linkId));
 
     const row = await findRow(orm, TripAlbumLinks, { id: linkId });
-    expect(row?.last_synced_at).not.toBeNull();
+    expect(row).not.toBeNull();
+    expect(row!.last_synced_at).not.toBeNull();
   });
 
   it('MEMACCESS-MA9-002: a non-canonical id is a silent no-op, matching a legacy UPDATE that matched zero rows', async () => {

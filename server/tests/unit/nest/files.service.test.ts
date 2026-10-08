@@ -460,7 +460,9 @@ describe('toggleStarred / softDeleteFile / restoreFile', () => {
     const file = await makeFile(trip.id, user.id);
     await svc.softDeleteFile(file.id);
     const row = await findRow(orm, TripFiles, { id: file.id });
-    expect(row?.deleted_at).not.toBeNull();
+    // The row must still be there: a hard delete would leave findRow at null.
+    expect(row).not.toBeNull();
+    expect(row!.deleted_at).not.toBeNull();
   });
 
   it('FILE-SVC-021: restoreFile clears deleted_at and returns the formatted row', async () => {

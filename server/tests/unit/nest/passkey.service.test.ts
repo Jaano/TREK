@@ -666,8 +666,9 @@ describe('passkeyLoginVerify', () => {
     expect(decoded).toHaveProperty('pv');
 
     const credRow = (await findRow(orm, WebauthnCredentials, { id: cred.id }));
-    expect(credRow?.counter).toBe(6);
-    expect(credRow?.last_used_at).not.toBeNull();
+    expect(credRow).not.toBeNull();
+    expect(credRow!.counter).toBe(6);
+    expect(credRow!.last_used_at).not.toBeNull();
     const userRow = await readUser(orm, user.id);
     expect(userRow.last_login).not.toBeNull();
     expect(userRow.login_count).toBe(1);
