@@ -38,7 +38,7 @@ import HelpAnchor from '../components/Help/HelpAnchor'
 import { getHelpContext } from '../help/registry'
 import { useToast } from '../components/shared/Toast'
 import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, Wallet, FolderOpen, Users, Train } from 'lucide-react'
-import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, mapsApi } from '../api/client'
+import { addonsApi, accommodationsApi, authApi, tripsApi, mapsApi } from '../api/client'
 import { accommodationRepo } from '../repo/accommodationRepo'
 import { useAuthStore } from '../store/authStore'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
@@ -143,6 +143,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
   } = pageState.planner
   const {
     poi,
+    placeActions,
     tourPlanner,
     permissions: { canPlaceEdit, canDayEdit },
     tourDetails,
@@ -591,23 +592,11 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                 files={files}
                 onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined}
                 tripMembers={tripMembers}
-                onSetParticipants={async (assignmentId, dayId, userIds) => {
-                  try {
-                    const data = await assignmentsApi.setParticipants(tripId, assignmentId, userIds)
-                    useTripStore.setState(state => ({
-                      assignments: {
-                        ...state.assignments,
-                        [String(dayId)]: (state.assignments[String(dayId)] || []).map(a =>
-                          a.id === assignmentId ? { ...a, participants: data.participants } : a
-                        ),
-                      }
-                    }))
-                  } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) }
-                }}
-                onUpdatePlace={async (placeId, data) => { try { await tripActions.updatePlace(tripId, placeId, data) } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) } }}
+                onSetParticipants={placeActions.setParticipants}
+                onUpdatePlace={placeActions.updatePlace}
                 onUploadImage={async (placeId, file) => { await tripActions.uploadPlaceImage(tripId, placeId, file) }}
                 onImageFromFile={async (placeId, fileId) => { await tripActions.setPlaceImageFromFile(tripId, placeId, fileId) }}
-                onRate={async (placeId, rating) => { try { await tripActions.ratePlace(tripId, placeId, rating) } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) } }}
+                onRate={placeActions.ratePlace}
                 leftWidth={isMobile ? 0 : leftPanelPx}
                 rightWidth={isMobile ? 0 : rightPanelPx}
               />
@@ -636,23 +625,11 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                     files={files}
                     onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined}
                     tripMembers={tripMembers}
-                    onSetParticipants={async (assignmentId, dayId, userIds) => {
-                      try {
-                        const data = await assignmentsApi.setParticipants(tripId, assignmentId, userIds)
-                        useTripStore.setState(state => ({
-                          assignments: {
-                            ...state.assignments,
-                            [String(dayId)]: (state.assignments[String(dayId)] || []).map(a =>
-                              a.id === assignmentId ? { ...a, participants: data.participants } : a
-                            ),
-                          }
-                        }))
-                      } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) }
-                    }}
-                    onUpdatePlace={async (placeId, data) => { try { await tripActions.updatePlace(tripId, placeId, data) } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) } }}
+                    onSetParticipants={placeActions.setParticipants}
+                    onUpdatePlace={placeActions.updatePlace}
                     onUploadImage={async (placeId, file) => { await tripActions.uploadPlaceImage(tripId, placeId, file) }}
                 onImageFromFile={async (placeId, fileId) => { await tripActions.setPlaceImageFromFile(tripId, placeId, fileId) }}
-                    onRate={async (placeId, rating) => { try { await tripActions.ratePlace(tripId, placeId, rating) } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.unknownError')) } }}
+                    onRate={placeActions.ratePlace}
                     leftWidth={0}
                     rightWidth={0}
                   />

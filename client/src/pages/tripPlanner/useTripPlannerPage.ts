@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TourListItem } from '@trek/shared'
 import { usePoiExplore, type Bbox } from '../../components/Map/usePoiExplore'
+import { placeActions } from '../../components/Planner/usePlaceActions'
 import { useTourPlanner } from '../../components/Tours/planner/useTourPlanner'
 import { useTripPlanner } from './useTripPlanner'
 
@@ -101,6 +102,8 @@ export function useTripPlannerPage() {
   return {
     planner,
     poi,
+    // The place inspector's writes, the same ones the phone's place sheet makes.
+    placeActions: placeActions({ tripId, tripActions, toast, t }),
     permissions: { canPlaceEdit, canDayEdit },
     tourPlanner,
     tourDetails: { openerRef: tourDetailOpenerRef, onSelectTour },

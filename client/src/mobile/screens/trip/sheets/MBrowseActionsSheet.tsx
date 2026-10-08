@@ -5,7 +5,7 @@ import type { MTripSheetsProps } from '../MTripShell'
 import { useTranslation } from '../../../../i18n'
 import { useAddonStore } from '../../../../store/addonStore'
 import { useSaveToCollectionStore } from '../../../../store/saveToCollectionStore'
-import { collectionTargetFromPlace } from '../lib/collectionTarget'
+import { placeToSaveTarget } from '../../../../components/Collections/saveTarget'
 import type { Place } from '../../../../types'
 
 interface BrowseActionsPayload {
@@ -55,7 +55,7 @@ export default function MBrowseActionsSheet({ planner, shell }: MTripSheetsProps
 
   const saveToCollection = () => {
     shell.closeSheet()
-    openSavePicker(collectionTargetFromPlace(place))
+    openSavePicker(placeToSaveTarget(place))
   }
 
   const tourAlreadyAssignedToDay = (dayId: number) => isTourPlace(place.id)

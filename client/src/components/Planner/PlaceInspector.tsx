@@ -22,10 +22,11 @@ import { collectionsApi } from '../../api/collections'
 import { useSettingsStore } from '../../store/settingsStore'
 import { useAddonStore } from '../../store/addonStore'
 import { useSaveToCollectionStore } from '../../store/saveToCollectionStore'
+import { placeToSaveTarget } from '../Collections/saveTarget'
 import DawarichIcon from '../shared/DawarichIcon'
 import { Tooltip } from '../shared/Tooltip'
 import { useToast } from '../shared/Toast'
-import { useTranslation, translateApiError } from '../../i18n'
+import { useTranslation } from '../../i18n'
 import { usePluginStore } from '../../store/pluginStore'
 import PluginFrame from '../Plugins/PluginFrame'
 import type { Place, Category, Day, Reservation, TripFile, AssignmentsMap, DistanceUnit } from '../../types'
@@ -46,6 +47,7 @@ import { BOX, Field, TypeTile, toneOf, toneTint, useOpenFile } from './bookings/
 import { parseMeta } from './bookings/bookingsModel'
 import { SoftPill, TimePill, tintOf } from './planParts'
 import { usePlaceLanguage } from '../../hooks/usePlaceLanguage'
+import { participantsWith, participantsWithout, splitParticipants, usePlaceFileUpload } from './usePlaceActions'
 
 const detailsCache = new Map()
 
@@ -266,12 +268,9 @@ export default function PlaceInspector({
   const saveVersion = useSaveToCollectionStore(s => s.version)
   const [savedInCollection, setSavedInCollection] = useState(false)
   const [hoursExpanded, setHoursExpanded] = useState(false)
-  const [filesExpanded, setFilesExpanded] = useState(false)
-  const [isUploading, setIsUploading] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameValue, setNameValue] = useState('')
   const nameInputRef = useRef<HTMLInputElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
   const googleDetails = usePlaceDetails(place?.google_place_id, place?.osm_id, placeLang)
 
   // Library-wide "is this place already saved anywhere I can see?" indicator for
@@ -296,51 +295,15 @@ export default function PlaceInspector({
 
   const handleSaveToCollection = useCallback(() => {
     if (!place) return
-    openSavePicker({
-      name: place.name,
-      source_trip_id: place.trip_id ?? null,
-      source_place_id: place.id,
-      description: place.description ?? null,
-      lat: place.lat ?? null,
-      lng: place.lng ?? null,
-      address: place.address ?? null,
-      category_id: place.category_id ?? null,
-      price: place.price ?? null,
-      currency: place.currency ?? null,
-      notes: place.notes ?? null,
-      image_url: place.image_url ?? null,
-      google_place_id: place.google_place_id ?? null,
-      google_ftid: place.google_ftid ?? null,
-      osm_id: place.osm_id ?? null,
-      website: place.website ?? null,
-      phone: place.phone ?? null,
-    })
+    openSavePicker(placeToSaveTarget(place))
   }, [place, openSavePicker])
 
   // Sits above the `if (!place)` bail-out below: a hook after an early return is
   // only reached while a place is selected, so deselecting one mid-session
   // changes the hook count and React tears the tree down.
-  const placeId = place?.id
-  const handleFileUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || [])
-    if (!selectedFiles.length || !onFileUpload || !placeId) return
-    setIsUploading(true)
-    try {
-      for (const file of selectedFiles) {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('place_id', String(placeId))
-        await onFileUpload(fd)
-      }
-      setFilesExpanded(true)
-    } catch (err: unknown) {
-      console.error('Upload failed', err)
-      toast.error(translateApiError(t, err, 'files.uploadError'))
-    } finally {
-      setIsUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }, [onFileUpload, placeId, toast, t])
+  const {
+    uploading: isUploading, filesExpanded, setFilesExpanded, fileInputRef, handleUpload: handleFileUpload,
+  } = usePlaceFileUpload(place?.id, onFileUpload, toast, true)
 
   const startNameEdit = () => {
     if (!onUpdatePlace) return
@@ -963,30 +926,17 @@ function ParticipantsBox({ tripMembers, participantIds, allJoined, onSetParticip
   }, [showAdd])
 
   // Active participants: if allJoined, show all members; otherwise show only those in participantIds
-  const activeMembers = allJoined ? tripMembers : tripMembers.filter(m => participantIds.includes(m.id))
-  const availableToAdd = allJoined ? [] : tripMembers.filter(m => !participantIds.includes(m.id))
+  const { activeMembers, availableMembers: availableToAdd } = splitParticipants(tripMembers, participantIds, allJoined)
   const canRemove = activeMembers.length > 1
 
   const handleRemove = (userId: number) => {
     if (!onSetParticipants) return
-    let newIds: number[]
-    if (allJoined) {
-      newIds = tripMembers.filter(m => m.id !== userId).map(m => m.id)
-    } else {
-      newIds = participantIds.filter(id => id !== userId)
-    }
-    if (newIds.length === tripMembers.length) newIds = []
-    onSetParticipants(selectedAssignmentId, selectedDayId, newIds)
+    onSetParticipants(selectedAssignmentId, selectedDayId, participantsWithout(tripMembers, participantIds, allJoined, userId))
   }
 
   const handleAdd = (userId: number) => {
     if (!onSetParticipants) return
-    const newIds = [...participantIds, userId]
-    if (newIds.length === tripMembers.length) {
-      onSetParticipants(selectedAssignmentId, selectedDayId, [])
-    } else {
-      onSetParticipants(selectedAssignmentId, selectedDayId, newIds)
-    }
+    onSetParticipants(selectedAssignmentId, selectedDayId, participantsWith(tripMembers, participantIds, userId))
     setShowAdd(false)
   }
 

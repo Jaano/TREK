@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom'
 import { Camera, Loader2, Upload, X } from 'lucide-react'
 import PlaceAvatar from './PlaceAvatar'
 import { Tooltip } from './Tooltip'
-import { normalizeImageFile } from '../../utils/convertHeic'
 import { useToast } from './Toast'
 import { useTranslation, translateApiError } from '../../i18n'
 import { fetchImageAsBlob } from '../../api/authUrl'
+import { usePlaceImagePick } from '../Planner/usePlaceActions'
 import type { Place, TripFile } from '../../types'
 
 interface Category {
@@ -43,7 +43,7 @@ export default function PlaceAvatarUpload({ place, category, size = 52, onUpload
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const anchorRef = useRef<HTMLDivElement>(null)
-  const [busy, setBusy] = useState(false)
+  const { busy, setBusy, pickImage: handleFile } = usePlaceImagePick(onUpload, toast)
   const [chooserOpen, setChooserOpen] = useState(false)
   const hasCustom = Boolean(place.image_url)
   const offersAttached = !!onPickAttached && attachedImages.length > 0
@@ -55,20 +55,6 @@ export default function PlaceAvatarUpload({ place, category, size = 52, onUpload
     setBusy(true)
     try {
       await onPickAttached!(fileId)
-    } catch (err: unknown) {
-      toast.error(translateApiError(t, err, 'places.imageUploadError'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    setBusy(true)
-    try {
-      await onUpload(await normalizeImageFile(file))
     } catch (err: unknown) {
       toast.error(translateApiError(t, err, 'places.imageUploadError'))
     } finally {

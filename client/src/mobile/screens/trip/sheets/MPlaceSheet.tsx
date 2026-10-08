@@ -7,12 +7,12 @@ import {
 import MSheet from '../../../components/MSheet'
 import type { MTripSheetsProps } from '../MTripShell'
 import { useTranslation, translateApiError } from '../../../../i18n'
-import { normalizeImageFile } from '../../../../utils/convertHeic'
-import { assignmentsApi } from '../../../../api/client'
-import { useTripStore } from '../../../../store/tripStore'
 import { useAddonStore } from '../../../../store/addonStore'
 import { useSaveToCollectionStore } from '../../../../store/saveToCollectionStore'
-import { collectionTargetFromPlace } from '../lib/collectionTarget'
+import { placeToSaveTarget } from '../../../../components/Collections/saveTarget'
+import {
+  participantsWith, participantsWithout, placeActions, splitParticipants, usePlaceFileUpload, usePlaceImagePick,
+} from '../../../../components/Planner/usePlaceActions'
 import { getCategoryIcon } from '../../../../components/shared/categoryIcons'
 import PlaceRating from '../../../../components/shared/StarRating'
 import MarkdownText from '../../../../components/shared/MarkdownText'
@@ -50,15 +50,18 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
   const collectionsEnabled = useAddonStore(s => s.isEnabled('collections'))
   const openSavePicker = useSaveToCollectionStore(s => s.open)
 
-  const [filesExpanded, setFilesExpanded] = useState(false)
+  const actions = placeActions({ tripId: planner.tripId, tripActions: planner.tripActions, toast: planner.toast, t })
+  const {
+    uploading, filesExpanded, setFilesExpanded, fileInputRef, handleUpload,
+  } = usePlaceFileUpload(place && !isTourPlace ? place.id : null, fd => planner.tripActions.addFile(planner.tripId, fd), planner.toast)
   const [dayPickerOpen, setDayPickerOpen] = useState(false)
   const [participantPickerOpen, setParticipantPickerOpen] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [navOpen, setNavOpen] = useState(false)
   const navBtnRef = useRef<HTMLButtonElement>(null)
-  const [imgBusy, setImgBusy] = useState(false)
+  const {
+    busy: imgBusy, setBusy: setImgBusy, pickImage: handleImagePick,
+  } = usePlaceImagePick(place && !isTourPlace ? file => planner.tripActions.uploadPlaceImage(planner.tripId, place.id, file) : undefined, planner.toast)
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
 
   const close = () => {
@@ -127,36 +130,19 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
   const participantIds = participants.map(p => p.user_id)
   const allJoined = participants.length === 0
   const members = planner.tripMembers as TripMember[]
-  const activeMembers = allJoined ? members : members.filter(m => participantIds.includes(m.id))
-  const availableMembers = allJoined ? [] : members.filter(m => !participantIds.includes(m.id))
+  const { activeMembers, availableMembers } = splitParticipants(members, participantIds, allJoined)
 
   const setParticipants = async (userIds: number[]) => {
     if (!assignmentInDay || !planner.selectedDayId) return
-    const dayId = planner.selectedDayId
-    try {
-      const data = await assignmentsApi.setParticipants(planner.tripId, assignmentInDay.id, userIds)
-      useTripStore.setState(state => ({
-        assignments: {
-          ...state.assignments,
-          [String(dayId)]: (state.assignments[String(dayId)] || []).map(a =>
-            a.id === assignmentInDay.id ? { ...a, participants: data.participants } : a,
-          ),
-        },
-      }))
-    } catch (err: unknown) {
-      planner.toast.error(err instanceof Error ? err.message : t('common.unknownError'))
-    }
+    await actions.setParticipants(assignmentInDay.id, planner.selectedDayId, userIds)
   }
 
   const removeParticipant = (userId: number) => {
-    let next = allJoined ? members.filter(m => m.id !== userId).map(m => m.id) : participantIds.filter(id => id !== userId)
-    if (next.length === members.length) next = []
-    void setParticipants(next)
+    void setParticipants(participantsWithout(members, participantIds, allJoined, userId))
   }
 
   const addParticipant = (userId: number) => {
-    const next = [...participantIds, userId]
-    void setParticipants(next.length === members.length ? [] : next)
+    void setParticipants(participantsWith(members, participantIds, userId))
     setParticipantPickerOpen(false)
   }
 
@@ -167,20 +153,6 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
     planner.reservations,
     assignmentInDay ? [assignmentInDay.id] : [],
   )
-
-  const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || !place || isTourPlace) return
-    setImgBusy(true)
-    try {
-      await planner.tripActions.uploadPlaceImage(planner.tripId, place.id, await normalizeImageFile(file))
-    } catch (err: unknown) {
-      planner.toast.error(translateApiError(t, err, 'places.imageUploadError'))
-    } finally {
-      setImgBusy(false)
-    }
-  }
 
   const handleTrackColor = async (color: string | null) => {
     if (!place || isTourPlace) return
@@ -203,39 +175,15 @@ export default function MPlaceSheet({ planner, shell }: MTripSheetsProps) {
     }
   }
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = Array.from(e.target.files || [])
-    if (!selected.length || !place || isTourPlace) return
-    setUploading(true)
-    try {
-      for (const file of selected) {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('place_id', String(place.id))
-        await planner.tripActions.addFile(planner.tripId, fd)
-      }
-      setFilesExpanded(true)
-    } catch (err: unknown) {
-      planner.toast.error(translateApiError(t, err, 'files.uploadError'))
-    } finally {
-      setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ''
-    }
-  }
-
   const saveToCollection = () => {
     if (!place) return
-    openSavePicker(collectionTargetFromPlace(place))
+    openSavePicker(placeToSaveTarget(place))
   }
 
   // Collaborative rating (#1435): every trip member casts their own star vote.
   const handleRate = async (rating: number | null) => {
     if (!place) return
-    try {
-      await planner.tripActions.ratePlace(planner.tripId, place.id, rating)
-    } catch (err: unknown) {
-      planner.toast.error(err instanceof Error ? err.message : t('common.unknownError'))
-    }
+    await actions.ratePlace(place.id, rating)
   }
 
   const showOnMap = () => {
