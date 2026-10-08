@@ -41,6 +41,10 @@ export function generateUUID(): string {
 }
 
 let _flushing = false
+// Set when flush() is called while a pass is already running. That pass read its
+// pending rows when it began, so a write queued since then waits for one more
+// pass, which the running one starts once it is done.
+let _flushAgain = false
 
 /**
  * Take the cross-tab flush lock, waiting while another tab holds it. Every open
@@ -255,7 +259,8 @@ export const mutationQueue = {
   /**
    * Start a flush for a write that joined the queue while online (see
    * mustQueue). It goes out as soon as the write it waits for is through, not
-   * at the next trigger. Offline this does nothing.
+   * at the next trigger: when a flush is already running, that flush runs one
+   * more pass once it is done (see flush). Offline this does nothing.
    */
   sendSoon(): void {
     if (isEffectivelyOffline()) return
@@ -270,10 +275,19 @@ export const mutationQueue = {
    * failed once it has failed MAX_SERVER_ERROR_ATTEMPTS times. A write parked as
    * failed or as a conflict holds back the later writes to the same entity, so
    * they keep their order whatever the user decides about it.
+   *
+   * A call that arrives while a pass is running returns at once, but asks that
+   * pass for one more round: the running pass read the pending rows when it
+   * began and would not see a write queued since.
    */
   async flush(): Promise<void> {
-    if (_flushing || isEffectivelyOffline() || !isAuthed()) return
+    if (isEffectivelyOffline() || !isAuthed()) return
+    if (_flushing) {
+      _flushAgain = true
+      return
+    }
     _flushing = true
+    _flushAgain = false
     const release = await acquireFlushLock()
     // tempId → realId learned during this flush, so a dependent edit/delete
     // queued against an offline-created entity (still holding the negative id)
@@ -518,8 +532,10 @@ export const mutationQueue = {
     }
     // A "mine wins" auto-resolution dropped its base token; one more pass now
     // overwrites the server unconditionally. Bounded: the retried write carries
-    // no token, so it cannot 409 for the same reason.
-    if (needsRetry && !isEffectivelyOffline()) {
+    // no token, so it cannot 409 for the same reason. A flush asked for while
+    // this pass ran gets its pass here too. Bounded as well: the flag is only set
+    // by a call made during a pass, and every pass clears it when it starts.
+    if ((needsRetry || _flushAgain) && !isEffectivelyOffline()) {
       await this.flush()
     }
   },
@@ -633,6 +649,7 @@ export const mutationQueue = {
   /** Reset internal flushing flag and timestamp counters — useful in tests. */
   _resetFlushing(): void {
     _flushing = false
+    _flushAgain = false
     _lastTs = 0
     _lastTempId = 0
   },

@@ -120,6 +120,28 @@ describe('an online edit of a visit with an older write still queued', () => {
     expect(sentTimes()).toEqual(['07:00', '09:00'])
   })
 
+  it('goes out once the older one lands even when that one was already on its way', async () => {
+    await queueFirst('pending')
+    // The older time is in flight when the new one is made: the running pass has
+    // already read its rows, so it must run once more for the new one.
+    let edited: Promise<unknown> | undefined
+    vi.mocked(apiClient.request).mockImplementation(async ({ data }) => {
+      const sent = (data as typeof first).place_time
+      if (sent === '07:00') {
+        edited = assignmentRepo.setTimes(9, assignment, second)
+        await edited
+      }
+      return { data: { assignment: { ...assignment, assignment_time: sent } } }
+    })
+
+    await mutationQueue.flush()
+
+    expect(edited).toBeDefined()
+    expect(assignmentsApi.updateTime).not.toHaveBeenCalled()
+    expect(sentTimes()).toEqual(['07:00', '09:00'])
+    expect(await offlineDb.mutationQueue.count()).toBe(0)
+  })
+
   it('holds a day clear behind an older clear of the same day', async () => {
     await assignmentRepo.clearDay(9, 1)
     await offlineDb.mutationQueue.toCollection().modify({ status: 'failed', attempts: 8 })
