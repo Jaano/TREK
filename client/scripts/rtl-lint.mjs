@@ -24,6 +24,7 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 const SRC = fileURLToPath(new URL('../src', import.meta.url))
 const BASELINE = fileURLToPath(new URL('./rtl-baseline.json', import.meta.url))
@@ -61,40 +62,47 @@ function walk(dir, files = []) {
 }
 
 /**
- * The code of each line, without its comments: prose like "top right" or
- * "left out" is no side. Good enough for this source, which keeps `//` and
- * `/*` out of string literals except in URLs (`https://`).
+ * The source with its comments blanked out, so prose like "top right" or
+ * "left out" is no side. TypeScript finds the comments in a .ts/.tsx file,
+ * which keeps `/*` and `//` inside strings and JSX text where they belong
+ * (accept="image/*", a URL); a stylesheet only has block comments.
  */
-function codeLines(source) {
-  let inBlock = false
-  return source.split('\n').map((line) => {
-    let code = ''
-    let rest = line
-    while (rest) {
-      if (inBlock) {
-        const end = rest.indexOf('*/')
-        if (end < 0) return code
-        rest = rest.slice(end + 2)
-        inBlock = false
-        continue
-      }
-      const block = rest.indexOf('/*')
-      const lineComment = rest.search(/(?<!:)\/\//)
-      if (lineComment >= 0 && (block < 0 || lineComment < block)) return code + rest.slice(0, lineComment)
-      if (block < 0) return code + rest
-      code += rest.slice(0, block)
-      rest = rest.slice(block + 2)
-      inBlock = true
+function withoutComments(source, file) {
+  const chars = source.split('')
+  const blank = (pos, end) => {
+    for (let i = pos; i < end; i++) if (chars[i] !== '\n') chars[i] = ' '
+  }
+  if (file.endsWith('.css')) {
+    for (const m of source.matchAll(/\/\*[\s\S]*?\*\//g)) blank(m.index, m.index + m[0].length)
+    return chars.join('')
+  }
+  const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind)
+  const seen = new Set()
+  const take = (ranges) => {
+    for (const r of ranges ?? []) {
+      if (seen.has(r.pos)) continue
+      seen.add(r.pos)
+      blank(r.pos, r.end)
     }
-    return code
-  })
+  }
+  const visit = (node) => {
+    take(ts.getLeadingCommentRanges(source, node.pos))
+    take(ts.getTrailingCommentRanges(source, node.end))
+    // JSX text holds no comments, and asking for them there would read `//` in a URL as one.
+    if (!ts.isJsxText(node)) for (const child of node.getChildren(sf)) visit(child)
+  }
+  visit(sf)
+  take(ts.getLeadingCommentRanges(source, sf.endOfFileToken.pos))
+  return chars.join('')
 }
 
 /** Every physical use in one file, as `line: match`. */
-export function physicalUses(source, isCss) {
+export function physicalUses(source, file) {
+  const isCss = file.endsWith('.css')
   const uses = []
   const lines = source.split('\n')
-  codeLines(source).forEach((code, i) => {
+  withoutComments(source, file).split('\n').forEach((code, i) => {
     if (lines[i].includes(DISABLE)) return
     const patterns = isCss ? [CSS] : [CLASS, STYLE]
     for (const re of patterns) for (const m of code.match(re) ?? []) uses.push(`${i + 1}: ${m.trim()}`)
@@ -106,7 +114,7 @@ function scan() {
   const counts = {}
   const listed = {}
   for (const file of walk(SRC)) {
-    const uses = physicalUses(readFileSync(file, 'utf8'), file.endsWith('.css'))
+    const uses = physicalUses(readFileSync(file, 'utf8'), file)
     if (!uses.length) continue
     const key = relative(SRC, file).replace(/\\/g, '/')
     counts[key] = uses.length

@@ -54,9 +54,10 @@ export const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🔥'
 
 /** Bubble corner radii, spec 03 §6.1 — constant per sender, not per group
  *  position (grouping is expressed through spacing + a single trailing
- *  timestamp instead, see MCollabChat). */
-export const OWN_BUBBLE_RADIUS = '16px 16px 4px 16px'
-export const OTHER_BUBBLE_RADIUS = '4px 16px 16px 16px'
+ *  timestamp instead, see MCollabChat). Logical corners, so the tail follows
+ *  the row to the other side in a right-to-left language. */
+export const OWN_BUBBLE_RADIUS = { borderStartStartRadius: 16, borderStartEndRadius: 16, borderEndEndRadius: 4, borderEndStartRadius: 16 } as const
+export const OTHER_BUBBLE_RADIUS = { borderStartStartRadius: 4, borderStartEndRadius: 16, borderEndEndRadius: 16, borderEndStartRadius: 16 } as const
 
 // SQLite stores UTC without a 'Z' suffix — append one so JS parses it as UTC
 // rather than local time (same fix the desktop helpers apply).

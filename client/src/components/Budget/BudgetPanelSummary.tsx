@@ -57,11 +57,14 @@ export default function BudgetSummary({ theme, currency, locale, grandTotal, has
               const sep = (0.1).toLocaleString(locale).replace(/\d/g, '')
               const [integerPart, decimalPart] = decimals > 0 ? full.split(sep) : [full, '']
               return (
-                // dir=ltr: the amount is split into spans, which a right-to-left flex row would reorder.
-                <div dir="ltr" style={{ display: 'flex', alignItems: 'baseline', gap: 4, letterSpacing: '-0.03em', lineHeight: 1 }}>
-                  <span style={{ fontSize: 'calc(38px * var(--fs-scale-title, 1))', fontWeight: 700 }}>{integerPart}</span>
-                  {decimalPart && <span style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 500, color: theme.sub }}>{sep}{decimalPart}</span>}
-                  <span style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 500, color: theme.sub, marginInlineStart: 2 }}>{SYMBOLS[currency] || currency}</span>
+                <div style={{ display: 'flex', letterSpacing: '-0.03em', lineHeight: 1 }}>
+                  {/* One left-to-right box at the row's start: the amount is split into
+                      spans, which a right-to-left flex row would reorder. */}
+                  <span dir="ltr" style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4 }}>
+                    <span style={{ fontSize: 'calc(38px * var(--fs-scale-title, 1))', fontWeight: 700 }}>{integerPart}</span>
+                    {decimalPart && <span style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 500, color: theme.sub }}>{sep}{decimalPart}</span>}
+                    <span style={{ fontSize: 'calc(22px * var(--fs-scale-title, 1))', fontWeight: 500, color: theme.sub, marginInlineStart: 2 }}>{SYMBOLS[currency] || currency}</span>
+                  </span>
                 </div>
               )
             })()}

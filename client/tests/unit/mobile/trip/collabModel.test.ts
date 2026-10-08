@@ -105,8 +105,10 @@ describe('collabModel — constants', () => {
     expect(QUICK_REACTIONS).toHaveLength(8);
     expect(QUICK_REACTIONS).toContain('❤️');
     expect(new Set(QUICK_REACTIONS).size).toBe(QUICK_REACTIONS.length);
-    expect(OWN_BUBBLE_RADIUS).toBe('16px 16px 4px 16px');
-    expect(OTHER_BUBBLE_RADIUS).toBe('4px 16px 16px 16px');
+    // Logical corners: in a left-to-right language the same as '16px 16px 4px 16px'
+    // and '4px 16px 16px 16px', and the tail follows the row in right to left.
+    expect(OWN_BUBBLE_RADIUS).toEqual({ borderStartStartRadius: 16, borderStartEndRadius: 16, borderEndEndRadius: 4, borderEndStartRadius: 16 });
+    expect(OTHER_BUBBLE_RADIUS).toEqual({ borderStartStartRadius: 4, borderStartEndRadius: 16, borderEndEndRadius: 16, borderEndStartRadius: 16 });
     expect(NOTE_COLORS).toHaveLength(6);
   });
 });

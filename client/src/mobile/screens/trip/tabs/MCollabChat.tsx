@@ -471,7 +471,7 @@ function ChatBubbleRow({ msg, own, showHeader, isLastInGroup, marginTop, is12h, 
               className={`px-[13px] py-[9px] text-[0.8125rem] leading-[1.45] ${
                 own ? 'bg-m-act text-m-actfg' : 'border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] text-m-ink'
               }`}
-              style={{ borderRadius: own ? OWN_BUBBLE_RADIUS : OTHER_BUBBLE_RADIUS }}
+              style={own ? OWN_BUBBLE_RADIUS : OTHER_BUBBLE_RADIUS}
             >
               {hasReply && (
                 <div className="mb-1 rounded-[10px] bg-[color:var(--m-card)] px-[10px] py-[5px]">
