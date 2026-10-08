@@ -14,6 +14,14 @@ import { addTripMember, createCategory, createDay, createDayAssignment, createPl
 import { createTour } from '../../../helpers/tours-repos';
 import { Places } from '../../../../src/db/entities/Places.entity';
 import type { PlacesRepository } from '../../../../src/db/repositories/Places.repository';
+import type { RequiredEntityData } from '@mikro-orm/core';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { tagPlace } from '../../../helpers/factories/places';
+import { makeTour } from '../../../helpers/factories/tours';
+import { Categories } from '../../../../src/db/entities/Categories.entity';
+import { DayAssignments } from '../../../../src/db/entities/DayAssignments.entity';
+import { PlaceRatings } from '../../../../src/db/entities/PlaceRatings.entity';
+import { PlaceRegions } from '../../../../src/db/entities/PlaceRegions.entity';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -26,6 +34,17 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
+/** The stored place; fails the case when it is gone. */
+async function placeRow(id: number) {
+  const row = await findRow(t.orm, Places, { id });
+  if (!row) throw new Error(`no place ${id}`);
+  return row;
+}
+
+/** SQLite's datetime('now', <offset>) as a value: UTC, to the second. */
+const sqliteNow = (offsetSeconds: number): string =>
+  new Date(Date.now() + offsetSeconds * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
 /**
  * The legacy `getPlaceWithTags` (`db/database.ts:146-197` at base), run raw
  * on the same rows — 0b security review F-B6: a `toMatchObject`/partial
@@ -36,11 +55,14 @@ afterAll(async () => { await t.close(); testDb.close(); });
  */
 function legacyGetPlaceWithTags(placeId: number): unknown {
   const place = testDb
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     .prepare('SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon, t.place_id as tour_place_id FROM places p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN tours t ON t.place_id = p.id WHERE p.id = ?')
     .get(placeId) as (Record<string, unknown> & { category_id: number | null; category_name: string | null; category_color: string | null; category_icon: string | null }) | undefined;
   if (!place) return null;
+  // test-sql-allow: the legacy statement is the oracle the repository read is held to.
   const tags = testDb.prepare('SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?').all(placeId);
   const ratings = testDb
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     .prepare('SELECT pr.user_id, u.username, u.avatar, pr.rating FROM place_ratings pr JOIN users u ON pr.user_id = u.id WHERE pr.place_id = ? ORDER BY pr.created_at')
     .all(placeId) as { user_id: number; username: string; avatar: string | null; rating: number }[];
   return {
@@ -61,7 +83,7 @@ describe('PlacesRepository.findWithTagsAndRatings — parity with the legacy get
     const trip = createTrip(testDb, owner.id);
     const plain = createPlace(testDb, trip.id, { name: 'Plain' });
     const tour = createPlace(testDb, trip.id, { name: 'Ridge walk' });
-    testDb.prepare("INSERT INTO tours (place_id, tour_type) VALUES (?, 'hike')").run(tour.id);
+    await makeTour(t.orm, tour.id, { tourTypeRef: 'hike' });
 
     expect((await places.findWithTagsAndRatings(tour.id))?.tour_place_id).toBe(tour.id);
     expect((await places.findWithTagsAndRatings(plain.id))?.tour_place_id).toBeNull();
@@ -76,10 +98,10 @@ describe('PlacesRepository.findWithTagsAndRatings — parity with the legacy get
     const place = createPlace(testDb, trip.id, { category_id: category.id, name: 'Parity Park' });
     const tagA = createTag(testDb, owner.id, { name: 'Green' });
     const tagB = createTag(testDb, owner.id, { name: 'Quiet' });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tagA.id);
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tagB.id);
-    testDb.prepare("INSERT INTO place_ratings (place_id, user_id, rating, created_at) VALUES (?, ?, ?, datetime('now', '-2 minutes'))").run(place.id, voterA.id, 5);
-    testDb.prepare("INSERT INTO place_ratings (place_id, user_id, rating, created_at) VALUES (?, ?, ?, datetime('now', '-1 minutes'))").run(place.id, voterB.id, 3);
+    await tagPlace(t.orm, place.id, [tagA.id]);
+    await tagPlace(t.orm, place.id, [tagB.id]);
+    await insertRow(t.orm, PlaceRatings, { place: place.id, user: voterA.id, rating: 5, created_at: sqliteNow(-120) });
+    await insertRow(t.orm, PlaceRatings, { place: place.id, user: voterB.id, rating: 3, created_at: sqliteNow(-60) });
 
     const result = await places.findWithTagsAndRatings(place.id);
     const legacy = legacyGetPlaceWithTags(place.id) as Record<string, unknown>;
@@ -104,7 +126,7 @@ describe('PlacesRepository.findWithTagsAndRatings — parity with the legacy get
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     // category_id: null override defeats createPlace's default-first-category fallback.
-    testDb.prepare('DELETE FROM categories').run();
+    await deleteRows(t.orm, Categories, {});
     const place = createPlace(testDb, trip.id, { name: 'Uncategorized Spot' });
 
     const result = await places.findWithTagsAndRatings(place.id);
@@ -135,8 +157,8 @@ describe('PlacesRepository.findWithTagsAndRatings — parity with the legacy get
     const place = createPlace(testDb, trip.id);
     const tagA = createTag(testDb, owner.id, { name: 'Must see' });
     const tagB = createTag(testDb, owner.id, { name: 'Rainy day' });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tagA.id);
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tagB.id);
+    await tagPlace(t.orm, place.id, [tagA.id]);
+    await tagPlace(t.orm, place.id, [tagB.id]);
 
     const result = await places.findWithTagsAndRatings(place.id);
     expect(result?.tags).toHaveLength(2);
@@ -149,16 +171,12 @@ describe('PlacesRepository.findWithTagsAndRatings — parity with the legacy get
     const { user: voterB } = createUser(testDb, { username: 'voter_b' });
     const trip = createTrip(testDb, owner.id);
     const place = createPlace(testDb, trip.id);
-    testDb
-      .prepare("INSERT INTO place_ratings (place_id, user_id, rating, created_at) VALUES (?, ?, ?, datetime('now', '-2 minutes'))")
-      .run(place.id, voterA.id, 4);
+    await insertRow(t.orm, PlaceRatings, { place: place.id, user: voterA.id, rating: 4, created_at: sqliteNow(-120) });
     // Task 0b review M1: 4-and-2 averages to 3, which `Math.round(3)` also
     // equals — the brief's own named mutation (wrapping the average in
     // `Math.round(...)`) survived undetected. 4-and-3 averages to 3.5,
     // which `Math.round` would corrupt to 3 or 4 — mutation-proved.
-    testDb
-      .prepare("INSERT INTO place_ratings (place_id, user_id, rating, created_at) VALUES (?, ?, ?, datetime('now', '-1 minutes'))")
-      .run(place.id, voterB.id, 3);
+    await insertRow(t.orm, PlaceRatings, { place: place.id, user: voterB.id, rating: 3, created_at: sqliteNow(-60) });
 
     const result = await places.findWithTagsAndRatings(place.id);
     expect(result?.ratings).toHaveLength(2);
@@ -179,7 +197,7 @@ describe('PlacesRepository.findWithTagsAndRatings — parity with the legacy get
     const { user: voter } = createUser(testDb, { username: 'keyed_voter' });
     const trip = createTrip(testDb, owner.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('INSERT INTO place_ratings (place_id, user_id, rating) VALUES (?, ?, ?)').run(place.id, voter.id, 5);
+    await insertRow(t.orm, PlaceRatings, { place: place.id, user: voter.id, rating: 5 });
 
     const result = await places.findWithTagsAndRatings(place.id);
     expect(result?.ratings[0]).toEqual({ user_id: voter.id, username: 'keyed_voter', avatar: null, rating: 5 });
@@ -225,7 +243,7 @@ describe('PlacesRepository.existsByGoogleIdOrImageUrl', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET google_place_id = ? WHERE id = ?').run('ChIJ-gpid', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { google_place_id: 'ChIJ-gpid' });
     expect(await places.existsByGoogleIdOrImageUrl('ChIJ-gpid', '/api/maps/place-photo/ChIJ-gpid/bytes')).toBe(true);
   });
 
@@ -234,7 +252,7 @@ describe('PlacesRepository.existsByGoogleIdOrImageUrl', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
     const proxyUrl = '/api/maps/place-photo/coords%3A1%3A2/bytes';
-    testDb.prepare('UPDATE places SET image_url = ? WHERE id = ?').run(proxyUrl, place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { image_url: proxyUrl });
     expect(await places.existsByGoogleIdOrImageUrl('coords:1:2', proxyUrl)).toBe(true);
   });
 
@@ -271,6 +289,7 @@ describe('PlacesRepository.existsInTrip / findInTrip / reclaimInputs / deleteByI
     // Populate the identity map with an unrelated, WIDER read first — `{ disableIdentityMap: false }`
     // explicitly (program rule 20: the base default leaves the identity map empty, making this vacuous).
     await t.repo(Places).find({ trip: trip.id }, { disableIdentityMap: false });
+    // test-sql-allow: the write has to land behind the ORM's back, which is what the fresh read is tested against.
     testDb.prepare('UPDATE places SET name = ? WHERE id = ?').run('After', place.id);
     const row = await places.findInTrip(place.id, trip.id);
     expect(row?.name).toBe('After');
@@ -287,23 +306,38 @@ describe('PlacesRepository.existsInTrip / findInTrip / reclaimInputs / deleteByI
     const otherTrip = createTrip(testDb, user.id);
     const category = createCategory(testDb);
     const place = createPlace(testDb, trip.id, { name: 'Full Row' });
-    testDb.prepare(`
-      UPDATE places SET description = ?, lat = ?, lng = ?, address = ?, category_id = ?, price = ?, currency = ?,
-        reservation_status = ?, reservation_notes = ?, reservation_datetime = ?, place_time = ?, end_time = ?,
-        duration_minutes = ?, notes = ?, image_url = ?, google_place_id = ?, google_ftid = ?, website = ?, phone = ?,
-        transport_mode = ?, osm_id = ?, route_geometry = ?, route_color = ?, stop_type = ?, fill_percent = ?,
-        amap_poi_id = ?, source = ?
-      WHERE id = ?
-    `).run(
-      'A description with 007-style digits', 48.1, 2.2, '007 Rue de Paris', category.id, 12.5, 'EUR',
-      'confirmed', 'notes-a', '2026-01-01T10:00:00Z', '10:00', '11:00',
-      45, 'place notes', '/img/a.png', 'gpid-007', 'gftid-a', 'https://a.example', '+33 1 23 45 67 89',
-      'driving', 'osm-a', '{"type":"LineString"}', '#ff0000', 'hotel', 50,
-      'amap-a', 'manual',
-      place.id,
-    );
+    await updateRows(t.orm, Places, { id: place.id }, {
+      description: 'A description with 007-style digits',
+      lat: 48.1,
+      lng: 2.2,
+      address: '007 Rue de Paris',
+      category: category.id,
+      price: 12.5,
+      currency: 'EUR',
+      reservation_status: 'confirmed',
+      reservation_notes: 'notes-a',
+      reservation_datetime: '2026-01-01T10:00:00Z',
+      place_time: '10:00',
+      end_time: '11:00',
+      duration_minutes: 45,
+      notes: 'place notes',
+      image_url: '/img/a.png',
+      google_place_id: 'gpid-007',
+      google_ftid: 'gftid-a',
+      website: 'https://a.example',
+      phone: '+33 1 23 45 67 89',
+      transport_mode: 'driving',
+      osm_id: 'osm-a',
+      route_geometry: '{"type":"LineString"}',
+      route_color: '#ff0000',
+      stop_type: 'hotel',
+      fill_percent: 50,
+      amap_poi_id: 'amap-a',
+      source: 'manual',
+    });
 
     const row = await places.findInTrip(place.id, trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM places WHERE id = ? AND trip_id = ?').get(place.id, trip.id);
     expect(row).toEqual(legacy);
     expect(row).toMatchObject({ id: place.id, trip_id: trip.id, name: 'Full Row', google_place_id: 'gpid-007' });
@@ -315,6 +349,7 @@ describe('PlacesRepository.existsInTrip / findInTrip / reclaimInputs / deleteByI
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Bare Place' });
     const row = await places.findInTrip(place.id, trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM places WHERE id = ? AND trip_id = ?').get(place.id, trip.id);
     expect(row).toEqual(legacy);
     expect(row?.description).toBeNull();
@@ -325,7 +360,7 @@ describe('PlacesRepository.existsInTrip / findInTrip / reclaimInputs / deleteByI
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET google_place_id = ?, image_url = ? WHERE id = ?').run('gpid-1', '/uploads/places/x.jpg', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { google_place_id: 'gpid-1', image_url: '/uploads/places/x.jpg' });
     expect(await places.reclaimInputs(place.id, trip.id)).toEqual({ google_place_id: 'gpid-1', image_url: '/uploads/places/x.jpg' });
     expect(await places.reclaimInputs(999999, trip.id)).toBeUndefined();
   });
@@ -336,8 +371,8 @@ describe('PlacesRepository.existsInTrip / findInTrip / reclaimInputs / deleteByI
     const keep = createPlace(testDb, trip.id, { name: 'Keep' });
     const gone = createPlace(testDb, trip.id, { name: 'Gone' });
     await places.deleteById(gone.id);
-    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(gone.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(keep.id)).toBeDefined();
+    expect(await findRow(t.orm, Places, { id: gone.id })).toBeNull();
+    expect(await findRow(t.orm, Places, { id: keep.id })).not.toBeNull();
   });
 });
 
@@ -419,7 +454,7 @@ describe('PlacesRepository.insertPlace (PL4) / updatePlace (PL11)', () => {
     // second, so comparing against `createPlace`'s own `CURRENT_TIMESTAMP`
     // default would be flaky (Object.is on two identical second-granularity
     // strings), not a proof of anything.
-    testDb.prepare("UPDATE places SET updated_at = datetime('now', '-1 hour') WHERE id = ?").run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { updated_at: sqliteNow(-3600) });
     const before = (await places.findInTrip(place.id, trip.id))?.updated_at;
     await places.updatePlace(place.id, {
       name: 'Stamped', description: null, lat: null, lng: null, address: null, category_id: null,
@@ -439,9 +474,9 @@ describe('PlacesRepository.findDuplicateByExternalId / findDuplicateByName / fin
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const first = createPlace(testDb, trip.id, { name: 'First' });
-    testDb.prepare('UPDATE places SET osm_id = ? WHERE id = ?').run('node:123', first.id);
+    await updateRows(t.orm, Places, { id: first.id }, { osm_id: 'node:123' });
     const second = createPlace(testDb, trip.id, { name: 'Second' });
-    testDb.prepare('UPDATE places SET google_ftid = ? WHERE id = ?').run('node:123', second.id);
+    await updateRows(t.orm, Places, { id: second.id }, { google_ftid: 'node:123' });
     const hit = await places.findDuplicateByExternalId(String(trip.id), 'node:123');
     expect(hit?.id).toBe(first.id);
   });
@@ -452,7 +487,7 @@ describe('PlacesRepository.findDuplicateByExternalId / findDuplicateByName / fin
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Amap-only' });
-    testDb.prepare('UPDATE places SET amap_poi_id = ? WHERE id = ?').run('B0FFH00X01', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { amap_poi_id: 'B0FFH00X01' });
     const hit = await places.findDuplicateByExternalId(String(trip.id), 'B0FFH00X01');
     expect(hit?.id).toBe(place.id);
   });
@@ -513,8 +548,7 @@ describe('PlacesRepository.listForGpx (PL29) and existsByImageUrl (PI1)', () => 
     // through the same way), and deleting the categories table would also
     // break p1's own join. Insert place B directly instead, to genuinely
     // pin `category_id = NULL` while `category` (p1's) still exists.
-    const p2Id = testDb.prepare('INSERT INTO places (trip_id, name, category_id) VALUES (?, ?, NULL)').run(trip.id, 'B').lastInsertRowid;
-    const p2 = { id: p2Id as number };
+    const p2 = { id: await insertRow(t.orm, Places, { trip: trip.id, name: 'B', category: null }) };
     const rows = await places.listForGpx(String(trip.id));
     expect(rows.map((r) => r.name)).toEqual(['A', 'B']);
     expect(rows[0]).toMatchObject({ name: 'A', category: 'Trails' });
@@ -526,7 +560,7 @@ describe('PlacesRepository.listForGpx (PL29) and existsByImageUrl (PI1)', () => 
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET image_url = ? WHERE id = ?').run('/uploads/places/shared.jpg', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { image_url: '/uploads/places/shared.jpg' });
     expect(await places.existsByImageUrl('/uploads/places/shared.jpg')).toBe(true);
     expect(await places.existsByImageUrl('/uploads/places/nope.jpg')).toBe(false);
   });
@@ -544,13 +578,10 @@ describe('PlacesRepository.listDedupInputs (PL24)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const other = createTrip(testDb, user.id);
-    testDb.prepare(
-      `INSERT INTO places (trip_id, name, lat, lng, google_place_id, google_ftid, osm_id, amap_poi_id)
-       VALUES (?, 'Louvre', 48.86, 2.34, 'gp1', 'ft1', 'osm1', 'amap1')`,
-    ).run(trip.id);
-    testDb.prepare(
-      `INSERT INTO places (trip_id, name, lat, lng) VALUES (?, '', 1.1, 2.2)`,
-    ).run(trip.id);
+    await insertRow(t.orm, Places, {
+      trip: trip.id, name: 'Louvre', lat: 48.86, lng: 2.34, google_place_id: 'gp1', google_ftid: 'ft1', osm_id: 'osm1', amap_poi_id: 'amap1',
+    });
+    await insertRow(t.orm, Places, { trip: trip.id, name: '', lat: 1.1, lng: 2.2 });
     createPlace(testDb, other.id, { name: 'Not this trip' });
 
     const rows = await places.listDedupInputs(String(trip.id));
@@ -572,7 +603,7 @@ describe('PlacesRepository.listForTrip (PL3) — filter fragments', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const older = createPlace(testDb, trip.id, { name: 'Older' });
-    testDb.prepare("UPDATE places SET created_at = datetime('now', '-1 hour') WHERE id = ?").run(older.id);
+    await updateRows(t.orm, Places, { id: older.id }, { created_at: sqliteNow(-3600) });
     const newer = createPlace(testDb, trip.id, { name: 'Newer' });
     const rows = await places.listForTrip(String(trip.id), {});
     expect(rows.map((r) => r.id)).toEqual([newer.id, older.id]);
@@ -607,7 +638,7 @@ describe('PlacesRepository.listForTrip (PL3) — filter fragments', () => {
     const cat = createCategory(testDb, { name: 'Museums' });
     const inCat = createPlace(testDb, trip.id, { category_id: cat.id });
     const outCat = createPlace(testDb, trip.id);
-    testDb.prepare('DELETE FROM categories WHERE id != ?').run(cat.id);
+    await deleteRows(t.orm, Categories, { id: { $ne: cat.id } });
     const rows = await places.listForTrip(String(trip.id), { category: String(cat.id) });
     expect(rows.map((r) => r.id)).toEqual([inCat.id]);
     void outCat;
@@ -619,7 +650,7 @@ describe('PlacesRepository.listForTrip (PL3) — filter fragments', () => {
     const tag = createTag(testDb, user.id, { name: 'Must see' });
     const tagged = createPlace(testDb, trip.id, { name: 'Tagged' });
     const untagged = createPlace(testDb, trip.id, { name: 'Untagged' });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(tagged.id, tag.id);
+    await tagPlace(t.orm, tagged.id, [tag.id]);
     const rows = await places.listForTrip(String(trip.id), { tag: String(tag.id) });
     expect(rows.map((r) => r.id)).toEqual([tagged.id]);
     void untagged;
@@ -645,11 +676,11 @@ describe('PlacesRepository.listForTrip (PL3) — filter fragments', () => {
     const tag = createTag(testDb, user.id, { name: 'Green' });
     const day = createDay(testDb, trip.id);
     const winner = createPlace(testDb, trip.id, { name: 'Central Park', category_id: cat.id });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(winner.id, tag.id);
+    await tagPlace(t.orm, winner.id, [tag.id]);
     createDayAssignment(testDb, day.id, winner.id);
     // A near-miss on every axis, to prove the AND actually excludes it.
     const other = createPlace(testDb, trip.id, { name: 'Central Park Annex', category_id: cat.id });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(other.id, tag.id);
+    await tagPlace(t.orm, other.id, [tag.id]);
     // `other` is left unassigned, so `assignment: 'assigned'` alone should exclude it.
     const rows = await places.listForTrip(String(trip.id), {
       searchPattern: '%Central Park%', category: String(cat.id), tag: String(tag.id), assignment: 'assigned',
@@ -704,6 +735,7 @@ describe('PlacesRepository.listForTrip (PL3) — toEqual(legacy) over all 32 fil
       params.push(tripId);
     }
     query += ' ORDER BY p.created_at DESC';
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     return testDb.prepare(query).all(...params);
   }
 
@@ -717,13 +749,13 @@ describe('PlacesRepository.listForTrip (PL3) — toEqual(legacy) over all 32 fil
 
     // p1: category + tag + assigned + matches the search term.
     const p1 = createPlace(testDb, trip.id, { name: 'Central Park', category_id: cat.id });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(p1.id, tag.id);
+    await tagPlace(t.orm, p1.id, [tag.id]);
     createDayAssignment(testDb, day.id, p1.id);
     // p2: category, no tag, unassigned, matches the search term (a near-miss on 3 of 4 axes).
     createPlace(testDb, trip.id, { name: 'Central Station', category_id: cat.id });
     // p3: no category, tag + assigned, does NOT match the search term.
     const p3 = createPlace(testDb, trip.id, { name: 'Louvre' });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(p3.id, tag.id);
+    await tagPlace(t.orm, p3.id, [tag.id]);
     createDayAssignment(testDb, day.id, p3.id);
     // p4: no category, no tag, unassigned, does NOT match the search term,
     // and a Tour, so tour_place_id is non-null on exactly one row.
@@ -792,7 +824,7 @@ describe('PlacesRepository.insertPlace — the four importers\' narrower column 
       duration_minutes: 60, category: null, tags: [], ratings: [],
     });
     // Committed for real, not just visible mid-transaction.
-    expect(testDb.prepare('SELECT name FROM places WHERE trip_id = ?').get(trip.id)).toMatchObject({ name: 'GPX Waypoint' });
+    expect(await findRow(t.orm, Places, { trip: trip.id })).toMatchObject({ name: 'GPX Waypoint' });
   });
 
   it('PLACEREPO-033b: a transaction that throws after the insert leaves no row behind — the insert really was uncommitted, not autocommitted ahead of the wrapper', async () => {
@@ -808,7 +840,7 @@ describe('PlacesRepository.insertPlace — the four importers\' narrower column 
     })).rejects.toThrow('force rollback');
 
     // ...but never lands once the wrapping transaction rolls back.
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM places WHERE trip_id = ?').get(trip.id)).toMatchObject({ c: 0 });
+    expect(await countRows(t.orm, Places, { trip: trip.id })).toBe(0);
   });
 
   it('PLACEREPO-034 (PL34/PL35, KML): the 8-column KML shape (adds category_id) is stored, read back in the same transaction', async () => {
@@ -878,10 +910,12 @@ describe('PlacesRepository.distinctRouteColors / setRouteColor (PL36/PL37)', () 
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const other = createTrip(testDb, user.id);
-    testDb.prepare("INSERT INTO places (trip_id, name, lat, lng, route_geometry, route_color) VALUES (?, 'A', 1, 1, '[[1,1]]', ?)").run(trip.id, TRACK_COLORS[0]);
-    testDb.prepare("INSERT INTO places (trip_id, name, lat, lng, route_geometry, route_color) VALUES (?, 'B', 1, 1, '[[1,1]]', ?)").run(trip.id, TRACK_COLORS[1]);
-    testDb.prepare("INSERT INTO places (trip_id, name, lat, lng, route_geometry) VALUES (?, 'C', 1, 1, '[[1,1]]')").run(trip.id);
-    testDb.prepare("INSERT INTO places (trip_id, name, lat, lng, route_geometry, route_color) VALUES (?, 'D', 1, 1, '[[1,1]]', ?)").run(other.id, TRACK_COLORS[2]);
+    const track = async (tripId: number, name: string, routeColor?: string) =>
+      insertRow(t.orm, Places, { trip: tripId, name, lat: 1, lng: 1, route_geometry: '[[1,1]]', ...(routeColor ? { route_color: routeColor } : {}) });
+    await track(trip.id, 'A', TRACK_COLORS[0]);
+    await track(trip.id, 'B', TRACK_COLORS[1]);
+    await track(trip.id, 'C');
+    await track(other.id, 'D', TRACK_COLORS[2]);
 
     const colors = await places.distinctRouteColors(trip.id);
     expect(new Set(colors)).toEqual(new Set([TRACK_COLORS[0], TRACK_COLORS[1]]));
@@ -891,11 +925,11 @@ describe('PlacesRepository.distinctRouteColors / setRouteColor (PL36/PL37)', () 
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET updated_at = ? WHERE id = ?').run('2020-01-01 00:00:00', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { updated_at: '2020-01-01 00:00:00' });
 
     await places.setRouteColor(place.id, TRACK_COLORS[3]);
 
-    const row = testDb.prepare('SELECT route_color, updated_at FROM places WHERE id = ?').get(place.id) as { route_color: string; updated_at: string };
+    const row = await placeRow(place.id);
     expect(row.route_color).toBe(TRACK_COLORS[3]);
     expect(row.updated_at).toBe('2020-01-01 00:00:00');
   });
@@ -905,7 +939,7 @@ describe('PlacesRepository.distinctRouteColors / setRouteColor (PL36/PL37)', () 
     const trip = createTrip(testDb, user.id);
     const placeA = createPlace(testDb, trip.id, { name: 'Track A' });
     const placeB = createPlace(testDb, trip.id, { name: 'Track B' });
-    testDb.prepare("UPDATE places SET route_geometry = '[[1,1]]' WHERE id IN (?, ?)").run(placeA.id, placeB.id);
+    await updateRows(t.orm, Places, { id: { $in: [placeA.id, placeB.id] } }, { route_geometry: '[[1,1]]' });
 
     // Mirrors PlacesService.colorizeImportedTracks's own PL36+PL37 pairing
     // EXACTLY: the read AND the write for one claim share ONE transaction —
@@ -926,7 +960,7 @@ describe('PlacesRepository.distinctRouteColors / setRouteColor (PL36/PL37)', () 
     ]);
 
     expect(colorA).not.toBe(colorB);
-    const rows = testDb.prepare('SELECT route_color FROM places WHERE id IN (?, ?)').all(placeA.id, placeB.id) as { route_color: string }[];
+    const rows = await findRows(t.orm, Places, { id: { $in: [placeA.id, placeB.id] } });
     expect(new Set(rows.map((r) => r.route_color)).size).toBe(2);
   });
 });
@@ -936,11 +970,11 @@ describe('PlacesRepository.backfillFtid (PL39)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET updated_at = ? WHERE id = ?').run('2020-01-01 00:00:00', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { updated_at: '2020-01-01 00:00:00' });
 
     await places.backfillFtid(place.id, '0x9:0x9');
 
-    const row = testDb.prepare('SELECT google_ftid, updated_at FROM places WHERE id = ?').get(place.id) as { google_ftid: string; updated_at: string };
+    const row = await placeRow(place.id);
     expect(row.google_ftid).toBe('0x9:0x9');
     expect(row.updated_at).not.toBe('2020-01-01 00:00:00');
   });
@@ -951,13 +985,13 @@ describe('PlacesRepository.fillIfEmpty (PL43/PL44/PL46) — three call shapes ov
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET phone = ?, updated_at = ? WHERE id = ?').run('+1 555', '2020-01-01 00:00:00', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { phone: '+1 555', updated_at: '2020-01-01 00:00:00' });
 
     await places.fillIfEmpty(place.id, trip.id, {
       google_place_id: 'gp1', google_ftid: 'gf1', address: 'addr1', website: 'https://x', phone: 'ignored',
     });
 
-    const row = testDb.prepare('SELECT google_place_id, google_ftid, address, website, phone, updated_at FROM places WHERE id = ?').get(place.id) as Record<string, string>;
+    const row = await placeRow(place.id);
     expect(row.google_place_id).toBe('gp1');
     expect(row.google_ftid).toBe('gf1');
     expect(row.address).toBe('addr1');
@@ -971,15 +1005,15 @@ describe('PlacesRepository.fillIfEmpty (PL43/PL44/PL46) — three call shapes ov
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET address = ? WHERE id = ?').run('Existing address', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { address: 'Existing address' });
 
     await places.fillIfEmpty(place.id, trip.id, { address: 'New address' });
 
-    expect((testDb.prepare('SELECT address FROM places WHERE id = ?').get(place.id) as { address: string }).address).toBe('Existing address');
+    expect((await placeRow(place.id)).address).toBe('Existing address');
 
     const empty = createPlace(testDb, trip.id, { name: 'No address yet' });
     await places.fillIfEmpty(empty.id, trip.id, { address: 'First address' });
-    expect((testDb.prepare('SELECT address FROM places WHERE id = ?').get(empty.id) as { address: string }).address).toBe('First address');
+    expect((await placeRow(empty.id)).address).toBe('First address');
   });
 
   it('PLACEREPO-043 (PL44 shape): image_url-only', async () => {
@@ -989,7 +1023,7 @@ describe('PlacesRepository.fillIfEmpty (PL43/PL44/PL46) — three call shapes ov
 
     await places.fillIfEmpty(place.id, trip.id, { image_url: '/api/maps/place-photo/x/bytes' });
 
-    const row = testDb.prepare('SELECT image_url, google_place_id FROM places WHERE id = ?').get(place.id) as { image_url: string; google_place_id: string | null };
+    const row = await placeRow(place.id);
     expect(row.image_url).toBe('/api/maps/place-photo/x/bytes');
     // Not touched — the key was never in `fields`, not even COALESCE'd against itself.
     expect(row.google_place_id).toBeNull();
@@ -1002,7 +1036,7 @@ describe('PlacesRepository.fillIfEmpty (PL43/PL44/PL46) — three call shapes ov
 
     await places.fillIfEmpty(place.id, trip.id, { address: '1 Rue de Rivoli' });
 
-    expect((testDb.prepare('SELECT address FROM places WHERE id = ?').get(place.id) as { address: string }).address).toBe('1 Rue de Rivoli');
+    expect((await placeRow(place.id)).address).toBe('1 Rue de Rivoli');
   });
 
   it('PLACEREPO-045: WHERE id = ? AND trip_id = ? scoping — a mismatched trip_id writes nothing', async () => {
@@ -1013,7 +1047,7 @@ describe('PlacesRepository.fillIfEmpty (PL43/PL44/PL46) — three call shapes ov
 
     await places.fillIfEmpty(place.id, otherTrip.id, { address: 'Should not land' });
 
-    expect((testDb.prepare('SELECT address FROM places WHERE id = ?').get(place.id) as { address: string | null }).address).toBeNull();
+    expect((await placeRow(place.id)).address).toBeNull();
   });
 });
 
@@ -1025,11 +1059,12 @@ describe('PlacesRepository.listForTripOrdered (RP2)', () => {
     const trip = createTrip(testDb, user.id);
     const otherTrip = createTrip(testDb, user.id);
     const p1 = createPlace(testDb, trip.id, { name: 'First' });
-    testDb.prepare('UPDATE places SET created_at = ? WHERE id = ?').run('2026-01-01 00:00:00', p1.id);
+    await updateRows(t.orm, Places, { id: p1.id }, { created_at: '2026-01-01 00:00:00' });
     const p2 = createPlace(testDb, trip.id, { name: 'Second' });
-    testDb.prepare('UPDATE places SET created_at = ? WHERE id = ?').run('2026-02-01 00:00:00', p2.id);
+    await updateRows(t.orm, Places, { id: p2.id }, { created_at: '2026-02-01 00:00:00' });
     createPlace(testDb, otherTrip.id, { name: 'Elsewhere' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM places WHERE trip_id = ? ORDER BY created_at DESC').all(trip.id);
     const rows = await places.listForTripOrdered(trip.id);
     expect(rows).toEqual(legacy);
@@ -1056,39 +1091,43 @@ describe('PlacesRepository.listAllForTrip (TP40)', () => {
     const otherTrip = createTrip(testDb, user.id);
     const category = createCategory(testDb);
 
-    const insert = testDb.prepare(`
-      INSERT INTO places (
-        trip_id, name, description, lat, lng, address, category_id, price, currency,
-        reservation_status, reservation_notes, reservation_datetime, place_time, end_time,
-        duration_minutes, notes, image_url, google_place_id, google_ftid, website, phone,
-        transport_mode, created_at, updated_at, osm_id, route_geometry, route_color, stop_type,
-        fill_percent, amap_poi_id, source
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+    // Every column named and given, in the order the old statement bound them.
+    const columns = [
+      'trip', 'name', 'description', 'lat', 'lng', 'address', 'category', 'price', 'currency',
+      'reservation_status', 'reservation_notes', 'reservation_datetime', 'place_time', 'end_time',
+      'duration_minutes', 'notes', 'image_url', 'google_place_id', 'google_ftid', 'website', 'phone',
+      'transport_mode', 'created_at', 'updated_at', 'osm_id', 'route_geometry', 'route_color', 'stop_type',
+      'fill_percent', 'amap_poi_id', 'source',
+    ] as const;
+    const insert = {
+      run: (...values: unknown[]) =>
+        insertRow(t.orm, Places, Object.fromEntries(columns.map((c, i) => [c, values[i]])) as RequiredEntityData<Places>),
+    };
 
     // Row A: every nullable column non-null — a unicode string and a
     // '007'-style digit string among the values (rule 19's fixture bar).
-    const rowA = insert.run(
+    const rowA = await insert.run(
       trip.id, 'Café — 日本 ☕️', 'A description with 007-style digits', 48.1, 2.2, '007 Rue de Paris', category.id, 12.5, 'EUR',
       'confirmed', 'notes-a', '2026-01-01T10:00:00Z', '10:00', '11:00',
       45, 'place notes', '/img/a.png', 'gpid-007', 'gftid-a', 'https://a.example', '+33 1 23 45 67 89',
       'driving', '2026-01-01 09:00:00', '2026-01-01 09:30:00', 'osm-a', '{"type":"LineString"}', '#ff0000', 'hotel',
       50, 'amap-a', 'manual',
-    ).lastInsertRowid as number;
+    );
 
     // Row B: every nullable column NULL.
-    const rowB = insert.run(
+    const rowB = await insert.run(
       trip.id, 'Bare Place', null, null, null, null, null, null, null,
       null, null, null, null, null,
       null, null, null, null, null, null, null,
       null, null, null, null, null, null, null,
       null, null, null,
-    ).lastInsertRowid as number;
+    );
 
     // A place on another trip — must not leak into this trip's listAllForTrip.
     createPlace(testDb, otherTrip.id, { name: 'Elsewhere' });
 
     const rows = await places.listAllForTrip(trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM places WHERE trip_id = ?').all(trip.id);
     expect(rows).toEqual(legacy);
     // rowid-ascending scan order (no ORDER BY), not insertion-reversed or re-sorted.
@@ -1118,10 +1157,11 @@ describe('PlacesRepository.findChargingProbe (CH1)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Ladepark Nord', lat: 48.137, lng: 11.575 });
-    testDb.prepare("UPDATE places SET stop_type = 'charging' WHERE id = ?").run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { stop_type: 'charging' });
 
     const typed = await places.findChargingProbe(place.id, trip.id);
     const legacy = testDb
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       .prepare('SELECT name, lat, lng, stop_type FROM places WHERE id = ? AND trip_id = ?')
       .get(place.id, trip.id);
 
@@ -1137,6 +1177,7 @@ describe('PlacesRepository.findChargingProbe (CH1)', () => {
 
     const typed = await places.findChargingProbe(place.id, trip.id);
     const legacy = testDb
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       .prepare('SELECT name, lat, lng, stop_type FROM places WHERE id = ? AND trip_id = ?')
       .get(place.id, trip.id);
 
@@ -1163,11 +1204,11 @@ describe('PlacesRepository.setSource (DWS7)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Imported stay' });
-    const before = testDb.prepare('SELECT updated_at FROM places WHERE id = ?').get(place.id) as { updated_at: string | null };
+    const before = await placeRow(place.id);
 
     await places.setSource(place.id, 'dawarich');
 
-    const row = testDb.prepare('SELECT source, updated_at FROM places WHERE id = ?').get(place.id) as { source: string | null; updated_at: string | null };
+    const row = await placeRow(place.id);
     expect(row.source).toBe('dawarich');
     expect(row.updated_at).toBe(before.updated_at);
   });
@@ -1184,12 +1225,12 @@ describe('PlacesRepository.setImageUrlIfUnset (MAP9)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'No photo yet' });
-    testDb.prepare("UPDATE places SET google_place_id = 'ChIJ_shared' WHERE id = ?").run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { google_place_id: 'ChIJ_shared' });
 
     const n = await places.setImageUrlIfUnset('ChIJ_shared', '/uploads/photo-cache/new.jpg');
 
     expect(n).toBe(1);
-    const row = testDb.prepare('SELECT image_url FROM places WHERE id = ?').get(place.id) as { image_url: string | null };
+    const row = await placeRow(place.id);
     expect(row.image_url).toBe('/uploads/photo-cache/new.jpg');
   });
 
@@ -1197,12 +1238,12 @@ describe('PlacesRepository.setImageUrlIfUnset (MAP9)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Blank photo' });
-    testDb.prepare("UPDATE places SET google_place_id = 'ChIJ_blank', image_url = '' WHERE id = ?").run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { google_place_id: 'ChIJ_blank', image_url: '' });
 
     const n = await places.setImageUrlIfUnset('ChIJ_blank', '/uploads/photo-cache/filled.jpg');
 
     expect(n).toBe(1);
-    const row = testDb.prepare('SELECT image_url FROM places WHERE id = ?').get(place.id) as { image_url: string | null };
+    const row = await placeRow(place.id);
     expect(row.image_url).toBe('/uploads/photo-cache/filled.jpg');
   });
 
@@ -1210,12 +1251,12 @@ describe('PlacesRepository.setImageUrlIfUnset (MAP9)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Custom photo' });
-    testDb.prepare("UPDATE places SET google_place_id = 'ChIJ_custom', image_url = '/uploads/custom.jpg' WHERE id = ?").run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { google_place_id: 'ChIJ_custom', image_url: '/uploads/custom.jpg' });
 
     const n = await places.setImageUrlIfUnset('ChIJ_custom', '/uploads/photo-cache/should-not-land.jpg');
 
     expect(n).toBe(0);
-    const row = testDb.prepare('SELECT image_url FROM places WHERE id = ?').get(place.id) as { image_url: string | null };
+    const row = await placeRow(place.id);
     expect(row.image_url).toBe('/uploads/custom.jpg');
   });
 
@@ -1225,13 +1266,13 @@ describe('PlacesRepository.setImageUrlIfUnset (MAP9)', () => {
     const tripB = createTrip(testDb, user.id);
     const placeA = createPlace(testDb, tripA.id, { name: 'A' });
     const placeB = createPlace(testDb, tripB.id, { name: 'B' });
-    testDb.prepare("UPDATE places SET google_place_id = 'ChIJ_shared2' WHERE id IN (?, ?)").run(placeA.id, placeB.id);
+    await updateRows(t.orm, Places, { id: { $in: [placeA.id, placeB.id] } }, { google_place_id: 'ChIJ_shared2' });
 
     const n = await places.setImageUrlIfUnset('ChIJ_shared2', '/uploads/photo-cache/both.jpg');
 
     expect(n).toBe(2);
-    expect((testDb.prepare('SELECT image_url FROM places WHERE id = ?').get(placeA.id) as { image_url: string }).image_url).toBe('/uploads/photo-cache/both.jpg');
-    expect((testDb.prepare('SELECT image_url FROM places WHERE id = ?').get(placeB.id) as { image_url: string }).image_url).toBe('/uploads/photo-cache/both.jpg');
+    expect((await placeRow(placeA.id)).image_url).toBe('/uploads/photo-cache/both.jpg');
+    expect((await placeRow(placeB.id)).image_url).toBe('/uploads/photo-cache/both.jpg');
   });
 });
 
@@ -1245,14 +1286,14 @@ describe('PlacesRepository.listAssignedForPublicApi (Plan 4 Task 1, public-api.s
     const dayB = createDay(testDb, trip.id);
     const placeA1 = createPlace(testDb, trip.id, { name: 'A-first', category_id: category.id });
     const placeA2 = createPlace(testDb, trip.id, { name: 'A-second' });
-    testDb.prepare('UPDATE places SET category_id = NULL WHERE id = ?').run(placeA2.id); // no category, not the factory's default
+    await updateRows(t.orm, Places, { id: placeA2.id }, { category: null }); // no category, not the factory's default
     const placeB1 = createPlace(testDb, trip.id, { name: 'B-first' });
     const hotelPlace = createPlace(testDb, trip.id, { name: 'Hotel' });
     createDayAssignment(testDb, dayA.id, placeA2.id, { order_index: 5 });
     createDayAssignment(testDb, dayA.id, placeA1.id, { order_index: 1 });
     createDayAssignment(testDb, dayB.id, placeB1.id, { order_index: 0 });
     // A booked-night stop: da.accommodation_id IS NOT NULL, must be excluded.
-    testDb.prepare('INSERT INTO day_assignments (day_id, place_id, order_index, accommodation_id) VALUES (?, ?, 0, 999)').run(dayA.id, hotelPlace.id);
+    await insertRow(t.orm, DayAssignments, { day: dayA.id, place: hotelPlace.id, order_index: 0, accommodation_id: 999 });
     // Unassigned place in the same trip — never a candidate at all.
     createPlace(testDb, trip.id, { name: 'Unassigned' });
     // A place assigned on a DIFFERENT trip — must not leak in.
@@ -1284,6 +1325,7 @@ describe('PlacesRepository.listAssignedForPublicApi (Plan 4 Task 1, public-api.s
 
 describe('PlacesRepository.isTrackInTrip (RT13, RoadtripService.trackExists)', () => {
   const legacyIsTrackInTrip = (id: number, tripId: number): boolean =>
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     !!testDb.prepare(
       "SELECT id FROM places WHERE id = ? AND trip_id = ? AND route_geometry IS NOT NULL AND route_geometry != ''",
     ).get(id, tripId);
@@ -1292,7 +1334,7 @@ describe('PlacesRepository.isTrackInTrip (RT13, RoadtripService.trackExists)', (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET route_geometry = ? WHERE id = ?').run('{"type":"LineString"}', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { route_geometry: '{"type":"LineString"}' });
 
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(legacyIsTrackInTrip(place.id, trip.id));
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(true);
@@ -1302,7 +1344,7 @@ describe('PlacesRepository.isTrackInTrip (RT13, RoadtripService.trackExists)', (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare('UPDATE places SET route_geometry = NULL WHERE id = ?').run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { route_geometry: null });
 
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(legacyIsTrackInTrip(place.id, trip.id));
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(false);
@@ -1312,7 +1354,7 @@ describe('PlacesRepository.isTrackInTrip (RT13, RoadtripService.trackExists)', (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare("UPDATE places SET route_geometry = '' WHERE id = ?").run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { route_geometry: '' });
 
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(legacyIsTrackInTrip(place.id, trip.id));
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(false);
@@ -1323,7 +1365,7 @@ describe('PlacesRepository.isTrackInTrip (RT13, RoadtripService.trackExists)', (
     const trip = createTrip(testDb, user.id);
     const other = createTrip(testDb, user.id);
     const place = createPlace(testDb, other.id);
-    testDb.prepare('UPDATE places SET route_geometry = ? WHERE id = ?').run('{"type":"LineString"}', place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { route_geometry: '{"type":"LineString"}' });
 
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(legacyIsTrackInTrip(place.id, trip.id));
     expect(await places.isTrackInTrip(place.id, trip.id)).toBe(false);
@@ -1346,6 +1388,7 @@ describe('PlacesRepository.listForTripIds (AT2, AtlasService#getPlacesForTrips)'
     const pb = createPlace(testDb, tripB.id, { name: 'B' });
     createPlace(testDb, other.id, { name: 'Not in the batch' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`SELECT * FROM places WHERE trip_id IN (${[tripA.id, tripB.id].join(',')})`).all();
     const typed = await places.listForTripIds([tripA.id, tripB.id]);
     expect(typed).toEqual(legacy);
@@ -1365,12 +1408,12 @@ describe('PlacesRepository.listAddressesForUser (AT41, AtlasService#getTravelSta
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
     const place = createPlace(testDb, trip.id, { name: 'Tower', lat: 48.85, lng: 2.35 });
-    testDb.prepare('UPDATE places SET address = ? WHERE id = ?').run('5 Avenue Anatole France', place.id);
-    testDb.prepare('INSERT INTO place_regions (place_id, country_code, region_code, region_name) VALUES (?, ?, ?, ?)')
-      .run(place.id, 'FR', 'FR-IDF', 'Île-de-France');
+    await updateRows(t.orm, Places, { id: place.id }, { address: '5 Avenue Anatole France' });
+    await insertRow(t.orm, PlaceRegions, { place: place.id, country_code: 'FR', region_code: 'FR-IDF', region_name: 'Île-de-France' });
     const noAddress = createPlace(testDb, trip.id, { name: 'No address' });
-    testDb.prepare('UPDATE places SET address = NULL, lat = NULL, lng = NULL WHERE id = ?').run(noAddress.id);
+    await updateRows(t.orm, Places, { id: noAddress.id }, { address: null, lat: null, lng: null });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT DISTINCT p.address, p.lat, p.lng, pr.region_name
       FROM places p JOIN trips t ON p.trip_id = t.id
@@ -1405,6 +1448,7 @@ describe('PlacesRepository.listAddressesForUser (AT41, AtlasService#getTravelSta
  */
 describe('PlacesRepository — share.service.ts SH12 read', () => {
   function legacyPublicForShare(tripId: number): unknown {
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     return testDb.prepare(`
       SELECT p.id, p.trip_id, p.name, p.description, p.lat, p.lng, p.address, p.category_id,
         p.price, p.currency, p.place_time, p.end_time, p.duration_minutes, p.notes,
@@ -1423,23 +1467,44 @@ describe('PlacesRepository — share.service.ts SH12 read', () => {
     const category = createCategory(testDb, { name: 'Museum', color: '#111111', icon: '🏛️' });
 
     const withCategory = createPlace(testDb, trip.id, { name: 'Louvre', lat: 48.86, lng: 2.34, category_id: category.id, description: 'Art museum' });
-    testDb.prepare(`
-      UPDATE places SET address = ?, price = ?, currency = ?, place_time = ?, end_time = ?,
-        duration_minutes = ?, notes = ?, image_url = ?, website = ?, phone = ?, transport_mode = ?,
-        updated_at = ?, created_at = ?, reservation_status = 'confirmed', google_place_id = 'ChIJ123'
-      WHERE id = ?`).run(
-      'Rue de Rivoli', 17.5, 'EUR', '10:00', '12:00', 120, 'bring ID', 'https://img/louvre.jpg',
-      'https://louvre.fr', '+33140205050', 'walking', '2026-09-01T09:00:00.000Z', '2026-09-01T08:00:00.000Z',
-      withCategory.id,
-    );
+    await updateRows(t.orm, Places, { id: withCategory.id }, {
+      address: 'Rue de Rivoli',
+      price: 17.5,
+      currency: 'EUR',
+      place_time: '10:00',
+      end_time: '12:00',
+      duration_minutes: 120,
+      notes: 'bring ID',
+      image_url: 'https://img/louvre.jpg',
+      website: 'https://louvre.fr',
+      phone: '+33140205050',
+      transport_mode: 'walking',
+      updated_at: '2026-09-01T09:00:00.000Z',
+      created_at: '2026-09-01T08:00:00.000Z',
+      reservation_status: 'confirmed',
+      google_place_id: 'ChIJ123',
+    });
 
     const bare = createPlace(testDb, trip.id, { name: 'Unnamed spot' });
-    testDb.prepare(`
-      UPDATE places SET category_id = NULL, lat = NULL, lng = NULL, address = NULL, price = NULL,
-        currency = NULL, place_time = NULL, end_time = NULL, duration_minutes = NULL, notes = NULL,
-        image_url = NULL, website = NULL, phone = NULL, transport_mode = NULL, updated_at = NULL,
-        created_at = '2026-09-02T08:00:00.000Z', description = NULL
-      WHERE id = ?`).run(bare.id);
+    await updateRows(t.orm, Places, { id: bare.id }, {
+      category: null,
+      lat: null,
+      lng: null,
+      address: null,
+      price: null,
+      currency: null,
+      place_time: null,
+      end_time: null,
+      duration_minutes: null,
+      notes: null,
+      image_url: null,
+      website: null,
+      phone: null,
+      transport_mode: null,
+      updated_at: null,
+      created_at: '2026-09-02T08:00:00.000Z',
+      description: null,
+    });
 
     // A place on a different trip must never leak in.
     createPlace(testDb, other.id, { name: 'Foreign place' });
@@ -1484,7 +1549,7 @@ describe('PlacesRepository.insertTourPlace (TO10) / updateTourRoute (TO11)', () 
     const trip = createTrip(testDb, user.id);
     const other = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Old', lat: 1, lng: 1 });
-    testDb.prepare("UPDATE places SET transport_mode = 'driving', updated_at = NULL WHERE id = ?").run(place.id);
+    await updateRows(t.orm, Places, { id: place.id }, { transport_mode: 'driving', updated_at: null });
     const route = { name: 'New', lat: 47, lng: 11, route_geometry: '[[47,11],[47.2,11.2]]' };
 
     expect(await places.updateTourRoute(place.id, other.id, route)).toBe(false);
