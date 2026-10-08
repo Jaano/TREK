@@ -187,6 +187,8 @@ export default function DevNotificationsPanel(): React.ReactElement {
                 event: 'photos_shared',
                 scope: 'trip',
                 targetId: selectedTripId,
+                // A string on purpose: notification params are Record<string, string> end to end, the server
+                // sends count: String(added), and resolveTemplate reads a numeric string as the plural count.
                 params: { actor: username, trip: tripTitle, count: '5', tripId: String(selectedTripId) },
               })}
             />
