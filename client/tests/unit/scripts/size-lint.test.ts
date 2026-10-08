@@ -10,7 +10,12 @@ afterEach(() => tree?.remove());
 const BASELINE = 'scripts/size-baseline.json';
 
 function run(baseline: Record<string, number>, files: Record<string, string>, update = false) {
-  tree = ratchetTree({ [BASELINE]: JSON.stringify(baseline), 'tests/keep.test.ts': lines(1), ...files });
+  tree = ratchetTree({
+    [BASELINE]: JSON.stringify(baseline),
+    'tests/keep.test.ts': lines(1),
+    'e2e/keep.spec.ts': lines(1),
+    ...files,
+  });
   return check({ root: tree.root, baselinePath: tree.path(BASELINE), update, ...tree.out });
 }
 
@@ -31,6 +36,8 @@ describe('lint:size', () => {
     expect(groupOf('src/index.css')).toMatchObject({ name: 'stylesheet', limit: 1000 });
     expect(groupOf('src/a/B.test.tsx')).toMatchObject({ name: 'test', limit: 2000 });
     expect(groupOf('tests/unit/x.ts')).toMatchObject({ name: 'test', limit: 2000 });
+    expect(groupOf('e2e/help/fixtures.ts')).toMatchObject({ name: 'test', limit: 2000 });
+    expect(groupOf('e2e/server-launch.mjs')).toBeNull();
     expect(groupOf('src/a/notes.md')).toBeNull();
   });
 
@@ -54,6 +61,13 @@ describe('lint:size', () => {
     expect(run({}, { 'src/styles/a.css': lines(1001), 'src/A.test.tsx': lines(2001) })).toBe(1);
     expect(tree.error.join('\n')).toMatch(/src\/styles\/a\.css/);
     expect(tree.error.join('\n')).toMatch(/src\/A\.test\.tsx: 2001 lines .*test file is 2000/);
+  });
+
+  it('SIZE-010: covers the Playwright specs and fixtures under e2e/', () => {
+    const files = { 'src/a.ts': lines(1), 'e2e/help/fixtures.ts': lines(2001), 'e2e/a.spec.ts': lines(2000) };
+    expect(run({}, files)).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/e2e\/help\/fixtures\.ts: 2001 lines .*test file is 2000/);
+    expect(tree.error.join('\n')).not.toMatch(/e2e\/a\.spec\.ts/);
   });
 
   it('SIZE-007: holds a baselined file at its entry and fails it once it grows', () => {
@@ -81,7 +95,7 @@ describe('lint:size', () => {
   });
 
   it('SIZE-009: a broken baseline stops the check', () => {
-    tree = ratchetTree({ [BASELINE]: '{', 'src/a.ts': lines(1), 'tests/a.ts': lines(1) });
+    tree = ratchetTree({ [BASELINE]: '{', 'src/a.ts': lines(1), 'tests/a.ts': lines(1), 'e2e/a.ts': lines(1) });
     expect(() => check({ root: tree.root, baselinePath: tree.path(BASELINE), ...tree.out })).toThrow(RatchetError);
   });
 });

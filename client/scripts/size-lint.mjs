@@ -4,8 +4,8 @@
  *
  * A file past a thousand lines holds several concerns that no longer fit in
  * one reading, and every change to one of them risks the others. Each source
- * file and stylesheet under src/ may hold 1000 lines, each test (under tests/
- * or a co-located *.test.*) 2000. Lines are counted as an editor wraps them
+ * file and stylesheet under src/ may hold 1000 lines, each test (under tests/,
+ * a Playwright spec or fixture under e2e/, or a co-located *.test.*) 2000. Lines are counted as an editor wraps them
  * at 120 columns, so joining lines does not make a file smaller. The files
  * that were already larger are listed in scripts/size-baseline.json with the
  * size they had, and the check fails when one of them grows past its entry. A

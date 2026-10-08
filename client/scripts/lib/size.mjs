@@ -24,13 +24,15 @@ export const WIDTH = 120;
 /**
  * The kinds of file the check covers, each with the size a file without a
  * baseline entry may reach. Tests get more room: a spec mirrors the component
- * it covers and holds fixtures, but past LIMIT it is a god file too.
+ * it covers and holds fixtures, but past LIMIT it is a god file too. The
+ * Playwright specs and their fixtures under e2e/ count as tests.
  */
 export const GROUPS = [
   {
     name: 'test',
     limit: 2000,
-    accepts: (key) => /\.tsx?$/.test(key) && (key.startsWith('tests/') || TEST_FILE.test(key)),
+    accepts: (key) =>
+      /\.tsx?$/.test(key) && (key.startsWith('tests/') || key.startsWith('e2e/') || TEST_FILE.test(key)),
   },
   {
     name: 'source',
@@ -40,7 +42,7 @@ export const GROUPS = [
   { name: 'stylesheet', limit: 1000, accepts: (key) => key.startsWith('src/') && key.endsWith('.css') },
 ];
 
-export const DIRS = ['src', 'tests'];
+export const DIRS = ['src', 'tests', 'e2e'];
 
 export function groupOf(key) {
   return GROUPS.find((group) => group.accepts(key)) ?? null;

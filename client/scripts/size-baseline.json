@@ -1,4 +1,5 @@
 {
+  "e2e/help/fixtures.ts": 2291,
   "src/api/client.ts": 1916,
   "src/components/Admin/AdminPluginsPanel.test.tsx": 2704,
   "src/components/Admin/AdminPluginsPanel.tsx": 2431,
