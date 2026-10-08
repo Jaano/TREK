@@ -101,9 +101,28 @@ export function helperFailures(helpers: readonly HelperResult[]): HelperResult[]
   return helpers.filter((result) => result.failure !== null);
 }
 
-/** True when the run passes: every helper case on both engines, and the ratchet. */
-export function passed(input: Pick<ReportInput, 'verdict' | 'helpers'>): boolean {
-  return helperFailures(input.helpers).length === 0 && input.verdict.grown.length === 0 && input.verdict.stale.length === 0;
+/**
+ * True when the probe called no repository method at all. A broken plan (an
+ * unreadable tsconfig, a moved repositories directory) would otherwise pass
+ * with nothing failing, and its empty measurement could seed the baseline.
+ */
+export function probedNothing(summary: Pick<ProbeSummary, 'called'>): boolean {
+  return summary.called === 0;
+}
+
+/**
+ * True when the run passes: every helper case on both engines, at least one
+ * repository method called, a measured baseline, and the ratchet held. An
+ * unmeasured baseline fails, so the gate cannot merge before it holds anything.
+ */
+export function passed(input: Pick<ReportInput, 'verdict' | 'helpers' | 'summary'>): boolean {
+  return (
+    helperFailures(input.helpers).length === 0 &&
+    !probedNothing(input.summary) &&
+    !input.verdict.unseeded &&
+    input.verdict.grown.length === 0 &&
+    input.verdict.stale.length === 0
+  );
 }
 
 export function formatConsole(input: ReportInput): string {
@@ -128,8 +147,14 @@ export function formatConsole(input: ReportInput): string {
     lines.push(`  ${failed.method}  ${failed.code}  ${failed.message}`);
     lines.push(`      ${oneLine(failed.sql)}`);
   }
+  if (probedNothing(summary)) {
+    lines.push(`FAIL  No repository method was called (${summary.methods} planned); there is nothing to hold to the baseline.`);
+  }
   if (verdict.unseeded) {
-    lines.push('Baseline: not measured yet (failing is null). This run passes and writes the first measurement as the next baseline.');
+    lines.push(
+      'FAIL  Baseline: not measured yet (failing is null). Commit the next baseline this run wrote ' +
+        '(the pg-probe-baseline artifact in CI) as scripts/pg-probe-baseline.json.',
+    );
   }
   for (const entry of verdict.grown) {
     lines.push(`FAIL  ${entry.method} sends ${entry.now} statement(s) Postgres refuses, ${entry.allowed} allowed.`);
@@ -153,7 +178,13 @@ export function formatMarkdown(input: ReportInput): string {
   out.push(`| Distinct statements | ${summary.statements} |`);
   out.push(`| Refused by Postgres | ${summary.failedStatements.length} |`);
   out.push('');
-  if (verdict.unseeded) out.push('The baseline has not been measured yet; the `pg-probe-baseline` artifact holds the first one.', '');
+  if (probedNothing(summary)) out.push('No repository method was called, so there is nothing to hold to the baseline.', '');
+  if (verdict.unseeded) {
+    out.push(
+      'The baseline has not been measured yet, which fails the run. Commit `pg-probe-baseline.json` from the `pg-probe-baseline` artifact as `server/scripts/pg-probe-baseline.json`.',
+      '',
+    );
+  }
   if (verdict.grown.length > 0 || verdict.stale.length > 0) {
     out.push('### Ratchet', '', '| Method | Allowed | Now |', '|---|---|---|');
     for (const entry of [...verdict.grown, ...verdict.stale]) out.push(`| ${cell(entry.method)} | ${entry.allowed} | ${entry.now} |`);

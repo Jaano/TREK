@@ -3,7 +3,8 @@
  * itself only runs in CI against a Postgres service, so the rules that decide
  * whether that job passes are pinned here: a method may not fail more
  * statements than its entry, a stale entry fails until it is lowered, an
- * unmeasured baseline only reports, and --update never raises or adds.
+ * unmeasured baseline has nothing to compare (the run fails on it, see
+ * report.test.ts), and --update never raises or adds.
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -28,7 +29,7 @@ describe('pg-probe baseline', () => {
     expect(() => parseBaseline('{"failing": {"A.b": 1.5}}', 'b.json')).toThrow(/expected a positive integer/);
   });
 
-  it('PGPROBE-003: an unmeasured baseline only reports', () => {
+  it('PGPROBE-003: an unmeasured baseline is flagged instead of compared', () => {
     expect(compareWithBaseline({ failing: null }, now({ 'A.b': 3 }))).toEqual({ unseeded: true, grown: [], stale: [] });
   });
 

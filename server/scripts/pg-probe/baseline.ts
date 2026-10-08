@@ -10,8 +10,9 @@
  * `--update` lowers entries and drops the ones that reach zero or whose
  * method is gone; it never raises or adds one. The only exception is the
  * first run: a baseline whose `failing` is `null` has never been measured,
- * so the check reports and passes, and `--update` (or the CI artifact)
- * writes the first measurement.
+ * so there is nothing to compare and the run fails (scripts/pg-probe.ts)
+ * until the first measurement, written by `--update` or taken from the CI
+ * artifact, is committed.
  */
 
 import { readFileSync } from 'node:fs';
@@ -22,7 +23,7 @@ export interface ProbeBaseline {
 }
 
 export interface BaselineVerdict {
-  /** The baseline has never been measured: report only. */
+  /** The baseline has never been measured: nothing to compare, and the run fails until it is seeded. */
   unseeded: boolean;
   /** Methods failing more statements than their entry allows. */
   grown: { method: string; allowed: number; now: number }[];

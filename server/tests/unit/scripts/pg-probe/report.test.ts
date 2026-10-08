@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { exitCode, parseArgs, repositoryFiles } from '../../../../scripts/pg-probe';
 import type { BaselineVerdict } from '../../../../scripts/pg-probe/baseline';
 import type { HelperResult } from '../../../../scripts/pg-probe/helper-cases';
-import { formatConsole, formatMarkdown, oneLine, passed, summarize, type MethodResult, type ReportInput } from '../../../../scripts/pg-probe/report';
+import { formatConsole, formatMarkdown, oneLine, passed, probedNothing, summarize, type MethodResult, type ReportInput } from '../../../../scripts/pg-probe/report';
 
 const ok = (sql: string) => ({ sql, outcome: { ok: true as const } });
 const refused = (sql: string, code = '42883', message = 'function datetime(unknown) does not exist') => ({
@@ -48,7 +48,28 @@ describe('pg-probe report', () => {
     expect(passed(input({ helpers: [helper('expected 1, got 2')] }))).toBe(false);
     expect(passed(input({ verdict: { ...CLEAN, grown: [{ method: 'B.broken', allowed: 1, now: 2 }] } }))).toBe(false);
     expect(passed(input({ verdict: { ...CLEAN, stale: [{ method: 'B.broken', allowed: 3, now: 2 }] } }))).toBe(false);
-    expect(passed(input({ verdict: { unseeded: true, grown: [], stale: [] } }))).toBe(true);
+  });
+
+  it('PGPROBE-066: an unmeasured baseline fails the run, and only --update (which seeds it) passes', () => {
+    const unseeded = input({ verdict: { unseeded: true, grown: [], stale: [] } });
+    expect(passed(unseeded)).toBe(false);
+    expect(exitCode(unseeded, false)).toBe(1);
+    expect(exitCode(unseeded, true)).toBe(0);
+    expect(exitCode(input({ verdict: { unseeded: true, grown: [], stale: [] }, helpers: [helper('threw: boom')] }), true)).toBe(1);
+  });
+
+  it('PGPROBE-067: a run that called no repository method fails, also under --update', () => {
+    const skippedOnly = RESULTS.filter((result) => result.unprobeable !== undefined);
+    for (const results of [[], skippedOnly]) {
+      const summary = summarize(results);
+      expect(probedNothing(summary)).toBe(true);
+      const empty = input({ summary, results });
+      expect(passed(empty)).toBe(false);
+      expect(exitCode(empty, false)).toBe(1);
+      expect(exitCode(empty, true)).toBe(1);
+      expect(exitCode(input({ summary, results, verdict: { unseeded: true, grown: [], stale: [] } }), true)).toBe(1);
+    }
+    expect(probedNothing(summarize(RESULTS))).toBe(false);
   });
 
   it('PGPROBE-062: --update forgives a stale entry but never a grown one or a failing helper', () => {
@@ -75,7 +96,11 @@ describe('pg-probe report', () => {
     expect(text).toContain('FAIL  B.broken sends 2 statement(s) Postgres refuses, 1 allowed.');
     expect(text).toContain('FAIL  Z.gone is held at 1 failing statement(s) but fails 0 now; lower the baseline.');
     expect(text.trim().endsWith('Postgres probe failed.')).toBe(true);
-    expect(formatConsole(input({ verdict: { unseeded: true, grown: [], stale: [] } }))).toContain('Baseline: not measured yet');
+    const unseeded = formatConsole(input({ verdict: { unseeded: true, grown: [], stale: [] } }));
+    expect(unseeded).toContain('FAIL  Baseline: not measured yet');
+    expect(unseeded).toContain('as scripts/pg-probe-baseline.json');
+    expect(unseeded.trim().endsWith('Postgres probe failed.')).toBe(true);
+    expect(formatConsole(input({ summary: summarize([]), results: [] }))).toContain('FAIL  No repository method was called (0 planned)');
   });
 
   it('PGPROBE-064: the step summary is a Markdown table with escaped cells', () => {
@@ -85,7 +110,10 @@ describe('pg-probe report', () => {
     expect(md).toContain('| postgres | a\\|b | got \'x\' |');
     expect(md).toContain('| 42883 | 1 |');
     expect(md).toContain('| E.skipped | fn: a function parameter |');
-    expect(formatMarkdown(input({ verdict: { unseeded: true, grown: [], stale: [] } }))).toContain('has not been measured yet');
+    const unseeded = formatMarkdown(input({ verdict: { unseeded: true, grown: [], stale: [] } }));
+    expect(unseeded).toContain('Result: **failed**');
+    expect(unseeded).toContain('has not been measured yet, which fails the run');
+    expect(formatMarkdown(input({ summary: summarize([]), results: [] }))).toContain('No repository method was called');
   });
 
   it('PGPROBE-065: flattens and cuts SQL for a log line', () => {

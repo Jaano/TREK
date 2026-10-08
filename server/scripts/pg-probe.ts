@@ -29,6 +29,11 @@
  *   --url=<postgres url>       instead of TREK_PG_PROBE_URL
  *   --update                   lower scripts/pg-probe-baseline.json to this run (never raises or adds an entry;
  *                              an unmeasured baseline gets its first measurement)
+ *
+ * A baseline whose `failing` is `null` has never been measured and fails the
+ * run (outside `--update`); the baseline the run writes with
+ * `--next-baseline` (the CI artifact) is the first measurement to commit. A
+ * run that called no repository method fails as well.
  *   --next-baseline=<path>     write the baseline this run would leave (the CI artifact)
  *   --report=<path>            write everything the run saw as JSON
  *   --summary=<path>           append the Markdown summary (defaults to $GITHUB_STEP_SUMMARY)
@@ -45,7 +50,7 @@ import { compareWithBaseline, formatBaseline, lowerBaseline, readBaseline } from
 import { connectProbeOrm, connectSetupOrm, postgresHelperEngine, prepareDatabase, probeRepositories, sqliteHelperEngine } from './pg-probe/engines';
 import { runHelperCases, type HelperResult } from './pg-probe/helper-cases';
 import { StatementRecorder } from './pg-probe/recorder';
-import { formatConsole, formatMarkdown, passed, summarize, type MethodResult, type ReportInput } from './pg-probe/report';
+import { formatConsole, formatMarkdown, passed, probedNothing, summarize, type MethodResult, type ReportInput } from './pg-probe/report';
 
 const SERVER_ROOT = path.join(__dirname, '..');
 export const BASELINE_PATH = path.join(SERVER_ROOT, 'scripts', 'pg-probe-baseline.json');
@@ -96,14 +101,16 @@ export function repositoryFiles(dir: string): string[] {
 }
 
 /**
- * 0 when every helper case passed and no method fails more statements than
+ * 0 when every helper case passed, the probe called at least one repository
+ * method, the baseline is measured and no method fails more statements than
  * its entry allows. An entry above what its method fails now fails the run
- * too, unless this run is the `--update` that lowers it.
+ * too, and so does an unmeasured baseline, unless this run is the `--update`
+ * that lowers or seeds it.
  */
-export function exitCode(input: Pick<ReportInput, 'verdict' | 'helpers'>, update: boolean): number {
+export function exitCode(input: Pick<ReportInput, 'verdict' | 'helpers' | 'summary'>, update: boolean): number {
   if (passed(input)) return 0;
   const helpersOk = input.helpers.every((result) => result.failure === null);
-  return helpersOk && input.verdict.grown.length === 0 && update ? 0 : 1;
+  return helpersOk && !probedNothing(input.summary) && input.verdict.grown.length === 0 && update ? 0 : 1;
 }
 
 /** GitHub annotations when running in Actions, plain lines otherwise. */
@@ -186,7 +193,14 @@ async function main(): Promise<number> {
         'Lower it (--update, or the pg-probe-baseline artifact).',
     );
   }
-  if (verdict.unseeded) annotate('notice', 'pg-probe: the baseline has not been measured yet; the pg-probe-baseline artifact holds the first one.');
+  if (probedNothing(summary)) annotate('error', `pg-probe: no repository method was called (${summary.methods} planned).`);
+  if (verdict.unseeded) {
+    annotate(
+      'error',
+      'pg-probe: the baseline has not been measured yet. Commit pg-probe-baseline.json from the pg-probe-baseline artifact ' +
+        'as server/scripts/pg-probe-baseline.json.',
+    );
+  }
   for (const failure of schemaFailures) annotate('warning', `pg-probe schema: ${failure.message}`);
   return exitCode(input, args.update);
 }

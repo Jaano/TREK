@@ -530,9 +530,11 @@ jobs:
   # on SQLite and Postgres (every case must pass), and calls every public
   # repository method once, each statement in its own rolled-back transaction.
   # The statements Postgres refuses are held per method to
-  # server/scripts/pg-probe-baseline.json, which may only shrink. The measured
-  # baseline and the full report are uploaded either way, so a change that
-  # fixes a statement can lower the baseline without a local Postgres.
+  # server/scripts/pg-probe-baseline.json, which may only shrink; an unmeasured
+  # baseline (failing: null) or a run that called no method fails. The measured
+  # baseline and the full report are uploaded either way, so the first run's
+  # artifact seeds the file and a change that fixes a statement can lower it
+  # without a local Postgres.
   postgres-probe:
     name: Postgres Probe
     runs-on: ubuntu-24.04
