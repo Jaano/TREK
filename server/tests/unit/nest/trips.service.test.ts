@@ -1778,18 +1778,16 @@ describe('copy — whole-trip parity (Task 8)', () => {
     const accomId = Number(await insertRow(await orm(), DayAccommodations, { trip: trip.id, place: stop.id, startDay: days[0].id, endDay: days[1].id, check_in: '15:00', check_in_end: '15:30', check_out: '11:00', confirmation: 'CONF-1', notes: 'Late checkout ok' }));
     await updateRows(await orm(), DayAssignments, { id: assignment.id }, { accommodation_id: accomId });
 
-    // test-sql-allow: the seed reproduces the legacy raw binding of a number into the TEXT accommodation_id.
-    const resId = Number(testDb.prepare(`
-      INSERT INTO reservations (trip_id, day_id, end_day_id, place_id, assignment_id, accommodation_id, title, reservation_time, reservation_end_time,
-        location, confirmation_number, notes, url, status, type, metadata, day_plan_position, needs_review, ingest_state,
-        external_source, external_id, sync_enabled)
-      VALUES (?, ?, ?, ?, ?, ?, 'Stay', '15:00', '11:00', 'Front desk', 'CONF-99', 'Bring ID', 'https://example.com/booking',
-        'confirmed', 'hotel', '{"note":"seed"}', 1.5, 1, 'live', 'airtrail', 'ext-123', 0)
-    `).run(trip.id, days[0].id, days[1].id, stop.id, assignment.id, accomId).lastInsertRowid);
-    // Confirms the seed itself reproduces the legacy "14.0" TEXT shape
-    // (this is the SOURCE row's own accommodation_id, written the same way
-    // the pre-migration `copy` bound it — a plain number through
-    // better-sqlite3 into the TEXT column).
+    const resId = Number(await insertRow(await orm(), Reservations, {
+      trip: trip.id, day: days[0].id, endDay: days[1].id, place: stop.id, assignment: assignment.id,
+      accommodation_id: legacyBoundIntegerText(accomId), title: 'Stay', reservation_time: '15:00', reservation_end_time: '11:00',
+      location: 'Front desk', confirmation_number: 'CONF-99', notes: 'Bring ID', url: 'https://example.com/booking',
+      status: 'confirmed', type: 'hotel', metadata: '{"note":"seed"}', day_plan_position: 1.5, needs_review: 1, ingest_state: 'live',
+      external_source: 'airtrail', external_id: 'ext-123', sync_enabled: 0,
+    }));
+    // Confirms the seed itself carries the legacy "14.0" TEXT shape on the
+    // SOURCE row's accommodation_id, the shape the pre-migration `copy`
+    // produced by binding a plain number into the TEXT column.
     expect((await storedFields(Reservations, { id: resId }, ['accommodation_id']) as { accommodation_id: string }).accommodation_id).toBe(`${accomId}.0`);
 
     const itemId = Number(await insertRow(await orm(), BudgetItems, { trip: trip.id, category: 'Accommodation', name: 'Hotel', total_price: 300, reservation: resId, currency: 'EUR' }));
