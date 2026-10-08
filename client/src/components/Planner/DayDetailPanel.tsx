@@ -19,7 +19,7 @@ import type { Day, Place, Category, Reservation, AssignmentsMap, Accommodation }
 import { formatClockTime, splitReservationDateTime } from '../../utils/formatters'
 import { useDayDetail, useDayRename, type HotelDayRange, type HotelForm, type HotelPickerMode } from './useDayDetail'
 import { dayBookings, stayDayLabel, toDisplayTemp } from './dayDetailModel'
-import { stayPlaces } from '../../utils/stayPlaces'
+import { stayDayOptions, stayFormFrom, stayPlaceChoices, stayRangeFromEnd, stayRangeFromStart } from './stayFormModel'
 import { DialogShell, DialogHeader, DialogSection, DialogFooter, DialogButton, FooterSpacer, NEUTRAL_TINT, PILL, fs } from '../shared/DialogShell'
 import { INPUT, PANEL, EditorField, AddRowButton, PillSelect } from '../shared/dialogParts'
 import { BOX, Eyebrow, Field, RoundAction, TypeTile, toneOf, toneColor, toneTint } from './bookings/bookingParts'
@@ -155,7 +155,7 @@ export default function DayDetailPanel({ day, days, places, categories = [], tri
   }
   const editAccommodation = (acc: Accommodation) => {
     setAccommodation(acc)
-    setHotelForm({ check_in: acc.check_in || '', check_in_end: acc.check_in_end || '', check_out: acc.check_out || '', confirmation: acc.confirmation || '', place_id: acc.place_id ?? null })
+    setHotelForm(stayFormFrom(acc, null))
     setHotelDayRange({ start: acc.start_day_id, end: acc.end_day_id })
     setShowHotelPicker('edit')
   }
@@ -537,17 +537,10 @@ function HotelPickerModal({ mode, onClose, onSave, days, categories, places, hot
   if (!mode) return null
 
   const dayLabel = (d: Day, i: number) => d.title || t('planner.dayN', { n: i + 1 })
-  const dayOptions = days.map((d, i) => ({
-    value: d.id,
-    label: dayLabel(d, i),
-    badge: d.date
-      ? new Date(d.date + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })
-      : (d.title ? t('planner.dayN', { n: i + 1 }) : undefined),
-  }))
+  const dayOptions = stayDayOptions(days, t, locale)
   const position = (id: number | undefined) => days.findIndex(d => d.id === id)
   const allDays = hotelDayRange.start === days[0]?.id && hotelDayRange.end === days[days.length - 1]?.id
-  const offered = stayPlaces<Place>(places, hotelForm.place_id)
-  const filtered = hotelCategoryFilter ? offered.filter(p => p.category_id === hotelCategoryFilter) : offered
+  const filtered = stayPlaceChoices<Place>(places, hotelForm.place_id, hotelCategoryFilter || null)
   const setTime = (field: 'check_in' | 'check_in_end' | 'check_out') => (v: string) => setHotelForm(f => ({ ...f, [field]: v }))
   const picked = places.find(p => p.id === hotelForm.place_id) ?? null
   const startAt = position(hotelDayRange.start)
@@ -609,7 +602,7 @@ function HotelPickerModal({ mode, onClose, onSave, days, categories, places, hot
               <CustomSelect
                 id={startId}
                 value={hotelDayRange.start ?? ''}
-                onChange={v => { const id = Number(v); setHotelDayRange(prev => ({ start: id, end: position(id) > position(prev.end) ? id : prev.end })) }}
+                onChange={v => { const id = Number(v); setHotelDayRange(prev => stayRangeFromStart(days, prev, id)) }}
                 options={dayOptions}
                 size="sm"
               />
@@ -619,7 +612,7 @@ function HotelPickerModal({ mode, onClose, onSave, days, categories, places, hot
               <CustomSelect
                 id={endId}
                 value={hotelDayRange.end ?? ''}
-                onChange={v => { const id = Number(v); setHotelDayRange(prev => ({ start: position(id) < position(prev.start) ? id : prev.start, end: id })) }}
+                onChange={v => { const id = Number(v); setHotelDayRange(prev => stayRangeFromEnd(days, prev, id)) }}
                 options={dayOptions}
                 size="sm"
               />

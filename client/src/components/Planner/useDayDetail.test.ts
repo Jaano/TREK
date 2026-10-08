@@ -1,11 +1,13 @@
-// FE-PLANNER-USEDAYDETAIL-001 to -007: the forecast and the in-place rename the
-// desktop day panel and the phone day sheet share.
+// FE-PLANNER-USEDAYDETAIL-001 to -009: the forecast, the in-place rename and the
+// stay write the desktop day panel and the phone day and stay sheets share.
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { WeatherResult } from '@trek/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { weatherApi } from '../../api/client';
-import { useDayForecast, useDayRename } from './useDayDetail';
+import { resetAllStores } from '../../../tests/helpers/store';
+import { accommodationsApi, weatherApi } from '../../api/client';
+import { useTripStore } from '../../store/tripStore';
+import { useDayForecast, useDayRename, writeStay } from './useDayDetail';
 
 const SUNNY = { temp: 21, main: 'Clear', description: 'clear sky' } as WeatherResult;
 
@@ -16,7 +18,10 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  resetAllStores();
+});
 
 describe('useDayForecast', () => {
   it('FE-PLANNER-USEDAYDETAIL-001: asks for nothing while not ready', () => {
@@ -105,5 +110,31 @@ describe('useDayRename', () => {
     act(() => result.current.setEditingTitle(false));
     expect(result.current.editingTitle).toBe(false);
     expect(onCommit).not.toHaveBeenCalled();
+  });
+});
+
+describe('writeStay', () => {
+  const body = { place_id: 7, start_day_id: 1, end_day_id: 2, check_in: null };
+
+  it('FE-PLANNER-USEDAYDETAIL-008: creates a new stay and applies the stop the server added for it', async () => {
+    const handleRemoteEvent = vi.fn();
+    useTripStore.setState({ handleRemoteEvent } as never);
+    const assignment = { id: 5, day_id: 1 };
+    const create = vi.spyOn(accommodationsApi, 'create').mockResolvedValue({ accommodation: { id: 9 }, assignment });
+    const update = vi.spyOn(accommodationsApi, 'update');
+
+    await expect(writeStay(3, null, body)).resolves.toEqual({ accommodation: { id: 9 }, assignment });
+    expect(create).toHaveBeenCalledWith(3, body);
+    expect(update).not.toHaveBeenCalled();
+    expect(handleRemoteEvent).toHaveBeenCalledWith({ type: 'assignment:created', assignment });
+  });
+
+  it('FE-PLANNER-USEDAYDETAIL-009: updates the given stay, and a refused write throws', async () => {
+    const update = vi.spyOn(accommodationsApi, 'update').mockResolvedValueOnce({ accommodation: { id: 4 } });
+    await writeStay(3, 4, body);
+    expect(update).toHaveBeenCalledWith(3, 4, body);
+
+    update.mockRejectedValueOnce(new Error('overlap'));
+    await expect(writeStay(3, 4, body)).rejects.toThrow('overlap');
   });
 });

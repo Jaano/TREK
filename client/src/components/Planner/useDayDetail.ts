@@ -3,6 +3,7 @@ import type { WeatherResult } from '@trek/shared'
 import { weatherApi, accommodationsApi } from '../../api/client'
 import { isDayInAccommodationRange } from '../../utils/dayOrder'
 import { applyStayStops } from '../../store/stayStops'
+import { stayCheckoutDay, stayRequestBody } from './stayFormModel'
 import type { Accommodation, Day } from '../../types'
 
 export interface HotelForm {
@@ -22,6 +23,17 @@ export interface HotelDayRange {
 export type HotelPickerMode = boolean | 'edit'
 
 const EMPTY_HOTEL_FORM: HotelForm = { check_in: '', check_in_end: '', check_out: '', confirmation: '', place_id: null }
+
+/**
+ * Creates a stay, or updates the one with `accId`, and applies the stops the
+ * server moved for it, for the desktop day panel and the phone accommodation
+ * sheet alike. Throws when the server refuses the write.
+ */
+export async function writeStay(tripId: number, accId: number | null, body: Parameters<typeof accommodationsApi.create>[1]) {
+  const data = accId != null ? await accommodationsApi.update(tripId, accId, body) : await accommodationsApi.create(tripId, body)
+  applyStayStops(data)
+  return data
+}
 
 /**
  * A day's detailed forecast (Open-Meteo through the weather service, climate
@@ -81,8 +93,7 @@ export function useDayDetail(day: Day | null, days: Day[], tripId: number, lat: 
   // A stay virtually never checks out the day it checks in — default the range
   // to check-out on the next day, unless the trip ends here.
   const defaultHotelDayRange = (d: Day | null): HotelDayRange => {
-    const idx = (days || []).findIndex(x => x.id === d?.id)
-    return { start: d?.id, end: (idx >= 0 && days[idx + 1]?.id) || d?.id }
+    return { start: d?.id, end: stayCheckoutDay(days || [], d?.id) || d?.id }
   }
   const [hotelDayRange, setHotelDayRange] = useState<HotelDayRange>(() => defaultHotelDayRange(day))
   const [hotelCategoryFilter, setHotelCategoryFilter] = useState<number | ''>('')
@@ -120,16 +131,7 @@ export function useDayDetail(day: Day | null, days: Day[], tripId: number, lat: 
   /** Creates the stay the picker describes. Throws when the server refuses it. */
   const handleSaveAccommodation = async () => {
     if (!hotelForm.place_id || hotelDayRange.start == null || hotelDayRange.end == null) return
-    const data = await accommodationsApi.create(tripId, {
-      place_id: hotelForm.place_id,
-      start_day_id: hotelDayRange.start,
-      end_day_id: hotelDayRange.end,
-      check_in: hotelForm.check_in || null,
-      check_in_end: hotelForm.check_in_end || null,
-      check_out: hotelForm.check_out || null,
-      confirmation: hotelForm.confirmation || null,
-    })
-    applyStayStops(data)
+    const data = await writeStay(tripId, null, stayRequestBody(hotelForm, hotelDayRange))
     const newAcc: Accommodation = data.accommodation
     const updated = [...accommodations, newAcc]
     setAccommodations(updated)
@@ -143,15 +145,7 @@ export function useDayDetail(day: Day | null, days: Day[], tripId: number, lat: 
   /** Saves the picker over the stay in `accommodation`, then reloads the list. Throws when the server refuses it. */
   const handleUpdateAccommodation = async () => {
     if (!accommodation) return
-    applyStayStops(await accommodationsApi.update(tripId, accommodation.id, {
-      place_id: hotelForm.place_id,
-      start_day_id: hotelDayRange.start,
-      end_day_id: hotelDayRange.end,
-      check_in: hotelForm.check_in || null,
-      check_in_end: hotelForm.check_in_end || null,
-      check_out: hotelForm.check_out || null,
-      confirmation: hotelForm.confirmation || null,
-    }))
+    await writeStay(tripId, accommodation.id, stayRequestBody(hotelForm, hotelDayRange))
     setShowHotelPicker(false)
     setHotelForm(EMPTY_HOTEL_FORM)
     const d = await accommodationsApi.list(tripId)
