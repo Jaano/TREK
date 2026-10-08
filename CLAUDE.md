@@ -114,6 +114,8 @@ These principles come out of a full-repo audit and shape all new code:
 
 - **`ci-ok` is the required check.** The branch ruleset requires `ci-ok` (plus `lint` and `check-target` from their own workflows), and `ci-ok` needs every job above except the scan. It fails if any of them failed or was cancelled and passes if they passed or were skipped. A new gate job counts only once it is listed in `ci-ok`'s `needs:`.
 - **What runs is decided by `changes`, not by `on.paths`**: `scripts/ci/changed-areas.mjs` maps the changed files to the `code`, `image` and `deploy` areas (tests: `npm run test:ci-scripts`). A path filter on the workflow would leave `ci-ok` unreported on a docs-only PR and block it. Add a new top-level file the build reads to the right area there.
+- **Runners and Node**: jobs run on `ubuntu-24.04`, not `ubuntu-latest`, and every `setup-node` reads `.nvmrc`. Third-party actions (anything outside `actions/*`) are pinned by commit SHA with the tag in a comment; Dependabot keeps both current.
+- **Security scans are advisory.** `security.yml` runs `npm audit` (what the image installs, plus `plugin-sdk`) on every PR and push into dev and main, and Docker Scout on the built image for main. Neither is required: a newly published advisory would turn every open PR red at once. Fixes are held as floors in the root `package.json` `overrides`; npm ignores an `overrides` block in a workspace `package.json`, so never put one there.
 
 **SonarCloud** (project `liketrek_TREK`, the built-in Sonar way gate; the run takes 20–25 min, so get it right before pushing) measures **new code only** on a PR; any failing condition blocks it:
 
