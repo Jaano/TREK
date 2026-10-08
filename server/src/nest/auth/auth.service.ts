@@ -33,8 +33,6 @@ import { PasswordResetTokens } from '../../db/entities/PasswordResetTokens.entit
 import type { PasswordResetTokensRepository } from '../../db/repositories/PasswordResetTokens.repository';
 import { PushSubscriptions } from '../../db/entities/PushSubscriptions.entity';
 import type { PushSubscriptionsRepository } from '../../db/repositories/PushSubscriptions.repository';
-import { UserSessions } from '../../db/entities/UserSessions.entity';
-import type { UserSessionsRepository } from '../../db/repositories/UserSessions.repository';
 import { SessionsService, type SessionClient } from '../sessions/sessions.service';
 // Type-and-guard only: the app-config read reports the provider choice, it does
 // not construct one, so this does not pull the maps domain into auth.
@@ -188,7 +186,6 @@ export class AuthService {
     @InjectRepository(WebauthnCredentials) private readonly webauthnCredentials: WebauthnCredentialsRepository,
     @InjectRepository(PasswordResetTokens) private readonly passwordResetTokens: PasswordResetTokensRepository,
     @InjectRepository(PushSubscriptions) private readonly pushSubscriptions: PushSubscriptionsRepository,
-    @InjectRepository(UserSessions) private readonly userSessions: UserSessionsRepository,
     private readonly sessions: SessionsService,
   ) {}
 
@@ -1134,6 +1131,6 @@ export class AuthService {
    * route) should go through.
    */
   async verifyJwtToken(token: string): Promise<User | null> {
-    return verifyJwtAndLoadUser(token, this.usersRepo, this.userSessions);
+    return verifyJwtAndLoadUser(token, this.usersRepo, this.sessions);
   }
 }

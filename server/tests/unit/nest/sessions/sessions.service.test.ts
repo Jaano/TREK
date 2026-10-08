@@ -8,6 +8,8 @@ import { createUser } from '../../../helpers/factories';
 import { UserSessions } from '../../../../src/db/entities/UserSessions.entity';
 import { SessionsService, USER_AGENT_MAX_LENGTH, legacySessionId, sessionClientFrom } from '../../../../src/nest/sessions/sessions.service';
 import { userSessionIdSchema } from '@trek/shared';
+import { verifyJwtAndLoadUser } from '../../../../src/nest/auth/jwt-verify';
+import { Users } from '../../../../src/db/entities/Users.entity';
 import type { Request } from 'express';
 import { JWT_SECRET, SESSION_DURATION_REMEMBER_SECONDS, SESSION_DURATION_SECONDS } from '../../../../src/config';
 
@@ -255,5 +257,24 @@ describe('SessionsService list and revoke', () => {
     expect(rowOf(live.jti)).toBeDefined();
     expect(rowOf(ended.jti)).toBeUndefined();
     expect(rowOf(short.jti)).toBeUndefined();
+  });
+});
+
+describe('SessionsService as the session check', () => {
+  it('SESS-016: answers findActive and touchLastSeen for verifyJwtAndLoadUser', async () => {
+    const { user } = createUser(testDb);
+    const live = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+    const ended = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+    await svc.revoke(user.id, ended.jti);
+    const now = textOf(Math.floor(Date.now() / 1000));
+
+    expect(await svc.findActive(live.jti, user.id, now)).toEqual({ id: live.jti, last_seen_at: textOf(live.iat) });
+    expect(await svc.findActive(ended.jti, user.id, now)).toBeNull();
+    await svc.touchLastSeen(live.jti, '2030-01-01 00:00:00');
+    expect(rowOf(live.jti)?.last_seen_at).toBe('2030-01-01 00:00:00');
+
+    const sign = (jti: string) => jwt.sign({ id: user.id, pv: 0 }, JWT_SECRET, { algorithm: 'HS256', expiresIn: 600, jwtid: jti });
+    expect((await verifyJwtAndLoadUser(sign(live.jti), t.repo(Users), svc))?.id).toBe(user.id);
+    expect(await verifyJwtAndLoadUser(sign(ended.jti), t.repo(Users), svc)).toBeNull();
   });
 });

@@ -131,7 +131,6 @@ beforeAll(async () => {
   await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb), await createTestOauthTokensRepo(testDb),
   await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
   await createTestPushSubscriptionsRepo(testDb),
-  await createTestUserSessionsRepo(testDb),
   await createTestSessionsService(testDb),
 );
 });

@@ -103,13 +103,21 @@ export function verifiedSessionClaims(token: string | null | undefined): (Sessio
 }
 
 /**
+ * What the session check reads and writes: the two `UserSessionsRepository`
+ * methods. The guards hand in the repository from their own entity manager;
+ * `AuthService` hands in `SessionsService`, which answers the same two calls,
+ * so auth reaches the table through the sessions domain that owns it.
+ */
+export type SessionLookup = Pick<UserSessionsRepository, 'findActive' | 'touchLastSeen'>;
+
+/**
  * The session half of the check. A token with a `jti` must name an active
  * session of its own user: one revoked (logout, a password change, "sign out
  * other sessions"), expired or purged refuses the token. A token without one
  * was issued before sessions were tracked and passes until its own expiry, so
  * the upgrade signs nobody out; a password change still ends it through `pv`.
  */
-async function sessionIsActive(decoded: { id: number; jti?: unknown }, sessions: UserSessionsRepository): Promise<boolean> {
+async function sessionIsActive(decoded: { id: number; jti?: unknown }, sessions: SessionLookup): Promise<boolean> {
   if (decoded.jti === undefined) return true;
   if (typeof decoded.jti !== 'string') return false;
   const now = new Date();
@@ -130,7 +138,7 @@ async function sessionIsActive(decoded: { id: number; jti?: unknown }, sessions:
 export async function verifyJwtAndLoadUser(
   token: string,
   users: UsersRepository,
-  sessions: UserSessionsRepository,
+  sessions: SessionLookup,
 ): Promise<User | null> {
   try {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as {

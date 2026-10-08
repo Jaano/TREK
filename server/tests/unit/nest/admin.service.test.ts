@@ -117,7 +117,7 @@ import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-rep
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
 import type { DatabaseBackupStrategy } from '../../../src/nest/database/database-backup.interface';
-import { createTestSessionsService, createTestUserSessionsRepo } from '../../helpers/sessions';
+import { createTestSessionsService } from '../../helpers/sessions';
 
 const realtime = new RealtimeService();
 
@@ -152,7 +152,6 @@ beforeAll(async () => {
     await createTestAppSettingsRepo(testDb), await createTestUsersRepo(testDb), await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb),
     await createTestOauthTokensRepo(testDb), await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
     await createTestPushSubscriptionsRepo(testDb),
-    await createTestUserSessionsRepo(testDb),
     await createTestSessionsService(testDb),
   );
   const t = await sharedTestOrm(testDb);

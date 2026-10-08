@@ -137,6 +137,25 @@ export class SessionsService {
     return (await this.sessions.findActive(jti, user.id, dbNow())) ? token : null;
   }
 
+  /**
+   * The active session a token names, for the session check in
+   * `verifyJwtAndLoadUser` (auth/jwt-verify.ts, its `SessionLookup`): null
+   * when it is revoked, expired, gone or another user's.
+   */
+  async findActive(id: string, userId: number, now: string): Promise<{ id: string; last_seen_at: string } | null> {
+    return this.sessions.findActive(id, userId, now);
+  }
+
+  /**
+   * Refresh when a session was last used; the same check calls it at most
+   * every few minutes.
+   *
+   * @txStandalone bookkeeping for the session list that stands on its own.
+   */
+  async touchLastSeen(id: string, now: string): Promise<void> {
+    await this.sessions.touchLastSeen(id, now);
+  }
+
   /** The user's active sessions, most recently used first, the one in `currentId` flagged. */
   async list(userId: number, currentId?: string): Promise<UserSession[]> {
     const rows = await this.sessions.listActiveForUser(userId, dbNow());

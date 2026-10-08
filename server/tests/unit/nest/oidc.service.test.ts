@@ -123,7 +123,7 @@ import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-re
 import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
-import { createTestSessionsService, createTestUserSessionsRepo } from '../../helpers/sessions';
+import { createTestSessionsService } from '../../helpers/sessions';
 
 // MailerService is injected since the notifications fold — a stub instead of a
 // module mock. sendPasswordResetEmail is the only thing auth reaches for.
@@ -151,7 +151,6 @@ beforeAll(async () => {
   await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb), await createTestOauthTokensRepo(testDb),
   await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
   await createTestPushSubscriptionsRepo(testDb),
-  await createTestUserSessionsRepo(testDb),
   await createTestSessionsService(testDb),
 );
   svc = new OidcService(auth, membership, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestInviteTokensRepo(testDb), await createTestAppSettingsRepo(testDb));
