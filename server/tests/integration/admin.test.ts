@@ -308,69 +308,69 @@ describe('Admin user management', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-expect(await findRow(orm, Users, { id: target.id })).toBeNull();
+    expect(await findRow(orm, Users, { id: target.id })).toBeNull();
     // trip_members row survives but invited_by is now NULL
     expect((await findRow(orm, TripMembers, { trip: otherTrip.id, user: thirdUser.id }))?.invited_by).toBeNull();
-expect(await findRow(orm, ShareTokens, { createdByRef: target.id })).toBeNull();
+    expect(await findRow(orm, ShareTokens, { createdByRef: target.id })).toBeNull();
     expect((await findRow(orm, BudgetItems, { id: budgetItem.id }))?.paid_by_user_id).toBeNull();
-expect(await findRow(orm, JourneyContributors, { journey: otherJourney.id, user: target.id })).toBeNull();
-expect(await findRow(orm, JourneyEntries, { author: target.id })).toBeNull();
-expect(await findRow(orm, JourneyShareTokens, { createdByRef: target.id })).toBeNull();
+    expect(await findRow(orm, JourneyContributors, { journey: otherJourney.id, user: target.id })).toBeNull();
+    expect(await findRow(orm, JourneyEntries, { author: target.id })).toBeNull();
+    expect(await findRow(orm, JourneyShareTokens, { createdByRef: target.id })).toBeNull();
     // sent notification survives but sender_id becomes NULL
     expect((await findRow(orm, Notifications, { id: sentNotif }))?.sender_id).toBeNull();
     // received notification is cascade-deleted
-expect(await findRow(orm, Notifications, { recipient: target.id })).toBeNull();
+    expect(await findRow(orm, Notifications, { recipient: target.id })).toBeNull();
     // notice dismissals are cascade-deleted
-expect(await findRow(orm, UserNoticeDismissals, { user: target.id, notice_id: 'test-notice' })).toBeNull();
+    expect(await findRow(orm, UserNoticeDismissals, { user: target.id, notice_id: 'test-notice' })).toBeNull();
     // owned journey and its entries are cascade-deleted
-expect(await findRow(orm, Journeys, { user: target.id })).toBeNull();
-expect(await findRow(orm, JourneyEntries, { journey: ownedJourney.id })).toBeNull();
+    expect(await findRow(orm, Journeys, { user: target.id })).toBeNull();
+    expect(await findRow(orm, JourneyEntries, { journey: ownedJourney.id })).toBeNull();
     // uploaded file survives but uploaded_by is now NULL
     expect((await findRow(orm, TripFiles, { id: fileId }))?.uploaded_by).toBeNull();
     // trek_photos row survives but owner_id is now NULL
     expect((await findRow(orm, TrekPhotos, { id: trekPhotoId }))?.owner_id).toBeNull();
     // trip_photos row for target is cascade-deleted
-expect(await findRow(orm, TripPhotos, { trip: otherTrip.id, user: target.id })).toBeNull();
+    expect(await findRow(orm, TripPhotos, { trip: otherTrip.id, user: target.id })).toBeNull();
     // owned trip is cascade-deleted
-expect(await findRow(orm, Trips, { id: ownedTrip.id })).toBeNull();
+    expect(await findRow(orm, Trips, { id: ownedTrip.id })).toBeNull();
     // trip membership on others' trips is removed
-expect(await findRow(orm, TripMembers, { trip: otherTrip.id, user: target.id })).toBeNull();
+    expect(await findRow(orm, TripMembers, { trip: otherTrip.id, user: target.id })).toBeNull();
     // category survives but user_id is NULL
     expect((await findRow(orm, Categories, { id: userCategory.id }))?.user_id).toBeNull();
     // tag is deleted
-expect(await findRow(orm, Tags, { id: userTag.id })).toBeNull();
+    expect(await findRow(orm, Tags, { id: userTag.id })).toBeNull();
     // todo assigned_user_id is NULL
     expect((await findRow(orm, TodoItems, { id: todoItem.id }))?.assigned_user_id).toBeNull();
     // packing bag survives but user_id is NULL
     expect((await findRow(orm, PackingBags, { id: packBagId }))?.user_id).toBeNull();
     // MCP tokens are deleted
-expect(await findRow(orm, McpTokens, { user: target.id })).toBeNull();
+    expect(await findRow(orm, McpTokens, { user: target.id })).toBeNull();
     // OAuth tokens and consents are deleted
     expect(await findRow(orm, OauthTokens, { user: target.id })).toBeNull();
     expect(await findRow(orm, OauthConsents, { user: target.id })).toBeNull();
     // owned vacay plan is deleted
-expect(await findRow(orm, VacayPlans, { id: vacayPlanId })).toBeNull();
+    expect(await findRow(orm, VacayPlans, { id: vacayPlanId })).toBeNull();
     // vacay plan membership on others' plans is removed
-expect(await findRow(orm, VacayPlanMembers, { plan: otherVacayPlanId, user: target.id })).toBeNull();
+    expect(await findRow(orm, VacayPlanMembers, { plan: otherVacayPlanId, user: target.id })).toBeNull();
     // bucket list items are deleted
-expect(await findRow(orm, BucketList, { user: target.id })).toBeNull();
+    expect(await findRow(orm, BucketList, { user: target.id })).toBeNull();
     // travel history is deleted
     expect(await findRow(orm, VisitedCountries, { user: target.id, country_code: 'JP' })).toBeNull();
     expect(await findRow(orm, VisitedRegions, { user: target.id })).toBeNull();
     // packing template is deleted
-expect(await findRow(orm, PackingTemplates, { id: packTemplateId })).toBeNull();
+    expect(await findRow(orm, PackingTemplates, { id: packTemplateId })).toBeNull();
     // invite tokens created by target are deleted
-expect(await findRow(orm, InviteTokens, { createdByRef: target.id })).toBeNull();
+    expect(await findRow(orm, InviteTokens, { createdByRef: target.id })).toBeNull();
     // collab content is deleted
-expect(await findRow(orm, CollabNotes, { user: target.id, trip: otherTrip.id })).toBeNull();
+    expect(await findRow(orm, CollabNotes, { user: target.id, trip: otherTrip.id })).toBeNull();
     // user settings are deleted
-expect(await findRow(orm, Settings, { user: target.id })).toBeNull();
+    expect(await findRow(orm, Settings, { user: target.id })).toBeNull();
     // password reset tokens are deleted
-expect(await findRow(orm, PasswordResetTokens, { user: target.id })).toBeNull();
+    expect(await findRow(orm, PasswordResetTokens, { user: target.id })).toBeNull();
     // audit log entry survives but user_id is NULL
     expect((await findRow(orm, AuditLog, { id: auditId }))?.user_id).toBeNull();
     // notification channel preferences are deleted
-expect(await findRow(orm, NotificationChannelPreferences, { user: target.id, event_type: 'trip_invite' })).toBeNull();
+    expect(await findRow(orm, NotificationChannelPreferences, { user: target.id, event_type: 'trip_invite' })).toBeNull();
   });
 
   it('ADMIN-006 — admin cannot delete their own account', async () => {
