@@ -14,8 +14,17 @@ import {
   createDay, createDayAccommodation, createDayAssignment, createPlace, createReservation, createTrip, createUser, addTripMember,
 } from '../../../helpers/factories';
 import {
-  createTestReservationsRepo, createTestTripsRepo, createTestDaysRepo, createTestDayNotesRepo,
+  createTestReservationsRepo, createTestTripsRepo, createTestDaysRepo, createTestDayNotesRepo, sharedTestOrm,
 } from '../../../helpers/test-uow';
+import type { EntityData } from '@mikro-orm/core';
+import { findRow, findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { DayAccommodations } from '../../../../src/db/entities/DayAccommodations.entity';
+import { DayAssignments } from '../../../../src/db/entities/DayAssignments.entity';
+import { Days } from '../../../../src/db/entities/Days.entity';
+import { ReservationDayPositions } from '../../../../src/db/entities/ReservationDayPositions.entity';
+import { ReservationEndpoints } from '../../../../src/db/entities/ReservationEndpoints.entity';
+import { Reservations } from '../../../../src/db/entities/Reservations.entity';
+import { Trips } from '../../../../src/db/entities/Trips.entity';
 import type { ReservationsRepository } from '../../../../src/db/repositories/Reservations.repository';
 import type { TripsRepository } from '../../../../src/db/repositories/Trips.repository';
 import type { DaysRepository } from '../../../../src/db/repositories/Days.repository';
@@ -36,6 +45,28 @@ beforeAll(async () => {
 beforeEach(() => resetTestDb(testDb));
 afterAll(() => testDb.close());
 
+const orm = () => sharedTestOrm(testDb);
+
+async function setReservation(id: number, data: EntityData<Reservations>): Promise<void> {
+  await updateRows(await orm(), Reservations, { id }, data);
+}
+
+async function setTrip(id: number, data: EntityData<Trips>): Promise<void> {
+  await updateRows(await orm(), Trips, { id }, data);
+}
+
+/** The stored booking; fails the case when it is gone. */
+async function reservationRow(id: number) {
+  const row = await findRow(await orm(), Reservations, { id });
+  if (!row) throw new Error(`no reservation ${id}`);
+  return row;
+}
+
+/** The trip's day ids in day order. */
+async function dayIds(tripId: number): Promise<{ id: number }[]> {
+  return (await findRows(await orm(), Days, { trip: tripId }, { day_number: 'asc' })).map((d) => ({ id: d.id }));
+}
+
 // The RV1 fragment CL2/CL7's legacy statements interpolated inline — kept
 // here, not imported, for the same "no production copy left to import from"
 // reason `_shared/reservation-visibility.test.ts` gives.
@@ -52,6 +83,7 @@ describe('ReservationsRepository — CL1 (findRaw, existing method reused by cal
     const trip = createTrip(testDb, user.id, { title: 'Alps' });
 
     const typed = await tripsRepo.findRaw(trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM trips WHERE id = ?').get(trip.id);
 
     expect(typed).toEqual(legacy);
@@ -64,12 +96,13 @@ describe('ReservationsRepository — CL2 (listForCalendar)', () => {
     const trip = createTrip(testDb, user.id, { start_date: '2026-06-01', end_date: '2026-06-05' });
     const place = createPlace(testDb, trip.id);
     const live = createReservation(testDb, trip.id, { title: 'Live' });
-    testDb.prepare('UPDATE reservations SET place_id = ? WHERE id = ?').run(place.id, live.id);
+    await setReservation(live.id, { place: place.id });
     const staged = createReservation(testDb, trip.id, { title: 'Staged' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged.id);
+    await setReservation(staged.id, { ingest_state: 'staged' });
 
     const typed = await reservationsRepo.listForCalendar(trip.id);
     const legacy = testDb
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       .prepare(
         `SELECT r.*, pl.lat AS place_lat, pl.lng AS place_lng,
                 sd.date AS stay_start_date, ed.date AS stay_end_date,
@@ -96,13 +129,14 @@ describe('ReservationsRepository — CL2 (listForCalendar)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-06-01', end_date: '2026-06-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id, { check_in: '15:00', check_out: '11:00' });
     const booking = createReservation(testDb, trip.id, { title: 'Hotel', type: 'hotel' });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(`${stay.id}.0`, booking.id);
+    await setReservation(booking.id, { accommodation_id: `${stay.id}.0` });
 
     const typed = await reservationsRepo.listForCalendar(trip.id);
     const legacy = testDb
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       .prepare(
         `SELECT r.*, pl.lat AS place_lat, pl.lng AS place_lng,
                 sd.date AS stay_start_date, ed.date AS stay_end_date,
@@ -133,13 +167,13 @@ describe('ReservationsRepository — CL2 (listForCalendar)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-06-01', end_date: '2026-06-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
 
     const stagedFirst = createReservation(testDb, trip.id, { title: 'Staged, lower id', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(String(stay.id), stagedFirst.id);
+    await setReservation(stagedFirst.id, { accommodation_id: String(stay.id), ingest_state: 'staged' });
     const liveSecond = createReservation(testDb, trip.id, { title: 'Live, higher id', type: 'hotel' });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(String(stay.id), liveSecond.id);
+    await setReservation(liveSecond.id, { accommodation_id: String(stay.id) });
 
     const typed = await reservationsRepo.listForCalendar(trip.id);
     const liveRow = typed.find((r) => r.id === liveSecond.id);
@@ -157,16 +191,14 @@ describe('ReservationsRepository — CL4 (listCalendarStops)', () => {
     const trip = createTrip(testDb, user.id, { start_date: '2026-06-01', end_date: '2026-06-03' });
     const day = createDay(testDb, trip.id, { date: '2026-06-01' });
     const place = createPlace(testDb, trip.id, { name: 'Museum' });
-    testDb.prepare('INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (?, ?, 0)').run(day.id, place.id);
+    await insertRow(await orm(), DayAssignments, { day: day.id, place: place.id, order_index: 0 });
     // A booked-night stop: linked to an accommodation, must be excluded.
     const hotelPlace = createPlace(testDb, trip.id, { name: 'Hotel' });
-    const accResult = testDb.prepare(
-      'INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id) VALUES (?, ?, ?, ?)',
-    ).run(trip.id, hotelPlace.id, day.id, day.id);
-    testDb.prepare('INSERT INTO day_assignments (day_id, place_id, order_index, accommodation_id) VALUES (?, ?, 1, ?)')
-      .run(day.id, hotelPlace.id, accResult.lastInsertRowid);
+    const accId = await insertRow(await orm(), DayAccommodations, { trip: trip.id, place: hotelPlace.id, startDay: day.id, endDay: day.id });
+    await insertRow(await orm(), DayAssignments, { day: day.id, place: hotelPlace.id, order_index: 1, accommodation_id: accId });
 
     const typed = await reservationsRepo.listCalendarStops(day.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
         SELECT da.*, p.name as place_name, p.address as place_address,
           p.lat as place_lat, p.lng as place_lng,
@@ -189,17 +221,18 @@ describe('ReservationsRepository — CL7 (listPublicStaysForCalendar)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-06-01', end_date: '2026-06-06' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
 
     const liveLinked = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id, { check_in: '15:00', check_out: '11:00' });
     const liveBooking = createReservation(testDb, trip.id, { title: 'Live', type: 'hotel' });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(String(liveLinked.id), liveBooking.id);
+    await setReservation(liveBooking.id, { accommodation_id: String(liveLinked.id) });
 
     const stagedOnly = createDayAccommodation(testDb, trip.id, place.id, days[2].id, days[3].id);
     const stagedBooking = createReservation(testDb, trip.id, { title: 'Staged', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(String(stagedOnly.id), stagedBooking.id);
+    await setReservation(stagedBooking.id, { accommodation_id: String(stagedOnly.id), ingest_state: 'staged' });
 
     const typed = await reservationsRepo.listPublicStaysForCalendar(trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT a.id, a.check_in, a.check_in_end, a.check_out,
              sd.date AS start_date, ed.date AS end_date,
@@ -290,6 +323,7 @@ const LEGACY_LIST_UPCOMING = `
   `;
 
 function legacyListUpcoming(userId: number, today: string, nowHHMM: string, limit: number) {
+  // test-sql-allow: the legacy statement is the oracle the repository read is held to.
   return testDb.prepare(LEGACY_LIST_UPCOMING).all(userId, userId, today, today, nowHHMM, limit);
 }
 
@@ -312,52 +346,51 @@ describe('ReservationsRepository — RS20 (listUpcomingForUser)', () => {
     addTripMember(testDb, tripMember.id, owner.id);
     const tripHidden = createTrip(testDb, stranger.id, { start_date: '2999-01-01', end_date: '2999-01-05' });
     const tripArchived = createTrip(testDb, owner.id, { start_date: '2999-01-01', end_date: '2999-01-05' });
-    testDb.prepare('UPDATE trips SET is_archived = 1 WHERE id = ?').run(tripArchived.id);
+    await setTrip(tripArchived.id, { is_archived: 1 });
 
     // Two bookings on the SAME date+time — the (at_date, at_time) tie the
     // `id ASC` tiebreak has to resolve, in insertion (id) order.
     const tie1 = createReservation(testDb, tripOwned.id, { title: 'Tie 1' });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2999-01-02T09:00:00', tie1.id);
+    await setReservation(tie1.id, { reservation_time: '2999-01-02T09:00:00' });
     const tie2 = createReservation(testDb, tripOwned.id, { title: 'Tie 2' });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2999-01-02T09:00:00', tie2.id);
+    await setReservation(tie2.id, { reservation_time: '2999-01-02T09:00:00' });
 
     // Excluded regardless of settings: cancelled, and a hotel-typed booking
     // dated through its own reservation_time.
     const cancelled = createReservation(testDb, tripOwned.id, { title: 'Cancelled' });
-    testDb.prepare("UPDATE reservations SET reservation_time = ?, status = 'cancelled' WHERE id = ?").run('2999-01-03T10:00:00', cancelled.id);
+    await setReservation(cancelled.id, { reservation_time: '2999-01-03T10:00:00', status: 'cancelled' });
     const hotelDated = createReservation(testDb, tripOwned.id, { title: 'Hotel dated', type: 'hotel' });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2999-01-03T10:00:00', hotelDated.id);
+    await setReservation(hotelDated.id, { reservation_time: '2999-01-03T10:00:00' });
 
     // A NULL-typed booking still shows.
     const untyped = createReservation(testDb, tripOwned.id, { title: 'Untyped' });
-    testDb.prepare('UPDATE reservations SET type = NULL, reservation_time = ? WHERE id = ?').run('2999-01-04T10:00:00', untyped.id);
+    await setReservation(untyped.id, { type: null, reservation_time: '2999-01-04T10:00:00' });
 
     // A bare-clock, day-anchored booking.
     const bareDay = createDay(testDb, tripOwned.id, { date: '2999-01-05' });
     const bareClock = createReservation(testDb, tripOwned.id, { title: 'Bare clock', day_id: bareDay.id });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('07:00', bareClock.id);
+    await setReservation(bareClock.id, { reservation_time: '07:00' });
 
     // A member-trip booking.
     const memberBooking = createReservation(testDb, tripMember.id, { title: 'Member trip' });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2999-01-02T12:00:00', memberBooking.id);
+    await setReservation(memberBooking.id, { reservation_time: '2999-01-02T12:00:00' });
 
     // A hidden-trip booking — must never appear.
     const hiddenBooking = createReservation(testDb, tripHidden.id, { title: 'Hidden' });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2999-01-02T08:00:00', hiddenBooking.id);
+    await setReservation(hiddenBooking.id, { reservation_time: '2999-01-02T08:00:00' });
 
     // A NAMED stay (check-in + check-out).
     const namedPlace = createPlace(testDb, tripOwned.id, { name: 'The Plaza' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(tripOwned.id) as { id: number }[];
+    const days = await dayIds(tripOwned.id);
     createDayAccommodation(testDb, tripOwned.id, namedPlace.id, days[5].id, days[7].id, { check_in: '15:00', check_out: '11:00' });
 
     // A NAMELESS stay whose only (cancelled-excluded) booking's
     // accommodation_id is stored in the "<id>.0" TEXT shape.
-    const namelessAcc = testDb.prepare(
-      'INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_out) VALUES (?, NULL, ?, ?, ?, ?)',
-    ).run(tripOwned.id, days[5].id, days[6].id, '16:00', '10:00');
-    const namelessId = namelessAcc.lastInsertRowid as number;
+    const namelessId = await insertRow(await orm(), DayAccommodations, {
+      trip: tripOwned.id, place: null, startDay: days[5].id, endDay: days[6].id, check_in: '16:00', check_out: '10:00',
+    });
     const namelessBooking = createReservation(testDb, tripOwned.id, { title: 'Hotel Ibis', type: 'hotel' });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(`${namelessId}.0`, namelessBooking.id);
+    await setReservation(namelessBooking.id, { accommodation_id: `${namelessId}.0` });
 
     const settings: [string, string, number][] = [
       ['2000-01-01', '2000-01-01T00:00', 20], // far past today — everything future-dated shows
@@ -397,7 +430,7 @@ describe('ReservationsRepository — AC37/AC40 (listIdMetadataByStay/listIdsBySt
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
 
     // `shapes[1]` ('<id>.0') is the ONLY one the legacy `Number(id)` bind —
@@ -409,18 +442,21 @@ describe('ReservationsRepository — AC37/AC40 (listIdMetadataByStay/listIdsBySt
       `${stay.id}abc`,
       ` ${stay.id}`,
     ];
-    const ids = shapes.map((shape, i) => {
+    const ids: number[] = [];
+    for (const [i, shape] of shapes.entries()) {
       const r = createReservation(testDb, trip.id, { title: `Link ${i}`, type: 'hotel' });
-      testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(shape, r.id);
-      return r.id;
-    });
+      await setReservation(r.id, { accommodation_id: shape });
+      ids.push(r.id);
+    }
 
     const typedMeta = await reservationsRepo.listIdMetadataByStay(stay.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyMeta = testDb.prepare('SELECT id, metadata FROM reservations WHERE accommodation_id = ?').all(stay.id) as { id: number; metadata: string | null }[];
     expect(typedMeta).toEqual(legacyMeta);
     expect(typedMeta.map((r) => r.id)).toEqual([ids[1]]);
 
     const typedIds = await reservationsRepo.listIdsByStay(stay.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyIds = testDb.prepare('SELECT id FROM reservations WHERE accommodation_id = ?').all(stay.id) as { id: number }[];
     expect(typedIds).toEqual(legacyIds);
     expect(typedIds.map((r) => r.id)).toEqual([ids[1]]);
@@ -446,34 +482,36 @@ describe('ReservationsRepository — Task 2 reads (listForTrip / findWithJoins /
     LEFT JOIN day_accommodations ap ON ap.id = r.accommodation_id
     LEFT JOIN places acc_p ON acc_p.id = ap.place_id`;
 
-  const seed = () => {
+  const seed = async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id, { name: 'Museum' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const hotelPlace = createPlace(testDb, trip.id, { name: 'Grand Hotel' });
     const stay = createDayAccommodation(testDb, trip.id, hotelPlace.id, days[0].id, days[1].id);
 
     // A dated, non-hotel booking — a restamp/resync candidate.
     const dinner = createReservation(testDb, trip.id, { title: 'Dinner', type: 'restaurant', day_id: days[0].id });
-    testDb.prepare("UPDATE reservations SET reservation_time = ? WHERE id = ?").run('2026-09-01T19:00', dinner.id);
+    await setReservation(dinner.id, { reservation_time: '2026-09-01T19:00' });
 
     // A hotel booking linked to the stay above — the joined projection's place/accommodation columns.
     const hotel = createReservation(testDb, trip.id, { title: 'Grand Hotel Stay', type: 'hotel', day_id: days[0].id });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ?, place_id = ? WHERE id = ?').run(`${stay.id}.0`, place.id, hotel.id);
+    await setReservation(hotel.id, { accommodation_id: `${stay.id}.0`, place: place.id });
 
     return { trip, days, place, hotelPlace, stay, dinner, hotel };
   };
 
   it('RS18 listForTrip — matches the legacy joined statement, ordered by reservation_time then created_at', async () => {
-    const { trip } = seed();
+    const { trip } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`${legacyJoinedSql} WHERE r.trip_id = ? ORDER BY r.reservation_time ASC, r.created_at ASC`).all(trip.id);
     const typed = await reservationsRepo.listForTrip(trip.id);
     expect(typed).toEqual(legacy);
   });
 
   it('RR1 findWithJoins — matches the legacy joined statement for one row, place/accommodation columns populated', async () => {
-    const { hotel, stay, hotelPlace } = seed();
+    const { hotel, stay, hotelPlace } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`${legacyJoinedSql} WHERE r.id = ?`).get(hotel.id);
     const typed = await reservationsRepo.findWithJoins(hotel.id);
     expect(typed).toEqual(legacy);
@@ -481,14 +519,16 @@ describe('ReservationsRepository — Task 2 reads (listForTrip / findWithJoins /
   });
 
   it('RS35 findInTrip — matches the legacy statement, scoped by trip', async () => {
-    const { trip, dinner } = seed();
+    const { trip, dinner } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM reservations WHERE id = ? AND trip_id = ?').get(dinner.id, trip.id);
     expect(await reservationsRepo.findInTrip(dinner.id, trip.id)).toEqual(legacy);
     expect(await reservationsRepo.findInTrip(999999, trip.id)).toBeUndefined();
   });
 
   it('RS12 listResyncCandidates — matches the legacy statement (dated, non-hotel-or-unlinked)', async () => {
-    const { trip, dinner } = seed();
+    const { trip, dinner } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT id, reservation_time, reservation_end_time, day_id, end_day_id FROM reservations
       WHERE trip_id = ? AND (type != 'hotel' OR accommodation_id IS NULL) AND reservation_time IS NOT NULL`).all(trip.id);
@@ -498,7 +538,8 @@ describe('ReservationsRepository — Task 2 reads (listForTrip / findWithJoins /
   });
 
   it('DY14 listForRestamp — matches the legacy statement, every reservation of the trip regardless of type', async () => {
-    const { trip, dinner, hotel } = seed();
+    const { trip, dinner, hotel } = await seed();
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT id, day_id, end_day_id, reservation_time, reservation_end_time FROM reservations WHERE trip_id = ?').all(trip.id);
     const typed = await reservationsRepo.listForRestamp(trip.id);
     expect(typed).toEqual(legacy);
@@ -520,9 +561,11 @@ describe('ReservationsRepository — AirTrail leaf (ATL1/ATL2/ATL4, airports)', 
 
     await reservationsRepo.linkAirtrailSingleFlight(res.id, 'AT-42', user.id, 'hash-1', '2026-09-24T10:00:00Z');
 
-    const row = testDb.prepare(
-      "SELECT external_source, external_id, external_owner_user_id, sync_enabled, external_hash, external_synced_at FROM reservations WHERE id = ?",
-    ).get(res.id);
+    const stored = await reservationRow(res.id);
+    const row = {
+      external_source: stored.external_source, external_id: stored.external_id, external_owner_user_id: stored.external_owner_user_id,
+      sync_enabled: stored.sync_enabled, external_hash: stored.external_hash, external_synced_at: stored.external_synced_at,
+    };
     expect(row).toEqual({
       external_source: 'airtrail', external_id: 'AT-42', external_owner_user_id: user.id,
       sync_enabled: 1, external_hash: 'hash-1', external_synced_at: '2026-09-24T10:00:00Z',
@@ -537,8 +580,8 @@ describe('ReservationsRepository — AirTrail leaf (ATL1/ATL2/ATL4, airports)', 
 
     await reservationsRepo.setAirtrailSyncDisabled(res.id);
 
-    const row = testDb.prepare('SELECT sync_enabled, external_id FROM reservations WHERE id = ?').get(res.id);
-    expect(row).toEqual({ sync_enabled: 0, external_id: 'AT-42' });
+    const { sync_enabled, external_id } = await reservationRow(res.id);
+    expect({ sync_enabled, external_id }).toEqual({ sync_enabled: 0, external_id: 'AT-42' });
   });
 
   it('ATL4 findAirtrailLinked — matches the legacy statement, scoped to external_source = \'airtrail\' (a plain flight misses)', async () => {
@@ -548,6 +591,7 @@ describe('ReservationsRepository — AirTrail leaf (ATL1/ATL2/ATL4, airports)', 
     await reservationsRepo.linkAirtrailSingleFlight(linked.id, 'AT-7', user.id, 'hash-2', '2026-09-24T11:00:00Z');
     const plain = createReservation(testDb, trip.id, { title: 'Dinner', type: 'restaurant' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(
       "SELECT id, trip_id, external_id, external_owner_user_id, sync_enabled FROM reservations WHERE id = ? AND external_source = 'airtrail'",
     ).get(linked.id);
@@ -559,11 +603,11 @@ describe('ReservationsRepository — AirTrail leaf (ATL1/ATL2/ATL4, airports)', 
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const res = createReservation(testDb, trip.id, { title: 'Flight', type: 'flight' });
-    expect((testDb.prepare('SELECT needs_review FROM reservations WHERE id = ?').get(res.id) as { needs_review: number }).needs_review).toBe(0);
+    expect((await reservationRow(res.id)).needs_review).toBe(0);
 
     await reservationsRepo.markNeedsReview(res.id);
 
-    expect((testDb.prepare('SELECT needs_review FROM reservations WHERE id = ?').get(res.id) as { needs_review: number }).needs_review).toBe(1);
+    expect((await reservationRow(res.id)).needs_review).toBe(1);
   });
 });
 
@@ -579,24 +623,21 @@ describe('ReservationsRepository — AirTrail leaf (ATL1/ATL2/ATL4, airports)', 
 // ONE seeded world per describe block, `toEqual(<legacy raw>)` per method.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const insertReservationEndpoint = (
+const insertReservationEndpoint = async (
   reservationId: number,
   role: string,
   sequence: number,
   overrides: Partial<{ name: string; code: string | null; lat: number; lng: number; timezone: string | null; local_time: string | null; local_date: string | null }> = {},
 ) => {
-  testDb.prepare(`
-    INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-    reservationId, role, sequence,
-    overrides.name ?? `${role} endpoint`, overrides.code ?? null, overrides.lat ?? 48.0, overrides.lng ?? 11.0,
-    overrides.timezone ?? null, overrides.local_time ?? null, overrides.local_date ?? null,
-  );
+  await insertRow(await orm(), ReservationEndpoints, {
+    reservation: reservationId, role, sequence,
+    name: overrides.name ?? `${role} endpoint`, code: overrides.code ?? null, lat: overrides.lat ?? 48.0, lng: overrides.lng ?? 11.0,
+    timezone: overrides.timezone ?? null, local_time: overrides.local_time ?? null, local_date: overrides.local_date ?? null,
+  });
 };
 
-const insertDayPosition = (reservationId: number, dayId: number, position: number) => {
-  testDb.prepare('INSERT INTO reservation_day_positions (reservation_id, day_id, position) VALUES (?, ?, ?)')
-    .run(reservationId, dayId, position);
+const insertDayPosition = async (reservationId: number, dayId: number, position: number) => {
+  await insertRow(await orm(), ReservationDayPositions, { reservation: reservationId, day: dayId, position });
 };
 
 describe('ReservationsRepository — share.service.ts reads (SH-family)', () => {
@@ -605,11 +646,12 @@ describe('ReservationsRepository — share.service.ts reads (SH-family)', () => 
     const trip = createTrip(testDb, user.id);
     const other = createTrip(testDb, user.id);
     const flight = createReservation(testDb, trip.id, { title: 'Flight', type: 'flight' });
-    insertReservationEndpoint(flight.id, 'from', 1, { name: 'JFK', code: 'JFK', lat: 40.6, lng: -73.7, timezone: 'America/New_York', local_time: '10:00', local_date: '2026-09-01' });
-    insertReservationEndpoint(flight.id, 'to', 0, { name: 'MUC', code: null, lat: 48.35, lng: 11.78, timezone: null, local_time: null, local_date: null });
+    await insertReservationEndpoint(flight.id, 'from', 1, { name: 'JFK', code: 'JFK', lat: 40.6, lng: -73.7, timezone: 'America/New_York', local_time: '10:00', local_date: '2026-09-01' });
+    await insertReservationEndpoint(flight.id, 'to', 0, { name: 'MUC', code: null, lat: 48.35, lng: 11.78, timezone: null, local_time: null, local_date: null });
     const foreign = createReservation(testDb, other.id, { title: 'Foreign', type: 'flight' });
-    insertReservationEndpoint(foreign.id, 'from', 0, { name: 'LHR' });
+    await insertReservationEndpoint(foreign.id, 'from', 0, { name: 'LHR' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT e.reservation_id, e.role, e.sequence, e.name, e.code, e.lat, e.lng, e.timezone, e.local_date, e.local_time
       FROM reservation_endpoints e JOIN reservations r ON r.id = e.reservation_id
@@ -624,15 +666,15 @@ describe('ReservationsRepository — share.service.ts reads (SH-family)', () => 
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-03' });
     const other = createTrip(testDb, user.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const res = createReservation(testDb, trip.id, { title: 'Multi-day rental', type: 'car_rental' });
-    insertDayPosition(res.id, days[0].id, 0);
-    insertDayPosition(res.id, days[1].id, 1);
+    await insertDayPosition(res.id, days[0].id, 0);
+    await insertDayPosition(res.id, days[1].id, 1);
     const foreignRes = createReservation(testDb, other.id, { title: 'Foreign', type: 'car_rental' });
-    testDb.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, 1, ?)').run(other.id, '2026-01-01');
-    const foreignDay = testDb.prepare('SELECT id FROM days WHERE trip_id = ?').get(other.id) as { id: number };
-    insertDayPosition(foreignRes.id, foreignDay.id, 0);
+    const foreignDay = { id: await insertRow(await orm(), Days, { trip: other.id, day_number: 1, date: '2026-01-01' }) };
+    await insertDayPosition(foreignRes.id, foreignDay.id, 0);
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT rdp.reservation_id, rdp.day_id, rdp.position
       FROM reservation_day_positions rdp JOIN reservations r ON r.id = rdp.reservation_id
@@ -646,15 +688,18 @@ describe('ReservationsRepository — share.service.ts reads (SH-family)', () => 
   it('listPublicForShare — matches the legacy statement, live bookings only, staged excluded', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-03' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const place = createPlace(testDb, trip.id);
     const live = createReservation(testDb, trip.id, { title: 'Live', type: 'flight', day_id: days[0].id });
-    testDb.prepare(`UPDATE reservations SET end_day_id = ?, place_id = ?, accommodation_id = NULL, status = 'confirmed',
-      location = ?, reservation_time = ?, reservation_end_time = ?, notes = ?, url = ?, metadata = ? WHERE id = ?`)
-      .run(days[1].id, place.id, 'Gate 4', '2026-09-01T10:00', '2026-09-01T12:00', 'note', 'https://example.com', '{"k":"v"}', live.id);
+    await setReservation(live.id, {
+      endDay: days[1].id, place: place.id, accommodation_id: null, status: 'confirmed',
+      location: 'Gate 4', reservation_time: '2026-09-01T10:00', reservation_end_time: '2026-09-01T12:00',
+      notes: 'note', url: 'https://example.com', metadata: '{"k":"v"}',
+    });
     const staged = createReservation(testDb, trip.id, { title: 'Staged', type: 'flight' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged.id);
+    await setReservation(staged.id, { ingest_state: 'staged' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT id, trip_id, day_id, end_day_id, place_id, accommodation_id, title, type, status, location,
              reservation_time, reservation_end_time, notes, url, metadata, created_at
@@ -669,16 +714,17 @@ describe('ReservationsRepository — share.service.ts reads (SH-family)', () => 
   it('listPublicAccommodationsForShare — matches the legacy statement, only stays with a public booking (or none) are included', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const place = createPlace(testDb, trip.id, { name: 'Grand Hotel' });
     const noBooking = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id, { check_in: '15:00', check_out: '11:00' });
     const liveLinked = createDayAccommodation(testDb, trip.id, place.id, days[2].id, days[3].id);
     const liveBooking = createReservation(testDb, trip.id, { title: 'Live', type: 'hotel' });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(String(liveLinked.id), liveBooking.id);
+    await setReservation(liveBooking.id, { accommodation_id: String(liveLinked.id) });
     const stagedOnly = createDayAccommodation(testDb, trip.id, place.id, days[3].id, days[4].id);
     const stagedBooking = createReservation(testDb, trip.id, { title: 'Staged', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(String(stagedOnly.id), stagedBooking.id);
+    await setReservation(stagedBooking.id, { accommodation_id: String(stagedOnly.id), ingest_state: 'staged' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT a.id, a.trip_id, a.place_id, a.start_day_id, a.end_day_id, a.check_in, a.check_in_end, a.check_out, a.notes,
              p.name as place_name, p.address as place_address, p.lat as place_lat, p.lng as place_lng
@@ -708,9 +754,10 @@ describe('ReservationsRepository — share.service.ts reads (SH-family)', () => 
     createDayAccommodation(testDb, other.id, elsewhere.id, otherDay.id, otherDay.id);
     const liveRes = createReservation(testDb, trip.id, { type: 'hotel', title: 'Live' });
     const stagedRes = createReservation(testDb, trip.id, { type: 'hotel', title: 'Staged' });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(String(liveStay.id), liveRes.id);
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(String(stagedStay.id), stagedRes.id);
+    await setReservation(liveRes.id, { accommodation_id: String(liveStay.id) });
+    await setReservation(stagedRes.id, { accommodation_id: String(stagedStay.id), ingest_state: 'staged' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = (testDb.prepare(`
       SELECT DISTINCT a.place_id FROM day_accommodations a
       WHERE a.trip_id = ? AND ${publicStaySql('a')}`).all(trip.id) as { place_id: number }[]).map((r) => r.place_id);
@@ -725,11 +772,12 @@ describe('ReservationsRepository — public-api.service.ts reads', () => {
   it('listScheduledForPublicApi — matches the legacy statement, scoped by trip, ordered by day then time', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-03' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const scheduled = createReservation(testDb, trip.id, { title: 'Dinner', type: 'restaurant', day_id: days[0].id });
-    testDb.prepare("UPDATE reservations SET reservation_time = ?, location = ?, notes = ? WHERE id = ?").run('2026-09-01T19:00', 'Downtown', 'window seat', scheduled.id);
+    await setReservation(scheduled.id, { reservation_time: '2026-09-01T19:00', location: 'Downtown', notes: 'window seat' });
     createReservation(testDb, trip.id, { title: 'Unscheduled', type: 'restaurant' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT day_id, type, title, location, reservation_time, reservation_end_time, status, notes
       FROM reservations WHERE trip_id = ? AND day_id IS NOT NULL
@@ -743,11 +791,12 @@ describe('ReservationsRepository — public-api.service.ts reads', () => {
   it('listUnscheduledForPublicApi — matches the legacy statement, day_id IS NULL only', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-02' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const unscheduled = createReservation(testDb, trip.id, { title: 'Unscheduled', type: 'restaurant' });
-    testDb.prepare("UPDATE reservations SET reservation_time = NULL, location = ?, notes = ? WHERE id = ?").run(null, null, unscheduled.id);
+    await setReservation(unscheduled.id, { reservation_time: null, location: null, notes: null });
     createReservation(testDb, trip.id, { title: 'Scheduled', type: 'restaurant', day_id: days[0].id });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT type, title, location, reservation_time, reservation_end_time, status, notes
       FROM reservations WHERE trip_id = ? AND day_id IS NULL
@@ -761,11 +810,12 @@ describe('ReservationsRepository — public-api.service.ts reads', () => {
   it('listAccommodationsForPublicApi — matches the legacy LEFT JOIN statement, ordered by start date', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const place = createPlace(testDb, trip.id, { name: 'Grand Hotel' });
     createDayAccommodation(testDb, trip.id, place.id, days[2].id, days[3].id, { check_in: '15:00', check_out: '11:00' });
     createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT p.name, p.address, p.lat, p.lng, ds.date as start_date, de.date as end_date, a.check_in, a.check_out, a.notes
       FROM day_accommodations a
@@ -782,13 +832,14 @@ describe('ReservationsRepository — public-api.service.ts reads', () => {
   it('listUnplannedPlacesForPublicApi — matches the legacy NOT EXISTS statement, excluding assigned and staying places', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-02' });
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await dayIds(trip.id);
     const unplanned = createPlace(testDb, trip.id, { name: 'Unplanned Cafe' });
     const assigned = createPlace(testDb, trip.id, { name: 'Assigned Museum' });
     createDayAssignment(testDb, days[0].id, assigned.id);
     const staying = createPlace(testDb, trip.id, { name: 'Hotel' });
     createDayAccommodation(testDb, trip.id, staying.id, days[0].id, days[1].id);
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT p.name, p.address, p.lat, p.lng, p.place_time, p.end_time, p.duration_minutes, p.notes, p.transport_mode, c.name as category
       FROM places p LEFT JOIN categories c ON c.id = p.category_id
