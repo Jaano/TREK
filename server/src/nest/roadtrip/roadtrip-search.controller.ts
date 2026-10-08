@@ -8,7 +8,7 @@ import { RequireAddon } from '../addons/require-addon.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RoadtripSearchService } from './roadtrip-search.service';
 
-class SearchAreaDto extends createZodDto(roadtripSearchAreaSchema) {}
+export class SearchAreaDto extends createZodDto(roadtripSearchAreaSchema) {}
 
 @Controller('api/roadtrip/search-area')
 @UseGuards(JwtAuthGuard, AddonGuard)

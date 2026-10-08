@@ -9,7 +9,7 @@ import { RequirePermission, TripAccessGuard } from '../permissions/trip-access.g
 import { RealtimeService } from '../realtime/realtime.service';
 import { DayBoundariesService } from './day-boundaries.service';
 
-class DayBoundaryDto extends createZodDto(roadtripDayBoundarySchema) {}
+export class DayBoundaryDto extends createZodDto(roadtripDayBoundarySchema) {}
 
 @Controller('api/trips/:tripId/roadtrip/day-boundaries')
 @UseGuards(AddonGuard, JwtAuthGuard, TripAccessGuard)

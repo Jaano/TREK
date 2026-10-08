@@ -168,8 +168,14 @@ declare const repo: { run(sql: string, params?: unknown[]): Promise<unknown>; ge
     for (const file of exempt) {
       const options = await selectorsFor(file);
       expect(hits(options, "void connection.execute('PRAGMA wal_checkpoint(TRUNCATE)');"), file).toEqual([]);
-      expect(messages(options, `${PRELUDE}
-void safeFetch(url);`), file).toContain(TIMEOUT);
+      expect(
+        messages(
+          options,
+          `${PRELUDE}
+void safeFetch(url);`,
+        ),
+        file,
+      ).toContain(TIMEOUT);
     }
   });
 
@@ -185,7 +191,9 @@ void safeFetch(url);`), file).toContain(TIMEOUT);
       EXEMPT_SQL_STRINGS,
     );
     for (const [file, n] of Object.entries(counts)) {
-      expect(n, `${file} holds no SQL string any more: drop it from the ignores in eslint.config.mjs`).toBeGreaterThan(0);
+      expect(n, `${file} holds no SQL string any more: drop it from the ignores in eslint.config.mjs`).toBeGreaterThan(
+        0,
+      );
     }
   });
 

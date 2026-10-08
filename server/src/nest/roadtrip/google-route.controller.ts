@@ -9,8 +9,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { TripAccessGuard } from '../permissions/trip-access.guard';
 import { GoogleRouteService } from './google-route.service';
 
-class PreviewDto extends createZodDto(googleRoutePreviewRequestSchema) {}
-class ImportDto extends createZodDto(googleRouteImportSchema) {}
+export class PreviewDto extends createZodDto(googleRoutePreviewRequestSchema) {}
+export class ImportDto extends createZodDto(googleRouteImportSchema) {}
 
 @Controller('api')
 @UseGuards(AddonGuard, JwtAuthGuard)

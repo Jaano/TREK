@@ -9,7 +9,7 @@ import { roadtripPreferencesUpdateSchema } from '@trek/shared';
 
 import { createZodDto } from 'nestjs-zod';
 
-class PreferencesDto extends createZodDto(roadtripPreferencesUpdateSchema) {}
+export class PreferencesDto extends createZodDto(roadtripPreferencesUpdateSchema) {}
 
 @Controller('api/trips/:tripId/roadtrip/preferences')
 @UseGuards(AddonGuard, JwtAuthGuard, TripAccessGuard)
