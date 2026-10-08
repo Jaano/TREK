@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTripStore } from '../../../../store/tripStore'
 import { useRouteCalculation } from '../../../../hooks/useRouteCalculation'
-import { assignmentsApi, reservationsApi, weatherApi } from '../../../../api/client'
-import { useRouteModeOptions } from '../../../../components/Planner/routeModes'
+import { reservationsApi, weatherApi } from '../../../../api/client'
+import { useLegModeActions } from '../../../../components/Planner/useLegModeActions'
 import { getDayBookendHotels } from '../../../../utils/dayOrder'
 import { dayWeatherAnchor } from '../../../../utils/dayWeather'
 import { metadataWithLegPositions, planMergedOrder, withTransportPositions } from '../../../../utils/mergedOrder'
@@ -327,7 +327,7 @@ export function useMPlanTimeline(planner: TripPlanner) {
     : null
 
   // ── Per-segment travel mode (#1281) ──
-  const routeModeOptions = useRouteModeOptions()
+  const { routeModeOptions, persistLegMode } = useLegModeActions({ tripId, toast, t, tripActions })
 
   // Set the mode of the leg leaving a stop — optimistic, then persisted; null clears
   // the override back to the day default. Sticky against the whole-day picker.
@@ -337,11 +337,8 @@ export function useMPlanTimeline(planner: TripPlanner) {
     useTripStore.setState(state => ({
       assignments: { ...state.assignments, [key]: (state.assignments[key] || []).map(a => (a.id === assignmentId ? { ...a, leg_transport_mode: mode } : a)) },
     }))
-    assignmentsApi.updateTransport(tripId, assignmentId, mode).catch((err: unknown) => {
-      toast.error(err instanceof Error ? err.message : t('common.unknownError'))
-      tripActions.refreshDays(tripId)
-    })
-  }, [day, tripId, toast, t, tripActions])
+    persistLegMode(assignmentId, mode)
+  }, [day, persistLegMode])
 
   // ── Public transit for one leg (#2398) ──
   // The entry the desktop connector menu carries: the automated search, seeded with

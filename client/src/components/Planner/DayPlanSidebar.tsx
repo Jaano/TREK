@@ -10,7 +10,7 @@ import { safeHttpUrl } from '../../utils/safeUrl'
 import { ChevronDown, ChevronRight, ChevronUp, Compass, RotateCcw, ExternalLink, Pencil, GripVertical, Ticket, Plus, FileText, Trash2, Car, Lock, Hotel, Eraser, Route as RouteIcon, RouteOff, Bookmark, StickyNote, TramFront, Zap, MapPin, Globe } from 'lucide-react'
 import { type PickedPlace } from './TransitSearchPanel'
 import { buildTransitLeg, buildTransitNameIndex } from './transitLeg'
-import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
+import { reservationsApi, daysApi } from '../../api/client'
 import { calculateRouteWithLegs, optimizeRoute, generateGoogleMapsUrl, generateCoMapsUrl } from '../Map/RouteCalculator'
 import GoogleMapsIcon from '../shared/GoogleMapsIcon'
 import PlaceAvatar from '../shared/PlaceAvatar'
@@ -62,6 +62,7 @@ import { findTodayDayId } from './today'
 import { markdownLinkComponents } from '../shared/markdownLink'
 import { RouteConnector, HotelRouteConnector } from './DayPlanSidebarRouteConnector'
 import { resolveLegMode } from './legMode'
+import { useLegModeActions } from './useLegModeActions'
 import { dayExportStops, fillAroundLocked } from './dayRoute'
 import { projectDayItinerary } from '../Map/dayTourProjection'
 import { usePluginDaySchedule, usePluginDayTints, dayTintBackground, dayTinted, PluginDayScheduleRow, formatScheduleMinutes } from '../Plugins/PluginDaySchedule'
@@ -1515,7 +1516,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
   const gripsShown = canEditDays && !dragDisabled
 
   // ── Per-segment / per-day travel mode (#1281) ──────────────────────────────
-  const modeIcon = routeModeIcon
+  const { legModeMenu, persistLegMode } = useLegModeActions({ tripId, toast, t, tripActions })
 
   // Set the mode of the leg LEAVING this stop. Optimistic (the connector + map
   // recompute from the store), then persisted; null clears the override so the leg
@@ -1529,10 +1530,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
         [key]: assignments[key].map(a => (a.id === assignmentId ? { ...a, leg_transport_mode: mode } : a)),
       })
     }
-    assignmentsApi.updateTransport(tripId, assignmentId, mode).catch((err: unknown) => {
-      toast.error(err instanceof Error ? err.message : t('common.unknownError'))
-      void tripActions.refreshDays(tripId)
-    })
+    persistLegMode(assignmentId, mode)
   }
 
   // The whole-day default (the Car/Foot picker). Persisted so it survives a reload,
@@ -1556,22 +1554,17 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
 
   // The extra connector-menu entry (#1281 follow-up): search public transit for this
   // leg instead of drawing a road route. Only when a handler is wired (day has dates).
-  const transitLegMenuItem = (dayId: number, seg?: RouteSegment) => {
-    if (!onPlanTransitLeg) return []
+  const transitLegPlanner = (dayId: number, seg?: RouteSegment) => {
+    if (!onPlanTransitLeg) return undefined
     const leg = buildTransitLeg(seg, dayId, transitNameIndex, assignments, reservations)
-    if (!leg) return []
-    return [{ label: t('transit.title'), icon: TramFront, onClick: () => onPlanTransitLeg({ dayId, from: leg.from, to: leg.to, time: leg.time }) }]
+    if (!leg) return undefined
+    return () => onPlanTransitLeg({ dayId, from: leg.from, to: leg.to, time: leg.time })
   }
 
   // Open the mode menu at the clicked connector: every route profile, the optional
   // "public transport" entry, plus a "use day default" entry that clears the override.
   const openLegModeMenu = (e: React.MouseEvent, assignmentId: number, dayId: number, seg?: RouteSegment) => {
-    ctxMenu.open(e, [
-      ...routeProfileOptions.map(o => ({ label: o.label, icon: modeIcon(o.key), onClick: () => setLegMode(assignmentId, dayId, o.key) })),
-      ...transitLegMenuItem(dayId, seg),
-      { divider: true },
-      { label: t('dayplan.transportMode.useDefault'), icon: RotateCcw, onClick: () => setLegMode(assignmentId, dayId, null) },
-    ])
+    ctxMenu.open(e, legModeMenu(mode => setLegMode(assignmentId, dayId, mode), transitLegPlanner(dayId, seg)))
   }
 
   // Set the mode of the leg ENTERING this stop (a booking arrival or the morning
@@ -1584,19 +1577,11 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
         [key]: assignments[key].map(a => (a.id === assignmentId ? { ...a, incoming_leg_transport_mode: mode } : a)),
       })
     }
-    assignmentsApi.updateTransport(tripId, assignmentId, mode, 'incoming').catch((err: unknown) => {
-      toast.error(err instanceof Error ? err.message : t('common.unknownError'))
-      void tripActions.refreshDays(tripId)
-    })
+    persistLegMode(assignmentId, mode, 'incoming')
   }
 
   const openIncomingLegModeMenu = (e: React.MouseEvent, assignmentId: number, dayId: number, seg?: RouteSegment) => {
-    ctxMenu.open(e, [
-      ...routeProfileOptions.map(o => ({ label: o.label, icon: modeIcon(o.key), onClick: () => setIncomingLegMode(assignmentId, dayId, o.key) })),
-      ...transitLegMenuItem(dayId, seg),
-      { divider: true },
-      { label: t('dayplan.transportMode.useDefault'), icon: RotateCcw, onClick: () => setIncomingLegMode(assignmentId, dayId, null) },
-    ])
+    ctxMenu.open(e, legModeMenu(mode => setIncomingLegMode(assignmentId, dayId, mode), transitLegPlanner(dayId, seg)))
   }
 
   // Enter/Space on a route connector opens the same mode menu a click opens. A key
