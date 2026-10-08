@@ -12,18 +12,8 @@ vi.mock('../../../src/db/database', async () => {
 
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  // DatabaseService delegates the joined read straight through to the module, so the
-  // mock has to answer it: without this the insert half of every import throws.
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: any) => {
-      const place: any = db.prepare('SELECT * FROM places WHERE id = ?').get(placeId);
-      return place ? { ...place, category: null, tags: [] } : null;
-    },
-  };
-    return mock;
+  // The joined place read goes through PlacesRepository now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
 

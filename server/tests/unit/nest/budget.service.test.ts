@@ -4,18 +4,14 @@
  * freeze the FX rate before the raw write — incl. the #1445 stored-currency
  * thread-through) and the wrapper-only syncReservationPrice SQL. The SQL-heavy
  * paths themselves are covered by budget.service.db.test.ts (real :memory: DB)
- * and budget.service.calc.test.ts (settlement math over a prepare-stub mock).
+ * and budget.service.calc.test.ts (settlement math over a stubbed database).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock the data + side-effect dependencies the service reaches into directly.
-const { dbMock } = vi.hoisted(() => {
-  const stmt = { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
-  return { dbMock: { prepare: vi.fn(() => stmt), _stmt: stmt } };
-});
 const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
 vi.mock('../../../src/db/database', () => ({
-  db: dbMock,
+  db: {},
   closeDb: () => {},
   reinitialize: () => {},
   canAccessTrip,
@@ -49,9 +45,9 @@ import type { TripsRepository } from '../../../src/db/repositories/Trips.reposit
 import type { TripMembersRepository } from '../../../src/db/repositories/TripMembers.repository';
 
 /**
- * There is no database behind this suite — every statement is served by the
- * prepare stub above — so the UnitOfWork is a pass-through: it runs the callback
- * as MikroORM would, with no transaction to open on.
+ * There is no database behind this suite (every repository is a stub), so the
+ * UnitOfWork is a pass-through: it runs the callback as MikroORM would, with no
+ * transaction to open on.
  */
 const uowStub = { transactional: <T>(fn: () => Promise<T>) => fn() } as unknown as UnitOfWork;
 
@@ -61,16 +57,19 @@ const uowStub = { transactional: <T>(fn: () => Promise<T>) => fn() } as unknown 
  * and update and delete wrappers, setItemPayers, insertSettlement,
  * getSettlement, applySettlementUpdate — the composite-wrapper tests only
  * assert the freeze-then-write ORDER, never the SQL itself) or, for
- * `syncReservationPrice`, still needs the `dbMock`/`prepare` stub above to
- * answer — so this repo proxies to it instead of a real
- * `ReservationsRepository`, keeping that describe block's assertions
- * (incl. "prepare throws" leading to a swallowed error) unchanged.
+ * `syncReservationPrice`, answered by these three repository stubs: the
+ * lookup, the metadata write and the reload the service makes, in that order.
+ * A lookup that rejects stands for the database being gone.
  */
-const reservationsRepoStub = {
-  getIdAndMetadata: async (id: number, tripId: unknown) => dbMock.prepare().get(id, tripId),
-  setMetadata: async (id: number, metadata: string) => { dbMock.prepare().run(metadata, id); },
-  getFull: async (id: number) => dbMock.prepare().get(id),
-} as unknown as ReservationsRepository;
+const reservationsRepo = {
+  getIdAndMetadata: vi.fn(),
+  setMetadata: vi.fn<(id: number, metadata: string) => Promise<void>>(async () => {}),
+  getFull: vi.fn(),
+};
+const reservationsRepoStub = reservationsRepo as unknown as ReservationsRepository;
+
+/** The metadata JSON the service wrote on its first setMetadata call. */
+const writtenMetadata = (): unknown => JSON.parse(reservationsRepo.setMetadata.mock.calls[0][1]);
 
 function svc(
   tripMembersRepo: TripMembersRepository = {} as unknown as TripMembersRepository,
@@ -101,7 +100,7 @@ describe('BudgetService', () => {
     // Plan 4 Task 2: `verifyTripAccess` no longer rides `DatabaseService
     // .canAccessTrip` — it reads through the injected `TripsRepository`
     // directly, consistent with this suite's "no database behind it"
-    // design (everything else here is a `prepare` stub).
+    // design (everything else here is a stub).
     const findAccessible = vi.fn(async () => ({ id: 5, user_id: 2 }));
     const fakeTripsRepo = { findAccessible } as unknown as TripsRepository;
     expect(await svc(undefined, fakeTripsRepo).verifyTripAccess('5', 2)).toEqual({ id: 5, user_id: 2 });
@@ -261,52 +260,54 @@ describe('BudgetService', () => {
 
   describe('syncReservationPrice', () => {
     it('returns early when the reservation is not found', async () => {
-      dbMock._stmt.get.mockReturnValueOnce(undefined);
+      reservationsRepo.getIdAndMetadata.mockResolvedValueOnce(undefined);
       await svc().syncReservationPrice('5', 42, 250, 'sock');
-      expect(dbMock._stmt.run).not.toHaveBeenCalled();
+      expect(reservationsRepo.setMetadata).not.toHaveBeenCalled();
       expect(broadcast).not.toHaveBeenCalled();
     });
 
     it('merges into existing metadata and broadcasts reservation:updated', async () => {
-      dbMock._stmt.get
-        .mockReturnValueOnce({ id: 42, metadata: '{"vendor":"ACME"}' }) // lookup
-        .mockReturnValueOnce({ id: 42, metadata: '{"vendor":"ACME","price":"250"}' }); // reload
+      reservationsRepo.getIdAndMetadata.mockResolvedValueOnce({ id: 42, metadata: '{"vendor":"ACME"}' }); // lookup
+      reservationsRepo.getFull.mockResolvedValueOnce({ id: 42, metadata: '{"vendor":"ACME","price":"250"}' }); // reload
       await svc().syncReservationPrice('5', 42, 250, 'sock');
-      const writtenMeta = JSON.parse(dbMock._stmt.run.mock.calls[0][0] as string);
-      expect(writtenMeta).toEqual({ vendor: 'ACME', price: '250' });
+      expect(reservationsRepo.setMetadata.mock.calls[0][0]).toBe(42);
+      expect(writtenMetadata()).toEqual({ vendor: 'ACME', price: '250' });
       expect(broadcast).toHaveBeenCalledWith('5', 'reservation:updated', { reservation: { id: 42, metadata: '{"vendor":"ACME","price":"250"}' } }, 'sock');
     });
 
     it('starts from an empty object when the reservation has no metadata', async () => {
-      dbMock._stmt.get.mockReturnValueOnce({ id: 42, metadata: null }).mockReturnValueOnce({ id: 42 });
+      reservationsRepo.getIdAndMetadata.mockResolvedValueOnce({ id: 42, metadata: null });
+      reservationsRepo.getFull.mockResolvedValueOnce({ id: 42 });
       await svc().syncReservationPrice('5', 42, 99, undefined);
-      const writtenMeta = JSON.parse(dbMock._stmt.run.mock.calls[0][0] as string);
-      expect(writtenMeta).toEqual({ price: '99' });
+      expect(writtenMetadata()).toEqual({ price: '99' });
     });
 
     it('swallows errors so a sync failure never breaks the budget update', async () => {
-      dbMock.prepare.mockImplementationOnce(() => { throw new Error('db gone'); });
+      reservationsRepo.getIdAndMetadata.mockRejectedValueOnce(new Error('db gone'));
       await expect(svc().syncReservationPrice('5', 42, 250, 'sock')).resolves.toBeUndefined();
       expect(broadcast).not.toHaveBeenCalled();
     });
 
     // #2084: the card names the currency beside the mirrored figure.
     it('writes the currency beside the price, upper-cased', async () => {
-      dbMock._stmt.get.mockReturnValueOnce({ id: 42, metadata: '{"seat":"1A"}' }).mockReturnValueOnce({ id: 42 });
+      reservationsRepo.getIdAndMetadata.mockResolvedValueOnce({ id: 42, metadata: '{"seat":"1A"}' });
+      reservationsRepo.getFull.mockResolvedValueOnce({ id: 42 });
       await svc().syncReservationPrice('5', 42, 99.5, 'sock', 'usd');
-      expect(JSON.parse(dbMock._stmt.run.mock.calls[0][0] as string)).toEqual({ seat: '1A', price: '99.5', priceCurrency: 'USD' });
+      expect(writtenMetadata()).toEqual({ seat: '1A', price: '99.5', priceCurrency: 'USD' });
     });
 
     it('drops a stored currency when the expense is in the trip currency (null)', async () => {
-      dbMock._stmt.get.mockReturnValueOnce({ id: 42, metadata: '{"price":"10","priceCurrency":"CNY"}' }).mockReturnValueOnce({ id: 42 });
+      reservationsRepo.getIdAndMetadata.mockResolvedValueOnce({ id: 42, metadata: '{"price":"10","priceCurrency":"CNY"}' });
+      reservationsRepo.getFull.mockResolvedValueOnce({ id: 42 });
       await svc().syncReservationPrice('5', 42, 12, undefined, null);
-      expect(JSON.parse(dbMock._stmt.run.mock.calls[0][0] as string)).toEqual({ price: '12' });
+      expect(writtenMetadata()).toEqual({ price: '12' });
     });
 
     it('leaves a stored currency alone when none is passed at all', async () => {
-      dbMock._stmt.get.mockReturnValueOnce({ id: 42, metadata: '{"price":"10","priceCurrency":"CNY"}' }).mockReturnValueOnce({ id: 42 });
+      reservationsRepo.getIdAndMetadata.mockResolvedValueOnce({ id: 42, metadata: '{"price":"10","priceCurrency":"CNY"}' });
+      reservationsRepo.getFull.mockResolvedValueOnce({ id: 42 });
       await svc().syncReservationPrice('5', 42, 12, undefined);
-      expect(JSON.parse(dbMock._stmt.run.mock.calls[0][0] as string)).toEqual({ price: '12', priceCurrency: 'CNY' });
+      expect(writtenMetadata()).toEqual({ price: '12', priceCurrency: 'CNY' });
     });
   });
 

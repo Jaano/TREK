@@ -4,7 +4,7 @@
  * counterparts of the GET /api/plugins feed and GET /api/plugin-pois. Both go through
  * PluginPoisService, so the gate, the window and the normalization are the REST ones.
  */
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { pluginsEnabled } = vi.hoisted(() => ({ pluginsEnabled: vi.fn(() => true) }));
 
@@ -25,6 +25,10 @@ import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 import { resetTestDb } from '../../helpers/test-db';
 import { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
+import { Plugins } from '../../../src/db/entities/Plugins.entity';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { deleteRows } from '../../helpers/factories/rows';
+import { makePlugin } from '../../helpers/factories/plugins';
 
 const providersOfMock = vi.spyOn(PluginHooks.prototype, 'providersOf');
 const categoryPoisMock = vi.spyOn(PluginHooks.prototype, 'categoryPois');
@@ -32,18 +36,28 @@ const categoryPoisMock = vi.spyOn(PluginHooks.prototype, 'categoryPois');
 const trailheads = { id: 'trailheads', label: 'Trailheads', labels: { de: 'Wanderparkplätze' }, icon: 'Signpost', color: '#2f855a' };
 const bbox = { south: 47, west: 11, north: 47.5, east: 11.5 };
 
-beforeEach(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+beforeEach(async () => {
   resetTestDb(testDb);
-  testDb.prepare('DELETE FROM plugins').run();
-  testDb
-    .prepare("INSERT INTO plugins (id, name, status, capabilities, granted_permissions) VALUES (?, ?, 'active', ?, ?)")
-    .run('trail-finder', 'Trail Finder', JSON.stringify({ poiCategories: [trailheads] }), JSON.stringify(['hook:poi-category-provider']));
+  await deleteRows(orm, Plugins);
+  await makePlugin(orm, 'trail-finder', {
+    name: 'Trail Finder',
+    status: 'active',
+    capabilities: JSON.stringify({ poiCategories: [trailheads] }),
+    granted_permissions: JSON.stringify(['hook:poi-category-provider']),
+  });
   pluginsEnabled.mockReturnValue(true);
   providersOfMock.mockReset().mockReturnValue(['trail-finder']);
   categoryPoisMock.mockReset().mockResolvedValue([]);
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 

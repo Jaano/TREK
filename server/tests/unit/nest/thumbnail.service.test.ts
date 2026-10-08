@@ -19,6 +19,7 @@ import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
+import { deleteRows, insertRow } from '../../helpers/factories/rows';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
 
 // Category-addressed since slice 4: originals + thumbs are ('journey', <name>)
@@ -136,13 +137,13 @@ describe('sweepOrphanThumbs (spec fix #2)', () => {
     return fp;
   };
 
-  beforeEach(() => {
-    thumbsDb.prepare('DELETE FROM trek_photos').run();
+  beforeEach(async () => {
+    await deleteRows(t, TrekPhotos);
     fs.rmSync(thumbsDir, { recursive: true, force: true });
   });
 
   it('THUMB-SWEEP-001: deletes strays, spares thumbs derivable from live journey rows', async () => {
-    thumbsDb.prepare("INSERT INTO trek_photos (provider, file_path) VALUES ('local', ?)").run('journey/live.jpg');
+    await insertRow(t, TrekPhotos, { provider: 'local', file_path: 'journey/live.jpg' });
     const liveName = journeyThumbName('journey/live.jpg'); // 'thumbs/<hash>.jpg'
     const livePath = writeThumb(path.basename(liveName));
     const strayPath = writeThumb('deadbeefdeadbeef.jpg');
@@ -155,8 +156,11 @@ describe('sweepOrphanThumbs (spec fix #2)', () => {
   });
 
   it('THUMB-SWEEP-002: spares a recorded thumbnail_path even without a matching file_path hash', async () => {
-    thumbsDb.prepare("INSERT INTO trek_photos (provider, file_path, thumbnail_path) VALUES ('local', ?, ?)")
-      .run('elsewhere/x.jpg', 'journey/thumbs/recorded00000000.jpg');
+    await insertRow(t, TrekPhotos, {
+      provider: 'local',
+      file_path: 'elsewhere/x.jpg',
+      thumbnail_path: 'journey/thumbs/recorded00000000.jpg',
+    });
     const recorded = writeThumb('recorded00000000.jpg');
 
     const removed = await svc.sweepOrphanThumbs();

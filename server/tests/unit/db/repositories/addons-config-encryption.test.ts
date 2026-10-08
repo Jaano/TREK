@@ -12,6 +12,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { Addons } from '../../../../src/db/entities/Addons.entity';
+import { deleteRows, insertRow } from '../../../helpers/factories/rows';
 import type { AddonsRepository } from '../../../../src/db/repositories/Addons.repository';
 import { prepareLlmAddonConfigForWrite } from '../../../../src/nest/llm-parse/llm-config';
 import { decrypt_api_key } from '../../../../src/nest/common/crypto/apiKeyCrypto';
@@ -24,12 +25,18 @@ beforeAll(async () => {
   t = await createTestOrm(testDb);
   addons = t.repo(Addons);
 });
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  testDb.exec('DELETE FROM addons');
-  testDb
-    .prepare(`INSERT INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('llm_parsing', 'AI Parsing', NULL, 'global', 'Sparkles', 0, 0)`)
-    .run();
+  await deleteRows(t, Addons);
+  await insertRow(t, Addons, {
+    id: 'llm_parsing',
+    name: 'AI Parsing',
+    description: null,
+    type: 'global',
+    icon: 'Sparkles',
+    enabled: false,
+    sort_order: 0,
+  });
   t.clear();
 });
 afterAll(async () => {

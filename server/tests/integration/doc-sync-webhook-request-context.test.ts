@@ -31,12 +31,14 @@
  * callback it schedules (`() => config.getLink(linkId)`) is what needs the
  * fork, and it only runs once the timer fires, inside `schedule()`'s own
  * `withRequestContext` — exactly the wrap under test. The link id comes from
- * a raw `testDb` read (no ORM, no context needed) rather than through
- * `nudge()`/`getLinkByToken`, so nothing before the `schedule()` call ever
- * touches the EntityManager.
+ * the fixture `beforeAll` seeds, whose factory calls each open and close a
+ * request context of their own, rather than through
+ * `nudge()`/`getLinkByToken`, so nothing in the test body before the
+ * `schedule()` call ever touches the EntityManager.
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 vi.mock('../../src/db/database', async () => {
   const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
@@ -56,6 +58,11 @@ vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.
 import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
 import { createUser, createTrip } from '../helpers/factories';
+import { insertRow, updateRows } from '../helpers/factories/rows';
+import { setAddonEnabled } from '../helpers/factories/settings';
+import { DocumentConnections } from '../../src/db/entities/DocumentConnections.entity';
+import { DocumentProviders } from '../../src/db/entities/DocumentProviders.entity';
+import { TripDocumentLinks } from '../../src/db/entities/TripDocumentLinks.entity';
 import { WEBHOOK_NUDGE_DEBOUNCE_SECONDS } from '../../src/nest/doc-sync/doc-sync.constants';
 import { DocSyncWebhookController } from '../../src/nest/doc-sync/doc-sync-webhook.controller';
 import { DocSyncConfigService } from '../../src/nest/doc-sync/doc-sync-config.service';
@@ -74,28 +81,35 @@ describe('DocSyncWebhookController#schedule() runs its detached timer body insid
     // The addon gate and the provider both have to be genuinely on: schedule()'s
     // own reload callback (`syncIsOn`) skips the run otherwise, before ever
     // reaching the assertion below.
-    testDb.exec("UPDATE addons SET enabled = 1 WHERE id = 'documents'");
-    testDb.exec("UPDATE document_providers SET enabled = 1 WHERE id = 'paperless'");
+    const orm = app.get(MikroORM);
+    await setAddonEnabled(orm, 'documents', true);
+    await updateRows(orm, DocumentProviders, { id: 'paperless' }, { enabled: 1 });
 
     const owner = createUser(testDb, { username: 'docsync-webhook-ctx', email: 'docsync-webhook-ctx@test.local' }).user;
     const trip = createTrip(testDb, owner.id, { title: 'Japan' });
-    const connInfo = testDb
-      .prepare(
-        `INSERT INTO document_connections (trip_id, provider_id, owner_user_id, base_url, secrets, settings)
-         VALUES (?, 'paperless', ?, 'https://paperless.example.com', NULL, '{}')`,
-      )
-      .run(trip.id, owner.id);
-    const linkInfo = testDb
-      .prepare(
-        `INSERT INTO trip_document_links
-           (trip_id, connection_id, provider_id, remote_scope_key, remote_label, direction, delete_policy,
-            conflict_policy, sync_enabled, webhook_token, created_by)
-         VALUES (?, ?, 'paperless', 'tag:1', 'Japan', 'both', 'unlink', 'manual', 1, 'webhook-ctx-ratchet-token', ?)`,
-      )
-      .run(trip.id, connInfo.lastInsertRowid, owner.id);
-    // A plain better-sqlite3 read — no ORM, no request context — so nothing
-    // before the `schedule()` call below ever touches the EntityManager.
-    linkId = Number(linkInfo.lastInsertRowid);
+    const connectionId = await insertRow(orm, DocumentConnections, {
+      trip: trip.id,
+      provider: 'paperless',
+      ownerUser: owner.id,
+      base_url: 'https://paperless.example.com',
+      secrets: null,
+      settings: '{}',
+    });
+    // Each factory call above closed its own request context before returning,
+    // so the test body below starts with no EntityManager fork around it.
+    linkId = await insertRow(orm, TripDocumentLinks, {
+      trip: trip.id,
+      connection: connectionId,
+      provider_id: 'paperless',
+      remote_scope_key: 'tag:1',
+      remote_label: 'Japan',
+      direction: 'both',
+      delete_policy: 'unlink',
+      conflict_policy: 'manual',
+      sync_enabled: 1,
+      webhook_token: 'webhook-ctx-ratchet-token',
+      createdByRef: owner.id,
+    });
   });
 
   afterAll(async () => {

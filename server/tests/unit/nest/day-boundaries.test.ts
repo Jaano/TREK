@@ -16,6 +16,7 @@ import { DayBoundariesController } from '../../../src/nest/roadtrip/day-boundari
 import { DayBoundariesMcp } from '../../../src/nest/roadtrip/day-boundaries.mcp';
 import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
 import { RoadtripDayBoundaries } from '../../../src/db/entities/RoadtripDayBoundaries.entity';
+import { deleteRows } from '../../helpers/factories/rows';
 import type { McpContext } from '../../../src/nest-mcp';
 
 const testDb = createSnapshotTestDb();
@@ -71,7 +72,7 @@ it('replaces one day only, persists place snapping and cascades deleted visits',
   expect(await service.list(tripB.id)).toEqual([]);
   await service.remove(tripB.id, 1);
   expect(await service.list(tripA.id)).toHaveLength(2);
-  testDb.prepare('DELETE FROM day_assignments WHERE id = ?').run(toId);
+  await deleteRows(t, DayAssignments, { id: toId });
   expect(await service.list(tripA.id)).toEqual([{ ...boundary, to_assignment_id: null, fraction: 1 }]);
 });
 

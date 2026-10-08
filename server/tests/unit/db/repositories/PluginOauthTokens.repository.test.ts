@@ -17,6 +17,7 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { PluginOauthTokens } from '../../../../src/db/entities/PluginOauthTokens.entity';
 import type { PluginOauthTokensRepository } from '../../../../src/db/repositories/PluginOauthTokens.repository';
 import { currentTimestampKysely } from '../../../../src/db/dialect/kysely-functions';
+import { findRow } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -30,9 +31,7 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 function storedRow(pluginId: string, userId: number) {
-  return testDb
-    .prepare('SELECT plugin_id, user_id, access_token, refresh_token, expires_at, scope, updated_at FROM plugin_oauth_tokens WHERE plugin_id = ? AND user_id = ?')
-    .get(pluginId, userId) as { plugin_id: string; user_id: number; access_token: string | null; refresh_token: string | null; expires_at: number | null; scope: string | null; updated_at: string } | undefined;
+  return findRow(t, PluginOauthTokens, { plugin_id: pluginId, user_id: userId });
 }
 
 describe('PluginOauthTokensRepository', () => {
@@ -75,12 +74,12 @@ describe('PluginOauthTokensRepository', () => {
       // Seed an existing token row with a non-null refresh_token — the state a
       // previously-connected user is in when a later refresh comes back without one.
       await repo.storeToken({ plugin_id: 'p', user_id: 42, access_token: 'AT-1', refresh_token: 'RT-original', expires_at: 1000, scope: 'read' });
-      expect(storedRow('p', 42)).toMatchObject({ access_token: 'AT-1', refresh_token: 'RT-original' });
+      expect(await storedRow('p', 42)).toMatchObject({ access_token: 'AT-1', refresh_token: 'RT-original' });
 
       // A refresh response that omits refresh_token — the repository call the
       // service makes when it has NOT pre-filled the field itself.
       await repo.storeToken({ plugin_id: 'p', user_id: 42, access_token: 'AT-2', refresh_token: null, expires_at: 2000, scope: 'read write' });
-      const row = storedRow('p', 42)!;
+      const row = (await storedRow('p', 42))!;
       // access_token/expires_at/scope always take the new value (plain excluded.* reassignment)...
       expect(row.access_token).toBe('AT-2');
       expect(row.expires_at).toBe(2000);
@@ -93,14 +92,14 @@ describe('PluginOauthTokensRepository', () => {
     it('PO11REPO-003 (R-oauth-upsert, the other COALESCE direction): a refresh response that DOES supply a new refresh_token overwrites the stored one', async () => {
       await repo.storeToken({ plugin_id: 'p', user_id: 42, access_token: 'AT-1', refresh_token: 'RT-original', expires_at: 1000, scope: 'read' });
       await repo.storeToken({ plugin_id: 'p', user_id: 42, access_token: 'AT-2', refresh_token: 'RT-rotated', expires_at: 2000, scope: 'read' });
-      const row = storedRow('p', 42)!;
+      const row = (await storedRow('p', 42))!;
       expect(row.refresh_token).toBe('RT-rotated');
     });
 
     it('PO11REPO-004: a brand-new row (no prior state) inserts plainly — no COALESCE fallback target to speak of yet', async () => {
-      expect(storedRow('fresh', 7)).toBeUndefined();
+      expect(await storedRow('fresh', 7)).toBeNull();
       await repo.storeToken({ plugin_id: 'fresh', user_id: 7, access_token: 'AT', refresh_token: null, expires_at: null, scope: null });
-      const row = storedRow('fresh', 7)!;
+      const row = (await storedRow('fresh', 7))!;
       expect(row.access_token).toBe('AT');
       expect(row.refresh_token).toBeNull();
     });
@@ -108,8 +107,8 @@ describe('PluginOauthTokensRepository', () => {
     it('PO11REPO-005: the composite key isolates rows — a second user of the same plugin gets its own row, the first is untouched', async () => {
       await repo.storeToken({ plugin_id: 'p', user_id: 1, access_token: 'AT-1', refresh_token: 'RT-1', expires_at: null, scope: null });
       await repo.storeToken({ plugin_id: 'p', user_id: 2, access_token: 'AT-2', refresh_token: 'RT-2', expires_at: null, scope: null });
-      expect(storedRow('p', 1)).toMatchObject({ access_token: 'AT-1', refresh_token: 'RT-1' });
-      expect(storedRow('p', 2)).toMatchObject({ access_token: 'AT-2', refresh_token: 'RT-2' });
+      expect(await storedRow('p', 1)).toMatchObject({ access_token: 'AT-1', refresh_token: 'RT-1' });
+      expect(await storedRow('p', 2)).toMatchObject({ access_token: 'AT-2', refresh_token: 'RT-2' });
     });
   });
 });

@@ -17,6 +17,10 @@ import {
   createTrip,
   createUser,
 } from '../../helpers/factories';
+import { readTripDays } from '../../helpers/factories/trips';
+import { countRows } from '../../helpers/factories/rows';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
 
 // #2518: a container with a read-only root filesystem and no tmpfs on /tmp
 // gives SQLite nowhere to put a temp file, so deleting a trip failed with
@@ -124,7 +128,8 @@ async function deleteTripAndWatchTempFiles(db: Database.Database): Promise<{
     start_date: '2026-06-01',
     end_date: '2026-06-14',
   });
-  const days = db.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { id: number }[];
+  const t = await createTestOrm(db);
+  const days = await readTripDays(t, trip.id);
   for (let i = 0; i < 25; i++) {
     const place = createPlace(db, trip.id, { name: `Ort ${i}`, description: 'Grachten und Tulpen. '.repeat(10) });
     createDayAssignment(db, days[i % days.length].id, place.id);
@@ -141,19 +146,17 @@ async function deleteTripAndWatchTempFiles(db: Database.Database): Promise<{
   db.exec('CREATE TRIGGER trek_watch_trip_delete AFTER DELETE ON trips BEGIN SELECT trek_watch_temp_files(); END');
 
   const none = undefined as never;
-  const t = await createTestOrm(db);
   try {
     const trips = new TripsService(none, none, none, none, none, none, none, none, new UnitOfWork(t.em), t.em, none);
     await trips.remove(trip.id, user.id, 'user');
+    return {
+      tempFiles: [...seen],
+      tripLeft: await countRows(t, Trips, { id: trip.id }),
+      placesLeft: await countRows(t, Places, { trip: trip.id }),
+    };
   } finally {
     await t.close();
   }
-
-  return {
-    tempFiles: [...seen],
-    tripLeft: (db.prepare('SELECT COUNT(*) AS n FROM trips WHERE id = ?').get(trip.id) as { n: number }).n,
-    placesLeft: (db.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id) as { n: number }).n,
-  };
 }
 
 describe.runIf(canSeeTempFiles)('deleting a trip with content (#2518)', () => {

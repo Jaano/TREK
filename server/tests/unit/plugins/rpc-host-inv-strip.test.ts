@@ -41,7 +41,7 @@ const tripsRegistry = () => {
   } as unknown as TripsRepository;
   const guards = new PluginGuards(db, {} as never, {} as never, {} as never);
   // Plan 3c Task 7: trips.getById (RP1) now reads through
-  // `EntityManager.getRepository(Trips).findRaw(...)`, not `db.prepare(...)`.
+  // `EntityManager.getRepository(Trips).findRaw(...)`, not a raw statement on the handle.
   const em = {
     getRepository: () => ({ findRaw: async () => ({ id: 1, title: 'Japan', feed_token: null }) }),
   } as unknown as EntityManager;

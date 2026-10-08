@@ -24,6 +24,9 @@ import { StorageRegistryService, BACKENDS_KEY, CATEGORIES_KEY } from '../../../.
 import { StorageService } from '../../../../src/nest/storage/storage.service';
 import { StorageConflictError } from '../../../../src/nest/storage/storage.types';
 import { createTestUnitOfWork, createTestAppSettingsRepo, sharedTestOrm } from '../../../helpers/test-uow';
+import { readAppSetting, setAppSetting } from '../../../helpers/factories/settings';
+import { deleteRows } from '../../../helpers/factories/rows';
+import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
 
 const tmpDirs: string[] = [];
 function makeTmpDir(): string {
@@ -31,12 +34,11 @@ function makeTmpDir(): string {
   tmpDirs.push(dir);
   return dir;
 }
-function setSetting(key: string, value: string): void {
-  testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+async function setSetting(key: string, value: string): Promise<void> {
+  await setAppSetting(await sharedTestOrm(testDb), key, value);
 }
-function readRow(key: string): string | undefined {
-  const row = testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined;
-  return row?.value;
+async function readRow(key: string): Promise<string | undefined> {
+  return (await readAppSetting(await sharedTestOrm(testDb), key)) ?? undefined;
 }
 
 const S3_OPTIONS = {
@@ -53,7 +55,7 @@ const S3_OPTIONS = {
 /** Real registry + real service over the in-memory DB. */
 async function makeService(opts: { uploadsRoot?: string } = {}) {
   const uploadsRoot = opts.uploadsRoot ?? makeTmpDir();
-  setSetting(BACKENDS_KEY, JSON.stringify([{ name: 'uploads-local', type: 'local', options: { root: uploadsRoot } }]));
+  await setSetting(BACKENDS_KEY, JSON.stringify([{ name: 'uploads-local', type: 'local', options: { root: uploadsRoot } }]));
   const env = { placePhotoDir: undefined };
   const uow = await createTestUnitOfWork(testDb);
   const appSettings = await createTestAppSettingsRepo(testDb);
@@ -92,8 +94,8 @@ async function put(service: StorageAdminService, config: StorageConfig): Promise
   await service.applyConfig({ ...config, version: (await (await service.state())).version });
 }
 
-beforeEach(() => {
-  testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'storage.%'").run();
+beforeEach(async () => {
+  await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: { $like: 'storage.%' } });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -138,7 +140,7 @@ describe('StorageAdminService.state', () => {
     const { service, registry } = await makeService();
     expect((await service.state()).configError).toBeNull();
 
-    setSetting(CATEGORIES_KEY, 'garbage {');
+    await setSetting(CATEGORIES_KEY, 'garbage {');
     await registry.reload();
     expect((await service.state()).configError).toBe(registry.lastLoadError());
     expect((await service.state()).configError).not.toBeNull();
@@ -163,7 +165,7 @@ describe('StorageAdminService.applyConfig', () => {
       categories: { backups: 'nas-backups' },
     }));
     expect(registry.resolve('backups').backendName).toBe('nas-backups'); // reload() ran
-    expect(JSON.parse(readRow(CATEGORIES_KEY)!)).toEqual({ backups: 'nas-backups' });
+    expect(JSON.parse((await readRow(CATEGORIES_KEY))!)).toEqual({ backups: 'nas-backups' });
   });
 
   it('STORADM-011 encrypts plaintext secrets at rest', async () => {
@@ -172,7 +174,7 @@ describe('StorageAdminService.applyConfig', () => {
       backends: [{ name: 'off-box', type: 's3', options: S3_OPTIONS }],
       categories: { backups: 'off-box' },
     }));
-    const stored = JSON.parse(readRow(BACKENDS_KEY)!) as Array<{ name: string; options: Record<string, unknown> }>;
+    const stored = JSON.parse((await readRow(BACKENDS_KEY))!) as Array<{ name: string; options: Record<string, unknown> }>;
     const secret = String(stored.find((b) => b.name === 'off-box')!.options.secretAccessKey);
     expect(secret.startsWith('enc:v1:')).toBe(true);
   });
@@ -183,27 +185,27 @@ describe('StorageAdminService.applyConfig', () => {
       backends: [{ name: 'off-box', type: 's3', options: S3_OPTIONS }],
       categories: { backups: 'off-box' },
     }));
-    const before = JSON.parse(readRow(BACKENDS_KEY)!) as Array<{ name: string; options: Record<string, unknown> }>;
+    const before = JSON.parse((await readRow(BACKENDS_KEY))!) as Array<{ name: string; options: Record<string, unknown> }>;
     const cipherBefore = before.find((b) => b.name === 'off-box')!.options.secretAccessKey;
 
     await put(service, configWith(uploadsRoot, {
       backends: [{ name: 'off-box', type: 's3', options: { ...S3_OPTIONS, secretAccessKey: MASKED_SETTING_VALUE } }],
       categories: { backups: 'off-box' },
     }));
-    const after = JSON.parse(readRow(BACKENDS_KEY)!) as Array<{ name: string; options: Record<string, unknown> }>;
+    const after = JSON.parse((await readRow(BACKENDS_KEY))!) as Array<{ name: string; options: Record<string, unknown> }>;
     expect(after.find((b) => b.name === 'off-box')!.options.secretAccessKey).toBe(cipherBefore);
   });
 
   it('STORADM-013 a mask on a renamed/new backend throws the re-enter error, persists nothing', async () => {
     const { service, uploadsRoot } = await makeService();
-    const before = readRow(BACKENDS_KEY);
+    const before = await readRow(BACKENDS_KEY);
     await expect(
       put(service, configWith(uploadsRoot, {
         backends: [{ name: 'brand-new', type: 's3', options: { ...S3_OPTIONS, secretAccessKey: MASKED_SETTING_VALUE } }],
         categories: {},
       })),
     ).rejects.toThrow("re-enter the secret 'secretAccessKey' for 'brand-new'");
-    expect(readRow(BACKENDS_KEY)).toBe(before);
+    expect(await readRow(BACKENDS_KEY)).toBe(before);
   });
 
   it('STORADM-014 a plaintext secret saves without an explicit ENCRYPTION_KEY and is still encrypted at rest', async () => {
@@ -213,7 +215,7 @@ describe('StorageAdminService.applyConfig', () => {
       backends: [{ name: 'off-box', type: 's3', options: S3_OPTIONS }],
       categories: {},
     }));
-    const stored = JSON.parse(readRow(BACKENDS_KEY)!) as Array<{ name: string; options: Record<string, string> }>;
+    const stored = JSON.parse((await readRow(BACKENDS_KEY))!) as Array<{ name: string; options: Record<string, string> }>;
     const offBox = stored.find((b) => b.name === 'off-box')!;
     expect(offBox.options.secretAccessKey.startsWith('enc:v1:')).toBe(true);
   });
@@ -225,29 +227,29 @@ describe('StorageAdminService.applyConfig', () => {
       backends: [{ name: 'off-box', type: 's3', options: { ...S3_OPTIONS, secretAccessKey: encrypt_api_key('sk') } }],
       categories: { backups: 'off-box' },
     }));
-    expect(readRow(BACKENDS_KEY)).toBeDefined();
+    expect(await readRow(BACKENDS_KEY)).toBeDefined();
   });
 
   it('STORADM-016 preview() refusals surface verbatim and persist nothing', async () => {
     const { service, uploadsRoot, registry } = await makeService();
-    const before = readRow(CATEGORIES_KEY);
+    const before = await readRow(CATEGORIES_KEY);
     await expect(
       put(service, configWith(uploadsRoot, { categories: { backups: 'nope' } })),
     ).rejects.toThrow("category 'backups' maps to unknown backend 'nope'");
-    expect(readRow(CATEGORIES_KEY)).toBe(before);
+    expect(await readRow(CATEGORIES_KEY)).toBe(before);
     expect(registry.resolve('backups').backendName).toBe('backups-local'); // live state untouched
   });
 
   it('STORADM-018 a mask sentinel in a NON-secret field throws and persists nothing', async () => {
     const { service, uploadsRoot } = await makeService();
-    const before = readRow(BACKENDS_KEY);
+    const before = await readRow(BACKENDS_KEY);
     await expect(
       put(service, configWith(uploadsRoot, {
         backends: [{ name: 'off-box', type: 's3', options: { ...S3_OPTIONS, accessKeyId: MASKED_SETTING_VALUE } }],
         categories: {},
       })),
     ).rejects.toThrow("backend 'off-box' field 'accessKeyId' is the mask sentinel — a mask can never become a stored value");
-    expect(readRow(BACKENDS_KEY)).toBe(before);
+    expect(await readRow(BACKENDS_KEY)).toBe(before);
   });
 
   it('STORADM-017 persists both rows in ONE transaction and reloads once', async () => {
@@ -284,8 +286,8 @@ describe('StorageAdminService.applyConfig', () => {
   it('STORADM-031 a stale submitted version throws StorageConflictError and persists nothing (→ 409, audit #7)', async () => {
     const { service, uploadsRoot } = await makeService();
     await put(service, configWith(uploadsRoot)); // version is now 1
-    const beforeBackends = readRow(BACKENDS_KEY);
-    const beforeCategories = readRow(CATEGORIES_KEY);
+    const beforeBackends = await readRow(BACKENDS_KEY);
+    const beforeCategories = await readRow(CATEGORIES_KEY);
     await expect(
       service.applyConfig({ ...configWith(uploadsRoot), version: 0 }), // stale — current is 1
     ).rejects.toThrow(StorageConflictError);
@@ -297,8 +299,8 @@ describe('StorageAdminService.applyConfig', () => {
       expect((err as StorageConflictError).currentVersion).toBe(1);
       expect((err as StorageConflictError).submittedVersion).toBe(0);
     }
-    expect(readRow(BACKENDS_KEY)).toBe(beforeBackends);
-    expect(readRow(CATEGORIES_KEY)).toBe(beforeCategories);
+    expect(await readRow(BACKENDS_KEY)).toBe(beforeBackends);
+    expect(await readRow(CATEGORIES_KEY)).toBe(beforeCategories);
     expect((await service.state()).version).toBe(1); // unchanged — the conflicting save never wrote
   });
 
@@ -452,7 +454,7 @@ describe('StorageAdminService.testBackend', () => {
     // applyConfig encrypted the secret at rest — the snapshot the mirror
     // expansion reads holds ciphertext, so this probe exercises the full
     // snapshot → decryptBackendSecrets → ephemeral S3Driver chain.
-    expect(readRow(BACKENDS_KEY)).toContain('enc:v1:');
+    expect(await readRow(BACKENDS_KEY)).toContain('enc:v1:');
     const result = await service.testBackend({
       name: 'cand-mirror',
       type: 'mirror',

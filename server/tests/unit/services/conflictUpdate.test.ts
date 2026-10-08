@@ -8,16 +8,10 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 vi.mock('../../../src/db/database', async () => {
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  function getPlaceWithTags(placeId: number | string) {
-    const p = db.prepare('SELECT * FROM places WHERE id = ?').get(placeId);
-    if (!p) return null;
-    return { ...(p as object), category: null, tags: [] };
-  }
   return {
     db,
     closeDb: () => {},
     reinitialize: () => {},
-    getPlaceWithTags,
     canAccessTrip: async () => null,
     isOwner: async () => false,
   };
@@ -30,6 +24,8 @@ vi.mock('../../../src/config', () => ({
 
 import { db as testDb } from '../../../src/db/database';
 import { resetTestDb } from '../../helpers/test-db';
+import { findRow } from '../../helpers/factories/rows';
+import { Places } from '../../../src/db/entities/Places.entity';
 import { createUser, createTrip } from '../../helpers/factories';
 import { accommodationsOver } from '../../helpers/accommodations-service';
 import { isUpdateConflict } from '../../../src/nest/common/conflictResult';
@@ -190,8 +186,8 @@ describe('PlacesService.update — optimistic concurrency', () => {
       expect((result.server as { name: string }).name).toBe('Original');
     }
     // The row must NOT have been overwritten.
-    const row = testDb.prepare('SELECT name FROM places WHERE id = ?').get(place.id) as { name: string };
-    expect(row.name).toBe('Original');
+    const row = await findRow(await sharedTestOrm(testDb), Places, { id: place.id });
+    expect(row?.name).toBe('Original');
   });
 
   it('returns null for a place that does not exist', async () => {
@@ -203,6 +199,7 @@ describe('PlacesService.update — optimistic concurrency', () => {
 
 describe('updateItem (packing) — optimistic concurrency', () => {
   it('migration added updated_at and createItem stamps it', async () => {
+    // test-sql-allow: schema introspection, which no entity or repository maps.
     const cols = testDb.prepare("PRAGMA table_info('packing_items')").all() as { name: string }[];
     expect(cols.map(c => c.name)).toContain('updated_at');
 

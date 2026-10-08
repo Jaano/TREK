@@ -53,9 +53,15 @@ import { resetTestDb } from '../helpers/test-db';
 import { createUser, createTrip, createPlace } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { PlaceRegionsRepository } from '../../src/db/repositories/PlaceRegions.repository';
+import { PlaceRegions } from '../../src/db/entities/PlaceRegions.entity';
+import { findRow, findRows } from '../helpers/factories/rows';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { MikroORM } from '@mikro-orm/core';
 
 let nestApp: INestApplication;
 let app: Application;
+/** The app's own ORM, for reading back what the background geocode wrote. */
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
 const errors: unknown[] = [];
 beforeAll(async () => {
   const orig = PlaceRegionsRepository.prototype.upsertRegionWhileUnmoved;
@@ -83,10 +89,10 @@ describe('AT4/AT29 background geocode request context', () => {
     const p = createPlace(testDb, trip.id, { lat: 48.85, lng: 2.35 });
     const res = await request(app).get('/api/addons/atlas/stats').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
-    expect(testDb.prepare('SELECT * FROM place_regions WHERE place_id=?').get(p.id)).toBeUndefined();
+    expect(await findRow(orm(), PlaceRegions, { place: p.id })).toBeNull();
     await new Promise((r) => setTimeout(r, 2500));
     expect(errors).toEqual([]);
-    expect(testDb.prepare('SELECT * FROM place_regions WHERE place_id=?').get(p.id)).toMatchObject({ country_code: 'FR', region_code: 'FR-IDF' });
+    expect(await findRow(orm(), PlaceRegions, { place: p.id })).toMatchObject({ country_code: 'FR', region_code: 'FR-IDF' });
   }, 15_000);
 
   it('IIFE-CTX-AT29 — /regions IIFE writes two places sequentially (2nd after ~2.4s)', async () => {
@@ -99,7 +105,10 @@ describe('AT4/AT29 background geocode request context', () => {
     expect(res.status).toBe(200);
     await new Promise((r) => setTimeout(r, 3500));
     expect(errors).toEqual([]);
-    const rows = testDb.prepare('SELECT place_id, region_code FROM place_regions ORDER BY place_id').all();
+    const rows = (await findRows(orm(), PlaceRegions, {}, { place: 'asc' })).map((r) => ({
+      place_id: r.place_id,
+      region_code: r.region_code,
+    }));
     expect(rows).toEqual([
       { place_id: p1.id, region_code: 'FR-IDF' },
       { place_id: p2.id, region_code: 'FR-PAC' },

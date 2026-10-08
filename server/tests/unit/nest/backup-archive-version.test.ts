@@ -19,6 +19,7 @@ describe('checkBackupDatabase and the release that made the backup', () => {
     const db = new Database(path.join(dir, 'travel.db'));
     for (const table of ['users', 'trips', 'trip_members', 'places', 'days']) db.exec(`CREATE TABLE ${table} (id INTEGER)`);
     db.exec('CREATE TABLE mikro_orm_migrations (id INTEGER PRIMARY KEY, name TEXT, executed_at TEXT)');
+    // test-sql-allow: a bare backup file before any boot, which no ORM is bound to.
     const insert = db.prepare('INSERT INTO mikro_orm_migrations (name) VALUES (?)');
     for (const name of recorded) insert.run(name);
     db.close();

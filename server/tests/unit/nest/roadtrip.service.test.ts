@@ -4,6 +4,7 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { createDay, createPlace, createTrip, createUser } from '../../helpers/factories';
 import { createTestUnitOfWork } from '../../helpers/test-uow';
+import { updateRows } from '../../helpers/factories/rows';
 import { RoadtripService } from '../../../src/nest/roadtrip/roadtrip.service';
 import { Days } from '../../../src/db/entities/Days.entity';
 import { Places } from '../../../src/db/entities/Places.entity';
@@ -33,7 +34,7 @@ async function makeService() {
   );
 }
 
-function fixture() {
+async function fixture() {
   const { user } = createUser(testDb);
   const tripA = createTrip(testDb, user.id);
   const tripB = createTrip(testDb, user.id);
@@ -43,17 +44,17 @@ function fixture() {
   const track = createPlace(testDb, tripA.id, { name: 'Atlantic Road' });
   const hotel = createPlace(testDb, tripA.id, { name: 'A hotel' });
   const otherTrack = createPlace(testDb, tripB.id, { name: 'Somebody else’s track' });
-  testDb.prepare('UPDATE places SET route_geometry = ? WHERE id = ?').run('[[52,13],[52,14]]', track.id);
-  testDb.prepare('UPDATE places SET route_geometry = ? WHERE id = ?').run('[[40,2],[40,3]]', otherTrack.id);
+  await updateRows(t, Places, { id: track.id }, { route_geometry: '[[52,13],[52,14]]' });
+  await updateRows(t, Places, { id: otherTrack.id }, { route_geometry: '[[40,2],[40,3]]' });
   return { tripA, tripB, dayA1, dayA2, dayB1, track, hotel, otherTrack };
 }
 
 describe('RoadtripService', () => {
   let service: RoadtripService;
-  let f: ReturnType<typeof fixture>;
+  let f: Awaited<ReturnType<typeof fixture>>;
   beforeEach(async () => {
     service = await makeService();
-    f = fixture();
+    f = await fixture();
   });
 
   it('ROADTRIP-SVC-001: a day of another trip is not this trip’s day', async () => {

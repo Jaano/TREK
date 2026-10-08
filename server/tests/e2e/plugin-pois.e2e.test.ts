@@ -42,7 +42,9 @@ vi.mock('../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled: () => plu
 
 import { db } from '../../src/db/database';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+import { makePlugin } from '../helpers/factories/plugins';
 
 const trailheads = { id: 'trailheads', label: 'Trailheads', icon: 'Signpost', color: '#2f855a' };
 const query = { pluginId: 'trail-finder', category: 'trailheads', south: '47', west: '11', north: '47.5', east: '11.5', lang: 'de' };
@@ -66,14 +68,16 @@ describe('Plugin POIs e2e (real guard chain + temp SQLite)', () => {
   }
 
   beforeAll(async () => {
-    // harness.ts's seedUser() omits password_hash, which the migrated schema
-    // requires NOT NULL (addons.e2e.test.ts does the same) — the same SeededUser
-    // shape sessionCookie(1) needs, with the hash filled in.
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
-    ).run();
-    db.prepare("INSERT INTO plugins (id, name, status, capabilities, granted_permissions) VALUES (?, ?, 'active', ?, ?)")
-      .run('trail-finder', 'Trail Finder', JSON.stringify({ poiCategories: [trailheads] }), JSON.stringify(['hook:poi-category-provider']));
+    // The user sessionCookie(1) is signed for, pinned to id 1.
+    const orm = await createTestOrm(db);
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test', role: 'user', password_version: 0 });
+    await makePlugin(orm, 'trail-finder', {
+      name: 'Trail Finder',
+      status: 'active',
+      capabilities: JSON.stringify({ poiCategories: [trailheads] }),
+      granted_permissions: JSON.stringify(['hook:poi-category-provider']),
+    });
+    await orm.close();
     app = await build();
     const hooks = app.get(PluginHooks, { strict: false });
     providersOf = vi.spyOn(hooks, 'providersOf');

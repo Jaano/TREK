@@ -3,6 +3,7 @@ import { createSnapshotTestDb } from '../../../../helpers/db-mock';
 import { resetTestDb } from '../../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../../helpers/test-orm';
 import { createReservation, createTrip, createUser } from '../../../../helpers/factories';
+import { addReservationTraveler } from '../../../../helpers/factories/reservations';
 import { Reservations } from '../../../../../src/db/entities/Reservations.entity';
 import {
   travelerOwnsCondition,
@@ -32,12 +33,13 @@ beforeAll(async () => { t = await createTestOrm(testDb); });
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function addTraveler(reservationId: number, userId: number): void {
-  testDb.prepare('INSERT INTO reservation_travelers (reservation_id, user_id) VALUES (?, ?)').run(reservationId, userId);
+async function addTraveler(reservationId: number, userId: number): Promise<void> {
+  await addReservationTraveler(t, reservationId, userId);
 }
 
 async function legacyOwnedIds(tripId: number, userId: number): Promise<number[]> {
   const rows = testDb
+    // test-sql-allow: the legacy TRAVELER_OWNS fragment is the oracle, so it has to run as the raw SQL it was.
     .prepare(`SELECT id FROM reservations r WHERE r.trip_id = ? AND ${TRAVELER_OWNS} ORDER BY id ASC`)
     .all(tripId, userId) as { id: number }[];
   return rows.map((row) => row.id);
@@ -91,7 +93,7 @@ describe('reservation-travelers-owns parity (TRAVELER_OWNS: the two cases that m
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, traveler.id);
     const assigned = createReservation(testDb, trip.id, { title: 'Flight with named travelers' });
-    addTraveler(assigned.id, traveler.id);
+    await addTraveler(assigned.id, traveler.id);
 
     const legacyForTraveler = await legacyOwnedIds(trip.id, traveler.id);
     const typedQbForTraveler = await typedQbOwnedIds(trip.id, traveler.id);
@@ -114,8 +116,8 @@ describe('reservation-travelers-owns parity (TRAVELER_OWNS: the two cases that m
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, travelerA.id);
     const shared = createReservation(testDb, trip.id, { title: 'Family flight' });
-    addTraveler(shared.id, travelerA.id);
-    addTraveler(shared.id, travelerB.id);
+    await addTraveler(shared.id, travelerA.id);
+    await addTraveler(shared.id, travelerB.id);
 
     for (const userId of [travelerA.id, travelerB.id]) {
       const legacy = await legacyOwnedIds(trip.id, userId);
@@ -141,7 +143,7 @@ describe('reservation-travelers-owns parity (TRAVELER_OWNS: the two cases that m
     const trip = createTrip(testDb, owner.id);
     const unassigned = createReservation(testDb, trip.id, { title: 'Unassigned' });
     const assignedToOther = createReservation(testDb, trip.id, { title: 'Assigned to someone else' });
-    addTraveler(assignedToOther.id, travelerB.id);
+    await addTraveler(assignedToOther.id, travelerB.id);
 
     const legacy = await legacyOwnedIds(trip.id, viewer.id);
     const typedQb = await typedQbOwnedIds(trip.id, viewer.id);

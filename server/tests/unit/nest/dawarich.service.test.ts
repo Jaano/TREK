@@ -72,6 +72,8 @@ vi.mock('../../../src/utils/ssrfGuard', () => ({
 import { DAWARICH_KEY_MASK, type DawarichCapabilities } from '@trek/shared';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
+import { DawarichConnections } from '../../../src/db/entities/DawarichConnections.entity';
+import { findRow, upsertRow } from '../../helpers/factories/rows';
 import type { DawarichConnectionsRepository } from '../../../src/db/repositories/DawarichConnections.repository';
 import { DawarichService } from '../../../src/nest/integrations/dawarich.service';
 import type { TestOrm } from '../../helpers/test-orm';
@@ -121,7 +123,7 @@ interface ConnFixture {
   capabilities: string | null;
 }
 
-function connect(userId: number, over: Partial<ConnFixture> = {}): void {
+async function connect(userId: number, over: Partial<ConnFixture> = {}): Promise<void> {
   const row: ConnFixture = {
     url: HOST,
     apiKey: 'stored-key',
@@ -133,41 +135,21 @@ function connect(userId: number, over: Partial<ConnFixture> = {}): void {
     capabilities: null,
     ...over,
   };
-  testDb
-    .prepare(
-      `INSERT OR REPLACE INTO dawarich_connections
-         (user_id, url, api_key, allow_insecure_tls, sync_enabled,
-          last_sync_at, last_sync_state, last_sync_error, capabilities)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      userId,
-      row.url,
-      row.apiKey,
-      row.allowInsecureTls,
-      row.syncEnabled,
-      row.lastSyncAt,
-      row.lastSyncState,
-      row.lastSyncError,
-      row.capabilities,
-    );
+  await upsertRow(t, DawarichConnections, {
+    user: userId,
+    url: row.url,
+    api_key: row.apiKey,
+    allow_insecure_tls: row.allowInsecureTls,
+    sync_enabled: row.syncEnabled,
+    last_sync_at: row.lastSyncAt,
+    last_sync_state: row.lastSyncState,
+    last_sync_error: row.lastSyncError,
+    capabilities: row.capabilities,
+  });
 }
 
-interface StoredRow {
-  url: string | null;
-  api_key: string | null;
-  allow_insecure_tls: number;
-  sync_enabled: number;
-  last_sync_at: string | null;
-  last_sync_state: string;
-  last_sync_error: string | null;
-  capabilities: string | null;
-}
-
-function row(userId = USER): StoredRow | undefined {
-  return testDb
-    .prepare('SELECT * FROM dawarich_connections WHERE user_id = ?')
-    .get(userId) as StoredRow | undefined;
+function row(userId = USER) {
+  return findRow(t, DawarichConnections, { user: userId });
 }
 
 const FULL_CAPS: DawarichCapabilities = {
@@ -271,24 +253,24 @@ describe('DawarichService getCredentials', () => {
   });
 
   it('DAWARICH-SVC-002: a row without an address is not a connection', async () => {
-    connect(USER, { url: null });
+    await connect(USER, { url: null });
     expect(await svc.getCredentials(USER)).toBeNull();
   });
 
   it('DAWARICH-SVC-003: a row without a key is not a connection', async () => {
-    connect(USER, { apiKey: null });
+    await connect(USER, { apiKey: null });
     expect(await svc.getCredentials(USER)).toBeNull();
   });
 
   it('DAWARICH-SVC-004: a key that cannot be decrypted reads as "not connected" rather than travelling upstream as garbage', async () => {
     // What a rotated ENCRYPTION_KEY or a half-restored backup leaves behind:
     // the envelope is intact, the ciphertext is not ours.
-    connect(USER, { apiKey: 'enc:v1:bm90LWEtcmVhbC1ibG9i' });
+    await connect(USER, { apiKey: 'enc:v1:bm90LWEtcmVhbC1ibG9i' });
     expect(await svc.getCredentials(USER)).toBeNull();
   });
 
   it('DAWARICH-SVC-005: a legacy plaintext key still works, with the TLS flag off', async () => {
-    connect(USER, { apiKey: 'plain-legacy-key', allowInsecureTls: 0 });
+    await connect(USER, { apiKey: 'plain-legacy-key', allowInsecureTls: 0 });
     expect(await svc.getCredentials(USER)).toEqual({
       baseUrl: HOST,
       apiKey: 'plain-legacy-key',
@@ -312,12 +294,12 @@ describe('DawarichService getCredentials', () => {
 
 describe('DawarichService isConnected', () => {
   it('DAWARICH-SVC-010: both halves present means connected', async () => {
-    connect(USER);
+    await connect(USER);
     expect(await svc.isConnected(USER)).toBe(true);
   });
 
   it('DAWARICH-SVC-011: an address without a key is not connected', async () => {
-    connect(USER, { apiKey: null });
+    await connect(USER, { apiKey: null });
     expect(await svc.isConnected(USER)).toBe(false);
   });
 
@@ -329,7 +311,7 @@ describe('DawarichService isConnected', () => {
     // Deliberate difference from getCredentials: the settings card has to keep
     // showing a connection the user can repair, and only the outbound path
     // cares that the ciphertext is unusable.
-    connect(USER, { apiKey: 'enc:v1:bm90LWEtcmVhbC1ibG9i' });
+    await connect(USER, { apiKey: 'enc:v1:bm90LWEtcmVhbC1ibG9i' });
     expect(await svc.isConnected(USER)).toBe(true);
     expect(await svc.getCredentials(USER)).toBeNull();
   });
@@ -343,14 +325,14 @@ describe('DawarichService listSyncableUserIds', () => {
     const blankUrl = createUser(testDb).user.id;
     const noKey = createUser(testDb).user.id;
 
-    connect(syncable);
-    connect(pollOff, { syncEnabled: 0 });
-    connect(noUrl, { url: null });
+    await connect(syncable);
+    await connect(pollOff, { syncEnabled: 0 });
+    await connect(noUrl, { url: null });
     // An empty string is a distinct case from NULL: the save path stores NULL,
     // but an older row or a hand-edited one can hold '' and it must not be
     // polled, because the client would then request /api/v1 on no host at all.
-    connect(blankUrl, { url: '' });
-    connect(noKey, { apiKey: null });
+    await connect(blankUrl, { url: '' });
+    await connect(noKey, { apiKey: null });
 
     expect(await svc.listSyncableUserIds()).toEqual([syncable]);
   });
@@ -365,9 +347,9 @@ describe('DawarichService listSyncableUserIds', () => {
     // settings card would still say the poll was on for all of them.
     const second = createUser(testDb).user.id;
     const pollOff = createUser(testDb).user.id;
-    connect(USER);
-    connect(second);
-    connect(pollOff, { syncEnabled: 0 });
+    await connect(USER);
+    await connect(second);
+    await connect(pollOff, { syncEnabled: 0 });
 
     const ids = await svc.listSyncableUserIds();
 
@@ -397,7 +379,7 @@ describe('DawarichService getConnection', () => {
   });
 
   it('DAWARICH-SVC-031: a stored connection is reported with a mask where the key is, never the key', async () => {
-    connect(USER, {
+    await connect(USER, {
       apiKey: 'stored-key',
       allowInsecureTls: 1,
       syncEnabled: 0,
@@ -423,24 +405,24 @@ describe('DawarichService getConnection', () => {
   });
 
   it('DAWARICH-SVC-032: an address without a key reports the address and no mask', async () => {
-    connect(USER, { apiKey: null });
+    await connect(USER, { apiKey: null });
     expect(await svc.getConnection(USER)).toMatchObject({ url: HOST, apiKeyMasked: '', connected: false });
   });
 
   it('DAWARICH-SVC-033: a null address reads as an empty string, so the form binds to a value', async () => {
-    connect(USER, { url: null, apiKey: null });
+    await connect(USER, { url: null, apiKey: null });
     expect(await svc.getConnection(USER)).toMatchObject({ url: '', connected: false, syncEnabled: true });
   });
 
   it.each(['ok', 'partial', 'failed'])('DAWARICH-SVC-034: the known sync state %s passes through', async (state) => {
-    connect(USER, { lastSyncState: state });
+    await connect(USER, { lastSyncState: state });
     expect((await svc.getConnection(USER)).lastSyncState).toBe(state);
   });
 
   it.each(['syncing', 'OK', 'success', ''])(
     'DAWARICH-SVC-035: the unrecognised sync state %j reads as "never" rather than reaching a client that has no branch for it',
     async (state) => {
-      connect(USER, { lastSyncState: state });
+      await connect(USER, { lastSyncState: state });
       expect((await svc.getConnection(USER)).lastSyncState).toBe('never');
     },
   );
@@ -448,7 +430,7 @@ describe('DawarichService getConnection', () => {
   it.each(['{not json', '', 'undefined'])(
     'DAWARICH-SVC-036: the malformed capabilities blob %j reads as "not probed yet", never as a crash on the settings page',
     async (raw) => {
-      connect(USER, { capabilities: raw });
+      await connect(USER, { capabilities: raw });
       expect((await svc.getConnection(USER)).capabilities).toBeNull();
     },
   );
@@ -456,7 +438,7 @@ describe('DawarichService getConnection', () => {
   it.each(['null', '42', '"visits"', 'true'])(
     'DAWARICH-SVC-037: the JSON scalar %s is not a capabilities object and reads as not probed',
     async (raw) => {
-      connect(USER, { capabilities: raw });
+      await connect(USER, { capabilities: raw });
       expect((await svc.getConnection(USER)).capabilities).toBeNull();
     },
   );
@@ -465,7 +447,7 @@ describe('DawarichService getConnection', () => {
     // The column survives an upgrade, so the shape is whatever was current when
     // the last probe ran. Missing flags are off and a missing probe timestamp
     // is the epoch, which reads as "long ago" everywhere it is compared.
-    connect(USER, { capabilities: JSON.stringify({ visits: true, serverVersion: 17, extra: 'ignored' }) });
+    await connect(USER, { capabilities: JSON.stringify({ visits: true, serverVersion: 17, extra: 'ignored' }) });
 
     expect((await svc.getConnection(USER)).capabilities).toEqual({
       visits: true,
@@ -481,7 +463,7 @@ describe('DawarichService getConnection', () => {
   });
 
   it('DAWARICH-SVC-039: a complete blob round-trips unchanged', async () => {
-    connect(USER, { capabilities: JSON.stringify(FULL_CAPS) });
+    await connect(USER, { capabilities: JSON.stringify(FULL_CAPS) });
     expect((await svc.getConnection(USER)).capabilities).toEqual(FULL_CAPS);
   });
 });
@@ -492,12 +474,12 @@ describe('DawarichService getCapabilities', () => {
   });
 
   it('DAWARICH-SVC-041: null when the connection has never been probed', async () => {
-    connect(USER);
+    await connect(USER);
     expect(await svc.getCapabilities(USER)).toBeNull();
   });
 
   it('DAWARICH-SVC-042: the stored probe otherwise', async () => {
-    connect(USER, { capabilities: JSON.stringify(FULL_CAPS) });
+    await connect(USER, { capabilities: JSON.stringify(FULL_CAPS) });
     expect(await svc.getCapabilities(USER)).toEqual(FULL_CAPS);
   });
 });
@@ -511,7 +493,7 @@ describe('DawarichService saveSettings', () => {
     const out = await svc.saveSettings(USER, `  ${HOST}  `, 'super-secret', true, true, IP);
 
     expect(out).toEqual({ success: true });
-    const stored = row();
+    const stored = await row();
     expect(stored?.url).toBe(HOST);
     expect(stored?.allow_insecure_tls).toBe(1);
     expect(stored?.sync_enabled).toBe(1);
@@ -524,31 +506,31 @@ describe('DawarichService saveSettings', () => {
   it('DAWARICH-SVC-051: turning the background poll off is persisted, and the card reports it', async () => {
     await svc.saveSettings(USER, HOST, 'k', false, false, IP);
 
-    expect(row()?.sync_enabled).toBe(0);
-    expect(row()?.allow_insecure_tls).toBe(0);
+    expect((await row())?.sync_enabled).toBe(0);
+    expect((await row())?.allow_insecure_tls).toBe(0);
     expect((await svc.getConnection(USER)).syncEnabled).toBe(false);
     expect(await svc.listSyncableUserIds()).toEqual([]);
   });
 
   it('DAWARICH-SVC-052: a blank key field keeps the stored key, because the field is never prefilled', async () => {
     await svc.saveSettings(USER, HOST, 'first-key', false, true, IP);
-    const encrypted = row()?.api_key;
+    const encrypted = (await row())?.api_key;
 
     await svc.saveSettings(USER, `${HOST}`, undefined, true, true, IP);
 
-    expect(row()?.api_key).toBe(encrypted);
-    expect(row()?.allow_insecure_tls).toBe(1);
+    expect((await row())?.api_key).toBe(encrypted);
+    expect((await row())?.allow_insecure_tls).toBe(1);
   });
 
   it.each([DAWARICH_KEY_MASK, '   ', ''])(
     'DAWARICH-SVC-053: the key field %j means "keep what is stored"',
     async (typed) => {
       await svc.saveSettings(USER, HOST, 'first-key', false, true, IP);
-      const encrypted = row()?.api_key;
+      const encrypted = (await row())?.api_key;
 
       await svc.saveSettings(USER, HOST, typed, false, true, IP);
 
-      expect(row()?.api_key).toBe(encrypted);
+      expect((await row())?.api_key).toBe(encrypted);
       expect((await svc.getCredentials(USER))?.apiKey).toBe('first-key');
     },
   );
@@ -561,7 +543,7 @@ describe('DawarichService saveSettings', () => {
   });
 
   it('DAWARICH-SVC-055: moving to a different host without retyping the key drops the key and every artefact of the old instance', async () => {
-    connect(USER, {
+    await connect(USER, {
       url: 'https://old.example',
       apiKey: 'stored-key',
       lastSyncAt: '2026-09-12T04:15:00.000Z',
@@ -572,7 +554,7 @@ describe('DawarichService saveSettings', () => {
 
     await svc.saveSettings(USER, 'https://new.example', undefined, false, true, IP);
 
-    const stored = row();
+    const stored = await row();
     expect(stored?.url).toBe('https://new.example');
     expect(stored?.api_key).toBeNull();
     expect(stored?.capabilities).toBeNull();
@@ -582,9 +564,9 @@ describe('DawarichService saveSettings', () => {
   });
 
   it('DAWARICH-SVC-056: a different port is a different instance, so the key goes with it', async () => {
-    connect(USER, { url: 'https://d.example' });
+    await connect(USER, { url: 'https://d.example' });
     await svc.saveSettings(USER, 'https://d.example:8443', undefined, false, true, IP);
-    expect(row()?.api_key).toBeNull();
+    expect((await row())?.api_key).toBeNull();
   });
 
   it.each([
@@ -594,15 +576,15 @@ describe('DawarichService saveSettings', () => {
   ])(
     'DAWARICH-SVC-057: %s to %s is the same instance and keeps the key',
     async (before, after) => {
-      connect(USER, { url: before, apiKey: 'stored-key' });
+      await connect(USER, { url: before, apiKey: 'stored-key' });
       await svc.saveSettings(USER, after, undefined, false, true, IP);
-      expect(row()?.api_key).toBe('stored-key');
-      expect(row()?.url).toBe(after);
+      expect((await row())?.api_key).toBe('stored-key');
+      expect((await row())?.url).toBe(after);
     },
   );
 
   it('DAWARICH-SVC-058: a key typed at the same time as the host change survives, because it was minted for the new host', async () => {
-    connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
+    await connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
 
     await svc.saveSettings(USER, 'https://new.example', 'minted-for-new', false, true, IP);
 
@@ -617,32 +599,32 @@ describe('DawarichService saveSettings', () => {
     // No scheme, so the URL constructor throws and the comparison falls back to
     // string equality. Erring towards keeping the key here is safe precisely
     // because the text did not change.
-    connect(USER, { url: 'dawarich.example', apiKey: 'stored-key' });
+    await connect(USER, { url: 'dawarich.example', apiKey: 'stored-key' });
 
     await svc.saveSettings(USER, 'dawarich.example', undefined, false, true, IP);
 
-    expect(row()?.api_key).toBe('stored-key');
+    expect((await row())?.api_key).toBe('stored-key');
   });
 
   it('DAWARICH-SVC-060: an unparseable stored address against a different one drops the key', async () => {
-    connect(USER, { url: 'dawarich.example', apiKey: 'stored-key' });
+    await connect(USER, { url: 'dawarich.example', apiKey: 'stored-key' });
 
     await svc.saveSettings(USER, 'https://new.example', undefined, false, true, IP);
 
-    expect(row()?.api_key).toBeNull();
+    expect((await row())?.api_key).toBeNull();
   });
 
   it('DAWARICH-SVC-061: a row whose address column is null counts as no previous host, so nothing is dropped', async () => {
-    connect(USER, { url: null, apiKey: 'stored-key' });
+    await connect(USER, { url: null, apiKey: 'stored-key' });
 
     await svc.saveSettings(USER, HOST, undefined, false, true, IP);
 
-    expect(row()?.api_key).toBe('stored-key');
-    expect(row()?.url).toBe(HOST);
+    expect((await row())?.api_key).toBe('stored-key');
+    expect((await row())?.url).toBe(HOST);
   });
 
   it('DAWARICH-SVC-062: clearing the address wipes the key, because a live credential for a server nobody named is just a stored secret', async () => {
-    connect(USER, {
+    await connect(USER, {
       apiKey: 'stored-key',
       lastSyncAt: '2026-09-12T04:15:00.000Z',
       lastSyncState: 'ok',
@@ -653,7 +635,7 @@ describe('DawarichService saveSettings', () => {
     const out = await svc.saveSettings(USER, '   ', undefined, false, true, IP);
 
     expect(out).toEqual({ success: true });
-    const stored = row();
+    const stored = await row();
     expect(stored?.url).toBeNull();
     expect(stored?.api_key).toBeNull();
     expect(stored?.capabilities).toBeNull();
@@ -663,9 +645,9 @@ describe('DawarichService saveSettings', () => {
   });
 
   it('DAWARICH-SVC-063: a key typed while the address is cleared is discarded with it', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
     await svc.saveSettings(USER, '', 'pointless-key', false, true, IP);
-    expect(row()?.api_key).toBeNull();
+    expect((await row())?.api_key).toBeNull();
   });
 
   it('DAWARICH-SVC-064: an empty address is never resolved, so clearing the connection cannot fail on DNS', async () => {
@@ -683,7 +665,7 @@ describe('DawarichService saveSettings', () => {
       code: 'invalid_url',
       error: 'Only HTTP and HTTPS URLs are allowed',
     });
-    expect(row()).toBeUndefined();
+    expect(await row()).toBeNull();
     expect(audit.writeAudit).not.toHaveBeenCalled();
   });
 
@@ -708,7 +690,7 @@ describe('DawarichService saveSettings', () => {
       warningCode: 'private_ip',
       warningIp: '192.168.0.5',
     });
-    expect(row()?.url).toBe('http://dawarich.lan:3000');
+    expect((await row())?.url).toBe('http://dawarich.lan:3000');
     expect(audit.writeAudit).toHaveBeenCalledWith({
       userId: USER,
       action: 'dawarich.private_ip_configured',
@@ -730,7 +712,7 @@ describe('DawarichService saveSettings', () => {
     const out = await svc.saveSettings(USER, 'http://10.0.0.9:3000', 'k', false, true, IP);
 
     expect(out).toMatchObject({ success: true, warningCode: 'private_ip', warningIp: '10.0.0.9' });
-    expect(row()?.url).toBe('http://10.0.0.9:3000');
+    expect((await row())?.url).toBe('http://10.0.0.9:3000');
   });
 
   it('DAWARICH-SVC-069: a private result the resolver could not name still warns, with no IP in the warning payload', async () => {
@@ -744,7 +726,7 @@ describe('DawarichService saveSettings', () => {
   });
 
   it('DAWARICH-SVC-070: the address write and the key write are one transaction, so a failed key write cannot leave the old key pointed at the new host', async () => {
-    connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
+    await connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
     // Rollback proof (R7's transaction, one of the plan's eight): spy the
     // SECOND write (the key) to throw and confirm the FIRST write (the
     // address, already committed to the transactional connection) is rolled
@@ -760,7 +742,7 @@ describe('DawarichService saveSettings', () => {
       spy.mockRestore();
     }
 
-    const stored = row();
+    const stored = await row();
     expect(stored?.url).toBe('https://old.example');
     expect(stored?.api_key).toBe('stored-key');
   });
@@ -770,8 +752,8 @@ describe('DawarichService saveSettings', () => {
     // file and then logs the whole install out of Dawarich the first time one
     // person edits their own URL. Two victims, one bystander, both statements.
     const bystander = createUser(testDb).user.id;
-    connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
-    connect(bystander, {
+    await connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
+    await connect(bystander, {
       apiKey: 'bystander-key',
       capabilities: JSON.stringify(FULL_CAPS),
       lastSyncState: 'ok',
@@ -780,8 +762,8 @@ describe('DawarichService saveSettings', () => {
     await svc.saveSettings(USER, 'https://new.example', undefined, false, true, IP);
     await svc.saveSettings(USER, '', undefined, false, true, IP);
 
-    expect(row()?.api_key).toBeNull();
-    expect(row(bystander)).toMatchObject({
+    expect((await row())?.api_key).toBeNull();
+    expect(await row(bystander)).toMatchObject({
       url: HOST,
       api_key: 'bystander-key',
       last_sync_state: 'ok',
@@ -794,7 +776,7 @@ describe('DawarichService saveSettings', () => {
     // point at. Carrying them over would show the old instance's version and
     // "last sync ok" on a connection that has never been asked anything, and
     // the tracks layer would skip an endpoint the new instance does have.
-    connect(USER, {
+    await connect(USER, {
       url: 'https://old.example',
       apiKey: 'stored-key',
       lastSyncAt: '2026-09-12T04:15:00.000Z',
@@ -806,7 +788,7 @@ describe('DawarichService saveSettings', () => {
     await svc.saveSettings(USER, 'https://new.example', 'minted-for-new', false, true, IP);
 
     expect((await svc.getCredentials(USER))?.apiKey).toBe('minted-for-new');
-    const stored = row();
+    const stored = await row();
     expect(stored?.url).toBe('https://new.example');
     expect(stored?.capabilities).toBeNull();
     expect(stored?.last_sync_state).toBe('never');
@@ -815,7 +797,7 @@ describe('DawarichService saveSettings', () => {
   });
 
   it('DAWARICH-SVC-073: a new key on the same host keeps the probe, because it describes the host and not the key', async () => {
-    connect(USER, {
+    await connect(USER, {
       url: 'https://d.example/api',
       apiKey: 'stored-key',
       lastSyncState: 'ok',
@@ -825,8 +807,8 @@ describe('DawarichService saveSettings', () => {
     await svc.saveSettings(USER, 'https://d.example/', 'rotated-key', false, true, IP);
 
     expect((await svc.getCredentials(USER))?.apiKey).toBe('rotated-key');
-    expect(row()?.capabilities).toBe(JSON.stringify(FULL_CAPS));
-    expect(row()?.last_sync_state).toBe('ok');
+    expect((await row())?.capabilities).toBe(JSON.stringify(FULL_CAPS));
+    expect((await row())?.last_sync_state).toBe('ok');
   });
 });
 
@@ -836,11 +818,11 @@ describe('DawarichService saveSettings', () => {
 
 describe('DawarichService disconnect', () => {
   it('DAWARICH-SVC-080: forgets the credential and says so in the audit log', async () => {
-    connect(USER);
+    await connect(USER);
 
     await svc.disconnect(USER, '198.51.100.7');
 
-    expect(row()).toBeUndefined();
+    expect(await row()).toBeNull();
     expect((await svc.getConnection(USER)).connected).toBe(false);
     expect(audit.writeAudit).toHaveBeenCalledWith({
       userId: USER,
@@ -853,18 +835,18 @@ describe('DawarichService disconnect', () => {
   it('DAWARICH-SVC-081: disconnecting something that was never connected is a no-op that still leaves a trail', async () => {
     await svc.disconnect(USER, null);
 
-    expect(row()).toBeUndefined();
+    expect(await row()).toBeNull();
     expect(audit.writeAudit).toHaveBeenCalledWith(expect.objectContaining({ ip: null }));
   });
 
   it('DAWARICH-SVC-082: only the calling user loses their connection', async () => {
     const other = createUser(testDb).user.id;
-    connect(USER);
-    connect(other);
+    await connect(USER);
+    await connect(other);
 
     await svc.disconnect(USER, null);
 
-    expect(row(other)).toBeDefined();
+    expect(await row(other)).not.toBeNull();
   });
 });
 
@@ -890,7 +872,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-092: a key typed with no address falls back to the stored address', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
 
     await svc.testConnection(USER, '', 'typed-key', false);
 
@@ -898,7 +880,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-093: the mask means "use the stored key", which is what a form that only changed the TLS flag posts back', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
 
     await svc.testConnection(USER, HOST, DAWARICH_KEY_MASK, true);
 
@@ -906,7 +888,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-094: a stored connection tested as it stands persists the freshly probed capabilities', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
 
     const out = await svc.testConnection(USER, HOST, undefined, false);
 
@@ -915,7 +897,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-095: a test run against a different address than the stored one must not overwrite what is on file', async () => {
-    connect(USER, { apiKey: 'stored-key', capabilities: JSON.stringify(FULL_CAPS) });
+    await connect(USER, { apiKey: 'stored-key', capabilities: JSON.stringify(FULL_CAPS) });
 
     await svc.testConnection(USER, 'https://someone-elses.example', 'their-key', false);
 
@@ -926,11 +908,11 @@ describe('DawarichService testConnection', () => {
     const out = await svc.testConnection(USER, HOST, 'typed-key', false);
 
     expect(out.connected).toBe(true);
-    expect(row()).toBeUndefined();
+    expect(await row()).toBeNull();
   });
 
   it('DAWARICH-SVC-097: the visit count is the last 30 days, and it is only asked for when the visits endpoint exists', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
     allEndpointsAnswer([visit({ id: 1 }), visit({ id: 2 }), visit({ id: 3 })]);
 
     const out = await svc.testConnection(USER, HOST, undefined, false);
@@ -942,7 +924,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-098: an instance without a visits endpoint reports zero rather than asking a route that is not there', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
     client.listVisits.mockRejectedValue(notFound());
 
     const out = await svc.testConnection(USER, HOST, undefined, false);
@@ -953,7 +935,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-099: a count that fails after the connection is already proven is not a failed connection', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
     client.listVisits
       .mockResolvedValueOnce({ visits: [visit()], truncated: false, version: '1.14.4' })
       .mockRejectedValueOnce(new DawarichError('rate_limited', 'HTTP 429', 429));
@@ -964,7 +946,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-100: a rejected key is a 200 the form can render, carrying the code the client translates', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
     client.probe.mockRejectedValue(new DawarichError('unauthorized', 'Dawarich answered HTTP 401', 401));
 
     const out = await svc.testConnection(USER, HOST, undefined, false);
@@ -974,7 +956,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-101: the free-text detail rides along when there is one, for the person debugging their own reverse proxy', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
     client.probe.mockRejectedValue(
       new DawarichError('invalid_response', 'Not JSON', 200, '<html>login</html>'),
     );
@@ -987,7 +969,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-102: anything that is not a DawarichError reads as unreachable rather than leaking the message', async () => {
-    connect(USER, { apiKey: 'stored-key' });
+    await connect(USER, { apiKey: 'stored-key' });
     client.probe.mockRejectedValue(new Error('ECONNRESET on https://dawarich.example?api_key=secret'));
 
     expect(await svc.testConnection(USER, HOST, undefined, false)).toEqual({
@@ -997,7 +979,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-103: a failed probe leaves the stored capabilities untouched', async () => {
-    connect(USER, { apiKey: 'stored-key', capabilities: JSON.stringify(FULL_CAPS) });
+    await connect(USER, { apiKey: 'stored-key', capabilities: JSON.stringify(FULL_CAPS) });
     client.probe.mockRejectedValue(new DawarichError('unauthorized', 'HTTP 401', 401));
 
     await svc.testConnection(USER, HOST, undefined, false);
@@ -1009,7 +991,7 @@ describe('DawarichService testConnection', () => {
     // The rotated-ENCRYPTION_KEY case reached from the outbound side rather than
     // through getCredentials: the row still reads as connected on the card, and
     // the test button has to say what is wrong without sending the blob anywhere.
-    connect(USER, { apiKey: 'enc:v1:bm90LWEtcmVhbC1ibG9i' });
+    await connect(USER, { apiKey: 'enc:v1:bm90LWEtcmVhbC1ibG9i' });
 
     expect(await svc.testConnection(USER, HOST, undefined, false)).toEqual({
       connected: false,
@@ -1023,7 +1005,7 @@ describe('DawarichService testConnection', () => {
     // press Test" is the ordinary way to move an instance. Falling back to the
     // stored key here would carry it to whatever host was just typed, which is
     // exactly what saveSettings refuses to persist.
-    connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
+    await connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
 
     const out = await svc.testConnection(USER, 'https://someone-elses.example', undefined, false);
 
@@ -1033,7 +1015,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-106: the mask against a different host is a blank field, not a key', async () => {
-    connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
+    await connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
 
     const out = await svc.testConnection(USER, 'https://old.example:8443', DAWARICH_KEY_MASK, false);
 
@@ -1045,7 +1027,7 @@ describe('DawarichService testConnection', () => {
     // The mirror of 105: the same instance under a corrected path is where the
     // key was issued, and refusing it would make every trailing-slash edit
     // demand the key again.
-    connect(USER, { url: 'https://d.example/api', apiKey: 'stored-key' });
+    await connect(USER, { url: 'https://d.example/api', apiKey: 'stored-key' });
 
     const out = await svc.testConnection(USER, 'https://d.example/', undefined, false);
 
@@ -1054,7 +1036,7 @@ describe('DawarichService testConnection', () => {
   });
 
   it('DAWARICH-SVC-108: a key typed for the new host is used as typed, so moving an instance and testing it first still works', async () => {
-    connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
+    await connect(USER, { url: 'https://old.example', apiKey: 'stored-key' });
 
     const out = await svc.testConnection(USER, 'https://new.example', 'minted-for-new', false);
 
@@ -1176,33 +1158,33 @@ describe('DawarichService probeCapabilities', () => {
 
 describe('DawarichService storeCapabilities', () => {
   it('DAWARICH-SVC-130: writes the probe where getCapabilities reads it', async () => {
-    connect(USER);
+    await connect(USER);
 
     await svc.storeCapabilities(USER, FULL_CAPS);
 
     expect(await svc.getCapabilities(USER)).toEqual(FULL_CAPS);
-    expect(JSON.parse(row()?.capabilities ?? 'null')).toEqual(FULL_CAPS);
+    expect(JSON.parse((await row())?.capabilities ?? 'null')).toEqual(FULL_CAPS);
   });
 
   it('DAWARICH-SVC-131: storing against a user with no connection changes nothing instead of creating a row without a credential', async () => {
     await svc.storeCapabilities(USER, FULL_CAPS);
-    expect(row()).toBeUndefined();
+    expect(await row()).toBeNull();
   });
 
   it('DAWARICH-SVC-132: only the named user is touched', async () => {
     const other = createUser(testDb).user.id;
-    connect(USER);
-    connect(other);
+    await connect(USER);
+    await connect(other);
 
     await svc.storeCapabilities(USER, FULL_CAPS);
 
-    expect(row(other)?.capabilities).toBeNull();
+    expect((await row(other))?.capabilities).toBeNull();
   });
 });
 
 describe('DawarichService recordSyncResult', () => {
   it('DAWARICH-SVC-140: a failure is stored with its reason and a timestamp the card can show', async () => {
-    connect(USER);
+    await connect(USER);
     const before = Date.now();
 
     await svc.recordSyncResult(USER, 'failed', 'unreachable');
@@ -1214,7 +1196,7 @@ describe('DawarichService recordSyncResult', () => {
   });
 
   it('DAWARICH-SVC-141: a later success clears the error rather than leaving the old one on screen', async () => {
-    connect(USER, { lastSyncState: 'failed', lastSyncError: 'unreachable' });
+    await connect(USER, { lastSyncState: 'failed', lastSyncError: 'unreachable' });
 
     await svc.recordSyncResult(USER, 'ok', null);
 
@@ -1222,13 +1204,13 @@ describe('DawarichService recordSyncResult', () => {
   });
 
   it('DAWARICH-SVC-142: a partial run is its own state, distinct from both ok and failed', async () => {
-    connect(USER);
+    await connect(USER);
     await svc.recordSyncResult(USER, 'partial', 'too_large');
     expect((await svc.getConnection(USER)).lastSyncState).toBe('partial');
   });
 
   it('DAWARICH-SVC-143: recording against a user with no connection changes nothing', async () => {
     await svc.recordSyncResult(USER, 'ok', null);
-    expect(row()).toBeUndefined();
+    expect(await row()).toBeNull();
   });
 });

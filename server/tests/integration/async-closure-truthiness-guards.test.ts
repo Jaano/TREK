@@ -81,6 +81,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 vi.mock('../../src/db/database', async () => {
   const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
@@ -103,6 +104,7 @@ import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
 import { createDay, createDayAssignment, createPlace, createTrip, createUser } from '../helpers/factories';
 import { generateToken } from '../helpers/auth';
+import { setAddonEnabled } from '../helpers/factories/settings';
 
 describe('R1 async-closure truthiness guards (RB2/RS21/RS23) — driven through the real routes', () => {
   let app: INestApplication;
@@ -111,7 +113,7 @@ describe('R1 async-closure truthiness guards (RB2/RS21/RS23) — driven through 
   beforeAll(async () => {
     app = await buildApp();
     httpApp = app.getHttpAdapter().getInstance() as Application;
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'roadtrip'").run();
+    await setAddonEnabled(app.get(MikroORM), 'roadtrip', true);
   });
 
   afterAll(async () => {

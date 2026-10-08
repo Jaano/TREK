@@ -58,6 +58,8 @@ import { PluginRuntimeService } from '../../src/nest/plugins/plugin-runtime.serv
 import { PlaceShadowRetentionJob } from '../../src/nest/place-shadow/place-shadow.job';
 import { StorageService } from '../../src/nest/storage/storage.service';
 import { Users } from '../../src/db/entities/Users.entity';
+import { PlaceShadowPicks } from '../../src/db/entities/PlaceShadowPicks.entity';
+import { countRows, insertRow } from '../helpers/factories/rows';
 import { createUser } from '../helpers/factories';
 import { generateToken } from '../helpers/auth';
 
@@ -161,10 +163,18 @@ describe('ORM request-context seams populated in production', () => {
     const isEnabledSpy = vi.spyOn(registrar, 'isEnabled').mockReturnValue(true);
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      testDb.prepare(`
-        INSERT INTO place_shadow_picks (created_at, query, source, live_rank, live_count, picked_name, picked_lat, picked_lng)
-        VALUES (datetime('now', '-999 days'), 'seam-003', 'nominatim', 1, 1, 'expired pick', 0, 0)
-      `).run();
+      // 999 days old, in the `datetime('now')` text form the column defaults to.
+      const expiredAt = new Date(Date.now() - 999 * 86_400_000).toISOString().slice(0, 19).replace('T', ' ');
+      await insertRow(orm, PlaceShadowPicks, {
+        created_at: expiredAt,
+        query: 'seam-003',
+        source: 'nominatim',
+        live_rank: 1,
+        live_count: 1,
+        picked_name: 'expired pick',
+        picked_lat: 0,
+        picked_lng: 0,
+      });
 
       // Real bug found converting `purgeExpired` to a genuinely async
       // repository call (0b security review F-B4): the `cron` package's
@@ -199,8 +209,7 @@ describe('ORM request-context seams populated in production', () => {
       // `withRequestContext` wrap in `cron-registrar.service.ts`'s `register()`
       // makes the repository call throw inside `PlaceShadowRetentionJob.tick`'s
       // own try/catch, and the row survives (verified by hand, reverted).
-      const remaining = testDb.prepare("SELECT COUNT(*) as n FROM place_shadow_picks WHERE query = 'seam-003'").get() as { n: number };
-      expect(remaining.n).toBe(0);
+      expect(await countRows(orm, PlaceShadowPicks, { query: 'seam-003' })).toBe(0);
     } finally {
       registrar.unregister('place-shadow-retention');
       isEnabledSpy.mockRestore();

@@ -20,6 +20,7 @@ import { PluginUserSettingsService } from '../../../src/nest/plugins/plugin-user
 import { createTestAddonsService } from '../../helpers/test-addons';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { makePlugin } from '../../helpers/factories/plugins';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
@@ -51,13 +52,17 @@ afterAll(async () => { await t.close(); testDb.close(); });
 beforeEach(() => vi.clearAllMocks());
 
 /** installedDepRows() reads the `plugins` table directly — no discovery needed. */
-function installEnabledPlugin(id: string): void {
-  testDb
-    .prepare(
-      `INSERT INTO plugins (id, name, status, enabled, version, api_version, permissions, granted_permissions, capabilities, config, dependencies)
-       VALUES (?, ?, 'inactive', 1, '1.0.0', 1, '[]', '[]', '{}', '{}', '{}')`,
-    )
-    .run(id, id);
+async function installEnabledPlugin(id: string): Promise<void> {
+  await makePlugin(t, id, {
+    status: 'inactive',
+    enabled: 1,
+    api_version: 1,
+    permissions: '[]',
+    granted_permissions: '[]',
+    capabilities: '{}',
+    config: '{}',
+    dependencies: '{}',
+  });
 }
 
 async function buildRuntime(withOrm: boolean): Promise<PluginRuntimeService> {
@@ -94,7 +99,7 @@ async function buildRuntime(withOrm: boolean): Promise<PluginRuntimeService> {
 
 describe('PluginRuntimeService.onApplicationBootstrap — absent-ORM boot branch (task-6-rereview2.md I-A)', () => {
   it('RT-BOOT-NOORM-001: without an ORM, boot logs the skip line and never calls activate', async () => {
-    installEnabledPlugin('rtboot-noorm');
+    await installEnabledPlugin('rtboot-noorm');
     const rt = await buildRuntime(false);
     const activateSpy = vi.spyOn(rt, 'activate');
 
@@ -113,7 +118,7 @@ describe('PluginRuntimeService.onApplicationBootstrap — absent-ORM boot branch
   });
 
   it('RT-BOOT-NOORM-002: WITH an ORM, the same arrangement activates the plugin — proves case 001 is not vacuous', async () => {
-    installEnabledPlugin('rtboot-withorm');
+    await installEnabledPlugin('rtboot-withorm');
     const rt = await buildRuntime(true);
     const activateSpy = vi.spyOn(rt, 'activate').mockResolvedValue(undefined);
 

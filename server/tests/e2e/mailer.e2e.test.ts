@@ -58,7 +58,8 @@ import { db } from '../../src/db/database';
 import { createUser } from '../helpers/factories';
 import { AuthModule } from '../../src/nest/auth/auth.module';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm } from '../helpers/test-orm';
+import { setAppSetting } from '../helpers/factories/settings';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 
@@ -105,10 +106,11 @@ describe('Mailer e2e: the header logo in a mail on the wire (#2507)', () => {
 
   beforeAll(async () => {
     email = createUser(db as never, { username: 'mail-e2e', email: 'mail-e2e@example.test' }).user.email;
-    const setting = db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
-    setting.run('smtp_host', 'mail.internal.example');
-    setting.run('smtp_port', '587');
-    setting.run('smtp_from', 'trek@example.test');
+    const orm = await createTestOrm(db);
+    await setAppSetting(orm, 'smtp_host', 'mail.internal.example');
+    await setAppSetting(orm, 'smtp_port', '587');
+    await setAppSetting(orm, 'smtp_from', 'trek@example.test');
+    await orm.close();
     app = await build();
     server = app.getHttpServer();
 

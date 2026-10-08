@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 vi.mock('../../src/db/database', async () => {
   const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
@@ -44,14 +45,25 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { findRows } from '../helpers/factories/rows';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { VacayHolidayCalendars } from '../../src/db/entities/VacayHolidayCalendars.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
+
+/** The id of the holiday calendar created last. */
+async function latestCalendarId(): Promise<number | undefined> {
+  const [latest] = await findRows(orm, VacayHolidayCalendars, {}, { id: 'desc' });
+  return latest?.id;
+}
 
 beforeEach(async () => {
   resetTestDb(testDb);
@@ -299,7 +311,7 @@ describe('Vacay holiday calendar CRUD', () => {
       .send({ region: 'US', label: 'US Holidays' });
     expect(createRes.status).toBe(200);
     const calId = createRes.body.plan?.holiday_calendars?.at(-1)?.id
-      ?? (testDb.prepare('SELECT id FROM vacay_holiday_calendars ORDER BY id DESC LIMIT 1').get() as any)?.id;
+      ?? (await latestCalendarId());
 
     const res = await request(app)
       .put(`/api/addons/vacay/plan/holiday-calendars/${calId}`)
@@ -317,7 +329,7 @@ describe('Vacay holiday calendar CRUD', () => {
       .set('Cookie', authCookie(user.id))
       .send({ region: 'FR', label: 'French Holidays' });
     expect(createRes.status).toBe(200);
-    const calId = (testDb.prepare('SELECT id FROM vacay_holiday_calendars ORDER BY id DESC LIMIT 1').get() as any)?.id;
+    const calId = await latestCalendarId();
 
     const res = await request(app)
       .delete(`/api/addons/vacay/plan/holiday-calendars/${calId}`)

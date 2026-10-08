@@ -10,6 +10,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { VacayPlans } from '../../../../src/db/entities/VacayPlans.entity';
+import { makeVacayPlan } from '../../../helpers/factories/vacay';
 import type { VacayPlansRepository } from '../../../../src/db/repositories/VacayPlans.repository';
 
 const testDb = createSnapshotTestDb();
@@ -23,20 +24,16 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function insertPlan(ownerId: number, overrides: Partial<{ block_weekends: number; holidays_enabled: number; holidays_region: string; school_holidays_enabled: number; company_holidays_enabled: number; carry_over_enabled: number; weekend_days: string; week_start: number }> = {}): number {
-  const cols = Object.keys(overrides);
-  const placeholders = cols.map(() => '?').join(', ');
-  const extra = cols.length > 0 ? `, ${cols.join(', ')}` : '';
-  const result = testDb.prepare(`INSERT INTO vacay_plans (owner_id${extra}) VALUES (?${cols.length > 0 ? ', ' + placeholders : ''})`)
-    .run(ownerId, ...cols.map((c) => (overrides as Record<string, unknown>)[c]));
-  return Number(result.lastInsertRowid);
+async function insertPlan(ownerId: number, overrides: Partial<{ block_weekends: number; holidays_enabled: number; holidays_region: string; school_holidays_enabled: number; company_holidays_enabled: number; carry_over_enabled: number; weekend_days: string; week_start: number }> = {}): Promise<number> {
+  return (await makeVacayPlan(t, ownerId, overrides)).id;
 }
 
 describe('VacayPlansRepository.findByOwner (VC7/9/78)', () => {
   it('VACAYPLANREPO-001: matches SELECT * FROM vacay_plans WHERE owner_id = ? run raw, every nullable column set', async () => {
     const { user } = createUser(testDb);
-    const id = insertPlan(user.id, { holidays_region: 'DE', weekend_days: '["sat","sun"]', week_start: 1 });
+    const id = await insertPlan(user.id, { holidays_region: 'DE', weekend_days: '["sat","sun"]', week_start: 1 });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM vacay_plans WHERE owner_id = ?').get(user.id);
     expect(await repo.findByOwner(user.id)).toEqual(legacy);
     expect((await repo.findByOwner(user.id))!.id).toBe(id);
@@ -51,8 +48,9 @@ describe('VacayPlansRepository.findByOwner (VC7/9/78)', () => {
 describe('VacayPlansRepository.findById (VC14, the hottest statement in this file)', () => {
   it('VACAYPLANREPO-003: matches SELECT * FROM vacay_plans WHERE id = ? run raw, defaulted columns included', async () => {
     const { user } = createUser(testDb);
-    const id = insertPlan(user.id);
+    const id = await insertPlan(user.id);
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM vacay_plans WHERE id = ?').get(id);
     expect(await repo.findById(id)).toEqual(legacy);
   });

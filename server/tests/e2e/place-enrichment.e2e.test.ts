@@ -37,7 +37,11 @@ import { RateLimitService } from '../../src/nest/common/rate-limit.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { deleteRows } from '../helpers/factories/rows';
+import { setAppSetting } from '../helpers/factories/settings';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
+import { PlaceDetailsCache } from '../../src/db/entities/PlaceDetailsCache.entity';
 
 const BODY = { lat: 50.9, lng: 6.96, name: 'Museum Ludwig', placeId: 'way:12345' };
 
@@ -45,6 +49,7 @@ describe('Place enrichment e2e (real auth guard + real validation pipe)', () => 
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
   let maps: MapsService;
+  let orm: TestOrm;
 
   async function build() {
     const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), PlaceEnrichmentModule] }).compile();
@@ -60,6 +65,7 @@ describe('Place enrichment e2e (real auth guard + real validation pipe)', () => 
 
   beforeAll(async () => {
     seedUser(db as never, { id: 1 });
+    orm = await createTestOrm(db);
     app = await build();
     server = app.getHttpServer();
 
@@ -75,11 +81,12 @@ describe('Place enrichment e2e (real auth guard + real validation pipe)', () => 
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   beforeEach(async () => {
-    db.prepare('DELETE FROM app_settings').run();
-    db.prepare('DELETE FROM place_details_cache').run();
+    await deleteRows(orm, AppSettings);
+    await deleteRows(orm, PlaceDetailsCache);
     await app.get(RateLimitService).reset('place_enrichment');
     // spyOn hands back the same spy on a second call, so the call counts carry
     // over between tests unless they are cleared explicitly.
@@ -159,7 +166,7 @@ describe('Place enrichment e2e (real auth guard + real validation pipe)', () => 
   });
 
   it('200 with the disabled envelope once an admin switches enrichment off', async () => {
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('places_enrich_enabled', 'false')").run();
+    await setAppSetting(orm, 'places_enrich_enabled', 'false');
 
     const res = await request(server).post('/api/maps/enrichment').set('Cookie', sessionCookie(1)).send(BODY);
 

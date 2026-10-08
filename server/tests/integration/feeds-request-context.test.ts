@@ -67,7 +67,9 @@ import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
 import { CalendarService } from '../../src/nest/calendar/calendar.service';
 import { Trips } from '../../src/db/entities/Trips.entity';
+import { Users } from '../../src/db/entities/Users.entity';
 import { createTrip, createUser } from '../helpers/factories';
+import { updateRows } from '../helpers/factories/rows';
 
 describe('Anonymous ICS feed routes run inside a request context', () => {
   let app: INestApplication;
@@ -86,7 +88,7 @@ describe('Anonymous ICS feed routes run inside a request context', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Context-Proof Trip' });
     const token = randomUUID();
-    testDb.prepare('UPDATE trips SET feed_token = ? WHERE id = ?').run(token, trip.id);
+    await updateRows(app.get(MikroORM), Trips, { id: trip.id }, { feed_token: token });
 
     let repoRead: unknown;
     let caught: unknown;
@@ -136,7 +138,7 @@ describe('Anonymous ICS feed routes run inside a request context', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Mutation-Proof Trip' });
     const token = randomUUID();
-    testDb.prepare('UPDATE trips SET feed_token = ? WHERE id = ?').run(token, trip.id);
+    await updateRows(app.get(MikroORM), Trips, { id: trip.id }, { feed_token: token });
 
     const calendar = app.get(CalendarService);
     const spy = vi.spyOn(calendar, 'buildTripCalendar').mockImplementation(async () => {
@@ -184,7 +186,7 @@ describe('Anonymous ICS feed routes run inside a request context', () => {
     const { user } = createUser(testDb);
     createTrip(testDb, user.id, { title: 'User-Feed Context-Proof Trip' });
     const token = randomUUID();
-    testDb.prepare('UPDATE users SET feed_token = ? WHERE id = ?').run(token, user.id);
+    await updateRows(app.get(MikroORM), Users, { id: user.id }, { feed_token: token });
 
     let repoRead: unknown;
     let caught: unknown;

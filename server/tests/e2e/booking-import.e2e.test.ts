@@ -47,7 +47,11 @@ import { PermissionsService } from '../../src/nest/permissions/permissions.servi
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+import { makeTrip } from '../helpers/factories/trips';
+import { upsertRow } from '../helpers/factories/rows';
+import { Addons } from '../../src/db/entities/Addons.entity';
 
 /** A one-page PDF whose text layer holds `lines`, in the standard Helvetica. */
 function pdfWithText(lines: string[]): Buffer {
@@ -134,15 +138,23 @@ describe('Booking import e2e (#2477): a schema-bound provider on the upload rout
   };
 
   beforeAll(async () => {
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
-    ).run();
-    tripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (1, 'Albania')").run().lastInsertRowid);
+    const orm = await createTestOrm(db);
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test', role: 'user', password_version: 0 });
+    tripId = (await makeTrip(orm, 1, { title: 'Albania' })).id;
     // The instance config the reporter ran: Gemini behind the "openai" provider.
-    db.prepare(
-      `INSERT INTO addons (id, name, type, enabled, config) VALUES ('llm_parsing', 'AI Parsing', 'integration', 1, ?)
-       ON CONFLICT(id) DO UPDATE SET enabled = 1, config = excluded.config`,
-    ).run(JSON.stringify({ provider: 'openai', model: 'gemini-3.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' }));
+    await upsertRow(
+      orm,
+      Addons,
+      {
+        id: 'llm_parsing',
+        name: 'AI Parsing',
+        type: 'integration',
+        enabled: true,
+        config: { provider: 'openai', model: 'gemini-3.5-flash', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+      },
+      ['enabled', 'config'],
+    );
+    await orm.close();
     app = await build();
     vi.spyOn(app.get(PermissionsService), 'checkPermission').mockResolvedValue(true);
     server = app.getHttpServer();
