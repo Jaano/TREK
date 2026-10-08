@@ -323,7 +323,7 @@ describe('module-scoped permissions cache', () => {
     // (checkPermission for a plain member flips with the stored level).
     await svc.savePermissions({ trip_edit: 'trip_member' });
     expect(await secondInstance.checkPermission('trip_edit', 'user', 10, 20, true)).toBe(true);
-    // A direct row write, then invalidate through permissions-cache — the plain
+    // A direct row write, then invalidate through permissions-cache, the plain
     // function backup.impl.ts calls after a restore. Both service instances
     // must serve the fresh value afterwards.
     await setAppSetting(t, 'perm_trip_edit', 'trip_owner');
