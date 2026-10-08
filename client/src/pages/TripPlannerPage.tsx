@@ -4,9 +4,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router'
 import { useTripStore } from '../store/tripStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { MapViewAuto as MapView } from '../components/Map/MapViewAuto'
-import { MapCompassPill, type CompassMap } from '../components/Map/MapCompassPill'
-import { TripRouteOverviewPill, TripRouteOverviewPanel } from '../components/Map/TripRouteOverview'
-import { DawarichTrailPill } from '../components/Map/DawarichTrailPill'
+import type { CompassMap } from '../components/Map/MapCompassPill'
 import { getCached, fetchPhoto } from '../services/photoService'
 import DayPlanSidebar from '../components/Planner/DayPlanSidebar'
 import RoadtripModeSwitch from '../components/Roadtrip/RoadtripModeSwitch'
@@ -53,13 +51,13 @@ import type { Accommodation, TripMember, Day, Place, Reservation } from '../type
 import { useTripPlannerPage } from './tripPlanner/useTripPlannerPage'
 import {
   ReservationsPanel, FileManager, CostsPanel, ExpenseModal, CollabPanel,
-  RoadtripSidebar, RoadtripCorridorPanel, RoadtripLimitsCard, RoadtripStopPopup, RoadtripStayModal, RoadtripTrackModal, RoadtripAlternativesBar,
+  RoadtripSidebar, RoadtripCorridorPanel, RoadtripLimitsCard, RoadtripStopPopup, RoadtripStayModal, RoadtripTrackModal,
   TourPlannerRail, TourPlannerToursRail, TransportModal,
 } from './tripPlanner/plannerLazy'
 import { LazyPanel } from './tripPlanner/LazyPanel'
 import { ListsContainer } from './tripPlanner/ListsContainer'
+import { PlanMapStage } from './tripPlanner/PlanMapStage'
 import { useMergedMapPois } from '../components/Map/useMergedMapPois'
-import PoiCategoryPill from '../components/Map/PoiCategoryPill'
 import { useTouchDragBridge } from '../hooks/useTouchDragBridge'
 import PanelResizeHandle from '../components/Planner/PanelResizeHandle'
 
@@ -266,163 +264,23 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
 
         {activeTab === 'plan' && (
           <div style={{ position: 'absolute', inset: 0 }}>
-            <MapView
-              tripId={tripId}
-              dawarichTrack={dawarichTrail.track}
-              dawarichHiddenDates={dawarichHiddenDates}
-              places={roadtripActive ? roadtripMapPlaces : mapPlaces}
-              dayPlaces={dayPlaces}
-              route={roadtripActive ? roadtripMapLines : overviewActive ? tripOverview.lines : route}
-              routeColors={roadtripActive ? roadtripLineColors : overviewActive ? tripOverview.lineColors : undefined}
-              routeWalking={roadtripActive || overviewActive ? undefined : routeWalking}
-              followSelection={!mapLocked || isMobile}
-              onToggleFollow={isMobile ? undefined : toggleMapLocked}
-              routeVias={roadtripActive ? roadtripMapVias : routeVias}
-              dayBoundaryControls={roadtripActive ? dayBoundaryControls : undefined}
-              accessLines={roadtripActive ? roadtripRoutes.accessLines : undefined}
-              showTransitRoutes={transitRoutesShown}
-              // The route toggle belongs to one day, so the map needs that day to
-              // know which automated transports may ride it (#2019).
-              days={days}
-              selectedDayId={selectedDayId}
-              routeSegments={roadtripActive ? roadtripRoutes.segments : overviewActive ? tripOverview.segments : routeSegments}
-              selectedPlaceId={selectedPlaceId}
-              selectedPlace={selectedPlace}
-              onMarkerClick={handleMarkerClick}
-              onMapClick={handleMapClick}
-              onMapContextMenu={handleMapContextMenu}
-              // No center/zoom: the map frames itself on the trip's places at mount, and
-              // falls back to the world view when the trip has none.
-              tileUrl={mapTileUrl}
-              fitKey={fitKey}
-              dayOrderMap={dayOrderMap}
-              leftWidth={leftPanelPx}
-              rightWidth={rightPanelPx}
-              hasInspector={!!selectedPlace}
-              hasDayDetail={!!showDayDetail && !selectedPlace}
-              reservations={reservations}
-              showReservationStats={true}
-              // In road trip mode the rides that seam the drive are drawn as their own arcs
-              // beside the roads, on top of what the reader switched on under Days.
-              visibleConnectionIds={roadtripActive ? roadtripConnections : visibleConnections}
-              // The desktop plan shows the booking's detail; the narrow layout keeps the day
-              // list's transport view.
-              onReservationClick={(rid) => {
-                const r = reservations.find(x => x.id === rid)
-                if (!r) return
-                if (isMobile) setMapTransportDetail(r)
-                else openBookingDetail(r)
-              }}
-              /* In road trip mode the corridor's `visible` (not `search.results`: the map is
-                 the picture of that very list, and filtering the list while seventy pins stay
-                 on the map no longer answers "which of these") plus whatever the category
-                 pill found in view. Outside it, only the pill's hits. */
-              pois={mapPois}
-              onPoiClick={handlePoiClick}
-              // Only while road trip mode is on: outside it there is no drive to drop onto.
-              onPoiDropOnRoute={roadtripActive ? dropPoiOnRoute : undefined}
-              // Clicking the drawn route puts a via there; only in road trip mode, where
-              // the route is the thing being worked on.
-              onRouteClick={roadtripActive && can('day_edit', trip) ? addRoadtripVia : undefined}
-              roadtripVias={roadtripActive ? roadtripVias.byDay : undefined}
-              alternativeRoutes={alternativeOverlays}
-              focusPoints={overviewActive ? tripOverview.focusPoints : mapFocusPoints}
-              clusterLoosely={roadtripActive}
-              activeAlternative={highlightedAlternative}
-              onChooseAlternative={chooseRouteAlternative}
-              onHighlightAlternative={setHighlightedAlternative}
-              onMoveVia={can('day_edit', trip) ? moveRoadtripVia : undefined}
-              onRemoveVia={can('day_edit', trip) ? removeRoadtripVia : undefined}
-              onViewportChange={tourMap.captureViewport}
-              onMapReady={setGlMap}
+            <PlanMapStage
+              tripId={tripId} trip={trip} can={can} days={days} reservations={reservations} isMobile={isMobile}
+              selectedDayId={selectedDayId} selectedPlaceId={selectedPlaceId} selectedPlace={selectedPlace} showDayDetail={showDayDetail} handleSelectDay={handleSelectDay}
+              mapPlaces={mapPlaces} dayPlaces={dayPlaces} dayOrderMap={dayOrderMap} mapTileUrl={mapTileUrl} fitKey={fitKey} mapLocked={mapLocked} toggleMapLocked={toggleMapLocked} mapFocusPoints={mapFocusPoints}
+              route={route} routeWalking={routeWalking} routeSegments={routeSegments} routeVias={routeVias} transitRoutesShown={transitRoutesShown}
+              handleMarkerClick={handleMarkerClick} handleMapClick={handleMapClick} handleMapContextMenu={handleMapContextMenu} handlePoiClick={handlePoiClick}
+              visibleConnections={visibleConnections} setMapTransportDetail={setMapTransportDetail} openBookingDetail={openBookingDetail}
+              roadtripActive={roadtripActive} roadtripMapPlaces={roadtripMapPlaces} roadtripMapLines={roadtripMapLines} roadtripLineColors={roadtripLineColors} roadtripMapVias={roadtripMapVias}
+              roadtripRoutes={roadtripRoutes} roadtripConnections={roadtripConnections} roadtripVias={roadtripVias}
+              dayBoundaryControls={dayBoundaryControls} dropPoiOnRoute={dropPoiOnRoute} addRoadtripVia={addRoadtripVia} moveRoadtripVia={moveRoadtripVia} removeRoadtripVia={removeRoadtripVia}
+              routeAlternatives={routeAlternatives} alternativeOverlays={alternativeOverlays} highlightedAlternative={highlightedAlternative} chooseRouteAlternative={chooseRouteAlternative} setHighlightedAlternative={setHighlightedAlternative}
+              overviewActive={overviewActive} tripOverview={tripOverview} overviewShown={overviewShown} toggleOverview={toggleOverview}
+              dawarichEnabled={dawarichEnabled} dawarichTrail={dawarichTrail} dawarichHiddenDates={dawarichHiddenDates} dawarichTrailShown={dawarichTrailShown} toggleDawarichTrail={toggleDawarichTrail}
+              mobileSidebarOpen={mobileSidebarOpen} showPlaceForm={showPlaceForm} showMembersModal={showMembersModal} showReservationModal={showReservationModal}
+              poi={poi} tourMap={tourMap} leftPanelPx={leftPanelPx} rightPanelPx={rightPanelPx} mapInsetLeft={mapInsetLeft} mapInsetRight={mapInsetRight}
+              glMap={glMap} setGlMap={setGlMap} poiPillEnabled={poiPillEnabled} mapPois={mapPois} distanceUnit={distanceUnit}
             />
-
-            {/* Over the map rather than in a dialog: the answer to "which of these" is the
-                roads drawn behind it, so covering them to ask would hide the point. */}
-            {routeAlternatives.open && (
-              <div style={{ position: 'absolute', bottom: 18, left: '50%', transform: 'translateX(-50%)', zIndex: 26, pointerEvents: 'none', display: 'flex', justifyContent: 'center' }}>
-                <LazyPanel id="roadtrip-alternatives">
-                  <RoadtripAlternativesBar
-                    open={routeAlternatives.open}
-                    overlays={alternativeOverlays}
-                    onChoose={chooseRouteAlternative}
-                    onClose={routeAlternatives.close}
-                    onHighlight={setHighlightedAlternative}
-                  />
-                </LazyPanel>
-              </div>
-            )}
-
-            {/* Bottom-RIGHT. Not the top corridor between the panels, which is already
-                contested by the POI bar and the collapse tabs (#2247); and not the
-                bottom-left corner, where Leaflet's base-layer switcher sits at
-                z-index 1000 and would cover this. The right corner is free on both
-                renderers — the locate button that lives there is phone-only. */}
-            {(!roadtripActive || dawarichEnabled) && (
-              <div className="hidden md:flex" style={{
-                position: 'absolute', bottom: 18, right: mapInsetRight + 14, zIndex: 26,
-                pointerEvents: 'none', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
-              }}>
-                {!roadtripActive && overviewActive && (
-                  <TripRouteOverviewPanel
-                    overview={tripOverview}
-                    unit={distanceUnit}
-                    selectedDayId={selectedDayId}
-                    onSelectDay={handleSelectDay}
-                  />
-                )}
-                {!roadtripActive && (
-                  <TripRouteOverviewPill active={overviewShown} onToggle={toggleOverview} />
-                )}
-                {/* Stays in road-trip mode, unlike the overview: the route that was
-                    actually driven is the thing you most want beside the planned
-                    one. It is drawn, never applied — correcting the plan from the
-                    recording is a different feature and deliberately not this one. */}
-                {dawarichEnabled && (
-                  <DawarichTrailPill
-                    active={dawarichTrailShown}
-                    status={dawarichTrail.status}
-                    onToggle={toggleDawarichTrail}
-                  />
-                )}
-              </div>
-            )}
-
-            {(poiPillEnabled || glMap) && (
-              <div className="hidden md:flex" style={{
-                position: 'absolute', top: 14,
-                // Centred on the corridor the panels leave, not on the viewport: at
-                // 860px the viewport centre sits under the Places panel, where this
-                // cluster covered both collapse tabs and Add Place/Activity (#2247).
-                left: `calc(${mapInsetLeft}px + (100% - ${mapInsetLeft}px - ${mapInsetRight}px) / 2)`,
-                // No wider than that corridor either: once plugins add categories the pill
-                // scrolls inside it instead of running on under a panel.
-                maxWidth: `calc(100% - ${mapInsetLeft}px - ${mapInsetRight}px - 24px)`,
-                transform: 'translateX(-50%)', zIndex: 25, pointerEvents: 'none', alignItems: 'flex-start', gap: 8,
-              }}>
-                {poiPillEnabled && (
-                  <PoiCategoryPill categories={poi.categories} active={poi.active} onToggle={poi.toggle} loadingKeys={poi.loadingKeys} errorKeys={poi.errorKeys} moved={poi.moved} onSearchArea={poi.searchArea} />
-                )}
-                {glMap && <MapCompassPill map={glMap} />}
-              </div>
-            )}
-
-            {/* Mobile: the compass/reset-orientation control lives centre-top on its own
-                (the desktop cluster above is hidden below md), between the edge Plan/Places tabs. */}
-            {glMap && (
-              <div className="flex md:hidden" style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 25, pointerEvents: 'none' }}>
-                <MapCompassPill map={glMap} />
-              </div>
-            )}
-
-            {/* Mobile POI search controls live in a portal like the Plan/Places
-                buttons so map touch handlers cannot swallow the tap targets. */}
-            {poiPillEnabled && !mobileSidebarOpen && !showPlaceForm && !showMembersModal && !showReservationModal && createPortal(
-              <div data-testid="mobile-poi-category-pill" className="flex md:hidden" style={{ position: 'fixed', insetInline: 12, bottom: 'calc(var(--bottom-nav-h, 0px) + 12px)', justifyContent: 'center', zIndex: 100, pointerEvents: 'none' }}>
-                <PoiCategoryPill categories={poi.categories} active={poi.active} onToggle={poi.toggle} loadingKeys={poi.loadingKeys} errorKeys={poi.errorKeys} moved={poi.moved} onSearchArea={poi.searchArea} />
-              </div>,
-              document.body
-            )}
 
             <div className="hidden md:block" style={{ position: 'absolute', left: 10, top: 10, bottom: 10, zIndex: 20 }}>
               {/* The panel's tab: a flap on its edge while open, a raised accent tile once it is tucked away. */}
