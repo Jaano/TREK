@@ -584,6 +584,49 @@ describe('send() — channel failure resilience', () => {
 
 });
 
+describe('send() reports what it delivered', () => {
+  it('NSVC-022: counts in-app and every channel that went out', async () => {
+    const { user } = createUser(testDb);
+    setSmtp();
+    setUserWebhookUrl(user.id);
+    setNotificationChannels(testDb, 'email,webhook');
+    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+
+    await expect(
+      send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } }),
+    ).resolves.toEqual({ attempted: 3, delivered: 3 });
+  });
+
+  it('NSVC-023: a channel that fails is attempted but not delivered', async () => {
+    const { user } = createUser(testDb);
+    setSmtp();
+    setNotificationChannels(testDb, 'email');
+    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    disableNotificationPref(testDb, user.id, 'trip_reminder', 'inapp');
+    sendMailMock.mockRejectedValueOnce(new Error('SMTP connection refused'));
+    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+
+    await expect(
+      send({ event: 'trip_reminder', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', tripId: String(tripId) } }),
+    ).resolves.toEqual({ attempted: 1, delivered: 0 });
+  });
+
+  it('NSVC-024: nothing attempted when there is nobody to tell or nobody wants it', async () => {
+    const { user } = createUser(testDb);
+    setNotificationChannels(testDb, 'none');
+    disableNotificationPref(testDb, user.id, 'collab_message', 'inapp');
+    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+
+    await expect(
+      send({ event: 'collab_message', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', tripId: String(tripId) } }),
+    ).resolves.toEqual({ attempted: 0, delivered: 0 });
+    await expect(
+      send({ event: 'booking_change', actorId: user.id, scope: 'trip', targetId: tripId, params: { trip: 'Trip', actor: 'a', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } }),
+    ).resolves.toEqual({ attempted: 0, delivered: 0 });
+  });
+});
+
 // ── Ntfy dispatch ─────────────────────────────────────────────────────────────
 
 function setUserNtfyTopic(userId: number, topic = 'my-trek-topic'): void {

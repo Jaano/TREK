@@ -1,13 +1,13 @@
 import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { logInfo, logError } from '../audit/audit-log.logger';
+import { logInfo, logError, logWarn } from '../audit/audit-log.logger';
 import { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
 import { TripsRepository } from '../../db/repositories/Trips.repository';
 import { TodoItemsRepository } from '../../db/repositories/TodoItems.repository';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import { Trips } from '../../db/entities/Trips.entity';
 import { TodoItems } from '../../db/entities/TodoItems.entity';
-import { NotificationsService } from './notifications.service';
+import { NotificationsService, type NotificationDelivery, type NotificationPayload } from './notifications.service';
 import { CronRegistrarService } from '../scheduling/cron-registrar.service';
 import { addIsoDays } from '@trek/shared';
 import { appClock } from '../common/timezoneService';
@@ -33,6 +33,15 @@ import { appClock } from '../common/timezoneService';
 // todo_items.reminded_at) so the cron doesn't spam the user every morning
 // leading up to the deadline.
 const TODO_REMINDER_LEAD_DAYS = 3;
+
+/**
+ * Not delivered: the send threw (a DB error resolving the recipients), or it
+ * tried in-app and channels and none of them went out. A send nobody wanted
+ * (every recipient opted out) counts as done, since a retry would reach no one.
+ */
+function undelivered(delivery: NotificationDelivery | null): boolean {
+  return delivery === null || (delivery.attempted > 0 && delivery.delivered === 0);
+}
 
 @Injectable()
 export class ReminderJobsService implements OnApplicationBootstrap {
@@ -83,6 +92,10 @@ export class ReminderJobsService implements OnApplicationBootstrap {
    * date. A day the job did not run is caught up on the next one, and a trip
    * moved to a new start date is reminded again. "Today" is the date in the
    * TZ the job is scheduled in, not UTC.
+   *
+   * Each reminder is claimed before it is sent, so a second process running
+   * the same tick skips it, and given back when the send fails, so the next
+   * tick retries it until the trip starts.
    */
   async tripTick(): Promise<void> {
     try {
@@ -95,20 +108,40 @@ export class ReminderJobsService implements OnApplicationBootstrap {
         && t.start_date >= today
         && addIsoDays(t.start_date, -t.reminder_days) <= today);
 
+      const sent: typeof trips = [];
       for (const trip of trips) {
-        await this.notifications.send({ event: 'trip_reminder', actorId: null, scope: 'trip', targetId: trip.id, params: { trip: trip.title, tripId: String(trip.id) } }).catch(() => {});
-        await this.trips.markReminderSent(trip.id, trip.start_date);
+        if (!(await this.trips.claimReminder(trip.id, trip.start_date))) continue;
+        const delivery = await this.deliver({ event: 'trip_reminder', actorId: null, scope: 'trip', targetId: trip.id, params: { trip: trip.title, tripId: String(trip.id) } });
+        if (undelivered(delivery)) {
+          await this.trips.releaseReminder(trip.id, trip.start_date, trip.reminder_sent_for);
+          logWarn(`Trip reminder for "${trip.title}" was not delivered; the next run tries again`);
+          continue;
+        }
+        sent.push(trip);
       }
 
-      if (trips.length > 0) {
-        logInfo(`Trip reminders sent for ${trips.length} trip(s): ${trips.map(t => `"${t.title}" (${t.reminder_days}d)`).join(', ')}`);
+      if (sent.length > 0) {
+        logInfo(`Trip reminders sent for ${sent.length} trip(s): ${sent.map(t => `"${t.title}" (${t.reminder_days}d)`).join(', ')}`);
       }
     } catch (err: unknown) {
       logError(`Trip reminder check failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 
-  /** Daily check for unchecked todos due inside the lead window. */
+  /** One send, with a failure logged and reported as null instead of ending the tick. */
+  private async deliver(payload: NotificationPayload): Promise<NotificationDelivery | null> {
+    try {
+      return await this.notifications.send(payload);
+    } catch (err: unknown) {
+      logError(`Reminder ${payload.event} for ${payload.scope} ${payload.targetId} failed: ${err instanceof Error ? err.message : err}`);
+      return null;
+    }
+  }
+
+  /**
+   * Daily check for unchecked todos due inside the lead window. Claimed before
+   * the send and given back when it fails, like the trip reminders.
+   */
   async todoTick(): Promise<void> {
     try {
       if ((await this.appSettings.getValue('notify_todo_due')) === 'false') return;
@@ -120,10 +153,12 @@ export class ReminderJobsService implements OnApplicationBootstrap {
 
       const todos = await this.todoItems.listDueForReminder(todayDate, cutoffDate);
 
+      let sent = 0;
       for (const todo of todos) {
+        if (!(await this.todoItems.claimReminder(todo.id))) continue;
         const targetScope: 'user' | 'trip' = todo.assigned_user_id ? 'user' : 'trip';
         const targetId = todo.assigned_user_id ?? todo.trip_id;
-        await this.notifications.send({
+        const delivery = await this.deliver({
           event: 'todo_due',
           actorId: null,
           scope: targetScope,
@@ -134,13 +169,17 @@ export class ReminderJobsService implements OnApplicationBootstrap {
             tripId: String(todo.trip_id),
             due: todo.due_date,
           },
-        }).catch(() => {});
-        // RJ5 stays AFTER the send, unchanged (plan3f-inputs.md correction #8).
-        await this.todoItems.markReminded(todo.id);
+        });
+        if (undelivered(delivery)) {
+          await this.todoItems.releaseReminder(todo.id, todo.reminded_at);
+          logWarn(`Todo reminder for "${todo.name}" was not delivered; the next run tries again`);
+          continue;
+        }
+        sent += 1;
       }
 
-      if (todos.length > 0) {
-        logInfo(`Todo reminders sent for ${todos.length} item(s)`);
+      if (sent > 0) {
+        logInfo(`Todo reminders sent for ${sent} item(s)`);
       }
     } catch (err: unknown) {
       logError(`Todo reminder check failed: ${err instanceof Error ? err.message : err}`);

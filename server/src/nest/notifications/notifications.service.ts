@@ -258,6 +258,17 @@ export interface NotificationPayload {
 }
 
 /**
+ * What one {@link NotificationsService.send} reached: every in-app notification
+ * and channel message it tried, and how many of those went out. A channel that
+ * rejects or answers `false` (SMTP down, a webhook 5xx) did not deliver.
+ * `attempted` is 0 when nobody wanted the event at all.
+ */
+export interface NotificationDelivery {
+  attempted: number;
+  delivered: number;
+}
+
+/**
  * Should this channel deliver this event to this recipient?
  *
  * Encodes, unchanged, the gating the four hand-written dispatch blocks used to do:
@@ -644,12 +655,13 @@ export class NotificationsService {
 
   // ── Unified dispatcher (from services/notificationService.ts) ─────────────
 
-  async send(payload: NotificationPayload): Promise<void> {
+  async send(payload: NotificationPayload): Promise<NotificationDelivery> {
     const { event, actorId, params, scope, targetId, inApp } = payload;
+    const delivery: NotificationDelivery = { attempted: 0, delivered: 0 };
 
     // Resolve recipients based on scope
     const recipients = await this.resolveRecipients(scope, targetId, actorId);
-    if (recipients.length === 0) return;
+    if (recipients.length === 0) return delivery;
 
     const configEntry = EVENT_NOTIFICATION_CONFIG[event];
     if (!configEntry) {
@@ -770,9 +782,12 @@ export class NotificationsService {
       }
 
       const results = await Promise.allSettled(promises);
+      delivery.attempted += results.length;
       for (const result of results) {
         if (result.status === 'rejected') {
           logError(`notificationService.send channel dispatch failed event=${event} recipient=${recipientId}: ${result.reason instanceof Error ? result.reason.message : result.reason}`);
+        } else if (result.value !== false) {
+          delivery.delivered += 1;
         }
       }
     }));
@@ -792,15 +807,19 @@ export class NotificationsService {
       if (globalChannels.length > 0) {
         const { title, body } = getEventText('en', event, params);
         const msg: ChannelMessage = { event, title, body, navigateTarget: navigateTarget ?? undefined, url: fullLink };
-        await Promise.all(
+        const sent = await Promise.all(
           globalChannels.map(ch =>
             ch.sendGlobal!(msg).catch((err: unknown) => {
               logError(`notificationService.send admin ${ch.id} failed event=${event}: ${err instanceof Error ? err.message : err}`);
+              return false;
             }),
           ),
         );
+        delivery.attempted += sent.length;
+        delivery.delivered += sent.filter((result) => result !== false).length;
       }
     }
+    return delivery;
   }
 }
 

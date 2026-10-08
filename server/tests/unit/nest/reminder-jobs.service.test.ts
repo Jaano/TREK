@@ -2,8 +2,9 @@
  * ReminderJobsService — the trip + todo reminder crons in their owning domain
  * (moved from src/scheduler.ts). Proves the bootstrap registration + banners,
  * the per-tick enable gates, the reminder selection windows, the todo 20h
- * dedup via reminded_at, the user-vs-trip scope routing, and that a failing
- * tick is contained to a log line.
+ * dedup via reminded_at, the user-vs-trip scope routing, that a failing
+ * tick is contained to a log line, and the claim before each send: a second
+ * process skips a claimed reminder, a failed send gives the claim back.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
@@ -62,7 +63,7 @@ function makeJobs(overrides: { notifications?: NotificationsService } = {}) {
     // exactly, so every existing assertion below is unaffected.
     runOnBoot: vi.fn(async (_name: string, fn: () => void | Promise<void>) => { await fn(); }),
   };
-  const send = vi.fn().mockResolvedValue(undefined);
+  const send = vi.fn().mockResolvedValue({ attempted: 1, delivered: 1 });
   const svc = new ReminderJobsService(
     appSettingsRepo,
     tripsRepo,
@@ -203,7 +204,7 @@ describe('trip reminder tick', () => {
     const svc = new ReminderJobsService(
       { getValue: throwGone } as unknown as AppSettingsRepository,
       { listReminderCandidates: throwGone, countActiveWithReminders: throwGone } as unknown as TripsRepository,
-      { listDueForReminder: throwGone, markReminded: throwGone } as unknown as TodoItemsRepository,
+      { listDueForReminder: throwGone, claimReminder: throwGone } as unknown as TodoItemsRepository,
       broken,
       { isEnabled: () => true, register: () => true, unregister: () => {} } as unknown as CronRegistrarService,
     );
@@ -211,6 +212,57 @@ describe('trip reminder tick', () => {
     expect(logMock.logError).toHaveBeenCalledWith('Trip reminder check failed: db gone');
     await expect(svc.todoTick()).resolves.toBeUndefined();
     expect(logMock.logError).toHaveBeenCalledWith('Todo reminder check failed: db gone');
+  });
+});
+
+describe('trip reminder claims', () => {
+  const sentFor = (id: number) =>
+    (testDb.prepare('SELECT reminder_sent_for FROM trips WHERE id = ?').get(id) as { reminder_sent_for: string | null }).reminder_sent_for;
+
+  it('RJOB-013: a send that throws gives the claim back, logs it, and the next run sends again', async () => {
+    const { user } = createUser(testDb);
+    const tripId = tripWithReminder(user.id, 2);
+    const { svc, send } = makeJobs();
+    send.mockRejectedValueOnce(new Error('db gone mid-send'));
+
+    await svc.tripTick();
+    expect(sentFor(tripId)).toBeNull();
+    expect(logMock.logError).toHaveBeenCalledWith(expect.stringContaining('db gone mid-send'));
+    expect(logMock.logWarn).toHaveBeenCalledWith('Trip reminder for "Lisbon" was not delivered; the next run tries again');
+    expect(logMock.logInfo).not.toHaveBeenCalledWith(expect.stringMatching(/^Trip reminders sent/));
+
+    await svc.tripTick();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(sentFor(tripId)).not.toBeNull();
+  });
+
+  it('RJOB-014: every channel failing is retried, a send nobody wanted is not', async () => {
+    const { user } = createUser(testDb);
+    const failing = tripWithReminder(user.id, 2, 'Failing');
+    const unwanted = tripWithReminder(user.id, 3, 'Unwanted');
+    const { svc, send } = makeJobs();
+    send.mockImplementation(async (payload: { targetId: number }) =>
+      payload.targetId === failing ? { attempted: 2, delivered: 0 } : { attempted: 0, delivered: 0 },
+    );
+
+    await svc.tripTick();
+    expect(sentFor(failing)).toBeNull();
+    expect(sentFor(unwanted)).not.toBeNull();
+  });
+
+  it('RJOB-015: a reminder another process claimed first is not sent again', async () => {
+    const { user } = createUser(testDb);
+    const tripId = tripWithReminder(user.id, 2);
+    // Both processes read the candidates; the other one claims first.
+    const stale = await tripsRepo.listReminderCandidates();
+    const start = stale.find((t) => t.id === tripId)!.start_date;
+    await expect(tripsRepo.claimReminder(tripId, start)).resolves.toBe(true);
+    vi.spyOn(tripsRepo, 'listReminderCandidates').mockResolvedValueOnce(stale);
+
+    const { svc, send } = makeJobs();
+    await svc.tripTick();
+    expect(send).not.toHaveBeenCalled();
+    await expect(tripsRepo.claimReminder(tripId, start)).resolves.toBe(false);
   });
 });
 
@@ -274,5 +326,44 @@ describe('todo reminder tick', () => {
     const { svc, send } = makeJobs();
     await svc.todoTick();
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+describe('todo reminder claims', () => {
+  function dueTodo(): number {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Lisbon' });
+    const todo = createTodoItem(testDb, trip.id, { name: 'Pack bags' });
+    testDb.prepare("UPDATE todo_items SET due_date = date('now', '+1 day') WHERE id = ?").run(todo.id);
+    return todo.id;
+  }
+  const remindedAt = (id: number) =>
+    (testDb.prepare('SELECT reminded_at FROM todo_items WHERE id = ?').get(id) as { reminded_at: string | null }).reminded_at;
+
+  it('RJOB-016: a failed send gives the claim back, so the next run sends again', async () => {
+    const todoId = dueTodo();
+    const { svc, send } = makeJobs();
+    send.mockResolvedValueOnce({ attempted: 1, delivered: 0 });
+
+    await svc.todoTick();
+    expect(remindedAt(todoId)).toBeNull();
+    expect(logMock.logWarn).toHaveBeenCalledWith('Todo reminder for "Pack bags" was not delivered; the next run tries again');
+    expect(logMock.logInfo).not.toHaveBeenCalledWith(expect.stringMatching(/^Todo reminders sent/));
+
+    await svc.todoTick();
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(remindedAt(todoId)).not.toBeNull();
+  });
+
+  it('RJOB-017: a todo another process claimed first is not sent again', async () => {
+    const todoId = dueTodo();
+    const stale = await todoItemsRepo.listDueForReminder(new Date().toISOString().slice(0, 10), '2999-12-31');
+    await expect(todoItemsRepo.claimReminder(todoId)).resolves.toBe(true);
+    vi.spyOn(todoItemsRepo, 'listDueForReminder').mockResolvedValueOnce(stale);
+
+    const { svc, send } = makeJobs();
+    await svc.todoTick();
+    expect(send).not.toHaveBeenCalled();
+    await expect(todoItemsRepo.claimReminder(todoId)).resolves.toBe(false);
   });
 });

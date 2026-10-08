@@ -889,9 +889,28 @@ export class TripsRepository extends TrekRepository<Trips> {
       .execute<TripReminderCandidateRow[]>('all', false);
   }
 
-  /** `UPDATE trips SET reminder_sent_for = ? WHERE id = ?`: the start date the reminder went out for. */
-  async markReminderSent(id: number, startDate: string): Promise<void> {
-    await this.nativeUpdate({ id }, { reminder_sent_for: startDate });
+  /**
+   * Claims a trip reminder before it is sent: `UPDATE trips SET
+   * reminder_sent_for = :start WHERE id = ? AND start_date = :start AND
+   * (reminder_sent_for IS NULL OR reminder_sent_for <> :start)`. Of two
+   * processes running the tick only the one whose update lands sends, and a
+   * trip moved since it was read is left for the next tick. True when this
+   * caller holds the claim.
+   */
+  async claimReminder(id: number, startDate: string): Promise<boolean> {
+    const changed = await this.nativeUpdate(
+      { id, start_date: startDate, $or: [{ reminder_sent_for: null }, { reminder_sent_for: { $ne: startDate } }] },
+      { reminder_sent_for: startDate },
+    );
+    return changed === 1;
+  }
+
+  /**
+   * Gives a claim back after the send failed, so the next tick tries again:
+   * `reminder_sent_for` returns to what it was, unless the row moved on since.
+   */
+  async releaseReminder(id: number, startDate: string, previous: string | null): Promise<void> {
+    await this.nativeUpdate({ id, reminder_sent_for: startDate }, { reminder_sent_for: previous });
   }
 
   // ---------------------------------------------------------------------------

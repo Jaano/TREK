@@ -95,8 +95,10 @@ export async function makeNotificationPreferencesService(db: Database.Database):
  * `tsconfig`'s `include`, so leaving it off would not fail to compile. It would
  * land as `undefined` and throw inside the send.
  */
-export function notificationsStub(send: NotificationSend = async () => {}): NotificationsService {
+export function notificationsStub(
+  send: NotificationSend = async () => ({ attempted: 0, delivered: 0 }),
+): NotificationsService {
   return { send } as unknown as NotificationsService;
 }
 
-type NotificationSend = (payload: Parameters<NotificationsService['send']>[0]) => Promise<void>;
+type NotificationSend = (payload: Parameters<NotificationsService['send']>[0]) => Promise<unknown>;

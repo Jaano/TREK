@@ -222,7 +222,7 @@ export class TodoItemsRepository extends TrekRepository<TodoItems> {
     const platform = this.getEntityManager().getPlatform();
     const rows = await this.qb('ti')
       .join('ti.trip', 't')
-      .select(['ti.id', columnRef(platform, 'ti.trip_id'), 'ti.name', 'ti.due_date', columnRef(platform, 'ti.assigned_user_id'), 't.title', 't.user'])
+      .select(['ti.id', columnRef(platform, 'ti.trip_id'), 'ti.name', 'ti.due_date', columnRef(platform, 'ti.assigned_user_id'), 'ti.reminded_at', 't.title', 't.user'])
       .andWhere({ checked: 0 })
       .andWhere({ due_date: { $ne: null } })
       .andWhere({ due_date: { $ne: '' } })
@@ -236,21 +236,32 @@ export class TodoItemsRepository extends TrekRepository<TodoItems> {
       name: row.name,
       due_date: row.due_date,
       assigned_user_id: row.assigned_user_id,
+      reminded_at: row.reminded_at,
       trip_title: row.title,
       trip_owner_id: row.user_id,
     }));
   }
 
   /**
-   * RJ5 (`reminder-jobs.service.ts#todoTick`, looped) — `UPDATE todo_items
-   * SET reminded_at = CURRENT_TIMESTAMP WHERE id = ?`. Stays AFTER the
-   * notification send in call order (plan3f-inputs.md correction #8 — a
-   * documented, not-fixed-by-this-plan at-least-once ordering, unlike
-   * `notifications.service.ts#respond`'s deliberately claim-then-act shape).
+   * RJ5 (`reminder-jobs.service.ts#todoTick`, looped): claims the reminder
+   * before it is sent. `UPDATE todo_items SET reminded_at = CURRENT_TIMESTAMP
+   * WHERE id = ? AND (reminded_at IS NULL OR reminded_at <= now - 20 h)`, the
+   * same dedup bound {@link listDueForReminder} selects by, so of two
+   * processes running the tick only the one whose update lands sends. True
+   * when this caller holds the claim.
    */
-  async markReminded(id: number): Promise<void> {
+  async claimReminder(id: number): Promise<boolean> {
     const platform = this.getEntityManager().getPlatform();
-    await this.nativeUpdate({ id }, { reminded_at: currentTimestamp(platform) });
+    const changed = await this.nativeUpdate(
+      { id, $or: [{ reminded_at: null }, { reminded_at: { $lte: nowMinusHours(platform, 20) } }] },
+      { reminded_at: currentTimestamp(platform) },
+    );
+    return changed === 1;
+  }
+
+  /** Gives a claim back after the send failed, so the next tick tries again: `reminded_at` returns to what it was. */
+  async releaseReminder(id: number, remindedAt: string | null): Promise<void> {
+    await this.nativeUpdate({ id }, { reminded_at: remindedAt });
   }
 }
 
@@ -261,6 +272,7 @@ interface TodoReminderQueryRow {
   name: string;
   due_date: string;
   assigned_user_id: number | null;
+  reminded_at: string | null;
   title: string;
   user_id: number;
 }
@@ -272,6 +284,8 @@ export interface TodoReminderRow {
   name: string;
   due_date: string;
   assigned_user_id: number | null;
+  /** The previous reminder's time, what {@link TodoItemsRepository.releaseReminder} restores. */
+  reminded_at: string | null;
   trip_title: string;
   trip_owner_id: number;
 }
