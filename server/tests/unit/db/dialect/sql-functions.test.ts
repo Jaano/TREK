@@ -1128,7 +1128,7 @@ describe('sql-functions (sqlite)', () => {
   });
 
   // Plan 3g Task 0 (R1) — unixEpochToIsoKysely, the third fallback tier of
-  // `GALLERY_CHRONOLOGICAL_ORDER` (journey-gallery-order.ts). No consumer
+  // `GALLERY_CHRONOLOGICAL_ORDER` (tests/helpers/legacy-gallery-order.ts). No consumer
   // yet: Task 1 (getJourneyFull) and Task 3 (getPublicJourney) each fold this
   // into their own rebuild of the constant. The full composed ORDER BY proof
   // (coalesce + nullif + correlated subquery + this helper, on a seeded
@@ -1337,7 +1337,7 @@ describe('sql-functions (sqlite)', () => {
 
 /**
  * Plan 3g Task 0 (R1) — the full Kysely rebuild of
- * `journey-gallery-order.ts`'s `GALLERY_CHRONOLOGICAL_ORDER`, as a worked
+ * `GALLERY_CHRONOLOGICAL_ORDER` (tests/helpers/legacy-gallery-order.ts), as a worked
  * example: `COALESCE(NULLIF(tp.taken_at, ''), <correlated MIN+concat
  * subquery over journey_entry_photos/journey_entries>, <unixEpochToIsoKysely
  * of gp.created_at>) ASC, gp.sort_order ASC, gp.id ASC`. NOT exported from

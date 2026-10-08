@@ -736,7 +736,7 @@ export function lowerTrimParam(platform: Platform, value: string): RawQueryFragm
 // ---------------------------------------------------------------------------
 // Plan 3g Task 0 (R1) — no consumer yet: Task 1 (`getJourneyFull`'s gallery
 // read) and Task 3 (`getPublicJourney`'s gallery read) each fold this into
-// their own rebuild of `journey-gallery-order.ts`'s `GALLERY_CHRONOLOGICAL_ORDER`
+// their own rebuild of the legacy `GALLERY_CHRONOLOGICAL_ORDER` (tests/helpers/)
 // text (a `COALESCE(NULLIF(tp.taken_at, ''), <correlated MIN+concat subquery>,
 // <this>)` ORDER BY, worked out in full in Task 0's report for both to paste
 // in verbatim, neither re-deriving it). Added here, Kysely-only (no MikroORM

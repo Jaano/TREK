@@ -49,7 +49,7 @@ import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-re
 import type { JourneyPublicGalleryRow, JourneyShareTokensRepository } from '../../../src/db/repositories/JourneyShareTokens.repository';
 import type { JourneyEntriesRepository } from '../../../src/db/repositories/JourneyEntries.repository';
 import type { JourneyEntryPhotosRepository } from '../../../src/db/repositories/JourneyEntryPhotos.repository';
-import { GALLERY_CHRONOLOGICAL_ORDER } from '../../../src/nest/journey/journey-gallery-order';
+import { GALLERY_CHRONOLOGICAL_ORDER } from '../../helpers/legacy-gallery-order';
 
 let svc: JourneyShareService;
 let t: TestOrm;

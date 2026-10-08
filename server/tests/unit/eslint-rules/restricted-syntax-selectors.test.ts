@@ -4,7 +4,7 @@ import { ESLint, Linter } from 'eslint';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
-// The outbound-timeout guard is no-restricted-syntax selectors in
+// The outbound-timeout and raw-SQL guards are no-restricted-syntax selectors in
 // eslint.config.mjs, and a selector that stops matching fails silently: the
 // lint stays green and nothing is checked. This asks ESLint for the options it
 // really applies to a given path (so the flat-config blocks and their ignores
@@ -88,5 +88,55 @@ describe('outbound fetch timeout selectors', () => {
   it('holds in the repositories too, whose block restates the selectors', async () => {
     const repo = await selectorsFor('src/db/repositories/Probe.repository.ts');
     expect(messages(repo, `${PRELUDE}\nvoid safeFetch(url, undefined, {});`)).toEqual([TIMEOUT]);
+  });
+});
+
+describe('raw SQL string selectors', () => {
+  const SQL = `
+declare const connection: { execute(sql: string, params?: unknown[], mode?: string): Promise<unknown> };
+declare const qb: { execute(mode: string): Promise<unknown> };
+declare const repo: { run(sql: string, params?: unknown[]): Promise<unknown>; get(key: string): unknown };
+`;
+  const hits = (options: unknown[], code: string) =>
+    messages(options, `${SQL}\n${code}`).filter((m) => m.startsWith('A SQL string handed to the connection'));
+
+  it('flags a SQL string handed to the connection in a repository and in a seeder', async () => {
+    for (const file of ['src/db/repositories/Probe.repository.ts', 'src/db/seeders/ProbeSeeder.ts']) {
+      const options = await selectorsFor(file);
+      expect(hits(options, "void connection.execute('INSERT OR IGNORE INTO t (a) VALUES (?)', [1]);")).toHaveLength(1);
+      expect(hits(options, 'void connection.execute(`  select * from t where id = ?`, [1]);')).toHaveLength(1);
+      expect(hits(options, "void repo.run('PRAGMA wal_checkpoint(TRUNCATE)');")).toHaveLength(1);
+      // A result mode and a map lookup are not SQL.
+      expect(hits(options, "void qb.execute('run'); void repo.get('key');")).toEqual([]);
+    }
+  });
+
+  it('still forbids raw() and the sql tag in a repository', async () => {
+    const options = await selectorsFor('src/db/repositories/Probe.repository.ts');
+    const found = messages(options, "declare function raw(s: string): unknown;\nvoid raw('now()');");
+    expect(found.some((m) => m.startsWith('Dialect SQL goes through'))).toBe(true);
+  });
+
+  it('leaves the named adapters alone, and only them', async () => {
+    for (const file of [
+      'src/db/repositories/MaintenanceRepository.ts',
+      'src/db/repositories/DemoRepository.ts',
+      'src/db/seeders/AddonSeeder.ts',
+      'src/db/seeders/AdminSeeder.ts',
+      'src/db/seeders/CategorySeeder.ts',
+      'src/db/seeders/DocumentProviderSeeder.ts',
+      'src/db/seeders/PhotoProviderSeeder.ts',
+      'src/db/seeders/SchemaVersionSeeder.ts',
+    ]) {
+      const options = await selectorsFor(file);
+      expect(hits(options, "void connection.execute('PRAGMA wal_checkpoint(TRUNCATE)');"), file).toEqual([]);
+      // The rest of the guard still applies to them.
+      expect(messages(options, `${PRELUDE}\nvoid safeFetch(url);`), file).toContain(TIMEOUT);
+    }
+  });
+
+  it('does not reach outside src/db', async () => {
+    const options = await selectorsFor('src/nest/memories/probe.service.ts');
+    expect(hits(options, "void connection.execute('SELECT 1');")).toEqual([]);
   });
 });

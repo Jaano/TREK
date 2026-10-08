@@ -86,10 +86,10 @@ function countryNamesFor(points: { country: string | null }[]): Record<string, s
 // `GALLERY_JOIN` raw-SQL-text consts these two comment paragraphs used to
 // document are GONE — every site that folded them into a `this.db.prepare(...)`
 // call now reads through `JourneyPhotosRepository`/`JourneyEntryPhotosRepository`
-// instead (JG15/19/72/88-102/108-116, `journey-share.service.ts`'s own
-// GALLERY_CHRONOLOGICAL_ORDER import for JS15 is unaffected — that constant
-// lives in `journey-gallery-order.ts`, a separate file this task does not
-// touch). The two comment paragraphs above are kept for the column-shape
+// instead (JG15/19/72/88-102/108-116; the legacy GALLERY_CHRONOLOGICAL_ORDER
+// text survives only as the parity tests' oracle in
+// tests/helpers/legacy-gallery-order.ts, read by no production code).
+// The two comment paragraphs above are kept for the column-shape
 // documentation; the repositories' own docstrings are the source of truth
 // for the exact column lists now.
 

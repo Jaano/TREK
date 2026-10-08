@@ -59,7 +59,7 @@ import {
 // M5d (task-5-review.md) — full-key parity tests for Task 2's read models,
 // ported from the reviewer's probe (scratchpad r3g/probe/zz-r3g-parity-probe.test.ts).
 import { todayUtc } from '@trek/shared';
-import { GALLERY_CHRONOLOGICAL_ORDER } from '../../../src/nest/journey/journey-gallery-order';
+import { GALLERY_CHRONOLOGICAL_ORDER } from '../../helpers/legacy-gallery-order';
 
 let svc: JourneyDomainService;
 // Plan 3g Task 1's own additions (below, "repositories (R9's parity + mutation

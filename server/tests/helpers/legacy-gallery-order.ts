@@ -1,5 +1,9 @@
 /**
- * How the journey gallery is ordered (#2200).
+ * How the journey gallery is ordered (#2200), as the raw SQLite text the gallery
+ * reads used before JourneyPhotosRepository.galleryRead rebuilt it in Kysely.
+ * Kept here as the oracle the parity tests compare that rebuild against; no
+ * production code reads it, and raw SQL has no place in src/nest any more.
+ *
  *
  * `journey_photos.sort_order` is nothing but MAX+1 at insert time and no surface
  * ever writes it again, so ordering by it is ordering by "whenever this got

@@ -69,6 +69,23 @@ const FETCH_SELECTORS = [
   },
 ];
 
+// The statements a SQL string starts with. Matching on the text rather than on
+// the method name keeps `qb.execute('run')` (a result mode, not SQL) legal.
+const SQL_TEXT = String.raw`/^\s*(SELECT|INSERT|UPDATE|DELETE|REPLACE|WITH|PRAGMA|VACUUM|CREATE|DROP|ALTER|ATTACH|BEGIN|COMMIT)\b/i`;
+const SQL_STRING_MESSAGE =
+  'A SQL string handed to the connection is raw SQL too. Build it with the query builder (this.kysely(), em.createQueryBuilder) and route dialect functions through src/db/dialect/sql-functions.ts.';
+
+const STRING_SQL_SELECTORS = [
+  {
+    selector: `CallExpression[callee.property.name=/^(execute|run|all|get)$/] > Literal.arguments:first-child[value=${SQL_TEXT}]`,
+    message: SQL_STRING_MESSAGE,
+  },
+  {
+    selector: `CallExpression[callee.property.name=/^(execute|run|all|get)$/] > TemplateLiteral.arguments:first-child[quasis.0.value.raw=${SQL_TEXT}]`,
+    message: SQL_STRING_MESSAGE,
+  },
+];
+
 export default tseslint.config(
   gitignore({ strict: false }),
   {
@@ -297,6 +314,38 @@ export default tseslint.config(
         },
       ],
       'no-restricted-syntax': ['error', ...ENV_SELECTORS, ...RAW_SQL_SELECTORS, ...FETCH_SELECTORS],
+    },
+  },
+  {
+    // RAW_SQL_SELECTORS only see `raw()` and the `sql` tag. A SQL string
+    // handed straight to the connection
+    // (`em.getConnection().execute('INSERT OR IGNORE ...')`) is raw SQL all the
+    // same and passed unseen, in the seeders too, which no repository rule
+    // reached. The files below already hold such strings and are named one by
+    // one, so the list can only shrink: MaintenanceRepository is the SQLite
+    // maintenance adapter (PRAGMA, VACUUM INTO), DemoRepository is the
+    // documented escape hatch for the demo seed data, and every seeder but
+    // DatabaseSeeder writes its rows as SQL text (four of them with the
+    // SQLite-only INSERT OR IGNORE). A new seeder starts on the query builder.
+    files: ['src/db/repositories/**/*.ts', 'src/db/seeders/**/*.ts'],
+    ignores: [
+      'src/db/repositories/MaintenanceRepository.ts',
+      'src/db/repositories/DemoRepository.ts',
+      'src/db/seeders/AddonSeeder.ts',
+      'src/db/seeders/AdminSeeder.ts',
+      'src/db/seeders/CategorySeeder.ts',
+      'src/db/seeders/DocumentProviderSeeder.ts',
+      'src/db/seeders/PhotoProviderSeeder.ts',
+      'src/db/seeders/SchemaVersionSeeder.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...ENV_SELECTORS,
+        ...RAW_SQL_SELECTORS,
+        ...FETCH_SELECTORS,
+        ...STRING_SQL_SELECTORS,
+      ],
     },
   },
   {
