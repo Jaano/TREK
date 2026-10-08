@@ -99,7 +99,9 @@ jobs:
         run: |
           set -euo pipefail
           list="$RUNNER_TEMP/changed-files.txt"
-          changed_between() { git -c core.quotePath=false diff --name-only "$1" "$2" > "$list"; }
+          # --no-renames lists a moved file under its old path too, so a move
+          # out of an area still runs that area.
+          changed_between() { git -c core.quotePath=false diff --no-renames --name-only "$1" "$2" > "$list"; }
           case "$EVENT" in
             pull_request)
               changed_between HEAD^1 HEAD

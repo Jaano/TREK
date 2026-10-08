@@ -27,6 +27,12 @@ import { fileURLToPath } from 'node:url';
 // runs everything.
 const ALWAYS = ['.github/workflows/test.yml', 'scripts/ci/'];
 
+// Files the test suites read straight from disk, outside the packages:
+// config-templates.test.ts pins docker-compose.yml and the Helm chart to the
+// code defaults, help.test.ts serves wiki pages and images, and the client's
+// help registry test checks every help link against the wiki headings.
+const READ_BY_TESTS = ['charts/', /^docker-compose[^/]*\.ya?ml$/, 'wiki/'];
+
 export const AREAS = {
   // The type, lint, test, coverage, bundle and end-to-end jobs. npm workspaces
   // hoist every dependency into the root lockfile, so a dependency bump touches
@@ -42,14 +48,16 @@ export const AREAS = {
     '.nvmrc',
     'sonar-project.properties',
     'Dockerfile',
+    ...READ_BY_TESTS,
     ...ALWAYS,
   ],
   // The image build and its boot check: everything the Dockerfile copies or
-  // installs from.
+  // installs from. The image serves the in-app help from wiki/.
   image: [
     'server/',
     'client/',
     'shared/',
+    'wiki/',
     'package.json',
     'package-lock.json',
     '.nvmrc',
@@ -61,9 +69,11 @@ export const AREAS = {
   deploy: ['charts/', /^docker-compose[^/]*\.ya?ml$/, ...ALWAYS],
 };
 
-// Markdown inside the packages (CLAUDE.md, READMEs, PATTERN.md) changes no
-// test, no build and no scan.
-const isMarkdown = (path) => path.endsWith('.md');
+// Markdown outside wiki/ (the root README, CLAUDE.md, the package READMEs,
+// PATTERN.md) changes no test, no build and no scan. The wiki does: the image
+// ships it as the in-app help and tests read its pages and headings, so a
+// wiki page is classified like any other file.
+const isInertMarkdown = (path) => path.endsWith('.md') && !path.startsWith('wiki/');
 
 function matches(rule, path) {
   if (rule instanceof RegExp) return rule.test(path);
@@ -86,7 +96,7 @@ export function classify(files) {
 
   const result = {};
   for (const [area, rules] of Object.entries(AREAS)) {
-    result[area] = paths.some((path) => !isMarkdown(path) && rules.some((rule) => matches(rule, path)));
+    result[area] = paths.some((path) => !isInertMarkdown(path) && rules.some((rule) => matches(rule, path)));
   }
   return result;
 }
