@@ -4,7 +4,6 @@ import { assignmentsApi } from '../api/client'
 import { offlineDb } from '../db/offlineDb'
 import { cacheAssignment } from '../db/cacheAssignment'
 import { generateUUID, mutationQueue } from '../sync/mutationQueue'
-import { isEffectivelyOffline } from '../sync/networkMode'
 import type { Assignment } from '../types'
 
 /** Start and End of one visit, as the time route stores them: null is no time. */
@@ -20,7 +19,7 @@ export const assignmentRepo = {
    * replay, so a place added meanwhile by someone else goes with the rest.
    */
   async clearDay(tripId: number | string, dayId: number): Promise<void> {
-    if (!isEffectivelyOffline()) {
+    if (!(await mutationQueue.mustQueue('dayAssignments', dayId))) {
       await assignmentsApi.clearDay(tripId, dayId)
       await offlineDb.days.where('id').equals(dayId).modify(day => { day.assignments = [] })
       return
@@ -33,10 +32,11 @@ export const assignmentRepo = {
       })
       await offlineDb.days.where('id').equals(dayId).modify(day => { day.assignments = [] })
     })
+    mutationQueue.sendSoon()
   },
 
   async setEndDay(tripId: number | string, assignment: Assignment, endDay: boolean): Promise<Assignment> {
-    if (!isEffectivelyOffline()) {
+    if (!(await mutationQueue.mustQueue('assignments', assignment.id))) {
       const saved = await saveAssignmentEndDay(tripId, assignment.id, { end_day: endDay })
       await cacheAssignment(saved)
       return saved
@@ -50,12 +50,13 @@ export const assignmentRepo = {
       })
       await cacheAssignment(updated)
     })
+    mutationQueue.sendSoon()
     return updated
   },
 
   /** Takes a stop out of the day's route or puts it back (#2532), offline too. */
   async setRouteExcluded(tripId: number | string, assignment: Assignment, excluded: boolean): Promise<Assignment> {
-    if (!isEffectivelyOffline()) {
+    if (!(await mutationQueue.mustQueue('assignments', assignment.id))) {
       const saved = assignmentSchema.parse((await assignmentsApi.setRouteExcluded(tripId, assignment.id, excluded)).assignment)
       await cacheAssignment(saved)
       return saved
@@ -69,6 +70,7 @@ export const assignmentRepo = {
       })
       await cacheAssignment(updated)
     })
+    mutationQueue.sendSoon()
     return updated
   },
 
@@ -79,7 +81,7 @@ export const assignmentRepo = {
    * other in as it stands; leaving it out would clear it.
    */
   async setTimes(tripId: number | string, assignment: Assignment, times: AssignmentTimes): Promise<Assignment> {
-    if (!isEffectivelyOffline()) {
+    if (!(await mutationQueue.mustQueue('assignments', assignment.id))) {
       const saved = assignmentSchema.parse((await assignmentsApi.updateTime(tripId, assignment.id, times)).assignment)
       await cacheAssignment(saved)
       return saved
@@ -93,6 +95,7 @@ export const assignmentRepo = {
       })
       await cacheAssignment(updated)
     })
+    mutationQueue.sendSoon()
     return updated
   },
 }

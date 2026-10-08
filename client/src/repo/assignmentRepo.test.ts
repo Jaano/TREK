@@ -11,7 +11,7 @@ import type { Assignment, Day } from '../types'
 vi.mock('../api/assignmentEndDay', () => ({ saveAssignmentEndDay: vi.fn() }))
 vi.mock('../sync/networkMode', () => ({ isEffectivelyOffline: vi.fn(() => true) }))
 vi.mock('../sync/authGate', () => ({ isAuthed: () => true }))
-vi.mock('../api/client', () => ({ apiClient: { request: vi.fn() }, assignmentsApi: { updateTime: vi.fn() } }))
+vi.mock('../api/client', () => ({ apiClient: { request: vi.fn() }, assignmentsApi: { updateTime: vi.fn(), clearDay: vi.fn() } }))
 const assignment = { id: 7, day_id: 1, place_id: 2, order_index: 0, assignment_time: '07:00', place: { id: 2, name: 'Berlin' } } as Assignment
 
 beforeEach(async () => {
@@ -77,5 +77,57 @@ describe('assignment time persistence', () => {
     vi.mocked(assignmentsApi.updateTime).mockRejectedValue(new Error('Denied'))
     await expect(assignmentRepo.setTimes(9, assignment, times)).rejects.toThrow('Denied')
     expect((await offlineDb.days.get(1))?.assignments?.[0]).toEqual(assignment)
+  })
+})
+
+describe('an online edit of a visit with an older write still queued', () => {
+  const first = { place_time: '07:00', end_time: null }
+  const second = { place_time: '09:00', end_time: null }
+
+  /** Queue the first edit offline, then come back online. */
+  async function queueFirst(status: 'pending' | 'failed') {
+    await assignmentRepo.setTimes(9, assignment, first)
+    if (status === 'failed') await offlineDb.mutationQueue.toCollection().modify({ status: 'failed', attempts: 8 })
+    vi.mocked(isEffectivelyOffline).mockReturnValue(false)
+    vi.mocked(apiClient.request).mockImplementation(async ({ data }) => ({ data: { assignment: { ...assignment, assignment_time: (data as typeof first).place_time } } }))
+  }
+
+  const sentTimes = () => vi.mocked(apiClient.request).mock.calls.map(([req]) => (req.data as typeof first).place_time)
+
+  it('waits behind a parked one, so Try again cannot replay the older time over it', async () => {
+    await queueFirst('failed')
+
+    await assignmentRepo.setTimes(9, assignment, second)
+    // Not sent past the parked write, not even by the flush it started.
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(assignmentsApi.updateTime).not.toHaveBeenCalled()
+    expect(apiClient.request).not.toHaveBeenCalled()
+    expect((await offlineDb.days.get(1))?.assignments?.[0].assignment_time).toBe('09:00')
+
+    await mutationQueue.retryFailed()
+    expect(sentTimes()).toEqual(['07:00', '09:00'])
+    expect(await offlineDb.mutationQueue.count()).toBe(0)
+    expect((await offlineDb.days.get(1))?.assignments?.[0].assignment_time).toBe('09:00')
+  })
+
+  it('goes out right after an older one that was only waiting to be sent', async () => {
+    await queueFirst('pending')
+
+    await assignmentRepo.setTimes(9, assignment, second)
+
+    await vi.waitFor(async () => expect(await offlineDb.mutationQueue.count()).toBe(0))
+    expect(assignmentsApi.updateTime).not.toHaveBeenCalled()
+    expect(sentTimes()).toEqual(['07:00', '09:00'])
+  })
+
+  it('holds a day clear behind an older clear of the same day', async () => {
+    await assignmentRepo.clearDay(9, 1)
+    await offlineDb.mutationQueue.toCollection().modify({ status: 'failed', attempts: 8 })
+    vi.mocked(isEffectivelyOffline).mockReturnValue(false)
+
+    await assignmentRepo.clearDay(9, 1)
+
+    expect(assignmentsApi.clearDay).not.toHaveBeenCalled()
+    expect((await offlineDb.mutationQueue.toArray()).map(m => m.status).sort()).toEqual(['failed', 'pending'])
   })
 })

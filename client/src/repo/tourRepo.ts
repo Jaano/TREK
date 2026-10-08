@@ -130,7 +130,7 @@ export const tourRepo = {
   },
 
   async update(tripId: number | string, placeId: number, body: TourCreateRequest): Promise<TourDetailResponse> {
-    if (isEffectivelyOffline()) {
+    if (await mutationQueue.mustQueue('tours', placeId)) {
       const tid = Number(tripId)
       const existing = await offlineDb.tours.get(placeId)
       const tour: CachedTour = {
@@ -153,6 +153,7 @@ export const tourRepo = {
         entityId: placeId,
         ...(isTemp ? { tempEntityId: placeId } : {}),
       })
+      mutationQueue.sendSoon()
       return { tour: toListItem(tour), waypoints: body.waypoints }
     }
     const result = await toursApi.update(tripId, placeId, body)

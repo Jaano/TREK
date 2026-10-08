@@ -1,4 +1,4 @@
-// FE-REPO-TOUR-001 to FE-REPO-TOUR-012
+// FE-REPO-TOUR-001 to FE-REPO-TOUR-014
 // Tours through the offline core: read-through to Dexie, offline create and
 // edit written there and queued, and the online paths keeping the copy fresh.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
@@ -188,6 +188,22 @@ describe('tourRepo.update', () => {
 
     expect(await offlineDb.tours.get(40)).toMatchObject({ name: 'Edited', waypoints: body.waypoints })
     expect(await offlineDb.tours.get(50)).toMatchObject({ trip_id: 3 })
+  })
+
+  it('FE-REPO-TOUR-014: online, an edit of a tour with an older write parked waits behind it in the queue', async () => {
+    await offlineDb.tours.put({ ...tour(), trip_id: 3 })
+    await offlineDb.mutationQueue.put({
+      id: 'parked-tour', tripId: 3, method: 'PUT', url: '/trips/3/tours/40', body, createdAt: 1,
+      status: 'failed', attempts: 8, lastError: 'boom', resource: 'tours', entityId: 40,
+    })
+    let sent = 0
+    server.use(http.put('/api/trips/3/tours/40', () => { sent++; return HttpResponse.json({ tour: tour(), waypoints: body.waypoints }) }))
+
+    const result = await tourRepo.update(3, 40, { ...body, name: 'Renamed' })
+
+    expect(result.tour.name).toBe('Renamed')
+    expect(sent).toBe(0)
+    expect((await offlineDb.mutationQueue.toArray()).map(m => m.status).sort()).toEqual(['failed', 'pending'])
   })
 })
 

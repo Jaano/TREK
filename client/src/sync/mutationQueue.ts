@@ -231,6 +231,38 @@ export const mutationQueue = {
   },
 
   /**
+   * Does a write to this entity have to join the queue? Offline, always. Online
+   * too while an older write to the same entity is still queued, backing off,
+   * parked as failed or waiting as a conflict: sent straight to the server the
+   * new write would land first, and Try again or the next flush would replay
+   * the older one over it. Queued, it waits behind the older write and keeps
+   * the order the user made them in. The repos of visits, a day's visits, tours
+   * and the driving settings ask this, because those writes carry no version
+   * token; a place or packing item sends one, so the server refuses the older
+   * write (409) and it becomes a conflict instead.
+   */
+  async mustQueue(resource: string, entityId: number): Promise<boolean> {
+    if (isEffectivelyOffline()) return true
+    const key = `${resource}:${entityId}`
+    const older = await offlineDb.mutationQueue
+      .where('status')
+      .anyOf(['pending', 'syncing', 'failed', 'conflict'])
+      .filter(m => entityKey(m) === key)
+      .first()
+    return older !== undefined
+  },
+
+  /**
+   * Start a flush for a write that joined the queue while online (see
+   * mustQueue). It goes out as soon as the write it waits for is through, not
+   * at the next trigger. Offline this does nothing.
+   */
+  sendSoon(): void {
+    if (isEffectivelyOffline()) return
+    this.flush().catch(console.error)
+  },
+
+  /**
    * Drain the queue: replay each pending mutation against the server in FIFO order.
    * Stops on the first network error (retried on the next trigger). 4xx answers
    * are marked failed and skipped; a DELETE answered 404 counts as done. A 5xx
@@ -528,10 +560,16 @@ export const mutationQueue = {
   },
 
   /**
-   * Put every parked change back in line, from a fresh start, and flush. The
-   * later writes to the same entities waited behind them, so the replay keeps
-   * the order they were made in, and a place or packing item still sends the
-   * token it was edited against, which a newer server version refuses (409).
+   * Put every parked change back in line, from a fresh start, and flush.
+   * The later writes to the same entity made on this device waited behind it:
+   * offline ones in the queue and, for visits, tours and the driving settings,
+   * online ones too (mustQueue), so they go out after it in the order they were
+   * made. A place or packing item still sends the token it was edited against,
+   * so any newer version on the server, a collaborator's or one saved here
+   * online, refuses it (409) and it becomes a conflict. A write without a token
+   * overwrites what someone else changed on the server meanwhile, as every
+   * replayed offline write of those resources does, and so do writes made here
+   * that skip the repos (the planner's two direct time edits of a visit).
    */
   async retryFailed(): Promise<void> {
     await offlineDb.mutationQueue

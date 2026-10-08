@@ -715,6 +715,34 @@ describe('mutationQueue: writes to one entity keep their order around a parked o
   });
 });
 
+describe('mutationQueue.mustQueue: a write to an entity with an older one still in the queue', () => {
+  const visit = (status: 'pending' | 'syncing' | 'failed' | 'conflict', entityId = 7) => ({
+    id: generateUUID(), tripId: 1, method: 'PUT' as const, url: `/trips/1/assignments/${entityId}/time`,
+    body: {}, createdAt: 1, status, attempts: 0, lastError: null, resource: 'assignments', entityId,
+  });
+
+  it('is always true offline', async () => {
+    Object.defineProperty(navigator, 'onLine', { value: false });
+    expect(await mutationQueue.mustQueue('assignments', 7)).toBe(true);
+  });
+
+  it('is false online while nothing is queued for the entity', async () => {
+    await offlineDb.mutationQueue.put(visit('failed', 8));
+    await offlineDb.mutationQueue.put({ ...visit('failed'), resource: 'places' });
+    expect(await mutationQueue.mustQueue('assignments', 7)).toBe(false);
+  });
+
+  it.each(['pending', 'syncing', 'failed', 'conflict'] as const)('is true online behind a %s write to the entity', async status => {
+    await offlineDb.mutationQueue.put(visit(status));
+    expect(await mutationQueue.mustQueue('assignments', 7)).toBe(true);
+  });
+
+  it('is true for an edit of an offline create that has not synced yet', async () => {
+    await mutationQueue.enqueue({ id: generateUUID(), tripId: 1, method: 'POST', url: '/trips/1/tours', body: {}, resource: 'tours', tempId: -42 });
+    expect(await mutationQueue.mustQueue('tours', -42)).toBe(true);
+  });
+});
+
 describe('mutationQueue.flush: one tab at a time', () => {
   /** A Web Locks stand-in: one holder per name, later requests wait their turn. */
   function fakeLocks() {
