@@ -27,7 +27,6 @@
   "src/nest/doc-sync/doc-sync.service.ts#DocSyncService.resolveConflict": 3,
   "src/nest/doc-sync/doc-sync.service.ts#DocSyncService.runLink": 4,
   "src/nest/doc-sync/doc-sync.service.ts#DocSyncService.syncLink": 2,
-  "src/nest/integrations/airtrail-import.service.ts#AirtrailImportService.importAirtrailFlights": 8,
   "src/nest/integrations/airtrail-link.service.ts#AirtrailLinkService.pushReservationToAirtrail": 2,
   "src/nest/integrations/airtrail-sync.service.ts#AirtrailSyncService.runAirtrailSync": 2,
   "src/nest/integrations/airtrail-sync.service.ts#AirtrailSyncService.syncOwner": 8,

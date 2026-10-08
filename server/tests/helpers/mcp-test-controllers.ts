@@ -519,6 +519,7 @@ export async function createMcpTestRegistry(): Promise<McpRegistry> {
       new ReservationImportMcp(new AirtrailImportService(
         await createTestReservationsRepo(db), await createTestReservationEndpointsRepo(db), await createTestDaysRepo(db),
         realtimeService, reservationsService, new AirtrailClient(), new AirtrailService(usersRepo, new AuditService(auditLogRepo, usersRepo), new AirtrailClient()),
+        await createTestUnitOfWork(db),
       ), await createTestTripsRepo(db), authService, guards, addonsService),
       new SettingsMcp(new SettingsService(await createTestUnitOfWork(db), appSettings, await createTestSettingsRepo(db)), authService),
       new HelpMcp(), new AddonsMcp(addonsService),

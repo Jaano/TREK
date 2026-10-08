@@ -57,6 +57,7 @@ async function makeImportService(): Promise<AirtrailImportService> {
     {
       getAirtrailCredentials: () => ({ baseUrl: 'https://at.example', apiKey: 'k', allowInsecureTls: false }),
     } as unknown as AirtrailService,
+    await createTestUnitOfWork(db),
   );
 }
 
@@ -260,5 +261,41 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     expect(r.sync_enabled).toBe(1);
     expect(r.external_hash).toBeTruthy();
     expect(JSON.parse(r.metadata).airtrail_ids).toBeUndefined();
+  });
+});
+
+describe('importAirtrailFlights writes a booking with its link', () => {
+  it('rolls the booking back when the single-flight link fails, so a flight reported skipped is not in the trip', async () => {
+    listFlights.mockResolvedValue([legBruHel()]);
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const repo = await createTestReservationsRepo(db);
+    const spy = vi.spyOn(repo, 'linkAirtrailSingleFlight').mockRejectedValueOnce(new Error('boom'));
+    try {
+      const result = await importAirtrailFlights(tripId, userId, ['101'], undefined);
+      expect(result.imported).toEqual([]);
+      expect(result.skipped).toEqual([{ flightId: '101', reason: 'invalid', detail: 'boom' }]);
+    } finally {
+      spy.mockRestore();
+      quiet.mockRestore();
+    }
+    expect(tripReservations(tripId)).toEqual([]);
+    expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it('rolls a joined connection back when its link fails', async () => {
+    listFlights.mockResolvedValue([legBruHel(), legHelJfk()]);
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const repo = await createTestReservationsRepo(db);
+    const spy = vi.spyOn(repo, 'linkAirtrailMultiLeg').mockRejectedValueOnce(new Error('boom'));
+    try {
+      const result = await importAirtrailFlights(tripId, userId, ['101', '102'], undefined, [['101', '102']]);
+      expect(result.imported).toEqual([]);
+      expect(result.skipped.map(s => [s.flightId, s.reason])).toEqual([['101', 'invalid'], ['102', 'invalid']]);
+    } finally {
+      spy.mockRestore();
+      quiet.mockRestore();
+    }
+    expect(tripReservations(tripId)).toEqual([]);
+    expect(broadcast).not.toHaveBeenCalled();
   });
 });

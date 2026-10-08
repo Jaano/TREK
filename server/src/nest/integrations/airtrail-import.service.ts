@@ -9,6 +9,7 @@ import { Days } from '../../db/entities/Days.entity';
 import { DaysRepository } from '../../db/repositories/Days.repository';
 import { RealtimeService } from '../realtime/realtime.service';
 import { ReservationsService } from '../reservations/reservations.service';
+import { UnitOfWork } from '../database/unit-of-work';
 import { AirtrailRequestError, type AirtrailFlightRaw } from './airtrail.client';
 import { AirtrailClient } from './airtrail.client';
 import { AirtrailService } from './airtrail.service';
@@ -121,6 +122,7 @@ export class AirtrailImportService {
     private readonly reservations: ReservationsService,
     private readonly client: AirtrailClient,
     private readonly airtrail: AirtrailService,
+    private readonly uow: UnitOfWork,
   ) {}
 
   /**
@@ -135,6 +137,11 @@ export class AirtrailImportService {
     return Number.isFinite(n) ? n : -1;
   }
 
+  /**
+   * @txIndependent one transaction per imported booking: a flight or a joined
+   * connection lands with its AirTrail link or not at all, and one that fails is
+   * reported skipped while the others stay imported.
+   */
   async importAirtrailFlights(
     tripId: string | number,
     userId: number,
@@ -245,9 +252,15 @@ export class AirtrailImportService {
       const ids = chain.map(f => String(f.id));
       try {
         const mapped = mapFlightsToMultiLegReservation(chain, resolveDayId);
-        const { reservation } = await this.reservations.create(tripId, mapped as any);
         const now = new Date().toISOString();
-        await this.reservationsRepo.linkAirtrailMultiLeg(Number(reservation.id), ids[0], userId, now);
+        // The booking and its AirTrail link are one write: a failed link must not
+        // leave a booking behind that this import then reports as skipped. The
+        // flights were fetched above, so nothing in here waits on the network.
+        const reservation = await this.uow.transactional(async () => {
+          const created = (await this.reservations.create(tripId, mapped as any)).reservation;
+          await this.reservationsRepo.linkAirtrailMultiLeg(Number(created.id), ids[0], userId, now);
+          return created;
+        });
 
         reservation.external_source = 'airtrail';
         reservation.external_id = ids[0];
@@ -286,9 +299,13 @@ export class AirtrailImportService {
       }
 
       try {
-        const { reservation } = await this.reservations.create(tripId, mapped as any);
         const now = new Date().toISOString();
-        await this.reservationsRepo.linkAirtrailSingleFlight(Number(reservation.id), fid, userId, canonicalHash(flight), now);
+        // One write with its link, as for a joined connection above.
+        const reservation = await this.uow.transactional(async () => {
+          const created = (await this.reservations.create(tripId, mapped as any)).reservation;
+          await this.reservationsRepo.linkAirtrailSingleFlight(Number(created.id), fid, userId, canonicalHash(flight), now);
+          return created;
+        });
 
         // Carry the linkage on the broadcast payload so members see the badge live.
         reservation.external_source = 'airtrail';
