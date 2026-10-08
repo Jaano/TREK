@@ -32,12 +32,6 @@ vi.mock('../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: number | string, userId: number) =>
-      db
-        .prepare(
-          'SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)',
-        )
-        .get(userId, tripId, userId),
     isOwner: () => false,
   };
 });
@@ -53,7 +47,12 @@ import { AddonsService } from '../../src/nest/addons/addons.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { countRows, deleteRows, findRow, insertRow } from '../helpers/factories/rows';
+import { DawarichConnections } from '../../src/db/entities/DawarichConnections.entity';
+import { DawarichVisitSuggestions } from '../../src/db/entities/DawarichVisitSuggestions.entity';
+
+let orm: TestOrm;
 
 /**
  * Every outbound call an instance would ever receive, stubbed to throw. A route
@@ -75,15 +74,12 @@ function makeClientStub() {
 }
 
 /** A suggestion row with only the NOT NULL columns filled in. */
-function seedSuggestion(userId: number, sourceVisitId: string, name: string): number {
-  const info = db
-    .prepare(
-      `INSERT INTO dawarich_visit_suggestions
-         (user_id, source_visit_id, name, lat, lng, started_at, ended_at, duration_minutes, local_date, source_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(userId, sourceVisitId, name, 48.8584, 2.2945, '2026-05-01T10:00:00+02:00', '2026-05-01T12:30:00+02:00', 150, '2026-05-01', 'hash-' + sourceVisitId);
-  return Number(info.lastInsertRowid);
+function seedSuggestion(userId: number, sourceVisitId: string, name: string): Promise<number> {
+  return insertRow(orm, DawarichVisitSuggestions, {
+    user: userId, source_visit_id: sourceVisitId, name, lat: 48.8584, lng: 2.2945,
+    started_at: '2026-05-01T10:00:00+02:00', ended_at: '2026-05-01T12:30:00+02:00', duration_minutes: 150,
+    local_date: '2026-05-01', source_hash: 'hash-' + sourceVisitId,
+  });
 }
 
 describe('Dawarich e2e (real addon gate + real auth guard + real services + temp SQLite)', () => {
@@ -111,21 +107,23 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
   }
 
   beforeAll(async () => {
+    orm = await createTestOrm(db);
     ownerId = createUser(db as never, { username: 'dawarich-owner', email: 'dawarich-owner@test.example' }).user.id;
     strangerId = createUser(db as never, { username: 'dawarich-stranger', email: 'dawarich-stranger@test.example' }).user.id;
-    strangerSuggestionId = seedSuggestion(strangerId, 'visit-stranger-1', 'Eiffel Tower');
+    strangerSuggestionId = await seedSuggestion(strangerId, 'visit-stranger-1', 'Eiffel Tower');
     app = await build();
     server = app.getHttpServer();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     isAddonEnabled.mockReturnValue(true);
-    db.prepare('DELETE FROM dawarich_connections').run();
-    db.prepare('DELETE FROM dawarich_visit_suggestions WHERE user_id = ?').run(ownerId);
+    await deleteRows(orm, DawarichConnections);
+    await deleteRows(orm, DawarichVisitSuggestions, { user: ownerId });
   });
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   // ── Auth + addon gate ────────────────────────────────────────────────────
@@ -158,7 +156,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
       .set('Cookie', sessionCookie(ownerId))
       .send({ url: 'https://dawarich.example', apiKey: 'secret' });
     expect(res.status).toBe(404);
-    expect(db.prepare('SELECT COUNT(*) AS n FROM dawarich_connections').get()).toEqual({ n: 0 });
+    expect(await countRows(orm, DawarichConnections)).toBe(0);
   });
 
   it('DAWARICH-E2E-005: the addon flag is re-read per request — switching it back on reopens the route without a restart', async () => {
@@ -198,7 +196,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Invalid URL' });
     // Crucially: the key is not stored on a rejected address either.
-    expect(db.prepare('SELECT COUNT(*) AS n FROM dawarich_connections').get()).toEqual({ n: 0 });
+    expect(await countRows(orm, DawarichConnections)).toBe(0);
   });
 
   it('DAWARICH-E2E-012: PUT settings with a non-HTTP scheme is a 400 — file:// and friends never reach the fetch layer', async () => {
@@ -209,7 +207,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Only HTTP and HTTPS URLs are allowed' });
-    expect(db.prepare('SELECT COUNT(*) AS n FROM dawarich_connections').get()).toEqual({ n: 0 });
+    expect(await countRows(orm, DawarichConnections)).toBe(0);
   });
 
   it('DAWARICH-E2E-013: PUT settings rejects a body the shared contract does not accept, before any of this runs', async () => {
@@ -230,8 +228,8 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
     expect(put.status).toBe(200);
     expect(put.body).toEqual({ success: true });
 
-    const row = db.prepare('SELECT url, api_key, sync_enabled FROM dawarich_connections WHERE user_id = ?').get(ownerId);
-    expect(row).toEqual({ url: null, api_key: null, sync_enabled: 0 });
+    const row = await findRow(orm, DawarichConnections, { user: ownerId });
+    expect(row).toMatchObject({ url: null, api_key: null, sync_enabled: 0 });
 
     const res = await request(server).get('/api/integrations/dawarich/settings').set('Cookie', sessionCookie(ownerId));
     expect(res.body.connected).toBe(false);
@@ -250,11 +248,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
     // the form just typed. The client stub throws on every call, so a probe
     // that did go out would surface as `unreachable` here rather than as the
     // refusal the form is meant to render.
-    db.prepare('INSERT INTO dawarich_connections (user_id, url, api_key) VALUES (?, ?, ?)').run(
-      ownerId,
-      'https://dawarich.old.example',
-      'plain-legacy-key',
-    );
+    await insertRow(orm, DawarichConnections, { user: ownerId, url: 'https://dawarich.old.example', api_key: 'plain-legacy-key' });
 
     const res = await request(server)
       .post('/api/integrations/dawarich/test')
@@ -265,7 +259,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
     expect(res.body).toMatchObject({ connected: false, error: 'not_connected' });
     expect(res.body.errorDetail).toContain('https://dawarich.old.example');
     // And the stored connection is untouched by a test, as it always was.
-    expect(db.prepare('SELECT url, api_key FROM dawarich_connections WHERE user_id = ?').get(ownerId)).toEqual({
+    expect(await findRow(orm, DawarichConnections, { user: ownerId })).toMatchObject({
       url: 'https://dawarich.old.example',
       api_key: 'plain-legacy-key',
     });
@@ -304,7 +298,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
   // ── Cross-user isolation ─────────────────────────────────────────────────
 
   it("DAWARICH-E2E-030: another user's suggestion never appears in your own list", async () => {
-    const mine = seedSuggestion(ownerId, 'visit-mine-1', 'Gare du Nord');
+    const mine = await seedSuggestion(ownerId, 'visit-mine-1', 'Gare du Nord');
 
     const res = await request(server).get('/api/integrations/dawarich/suggestions').set('Cookie', sessionCookie(ownerId));
     expect(res.status).toBe(200);
@@ -313,8 +307,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
     expect(ids).not.toContain(strangerSuggestionId);
     // And the row really is there for the other user, so this is isolation and
     // not an empty table.
-    expect(db.prepare('SELECT user_id FROM dawarich_visit_suggestions WHERE id = ?').get(strangerSuggestionId))
-      .toEqual({ user_id: strangerId });
+    expect((await findRow(orm, DawarichVisitSuggestions, { id: strangerSuggestionId }))?.user_id).toBe(strangerId);
   });
 
   it("DAWARICH-E2E-031: PUT state on another user's suggestion is a 404 — the same answer a missing id gets, so nothing is enumerable", async () => {
@@ -325,8 +318,7 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Suggestion not found' });
-    expect(db.prepare('SELECT state FROM dawarich_visit_suggestions WHERE id = ?').get(strangerSuggestionId))
-      .toEqual({ state: 'new' });
+    expect((await findRow(orm, DawarichVisitSuggestions, { id: strangerSuggestionId }))?.state).toBe('new');
 
     const missing = await request(server)
       .put('/api/integrations/dawarich/suggestions/999999/state')
@@ -344,12 +336,11 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Suggestion not found', code: 'not_found' });
-    expect(db.prepare('SELECT state, target FROM dawarich_visit_suggestions WHERE id = ?').get(strangerSuggestionId))
-      .toEqual({ state: 'new', target: null });
+    expect((await findRow(orm, DawarichVisitSuggestions, { id: strangerSuggestionId }))).toMatchObject({ state: 'new', target: null });
   });
 
   it('DAWARICH-E2E-033: your own suggestion is reachable through the same route, which is what makes the two 404s above meaningful', async () => {
-    const mine = seedSuggestion(ownerId, 'visit-mine-2', 'Musée d’Orsay');
+    const mine = await seedSuggestion(ownerId, 'visit-mine-2', 'Musée d’Orsay');
 
     const res = await request(server)
       .put(`/api/integrations/dawarich/suggestions/${mine}/state`)
@@ -359,6 +350,6 @@ describe('Dawarich e2e (real addon gate + real auth guard + real services + temp
     expect(res.status).toBe(200);
     expect(res.body.id).toBe(mine);
     expect(res.body.state).toBe('dismissed');
-    expect(db.prepare('SELECT state FROM dawarich_visit_suggestions WHERE id = ?').get(mine)).toEqual({ state: 'dismissed' });
+    expect((await findRow(orm, DawarichVisitSuggestions, { id: mine }))?.state).toBe('dismissed');
   });
 });

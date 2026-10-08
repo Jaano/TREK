@@ -16,10 +16,10 @@
  * `collection_places` half, closing out the Plan 3h carve-out): the legacy
  * version cast a hand-rolled 3-table SQLite fixture to `DatabaseService`;
  * that cannot survive the service now calling three repositories for its
- * owned reads/writes. The same minimal 3-table fixture stays (every column
- * these repositories touch is already in it — the R8 `createSnapshotTestDb()`
- * migration only applies once a converted read needs a column the hand-rolled
- * DDL omits, which is not the case here), wired through `createTestOrm()`.
+ * owned reads/writes. The suite runs on the migrated snapshot
+ * (`createSnapshotTestDb()`), wired through `createTestOrm()`, and seeds the
+ * referencing places and saved places through the ORM factories, which need
+ * the full rows a hand-rolled table could not give them.
  * Plan 4 Task 4 dropped the now-unused `DatabaseService` injection entirely.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
@@ -28,34 +28,12 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { Jimp, JimpMime } from 'jimp';
 
-const { testDb } = vi.hoisted(() => {
-  const Db = require('better-sqlite3');
-  return { testDb: new Db(':memory:') };
+vi.mock('../../../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../../../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
 
-// Minimal real DB with just the tables the cache touches. isReferenced
-// UNIONs collection_places (#1081 photo-cache fix), so the bare fixture must
-// declare it too or the reference check would throw "no such table".
-testDb.exec(`
-  CREATE TABLE places (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    google_place_id TEXT,
-    image_url TEXT
-  );
-  CREATE TABLE collection_places (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    google_place_id TEXT,
-    image_url TEXT
-  );
-  CREATE TABLE google_place_photo_meta (
-    place_id    TEXT PRIMARY KEY,
-    attribution TEXT,
-    fetched_at  INTEGER NOT NULL,
-    error_at    INTEGER
-  );
-`);
-
-vi.mock('../../../../src/db/database', () => ({ db: testDb }));
+import { db as testDb } from '../../../../src/db/database';
 
 import { PlacePhotoCacheService } from '../../../../src/nest/place-photos/place-photo-cache.service';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
@@ -66,6 +44,11 @@ import type { PlacesRepository } from '../../../../src/db/repositories/Places.re
 import { CollectionPlaces } from '../../../../src/db/entities/CollectionPlaces.entity';
 import type { CollectionPlacesRepository } from '../../../../src/db/repositories/CollectionPlaces.repository';
 import { makeStorageFixture, type StorageFixture } from '../../../helpers/storage-fixture';
+import { findRow, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { makeUser } from '../../../helpers/factories/users';
+import { makeTrip } from '../../../helpers/factories/trips';
+import { makePlace } from '../../../helpers/factories/places';
+import { makeCollection, makeCollectionPlace } from '../../../helpers/factories/collections';
 
 async function makeJpeg(width: number, height: number): Promise<Buffer> {
   const img = new Jimp({ width, height, color: 0xff0000ff });
@@ -80,6 +63,16 @@ let t: TestOrm;
 let metaRepo: GooglePlacePhotoMetaRepository;
 let placesRepo: PlacesRepository;
 let collectionPlacesRepo: CollectionPlacesRepository;
+/** The trip and the collection the referencing rows hang off; the per-case reset leaves both alone. */
+let ownerId: number;
+let tripId: number;
+let collectionId: number;
+
+const referenceByPlace = (overrides: { google_place_id?: string; image_url?: string }) => makePlace(t, tripId, overrides);
+const referenceByCollectionPlace = (googlePlaceId: string) =>
+  makeCollectionPlace(t, collectionId, ownerId, { google_place_id: googlePlaceId });
+const insertMeta = (placeId: string, attribution: string | null, fetchedAt: number) =>
+  insertRow(t, GooglePlacePhotoMeta, { place_id: placeId, attribution, fetched_at: fetchedAt });
 
 // Task 1 fix review L3: this is the one suite in this commit that opts out of
 // the request-context ratchet (`allowGlobalContext: true`, disabling
@@ -104,8 +97,11 @@ beforeAll(async () => {
   metaRepo = t.repo(GooglePlacePhotoMeta);
   placesRepo = t.repo(Places);
   collectionPlacesRepo = t.repo(CollectionPlaces);
+  ownerId = (await makeUser(t)).user.id;
+  tripId = (await makeTrip(t, ownerId)).id;
+  collectionId = (await makeCollection(t, ownerId)).id;
 });
-afterAll(async () => { await t.close(); });
+afterAll(async () => { await t.close(); testDb.close(); });
 
 describe.each([
   ['mode A (photos/google/ prefix)', 'photos/google/'],
@@ -180,12 +176,10 @@ describe.each([
 
   describe('get()', () => {
     it('PPC-013: purges the meta row and returns null when the object vanished', async () => {
-      testDb
-        .prepare('INSERT INTO google_place_photo_meta (place_id, attribution, fetched_at) VALUES (?, ?, ?)')
-        .run('gone-place', 'Bob', Date.now());
+      await insertMeta('gone-place', 'Bob', Date.now());
 
       expect(await cache.get('gone-place')).toBeNull();
-      expect(testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('gone-place')).toBeUndefined();
+      expect(await findRow(t, GooglePlacePhotoMeta, { place_id: 'gone-place' })).toBeNull();
     });
 
     it('PPC-014: returns the proxy URL + attribution for a cached photo', async () => {
@@ -205,9 +199,7 @@ describe.each([
     // outcome on a genuine race: two concurrent `get()` calls for a
     // never-checked placeId whose storage object is missing.
     it('PPC-017 (§18.4 concurrency): two concurrent gets on a row whose storage object is missing both resolve null; the loser\'s delete is a harmless no-op', async () => {
-      testDb
-        .prepare('INSERT INTO google_place_photo_meta (place_id, attribution, fetched_at) VALUES (?, ?, ?)')
-        .run('race-place', 'Dana', Date.now());
+      await insertMeta('race-place', 'Dana', Date.now());
       const deleteSpy = vi.spyOn(metaRepo, 'deleteByPlaceId');
 
       try {
@@ -222,7 +214,7 @@ describe.each([
         expect(deleteSpy).toHaveBeenCalledTimes(2);
         expect(deleteSpy).toHaveBeenCalledWith('race-place');
         // Exactly one row existed to begin with — gone either way, not double-deleted into an error.
-        expect(testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('race-place')).toBeUndefined();
+        expect(await findRow(t, GooglePlacePhotoMeta, { place_id: 'race-place' })).toBeNull();
       } finally {
         deleteSpy.mockRestore();
       }
@@ -237,12 +229,12 @@ describe.each([
       await cache.removeIfUnreferenced('orphan');
 
       expect(fs.existsSync(filePathFor('orphan'))).toBe(false);
-      expect(testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('orphan')).toBeUndefined();
+      expect(await findRow(t, GooglePlacePhotoMeta, { place_id: 'orphan' })).toBeNull();
     });
 
     it('PPC-005: keeps an entry still referenced by google_place_id', async () => {
       await cache.put('gid-1', await makeJpeg(50, 50), null);
-      testDb.prepare('INSERT INTO places (google_place_id) VALUES (?)').run('gid-1');
+      await referenceByPlace({ google_place_id: 'gid-1' });
 
       await cache.removeIfUnreferenced('gid-1');
 
@@ -253,7 +245,7 @@ describe.each([
       const id = 'coords:48.8:2.3';
       await cache.put(id, await makeJpeg(50, 50), null);
       const proxy = `/api/maps/place-photo/${encodeURIComponent(id)}/bytes`;
-      testDb.prepare('INSERT INTO places (image_url) VALUES (?)').run(proxy);
+      await referenceByPlace({ image_url: proxy });
 
       await cache.removeIfUnreferenced(id);
 
@@ -267,7 +259,7 @@ describe.each([
     it('PPC-016: keeps an entry referenced only through collection_places, proving the repository-backed fallback still fires', async () => {
       const id = 'coll-only';
       await cache.put(id, await makeJpeg(50, 50), null);
-      testDb.prepare('INSERT INTO collection_places (google_place_id) VALUES (?)').run(id);
+      await referenceByCollectionPlace(id);
 
       await cache.removeIfUnreferenced(id);
 
@@ -279,7 +271,7 @@ describe.each([
     it('PPC-007: removes orphaned meta rows + files, keeps referenced ones, deletes stray files', async () => {
       await cache.put('keep-gid', await makeJpeg(50, 50), null);
       await cache.put('drop-me', await makeJpeg(50, 50), null);
-      testDb.prepare('INSERT INTO places (google_place_id) VALUES (?)').run('keep-gid');
+      await referenceByPlace({ google_place_id: 'keep-gid' });
 
       // A stray .jpg on disk with no meta row (e.g. a crash between write and upsert).
       const strayPath = path.join(prefixDir(), 'deadbeef'.padEnd(40, '0') + '.jpg');
@@ -290,14 +282,14 @@ describe.each([
       expect(fs.existsSync(filePathFor('keep-gid'))).toBe(true);
       expect(fs.existsSync(filePathFor('drop-me'))).toBe(false);
       expect(fs.existsSync(strayPath)).toBe(false);
-      expect(testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('drop-me')).toBeUndefined();
-      expect(testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('keep-gid')).toBeDefined();
+      expect(await findRow(t, GooglePlacePhotoMeta, { place_id: 'drop-me' })).toBeNull();
+      expect(await findRow(t, GooglePlacePhotoMeta, { place_id: 'keep-gid' })).not.toBeNull();
       expect(removed).toBe(2); // drop-me (orphan meta+file) + stray file
     });
 
     it('PPC-008: returns 0 when every entry is referenced', async () => {
       await cache.put('ref-a', await makeJpeg(50, 50), null);
-      testDb.prepare('INSERT INTO places (google_place_id) VALUES (?)').run('ref-a');
+      await referenceByPlace({ google_place_id: 'ref-a' });
 
       expect(await cache.sweepOrphans()).toBe(0);
       expect(fs.existsSync(filePathFor('ref-a'))).toBe(true);
@@ -320,25 +312,23 @@ describe.each([
   });
 
   describe('negative cache', () => {
-    function ageError(placeId: string, ms: number): void {
-      testDb
-        .prepare('UPDATE google_place_photo_meta SET error_at = ? WHERE place_id = ?')
-        .run(Date.now() - ms, placeId);
+    async function ageError(placeId: string, ms: number): Promise<void> {
+      await updateRows(t, GooglePlacePhotoMeta, { place_id: placeId }, { error_at: Date.now() - ms });
     }
 
     it('PPC-009: a place with no photo stays remembered well past the old five-minute window', async () => {
       await cache.markError('photo-less');
 
-      ageError('photo-less', 30 * 60 * 1000);
+      await ageError('photo-less', 30 * 60 * 1000);
       expect(await cache.getErrored('photo-less')).toBe(true);
 
-      ageError('photo-less', 5 * 60 * 60 * 1000);
+      await ageError('photo-less', 5 * 60 * 60 * 1000);
       expect(await cache.getErrored('photo-less')).toBe(true);
     });
 
     it('PPC-010: the miss expires once it is a day old', async () => {
       await cache.markError('stale-miss');
-      ageError('stale-miss', 24 * 60 * 60 * 1000);
+      await ageError('stale-miss', 24 * 60 * 60 * 1000);
 
       expect(await cache.getErrored('stale-miss')).toBe(false);
     });
@@ -351,14 +341,14 @@ describe.each([
         await cache.markError('flaky', 'provider-error');
         expect(await cache.getErrored('flaky')).toBe(true);
         // Nothing on disk — a restart retries instead of inheriting someone's outage.
-        expect(testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('flaky')).toBeUndefined();
+        expect(await findRow(t, GooglePlacePhotoMeta, { place_id: 'flaky' })).toBeNull();
 
         vi.advanceTimersByTime(5 * 60 * 1000);
         expect(await cache.getErrored('flaky')).toBe(false);
 
         // The long window belongs to the other case: same age, still remembered.
         await cache.markError('photo-less-too');
-        ageError('photo-less-too', 5 * 60 * 1000);
+        await ageError('photo-less-too', 5 * 60 * 1000);
         expect(await cache.getErrored('photo-less-too')).toBe(true);
       } finally {
         vi.useRealTimers();
