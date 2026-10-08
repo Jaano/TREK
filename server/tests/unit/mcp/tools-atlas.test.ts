@@ -21,13 +21,24 @@ vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createBucketListItem, createVisitedCountry } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow } from '../../helpers/factories/rows';
+import { BucketList } from '../../../src/db/entities/BucketList.entity';
+import { VisitedCountries } from '../../../src/db/entities/VisitedCountries.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
 
 beforeEach(() => {
   resetTestDb(testDb);
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -48,7 +59,7 @@ describe('Tool: mark_country_visited', () => {
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
       expect(data.country_code).toBe('FR');
-      const row = testDb.prepare('SELECT country_code FROM visited_countries WHERE user_id = ? AND country_code = ?').get(user.id, 'FR');
+      const row = await findRow(orm, VisitedCountries, { user: user.id, country_code: 'FR' });
       expect(row).toBeTruthy();
     });
   });
@@ -60,7 +71,7 @@ describe('Tool: mark_country_visited', () => {
       const result = await h.client.callTool({ name: 'mark_country_visited', arguments: { country_code: 'JP' } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      const count = (testDb.prepare('SELECT COUNT(*) as c FROM visited_countries WHERE user_id = ? AND country_code = ?').get(user.id, 'JP') as { c: number }).c;
+      const count = await countRows(orm, VisitedCountries, { user: user.id, country_code: 'JP' });
       expect(count).toBe(1);
     });
   });
@@ -87,8 +98,8 @@ describe('Tool: unmark_country_visited', () => {
       const result = await h.client.callTool({ name: 'unmark_country_visited', arguments: { country_code: 'ES' } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      const row = testDb.prepare('SELECT country_code FROM visited_countries WHERE user_id = ? AND country_code = ?').get(user.id, 'ES');
-      expect(row).toBeUndefined();
+      const row = await findRow(orm, VisitedCountries, { user: user.id, country_code: 'ES' });
+      expect(row).toBeNull();
     });
   });
 
@@ -181,7 +192,7 @@ describe('Tool: create_bucket_list_item', () => {
         arguments: { name: 'Japan', country_code: 'JP' },
       });
       expect(result.isError).toBe(true);
-      expect((testDb.prepare('SELECT COUNT(*) AS n FROM bucket_list WHERE user_id = ?').get(user.id) as { n: number }).n).toBe(1);
+      expect(await countRows(orm, BucketList, { user: user.id })).toBe(1);
     });
   });
 
@@ -207,7 +218,7 @@ describe('Tool: delete_bucket_list_item', () => {
       const result = await h.client.callTool({ name: 'delete_bucket_list_item', arguments: { itemId: item.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM bucket_list WHERE id = ?').get(item.id)).toBeUndefined();
+      expect(await findRow(orm, BucketList, { id: item.id })).toBeNull();
     });
   });
 

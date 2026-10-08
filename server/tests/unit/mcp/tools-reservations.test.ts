@@ -22,6 +22,28 @@ vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, createReservation, createBudgetItem, createDayAssignment, createDayAccommodation, createCategory, addTripMember } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { DayAccommodations } from '../../../src/db/entities/DayAccommodations.entity';
+import { ReservationTravelers } from '../../../src/db/entities/ReservationTravelers.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+async function reservationRow(id: number) {
+  return (await findRow(orm, Reservations, { id }))!;
+}
+
+async function reservationUrl(id: number) {
+  const row = await findRow(orm, Reservations, { id });
+  return row ? { url: row.url } : undefined;
+}
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -29,7 +51,8 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -97,7 +120,7 @@ describe('Tool: create_reservation', () => {
       expect(data.reservation.type).toBe('hotel');
       expect(data.reservation.accommodation_id).not.toBeNull();
       // accommodation was created
-      const acc = testDb.prepare('SELECT * FROM day_accommodations WHERE id = ?').get(data.reservation.accommodation_id) as any;
+      const acc = (await findRow(orm, DayAccommodations, { id: Number(data.reservation.accommodation_id) }))!;
       expect(acc.place_id).toBe(hotel.id);
       expect(acc.check_in).toBe('15:00');
     });
@@ -281,7 +304,7 @@ describe('Tool: delete_reservation', () => {
       const result = await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId: reservation.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(reservation.id)).toBeUndefined();
+      expect(await findRow(orm, Reservations, { id: reservation.id })).toBeNull();
     });
   });
 
@@ -301,14 +324,14 @@ describe('Tool: delete_reservation', () => {
       reservationId = (parseToolResult(r) as any).reservation.id;
     });
 
-    const accId = (testDb.prepare('SELECT accommodation_id FROM reservations WHERE id = ?').get(reservationId!) as any).accommodation_id;
+    const accId = (await reservationRow(reservationId!)).accommodation_id;
     expect(accId).not.toBeNull();
 
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId } });
     });
 
-    expect(testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(accId)).toBeUndefined();
+    expect(await findRow(orm, DayAccommodations, { id: Number(accId) })).toBeNull();
   });
 
   it('broadcasts reservation:deleted event', async () => {
@@ -330,12 +353,12 @@ describe('Tool: delete_reservation', () => {
     const fare = createBudgetItem(testDb, trip.id, { name: 'Fare' });
     const luggage = createBudgetItem(testDb, trip.id, { name: 'Luggage' });
     const unrelated = createBudgetItem(testDb, trip.id, { name: 'Coffee' });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservation.id, fare.id, luggage.id);
+    await updateRows(orm, BudgetItems, { id: { $in: [fare.id, luggage.id] } }, { reservation: reservation.id });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'delete_reservation', arguments: { tripId: trip.id, reservationId: reservation.id } });
       expect(parseToolResult(result)).toEqual({ success: true });
     });
-    expect(testDb.prepare('SELECT id FROM budget_items WHERE trip_id = ?').all(trip.id)).toEqual([{ id: unrelated.id }]);
+    expect((await findRows(orm, BudgetItems, { trip: trip.id }, { id: 'asc' })).map(r => ({ id: r.id }))).toEqual([{ id: unrelated.id }]);
     const deleted = broadcastMock.mock.calls.filter(c => c[1] === 'budget:deleted').map(c => (c[2] as { itemId: number }).itemId);
     expect(deleted).toEqual([fare.id, luggage.id]);
     // The expenses go out before the booking, so no client is left holding a link to nothing.
@@ -536,7 +559,7 @@ describe('Tool: set_reservation_travelers', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.travelers.map((t: any) => t.user_id).sort()).toEqual([owner.id, friend.id].sort());
-      const rows = testDb.prepare('SELECT user_id FROM reservation_travelers WHERE reservation_id = ?').all(reservationId) as any[];
+      const rows = await findRows(orm, ReservationTravelers, { reservation: reservationId });
       expect(rows).toHaveLength(2);
     });
   });
@@ -597,7 +620,7 @@ describe('Tool: set_reservation_travelers', () => {
         arguments: { tripId: trip.id, reservationId, user_ids: [] },
       });
       expect((parseToolResult(result) as any).travelers).toEqual([]);
-      expect(testDb.prepare('SELECT user_id FROM reservation_travelers WHERE reservation_id = ?').all(reservationId)).toEqual([]);
+      expect(await findRows(orm, ReservationTravelers, { reservation: reservationId })).toEqual([]);
     });
   });
 
@@ -716,7 +739,7 @@ describe('Reservation tools: url and reservation_end_time', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.reservation.url).toBe('https://example.com/booking/abc123');
-      const row = testDb.prepare('SELECT url FROM reservations WHERE id = ?').get(data.reservation.id) as any;
+      const row = await reservationRow(data.reservation.id);
       expect(row.url).toBe('https://example.com/booking/abc123');
     });
   });
@@ -733,7 +756,7 @@ describe('Reservation tools: url and reservation_end_time', () => {
         },
       });
       const data = parseToolResult(result) as any;
-      const row = testDb.prepare('SELECT reservation_time, reservation_end_time FROM reservations WHERE id = ?').get(data.reservation.id) as any;
+      const row = await reservationRow(data.reservation.id);
       expect(row.reservation_time).toBe('2025-06-01T19:00:00');
       expect(row.reservation_end_time).toBe('2025-06-01T21:30:00');
     });
@@ -756,7 +779,7 @@ describe('Reservation tools: url and reservation_end_time', () => {
           url: 'https://tours.example/booking/9', reservation_end_time: '2025-06-02T16:00:00',
         },
       });
-      const row = testDb.prepare('SELECT url, reservation_end_time FROM reservations WHERE id = ?').get(reservation.id) as any;
+      const row = await reservationRow(reservation.id);
       expect(row.url).toBe('https://tours.example/booking/9');
       expect(row.reservation_end_time).toBe('2025-06-02T16:00:00');
     });
@@ -771,7 +794,7 @@ describe('Reservation tools: url and reservation_end_time', () => {
         arguments: { tripId: trip.id, type: 'other', title: 'Nope', url: 'javascript:alert(1)' },
       });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM reservations').get()).toEqual({ n: 0 });
+      expect(await countRows(orm, Reservations)).toBe(0);
     });
   });
 
@@ -799,13 +822,13 @@ describe('Reservation tools: url and reservation_end_time', () => {
         },
       });
       const { reservation } = parseToolResult(created) as { reservation: { id: number } };
-      expect(testDb.prepare('SELECT url FROM reservations WHERE id = ?').get(reservation.id)).toEqual({ url: 'https://flix.example/booking/8891' });
+      expect(await reservationUrl(reservation.id)).toEqual({ url: 'https://flix.example/booking/8891' });
 
       await h.client.callTool({
         name: 'update_transport',
         arguments: { tripId: trip.id, reservationId: reservation.id, url: 'https://flix.example/booking/8892' },
       });
-      expect(testDb.prepare('SELECT url FROM reservations WHERE id = ?').get(reservation.id)).toEqual({ url: 'https://flix.example/booking/8892' });
+      expect(await reservationUrl(reservation.id)).toEqual({ url: 'https://flix.example/booking/8892' });
     });
   });
 });
@@ -832,10 +855,10 @@ describe('Tool: list_upcoming_reservations', () => {
     title: string,
     time: string | null,
     extra: Partial<{ type: string; status: string }> = {},
-  ): number {
-    return Number(testDb.prepare(
-      'INSERT INTO reservations (trip_id, title, type, status, reservation_time) VALUES (?, ?, ?, ?, ?)',
-    ).run(tripId, title, extra.type ?? 'restaurant', extra.status ?? 'pending', time).lastInsertRowid);
+  ): Promise<number> {
+    return insertRow(orm, Reservations, {
+      trip: tripId, title, type: extra.type ?? 'restaurant', status: extra.status ?? 'pending', reservation_time: time,
+    });
   }
 
   async function upcoming(userId: number, args: Record<string, unknown> = {}) {
@@ -857,9 +880,9 @@ describe('Tool: list_upcoming_reservations', () => {
     const stranger = createTrip(testDb, other.id);
     addTripMember(testDb, joined.id, user.id);
 
-    seedBooking(owned.id, 'Flight to Paris', `${dateInDays(4)}T08:00:00`, { type: 'flight' });
-    seedBooking(joined.id, 'Group dinner', `${dateInDays(2)}T19:00:00`);
-    seedBooking(stranger.id, 'Not mine', `${dateInDays(1)}T07:00:00`);
+    await seedBooking(owned.id, 'Flight to Paris', `${dateInDays(4)}T08:00:00`, { type: 'flight' });
+    await seedBooking(joined.id, 'Group dinner', `${dateInDays(2)}T19:00:00`);
+    await seedBooking(stranger.id, 'Not mine', `${dateInDays(1)}T07:00:00`);
 
     const rows = await upcoming(user.id);
     expect(rows.map((r) => r.title)).toEqual(['Group dinner', 'Flight to Paris']);
@@ -885,11 +908,11 @@ describe('Tool: list_upcoming_reservations', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const archived = createTrip(testDb, user.id);
-    testDb.prepare('UPDATE trips SET is_archived = 1 WHERE id = ?').run(archived.id);
+    await updateRows(orm, Trips, { id: archived.id }, { is_archived: 1 });
 
-    seedBooking(trip.id, 'Still on', `${dateInDays(2)}T12:00:00`);
-    seedBooking(trip.id, 'Called off', `${dateInDays(1)}T12:00:00`, { status: 'cancelled' });
-    seedBooking(archived.id, 'Last year', `${dateInDays(3)}T12:00:00`);
+    await seedBooking(trip.id, 'Still on', `${dateInDays(2)}T12:00:00`);
+    await seedBooking(trip.id, 'Called off', `${dateInDays(1)}T12:00:00`, { status: 'cancelled' });
+    await seedBooking(archived.id, 'Last year', `${dateInDays(3)}T12:00:00`);
 
     const rows = await upcoming(user.id);
     expect(rows.map((r) => r.title)).toEqual(['Still on']);
@@ -898,7 +921,7 @@ describe('Tool: list_upcoming_reservations', () => {
   it('returns the dashboard six by default and honours a limit', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    for (let i = 1; i <= 8; i++) seedBooking(trip.id, `Booking ${i}`, `${dateInDays(i)}T09:00:00`);
+    for (let i = 1; i <= 8; i++) await seedBooking(trip.id, `Booking ${i}`, `${dateInDays(i)}T09:00:00`);
 
     expect((await upcoming(user.id)).map((r) => r.title)).toEqual([
       'Booking 1', 'Booking 2', 'Booking 3', 'Booking 4', 'Booking 5', 'Booking 6',

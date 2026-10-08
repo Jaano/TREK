@@ -37,13 +37,30 @@ import { PermissionsService } from '../../../src/nest/permissions/permissions.se
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { McpToolGuardsService } from '../../../src/nest/mcp-shared/mcp-tool-guards.service';
 import { createTestUnitOfWork, createTestAppSettingsRepo, createTestCategoriesRepo, createTestTripsRepo, createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow } from '../../helpers/factories/rows';
+import { makeCategory, makePlace } from '../../helpers/factories/places';
+import { makeTrip } from '../../helpers/factories/trips';
+import { Categories } from '../../../src/db/entities/Categories.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+async function categoryRow(id: number) {
+  return (await findRow(orm, Categories, { id }))!;
+}
 
 beforeEach(() => {
   resetTestDb(testDb);
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -87,8 +104,8 @@ async function withWriteHarness(userId: number, fn: (client: Client) => Promise<
   }
 }
 
-function insertCategory(name: string, color = '#111111', icon = '🅰️'): number {
-  return Number(testDb.prepare('INSERT INTO categories (name, color, icon) VALUES (?, ?, ?)').run(name, color, icon).lastInsertRowid);
+async function insertCategory(name: string, color = '#111111', icon = '🅰️'): Promise<number> {
+  return (await makeCategory(orm, { name, color, icon })).id;
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +131,8 @@ describe('Tool: list_categories', () => {
   it('returns categories from all users, ordered by name', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
-    testDb.prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)').run('Zzz Mine', '#111111', '🅰️', user.id);
-    testDb.prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)').run('Zzz Other', '#222222', '🅱️', other.id);
+    await makeCategory(orm, { name: 'Zzz Mine', color: '#111111', icon: '🅰️', user: user.id });
+    await makeCategory(orm, { name: 'Zzz Other', color: '#222222', icon: '🅱️', user: other.id });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_categories', arguments: {} });
       const names = (parseToolResult(result) as any).categories.map((c: { name: string }) => c.name);
@@ -139,8 +156,8 @@ describe('Tool: create_category', () => {
         arguments: { name: 'Street food', color: '#16a34a', icon: '🍜' },
       });
       const data = parseToolResult(result) as any;
-      const row = testDb.prepare('SELECT name, color, icon, user_id FROM categories WHERE id = ?').get(data.category.id) as any;
-      expect(row).toEqual({ name: 'Street food', color: '#16a34a', icon: '🍜', user_id: admin.id });
+      const { name, color, icon, user_id } = await categoryRow(data.category.id);
+      expect({ name, color, icon, user_id }).toEqual({ name: 'Street food', color: '#16a34a', icon: '🍜', user_id: admin.id });
     });
   });
 
@@ -149,8 +166,8 @@ describe('Tool: create_category', () => {
     await withWriteHarness(admin.id, async (client) => {
       const result = await client.callTool({ name: 'create_category', arguments: { name: 'Bare minimum' } });
       const data = parseToolResult(result) as any;
-      const row = testDb.prepare('SELECT color, icon FROM categories WHERE id = ?').get(data.category.id) as any;
-      expect(row).toEqual({ color: '#6366f1', icon: '📍' });
+      const { color, icon } = await categoryRow(data.category.id);
+      expect({ color, icon }).toEqual({ color: '#6366f1', icon: '📍' });
     });
   });
 
@@ -159,7 +176,7 @@ describe('Tool: create_category', () => {
     await withWriteHarness(user.id, async (client) => {
       const result = await client.callTool({ name: 'create_category', arguments: { name: 'Sneaky' } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM categories WHERE name = ?').get('Sneaky')).toBeUndefined();
+      expect(await findRow(orm, Categories, { name: 'Sneaky' })).toBeNull();
     });
   });
 
@@ -169,7 +186,7 @@ describe('Tool: create_category', () => {
     await withWriteHarness(user.id, async (client) => {
       const result = await client.callTool({ name: 'create_category', arguments: { name: 'Demo made this' } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM categories WHERE name = ?').get('Demo made this')).toBeUndefined();
+      expect(await findRow(orm, Categories, { name: 'Demo made this' })).toBeNull();
     });
   });
 
@@ -178,7 +195,7 @@ describe('Tool: create_category', () => {
     await withWriteHarness(admin.id, async (client) => {
       const result = await client.callTool({ name: 'create_category', arguments: { name: 'Bad colour', color: 'rebeccapurple' } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM categories WHERE name = ?').get('Bad colour')).toBeUndefined();
+      expect(await findRow(orm, Categories, { name: 'Bad colour' })).toBeNull();
     });
   });
 
@@ -198,20 +215,22 @@ describe('Tool: create_category', () => {
 describe('Tool: update_category', () => {
   it('renames and recolours an existing category', async () => {
     const { user: admin } = createAdmin(testDb);
-    const id = insertCategory('Old name', '#111111', '🅰️');
+    const id = await insertCategory('Old name', '#111111', '🅰️');
     await withWriteHarness(admin.id, async (client) => {
       await client.callTool({ name: 'update_category', arguments: { categoryId: id, name: 'New name', color: '#dc2626' } });
-      const row = testDb.prepare('SELECT name, color, icon FROM categories WHERE id = ?').get(id) as any;
+      const { name, color, icon } = await categoryRow(id);
+      const row = { name, color, icon };
       expect(row).toEqual({ name: 'New name', color: '#dc2626', icon: '🅰️' });
     });
   });
 
   it('leaves the fields it was not given alone', async () => {
     const { user: admin } = createAdmin(testDb);
-    const id = insertCategory('Keep me', '#0891b2', '🚕');
+    const id = await insertCategory('Keep me', '#0891b2', '🚕');
     await withWriteHarness(admin.id, async (client) => {
       await client.callTool({ name: 'update_category', arguments: { categoryId: id, icon: '🚗' } });
-      const row = testDb.prepare('SELECT name, color, icon FROM categories WHERE id = ?').get(id) as any;
+      const { name, color, icon } = await categoryRow(id);
+      const row = { name, color, icon };
       expect(row).toEqual({ name: 'Keep me', color: '#0891b2', icon: '🚗' });
     });
   });
@@ -226,32 +245,32 @@ describe('Tool: update_category', () => {
 
   it('refuses a non-admin and leaves the row untouched', async () => {
     const { user } = createUser(testDb);
-    const id = insertCategory('Not yours', '#9333ea', '🔒');
+    const id = await insertCategory('Not yours', '#9333ea', '🔒');
     await withWriteHarness(user.id, async (client) => {
       const result = await client.callTool({ name: 'update_category', arguments: { categoryId: id, name: 'Hijacked' } });
       expect(result.isError).toBe(true);
-      expect((testDb.prepare('SELECT name FROM categories WHERE id = ?').get(id) as any).name).toBe('Not yours');
+      expect((await categoryRow(id)).name).toBe('Not yours');
     });
   });
 
   it('blocks demo user', async () => {
     process.env.DEMO_MODE = 'true';
     const { user } = createAdmin(testDb, { email: 'demo@trek.app' });
-    const id = insertCategory('Demo untouchable', '#ea580c', '🙅');
+    const id = await insertCategory('Demo untouchable', '#ea580c', '🙅');
     await withWriteHarness(user.id, async (client) => {
       const result = await client.callTool({ name: 'update_category', arguments: { categoryId: id, name: 'Changed' } });
       expect(result.isError).toBe(true);
-      expect((testDb.prepare('SELECT name FROM categories WHERE id = ?').get(id) as any).name).toBe('Demo untouchable');
+      expect((await categoryRow(id)).name).toBe('Demo untouchable');
     });
   });
 
   it('refuses a color that is not a hex value', async () => {
     const { user: admin } = createAdmin(testDb);
-    const id = insertCategory('Colour guard', '#2563eb', '🎨');
+    const id = await insertCategory('Colour guard', '#2563eb', '🎨');
     await withWriteHarness(admin.id, async (client) => {
       const result = await client.callTool({ name: 'update_category', arguments: { categoryId: id, color: 'goldenrod' } });
       expect(result.isError).toBe(true);
-      expect((testDb.prepare('SELECT color FROM categories WHERE id = ?').get(id) as any).color).toBe('#2563eb');
+      expect((await categoryRow(id)).color).toBe('#2563eb');
     });
   });
 });
@@ -263,14 +282,14 @@ describe('Tool: update_category', () => {
 describe('Tool: delete_category', () => {
   it('removes the category and unassigns the places that carried it', async () => {
     const { user: admin } = createAdmin(testDb);
-    const id = insertCategory('Doomed', '#d97706', '💀');
-    const trip = Number(testDb.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(admin.id, 'Trip').lastInsertRowid);
-    const place = Number(testDb.prepare('INSERT INTO places (trip_id, name, category_id) VALUES (?, ?, ?)').run(trip, 'Somewhere', id).lastInsertRowid);
+    const id = await insertCategory('Doomed', '#d97706', '💀');
+    const { id: trip } = await makeTrip(orm, admin.id, { title: 'Trip' });
+    const { id: place } = await makePlace(orm, trip, { name: 'Somewhere', category: id });
     await withWriteHarness(admin.id, async (client) => {
       const result = await client.callTool({ name: 'delete_category', arguments: { categoryId: id } });
       expect((parseToolResult(result) as any).success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM categories WHERE id = ?').get(id)).toBeUndefined();
-      expect((testDb.prepare('SELECT category_id FROM places WHERE id = ?').get(place) as any).category_id).toBeNull();
+      expect(await findRow(orm, Categories, { id })).toBeNull();
+      expect((await findRow(orm, Places, { id: place }))!.category_id).toBeNull();
     });
   });
 
@@ -284,22 +303,22 @@ describe('Tool: delete_category', () => {
 
   it('refuses a non-admin and keeps the row', async () => {
     const { user } = createUser(testDb);
-    const id = insertCategory('Survivor', '#16a34a', '🌿');
+    const id = await insertCategory('Survivor', '#16a34a', '🌿');
     await withWriteHarness(user.id, async (client) => {
       const result = await client.callTool({ name: 'delete_category', arguments: { categoryId: id } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM categories WHERE id = ?').get(id)).toBeDefined();
+      expect(await findRow(orm, Categories, { id })).not.toBeNull();
     });
   });
 
   it('blocks demo user', async () => {
     process.env.DEMO_MODE = 'true';
     const { user } = createAdmin(testDb, { email: 'demo@trek.app' });
-    const id = insertCategory('Demo survivor', '#0891b2', '🛟');
+    const id = await insertCategory('Demo survivor', '#0891b2', '🛟');
     await withWriteHarness(user.id, async (client) => {
       const result = await client.callTool({ name: 'delete_category', arguments: { categoryId: id } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM categories WHERE id = ?').get(id)).toBeDefined();
+      expect(await findRow(orm, Categories, { id })).not.toBeNull();
     });
   });
 });

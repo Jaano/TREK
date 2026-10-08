@@ -32,6 +32,19 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createPackingItem, addTripMember } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 import { ADDON_IDS } from '../../../src/addons';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { inContext } from '../../helpers/factories/context';
+import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { addPackingBagMembers, addPackingItemRecipients, makePackingBag } from '../../helpers/factories/packing';
+import { setAddonEnabled } from '../../helpers/factories/settings';
+import { PackingBags } from '../../../src/db/entities/PackingBags.entity';
+import { PackingItems } from '../../../src/db/entities/PackingItems.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -39,7 +52,8 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -124,17 +138,16 @@ describe('Tool: create_packing_item', () => {
 // which is the whole three-tier model the REST route has taken since #858.
 // ---------------------------------------------------------------------------
 
-const itemRow = (id: number) =>
-  testDb.prepare('SELECT * FROM packing_items WHERE id = ?').get(id) as
-    { id: number; checked: number; is_private: number; owner_id: number | null; bag_id: number | null; quantity: number; weight_grams: number | null };
+const itemRow = async (id: number) => (await findRow(orm, PackingItems, { id }))!;
 
 /** The id of the item a create call just made, typed rather than cast wide open. */
 const createdItemId = (result: Parameters<typeof parseToolResult>[0]) =>
   (parseToolResult(result) as { item: { id: number } }).item.id;
 
-const recipientIds = (itemId: number) =>
-  (testDb.prepare('SELECT user_id FROM packing_item_recipients WHERE item_id = ? ORDER BY user_id').all(itemId) as { user_id: number }[])
-    .map((r) => r.user_id);
+const recipientIds = async (itemId: number) =>
+  (await inContext(orm, (em) => em.getRepository(PackingItems).listRecipientsForItems([itemId])))
+    .map((r) => r.user_id)
+    .sort((a, b) => a - b);
 
 describe('Tool: create_packing_item sharing', () => {
   it('puts a personal item on the caller\'s own list', async () => {
@@ -145,7 +158,7 @@ describe('Tool: create_packing_item sharing', () => {
         name: 'create_packing_item',
         arguments: { tripId: trip.id, name: 'Insulin pens', visibility: 'personal' },
       });
-      const row = itemRow(createdItemId(result));
+      const row = await itemRow(createdItemId(result));
       expect(row.is_private).toBe(1);
       expect(row.owner_id).toBe(user.id);
     });
@@ -163,8 +176,8 @@ describe('Tool: create_packing_item sharing', () => {
         arguments: { tripId: trip.id, name: 'Sunscreen', visibility: 'shared', recipient_ids: [mate.id, stranger.id] },
       });
       const itemId = createdItemId(result);
-      expect(itemRow(itemId).is_private).toBe(1);
-      expect(recipientIds(itemId)).toEqual([mate.id]);
+      expect((await itemRow(itemId)).is_private).toBe(1);
+      expect(await recipientIds(itemId)).toEqual([mate.id]);
     });
   });
 
@@ -176,7 +189,7 @@ describe('Tool: create_packing_item sharing', () => {
         name: 'create_packing_item',
         arguments: { tripId: trip.id, name: 'Gift', is_private: true },
       });
-      expect(itemRow(createdItemId(result)).is_private).toBe(1);
+      expect((await itemRow(createdItemId(result))).is_private).toBe(1);
     });
   });
 
@@ -188,7 +201,7 @@ describe('Tool: create_packing_item sharing', () => {
         name: 'create_packing_item',
         arguments: { tripId: trip.id, name: 'Charger', checked: true },
       });
-      expect(itemRow(createdItemId(result)).checked).toBe(1);
+      expect((await itemRow(createdItemId(result))).checked).toBe(1);
     });
   });
 
@@ -230,13 +243,13 @@ describe('Tool: create_packing_item bag, quantity, weight (#2154)', () => {
   it('creates the item with its bag, quantity and weight in one write', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const bagId = Number(testDb.prepare('INSERT INTO packing_bags (trip_id, name) VALUES (?, ?)').run(trip.id, 'Carry-On').lastInsertRowid);
+    const { id: bagId } = await makePackingBag(orm, trip.id, { name: 'Carry-On' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'create_packing_item',
         arguments: { tripId: trip.id, name: 'Tent', bag_id: bagId, quantity: 3, weight_grams: 250 },
       });
-      const row = itemRow(createdItemId(result));
+      const row = await itemRow(createdItemId(result));
       expect(row.bag_id).toBe(bagId);
       expect(row.quantity).toBe(3);
       expect(row.weight_grams).toBe(250);
@@ -247,7 +260,7 @@ describe('Tool: create_packing_item bag, quantity, weight (#2154)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const otherTrip = createTrip(testDb, user.id);
-    const foreignBag = Number(testDb.prepare('INSERT INTO packing_bags (trip_id, name) VALUES (?, ?)').run(otherTrip.id, 'Foreign').lastInsertRowid);
+    const { id: foreignBag } = await makePackingBag(orm, otherTrip.id, { name: 'Foreign' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'create_packing_item',
@@ -256,7 +269,7 @@ describe('Tool: create_packing_item bag, quantity, weight (#2154)', () => {
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Bag not found');
     });
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM packing_items WHERE trip_id = ?').get(trip.id) as { n: number }).n).toBe(0);
+    expect(await countRows(orm, PackingItems, { trip: trip.id })).toBe(0);
   });
 });
 
@@ -333,21 +346,20 @@ describe('Tool: update_packing_item', () => {
 // ---------------------------------------------------------------------------
 
 describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
-  const makeBag = (tripId: number, name = 'Carry-On') =>
-    Number(testDb.prepare('INSERT INTO packing_bags (trip_id, name) VALUES (?, ?)').run(tripId, name).lastInsertRowid);
+  const makeBag = async (tripId: number, name = 'Carry-On') => (await makePackingBag(orm, tripId, { name })).id;
 
   it('moves an item into a bag', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    const bagId = makeBag(trip.id);
+    const bagId = await makeBag(trip.id);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_packing_item',
         arguments: { tripId: trip.id, itemId: item.id, bag_id: bagId },
       });
       expect(result.isError).toBeFalsy();
-      expect(itemRow(item.id).bag_id).toBe(bagId);
+      expect((await itemRow(item.id)).bag_id).toBe(bagId);
     });
   });
 
@@ -355,14 +367,14 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    const bagId = makeBag(trip.id);
-    testDb.prepare('UPDATE packing_items SET bag_id = ? WHERE id = ?').run(bagId, item.id);
+    const bagId = await makeBag(trip.id);
+    await updateRows(orm, PackingItems, { id: item.id }, { bag: bagId });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'update_packing_item',
         arguments: { tripId: trip.id, itemId: item.id, bag_id: null },
       });
-      expect(itemRow(item.id).bag_id).toBeNull();
+      expect((await itemRow(item.id)).bag_id).toBeNull();
     });
   });
 
@@ -375,7 +387,7 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
         name: 'update_packing_item',
         arguments: { tripId: trip.id, itemId: item.id, quantity: 3 },
       });
-      expect(itemRow(item.id).quantity).toBe(3);
+      expect((await itemRow(item.id)).quantity).toBe(3);
     });
   });
 
@@ -388,13 +400,13 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
         name: 'update_packing_item',
         arguments: { tripId: trip.id, itemId: item.id, weight_grams: 850 },
       });
-      expect(itemRow(item.id).weight_grams).toBe(850);
+      expect((await itemRow(item.id)).weight_grams).toBe(850);
 
       await h.client.callTool({
         name: 'update_packing_item',
         arguments: { tripId: trip.id, itemId: item.id, weight_grams: null },
       });
-      expect(itemRow(item.id).weight_grams).toBeNull();
+      expect((await itemRow(item.id)).weight_grams).toBeNull();
     });
   });
 
@@ -402,14 +414,14 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    const bagId = makeBag(trip.id);
-    testDb.prepare('UPDATE packing_items SET bag_id = ? WHERE id = ?').run(bagId, item.id);
+    const bagId = await makeBag(trip.id);
+    await updateRows(orm, PackingItems, { id: item.id }, { bag: bagId });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'update_packing_item',
         arguments: { tripId: trip.id, itemId: item.id, name: 'Renamed' },
       });
-      expect(itemRow(item.id).bag_id).toBe(bagId);
+      expect((await itemRow(item.id)).bag_id).toBe(bagId);
     });
   });
 
@@ -423,7 +435,7 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
         arguments: { tripId: trip.id, itemId: item.id, is_private: true },
       });
     });
-    const row = itemRow(item.id);
+    const row = await itemRow(item.id);
     expect(row.is_private).toBe(1);
     // An unowned item is claimed by whoever privatizes it, or the visibility
     // filter would have nobody to match.
@@ -436,14 +448,14 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    testDb.prepare('UPDATE packing_items SET is_private = 1, owner_id = ? WHERE id = ?').run(user.id, item.id);
+    await updateRows(orm, PackingItems, { id: item.id }, { is_private: 1, owner: user.id });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'update_packing_item',
         arguments: { tripId: trip.id, itemId: item.id, is_private: false },
       });
     });
-    expect(itemRow(item.id).is_private).toBe(0);
+    expect((await itemRow(item.id)).is_private).toBe(0);
     // Created first: the members who never had the row cannot apply an update to it.
     expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'packing:created', expect.any(Object));
     expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'packing:updated', expect.any(Object));
@@ -460,7 +472,7 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('bag_id');
-      expect(itemRow(item.id).bag_id).toBeNull();
+      expect((await itemRow(item.id)).bag_id).toBeNull();
     });
   });
 
@@ -469,7 +481,7 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
     const trip = createTrip(testDb, user.id);
     const otherTrip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    const foreignBag = makeBag(otherTrip.id, 'Foreign');
+    const foreignBag = await makeBag(otherTrip.id, 'Foreign');
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_packing_item',
@@ -477,7 +489,7 @@ describe('Tool: update_packing_item bag, quantity, weight, privacy', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('Bag not found');
-      expect(itemRow(item.id).bag_id).toBeNull();
+      expect((await itemRow(item.id)).bag_id).toBeNull();
     });
   });
 });
@@ -498,7 +510,7 @@ describe('Tool: set_packing_item_sharing', () => {
       });
       expect(result.isError).toBeFalsy();
     });
-    const row = itemRow(item.id);
+    const row = await itemRow(item.id);
     expect(row.is_private).toBe(1);
     expect(row.owner_id).toBe(user.id);
   });
@@ -516,8 +528,8 @@ describe('Tool: set_packing_item_sharing', () => {
         arguments: { tripId: trip.id, itemId: item.id, visibility: 'shared', recipient_ids: [mate.id, stranger.id] },
       });
     });
-    expect(itemRow(item.id).is_private).toBe(1);
-    expect(recipientIds(item.id)).toEqual([mate.id]);
+    expect((await itemRow(item.id)).is_private).toBe(1);
+    expect(await recipientIds(item.id)).toEqual([mate.id]);
   });
 
   it('returns an item to the common list and forgets its recipients', async () => {
@@ -526,16 +538,16 @@ describe('Tool: set_packing_item_sharing', () => {
     const trip = createTrip(testDb, user.id);
     addTripMember(testDb, trip.id, mate.id);
     const item = createPackingItem(testDb, trip.id);
-    testDb.prepare('UPDATE packing_items SET is_private = 1, owner_id = ? WHERE id = ?').run(user.id, item.id);
-    testDb.prepare('INSERT INTO packing_item_recipients (item_id, user_id) VALUES (?, ?)').run(item.id, mate.id);
+    await updateRows(orm, PackingItems, { id: item.id }, { is_private: 1, owner: user.id });
+    await addPackingItemRecipients(orm, item.id, [mate.id]);
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'set_packing_item_sharing',
         arguments: { tripId: trip.id, itemId: item.id, visibility: 'common' },
       });
     });
-    expect(itemRow(item.id).is_private).toBe(0);
-    expect(recipientIds(item.id)).toEqual([]);
+    expect((await itemRow(item.id)).is_private).toBe(0);
+    expect(await recipientIds(item.id)).toEqual([]);
   });
 
   it('rebuilds the room\'s view: gone for everyone, back for the people who may see it', async () => {
@@ -558,7 +570,7 @@ describe('Tool: set_packing_item_sharing', () => {
     const trip = createTrip(testDb, user.id);
     addTripMember(testDb, trip.id, mate.id);
     const item = createPackingItem(testDb, trip.id);
-    testDb.prepare('UPDATE packing_items SET owner_id = ? WHERE id = ?').run(mate.id, item.id);
+    await updateRows(orm, PackingItems, { id: item.id }, { owner: mate.id });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'set_packing_item_sharing',
@@ -566,7 +578,7 @@ describe('Tool: set_packing_item_sharing', () => {
       });
       expect(result.isError).toBe(true);
     });
-    expect(itemRow(item.id).is_private).toBe(0);
+    expect((await itemRow(item.id)).is_private).toBe(0);
   });
 
   it('returns error for item not found', async () => {
@@ -593,7 +605,7 @@ describe('Tool: set_packing_item_sharing', () => {
       });
       expect(result.isError).toBe(true);
     });
-    expect(itemRow(item.id).is_private).toBe(0);
+    expect((await itemRow(item.id)).is_private).toBe(0);
   });
 
   it('blocks demo user', async () => {
@@ -621,7 +633,7 @@ describe('Tool: set_packing_item_sharing', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('visibility');
-      expect(itemRow(item.id).is_private).toBe(0);
+      expect((await itemRow(item.id)).is_private).toBe(0);
     });
   });
 });
@@ -631,49 +643,46 @@ describe('Tool: set_packing_item_sharing', () => {
 // ---------------------------------------------------------------------------
 
 describe('Tool: update_packing_bag limit and owner', () => {
-  const bagRow = (id: number) =>
-    testDb.prepare('SELECT * FROM packing_bags WHERE id = ?').get(id) as
-      { id: number; name: string; weight_limit_grams: number | null; user_id: number | null };
+  const bagRow = async (id: number) => (await findRow(orm, PackingBags, { id }))!;
 
-  const makeBag = (tripId: number) =>
-    Number(testDb.prepare('INSERT INTO packing_bags (trip_id, name) VALUES (?, ?)').run(tripId, 'Carry-On').lastInsertRowid);
+  const makeBag = async (tripId: number) => (await makePackingBag(orm, tripId, { name: 'Carry-On' })).id;
 
   it('sets a weight limit', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const bagId = makeBag(trip.id);
+    const bagId = await makeBag(trip.id);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_packing_bag',
         arguments: { tripId: trip.id, bagId, weight_limit_grams: 8000 },
       });
       expect(result.isError).toBeFalsy();
-      expect(bagRow(bagId).weight_limit_grams).toBe(8000);
+      expect((await bagRow(bagId)).weight_limit_grams).toBe(8000);
     });
   });
 
   it('lifts the limit with an explicit null', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const bagId = makeBag(trip.id);
-    testDb.prepare('UPDATE packing_bags SET weight_limit_grams = 8000 WHERE id = ?').run(bagId);
+    const bagId = await makeBag(trip.id);
+    await updateRows(orm, PackingBags, { id: bagId }, { weight_limit_grams: 8000 });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'update_packing_bag',
         arguments: { tripId: trip.id, bagId, weight_limit_grams: null },
       });
-      expect(bagRow(bagId).weight_limit_grams).toBeNull();
+      expect((await bagRow(bagId)).weight_limit_grams).toBeNull();
     });
   });
 
   it('leaves the limit alone when the key is omitted', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const bagId = makeBag(trip.id);
-    testDb.prepare('UPDATE packing_bags SET weight_limit_grams = 8000 WHERE id = ?').run(bagId);
+    const bagId = await makeBag(trip.id);
+    await updateRows(orm, PackingBags, { id: bagId }, { weight_limit_grams: 8000 });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'update_packing_bag', arguments: { tripId: trip.id, bagId, name: 'Backpack' } });
-      const row = bagRow(bagId);
+      const row = await bagRow(bagId);
       expect(row.name).toBe('Backpack');
       expect(row.weight_limit_grams).toBe(8000);
     });
@@ -684,10 +693,10 @@ describe('Tool: update_packing_bag limit and owner', () => {
     const { user: mate } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     addTripMember(testDb, trip.id, mate.id);
-    const bagId = makeBag(trip.id);
+    const bagId = await makeBag(trip.id);
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'update_packing_bag', arguments: { tripId: trip.id, bagId, user_id: mate.id } });
-      expect(bagRow(bagId).user_id).toBe(mate.id);
+      expect((await bagRow(bagId)).user_id).toBe(mate.id);
     });
   });
 
@@ -695,17 +704,17 @@ describe('Tool: update_packing_bag limit and owner', () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const bagId = makeBag(trip.id);
+    const bagId = await makeBag(trip.id);
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'update_packing_bag', arguments: { tripId: trip.id, bagId, user_id: stranger.id } });
-      expect(bagRow(bagId).user_id).toBeNull();
+      expect((await bagRow(bagId)).user_id).toBeNull();
     });
   });
 
   it('refuses a weight limit that is not a number', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const bagId = makeBag(trip.id);
+    const bagId = await makeBag(trip.id);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_packing_bag',
@@ -713,7 +722,7 @@ describe('Tool: update_packing_bag limit and owner', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('weight_limit_grams');
-      expect(bagRow(bagId).weight_limit_grams).toBeNull();
+      expect((await bagRow(bagId)).weight_limit_grams).toBeNull();
     });
   });
 });
@@ -741,7 +750,7 @@ describe('Tool: toggle_packing_item', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    testDb.prepare('UPDATE packing_items SET checked = 1 WHERE id = ?').run(item.id);
+    await updateRows(orm, PackingItems, { id: item.id }, { checked: 1 });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'toggle_packing_item',
@@ -796,7 +805,7 @@ describe('Tool: delete_packing_item', () => {
       const result = await h.client.callTool({ name: 'delete_packing_item', arguments: { tripId: trip.id, itemId: item.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM packing_items WHERE id = ?').get(item.id)).toBeUndefined();
+      expect(await findRow(orm, PackingItems, { id: item.id })).toBeNull();
     });
   });
 
@@ -883,7 +892,7 @@ describe('Packing tools — packing addon gating', () => {
   it('registers nothing (tools or resources) when the packing addon is disabled', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare('UPDATE addons SET enabled = 0 WHERE id = ?').run(ADDON_IDS.PACKING);
+    await setAddonEnabled(orm, ADDON_IDS.PACKING, false);
     try {
       await withHarness(user.id, async (h) => {
         const names = (await h.client.listTools()).tools.map((t) => t.name);
@@ -893,7 +902,7 @@ describe('Packing tools — packing addon gating', () => {
         await expect(h.client.readResource({ uri: `trek://trips/${trip.id}/packing/bags` })).rejects.toThrow();
       });
     } finally {
-      testDb.prepare('UPDATE addons SET enabled = 1 WHERE id = ?').run(ADDON_IDS.PACKING);
+      await setAddonEnabled(orm, ADDON_IDS.PACKING, true);
     }
   });
 });
@@ -919,8 +928,7 @@ describe('Resource: trek://trips/{tripId}/packing', () => {
     const { user } = createUser(testDb);
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, sort_order, is_private, owner_id) VALUES (?, ?, 0, 0, 1, ?)')
-      .run(trip.id, 'Secret gift', owner.id);
+    await insertRow(orm, PackingItems, { trip: trip.id, name: 'Secret gift', checked: 0, sort_order: 0, is_private: 1, owner: owner.id });
     await withHarness(user.id, async (h) => {
       const result = await h.client.readResource({ uri: `trek://trips/${trip.id}/packing` });
       expect(parseResourceResult(result)).toEqual([]);
@@ -954,8 +962,8 @@ describe('Resource: trek://trips/{tripId}/packing/bags', () => {
   it('returns the bags with their members', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const bagId = Number(testDb.prepare('INSERT INTO packing_bags (trip_id, name) VALUES (?, ?)').run(trip.id, 'Carry-On').lastInsertRowid);
-    testDb.prepare('INSERT INTO packing_bag_members (bag_id, user_id) VALUES (?, ?)').run(bagId, user.id);
+    const { id: bagId } = await makePackingBag(orm, trip.id, { name: 'Carry-On' });
+    await addPackingBagMembers(orm, bagId, [user.id]);
     await withHarness(user.id, async (h) => {
       const result = await h.client.readResource({ uri: `trek://trips/${trip.id}/packing/bags` });
       const bags = parseResourceResult(result) as { name: string; members: { user_id: number }[] }[];
@@ -1000,13 +1008,13 @@ describe('Resource: trek://trips/{tripId}/packing/bags', () => {
  */
 describe('a restricted packing item over MCP', () => {
   const makePrivate = (itemId: number, ownerId: number) =>
-    testDb.prepare('UPDATE packing_items SET is_private = 1, owner_id = ? WHERE id = ?').run(ownerId, itemId);
+    updateRows(orm, PackingItems, { id: itemId }, { is_private: 1, owner: ownerId });
 
   it('is ticked off for its owner alone, not for the whole trip', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    makePrivate(item.id, user.id);
+    await makePrivate(item.id, user.id);
 
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
@@ -1027,7 +1035,7 @@ describe('a restricted packing item over MCP', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    makePrivate(item.id, user.id);
+    await makePrivate(item.id, user.id);
 
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
@@ -1052,7 +1060,7 @@ describe('a restricted packing item over MCP', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createPackingItem(testDb, trip.id);
-    makePrivate(item.id, user.id);
+    await makePrivate(item.id, user.id);
 
     await withHarness(user.id, async (h) => {
       await h.client.callTool({

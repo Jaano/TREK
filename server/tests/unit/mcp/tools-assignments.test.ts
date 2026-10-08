@@ -22,13 +22,40 @@ vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, createDayAssignment, createJourney } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { linkTripToJourney } from '../../helpers/factories/journeys';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { JourneyEntries } from '../../../src/db/entities/JourneyEntries.entity';
+import { RoadtripVias } from '../../../src/db/entities/RoadtripVias.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+/** The day's assignment ids in order_index order. */
+async function dayOrder(dayId: number): Promise<number[]> {
+  return (await findRows(orm, DayAssignments, { day: dayId }, { order_index: 'asc' })).map(r => r.id);
+}
+
+async function viaAfterIndex(id: number) {
+  const row = await findRow(orm, RoadtripVias, { id });
+  return row ? { after_order_index: row.after_order_index } : undefined;
+}
+
+async function assignmentNotes(id: number) {
+  const row = await findRow(orm, DayAssignments, { id });
+  return row ? { notes: row.notes } : undefined;
+}
 
 /** Link a journey to a trip so reconcileTripSkeletons has a target. */
 function linkJourney(journeyId: number, tripId: number) {
-  testDb.prepare('INSERT INTO journey_trips (journey_id, trip_id, added_at) VALUES (?, ?, ?)').run(journeyId, tripId, Date.now());
+  return linkTripToJourney(orm, journeyId, tripId);
 }
 function skeletonFor(journeyId: number, placeId: number) {
-  return testDb.prepare('SELECT * FROM journey_entries WHERE journey_id = ? AND source_place_id = ?').get(journeyId, placeId) as any;
+  return findRow(orm, JourneyEntries, { journey: journeyId, sourcePlace: placeId });
 }
 
 beforeEach(() => {
@@ -37,7 +64,8 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -93,17 +121,17 @@ describe('Tool: assign_place_to_day', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id, { name: 'Linked Place' });
     const journey = createJourney(testDb, user.id);
-    linkJourney(journey.id, trip.id);
+    await linkJourney(journey.id, trip.id);
 
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'assign_place_to_day',
         arguments: { tripId: trip.id, dayId: day.id, placeId: place.id },
       });
-      const skeleton = skeletonFor(journey.id, place.id);
-      expect(skeleton).toBeDefined();
-      expect(skeleton.type).toBe('skeleton');
-      expect(skeleton.title).toBe('Linked Place');
+      const skeleton = await skeletonFor(journey.id, place.id);
+      expect(skeleton).not.toBeNull();
+      expect(skeleton!.type).toBe('skeleton');
+      expect(skeleton!.title).toBe('Linked Place');
     });
   });
 
@@ -200,7 +228,7 @@ describe('Tool: unassign_place', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM day_assignments WHERE id = ?').get(assignment.id)).toBeUndefined();
+      expect(await findRow(orm, DayAssignments, { id: assignment.id })).toBeNull();
     });
   });
 
@@ -222,17 +250,17 @@ describe('Tool: unassign_place', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const journey = createJourney(testDb, user.id);
-    linkJourney(journey.id, trip.id);
+    await linkJourney(journey.id, trip.id);
 
     await withHarness(user.id, async (h) => {
       // Assign via MCP (materialises the skeleton), then unassign that same assignment.
       const assigned = parseToolResult(
         await h.client.callTool({ name: 'assign_place_to_day', arguments: { tripId: trip.id, dayId: day.id, placeId: place.id } }),
       ) as any;
-      expect(skeletonFor(journey.id, place.id)).toBeDefined();
+      expect(await skeletonFor(journey.id, place.id)).not.toBeNull();
 
       await h.client.callTool({ name: 'unassign_place', arguments: { tripId: trip.id, dayId: day.id, assignmentId: assigned.assignment.id } });
-      expect(skeletonFor(journey.id, place.id)).toBeUndefined();
+      expect(await skeletonFor(journey.id, place.id)).toBeNull();
     });
   });
 
@@ -276,7 +304,7 @@ describe('Tool: clear_day_assignments (#2470)', () => {
       const data = parseToolResult(await h.client.callTool({ name: 'clear_day_assignments', arguments: { tripId: trip.id, dayId: day.id } })) as any;
       expect(data.success).toBe(true);
       expect([...data.removedIds].sort()).toEqual([a1.id, a2.id].sort());
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = ?').get(day.id)).toEqual({ n: 0 });
+      expect(await countRows(orm, DayAssignments, { day: day.id })).toBe(0);
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'assignment:deleted', expect.objectContaining({ assignmentId: a1.id, dayId: day.id }));
     });
   });
@@ -322,8 +350,8 @@ describe('Tool: reorder_day_assignments', () => {
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
 
-      const a1Updated = testDb.prepare('SELECT order_index FROM day_assignments WHERE id = ?').get(a1.id) as { order_index: number };
-      const a2Updated = testDb.prepare('SELECT order_index FROM day_assignments WHERE id = ?').get(a2.id) as { order_index: number };
+      const a1Updated = (await findRow(orm, DayAssignments, { id: a1.id }))!;
+      const a2Updated = (await findRow(orm, DayAssignments, { id: a2.id }))!;
       expect(a2Updated.order_index).toBe(0);
       expect(a1Updated.order_index).toBe(1);
     });
@@ -397,7 +425,7 @@ describe('Tool: update_assignment_time', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    testDb.prepare('UPDATE day_assignments SET assignment_time = ?, assignment_end_time = ? WHERE id = ?').run('09:00', '11:00', assignment.id);
+    await updateRows(orm, DayAssignments, { id: assignment.id }, { assignment_time: '09:00', assignment_end_time: '11:00' });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
@@ -430,19 +458,17 @@ describe('Tool: update_assignment_time', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const [a, b, c, d] = [0, 1, 2, 3].map(i => createDayAssignment(testDb, day.id, place.id, { order_index: i }).id);
-    testDb.prepare('UPDATE day_assignments SET assignment_time = ? WHERE id = ?').run('15:00', b);
-    const via = Number(testDb.prepare(
-      'INSERT INTO roadtrip_vias (day_id, after_order_index, sequence, lat, lng) VALUES (?, 1, 0, 48.1, 11.5)'
-    ).run(day.id).lastInsertRowid);
+    await updateRows(orm, DayAssignments, { id: b }, { assignment_time: '15:00' });
+    const via = await insertRow(orm, RoadtripVias, { day: day.id, after_order_index: 1, sequence: 0, lat: 48.1, lng: 11.5 });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'update_assignment_time', arguments: { tripId: trip.id, assignmentId: d, place_time: '10:00' } });
       expect((parseToolResult(result) as { assignment: { assignment_time: string } }).assignment.assignment_time).toBe('10:00');
     });
 
-    const order = (testDb.prepare('SELECT id FROM day_assignments WHERE day_id = ? ORDER BY order_index').all(day.id) as { id: number }[]).map(r => r.id);
+    const order = await dayOrder(day.id);
     expect(order).toEqual([a, d, b, c]);
-    expect(testDb.prepare('SELECT after_order_index FROM roadtrip_vias WHERE id = ?').get(via)).toEqual({ after_order_index: 2 });
+    expect(await viaAfterIndex(via)).toEqual({ after_order_index: 2 });
     expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'assignment:reordered', expect.objectContaining({ dayId: day.id, orderedIds: [a, d, b, c] }));
     expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'roadtripVia:changed', expect.objectContaining({
       dayId: day.id,
@@ -461,7 +487,7 @@ describe('Tool: update_assignment_time', () => {
       await h.client.callTool({ name: 'update_assignment_time', arguments: { tripId: trip.id, assignmentId: c, place_time: '14:00' } });
     });
 
-    const order = (testDb.prepare('SELECT id FROM day_assignments WHERE day_id = ? ORDER BY order_index').all(day.id) as { id: number }[]).map(r => r.id);
+    const order = await dayOrder(day.id);
     expect(order).toEqual([a, b, c]);
     expect(broadcastMock.mock.calls.map(call => call[1])).toEqual(['assignment:updated']);
   });
@@ -473,11 +499,9 @@ describe('Tool: update_assignment_time', () => {
     const place = createPlace(testDb, trip.id);
     // B starts before A and was put behind it on purpose.
     const [a, b] = [0, 1].map(i => createDayAssignment(testDb, day.id, place.id, { order_index: i }).id);
-    testDb.prepare("UPDATE day_assignments SET assignment_time = '14:00' WHERE id = ?").run(a);
-    testDb.prepare("UPDATE day_assignments SET assignment_time = '10:00' WHERE id = ?").run(b);
-    const via = Number(testDb.prepare(
-      'INSERT INTO roadtrip_vias (day_id, after_order_index, sequence, lat, lng) VALUES (?, 0, 0, 48.1, 11.5)'
-    ).run(day.id).lastInsertRowid);
+    await updateRows(orm, DayAssignments, { id: a }, { assignment_time: '14:00' });
+    await updateRows(orm, DayAssignments, { id: b }, { assignment_time: '10:00' });
+    const via = await insertRow(orm, RoadtripVias, { day: day.id, after_order_index: 0, sequence: 0, lat: 48.1, lng: 11.5 });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'update_assignment_time', arguments: { tripId: trip.id, assignmentId: b, end_time: '11:30' } });
@@ -485,9 +509,9 @@ describe('Tool: update_assignment_time', () => {
         .toMatchObject({ assignment_time: '10:00', assignment_end_time: '11:30' });
     });
 
-    const order = (testDb.prepare('SELECT id FROM day_assignments WHERE day_id = ? ORDER BY order_index').all(day.id) as { id: number }[]).map(r => r.id);
+    const order = await dayOrder(day.id);
     expect(order).toEqual([a, b]);
-    expect(testDb.prepare('SELECT after_order_index FROM roadtrip_vias WHERE id = ?').get(via)).toEqual({ after_order_index: 0 });
+    expect(await viaAfterIndex(via)).toEqual({ after_order_index: 0 });
     expect(broadcastMock.mock.calls.map(call => call[1])).toEqual(['assignment:updated']);
   });
 
@@ -533,7 +557,7 @@ describe('Tool: update_assignment_notes', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.assignment.notes).toBe('Book the 10:00 timed entry and arrive 15 minutes early');
-      expect(testDb.prepare('SELECT notes FROM day_assignments WHERE id = ?').get(assignment.id)).toEqual({ notes: 'Book the 10:00 timed entry and arrive 15 minutes early' });
+      expect(await assignmentNotes(assignment.id)).toEqual({ notes: 'Book the 10:00 timed entry and arrive 15 minutes early' });
     });
   });
 
@@ -543,7 +567,7 @@ describe('Tool: update_assignment_notes', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    testDb.prepare('UPDATE day_assignments SET notes = ? WHERE id = ?').run('old', assignment.id);
+    await updateRows(orm, DayAssignments, { id: assignment.id }, { notes: 'old' });
 
     await withHarness(user.id, async (h) => {
       const cleared = parseToolResult(await h.client.callTool({
@@ -551,7 +575,7 @@ describe('Tool: update_assignment_notes', () => {
         arguments: { tripId: trip.id, assignmentId: assignment.id, notes: null },
       })) as any;
       expect(cleared.assignment.notes).toBeNull();
-      testDb.prepare('UPDATE day_assignments SET notes = ? WHERE id = ?').run('old', assignment.id);
+      await updateRows(orm, DayAssignments, { id: assignment.id }, { notes: 'old' });
       const emptied = parseToolResult(await h.client.callTool({
         name: 'update_assignment_notes',
         arguments: { tripId: trip.id, assignmentId: assignment.id, notes: '' },
@@ -591,7 +615,7 @@ describe('Tool: update_assignment_notes', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'update_assignment_notes', arguments: { tripId: trip.id, assignmentId: assignment.id, notes: 'n' } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT notes FROM day_assignments WHERE id = ?').get(assignment.id)).toEqual({ notes: null });
+      expect(await assignmentNotes(assignment.id)).toEqual({ notes: null });
     });
   });
 });

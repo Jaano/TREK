@@ -38,6 +38,25 @@ import { setAddonEnabled } from '../../helpers/test-db';
 import { ADDON_IDS } from '../../../src/addons';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 import { VacayService } from '../../../src/nest/vacay/vacay.service';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow, insertRow } from '../../helpers/factories/rows';
+import { VacayEntries } from '../../../src/db/entities/VacayEntries.entity';
+import { VacayHolidayCalendars } from '../../../src/db/entities/VacayHolidayCalendars.entity';
+import { VacayPlanMembers } from '../../../src/db/entities/VacayPlanMembers.entity';
+import { VacayPlans } from '../../../src/db/entities/VacayPlans.entity';
+import { VacayShares } from '../../../src/db/entities/VacayShares.entity';
+import { VacayUserSettings } from '../../../src/db/entities/VacayUserSettings.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+/** The plan the user was invited into. */
+async function invitedPlanId(userId: number): Promise<number> {
+  return (await findRow(orm, VacayPlanMembers, { user: userId }))!.plan_id;
+}
 
 // The plan-settings tests below need the real SQL write, so keep the
 // implementation the blanket stub replaces and delegate to it for one call.
@@ -70,7 +89,8 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -94,7 +114,7 @@ async function fusePlan(ownerId: number, memberId: number): Promise<number> {
   await withHarness(ownerId, async (h) => {
     await h.client.callTool({ name: 'send_vacay_invite', arguments: { targetUserId: memberId } });
   });
-  const planId = (testDb.prepare('SELECT plan_id FROM vacay_plan_members WHERE user_id = ?').get(memberId) as { plan_id: number }).plan_id;
+  const planId = await invitedPlanId(memberId);
   await withHarness(memberId, async (h) => {
     await h.client.callTool({ name: 'accept_vacay_invite', arguments: { planId } });
   });
@@ -148,7 +168,7 @@ describe('Tool: update_vacay_plan', () => {
       const data = parseToolResult(result) as any;
       expect(data.plan.school_holidays_enabled).toBe(true);
 
-      const row = testDb.prepare('SELECT school_holidays_enabled, weekend_days, week_start FROM vacay_plans WHERE owner_id = ?').get(user.id) as any;
+      const row = (await findRow(orm, VacayPlans, { owner: user.id }))!;
       expect(row.school_holidays_enabled).toBe(1);
       expect(row.weekend_days).toBe('5,6');
       expect(row.week_start).toBe(0);
@@ -160,7 +180,7 @@ describe('Tool: update_vacay_plan', () => {
     updatePlanSpy.mockImplementationOnce(realUpdatePlan);
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'update_vacay_plan', arguments: { weekend_days: '1,2' } });
-      const row = testDb.prepare('SELECT weekend_days, week_start, school_holidays_enabled FROM vacay_plans WHERE owner_id = ?').get(user.id) as any;
+      const row = (await findRow(orm, VacayPlans, { owner: user.id }))!;
       expect(row.weekend_days).toBe('1,2');
       // Column defaults, not values this call wrote.
       expect(row.week_start).toBe(1);
@@ -205,8 +225,7 @@ describe('Tool: get_vacay_year_settings', () => {
 
   it('returns a stored fiscal window', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO vacay_user_settings (user_id, year_type, year_start_month, year_start_day, hire_date) VALUES (?, ?, ?, ?, ?)')
-      .run(user.id, 'fiscal', 4, 6, null);
+    await insertRow(orm, VacayUserSettings, { user: user.id, year_type: 'fiscal', year_start_month: 4, year_start_day: 6, hire_date: null });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_vacay_year_settings', arguments: {} });
       const data = parseToolResult(result) as any;
@@ -346,7 +365,7 @@ describe('Tool: toggle_vacay_entry', () => {
       const data = parseToolResult(result) as any;
       expect(data.action).toBe('added');
 
-      const row = testDb.prepare('SELECT fraction, kind FROM vacay_entries WHERE user_id = ? AND date = ?').get(user.id, '2025-06-16') as any;
+      const row = (await findRow(orm, VacayEntries, { user: user.id, date: '2025-06-16' }))!;
       expect(row.fraction).toBe(0.5);
       expect(row.kind).toBe('vacation');
     });
@@ -356,7 +375,7 @@ describe('Tool: toggle_vacay_entry', () => {
     const { user } = createUser(testDb);
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-17', kind: 'comp' } });
-      const row = testDb.prepare('SELECT fraction, kind FROM vacay_entries WHERE user_id = ? AND date = ?').get(user.id, '2025-06-17') as any;
+      const row = (await findRow(orm, VacayEntries, { user: user.id, date: '2025-06-17' }))!;
       expect(row.kind).toBe('comp');
       expect(row.fraction).toBe(1);
     });
@@ -364,19 +383,19 @@ describe('Tool: toggle_vacay_entry', () => {
 
   it('converts the day in place on a different fraction and clears it on a repeat', async () => {
     const { user } = createUser(testDb);
-    const row = () => testDb.prepare('SELECT fraction, kind FROM vacay_entries WHERE user_id = ? AND date = ?').get(user.id, '2025-06-18') as any;
+    const row = () => findRow(orm, VacayEntries, { user: user.id, date: '2025-06-18' });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-18', fraction: 0.5, kind: 'comp' } });
-      expect(row().fraction).toBe(0.5);
+      expect((await row())!.fraction).toBe(0.5);
 
       const converted = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-18', fraction: 1, kind: 'comp' } });
       expect((parseToolResult(converted) as any).action).toBe('updated');
-      expect(row().fraction).toBe(1);
-      expect(row().kind).toBe('comp');
+      expect((await row())!.fraction).toBe(1);
+      expect((await row())!.kind).toBe('comp');
 
       const cleared = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-18', fraction: 1, kind: 'comp' } });
       expect((parseToolResult(cleared) as any).action).toBe('removed');
-      expect(row()).toBeUndefined();
+      expect(await row()).toBeNull();
     });
   });
 
@@ -392,7 +411,7 @@ describe('Tool: toggle_vacay_entry', () => {
       });
       expect((parseToolResult(result) as any).action).toBe('added');
 
-      const row = testDb.prepare('SELECT user_id, fraction FROM vacay_entries WHERE date = ?').get('2025-06-19') as any;
+      const row = (await findRow(orm, VacayEntries, { date: '2025-06-19' }))!;
       expect(row.user_id).toBe(member.id);
       expect(row.fraction).toBe(0.5);
     });
@@ -408,7 +427,7 @@ describe('Tool: toggle_vacay_entry', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toBe('User not in plan');
-      expect(testDb.prepare('SELECT id FROM vacay_entries WHERE user_id = ?').get(stranger.id)).toBeUndefined();
+      expect(await findRow(orm, VacayEntries, { user: stranger.id })).toBeNull();
     });
   });
 
@@ -417,7 +436,7 @@ describe('Tool: toggle_vacay_entry', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-21', fraction: 0.25 } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM vacay_entries WHERE date = ?').get('2025-06-21')).toBeUndefined();
+      expect(await findRow(orm, VacayEntries, { date: '2025-06-21' })).toBeNull();
     });
   });
 
@@ -426,7 +445,7 @@ describe('Tool: toggle_vacay_entry', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-22', kind: 'sabbatical' } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM vacay_entries WHERE date = ?').get('2025-06-22')).toBeUndefined();
+      expect(await findRow(orm, VacayEntries, { date: '2025-06-22' })).toBeNull();
     });
   });
 
@@ -542,7 +561,7 @@ describe('Tool: add_holiday_calendar', () => {
         arguments: { region: 'DE-BY', type: 'school_holiday' },
       });
       const data = parseToolResult(result) as any;
-      const row = testDb.prepare('SELECT type, region, color FROM vacay_holiday_calendars WHERE id = ?').get(data.calendar.id) as any;
+      const row = (await findRow(orm, VacayHolidayCalendars, { id: data.calendar.id }))!;
       expect(row.type).toBe('school_holiday');
       expect(row.region).toBe('DE-BY');
       expect(row.color).toBe('#a5f3fc');
@@ -554,7 +573,7 @@ describe('Tool: add_holiday_calendar', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'add_holiday_calendar', arguments: { region: 'GB' } });
       const data = parseToolResult(result) as any;
-      const row = testDb.prepare('SELECT type, color FROM vacay_holiday_calendars WHERE id = ?').get(data.calendar.id) as any;
+      const row = (await findRow(orm, VacayHolidayCalendars, { id: data.calendar.id }))!;
       expect(row.type).toBe('public_holiday');
       expect(row.color).toBe('#fecaca');
     });
@@ -565,7 +584,7 @@ describe('Tool: add_holiday_calendar', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'add_holiday_calendar', arguments: { region: 'DE', type: 'bank_holiday' } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM vacay_holiday_calendars WHERE region = ?').get('DE')).toBeUndefined();
+      expect(await findRow(orm, VacayHolidayCalendars, { region: 'DE' })).toBeNull();
     });
   });
 
@@ -829,8 +848,8 @@ describe('Tool: share_vacay_calendar', () => {
       const result = await h.client.callTool({ name: 'share_vacay_calendar', arguments: { targetUserId: other.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      const row = testDb.prepare('SELECT id FROM vacay_shares WHERE owner_id = ? AND user_id = ?').get(user.id, other.id);
-      expect(row).toBeDefined();
+      const row = await findRow(orm, VacayShares, { owner: user.id, user: other.id });
+      expect(row).not.toBeNull();
     });
   });
 
@@ -863,12 +882,12 @@ describe('Tool: unshare_vacay_calendar', () => {
     const { user: other } = createUser(testDb);
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'share_vacay_calendar', arguments: { targetUserId: other.id } });
-      const shareId = (testDb.prepare('SELECT id FROM vacay_shares WHERE owner_id = ?').get(user.id) as any).id;
+      const shareId = (await findRow(orm, VacayShares, { owner: user.id }))!.id;
 
       const result = await h.client.callTool({ name: 'unshare_vacay_calendar', arguments: { shareId } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM vacay_shares WHERE id = ?').get(shareId)).toBeUndefined();
+      expect(await findRow(orm, VacayShares, { id: shareId })).toBeNull();
     });
   });
 
@@ -964,7 +983,7 @@ describe('Tool: decline_vacay_invite', () => {
       await h.client.callTool({ name: 'send_vacay_invite', arguments: { targetUserId: invitee.id } });
     });
     await withHarness(invitee.id, async (h) => {
-      const result = await h.client.callTool({ name: 'decline_vacay_invite', arguments: { planId: (testDb.prepare('SELECT plan_id FROM vacay_plan_members WHERE user_id = ?').get(invitee.id) as { plan_id: number }).plan_id } });
+      const result = await h.client.callTool({ name: 'decline_vacay_invite', arguments: { planId: await invitedPlanId(invitee.id) } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
     });

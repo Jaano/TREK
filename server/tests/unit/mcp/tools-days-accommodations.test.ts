@@ -28,6 +28,28 @@ import { createUser, createTrip, createDay, createPlace, createDayAccommodation,
 import { invalidatePermissionsCache } from '../../../src/nest/permissions/permissions-cache';
 import { DayRemovalService } from '../../../src/nest/days/day-removal.service';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, deleteRows, findRow, findRows } from '../../helpers/factories/rows';
+import { makeReservation } from '../../helpers/factories/reservations';
+import { setAppSetting } from '../../helpers/factories/settings';
+import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
+import { DayAccommodations } from '../../../src/db/entities/DayAccommodations.entity';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+async function placeWebsite(id: number) {
+  const row = await findRow(orm, Places, { id });
+  return row ? { website: row.website } : undefined;
+}
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -35,7 +57,8 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -96,7 +119,7 @@ describe('Tool: create_day', () => {
       expect(text).toContain('Start day not found');
       expect(text).toContain(', ');
     });
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_accommodations').get()).toEqual({ n: 0 });
+    expect(await countRows(orm, DayAccommodations)).toBe(0);
   });
 
   it('returns access denied for non-member', async () => {
@@ -125,13 +148,13 @@ describe('Tool: create_day', () => {
 // ---------------------------------------------------------------------------
 
 describe('Tool: delete_day', () => {
-  const dayRows = (tripId: number) =>
-    testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as { id: number; day_number: number; date: string | null }[];
+  const dayRows = async (tripId: number) =>
+    (await findRows(orm, Days, { trip: tripId }, { day_number: 'asc' })).map(d => ({ id: d.id, day_number: d.day_number, date: d.date }));
 
   it('deletes a day the way REST does: the gap closes, the dates stay on their slots, and every screen hears it', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-01-01', end_date: '2026-01-03' });
-    const [d1, d2, d3] = dayRows(trip.id);
+    const [d1, d2, d3] = await dayRows(trip.id);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'delete_day',
@@ -139,12 +162,12 @@ describe('Tool: delete_day', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(d2.id)).toBeUndefined();
-      expect(dayRows(trip.id)).toEqual([
+      expect(await findRow(orm, Days, { id: d2.id })).toBeNull();
+      expect(await dayRows(trip.id)).toEqual([
         { id: d1.id, day_number: 1, date: '2026-01-01' },
         { id: d3.id, day_number: 2, date: '2026-01-02' },
       ]);
-      expect(testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(trip.id)).toEqual({ end_date: '2026-01-02' });
+      expect((await findRow(orm, Trips, { id: trip.id }))!.end_date).toBe('2026-01-02');
       const events = broadcastMock.mock.calls.map(c => c[1]);
       expect(events).toEqual(['day:deleted', 'day:reordered', 'trip:updated']);
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'day:deleted', expect.objectContaining({ dayId: d2.id }));
@@ -160,17 +183,17 @@ describe('Tool: delete_day', () => {
     const d2 = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id, { name: 'Harbour Hotel' });
     const stay = createDayAccommodation(testDb, trip.id, place.id, d2.id, d2.id);
-    const reservationId = Number(testDb.prepare(
-      "INSERT INTO reservations (trip_id, day_id, title, type, accommodation_id) VALUES (?, ?, 'Harbour Hotel', 'hotel', ?)",
-    ).run(trip.id, d2.id, stay.id).lastInsertRowid);
+    const { id: reservationId } = await makeReservation(orm, trip.id, {
+      day: d2.id, title: 'Harbour Hotel', type: 'hotel', accommodation_id: String(stay.id),
+    });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'delete_day', arguments: { tripId: trip.id, dayId: d2.id } });
       expect(result.isError).toBeFalsy();
-      expect(testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(stay.id)).toBeUndefined();
-      expect(testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(reservationId)).toBeUndefined();
+      expect(await findRow(orm, DayAccommodations, { id: stay.id })).toBeNull();
+      expect(await findRow(orm, Reservations, { id: reservationId })).toBeNull();
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'reservation:deleted', expect.objectContaining({ reservationId }));
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'accommodation:deleted', expect.objectContaining({ accommodationId: stay.id }));
-      expect(dayRows(trip.id).map(r => r.id)).toEqual([d1.id]);
+      expect((await dayRows(trip.id)).map(r => r.id)).toEqual([d1.id]);
     });
   });
 
@@ -182,7 +205,7 @@ describe('Tool: delete_day', () => {
       const result = await h.client.callTool({ name: 'delete_day', arguments: { tripId: trip.id, dayId: day.id } });
       expect(result.isError).toBe(true);
       expect(JSON.stringify(result.content)).toContain('A trip needs at least one day.');
-      expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id)).toBeDefined();
+      expect(await findRow(orm, Days, { id: day.id })).not.toBeNull();
       expect(broadcastMock).not.toHaveBeenCalled();
     });
   });
@@ -234,16 +257,16 @@ describe('Tool: delete_day', () => {
     addTripMember(testDb, trip.id, member.id);
     const day = createDay(testDb, trip.id);
     createDay(testDb, trip.id);
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_day_edit', 'trip_owner')").run();
+    await setAppSetting(orm, 'perm_day_edit', 'trip_owner');
     await invalidatePermissionsCache();
     try {
       await withHarness(member.id, async (h) => {
         const result = await h.client.callTool({ name: 'delete_day', arguments: { tripId: trip.id, dayId: day.id } });
         expect(result.isError).toBe(true);
-        expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id)).toBeDefined();
+        expect(await findRow(orm, Days, { id: day.id })).not.toBeNull();
       });
     } finally {
-      testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_day_edit'").run();
+      await deleteRows(orm, AppSettings, { key: 'perm_day_edit' });
       await invalidatePermissionsCache();
     }
   });
@@ -257,7 +280,7 @@ describe('Tool: delete_day', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'delete_day', arguments: { tripId: trip.id, dayId: day.id } });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id)).toBeDefined();
+      expect(await findRow(orm, Days, { id: day.id })).not.toBeNull();
     });
   });
 });
@@ -394,7 +417,7 @@ describe('Tool: delete_accommodation', () => {
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'accommodation:deleted', expect.objectContaining({ id: acc.id }));
-      expect(testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(acc.id)).toBeUndefined();
+      expect(await findRow(orm, DayAccommodations, { id: acc.id })).toBeNull();
     });
   });
 
@@ -425,7 +448,7 @@ describe('Tool: create_place_accommodation', () => {
         name: 'create_place_accommodation',
         arguments: { tripId: trip.id, name: 'Hôtel du Faouët', start_day_id: day.id, end_day_id: day.id, website: 'www.hotel-faouet.example' },
       })) as { place: { id: number } };
-      expect(testDb.prepare('SELECT website FROM places WHERE id = ?').get(data.place.id)).toEqual({ website: 'https://www.hotel-faouet.example' });
+      expect(await placeWebsite(data.place.id)).toEqual({ website: 'https://www.hotel-faouet.example' });
     });
   });
 
@@ -446,7 +469,7 @@ describe('Tool: create_place_accommodation', () => {
         const data = parseToolResult(result) as { place: { id: number; website: unknown }; accommodation: { id: number } };
         expect(data.place.website, name).toBeNull();
         expect(data.accommodation.id, name).toBeGreaterThan(0);
-        expect(testDb.prepare('SELECT website FROM places WHERE id = ?').get(data.place.id), name).toEqual({ website: null });
+        expect(await placeWebsite(data.place.id), name).toEqual({ website: null });
       }
     });
   });
@@ -469,7 +492,7 @@ describe('Tool: create_place_accommodation', () => {
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'place:created', expect.objectContaining({ place: expect.anything() }));
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'accommodation:created', expect.objectContaining({ accommodation: expect.anything() }));
       // The partner hotel reservation rides along.
-      const linked = testDb.prepare('SELECT type FROM reservations WHERE accommodation_id = ?').get(data.accommodation.id) as { type: string };
+      const linked = (await findRow(orm, Reservations, { accommodation_id: String(data.accommodation.id) }))!;
       expect(linked.type).toBe('hotel');
     });
   });
@@ -483,7 +506,7 @@ describe('Tool: create_place_accommodation', () => {
         arguments: { tripId: trip.id, name: 'Nowhere Inn', start_day_id: 99999, end_day_id: 99999 },
       });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT COUNT(*) as n FROM places WHERE trip_id = ?').get(trip.id)).toMatchObject({ n: 0 });
+      expect(await countRows(orm, Places, { trip: trip.id })).toBe(0);
     });
   });
 
@@ -503,9 +526,9 @@ describe('Tool: create_place_accommodation', () => {
       expect(result.isError).toBe(true);
       const { content } = result as { content: { type: string; text?: string }[] };
       expect(content[0].text).toContain('Failed to create place and accommodation');
-      expect(testDb.prepare('SELECT COUNT(*) as n FROM places WHERE trip_id = ?').get(trip.id)).toMatchObject({ n: 0 });
-      expect(testDb.prepare('SELECT COUNT(*) as n FROM day_accommodations WHERE trip_id = ?').get(trip.id)).toMatchObject({ n: 0 });
-      expect(testDb.prepare('SELECT COUNT(*) as n FROM day_assignments WHERE day_id = ?').get(day.id)).toMatchObject({ n: 0 });
+      expect(await countRows(orm, Places, { trip: trip.id })).toBe(0);
+      expect(await countRows(orm, DayAccommodations, { trip: trip.id })).toBe(0);
+      expect(await countRows(orm, DayAssignments, { day: day.id })).toBe(0);
     });
   });
 });

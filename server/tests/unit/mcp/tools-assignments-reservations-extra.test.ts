@@ -22,6 +22,16 @@ vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, createDayAssignment, createReservation } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow, insertRow } from '../../helpers/factories/rows';
+import { AssignmentParticipants } from '../../../src/db/entities/AssignmentParticipants.entity';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -29,7 +39,8 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -64,7 +75,7 @@ describe('Tool: move_assignment', () => {
         expect.objectContaining({ oldDayId: day1.id, newDayId: day2.id }),
       );
       // Verify the assignment was moved
-      const updated = testDb.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(assignment.id) as any;
+      const updated = (await findRow(orm, DayAssignments, { id: assignment.id }))!;
       expect(updated.day_id).toBe(day2.id);
     });
   });
@@ -160,7 +171,7 @@ describe('Tool: set_assignment_participants', () => {
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
     // First set
-    testDb.prepare('INSERT INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)').run(assignment.id, user.id);
+    await insertRow(orm, AssignmentParticipants, { assignment: assignment.id, user: user.id });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'set_assignment_participants',

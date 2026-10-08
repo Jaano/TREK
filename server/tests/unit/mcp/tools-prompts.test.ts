@@ -9,7 +9,14 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 import { db as testDb } from '../../../src/db/database';
-import { CAN_ACCESS_TRIP_SQL } from '../../helpers/db-mock';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { inContext } from '../../helpers/factories/context';
+import { findRow, findRows } from '../../helpers/factories/rows';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { PackingItems } from '../../../src/db/entities/PackingItems.entity';
+import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory';
@@ -88,9 +95,11 @@ import type { EntityManager } from '@mikro-orm/core';
 // The trip-summary prompt moved to the DI-discovered TripsMcp — its cases below
 // exercise it through a hand-built registry over a stub TripsService whose
 // getTripSummary is the same controllable mock the legacy path used.
+let orm: TestOrm;
 const tripsStub = {
-  canAccessTrip: (tripId: number, userId: number) => testDb.prepare(CAN_ACCESS_TRIP_SQL).get(userId, tripId, userId),
-  getRaw: async (tripId: number) => testDb.prepare('SELECT * FROM trips WHERE id = ?').get(tripId),
+  canAccessTrip: (tripId: number, userId: number) =>
+    inContext(orm, (em) => em.getRepository(Trips).findAccessible(tripId, userId)),
+  getRaw: async (tripId: number) => (await findRow(orm, Trips, { id: Number(tripId) })) ?? undefined,
 } as unknown as TripsService;
 // getTripSummary moved to TripReadModelService with the trip split; the mock is
 // the same controllable one, one constructor slot further along.
@@ -124,6 +133,7 @@ let promptBudget: BudgetService;
 let budgetMcp: BudgetMcp;
 let tripPromptsMcp: TripPromptsMcp;
 beforeAll(async () => {
+  orm = await createTestOrm(testDb);
   promptEm = (await sharedTestOrm(testDb)).em;
   promptGuards = new McpToolGuardsService(await createTestTripsRepo(testDb), await createTestUsersRepo(testDb), new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new RealtimeService());
   tripsMcp = new TripsMcp(
@@ -182,15 +192,15 @@ beforeEach(() => {
   // via budget.items/budget.total; packing stays an array (the packing prompt
   // tolerates it).
   mockGetTripSummary.mockImplementation(async (tripId: any) => {
-    const trip = testDb.prepare('SELECT * FROM trips WHERE id = ?').get(tripId) as any;
+    const trip = await findRow(orm, Trips, { id: Number(tripId) });
     if (!trip) return null;
-    const members = testDb.prepare(`
-      SELECT u.id, u.username as name, u.email
-      FROM trip_members m JOIN users u ON u.id = m.user_id
-      WHERE m.trip_id = ?
-    `).all(tripId) as any[];
-    const budgetRows = testDb.prepare('SELECT * FROM budget_items WHERE trip_id = ?').all(tripId) as any[];
-    const packingRows = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ?').all(tripId) as any[];
+    const members = [];
+    for (const m of await findRows(orm, TripMembers, { trip: trip.id }, { id: 'asc' })) {
+      const u = await findRow(orm, Users, { id: m.user_id });
+      if (u) members.push({ id: u.id, name: u.username, email: u.email });
+    }
+    const budgetRows = await findRows(orm, BudgetItems, { trip: trip.id }, { id: 'asc' });
+    const packingRows = await findRows(orm, PackingItems, { trip: trip.id }, { id: 'asc' });
     // The totals come from the same BudgetService.tripTotals the real summary uses.
     const totals = await promptBudget.tripTotals(tripId, trip.currency || 'EUR');
     return {
@@ -212,7 +222,8 @@ beforeEach(() => {
   });
 });
 
-afterAll(() => {
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
