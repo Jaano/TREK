@@ -82,7 +82,7 @@ See [Install-Helm](Install-Helm) for the full installation walkthrough and value
 
 TREK runs any pending database migrations automatically at startup. No manual migration steps are required after pulling a new image.
 
-Migrations only go forward, so going back to an older image means going back to a copy of the database from before the update. Images from 4.4 on refuse to start on a database a newer TREK has migrated. Images from 4.3.x and earlier do not check this: they start on the newer database without a warning, so restore the copy before you start one of them.
+Migrations only go forward, so going back to an older image means going back to a copy of the database from before the update. Images from 5.0 on refuse to start on a database a newer TREK has migrated. Images from 4.3.x and earlier do not check this: they start on the newer database without a warning, so restore the copy before you start one of them.
 
 TREK takes that copy itself. Right before a startup applies pending migrations, it writes the database to `data/pre-migrate-<schema>-<time>.db` (next to `travel.db`, or next to the file `TREK_DB_FILE` names) and logs the path. `<schema>` names what the copy holds: `legacy-244` for a 4.3.3 install, or the last migration's number for a newer one. The newest three are kept (`TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP`). A restart with nothing to migrate and a brand-new install take no copy.
 
@@ -94,7 +94,7 @@ To go back to the previous image after an update:
 2. Copy the `pre-migrate-…db` file over `data/travel.db` and delete `data/travel.db-wal` and `data/travel.db-shm`.
 3. Start the previous image.
 
-An image from 4.4 on that refuses a newer database names the copy it can run, if one is in the data directory. An image from 4.3.x or earlier neither refuses nor points at the copy, so for those, steps 1 to 3 are the only way back. Uploads are not part of this copy; they are not changed by migrations. The copy is a safety net for the update, not a backup: keep taking backups as described in [Backups](Backups).
+An image from 5.0 on that refuses a newer database names the copy it can run, if one is in the data directory. An image from 4.3.x or earlier neither refuses nor points at the copy, so for those, steps 1 to 3 are the only way back. Uploads are not part of this copy; they are not changed by migrations. The copy is a safety net for the update, not a backup: keep taking backups as described in [Backups](Backups).
 
 ## After the Update
 
@@ -159,7 +159,7 @@ Open the **Stacks** list, click the TREK stack, then click **Redeploy**.
 
 ![Edit stack page with an arrow pointing to the Update the stack button](assets/portainer-update-stack.png)
 
-Portainer's **Recreate** on a single container keeps that container's environment, which on images before 4.4 included the previous release's `APP_VERSION`. TREK then kept reporting the old version and open apps did not switch to the new interface. Images from 4.4 on take the version from a file inside the image, so a recreated container reports the image it actually runs.
+Portainer's **Recreate** on a single container keeps that container's environment, which on images before 5.0 included the previous release's `APP_VERSION`. TREK then kept reporting the old version and open apps did not switch to the new interface. Images from 5.0 on take the version from a file inside the image, so a recreated container reports the image it actually runs.
 
 See [Install-Portainer](Install-Portainer) for the full installation walkthrough.
 
