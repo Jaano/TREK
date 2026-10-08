@@ -18,6 +18,7 @@ import type { DatabaseLifecycle } from './nest/database/database-lifecycle.servi
 import { getAppUrl, getMcpSafeUrl, readEnv } from './app-config';
 import { resolveDataPaths } from './app-config/data-paths';
 import { resolveDbPath } from './db/db-path';
+import { flushLogFileSync } from './nest/audit/audit-log.logger';
 
 // data/tmp is the driver-agnostic global scratch dir (restore-upload spool,
 // mirror stream staging) and stays boot-created here. Driver-owned roots — the
@@ -205,6 +206,11 @@ function shutdown(signal: string): void {
     process.exit(1);
   });
 }
+
+// trek.log is written in batches off the event loop. Whatever is still queued
+// when the process ends, by any of the exits above or below, goes out
+// synchronously here: an 'exit' listener cannot wait for a promise.
+process.on('exit', () => flushLogFileSync());
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
