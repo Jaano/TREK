@@ -1593,7 +1593,7 @@ describe('folded quirk branches', () => {
     expect((await storedFields(Trips, { id: trip.id }, ['is_archived']) as { is_archived: number | null }).is_archived).toBe(1);
   });
 
-  it('TRIP-SVC-072 (Task 7 security review L2, absorbed): the trip UPDATE (TP25) commits before the days-regeneration transaction — a failed regen leaves the new dates in place', async () => {
+  it('TRIP-SVC-072: the trip UPDATE (TP25) and the days regeneration are one write, so a failed regen rolls the new dates back', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Ordering', start_date: '2025-06-01', end_date: '2025-06-03' });
 
@@ -1605,13 +1605,11 @@ describe('folded quirk branches', () => {
       spy.mockRestore();
     }
 
-    // TP25's own write already landed — R5/§18.6's documented, unfixed quirk:
-    // it runs BEFORE generateDays' transaction, so a regen failure never
-    // rolls it back with the day rows it failed to regenerate.
+    // TP25 runs inside the same transaction as the regeneration, so the
+    // failure takes the new dates back with it.
     const row = await storedFields(Trips, { id: trip.id }, ['start_date', 'end_date']) as { start_date: string; end_date: string };
-    expect(row).toEqual({ start_date: '2025-07-01', end_date: '2025-07-03' });
-    // The day rows themselves never got touched by the failed regen — still
-    // the original 3, on their original dates.
+    expect(row).toEqual({ start_date: '2025-06-01', end_date: '2025-06-03' });
+    // The day rows are untouched too: still the original 3, on their original dates.
     expect((await getDays(trip.id))).toHaveLength(3);
     expect((await getDays(trip.id)).map(d => d.date)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03']);
   });
