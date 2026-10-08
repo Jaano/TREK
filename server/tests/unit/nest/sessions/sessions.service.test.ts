@@ -6,7 +6,8 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { UserSessions } from '../../../../src/db/entities/UserSessions.entity';
-import { SessionsService, USER_AGENT_MAX_LENGTH, sessionClientFrom } from '../../../../src/nest/sessions/sessions.service';
+import { SessionsService, USER_AGENT_MAX_LENGTH, legacySessionId, sessionClientFrom } from '../../../../src/nest/sessions/sessions.service';
+import { userSessionIdSchema } from '@trek/shared';
 import type { Request } from 'express';
 import { JWT_SECRET, SESSION_DURATION_REMEMBER_SECONDS, SESSION_DURATION_SECONDS } from '../../../../src/config';
 
@@ -134,6 +135,60 @@ describe('SessionsService.renew', () => {
     expect(claims.pv).toBe(0);
     expect(claims.remember).toBe(true);
     expect(rowOf(claims.jti)).toEqual(expect.objectContaining({ user_id: user.id, user_agent: 'Safari', revoked_at: null }));
+  });
+});
+
+describe('SessionsService.renew of a token from before tracking', () => {
+  /** A token as the server signed them before sessions were tracked: no jti. */
+  function untracked(userId: number): string {
+    return jwt.sign({ id: userId, pv: 0 }, JWT_SECRET, { algorithm: 'HS256', expiresIn: SESSION_DURATION_SECONDS });
+  }
+
+  it('SESS-012: the requests of one page load renew it into a single session', async () => {
+    const { user } = createUser(testDb);
+    const legacy = untracked(user.id);
+
+    // Every request of the load carries the same cookie and renews it.
+    const renewed: (string | null)[] = [];
+    for (let i = 0; i < 5; i++) renewed.push(await svc.renew({ id: user.id, pv: 0, token: legacy }, { userAgent: 'Page load' }));
+
+    const ids = new Set(renewed.map((token) => claimsOf(token!).jti));
+    expect(ids).toEqual(new Set([legacySessionId(legacy)]));
+    expect(testDb.prepare('SELECT id, user_agent, revoked_at FROM user_sessions WHERE user_id = ?').all(user.id)).toEqual([
+      { id: legacySessionId(legacy), user_agent: 'Page load', revoked_at: null },
+    ]);
+    expect(await svc.list(user.id)).toHaveLength(1);
+  });
+
+  it('SESS-013: a session derived from it that was ended is not brought back', async () => {
+    const { user } = createUser(testDb);
+    const legacy = untracked(user.id);
+    const first = claimsOf((await svc.renew({ id: user.id, pv: 0, token: legacy }))!);
+    expect(await svc.revoke(user.id, first.jti)).toBe(true);
+
+    expect(await svc.renew({ id: user.id, pv: 0, token: legacy })).toBeNull();
+    expect(rowOf(first.jti)?.revoked_at).not.toBeNull();
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = ?').get(user.id)).toEqual({ n: 1 });
+  });
+
+  it('SESS-014: two different tokens of the same user stay two sessions', async () => {
+    const { user } = createUser(testDb);
+    const a = claimsOf((await svc.renew({ id: user.id, pv: 0, token: untracked(user.id) }))!);
+    const b = claimsOf((await svc.renew({ id: user.id, pv: 0, token: jwt.sign({ id: user.id, pv: 0, n: 2 }, JWT_SECRET) }))!);
+    expect(a.jti).not.toBe(b.jti);
+  });
+});
+
+describe('legacySessionId', () => {
+  it('SESS-015: is stable per token, differs between tokens and passes the session id check', () => {
+    const one = legacySessionId('header.payload.signature-one');
+    expect(legacySessionId('header.payload.signature-one')).toBe(one);
+    expect(legacySessionId('header.payload.signature-two')).not.toBe(one);
+    for (const token of ['a', 'b', 'header.payload.signature-one', 'x'.repeat(500)]) {
+      const id = legacySessionId(token);
+      expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      expect(userSessionIdSchema.safeParse(id).success).toBe(true);
+    }
   });
 });
 

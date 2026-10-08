@@ -80,7 +80,7 @@ describe('SessionRenewalInterceptor', () => {
     const res = makeRes();
     const t = token({ id: 1, pv: 3 }, 86400, 60000); // ~70% consumed
     await run(interceptor, { cookies: { trek_session: t }, user: { id: 1 } }, res);
-    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 3, remember: undefined, jti: undefined }, { userAgent: null });
+    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 3, remember: undefined, jti: undefined, token: t }, { userAgent: null });
     expect(res.cookie).toHaveBeenCalledWith('trek_session', 'renewed.jwt', expect.objectContaining({ maxAge: 86400000, httpOnly: true }));
   });
 
@@ -89,7 +89,7 @@ describe('SessionRenewalInterceptor', () => {
     const res = makeRes();
     const t = token({ id: 1, pv: 0, remember: true }, 2592000, 1600000); // ~62% consumed
     await run(interceptor, { cookies: { trek_session: t }, user: { id: 1 } }, res);
-    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: true, jti: undefined }, { userAgent: null });
+    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: true, jti: undefined, token: t }, { userAgent: null });
     expect(res.cookie).toHaveBeenCalledWith('trek_session', 'renewed.jwt', expect.objectContaining({ maxAge: 2592000000 }));
   });
 
@@ -98,7 +98,7 @@ describe('SessionRenewalInterceptor', () => {
     const res = makeRes();
     const t = token({ id: 1, pv: 0, remember: false }, 86400, 60000);
     await run(interceptor, { cookies: { trek_session: t }, user: { id: 1 } }, res);
-    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: false, jti: undefined }, { userAgent: null });
+    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: false, jti: undefined, token: t }, { userAgent: null });
     const options = res.cookie.mock.calls[0][2];
     expect(options).not.toHaveProperty('maxAge');
   });
@@ -108,7 +108,7 @@ describe('SessionRenewalInterceptor', () => {
     const res = makeRes();
     const t = token({ id: 1, pv: 0 }, 86400, 60000);
     await run(interceptor, { cookies: { trek_session: t }, user: { id: 1 } }, res);
-    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: undefined, jti: undefined }, { userAgent: null });
+    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: undefined, jti: undefined, token: t }, { userAgent: null });
     expect(res.cookie).toHaveBeenCalledWith('trek_session', 'renewed.jwt', expect.objectContaining({ maxAge: 86400000 }));
   });
 
@@ -179,7 +179,7 @@ describe('SessionRenewalInterceptor', () => {
     const res = makeRes();
     const t = jwt.sign({ id: 1, pv: 0, iat: Math.floor(Date.now() / 1000) - 60000 }, SECRET, { expiresIn: 86400, algorithm: 'HS256', jwtid: 'sid-1' });
     await run(interceptor, { cookies: { trek_session: t }, user: { id: 1 }, headers: { 'user-agent': 'Firefox/130' } }, res);
-    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: undefined, jti: 'sid-1' }, { userAgent: 'Firefox/130' });
+    expect(renew).toHaveBeenCalledWith({ id: 1, pv: 0, remember: undefined, jti: 'sid-1', token: t }, { userAgent: 'Firefox/130' });
     expect(res.cookie).toHaveBeenCalledWith('trek_session', 'renewed.jwt', expect.objectContaining({ maxAge: 86400000 }));
   });
 

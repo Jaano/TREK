@@ -203,4 +203,23 @@ describe('UserSessionsRepository', () => {
     expect(row('orphan')).toBeUndefined();
     expect(await sessions.restoreCarried([])).toBe(0);
   });
+
+  it('SESSREPO-013: insertSessionIfAbsent writes a new row and leaves an existing one alone', async () => {
+    const { user } = createUser(testDb);
+    await sessions.insertSessionIfAbsent({ id: 'derived', user_id: user.id, created_at: EARLIER, expires_at: LATER, user_agent: 'First' });
+    testDb.prepare("UPDATE user_sessions SET revoked_at = ? WHERE id = 'derived'").run(NOW);
+    t.clear();
+
+    await sessions.insertSessionIfAbsent({ id: 'derived', user_id: user.id, created_at: NOW, expires_at: '2026-12-01 00:00:00', user_agent: 'Second' });
+
+    expect(row('derived')).toStrictEqual({
+      id: 'derived',
+      user_id: user.id,
+      created_at: EARLIER,
+      last_seen_at: EARLIER,
+      expires_at: LATER,
+      revoked_at: NOW,
+      user_agent: 'First',
+    });
+  });
 });

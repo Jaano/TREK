@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import type { Request } from 'express';
@@ -23,6 +23,24 @@ export interface RenewableSessionClaims {
   pv?: number;
   remember?: boolean;
   jti?: string;
+  /**
+   * The token itself. A token from before sessions were tracked has no `jti`,
+   * and its session id is derived from it, so every renewal of that one token
+   * lands on the same session.
+   */
+  token?: string;
+}
+
+/**
+ * The session id a token from before sessions were tracked is renewed into:
+ * a SHA-256 of the token, laid out as a version 8 UUID (RFC 9562), so it
+ * passes the same id check a random one does. The same token always gives the
+ * same id; any other token, which differs at least in its signature, another.
+ */
+export function legacySessionId(token: string): string {
+  const h = createHash('sha256').update(token).digest('hex');
+  const variant = ((parseInt(h.charAt(16), 16) & 0x3) | 0x8).toString(16);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-8${h.slice(13, 16)}-${variant}${h.slice(17, 20)}-${h.slice(20, 32)}`;
 }
 
 /** The device description of a request: its User-Agent header, when it sent one. */
@@ -84,12 +102,39 @@ export class SessionsService {
    * the old token keeps working until its own expiry whatever happens next.
    */
   async renew(claims: RenewableSessionClaims, client: SessionClient = {}): Promise<string | null> {
-    const user = { id: claims.id, pv: claims.pv ?? 0 };
-    if (claims.jti === undefined) return this.issue(user, claims.remember, client);
-    const token = this.sign(user, claims.remember, claims.jti);
+    if (claims.jti === undefined) return this.renewUntracked(claims, client);
+    const token = this.sign({ id: claims.id, pv: claims.pv ?? 0 }, claims.remember, claims.jti);
     const { exp } = this.lifetimeOf(token);
     const extended = await this.sessions.extendActive(claims.jti, claims.id, dbNow(), dbNow(new Date(exp * 1000)));
     return extended ? token : null;
+  }
+
+  /**
+   * A token from before sessions were tracked, renewed into a tracked one.
+   *
+   * A page load sends many requests at once, and each of them past the token's
+   * half life renews it. With a random id every one of them would add a
+   * session, and the list would show one browser several times until they
+   * expired. The id is derived from the token instead and the row inserted
+   * only if it is not there yet, so all of them land on one session. If that
+   * session was ended in the meantime, nothing is renewed.
+   *
+   * @txStandalone one statement, standing on its own like `renew`.
+   */
+  private async renewUntracked(claims: RenewableSessionClaims, client: SessionClient): Promise<string | null> {
+    const user = { id: claims.id, pv: claims.pv ?? 0 };
+    if (claims.token === undefined) return this.issue(user, claims.remember, client);
+    const jti = legacySessionId(claims.token);
+    const token = this.sign(user, claims.remember, jti);
+    const { iat, exp } = this.lifetimeOf(token);
+    await this.sessions.insertSessionIfAbsent({
+      id: jti,
+      user_id: user.id,
+      created_at: dbNow(new Date(iat * 1000)),
+      expires_at: dbNow(new Date(exp * 1000)),
+      user_agent: clipUserAgent(client.userAgent),
+    });
+    return (await this.sessions.findActive(jti, user.id, dbNow())) ? token : null;
   }
 
   /** The user's active sessions, most recently used first, the one in `currentId` flagged. */

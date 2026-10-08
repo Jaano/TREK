@@ -57,6 +57,25 @@ export class UserSessionsRepository extends TrekRepository<UserSessions> {
   }
 
   /**
+   * `INSERT INTO user_sessions (id, user_id, created_at, last_seen_at, expires_at, user_agent)
+   *  VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`: a row that is
+   * already there, ended or not, is left exactly as it is.
+   */
+  async insertSessionIfAbsent(row: NewUserSessionRow): Promise<void> {
+    await this.upsertMany(
+      [{
+        id: row.id,
+        user: row.user_id,
+        created_at: row.created_at,
+        last_seen_at: row.created_at,
+        expires_at: row.expires_at,
+        user_agent: row.user_agent,
+      }],
+      { onConflictFields: ['id'], onConflictAction: 'ignore' },
+    );
+  }
+
+  /**
    * The check behind every session token that carries an id:
    * `SELECT id, last_seen_at FROM user_sessions WHERE id = ? AND user_id = ?
    *  AND revoked_at IS NULL AND expires_at > ?`. The owner is part of the

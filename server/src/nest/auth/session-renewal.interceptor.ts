@@ -20,7 +20,9 @@ import { setAuthCookie } from '../common/cookie';
  *   the decoded (not re-verified) token.
  * - A tracked token is re-signed under the same session id and the session's
  *   expiry moves with it; a token from before sessions were tracked comes back
- *   as a tracked session. If the session ended in between, nothing is renewed.
+ *   as a tracked session whose id is derived from that token, so the parallel
+ *   requests of one page load renew it into one session, not several. If the
+ *   session ended in between, nothing is renewed.
  * - The cookie is only renewed when it is the verified credential: extractToken
  *   prefers the cookie over the Authorization header, so cookie-present +
  *   req.user set means the guard verified the cookie. Bearer-only callers
@@ -58,7 +60,7 @@ export class SessionRenewalInterceptor implements NestInterceptor {
     if (Date.now() / 1000 < halfLife) return;
 
     const token = await this.sessions.renew(
-      { id: req.user.id, pv: claims.pv, remember: claims.remember, jti: claims.jti },
+      { id: req.user.id, pv: claims.pv, remember: claims.remember, jti: claims.jti, token: cookieToken },
       sessionClientFrom(req),
     );
     if (token) setAuthCookie(res, token, req, claims.remember);
