@@ -41,6 +41,33 @@ export function generateUUID(): string {
 }
 
 let _flushing = false
+
+/**
+ * Take the cross-tab flush lock, or learn that another tab holds it. Every open
+ * tab of the account shares the queue and runs its own triggers, and the
+ * _flushing flag only covers its own tab: two tabs read the same pending rows
+ * and replay each of them twice, leaning on the server's replay cache to answer
+ * the second. Resolves to the release function, or null when another tab is
+ * flushing (that flush picks the rows up). Where the Web Locks API is missing
+ * or refuses the request, the flush runs as before, guarded by the flag alone.
+ * The lock goes with the tab, so a tab killed mid-flush never strands it.
+ */
+function acquireFlushLock(): Promise<(() => void) | null> {
+  const noop = () => {}
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
+  if (!locks || typeof locks.request !== 'function') return Promise.resolve(noop)
+  return new Promise(resolve => {
+    locks
+      .request(`trek-mutation-flush:${offlineDb.name}`, { ifAvailable: true }, lock => {
+        if (!lock) {
+          resolve(null)
+          return undefined
+        }
+        return new Promise<void>(release => resolve(release))
+      })
+      .catch(() => resolve(noop))
+  })
+}
 // A row sits on 'syncing' only while its request is in flight, and the shared
 // axios instance times out at 8s. Anything still 'syncing' a minute later
 // belongs to a flush that never reached its catch — the tab was killed, the PWA
@@ -216,6 +243,11 @@ export const mutationQueue = {
   async flush(): Promise<void> {
     if (_flushing || isEffectivelyOffline() || !isAuthed()) return
     _flushing = true
+    const release = await acquireFlushLock()
+    if (!release) {
+      _flushing = false
+      return
+    }
     // tempId → realId learned during this flush, so a dependent edit/delete
     // queued against an offline-created entity (still holding the negative id)
     // can be rewritten to the server id before it is replayed.
@@ -454,6 +486,7 @@ export const mutationQueue = {
         }
       }
     } finally {
+      release()
       _flushing = false
     }
     // A "mine wins" auto-resolution dropped its base token; one more pass now

@@ -714,3 +714,57 @@ describe('mutationQueue: writes to one entity keep their order around a parked o
     expect(await offlineDb.mutationQueue.count()).toBe(0);
   });
 });
+
+describe('mutationQueue.flush: one tab at a time', () => {
+  /** A Web Locks stand-in: one holder per name, `ifAvailable` answers null when taken. */
+  function fakeLocks() {
+    const held = new Set<string>();
+    const names: string[] = [];
+    const request = vi.fn(async (name: string, _opts: { ifAvailable?: boolean }, cb: (lock: { name: string } | null) => unknown) => {
+      names.push(name);
+      if (held.has(name)) return cb(null);
+      held.add(name);
+      try { return await cb({ name }); } finally { held.delete(name); }
+    });
+    Object.defineProperty(navigator, 'locks', { value: { request }, configurable: true });
+    return { held, names, request };
+  }
+
+  afterEach(() => {
+    Reflect.deleteProperty(navigator, 'locks');
+  });
+
+  it('leaves the queue to the tab that holds the lock', async () => {
+    const locks = fakeLocks();
+    locks.held.add(`trek-mutation-flush:${offlineDb.name}`);
+    const id = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id }));
+    let sent = 0;
+    server.use(http.post('/api/trips/1/places', () => { sent++; return HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 61 }) }); }));
+
+    await mutationQueue.flush();
+    expect(sent).toBe(0);
+    expect(await offlineDb.mutationQueue.get(id)).toMatchObject({ status: 'pending' });
+
+    // The other tab is done: the next trigger here takes the lock and sends it.
+    locks.held.clear();
+    await mutationQueue.flush();
+    expect(sent).toBe(1);
+    expect(await offlineDb.mutationQueue.get(id)).toBeUndefined();
+    expect(locks.held.size).toBe(0);
+  });
+
+  it('flushes under the flag alone when the lock request is refused', async () => {
+    Object.defineProperty(navigator, 'locks', {
+      value: { request: vi.fn().mockRejectedValue(new DOMException('denied', 'SecurityError')) },
+      configurable: true,
+    });
+    const id = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id }));
+    server.use(http.post('/api/trips/1/places', () => HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 62 }) })));
+
+    await mutationQueue.flush();
+
+    expect(await offlineDb.mutationQueue.get(id)).toBeUndefined();
+  });
+});
