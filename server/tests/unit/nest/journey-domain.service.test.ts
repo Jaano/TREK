@@ -666,6 +666,14 @@ describe('createEntry', () => {
     expect(entry!.author_id).toBe(user.id);
   });
 
+  it('JOURNEY-SVC-030b: entries added to one day at the same time take one position each', async () => {
+    const { user } = createUser(testDb);
+    const journey = createJourney(testDb, user.id);
+    // Without the transaction every one read the same MAX for the date and landed on 0.
+    const entries = await Promise.all(['A', 'B', 'C'].map((title) => svc.createEntry(journey.id, user.id, { title, entry_date: '2026-03-10' })));
+    expect(entries.map((e) => e!.sort_order).sort((x, y) => x - y)).toEqual([0, 1, 2]);
+  });
+
   it('JOURNEY-SVC-031: viewer cannot create entry', async () => {
     const { user: owner } = createUser(testDb);
     const { user: viewer } = createUser(testDb);
@@ -3665,6 +3673,43 @@ describe('Plan 3g Task 2 — transaction rollback proofs (JG-TX1..4)', () => {
       sort_order: number;
     }[];
     for (const r of rows) expect(r.sort_order).toBe(0);
+  });
+
+  it('JG-TX5 (createJourney): a failing owner row rolls the journey back, so no journey is left without an owner', async () => {
+    const { user } = createUser(testDb);
+    vi.spyOn(contributorsRepoDirect, 'insertOwner').mockRejectedValueOnce(new Error('boom'));
+
+    await expect(svc.createJourney(user.id, { title: 'Orphan' })).rejects.toThrow('boom');
+
+    expect(testDb.prepare("SELECT id FROM journeys WHERE title = 'Orphan'").all()).toEqual([]);
+  });
+
+  it('JG-TX6 (createJourney): a failure after the trip is linked rolls back the journey and its owner, and nothing is broadcast', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-03-15', end_date: '2026-03-16' });
+    vi.spyOn(journeysRepoDirect, 'updateCoverImage').mockRejectedValueOnce(new Error('boom'));
+    testDb.prepare("UPDATE trips SET cover_image = '/uploads/covers/x.jpg' WHERE id = ?").run(trip.id);
+    const broadcast = vi.spyOn(svc, 'broadcastJourneyEvent');
+
+    await expect(svc.createJourney(user.id, { title: 'Half', trip_ids: [trip.id] })).rejects.toThrow('boom');
+
+    expect(testDb.prepare("SELECT id FROM journeys WHERE title = 'Half'").all()).toEqual([]);
+    expect(testDb.prepare('SELECT journey_id FROM journey_contributors WHERE user_id = ?').all(user.id)).toEqual([]);
+    expect(broadcast).not.toHaveBeenCalled();
+  });
+
+  it('JG-TX7 (addPhoto): a failing entry link rolls back the photo and its gallery row as well', async () => {
+    const { user } = createUser(testDb);
+    const journey = await svc.createJourney(user.id, { title: 'J' });
+    const entry = await svc.createEntry(journey.id, user.id, { entry_date: '2026-01-01' });
+
+    vi.spyOn(entryPhotosRepoDirect, 'insertIgnore').mockRejectedValueOnce(new Error('boom'));
+
+    await expect(svc.addPhoto(entry!.id, user.id, 'journey/tx7.jpg')).rejects.toThrow('boom');
+
+    expect(testDb.prepare('SELECT * FROM journey_photos WHERE journey_id = ?').all(journey.id)).toEqual([]);
+    expect(testDb.prepare("SELECT * FROM trek_photos WHERE file_path = 'journey/tx7.jpg'").all()).toEqual([]);
+    expect(testDb.prepare('SELECT type FROM journey_entries WHERE id = ?').get(entry!.id)).toEqual({ type: 'entry' });
   });
 });
 

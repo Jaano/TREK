@@ -208,39 +208,29 @@ export class JourneyDomainService {
     },
   ): Promise<Journey> {
     const now = this.ts();
-    const journeyId = await this.journeysRepo.insertJourney({
-      user_id: userId,
-      title: data.title,
-      subtitle: data.subtitle || null,
-      created_at: now,
-      updated_at: now,
+    // The journey, its owner row, its trips and their skeletons and the cover are
+    // one write: a failure halfway used to leave a journey nobody owned.
+    const { journeyId, linked } = await this.uow.transactional(async () => {
+      const id = await this.journeysRepo.insertJourney({
+        user_id: userId,
+        title: data.title,
+        subtitle: data.subtitle || null,
+        created_at: now,
+        updated_at: now,
+      });
+      await this.contributorsRepo.insertOwner(id, userId, now);
+
+      // Only trips that were ACTUALLY linked (linkTrip access-checks and refuses a
+      // foreign one). Inheriting the cover from a raw trip_ids[0] would leak an
+      // arbitrary trip's cover image cross-tenant.
+      const done: number[] = [];
+      for (const tripId of data.trip_ids ?? []) if (await this.linkTrip(id, tripId, userId)) done.push(tripId);
+      // JG11. The trip stores /uploads/covers/x.jpg, the journey covers/x.jpg.
+      const firstTrip = done.length > 0 ? await this.tripsRepo.findRaw(done[0]) : undefined;
+      if (firstTrip?.cover_image) await this.journeysRepo.updateCoverImage(id, firstTrip.cover_image.replace(/^\/uploads\//, ''));
+      return { journeyId: id, linked: done };
     });
-
-    // add owner as contributor
-    await this.contributorsRepo.insertOwner(journeyId, userId, now);
-
-    // link trips and sync skeleton entries
-    if (data.trip_ids?.length) {
-      // Track the first trip that was ACTUALLY linked (addTripToJourney access-checks and
-      // returns false for a foreign/inaccessible trip). Inheriting the cover from a raw
-      // trip_ids[0] would otherwise leak an arbitrary trip's cover image cross-tenant.
-      let coverTripId: number | undefined;
-      for (const tripId of data.trip_ids) {
-        if ((await this.addTripToJourney(journeyId, tripId, userId)) && coverTripId === undefined) coverTripId = tripId;
-      }
-
-      if (coverTripId !== undefined) {
-        // JG11 — `SELECT cover_image FROM trips WHERE id = ?`; `TripsRepository.findRaw`
-        // (already public, 3c) covers this column among every other trip column.
-        const firstTrip = await this.tripsRepo.findRaw(coverTripId);
-        if (firstTrip?.cover_image) {
-          // trip stores full path (/uploads/covers/x.jpg), journey stores relative (covers/x.jpg)
-          const relativePath = firstTrip.cover_image.replace(/^\/uploads\//, '');
-          await this.journeysRepo.updateCoverImage(journeyId, relativePath);
-        }
-      }
-    }
-
+    for (const tripId of linked) await this.broadcastJourneyEvent(journeyId, 'journey:trip:synced', { tripId });
     return (await this.journeysRepo.findById(journeyId)) as Journey;
   }
 
@@ -404,17 +394,19 @@ export class JourneyDomainService {
     const placed: { entryId: number; journeyId: number; lat: number; lng: number }[] = [];
     const seen = new Set<number>();
     const now = this.ts();
-    for (const row of rows) {
-      if (seen.has(row.entryId)) continue;
-      seen.add(row.entryId);
-      const changes = await this.entriesRepo.placeIfUnplaced(row.entryId, {
-        location_lat: row.lat,
-        location_lng: row.lng,
-        country_code: this.countryFor(row.lat, row.lng),
-        updated_at: now,
-      }); // JG123
-      if (changes > 0) placed.push(row);
-    }
+    await this.uow.transactional(async () => {
+      for (const row of rows) {
+        if (seen.has(row.entryId)) continue;
+        seen.add(row.entryId);
+        const changes = await this.entriesRepo.placeIfUnplaced(row.entryId, {
+          location_lat: row.lat,
+          location_lng: row.lng,
+          country_code: this.countryFor(row.lat, row.lng),
+          updated_at: now,
+        }); // JG123
+        if (changes > 0) placed.push(row);
+      }
+    });
     return placed;
   }
 
@@ -456,6 +448,13 @@ export class JourneyDomainService {
   // ── Trip management ──────────────────────────────────────────────────────
 
   async addTripToJourney(journeyId: number, tripId: number, userId: number): Promise<boolean> {
+    if (!(await this.uow.transactional(() => this.linkTrip(journeyId, tripId, userId)))) return false;
+    await this.broadcastJourneyEvent(journeyId, 'journey:trip:synced', { tripId });
+    return true;
+  }
+
+  /** The access checks, the link row and the trip's skeletons; the caller broadcasts after its commit. */
+  private async linkTrip(journeyId: number, tripId: number, userId: number): Promise<boolean> {
     // Only attach a trip the caller can actually access — otherwise a journey
     // owner could pull an arbitrary trip's places + photos into their journey
     // (cross-tenant leak). Mirrors the trip-access gate every other trip-scoped
@@ -480,20 +479,17 @@ export class JourneyDomainService {
     // let a photo one member had chosen not to share reach a journey at all. The
     // table and its (unreferenced) routes stay for one more release rather than
     // being dropped in an append-only migration.
-    await this.broadcastJourneyEvent(journeyId, 'journey:trip:synced', { tripId });
     return true;
   }
 
   async removeTripFromJourney(journeyId: number, tripId: number, userId: number): Promise<boolean> {
     if (!(await this.isOwner(journeyId, userId))) return false;
-
-    // remove skeleton entries that haven't been filled in
-    await this.entriesRepo.deleteSkeletonsForTrip(journeyId, tripId);
-
-    // detach filled entries from this trip
-    await this.entriesRepo.detachFilledForTrip(journeyId, tripId);
-
-    await this.journeyTripsRepo.deleteLink(journeyId, tripId);
+    await this.uow.transactional(async () => {
+      // Unfilled skeletons go, filled entries stay but let go of the trip.
+      await this.entriesRepo.deleteSkeletonsForTrip(journeyId, tripId);
+      await this.entriesRepo.detachFilledForTrip(journeyId, tripId);
+      await this.journeyTripsRepo.deleteLink(journeyId, tripId);
+    });
     return true;
   }
 
@@ -619,57 +615,60 @@ export class JourneyDomainService {
       (entry.source_assignment_id != null ? byAssignment.get(entry.source_assignment_id) : undefined) ?? assignments[0];
 
     const now = this.ts();
-    for (const entry of entries) {
-      const assignment = assignmentFor(entry);
-      if (entry.type === 'skeleton') {
-        // update everything on skeletons
-        await this.entriesRepo.updateSkeletonSnapshot(entry.id, {
-          title: place.name,
-          entry_date: assignment?.day_date || entry.entry_date,
-          entry_time: assignment?.assignment_time || place.place_time || entry.entry_time,
-          location_name: place.address || place.name,
-          location_lat: place.lat || null,
-          location_lng: place.lng || null,
-          // The pin moved, so the flag has to follow it — the same rule updateEntry
-          // states, and the one every sync write here used to skip.
-          country_code: this.countryFor(place.lat ?? null, place.lng ?? null),
-          updated_at: now,
-        });
-      } else {
-        // for filled entries, only update location silently
-        await this.entriesRepo.updateLocationOnly(entry.id, {
-          location_name: place.address || place.name,
-          location_lat: place.lat || null,
-          location_lng: place.lng || null,
-          country_code: this.countryFor(place.lat ?? null, place.lng ?? null),
-          updated_at: now,
-        });
+    await this.uow.transactional(async () => {
+      for (const entry of entries) {
+        const assignment = assignmentFor(entry);
+        if (entry.type === 'skeleton') {
+          // update everything on skeletons
+          await this.entriesRepo.updateSkeletonSnapshot(entry.id, {
+            title: place.name,
+            entry_date: assignment?.day_date || entry.entry_date,
+            entry_time: assignment?.assignment_time || place.place_time || entry.entry_time,
+            location_name: place.address || place.name,
+            location_lat: place.lat || null,
+            location_lng: place.lng || null,
+            // The pin moved, so the flag has to follow it — the same rule updateEntry
+            // states, and the one every sync write here used to skip.
+            country_code: this.countryFor(place.lat ?? null, place.lng ?? null),
+            updated_at: now,
+          });
+        } else {
+          // for filled entries, only update location silently
+          await this.entriesRepo.updateLocationOnly(entry.id, {
+            location_name: place.address || place.name,
+            location_lat: place.lat || null,
+            location_lng: place.lng || null,
+            country_code: this.countryFor(place.lat ?? null, place.lng ?? null),
+            updated_at: now,
+          });
+        }
       }
-    }
+    });
   }
 
   // called when a trip place is deleted
   async onPlaceDeleted(placeId: number) {
     const entries = await this.entriesRepo.listBySourcePlace(placeId);
-
-    for (const entry of entries) {
-      if (entry.type === 'skeleton') {
-        // no content: just delete
-        const hasPhotos = await this.entriesRepo.existsPhotoForEntry(entry.id);
-        if (!hasPhotos && !entry.story) {
-          await this.entriesRepo.deleteById(entry.id);
-          continue;
+    await this.uow.transactional(async () => {
+      for (const entry of entries) {
+        if (entry.type === 'skeleton') {
+          // no content: just delete
+          const hasPhotos = await this.entriesRepo.existsPhotoForEntry(entry.id);
+          if (!hasPhotos && !entry.story) {
+            await this.entriesRepo.deleteById(entry.id);
+            continue;
+          }
         }
+        // entry has content: keep it, detach, add note
+        const note = '\n\n> _Note: the original trip place was removed from the trip plan_';
+        const newStory = (entry.story || '') + note;
+        await this.entriesRepo.detachAndAnnotate(entry.id, {
+          type: entry.type === 'skeleton' ? 'entry' : entry.type,
+          story: newStory,
+          updated_at: this.ts(),
+        });
       }
-      // entry has content: keep it, detach, add note
-      const note = '\n\n> _Note: the original trip place was removed from the trip plan_';
-      const newStory = (entry.story || '') + note;
-      await this.entriesRepo.detachAndAnnotate(entry.id, {
-        type: entry.type === 'skeleton' ? 'entry' : entry.type,
-        story: newStory,
-        updated_at: this.ts(),
-      });
-    }
+    });
   }
 
   // Shared skeleton INSERT, reused by syncTripPlaces / onPlaceCreated / reconcileTripSkeletons.
@@ -723,13 +722,18 @@ export class JourneyDomainService {
     });
   }
 
-  // Make every journey linked to `tripId` mirror the trip's current day assignments:
-  // one skeleton per assignment, so a place standing on two days is two entries (#2329);
-  // refresh skeleton snapshots when a stop is moved to another day / its time changes;
-  // and drop skeletons whose assignment is gone. Filled entries are never destroyed —
-  // only detached + annotated, mirroring onPlaceDeleted. Idempotent: a second call with
-  // no underlying change is a no-op (no writes, no broadcast). Called from every
-  // assignment mutation path.
+  /**
+   * Make every journey linked to `tripId` mirror the trip's current day assignments:
+   * one skeleton per assignment, so a place standing on two days is two entries (#2329);
+   * refresh skeleton snapshots when a stop is moved to another day / its time changes;
+   * and drop skeletons whose assignment is gone. Filled entries are never destroyed —
+   * only detached + annotated, mirroring onPlaceDeleted. Idempotent: a second call with
+   * no underlying change is a no-op (no writes, no broadcast). Called from every
+   * assignment mutation path.
+   *
+   * @txIndependent one transaction per linked journey: each is whole on its own,
+   * and the next reconcile picks up a journey a failure skipped.
+   */
   async reconcileTripSkeletons(tripId: number, sid?: string | number) {
     const links = await this.journeyTripsRepo.listJourneyIdsForTrip(tripId);
     if (!links.length) return;
@@ -1205,35 +1209,37 @@ export class JourneyDomainService {
     if (!(await this.canEdit(journeyId, userId))) return null;
 
     const now = this.ts();
-    // JG74 — same text as JG42 (`maxSortOrderForDate`).
-    const maxOrder = await this.entriesRepo.maxSortOrderForDate(journeyId, data.entry_date);
-
     const prosConsJson =
       data.pros_cons && (data.pros_cons.pros.length || data.pros_cons.cons.length)
         ? JSON.stringify(data.pros_cons)
         : null;
 
-    const insertedId = await this.entriesRepo.insertEntry({
-      journey_id: journeyId,
-      author_id: userId,
-      type: data.type || 'entry',
-      title: data.title || null,
-      story: data.story || null,
-      entry_date: data.entry_date,
-      entry_time: data.entry_time || null,
-      location_name: data.location_name || null,
-      location_lat: data.location_lat ?? null,
-      location_lng: data.location_lng ?? null,
-      country_code: this.countryFor(data.location_lat, data.location_lng),
-      mood: data.mood || null,
-      weather: data.weather || null,
-      tags: data.tags?.length ? JSON.stringify(data.tags) : null,
-      pros_cons: prosConsJson,
-      visibility: data.visibility || 'private',
-      sort_order: (maxOrder ?? -1) + 1,
-      is_draft: data.is_draft ? 1 : 0,
-      created_at: now,
-      updated_at: now,
+    // The next position and the row that takes it in one transaction, so two
+    // entries added at once cannot both read the same MAX (JG74).
+    const insertedId = await this.uow.transactional(async () => {
+      const maxOrder = await this.entriesRepo.maxSortOrderForDate(journeyId, data.entry_date);
+      return await this.entriesRepo.insertEntry({
+        journey_id: journeyId,
+        author_id: userId,
+        type: data.type || 'entry',
+        title: data.title || null,
+        story: data.story || null,
+        entry_date: data.entry_date,
+        entry_time: data.entry_time || null,
+        location_name: data.location_name || null,
+        location_lat: data.location_lat ?? null,
+        location_lng: data.location_lng ?? null,
+        country_code: this.countryFor(data.location_lat, data.location_lng),
+        mood: data.mood || null,
+        weather: data.weather || null,
+        tags: data.tags?.length ? JSON.stringify(data.tags) : null,
+        pros_cons: prosConsJson,
+        visibility: data.visibility || 'private',
+        sort_order: (maxOrder ?? -1) + 1,
+        is_draft: data.is_draft ? 1 : 0,
+        created_at: now,
+        updated_at: now,
+      });
     });
 
     const created = decodeEntryRow((await this.entriesRepo.findById(insertedId)) as JourneyEntry);
@@ -1354,10 +1360,10 @@ export class JourneyDomainService {
     // was provided — the same condition the legacy field-count check tested.
     if (Object.keys(patch).length === 1) return decodeEntryRow(entry);
 
-    await this.entriesRepo.updateFields(entryId, patch);
-
-    // touch the journey
-    await this.journeysRepo.updateFields(entry.journey_id, { updated_at: this.ts() });
+    await this.uow.transactional(async () => {
+      await this.entriesRepo.updateFields(entryId, patch);
+      await this.journeysRepo.updateFields(entry.journey_id, { updated_at: this.ts() }); // touch the journey
+    });
 
     // JG80 — same text as JG76.
     const updated = decodeEntryRow((await this.entriesRepo.findById(entryId)) as JourneyEntry);
@@ -1517,20 +1523,17 @@ export class JourneyDomainService {
     if (!entry) return null;
     if (!(await this.canEdit(entry.journey_id, userId))) return null;
 
-    const trekPhotoId = await this.photos.getOrCreateLocal(
-      filePath,
-      thumbnailPath,
-      null,
-      null,
-      media?.mediaType || 'image',
-      media?.durationMs ?? null,
-    );
-    // JG-TX1 — wraps ONLY the gallery-ensure step; `linkGalleryPhotoToEntry`
-    // and `promoteSkeletonIfNeeded` run OUTSIDE the transaction, exactly as
-    // the legacy code shipped it (the boundary looks inconsistent but
-    // parity is law — not widened here, same for JG-TX2/JG-TX3 below).
-    const galleryId = await this.uow.transactional(async () => await this.ensureInGallery(entry.journey_id, trekPhotoId, caption));
-    const result = await this.linkGalleryPhotoToEntry(galleryId, entryId);
+    // JG-TX1: the photo row, its gallery row, the entry link and the promotion
+    // are one write, so a failure halfway leaves no gallery photo on no entry.
+    return await this.uow.transactional(async () => {
+      const trekPhotoId = await this.photos.getOrCreateLocal(filePath, thumbnailPath, null, null, media?.mediaType || 'image', media?.durationMs ?? null);
+      return await this.attachToEntry(entry, await this.ensureInGallery(entry.journey_id, trekPhotoId, caption));
+    });
+  }
+
+  /** Links a gallery row to the entry and promotes a skeleton it lands on. Runs inside the caller's transaction. */
+  private async attachToEntry(entry: JourneyEntry, galleryId: number): Promise<JourneyPhoto | null> {
+    const result = await this.linkGalleryPhotoToEntry(galleryId, entry.id);
     await this.promoteSkeletonIfNeeded(entry);
     return result;
   }
@@ -1549,17 +1552,13 @@ export class JourneyDomainService {
     if (!entry) return null;
     if (!(await this.canEdit(entry.journey_id, userId))) return null;
 
-    const trekPhotoId = await this.photos.getOrCreate(provider, assetId, userId, passphrase, mediaType);
-
-    // JG96 — skip if this photo is already linked to this entry.
-    const alreadyLinked = await this.entryPhotosRepo.existsLink(entryId, trekPhotoId);
-    if (alreadyLinked) return null;
-
-    // JG-TX2
-    const galleryId = await this.uow.transactional(async () => await this.ensureInGallery(entry.journey_id, trekPhotoId, caption));
-    const result = await this.linkGalleryPhotoToEntry(galleryId, entryId);
-    await this.promoteSkeletonIfNeeded(entry);
-    return result;
+    // JG-TX2, the same single write as JG-TX1.
+    return await this.uow.transactional(async () => {
+      const trekPhotoId = await this.photos.getOrCreate(provider, assetId, userId, passphrase, mediaType);
+      // JG96 — skip if this photo is already linked to this entry.
+      if (await this.entryPhotosRepo.existsLink(entryId, trekPhotoId)) return null;
+      return await this.attachToEntry(entry, await this.ensureInGallery(entry.journey_id, trekPhotoId, caption));
+    });
   }
 
   // Link a gallery photo (by its journey_photos.id) to an entry — idempotent.
@@ -1572,10 +1571,7 @@ export class JourneyDomainService {
     // JG98 — verify the gallery photo belongs to this journey.
     const galleryRow = await this.photosRepo.findScopeById(journeyPhotoId);
     if (!galleryRow || galleryRow.journey_id !== entry.journey_id) return null;
-
-    const result = await this.linkGalleryPhotoToEntry(galleryRow.id, entryId);
-    await this.promoteSkeletonIfNeeded(entry);
-    return result;
+    return await this.uow.transactional(() => this.attachToEntry(entry, galleryRow.id));
   }
 
   // Upload photos to the journey gallery only (no entry association).
@@ -1587,28 +1583,26 @@ export class JourneyDomainService {
     if (!(await this.canEdit(journeyId, userId))) return [];
     const results: GalleryPhoto[] = [];
     const now = this.ts();
-    // JG99 — same text as JG88.
-    const maxOrder = await this.photosRepo.maxSortOrder(journeyId);
-    let nextOrder = (maxOrder ?? -1) + 1;
-
-    for (const f of filePaths) {
-      const trekPhotoId = await this.photos.getOrCreateLocal(f.path, f.thumbnail, null, null, f.mediaType || 'image', f.durationMs ?? null);
-      // JG100 — the 5-column `INSERT OR IGNORE` variant (no `caption`),
-      // distinct text from JG89 but the SAME repository method (`INSERT OR
-      // IGNORE` never touches an existing row, so passing `caption: null`
-      // here is equivalent).
-      await this.photosRepo.insertIgnore({
-        journey_id: journeyId,
-        photo_id: trekPhotoId,
-        caption: null,
-        shared: 0,
-        sort_order: nextOrder++,
-        created_at: now,
-      });
-      // JG101
-      const row = await this.photosRepo.galleryReadByJourneyAndPhoto(journeyId, trekPhotoId);
-      if (row) results.push(row);
-    }
+    // One transaction from the MAX (JG99, same text as JG88) to the last row, so a
+    // second upload at the same time cannot take the same positions.
+    await this.uow.transactional(async () => {
+      let nextOrder = ((await this.photosRepo.maxSortOrder(journeyId)) ?? -1) + 1;
+      for (const f of filePaths) {
+        const trekPhotoId = await this.photos.getOrCreateLocal(f.path, f.thumbnail, null, null, f.mediaType || 'image', f.durationMs ?? null);
+        // JG100: JG89's `INSERT OR IGNORE` without a caption.
+        await this.photosRepo.insertIgnore({
+          journey_id: journeyId,
+          photo_id: trekPhotoId,
+          caption: null,
+          shared: 0,
+          sort_order: nextOrder++,
+          created_at: now,
+        });
+        // JG101
+        const row = await this.photosRepo.galleryReadByJourneyAndPhoto(journeyId, trekPhotoId);
+        if (row) results.push(row);
+      }
+    });
     return results;
   }
 
@@ -1623,9 +1617,9 @@ export class JourneyDomainService {
     mediaType: string = 'image',
   ): Promise<GalleryPhoto | null> {
     if (!(await this.canEdit(journeyId, userId))) return null;
-    const trekPhotoId = await this.photos.getOrCreate(provider, assetId, userId, passphrase, mediaType);
-    // JG-TX3
-    const galleryId = await this.uow.transactional(async () => await this.ensureInGallery(journeyId, trekPhotoId, caption));
+    // JG-TX3: the photo row and its gallery row together.
+    const galleryId = await this.uow.transactional(async () =>
+      await this.ensureInGallery(journeyId, await this.photos.getOrCreate(provider, assetId, userId, passphrase, mediaType), caption));
     // JG102
     return (await this.photosRepo.galleryReadOne(galleryId)) ?? null;
   }
@@ -1658,8 +1652,10 @@ export class JourneyDomainService {
     const trekRow = await this.photos.resolve(row.photo_id);
 
     // JG107 — cascade on journey_entry_photos.journey_photo_id handles junction cleanup.
-    await this.photosRepo.deleteById(journeyPhotoId);
-    await this.photos.deleteIfOrphan(row.photo_id);
+    await this.uow.transactional(async () => {
+      await this.photosRepo.deleteById(journeyPhotoId);
+      await this.photos.deleteIfOrphan(row.photo_id);
+    });
 
     return { photo_id: row.photo_id, file_path: trekRow?.file_path ?? null, thumbnail_path: trekRow?.thumbnail_path ?? null };
   }
@@ -1669,10 +1665,12 @@ export class JourneyDomainService {
     // JG108
     const trekPhotoId = await this.photosRepo.findPhotoIdById(photoId);
     if (trekPhotoId === undefined) return;
-    await this.photos.setProvider(trekPhotoId, provider, assetId, ownerId);
-    // JG109 — also denorm on gallery row for fast reads. §7: a DELIBERATE
-    // cache of `trek_photos`'s own columns, preserved exactly.
-    await this.photosRepo.updateProvider(photoId, provider, assetId, ownerId);
+    // JG109: the gallery row carries a deliberate copy of the provider columns
+    // for fast reads, so both rows change together.
+    await this.uow.transactional(async () => {
+      await this.photos.setProvider(trekPhotoId, provider, assetId, ownerId);
+      await this.photosRepo.updateProvider(photoId, provider, assetId, ownerId);
+    });
   }
 
   async updatePhoto(
@@ -1694,12 +1692,10 @@ export class JourneyDomainService {
     // DIFFERENT columns both named-ish "sort order" — the file's own doc
     // comment calls this out explicitly, and it gets its own mutation-proof
     // test (`journey-domain.service.test.ts`).
-    if (data.caption !== undefined) {
-      await this.photosRepo.updateCaption(photoId, data.caption);
-    }
-    if (data.sort_order !== undefined) {
-      await this.entryPhotosRepo.updateSortOrder(photoId, data.sort_order);
-    }
+    await this.uow.transactional(async () => {
+      if (data.caption !== undefined) await this.photosRepo.updateCaption(photoId, data.caption);
+      if (data.sort_order !== undefined) await this.entryPhotosRepo.updateSortOrder(photoId, data.sort_order);
+    });
     // JG113
     return (await this.entryPhotosRepo.findOneByGalleryId(photoId)) ?? null;
   }
@@ -1718,8 +1714,10 @@ export class JourneyDomainService {
     const trekRow = await this.photos.resolve(row.photo_id);
 
     // JG116 — same text as JG107.
-    await this.photosRepo.deleteById(photoId);
-    await this.photos.deleteIfOrphan(row.photo_id);
+    await this.uow.transactional(async () => {
+      await this.photosRepo.deleteById(photoId);
+      await this.photos.deleteIfOrphan(row.photo_id);
+    });
 
     return { id: row.id, photo_id: row.photo_id, file_path: trekRow?.file_path ?? null, thumbnail_path: trekRow?.thumbnail_path ?? null, journey_id: row.journey_id };
   }

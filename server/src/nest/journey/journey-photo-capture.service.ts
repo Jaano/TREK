@@ -46,14 +46,20 @@ export class JourneyPhotoCaptureService {
     private readonly orm: MikroORM,
   ) {}
 
-  /** Provider photos just added to a journey, to its gallery or to one of its entries. Detached. */
+  /**
+   * Provider photos just added to a journey, to its gallery or to one of its entries. Detached.
+   * @txStandalone a detached refresh after the add has committed.
+   */
   scheduleForJourney(journeyId: number, photos: readonly unknown[], userId: number): void {
     const ids = trekPhotoIdsOf(photos);
     if (!ids.length) return;
     void withRequestContext(this.orm, () => this.fill(journeyId, ids, userId));
   }
 
-  /** Provider photos just added to an entry, for a caller that only knows the entry. Detached. */
+  /**
+   * Provider photos just added to an entry, for a caller that only knows the entry. Detached.
+   * @txStandalone a detached refresh after the add has committed.
+   */
   scheduleForEntry(entryId: number, photos: readonly unknown[], userId: number): void {
     const ids = trekPhotoIdsOf(photos);
     if (!ids.length) return;
@@ -80,6 +86,8 @@ export class JourneyPhotoCaptureService {
    * reloads the journey itself once the last one is in, so an event per request
    * would only make every other open client reload once per uploaded photo. The
    * refresh belongs to the provider adds, where one request carries the batch.
+   *
+   * @txStandalone a detached refresh after the upload has committed.
    */
   scheduleUpload(photos: readonly unknown[], userId: number): void {
     const ids = trekPhotoIdsOf(photos);
@@ -95,6 +103,9 @@ export class JourneyPhotoCaptureService {
    * then a name for it, then everyone on the journey hears about it. The name is
    * best effort: a geocoder that does not answer leaves a pin without a label,
    * which the owner can still name by hand.
+   *
+   * @txIndependent the placing commits before the geocoder is asked, and each
+   * name is written on its own when its answer arrives.
    */
   async placeEntries(trekPhotoIds: number[]): Promise<number> {
     let placed: Awaited<ReturnType<JourneyDomainService['placeEntriesFromPhotos']>>;
