@@ -16,9 +16,10 @@ import {
   writeBaseline,
 } from './ratchet.mjs';
 
-export const DIRS = ['src', 'tests'];
+/** The app, its tests, the Playwright specs and the client's own tooling. */
+export const DIRS = ['src', 'tests', 'e2e', 'scripts'];
 
-export const accepts = (key) => /\.(?:tsx?|css)$/.test(key);
+export const accepts = (key) => /\.(?:tsx?|mjs|css)$/.test(key);
 
 /**
  * Whether Prettier leaves the file as it is, with the config that applies to

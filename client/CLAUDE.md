@@ -13,7 +13,7 @@ npm run lint:warnings     # eslint, failing on any error and on any warning coun
 npm run lint:pages        # enforce the Page pattern (CI gate)
 npm run lint:rtl          # physical left/right sides and rtl-lint-disable comments may only shrink per file (CI gate; --list shows them, --update lowers both baselines)
 npm run lint:size         # no source file or stylesheet past 1000 lines, no test past 2000, counted wrapped at 120 columns; longer ones may only shrink (CI gate; --update lowers the baseline)
-npm run lint:format       # Prettier: every file outside scripts/format-baseline.json must be formatted, the list only shrinks (CI gate; npx prettier --write <file>, then --update)
+npm run lint:format       # Prettier: every .ts/.tsx/.mjs/.css file under src/, tests/, e2e/ and scripts/ outside scripts/format-baseline.json must be formatted, the list only shrinks (CI gate; npx prettier --write <file>, then --update)
 npm run lint:layers       # imports go downwards: components never import pages/ or mobile/, nothing under the views imports a view; per-file counts may only shrink (CI gate; --list, --update)
 npm run lint:offline      # no view file (components/mobile/pages/hooks) imports src/api/ beyond scripts/offline-baseline.json, which only shrinks (CI gate; --list, --update)
 npm run lint:skips        # no .only anywhere; skipped/todo/fixme tests per file may only shrink against scripts/skip-baseline.json (CI gate; skipIf/runIf and Playwright's test.skip(condition, 'why') are fine)

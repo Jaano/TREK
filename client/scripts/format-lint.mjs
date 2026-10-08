@@ -8,7 +8,7 @@
  * check came in are listed in scripts/format-baseline.json and the list only
  * shrinks: every file outside it, a new one in particular, must be formatted,
  * and a listed file leaves the list once it has been formatted. The check
- * covers .ts, .tsx and .css under src/ and tests/.
+ * covers .ts, .tsx, .mjs and .css under src/, tests/, e2e/ and scripts/.
  *
  *   npm run lint:format              check against the baseline (CI)
  *   npm run lint:format -- --list    print every unformatted file

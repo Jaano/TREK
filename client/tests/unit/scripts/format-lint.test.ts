@@ -13,7 +13,14 @@ const FORMATTED = "const a = 'x';\n";
 const UNFORMATTED = 'const a = "x"\n';
 
 function run(baseline: string[], files: Record<string, string>, update = false) {
-  tree = ratchetTree({ ...CONFIG, [BASELINE]: JSON.stringify(baseline), 'tests/keep.ts': FORMATTED, ...files });
+  tree = ratchetTree({
+    ...CONFIG,
+    [BASELINE]: JSON.stringify(baseline),
+    'src/keep.ts': FORMATTED,
+    'tests/keep.ts': FORMATTED,
+    'e2e/keep.spec.ts': FORMATTED,
+    ...files,
+  });
   return check({ root: tree.root, baselinePath: tree.path(BASELINE), update, ...tree.out });
 }
 
@@ -58,13 +65,34 @@ describe('lint:format', () => {
     expect(JSON.parse(readFileSync(tree.path(BASELINE), 'utf8'))).toEqual([]);
   });
 
+  it('FORMAT-007: holds the Playwright specs and the client scripts to the same rule', async () => {
+    const files = {
+      'e2e/new.spec.ts': UNFORMATTED,
+      'scripts/new-lint.mjs': UNFORMATTED,
+      'scripts/data.json': '{"a":1}',
+    };
+    expect(await run([], files)).toBe(1);
+    const errors = tree.error.join('\n');
+    expect(errors).toMatch(/e2e\/new\.spec\.ts is not formatted/);
+    expect(errors).toMatch(/scripts\/new-lint\.mjs is not formatted/);
+    expect(errors).not.toMatch(/data\.json/);
+    tree.remove();
+    expect(await run(['e2e/new.spec.ts', 'scripts/new-lint.mjs'], files)).toBe(0);
+  });
+
   it('FORMAT-006: a missing baseline or Prettier config stops the check', async () => {
-    tree = ratchetTree({ ...CONFIG, 'src/a.ts': FORMATTED, 'tests/a.ts': FORMATTED });
+    tree = ratchetTree({
+      ...CONFIG,
+      'src/a.ts': FORMATTED,
+      'tests/a.ts': FORMATTED,
+      'e2e/a.ts': FORMATTED,
+      'scripts/a.mjs': FORMATTED,
+    });
     await expect(check({ root: tree.root, baselinePath: tree.path(BASELINE), ...tree.out })).rejects.toThrow(
       RatchetError
     );
     tree.remove();
-    tree = ratchetTree({ [BASELINE]: '[]', 'src/a.ts': FORMATTED, 'tests/a.ts': FORMATTED });
+    tree = ratchetTree({ [BASELINE]: '[]', 'src/a.ts': FORMATTED, 'tests/a.ts': FORMATTED, 'e2e/a.ts': FORMATTED });
     // No config in the tree; the lookup climbs no further than the temp directory's parents,
     // which hold none either.
     const result = check({ root: tree.root, baselinePath: tree.path(BASELINE), ...tree.out });
