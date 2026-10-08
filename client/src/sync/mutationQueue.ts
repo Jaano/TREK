@@ -81,6 +81,38 @@ function isRetryableStatus(status: number | undefined): boolean {
   return status === 401 || status === 408 || status === 425 || status === 429
 }
 
+/**
+ * The entity a queued write targets, as `resource:id`. A create is keyed by its
+ * temporary id, which is also what the writes queued against it carry until it
+ * syncs. Undefined when the row names no entity (it is then never held back).
+ */
+function entityKey(m: QueuedMutation): string | undefined {
+  if (!m.resource) return undefined
+  const id = m.entityId ?? m.tempEntityId ?? (m.method === 'POST' ? m.tempId : undefined)
+  return id === undefined ? undefined : `${m.resource}:${id}`
+}
+
+/**
+ * Entities with a parked write ('failed', or a 'conflict' waiting for the user),
+ * each with the time of the earliest such write. A later write to the same
+ * entity must not overtake it: replayed afterwards by Try again or Keep mine,
+ * the older write would silently overwrite the newer one, and only places and
+ * packing items carry a token the server could refuse it with.
+ */
+async function parkedEntities(): Promise<Map<string, number>> {
+  const parked = await offlineDb.mutationQueue.where('status').anyOf(['failed', 'conflict']).toArray()
+  const held = new Map<string, number>()
+  for (const m of parked) holdEntity(held, m)
+  return held
+}
+
+function holdEntity(held: Map<string, number>, m: QueuedMutation): void {
+  const key = entityKey(m)
+  if (key === undefined) return
+  const since = held.get(key)
+  if (since === undefined || m.createdAt < since) held.set(key, m.createdAt)
+}
+
 /** Pull the server's current entity out of a 409 response body ({ server: {...} }). */
 function extractConflictServer(err: unknown): unknown {
   const data = (err as { response?: { data?: unknown } })?.response?.data
@@ -177,7 +209,9 @@ export const mutationQueue = {
    * Stops on the first network error (retried on the next trigger). 4xx answers
    * are marked failed and skipped; a DELETE answered 404 counts as done. A 5xx
    * holds back only its own trip, retried with growing gaps, and is parked as
-   * failed once it has failed MAX_SERVER_ERROR_ATTEMPTS times.
+   * failed once it has failed MAX_SERVER_ERROR_ATTEMPTS times. A write parked as
+   * failed or as a conflict holds back the later writes to the same entity, so
+   * they keep their order whatever the user decides about it.
    */
   async flush(): Promise<void> {
     if (_flushing || isEffectivelyOffline() || !isAuthed()) return
@@ -212,6 +246,9 @@ export const mutationQueue = {
       // Trips whose queue waits behind a write the server failed on. Their later
       // writes must keep their order, but every other trip goes on syncing.
       const blockedTrips = new Set<number>()
+      // Entities whose later writes wait behind a parked one, until the user
+      // tries it again or discards it. Grows as writes park during this pass.
+      const heldEntities = await parkedEntities()
 
       for (const mutation of pending) {
         // Re-checked every pass, not just on entry: this loop writes server
@@ -220,6 +257,9 @@ export const mutationQueue = {
         // would otherwise seed it with the previous account's rows.
         if (!isAuthed()) break
         if (blockedTrips.has(mutation.tripId)) continue
+        const key = entityKey(mutation)
+        const heldSince = key === undefined ? undefined : heldEntities.get(key)
+        if (heldSince !== undefined && heldSince < mutation.createdAt) continue
         if (mutation.retryAfter !== undefined && mutation.retryAfter > Date.now()) {
           blockedTrips.add(mutation.tripId)
           continue
@@ -248,6 +288,7 @@ export const mutationQueue = {
             attempts: mutation.attempts + 1,
             lastError: 'unresolved temp id (dependent create did not sync)',
           })
+          holdEntity(heldEntities, mutation)
           continue
         }
 
@@ -365,6 +406,7 @@ export const mutationQueue = {
                 status: 'conflict', conflictServer: server ?? null, conflictAt: Date.now(),
                 attempts: mutation.attempts + 1, lastError: 'conflict',
               })
+              holdEntity(heldEntities, mutation)
             }
             continue
           }
@@ -380,6 +422,7 @@ export const mutationQueue = {
               attempts: mutation.attempts + 1,
               lastError: String(err),
             })
+            holdEntity(heldEntities, mutation)
           } else if (httpStatus !== undefined && httpStatus >= 500) {
             // The server answered and failed. Retried with growing gaps, and
             // only this trip waits for it. One that never goes through is
@@ -388,6 +431,7 @@ export const mutationQueue = {
             if (attempts >= MAX_SERVER_ERROR_ATTEMPTS) {
               await dropTempRows(mutation)
               await offlineDb.mutationQueue.update(mutation.id, { status: 'failed', attempts, lastError: String(err), retryAfter: undefined })
+              holdEntity(heldEntities, mutation)
             } else {
               await offlineDb.mutationQueue.update(mutation.id, {
                 status: 'pending',
@@ -455,7 +499,12 @@ export const mutationQueue = {
       .count()
   },
 
-  /** Put every parked change back in line, from a fresh start, and flush. */
+  /**
+   * Put every parked change back in line, from a fresh start, and flush. The
+   * later writes to the same entities waited behind them, so the replay keeps
+   * the order they were made in, and a place or packing item still sends the
+   * token it was edited against, which a newer server version refuses (409).
+   */
   async retryFailed(): Promise<void> {
     await offlineDb.mutationQueue
       .where('status')
@@ -466,10 +515,12 @@ export const mutationQueue = {
 
   /**
    * Drop every parked change. The local copy of an edit that never reached the
-   * server goes with the next trip sync, which reads the server's version.
+   * server goes with the next trip sync, which reads the server's version. The
+   * later writes that waited behind a parked one are sent right away.
    */
   async discardFailed(): Promise<void> {
     await offlineDb.mutationQueue.where('status').equals('failed').delete()
+    await this.flush()
   },
 
   /** Count unresolved sync conflicts (offline edits the server rejected as stale). */
@@ -509,6 +560,8 @@ export const mutationQueue = {
     if (!m || m.status !== 'conflict') return
     await applyServerEntity(m, m.conflictServer)
     await offlineDb.mutationQueue.delete(id)
+    // Later writes to the same entity waited behind the conflict.
+    await this.flush()
   },
 
   /** Reset internal flushing flag and timestamp counters — useful in tests. */

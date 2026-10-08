@@ -582,10 +582,135 @@ describe('mutationQueue: parked changes', () => {
     await mutationQueue.enqueue(makeMutation({ id: parked }));
     await mutationQueue.enqueue(makeMutation({ id: waiting }));
     await offlineDb.mutationQueue.update(parked, { status: 'failed' });
+    server.use(http.post('/api/trips/1/places', () => HttpResponse.json({ error: 'down' }, { status: 503 })));
 
     await mutationQueue.discardFailed();
 
     expect(await offlineDb.mutationQueue.get(parked)).toBeUndefined();
     expect(await offlineDb.mutationQueue.get(waiting)).toBeDefined();
+  });
+});
+
+describe('mutationQueue: writes to one entity keep their order around a parked one', () => {
+  function editPlace(id: string, name: string, placeId = 5) {
+    return makeMutation({ id, method: 'PUT', url: `/trips/1/places/${placeId}`, body: { name }, entityId: placeId });
+  }
+
+  /** Answers every PUT of place 5 and 6 with `status`, recording the names in arrival order. */
+  function recordPuts(status: number) {
+    const seen: string[] = [];
+    const answer = async (request: Request, id: number) => {
+      const { name } = await request.json() as { name: string };
+      seen.push(name);
+      return status < 300
+        ? HttpResponse.json({ place: buildPlace({ trip_id: 1, id, name }) })
+        : HttpResponse.json({ error: 'boom' }, { status });
+    };
+    server.use(
+      http.put('/api/trips/1/places/5', ({ request }) => answer(request, 5)),
+      http.put('/api/trips/1/places/6', ({ request }) => answer(request, 6)),
+    );
+    return seen;
+  }
+
+  it('a write parked in this pass holds back the later write to the same entity', async () => {
+    const first = generateUUID();
+    const second = generateUUID();
+    await mutationQueue.enqueue(editPlace(first, 'A'));
+    await mutationQueue.enqueue(editPlace(second, 'B'));
+    await offlineDb.mutationQueue.update(first, { attempts: 7 });
+    const seen = recordPuts(500);
+
+    await mutationQueue.flush();
+
+    expect(seen).toEqual(['A']);
+    expect(await offlineDb.mutationQueue.get(first)).toMatchObject({ status: 'failed' });
+    expect(await offlineDb.mutationQueue.get(second)).toMatchObject({ status: 'pending', attempts: 0 });
+  });
+
+  it('Try again replays the parked write first, so it cannot overwrite the newer one', async () => {
+    const first = generateUUID();
+    const second = generateUUID();
+    await mutationQueue.enqueue(editPlace(first, 'A'));
+    await mutationQueue.enqueue(editPlace(second, 'B'));
+    await offlineDb.mutationQueue.update(first, { status: 'failed', attempts: 8, lastError: 'boom' });
+
+    const held = recordPuts(200);
+    await mutationQueue.flush();
+    expect(held).toEqual([]);
+
+    await mutationQueue.retryFailed();
+    expect(held).toEqual(['A', 'B']);
+    expect(await offlineDb.mutationQueue.count()).toBe(0);
+    expect((await offlineDb.places.get(5))!.name).toBe('B');
+  });
+
+  it('a terminal 4xx holds back the later write as well', async () => {
+    const first = generateUUID();
+    const second = generateUUID();
+    await mutationQueue.enqueue(editPlace(first, 'A'));
+    await mutationQueue.enqueue(editPlace(second, 'B'));
+    const seen = recordPuts(400);
+
+    await mutationQueue.flush();
+
+    expect(seen).toEqual(['A']);
+    expect(await offlineDb.mutationQueue.get(second)).toMatchObject({ status: 'pending' });
+  });
+
+  it('other entities and older writes are not held back', async () => {
+    const older = generateUUID();
+    const parked = generateUUID();
+    const other = generateUUID();
+    await mutationQueue.enqueue(editPlace(older, 'old'));
+    await mutationQueue.enqueue(editPlace(parked, 'A'));
+    await mutationQueue.enqueue(editPlace(other, 'C', 6));
+    await offlineDb.mutationQueue.update(parked, { status: 'failed', attempts: 8 });
+    const seen = recordPuts(200);
+
+    await mutationQueue.flush();
+
+    expect(seen).toEqual(['old', 'C']);
+    expect(await offlineDb.mutationQueue.get(parked)).toMatchObject({ status: 'failed' });
+  });
+
+  it('Discard sends the writes that waited behind the parked one', async () => {
+    const first = generateUUID();
+    const second = generateUUID();
+    await mutationQueue.enqueue(editPlace(first, 'A'));
+    await mutationQueue.enqueue(editPlace(second, 'B'));
+    await offlineDb.mutationQueue.update(first, { status: 'failed', attempts: 8 });
+    const seen = recordPuts(200);
+
+    await mutationQueue.discardFailed();
+
+    expect(seen).toEqual(['B']);
+    expect(await offlineDb.mutationQueue.count()).toBe(0);
+  });
+
+  it('writes queued against a parked offline create wait for it instead of failing', async () => {
+    const create = generateUUID();
+    const edit = generateUUID();
+    const tempId = nextTempId();
+    await mutationQueue.enqueue(makeMutation({ id: create, tempId }));
+    await mutationQueue.enqueue(makeMutation({
+      id: edit, method: 'PUT', url: '/trips/1/places/{id}', body: { name: 'Renamed' }, entityId: tempId, tempEntityId: tempId,
+    }));
+    await offlineDb.mutationQueue.update(create, { attempts: 7 });
+    server.use(http.post('/api/trips/1/places', () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
+
+    await mutationQueue.flush();
+    expect(await offlineDb.mutationQueue.get(create)).toMatchObject({ status: 'failed' });
+    expect(await offlineDb.mutationQueue.get(edit)).toMatchObject({ status: 'pending', attempts: 0 });
+
+    const sent: string[] = [];
+    server.use(
+      http.post('/api/trips/1/places', () => { sent.push('create'); return HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 321 }) }); }),
+      http.put('/api/trips/1/places/321', () => { sent.push('edit'); return HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 321, name: 'Renamed' }) }); }),
+    );
+    await mutationQueue.retryFailed();
+
+    expect(sent).toEqual(['create', 'edit']);
+    expect(await offlineDb.mutationQueue.count()).toBe(0);
   });
 });
