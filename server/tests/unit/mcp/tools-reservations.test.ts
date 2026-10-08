@@ -241,13 +241,13 @@ describe('Tool: update_reservation', () => {
     const reservation = createReservation(testDb, trip.id, { title: 'Dinner', type: 'restaurant' });
     const auto = createBudgetItem(testDb, trip.id, { name: 'Dinner', category: 'food' });
     const picked = createBudgetItem(testDb, trip.id, { name: 'Taxi', category: 'transport' });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservation.id, auto.id, picked.id);
+    await updateRows(orm, BudgetItems, { id: { $in: [auto.id, picked.id] } }, { reservation: reservation.id });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'update_reservation', arguments: { tripId: trip.id, reservationId: reservation.id, type: 'activity' } });
       expect((parseToolResult(result) as { reservation: { type: string } }).reservation.type).toBe('activity');
     });
     // restaurant -> activity moves the auto-derived category; the hand-picked one stays.
-    expect(testDb.prepare('SELECT id, category FROM budget_items WHERE trip_id = ? ORDER BY id').all(trip.id))
+    expect((await findRows(orm, BudgetItems, { trip: trip.id }, { id: 'asc' })).map(r => ({ id: r.id, category: r.category })))
       .toEqual([{ id: auto.id, category: 'activities' }, { id: picked.id, category: 'transport' }]);
     const updated = broadcastMock.mock.calls.filter(c => c[1] === 'budget:updated').map(c => (c[2] as { item: { id: number } }).item.id);
     expect(updated).toEqual([auto.id]);

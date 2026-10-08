@@ -247,15 +247,15 @@ async function seedTemplate(userId: number, itemNames: string[]): Promise<number
 describe('template positions', () => {
   it('PACK-SVC-002b: template categories and items added at the same time take one position each', async () => {
     const { user } = createUser(testDb);
-    const templateId = seedTemplate(user.id, ['Tent']);
+    const templateId = await seedTemplate(user.id, ['Tent']);
     // seedTemplate's own category holds position 0 and its item position 0.
     const categories = await Promise.all(['Kitchen', 'Sleep', 'Clothes'].map((name) => svc.createTemplateCategory(String(templateId), name)));
     const catIds = categories.map((c) => (c as { category: { id: number } }).category.id);
-    expect((testDb.prepare('SELECT sort_order FROM packing_template_categories WHERE template_id = ? ORDER BY sort_order').all(templateId) as { sort_order: number }[])
+    expect((await findRows(await orm(), PackingTemplateCategories, { template: templateId }, { sort_order: 'asc' }))
       .map((r) => r.sort_order)).toEqual([0, 1, 2, 3]);
 
     await Promise.all(['Stove', 'Pot', 'Lighter'].map((name) => svc.createTemplateItem(String(templateId), String(catIds[0]), name)));
-    expect((testDb.prepare('SELECT sort_order FROM packing_template_items WHERE category_id = ? ORDER BY sort_order').all(catIds[0]) as { sort_order: number }[])
+    expect((await findRows(await orm(), PackingTemplateItems, { category: catIds[0] }, { sort_order: 'asc' }))
       .map((r) => r.sort_order)).toEqual([0, 1, 2]);
   });
 });
@@ -371,10 +371,10 @@ describe('createBag / deleteBag', () => {
     // Without the transaction every one of them read the same MAX and landed on 0.
     await Promise.all(['Carry-On', 'Checked', 'Daypack'].map((name) => svc.createBag(trip.id, { name })));
     await Promise.all(['Tent', 'Stove', 'Mat'].map((name) => svc.createItem(trip.id, { name }, user.id)));
-    const orders = (table: string) => (testDb.prepare(`SELECT sort_order FROM ${table} WHERE trip_id = ? ORDER BY sort_order`).all(trip.id) as { sort_order: number }[])
-      .map((r) => r.sort_order);
-    expect(orders('packing_bags')).toEqual([0, 1, 2]);
-    expect(orders('packing_items')).toEqual([0, 1, 2]);
+    const bags = await findRows(await orm(), PackingBags, { trip: trip.id }, { sort_order: 'asc' });
+    const items = await findRows(await orm(), PackingItems, { trip: trip.id }, { sort_order: 'asc' });
+    expect(bags.map((r) => r.sort_order)).toEqual([0, 1, 2]);
+    expect(items.map((r) => r.sort_order)).toEqual([0, 1, 2]);
   });
 
   it('PACK-SVC-006: deleteBag removes the bag and returns true', async () => {

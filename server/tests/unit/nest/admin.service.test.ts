@@ -116,6 +116,7 @@ import { readAppSetting } from '../../helpers/factories/settings';
 import { readUser } from '../../helpers/factories/users';
 import { McpTokens } from '../../../src/db/entities/McpTokens.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
+import { UserSessions } from '../../../src/db/entities/UserSessions.entity';
 import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
 import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourneyContributorsRepo } from '../../helpers/journey-repos';
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
@@ -734,8 +735,7 @@ const addPushDevice = async (userId: number, endpoint: string): Promise<void> =>
   await insertRow(orm, PushSubscriptions, { user: userId, endpoint, p256dh: 'p', auth: 'a', vapid_public_key: 'k' });
 };
 
-const liveSessions = (id: number): number =>
-  (testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = ? AND revoked_at IS NULL').get(id) as { n: number }).n;
+const liveSessions = (id: number): Promise<number> => countRows(orm, UserSessions, { user: id, revoked_at: null });
 
 const pushDeviceCount = (id: number): Promise<number> => countRows(orm, PushSubscriptions, { user: id });
 
@@ -804,8 +804,8 @@ describe('admin password reset revokes what an intruder already holds', () => {
 
     await updateUser(String(user.id), { password: 'ANewStrongPass123!' });
 
-    expect(liveSessions(user.id)).toBe(0);
-    expect(liveSessions(other.id)).toBe(1);
+    expect(await liveSessions(user.id)).toBe(0);
+    expect(await liveSessions(other.id)).toBe(1);
     expect(await auth.verifyJwtToken(intruder)).toBeNull();
     expect(await auth.verifyJwtToken(bystander)).not.toBeNull();
   });
@@ -832,8 +832,8 @@ describe('resetUserMfa', () => {
     await auth.generateToken({ id: admin.user.id });
 
     expect((await svc.resetUserMfa(String(user.id), admin.user.id)) as { success?: boolean }).toMatchObject({ success: true });
-    expect(liveSessions(user.id)).toBe(0);
-    expect(liveSessions(admin.user.id)).toBe(1);
+    expect(await liveSessions(user.id)).toBe(0);
+    expect(await liveSessions(admin.user.id)).toBe(1);
   });
 
   it('ADMIN-SVC-083 — clears the three columns disableMfa clears, so both paths leave one state', async () => {

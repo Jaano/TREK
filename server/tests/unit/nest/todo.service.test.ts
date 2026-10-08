@@ -124,7 +124,7 @@ describe('listItems and createItem', () => {
     const trip = createTrip(testDb, user.id);
     // Without the transaction both read the same MAX and both landed on 0.
     await Promise.all(['A', 'B', 'C'].map((name) => svc.createItem(trip.id, { name })));
-    const orders = (testDb.prepare('SELECT sort_order FROM todo_items WHERE trip_id = ? ORDER BY sort_order').all(trip.id) as { sort_order: number }[])
+    const orders = (await findRows(await sharedTestOrm(testDb), TodoItems, { trip: trip.id }, { sort_order: 'asc' }))
       .map((r) => r.sort_order);
     expect(orders).toEqual([0, 1, 2]);
   });

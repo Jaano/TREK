@@ -361,7 +361,7 @@ describe('setAdminPreferences', () => {
     const prefsRepo = await createTestNotificationChannelPreferencesRepo(testDb);
     const spy = vi.spyOn(prefsRepo, 'upsertPreference').mockRejectedValueOnce(new Error('disk full'));
     await expect(setAdminPreferences(user.id, { version_available: { email: false, inapp: false } })).rejects.toThrow('disk full');
-    expect(testDb.prepare("SELECT value FROM app_settings WHERE key = ?").get('admin_notif_pref_version_available_email')).toBeUndefined();
+    expect(await storedAppSetting('admin_notif_pref_version_available_email')).toBeNull();
     spy.mockRestore();
   });
 });

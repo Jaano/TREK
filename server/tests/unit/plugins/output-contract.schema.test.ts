@@ -17,6 +17,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createPluginRpcHostParts } from '../../helpers/plugin-host';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { updateRows } from '../../helpers/factories/rows';
+import { readTripDays } from '../../helpers/factories/trips';
+import { tagPlace } from '../../helpers/factories/places';
+import { Trips } from '../../../src/db/entities/Trips.entity';
 import {
   addTripMember,
   createBudgetItem,
@@ -63,6 +68,7 @@ const tableOf = (entity: PluginEntityName): string => {
 };
 
 const columnsOf = (table: string): string[] =>
+  // test-sql-allow: the check is against the columns the migrated table has, which only PRAGMA table_info reports.
   (testDb.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((c) => c.name);
 
 describe('the output contract against the migrated schema', () => {
@@ -138,13 +144,12 @@ describe('the output contract drops only the withheld fields', () => {
     tripId = trip.id;
     addTripMember(testDb, trip.id, member.id);
     // A real credential in the row, so "withheld" is proven rather than vacuous.
-    testDb.prepare("UPDATE trips SET feed_token = 'feed-secret' WHERE id = ?").run(trip.id);
-    dayIds = (testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as Array<{ id: number }>).map(
-      (d) => d.id,
-    );
+    const orm = await sharedTestOrm(testDb);
+    await updateRows(orm, Trips, { id: trip.id }, { feed_token: 'feed-secret' });
+    dayIds = (await readTripDays(orm, trip.id)).map((d) => d.id);
     placeId = createPlace(testDb, trip.id).id;
     const tag = createTag(testDb, owner.id);
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(placeId, tag.id);
+    await tagPlace(orm, placeId, [tag.id]);
     createDayAssignment(testDb, dayIds[0], placeId);
     createDayNote(testDb, dayIds[0], trip.id);
     createBudgetItem(testDb, trip.id);

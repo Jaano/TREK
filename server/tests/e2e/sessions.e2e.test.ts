@@ -47,6 +47,9 @@ import { SessionPurgeJob } from '../../src/nest/sessions/session-purge.job';
 import { withRequestContext } from '../../src/nest/database/request-context';
 import { encryptMfaSecret } from '../../src/nest/common/crypto/mfaCrypto';
 import { sessionRows } from '../helpers/sessions';
+import { insertRow, updateRows } from '../helpers/factories/rows';
+import { Users } from '../../src/db/entities/Users.entity';
+import { UserSessions } from '../../src/db/entities/UserSessions.entity';
 import { SessionRenewalInterceptor } from '../../src/nest/auth/session-renewal.interceptor';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
@@ -226,7 +229,7 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     expect(change.body).toEqual({ success: true });
     expect(((change.headers['set-cookie'] ?? []) as unknown as string[]).some((c) => c.startsWith('trek_session='))).toBe(false);
 
-    const rows = sessionRows(db as never, user.id);
+    const rows = await sessionRows(db as never, user.id);
     expect(rows).toEqual([expect.objectContaining({ id: sessionIdOf(cookie), revoked_at: expect.any(String) })]);
   }, 15000);
 
@@ -292,7 +295,7 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
   }, 15000);
 
   /** The rows of the user's sessions that still let a token in. */
-  const liveRows = (userId: number) => sessionRows(db as never, userId).filter((row) => row.revoked_at === null);
+  const liveRows = async (userId: number) => (await sessionRows(db as never, userId)).filter((row) => row.revoked_at === null);
 
   it('a password reset by email ends every session of the account', async () => {
     const { user, password } = freshUser('sess-reset');
@@ -312,8 +315,8 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
 
     expect((await me(laptop)).status).toBe(401);
     expect((await me(phone)).status).toBe(401);
-    expect(sessionRows(db as never, user.id).map((row) => row.id).sort()).toEqual([sessionIdOf(laptop), sessionIdOf(phone)].sort());
-    expect(liveRows(user.id)).toEqual([]);
+    expect((await sessionRows(db as never, user.id)).map((row) => row.id).sort()).toEqual([sessionIdOf(laptop), sessionIdOf(phone)].sort());
+    expect(await liveRows(user.id)).toEqual([]);
     // The new password signs in again, as a new session.
     const after = await signIn(user.email, 'Reset1234!x', 'Laptop');
     expect((await me(after)).status).toBe(200);
@@ -325,7 +328,7 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     const there = await signIn(user.email, password, 'There');
     // Two-factor turned on after both sign-ins, as the factory does it.
     const secret = 'JBSWY3DPEHPK3PXP';
-    db.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run(encryptMfaSecret(secret), user.id);
+    await updateRows(moduleRef.get(MikroORM), Users, { id: user.id }, { mfa_enabled: 1, mfa_secret: encryptMfaSecret(secret) });
 
     const off = await request(server)
       .post('/api/auth/mfa/disable')
@@ -336,19 +339,19 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
 
     expect((await me(there)).status).toBe(401);
     expect((await me(here)).status).toBe(200);
-    expect(liveRows(user.id).map((row) => row.id)).toEqual([sessionIdOf(here)]);
+    expect((await liveRows(user.id)).map((row) => row.id)).toEqual([sessionIdOf(here)]);
   }, 15000);
 
   it('deleting the account takes its sessions with it', async () => {
     const { user, password } = freshUser('sess-delete');
     const here = await signIn(user.email, password, 'Here');
     const there = await signIn(user.email, password, 'There');
-    expect(sessionRows(db as never, user.id)).toHaveLength(2);
+    expect(await sessionRows(db as never, user.id)).toHaveLength(2);
 
     const res = await request(server).delete('/api/auth/me').set('Cookie', here);
     expect(res.status).toBe(200);
 
-    expect(sessionRows(db as never, user.id)).toEqual([]);
+    expect(await sessionRows(db as never, user.id)).toEqual([]);
     expect((await me(here)).status).toBe(401);
     expect((await me(there)).status).toBe(401);
   }, 15000);
@@ -358,15 +361,19 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     const live = await signIn(user.email, password, 'Live');
     const ended = await signIn(user.email, password, 'Ended');
     expect((await request(server).delete(`/api/auth/sessions/${sessionIdOf(ended)}`).set('Cookie', live)).status).toBe(200);
-    db.prepare(
-      "INSERT INTO user_sessions (id, user_id, created_at, last_seen_at, expires_at) VALUES ('0b7c6f3e-2a51-4c8e-9d43-5f1e2b7a9c10', ?, '2020-01-01 00:00:00', '2020-01-01 00:00:00', '2020-01-02 00:00:00')",
-    ).run(user.id);
-    expect(sessionRows(db as never, user.id)).toHaveLength(3);
+    await insertRow(moduleRef.get(MikroORM), UserSessions, {
+      id: '0b7c6f3e-2a51-4c8e-9d43-5f1e2b7a9c10',
+      user: user.id,
+      created_at: '2020-01-01 00:00:00',
+      last_seen_at: '2020-01-01 00:00:00',
+      expires_at: '2020-01-02 00:00:00',
+    });
+    expect(await sessionRows(db as never, user.id)).toHaveLength(3);
 
     const job = moduleRef.get(SessionPurgeJob);
     await withRequestContext(moduleRef.get(MikroORM), () => job.tick());
 
-    expect(sessionRows(db as never, user.id).map((row) => row.id).sort()).toEqual([sessionIdOf(live), sessionIdOf(ended)].sort());
+    expect((await sessionRows(db as never, user.id)).map((row) => row.id).sort()).toEqual([sessionIdOf(live), sessionIdOf(ended)].sort());
     expect((await me(live)).status).toBe(200);
     expect((await me(ended)).status).toBe(401);
   }, 15000);
@@ -388,7 +395,7 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     const again = await request(server).get('/api/auth/me').set('Cookie', old).set('User-Agent', 'Old');
     expect(again.status).toBe(200);
     expect(((again.headers['set-cookie'] ?? []) as unknown as string[]).some((c) => c.startsWith('trek_session='))).toBe(false);
-    expect(sessionRows(db as never, user.id)).toEqual([expect.objectContaining({ id: sessionIdOf(renewed), revoked_at: expect.any(String) })]);
+    expect(await sessionRows(db as never, user.id)).toEqual([expect.objectContaining({ id: sessionIdOf(renewed), revoked_at: expect.any(String) })]);
     const list = await request(server).get('/api/auth/sessions').set('Cookie', old);
     expect(list.body.sessions).toEqual([]);
   }, 15000);

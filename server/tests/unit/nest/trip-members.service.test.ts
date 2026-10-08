@@ -50,8 +50,12 @@ import type { User } from '../../../src/types';
 import { notificationsStub } from '../../helpers/notifications';
 import { createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo, createTestTripsRepo, createTestTripMembersRepo, sharedTestOrm } from '../../helpers/test-uow';
 import { budgetRepoArgs } from '../../helpers/budget-repos';
-import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
 import { readUser } from '../../helpers/factories/users';
+import { makePlugin, setPluginUserConfig } from '../../helpers/factories/plugins';
+import { PluginUserConfig } from '../../../src/db/entities/PluginUserConfig.entity';
+import { PluginUserErasureQueue } from '../../../src/db/entities/PluginUserErasureQueue.entity';
+import { Plugins } from '../../../src/db/entities/Plugins.entity';
 import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
 import { Trips } from '../../../src/db/entities/Trips.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
@@ -438,10 +442,8 @@ describe('Task 6 review items — rollback and concurrency', () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     const { member: guest } = await roster.createGuest(trip.id, 'Rollback Ray', owner.id);
-    testDb.prepare('INSERT INTO plugins (id, name, version, permissions) VALUES (?, ?, ?, ?)')
-      .run('members-svc-019', 'members-svc-019', '1.0.0', JSON.stringify(['hook:user-data']));
-    testDb.prepare('INSERT INTO plugin_user_config (plugin_id, user_id, config) VALUES (?, ?, ?)')
-      .run('members-svc-019', guest.id, '{"token":"keep-me"}');
+    await makePlugin(await orm(), 'members-svc-019', { permissions: JSON.stringify(['hook:user-data']) });
+    await setPluginUserConfig(await orm(), 'members-svc-019', guest.id, { token: 'keep-me' });
 
     const spy = vi.spyOn(usersRepo, 'deleteGuest').mockRejectedValueOnce(new Error('boom'));
     try {
@@ -450,15 +452,15 @@ describe('Task 6 review items — rollback and concurrency', () => {
       // The erasure ran first, then the users delete rejected. Erasing outside the
       // transaction would have left the host rows deleted and an erasure queued for
       // a guest that still exists.
-      expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(guest.id)).toBeDefined();
-      expect(testDb.prepare('SELECT user_id FROM plugin_user_config WHERE user_id = ?').get(guest.id)).toBeDefined();
-      expect(testDb.prepare('SELECT plugin_id FROM plugin_user_erasure_queue WHERE user_id = ?').all(guest.id)).toEqual([]);
+      expect(await findRow(await orm(), Users, { id: guest.id })).not.toBeNull();
+      expect(await findRow(await orm(), PluginUserConfig, { user_id: guest.id })).not.toBeNull();
+      expect(await findRows(await orm(), PluginUserErasureQueue, { user_id: guest.id })).toEqual([]);
     } finally {
       spy.mockRestore();
       // resetTestDb leaves the plugin tables alone, so this test cleans up its own rows.
-      for (const t of ['plugin_user_erasure_queue', 'plugin_user_config', 'plugins']) {
-        testDb.prepare(`DELETE FROM ${t} WHERE ${t === 'plugins' ? 'id' : 'plugin_id'} = ?`).run('members-svc-019');
-      }
+      await deleteRows(await orm(), PluginUserErasureQueue, { plugin_id: 'members-svc-019' });
+      await deleteRows(await orm(), PluginUserConfig, { plugin_id: 'members-svc-019' });
+      await deleteRows(await orm(), Plugins, { id: 'members-svc-019' });
     }
   });
 

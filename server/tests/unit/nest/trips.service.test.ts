@@ -913,7 +913,7 @@ describe('resyncReservationDays (#1288)', () => {
 
     await expect(svc.updateTrip(trip.id, user.id, { start_date: '2025-06-02', end_date: '2025-06-06' }, 'user')).rejects.toThrow('boom');
 
-    expect(testDb.prepare('SELECT start_date, end_date FROM trips WHERE id = ?').get(trip.id))
+    expect(await storedFields(Trips, { id: trip.id }, ['start_date', 'end_date']))
       .toEqual({ start_date: '2025-06-01', end_date: '2025-06-05' });
     spy.mockRestore();
   });
@@ -1443,11 +1443,12 @@ describe('TripsService wrapper helpers', () => {
   it('re-anchors the budget before the trip row leaves its old currency (#1543)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { currency: 'EUR' });
     const plan = { next: 'RUB', rates: null };
     const seen: string[] = [];
     const prepareSpy = vi.spyOn(budgetSvc, 'prepareCurrencyRebase').mockResolvedValue(plan);
     const applySpy = vi.spyOn(budgetSvc, 'applyCurrencyRebase').mockImplementation(async () => {
+      // test-sql-allow: runs inside the update's open transaction, where an ORM read in a context of its own would wait on the held connection.
       seen.push((testDb.prepare('SELECT currency FROM trips WHERE id = ?').get(trip.id) as { currency: string }).currency);
     });
     try {
@@ -1456,7 +1457,7 @@ describe('TripsService wrapper helpers', () => {
       // The rebase reads the outgoing currency off the trip row, so it runs before the row moves.
       expect(applySpy).toHaveBeenCalledWith(trip.id, plan);
       expect(seen).toEqual(['EUR']);
-      expect(testDb.prepare('SELECT currency FROM trips WHERE id = ?').get(trip.id)).toEqual({ currency: 'RUB' });
+      expect(await storedFields(Trips, { id: trip.id }, ['currency'])).toEqual({ currency: 'RUB' });
     } finally {
       prepareSpy.mockRestore();
       applySpy.mockRestore();
@@ -1466,16 +1467,16 @@ describe('TripsService wrapper helpers', () => {
   it('TRIP-SVC-092: a failing day rebuild leaves the budget on the old currency with the trip (#1543)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-07-01', end_date: '2026-07-03' });
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { currency: 'EUR' });
     const item = createBudgetItem(testDb, trip.id, { total_price: 100 });
-    testDb.prepare("UPDATE budget_items SET currency = 'USD', exchange_rate = 1.1 WHERE id = ?").run(item.id);
+    await updateRows(await orm(), BudgetItems, { id: item.id }, { currency: 'USD', exchange_rate: 1.1 });
     // Rates come from the network in production; the plan is handed in so the real write runs.
     const prepareSpy = vi.spyOn(budgetSvc, 'prepareCurrencyRebase').mockResolvedValue({ next: 'JPY', rates: { USD: 0.0067, EUR: 0.0062 } });
     const daysSpy = vi.spyOn(svc, 'generateDays').mockRejectedValue(new Error('boom'));
     try {
       await expect(svc.update(trip.id, user.id, { currency: 'JPY', end_date: '2026-07-05' }, 'user')).rejects.toThrow('boom');
-      expect(testDb.prepare('SELECT currency, end_date FROM trips WHERE id = ?').get(trip.id)).toEqual({ currency: 'EUR', end_date: '2026-07-03' });
-      expect(testDb.prepare('SELECT currency, exchange_rate FROM budget_items WHERE id = ?').get(item.id)).toEqual({ currency: 'USD', exchange_rate: 1.1 });
+      expect(await storedFields(Trips, { id: trip.id }, ['currency', 'end_date'])).toEqual({ currency: 'EUR', end_date: '2026-07-03' });
+      expect(await storedFields(BudgetItems, { id: item.id }, ['currency', 'exchange_rate'])).toEqual({ currency: 'USD', exchange_rate: 1.1 });
     } finally {
       prepareSpy.mockRestore();
       daysSpy.mockRestore();

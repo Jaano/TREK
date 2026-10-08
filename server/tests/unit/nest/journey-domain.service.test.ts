@@ -2584,9 +2584,7 @@ describe('journey gallery', () => {
     ])));
     expect(batches.map((b) => b.length)).toEqual([2, 2, 2]);
 
-    const orders = testDb
-      .prepare('SELECT sort_order FROM journey_photos WHERE journey_id = ? ORDER BY sort_order')
-      .all(journey.id) as { sort_order: number }[];
+    const orders = await pickAll(JourneyPhotos, { journey: journey.id }, ['sort_order'], { sort_order: 'asc' });
     expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2, 3, 4, 5]);
   });
 
@@ -2596,13 +2594,9 @@ describe('journey gallery', () => {
     const photos = await Promise.all(['a', 'b', 'c'].map((n) => svc.addPhoto(entry.id, user.id, `journey/e-${n}.jpg`)));
     expect(photos.every(Boolean)).toBe(true);
 
-    const gallery = testDb
-      .prepare('SELECT sort_order FROM journey_photos WHERE journey_id = ? ORDER BY sort_order')
-      .all(journey.id) as { sort_order: number }[];
+    const gallery = await pickAll(JourneyPhotos, { journey: journey.id }, ['sort_order'], { sort_order: 'asc' });
     expect(gallery.map((o) => o.sort_order)).toEqual([0, 1, 2]);
-    const linked = testDb
-      .prepare('SELECT sort_order FROM journey_entry_photos WHERE entry_id = ? ORDER BY sort_order')
-      .all(entry.id) as { sort_order: number }[];
+    const linked = await pickAll(JourneyEntryPhotos, { entry: entry.id }, ['sort_order'], { sort_order: 'asc' });
     expect(linked.map((o) => o.sort_order)).toEqual([0, 1, 2]);
   });
 
@@ -3656,20 +3650,20 @@ describe('Plan 3g Task 2 — transaction rollback proofs (JG-TX1..4)', () => {
 
     await expect(svc.createJourney(user.id, { title: 'Orphan' })).rejects.toThrow('boom');
 
-    expect(testDb.prepare("SELECT id FROM journeys WHERE title = 'Orphan'").all()).toEqual([]);
+    expect(await pickAll(Journeys, { title: 'Orphan' }, ['id'])).toEqual([]);
   });
 
   it('JG-TX6 (createJourney): a failure after the trip is linked rolls back the journey and its owner, and nothing is broadcast', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-03-15', end_date: '2026-03-16' });
     vi.spyOn(journeysRepoDirect, 'updateCoverImage').mockRejectedValueOnce(new Error('boom'));
-    testDb.prepare("UPDATE trips SET cover_image = '/uploads/covers/x.jpg' WHERE id = ?").run(trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { cover_image: '/uploads/covers/x.jpg' });
     const broadcast = vi.spyOn(svc, 'broadcastJourneyEvent');
 
     await expect(svc.createJourney(user.id, { title: 'Half', trip_ids: [trip.id] })).rejects.toThrow('boom');
 
-    expect(testDb.prepare("SELECT id FROM journeys WHERE title = 'Half'").all()).toEqual([]);
-    expect(testDb.prepare('SELECT journey_id FROM journey_contributors WHERE user_id = ?').all(user.id)).toEqual([]);
+    expect(await pickAll(Journeys, { title: 'Half' }, ['id'])).toEqual([]);
+    expect(await pickAll(JourneyContributors, { user: user.id }, ['journey_id'])).toEqual([]);
     expect(broadcast).not.toHaveBeenCalled();
   });
 
@@ -3682,9 +3676,9 @@ describe('Plan 3g Task 2 — transaction rollback proofs (JG-TX1..4)', () => {
 
     await expect(svc.addPhoto(entry!.id, user.id, 'journey/tx7.jpg')).rejects.toThrow('boom');
 
-    expect(testDb.prepare('SELECT * FROM journey_photos WHERE journey_id = ?').all(journey.id)).toEqual([]);
-    expect(testDb.prepare("SELECT * FROM trek_photos WHERE file_path = 'journey/tx7.jpg'").all()).toEqual([]);
-    expect(testDb.prepare('SELECT type FROM journey_entries WHERE id = ?').get(entry!.id)).toEqual({ type: 'entry' });
+    expect(await findRows(await orm(), JourneyPhotos, { journey: journey.id })).toEqual([]);
+    expect(await findRows(await orm(), TrekPhotos, { file_path: 'journey/tx7.jpg' })).toEqual([]);
+    expect(await pickOne(JourneyEntries, { id: entry!.id }, ['type'])).toEqual({ type: 'entry' });
   });
 });
 

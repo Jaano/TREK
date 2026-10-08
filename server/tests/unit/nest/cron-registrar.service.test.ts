@@ -64,6 +64,8 @@ import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { SchedulerLeasesRepository } from '../../../src/db/repositories/SchedulerLeases.repository';
+import { SchedulerLeases } from '../../../src/db/entities/SchedulerLeases.entity';
+import { findRow, insertRow, updateRows } from '../../helpers/factories/rows';
 import { currentCorrelation, type Correlation } from '../../../src/nest/common/request-correlation';
 
 function makeRegistrar(isTest: boolean) {
@@ -299,16 +301,11 @@ describe('CronRegistrarService', () => {
       await t.close();
     });
 
-    const holder = (name: string) =>
-      testDb.prepare('SELECT owner, expires_at FROM scheduler_leases WHERE name = ?').get(name) as
-        | { owner: string; expires_at: number }
-        | undefined;
+    const holder = (name: string) => findRow(t, SchedulerLeases, { name });
 
     it('CRONREG-017: a tick another process holds does not run here', async () => {
       const name = 'lease-held-elsewhere';
-      testDb
-        .prepare('INSERT INTO scheduler_leases (name, owner, expires_at) VALUES (?, ?, ?)')
-        .run(name, 'other-host:1:peer', Date.now() + 60_000);
+      await insertRow(t, SchedulerLeases, { name, owner: 'other-host:1:peer', expires_at: Date.now() + 60_000 });
       const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
       let ran = false;
       registrar.register(name, '* * * * *', () => {
@@ -316,14 +313,12 @@ describe('CronRegistrarService', () => {
       });
       await h.jobs[0].onTick();
       expect(ran).toBe(false);
-      expect(holder(name)!.owner).toBe('other-host:1:peer');
+      expect((await holder(name))!.owner).toBe('other-host:1:peer');
     });
 
     it('CRONREG-021: a tick lost to another process is traced as skipped, and a tick run here as ok', async () => {
       const name = 'lease-trace-line';
-      testDb
-        .prepare('INSERT INTO scheduler_leases (name, owner, expires_at) VALUES (?, ?, ?)')
-        .run(name, 'other-host:1:peer', Date.now() + 60_000);
+      await insertRow(t, SchedulerLeases, { name, owner: 'other-host:1:peer', expires_at: Date.now() + 60_000 });
       const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
       registrar.register(name, '* * * * *', () => undefined);
       logDebugMock.mockClear();
@@ -333,7 +328,7 @@ describe('CronRegistrarService', () => {
       expect(lines()).toHaveLength(1);
       expect(lines()[0]).toMatch(new RegExp(`^cron ${name} skipped \\d+ms: lease held by another process$`));
 
-      testDb.prepare('UPDATE scheduler_leases SET expires_at = 1 WHERE name = ?').run(name);
+      await updateRows(t, SchedulerLeases, { name }, { expires_at: 1 });
       logDebugMock.mockClear();
       await h.jobs[0].onTick();
       await vi.waitFor(() => expect(lines()).toHaveLength(1));
@@ -359,7 +354,7 @@ describe('CronRegistrarService', () => {
         await h.jobs[0].onTick();
         expect(inTransaction).toEqual([true]);
         expect(ran).toBe(true);
-        expect(holder(name)!.owner).toBe(LEASE_OWNER);
+        expect((await holder(name))!.owner).toBe(LEASE_OWNER);
       } finally {
         spy.mockRestore();
       }
@@ -367,9 +362,7 @@ describe('CronRegistrarService', () => {
 
     it('CRONREG-018: a lapsed lease is taken over, and held for the settle window after the tick', async () => {
       const name = 'lease-lapsed';
-      testDb
-        .prepare('INSERT INTO scheduler_leases (name, owner, expires_at) VALUES (?, ?, ?)')
-        .run(name, 'crashed-host:9:gone', Date.now() - 1);
+      await insertRow(t, SchedulerLeases, { name, owner: 'crashed-host:9:gone', expires_at: Date.now() - 1 });
       const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
       let ran = false;
       registrar.register(name, '* * * * *', () => {
@@ -378,7 +371,7 @@ describe('CronRegistrarService', () => {
       const before = Date.now();
       await h.jobs[0].onTick();
       expect(ran).toBe(true);
-      const row = holder(name)!;
+      const row = (await holder(name))!;
       expect(row.owner).toBe(LEASE_OWNER);
       expect(row.expires_at).toBeGreaterThanOrEqual(before + LEASE_SETTLE_MS);
       expect(row.expires_at).toBeLessThan(before + LEASE_TTL_MS);
@@ -413,9 +406,9 @@ describe('CronRegistrarService', () => {
       });
       const tick = h.jobs[0].onTick();
       await running;
-      testDb.prepare('UPDATE scheduler_leases SET expires_at = 1 WHERE name = ?').run(name);
+      await updateRows(t, SchedulerLeases, { name }, { expires_at: 1 });
       vi.advanceTimersByTime(LEASE_HEARTBEAT_MS);
-      await vi.waitFor(() => expect(holder(name)!.expires_at).toBeGreaterThan(Date.now()));
+      await vi.waitFor(async () => expect((await holder(name))!.expires_at).toBeGreaterThan(Date.now()));
       finish();
       await tick;
     });

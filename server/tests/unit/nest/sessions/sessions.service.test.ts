@@ -5,6 +5,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
+import { countRows, findRow, findRows } from '../../../helpers/factories/rows';
 import { UserSessions } from '../../../../src/db/entities/UserSessions.entity';
 import { SessionsService, USER_AGENT_MAX_LENGTH, legacySessionId, sessionClientFrom } from '../../../../src/nest/sessions/sessions.service';
 import { userSessionIdSchema } from '@trek/shared';
@@ -32,9 +33,7 @@ function claimsOf(token: string): Claims {
 }
 
 function rowOf(id: string) {
-  return testDb.prepare('SELECT * FROM user_sessions WHERE id = ?').get(id) as
-    | { user_id: number; created_at: string; last_seen_at: string; expires_at: string; revoked_at: string | null; user_agent: string | null }
-    | undefined;
+  return findRow(t, UserSessions, { id });
 }
 
 function textOf(seconds: number): string {
@@ -62,7 +61,7 @@ describe('SessionsService.issue', () => {
     expect('remember' in claims).toBe(false);
     expect(claims.jti).toMatch(/^[0-9a-f-]{36}$/);
     expect(claims.exp - claims.iat).toBe(SESSION_DURATION_SECONDS);
-    expect(rowOf(claims.jti)).toEqual({
+    expect(await rowOf(claims.jti)).toEqual({
       id: claims.jti,
       user_id: user.id,
       created_at: textOf(claims.iat),
@@ -90,8 +89,8 @@ describe('SessionsService.issue', () => {
     const b = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
 
     expect(a.jti).not.toBe(b.jti);
-    expect(rowOf(a.jti)?.user_agent).toHaveLength(USER_AGENT_MAX_LENGTH);
-    expect(rowOf(b.jti)?.user_agent).toBeNull();
+    expect((await rowOf(a.jti))?.user_agent).toHaveLength(USER_AGENT_MAX_LENGTH);
+    expect((await rowOf(b.jti))?.user_agent).toBeNull();
   });
 });
 
@@ -111,13 +110,13 @@ describe('SessionsService.renew', () => {
     expect(claims.jti).toBe(first.jti);
     expect(claims.remember).toBe(false);
     expect(claims.exp).toBeGreaterThan(first.exp);
-    expect(rowOf(first.jti)).toEqual(expect.objectContaining({
+    expect(await rowOf(first.jti)).toEqual(expect.objectContaining({
       expires_at: textOf(claims.exp),
       last_seen_at: textOf(Date.parse('2026-10-08T00:00:00Z') / 1000 + SESSION_DURATION_SECONDS * 0.75),
       created_at: '2026-10-08 00:00:00',
       user_agent: null,
     }));
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions').get()).toEqual({ n: 1 });
+    expect(await countRows(t, UserSessions)).toBe(1);
   });
 
   it('SESS-005: a session that ended in the meantime is not renewed', async () => {
@@ -126,7 +125,7 @@ describe('SessionsService.renew', () => {
     await svc.revoke(user.id, first.jti);
 
     expect(await svc.renew({ id: user.id, pv: 0, jti: first.jti })).toBeNull();
-    expect(rowOf(first.jti)?.expires_at).toBe(textOf(first.exp));
+    expect((await rowOf(first.jti))?.expires_at).toBe(textOf(first.exp));
   });
 
   it('SESS-006: a token from before sessions were tracked comes back as a tracked session', async () => {
@@ -136,7 +135,7 @@ describe('SessionsService.renew', () => {
 
     expect(claims.pv).toBe(0);
     expect(claims.remember).toBe(true);
-    expect(rowOf(claims.jti)).toEqual(expect.objectContaining({ user_id: user.id, user_agent: 'Safari', revoked_at: null }));
+    expect(await rowOf(claims.jti)).toEqual(expect.objectContaining({ user_id: user.id, user_agent: 'Safari', revoked_at: null }));
   });
 });
 
@@ -156,7 +155,8 @@ describe('SessionsService.renew of a token from before tracking', () => {
 
     const ids = new Set(renewed.map((token) => claimsOf(token!).jti));
     expect(ids).toEqual(new Set([legacySessionId(legacy)]));
-    expect(testDb.prepare('SELECT id, user_agent, revoked_at FROM user_sessions WHERE user_id = ?').all(user.id)).toEqual([
+    const rows = await findRows(t, UserSessions, { user: user.id });
+    expect(rows.map(({ id, user_agent, revoked_at }) => ({ id, user_agent, revoked_at }))).toEqual([
       { id: legacySessionId(legacy), user_agent: 'Page load', revoked_at: null },
     ]);
     expect(await svc.list(user.id)).toHaveLength(1);
@@ -169,8 +169,8 @@ describe('SessionsService.renew of a token from before tracking', () => {
     expect(await svc.revoke(user.id, first.jti)).toBe(true);
 
     expect(await svc.renew({ id: user.id, pv: 0, token: legacy })).toBeNull();
-    expect(rowOf(first.jti)?.revoked_at).not.toBeNull();
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = ?').get(user.id)).toEqual({ n: 1 });
+    expect((await rowOf(first.jti))?.revoked_at).not.toBeNull();
+    expect(await countRows(t, UserSessions, { user: user.id })).toBe(1);
   });
 
   it('SESS-017: a session derived from it that was ended stays ended through the nightly purge', async () => {
@@ -182,7 +182,7 @@ describe('SessionsService.renew of a token from before tracking', () => {
     // The purge that night, while the old token is still valid.
     expect(await svc.purgeInactive(new Date())).toBe(0);
     expect(await svc.renew({ id: user.id, pv: 0, token: legacy })).toBeNull();
-    expect(rowOf(first.jti)?.revoked_at).not.toBeNull();
+    expect((await rowOf(first.jti))?.revoked_at).not.toBeNull();
     expect(await svc.list(user.id)).toEqual([]);
 
     // Once the old token has expired the row may go, since the token is refused by then.
@@ -198,7 +198,7 @@ describe('SessionsService.renew of a token from before tracking', () => {
     const renewed = claimsOf((await svc.renew({ id: user.id, pv: 0, token: legacy }))!);
 
     expect(renewed.exp - renewed.iat).toBe(SESSION_DURATION_SECONDS);
-    expect(rowOf(renewed.jti)?.expires_at).toBe(textOf((jwt.decode(legacy) as { exp: number }).exp));
+    expect((await rowOf(renewed.jti))?.expires_at).toBe(textOf((jwt.decode(legacy) as { exp: number }).exp));
   });
 
   it('SESS-014: two different tokens of the same user stay two sessions', async () => {
@@ -246,7 +246,7 @@ describe('SessionsService list and revoke', () => {
 
     expect(await svc.revoke(other.id, mine.jti)).toBe(false);
     expect(await svc.revoke(user.id, mine.jti)).toBe(true);
-    expect(rowOf(mine.jti)?.revoked_at).not.toBeNull();
+    expect((await rowOf(mine.jti))?.revoked_at).not.toBeNull();
   });
 
   it('SESS-009: revokeAll ends every session, or every one but the current', async () => {
@@ -256,9 +256,9 @@ describe('SessionsService list and revoke', () => {
     const c = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
 
     expect(await svc.revokeAll(user.id, b.jti)).toBe(2);
-    expect(rowOf(b.jti)?.revoked_at).toBeNull();
-    expect(rowOf(a.jti)?.revoked_at).not.toBeNull();
-    expect(rowOf(c.jti)?.revoked_at).not.toBeNull();
+    expect((await rowOf(b.jti))?.revoked_at).toBeNull();
+    expect((await rowOf(a.jti))?.revoked_at).not.toBeNull();
+    expect((await rowOf(c.jti))?.revoked_at).not.toBeNull();
     expect(await svc.revokeAll(user.id)).toBe(1);
   });
 
@@ -269,7 +269,7 @@ describe('SessionsService list and revoke', () => {
     expect(await svc.endSession(null)).toBe(false);
     expect(await svc.endSession({ id: user.id })).toBe(false);
     expect(await svc.endSession({ id: user.id, jti: mine.jti })).toBe(true);
-    expect(rowOf(mine.jti)?.revoked_at).not.toBeNull();
+    expect((await rowOf(mine.jti))?.revoked_at).not.toBeNull();
   });
 
   it('SESS-011: purgeInactive removes the expired rows and keeps a revoked one until it expires', async () => {
@@ -282,13 +282,13 @@ describe('SessionsService list and revoke', () => {
     // Just past the default lifetime: the short session has expired, the remembered ones have not.
     expect(SESSION_DURATION_REMEMBER_SECONDS).toBeGreaterThan(SESSION_DURATION_SECONDS + 60);
     expect(await svc.purgeInactive(new Date(Date.now() + (SESSION_DURATION_SECONDS + 60) * 1000))).toBe(1);
-    expect(rowOf(live.jti)).toBeDefined();
-    expect(rowOf(ended.jti)?.revoked_at).not.toBeNull();
-    expect(rowOf(short.jti)).toBeUndefined();
+    expect(await rowOf(live.jti)).not.toBeNull();
+    expect((await rowOf(ended.jti))?.revoked_at).not.toBeNull();
+    expect(await rowOf(short.jti)).toBeNull();
 
     // Past the long lifetime as well: the revoked row goes with the live one.
     expect(await svc.purgeInactive(new Date(Date.now() + (SESSION_DURATION_REMEMBER_SECONDS + 60) * 1000))).toBe(2);
-    expect(rowOf(ended.jti)).toBeUndefined();
+    expect(await rowOf(ended.jti)).toBeNull();
   });
 });
 
@@ -303,7 +303,7 @@ describe('SessionsService as the session check', () => {
     expect(await svc.findActive(live.jti, user.id, now)).toEqual({ id: live.jti, last_seen_at: textOf(live.iat) });
     expect(await svc.findActive(ended.jti, user.id, now)).toBeNull();
     await svc.touchLastSeen(live.jti, '2030-01-01 00:00:00');
-    expect(rowOf(live.jti)?.last_seen_at).toBe('2030-01-01 00:00:00');
+    expect((await rowOf(live.jti))?.last_seen_at).toBe('2030-01-01 00:00:00');
 
     const sign = (jti: string) => jwt.sign({ id: user.id, pv: 0 }, JWT_SECRET, { algorithm: 'HS256', expiresIn: 600, jwtid: jti });
     expect((await verifyJwtAndLoadUser(sign(live.jti), t.repo(Users), svc))?.id).toBe(user.id);

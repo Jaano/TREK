@@ -277,7 +277,7 @@ describe('create (service)', () => {
     const trip = createTrip(testDb, user.id);
     // Without the transaction both read the same MAX and both became day 1.
     await Promise.all([svc.create(trip.id), svc.create(trip.id), svc.create(trip.id)]);
-    const numbers = (testDb.prepare('SELECT day_number FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { day_number: number }[])
+    const numbers = (await findRows(await orm(), Days, { trip: trip.id }, { day_number: 'asc' }))
       .map((d) => d.day_number);
     expect(numbers).toEqual([1, 2, 3]);
   });

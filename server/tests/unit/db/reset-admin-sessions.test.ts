@@ -80,6 +80,7 @@ function resetAdmin(email: string): void {
 function read<T>(sql: string): T[] {
   const db = new Database(dbPath);
   try {
+    // test-sql-allow: reads the throwaway file reset-admin.js ran on, a hand-built two-table database no ORM is bound to.
     return db.prepare(sql).all() as T[];
   } finally {
     db.close();

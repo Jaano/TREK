@@ -294,7 +294,7 @@ describe('create', () => {
 
     await expect(svc.create(String(trip.id), { name: 'Half Place', tags: [tag.id] })).rejects.toThrow('disk full');
 
-    expect(testDb.prepare("SELECT id FROM places WHERE name = 'Half Place'").all()).toEqual([]);
+    expect(await findRows(orm, Places, { name: 'Half Place' })).toEqual([]);
     spy.mockRestore();
   });
 

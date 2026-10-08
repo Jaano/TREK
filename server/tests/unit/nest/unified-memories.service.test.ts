@@ -248,15 +248,15 @@ describe('addTripPhotos is atomic per photo', () => {
   it('MEM-UNIFIED-007b: the photo row and its trip link are one write: a failing link leaves no photo row', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare(
-      'INSERT OR IGNORE INTO photo_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run('tx-prov', 'Tx', 'Tx provider', 'Image', 1, 98);
+    await insertRowIgnoringConflict(orm, PhotoProviders, {
+      id: 'tx-prov', name: 'Tx', description: 'Tx provider', icon: 'Image', enabled: 1, sort_order: 98,
+    });
     const spy = vi.spyOn(tripPhotosRepo, 'insertIgnore').mockRejectedValueOnce(new Error('disk full'));
 
     const result = await addTripPhotos(String(trip.id), user.id, false, [{ provider: 'tx-prov', asset_ids: ['asset-tx'] }], 'sid');
 
     expect(result.success).toBe(false);
-    expect(testDb.prepare("SELECT id FROM trek_photos WHERE asset_id = 'asset-tx'").all()).toEqual([]);
+    expect(await findRows(orm, TrekPhotos, { asset_id: 'asset-tx' })).toEqual([]);
     spy.mockRestore();
   });
 });

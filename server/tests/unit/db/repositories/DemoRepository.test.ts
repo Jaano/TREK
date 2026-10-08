@@ -16,6 +16,7 @@ import { PackingItems } from '../../../../src/db/entities/PackingItems.entity';
 import { Places } from '../../../../src/db/entities/Places.entity';
 import { Reservations } from '../../../../src/db/entities/Reservations.entity';
 import { TripMembers } from '../../../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../../../src/db/entities/Trips.entity';
 import { Users } from '../../../../src/db/entities/Users.entity';
 
 /** The given columns of a row, the shape a narrow SELECT returned. */
@@ -114,7 +115,7 @@ describe('DemoRepository', () => {
     const { user } = createAdmin(testDb);
     const tripId = await demo.insertTrip(user.id, 'Ids', 'd', '2026-05-01', '2026-05-02', 'EUR');
     expect(typeof tripId).toBe('number');
-    const latest = testDb.prepare('SELECT MAX(id) AS id FROM trips').get() as { id: number };
+    const [latest] = await findRows(t, Trips, {}, { id: 'desc' });
     expect(tripId).toBe(latest.id);
 
     const dayId = await demo.insertDay(tripId, 1, '2026-05-01');
@@ -122,8 +123,8 @@ describe('DemoRepository', () => {
     expect(secondDayId).toBeGreaterThan(dayId);
 
     await demo.insertPackingItem(tripId, 'Charger', 0, 'Tech', 1);
-    const packing = testDb.prepare('SELECT updated_at FROM packing_items WHERE trip_id = ?').get(tripId) as { updated_at: string | null };
-    expect(packing.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    const packing = await findRow(t, PackingItems, { trip: tripId });
+    expect(packing?.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
   });
 
   it('DEMOREPO-CRED-001 (DMR1/DMR5 round trip): getAdminCredentials reads exactly what restoreAdminCredentials wrote', async () => {

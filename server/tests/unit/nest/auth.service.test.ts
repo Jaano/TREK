@@ -97,6 +97,7 @@ import { McpTokens } from '../../../src/db/entities/McpTokens.entity';
 import { PasswordResetTokens } from '../../../src/db/entities/PasswordResetTokens.entity';
 import { PushSubscriptions } from '../../../src/db/entities/PushSubscriptions.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
+import { UserSessions } from '../../../src/db/entities/UserSessions.entity';
 import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
 import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
 import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourneyContributorsRepo } from '../../helpers/journey-repos';
@@ -536,8 +537,8 @@ describe('changePassword — session invalidation', () => {
     const result = await svc.changePassword(user.id, user.email, { current_password: password, new_password: 'New1234!' }, undefined, {}, false);
 
     expect(result).toEqual({ success: true });
-    expect(pvOf(user.id)).toBe(1);
-    const rows = sessionRows(testDb, user.id);
+    expect(await pvOf(user.id)).toBe(1);
+    const rows = await sessionRows(testDb, user.id);
     expect(rows).toHaveLength(1);
     expect(rows.every((row) => row.revoked_at !== null)).toBe(true);
   });
@@ -800,7 +801,7 @@ describe('demoLogin', () => {
     const result = await svc.demoLogin({ userAgent: 'Demo visitor' });
     expect(typeof result.token).toBe('string');
     expect(result.user).not.toHaveProperty('password_hash');
-    expect(sessionRows(testDb, user.id).map((r) => r.user_agent)).toEqual(['Demo visitor']);
+    expect((await sessionRows(testDb, user.id)).map((r) => r.user_agent)).toEqual(['Demo visitor']);
     vi.unstubAllEnvs();
   });
 });
@@ -1287,14 +1288,14 @@ describe('registerUser loses the race for an email', () => {
 });
 
 describe('session tracking', () => {
-  const active = (userId: number) => sessionRows(testDb, userId).filter((row) => row.revoked_at === null);
+  const active = async (userId: number) => (await sessionRows(testDb, userId)).filter((row) => row.revoked_at === null);
 
   it('AUTH-SESS-001: a minted token names a new session row whose expiry is the token\'s own', async () => {
     const { user } = createUser(testDb);
     const token = await svc.generateToken({ id: user.id }, true, { userAgent: 'x'.repeat(300) });
     const claims = decodeJwt(token) as { jti: string; exp: number };
 
-    const rows = sessionRows(testDb, user.id);
+    const rows = await sessionRows(testDb, user.id);
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(claims.jti);
     expect(rows[0].expires_at).toBe(new Date(claims.exp * 1000).toISOString().slice(0, 19).replace('T', ' '));
@@ -1306,7 +1307,7 @@ describe('session tracking', () => {
     const { user, password } = createUser(testDb);
     const result = await svc.loginUser({ email: user.email, password }, { userAgent: 'Firefox/130' });
     expect(typeof result.token).toBe('string');
-    expect(sessionRows(testDb, user.id).map((row) => row.user_agent)).toEqual(['Firefox/130']);
+    expect((await sessionRows(testDb, user.id)).map((row) => row.user_agent)).toEqual(['Firefox/130']);
   });
 
   it('AUTH-SESS-003: a revoked session token no longer verifies', async () => {
@@ -1314,7 +1315,7 @@ describe('session tracking', () => {
     const token = await svc.generateToken({ id: user.id });
     expect(await svc.verifyJwtToken(token)).not.toBeNull();
 
-    testDb.prepare("UPDATE user_sessions SET revoked_at = '2026-01-01 00:00:00' WHERE user_id = ?").run(user.id);
+    await updateRows(orm, UserSessions, { user: user.id }, { revoked_at: '2026-01-01 00:00:00' });
     expect(await svc.verifyJwtToken(token)).toBeNull();
   });
 
@@ -1328,7 +1329,7 @@ describe('session tracking', () => {
     expect(await svc.verifyJwtToken(laptop)).toBeNull();
     expect(await svc.verifyJwtToken(phone)).toBeNull();
     expect(await svc.verifyJwtToken(result.token!)).not.toBeNull();
-    expect(active(user.id).map((row) => row.user_agent)).toEqual(['Safari']);
+    expect((await active(user.id)).map((row) => row.user_agent)).toEqual(['Safari']);
   });
 
   it('AUTH-SESS-005: a password reset ends every session', async () => {
@@ -1337,14 +1338,14 @@ describe('session tracking', () => {
     const issued = await svc.requestPasswordReset(user.email, null);
 
     expect(await svc.resetPassword({ token: issued.tokenForDelivery!, new_password: 'Fresh123!' })).toEqual({ success: true, userId: user.id });
-    expect(active(user.id)).toEqual([]);
+    expect(await active(user.id)).toEqual([]);
     expect(await svc.verifyJwtToken(token)).toBeNull();
   });
 
   it('AUTH-SESS-006: disabling MFA ends every other session and keeps the one it was done from', async () => {
     const { user, password } = createUser(testDb);
     const secret = authenticator.generateSecret();
-    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run('enc:' + secret, user.id);
+    await updateRows(orm, Users, { id: user.id }, { mfa_enabled: 1, mfa_secret: 'enc:' + secret });
     const here = await svc.generateToken({ id: user.id });
     const elsewhere = await svc.generateToken({ id: user.id });
     const hereId = (decodeJwt(here) as { jti: string }).jti;
@@ -1357,7 +1358,7 @@ describe('session tracking', () => {
   it('AUTH-SESS-007: a refused MFA disable leaves the sessions alone', async () => {
     const { user } = createUser(testDb);
     const secret = authenticator.generateSecret();
-    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run('enc:' + secret, user.id);
+    await updateRows(orm, Users, { id: user.id }, { mfa_enabled: 1, mfa_secret: 'enc:' + secret });
     const token = await svc.generateToken({ id: user.id });
 
     expect((await svc.disableMfa(user.id, user.email, { password: 'wrong', code: authenticator.generate(secret) })).status).toBe(401);
@@ -1367,17 +1368,17 @@ describe('session tracking', () => {
   it('AUTH-SESS-008: an MFA login records the device too', async () => {
     const { user, password } = createUser(testDb);
     const secret = authenticator.generateSecret();
-    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run('enc:' + secret, user.id);
+    await updateRows(orm, Users, { id: user.id }, { mfa_enabled: 1, mfa_secret: 'enc:' + secret });
     const interstitial = await svc.loginUser({ email: user.email, password });
 
     const result = await svc.verifyMfaLogin({ mfa_token: interstitial.mfa_token, code: authenticator.generate(secret) }, { userAgent: 'Edge' });
     expect(await svc.verifyJwtToken(result.token!)).not.toBeNull();
-    expect(sessionRows(testDb, user.id).map((row) => row.user_agent)).toEqual(['Edge']);
+    expect((await sessionRows(testDb, user.id)).map((row) => row.user_agent)).toEqual(['Edge']);
   });
 
   it('AUTH-SESS-009: register records the first session with its device', async () => {
     const result = await svc.registerUser({ username: 'sess-reg', email: 'sess-reg@example.test', password: 'Secure123!' }, { userAgent: 'Chrome' });
     const userId = (decodeJwt(result.token!) as { id: number }).id;
-    expect(sessionRows(testDb, userId).map((row) => row.user_agent)).toEqual(['Chrome']);
+    expect((await sessionRows(testDb, userId)).map((row) => row.user_agent)).toEqual(['Chrome']);
   });
 });

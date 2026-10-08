@@ -38,6 +38,7 @@ function portWith(maintenance: { walCheckpoint: unknown; vacuumInto: unknown }):
 function writeDb(file: string, label: string): void {
   const db = new Database(file);
   db.exec('CREATE TABLE marker (label TEXT NOT NULL)');
+  // test-sql-allow: the marker table is a bare fixture file no entity maps, and no ORM is bound to this handle.
   db.prepare('INSERT INTO marker (label) VALUES (?)').run(label);
   db.close();
 }
@@ -45,6 +46,7 @@ function writeDb(file: string, label: string): void {
 function readLabel(file: string): string {
   const db = new Database(file, { readonly: true });
   try {
+    // test-sql-allow: reads the copied file on a read-only handle no ORM is bound to, from a table no entity maps.
     return (db.prepare('SELECT label FROM marker').get() as { label: string }).label;
   } finally {
     db.close();
@@ -102,6 +104,7 @@ describe('SqliteDatabaseBackup', () => {
 
     it('SQLBK-004: writes a consistent copy of the live database', async () => {
       // A write that sits in the WAL only: VACUUM INTO still carries it.
+      // test-sql-allow: the marker table is a bare fixture no entity maps; the write has to land in the WAL of this file.
       live.prepare('UPDATE marker SET label = ?').run('after');
       const target = path.join(dir, 'copy.db');
       const port = portWith(new MaintenanceRepository(orm.em));

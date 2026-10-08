@@ -50,6 +50,7 @@ describe('db/database.ts connection lifecycle', () => {
       log.mockRestore();
     }
     expect(() => getRawConnection()).toThrow('Database connection is not available (restore in progress?)');
+    // test-sql-allow: tests that the raw db proxy itself refuses a statement while the connection is closed; no ORM is involved.
     expect(() => db.prepare('SELECT 1')).toThrow('Database connection is not available (restore in progress?)');
     expect(opened.count).toBe(1);
   });

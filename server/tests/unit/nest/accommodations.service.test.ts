@@ -216,14 +216,14 @@ describe('updateAccommodation', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id, { name: 'Hotel' });
     await svc.createAccommodation(trip.id, { place_id: place.id, start_day_id: day.id, end_day_id: day.id, check_in: '14:00' });
-    const { id } = testDb.prepare('SELECT id FROM day_accommodations WHERE trip_id = ?').get(trip.id) as { id: number };
+    const { id } = (await findRow(await orm(), DayAccommodations, { trip: trip.id }))!;
     const existing = (await svc.getAccommodation(id, trip.id))!;
     const reservations = await createTestReservationsRepo(testDb);
     const spy = vi.spyOn(reservations, 'setMetadataAndConfirmation').mockRejectedValueOnce(new Error('boom'));
 
     await expect(svc.updateAccommodation(id, existing, { check_in: '18:00' })).rejects.toThrow('boom');
 
-    expect(testDb.prepare('SELECT check_in FROM day_accommodations WHERE id = ?').get(id)).toEqual({ check_in: '14:00' });
+    expect((await findRow(await orm(), DayAccommodations, { id }))!.check_in).toBe('14:00');
     spy.mockRestore();
   });
 

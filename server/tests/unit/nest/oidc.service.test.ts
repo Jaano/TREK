@@ -110,6 +110,7 @@ import { makeInviteToken } from '../../helpers/factories/tokens';
 import { InviteTokens } from '../../../src/db/entities/InviteTokens.entity';
 import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
+import { UserSessions } from '../../../src/db/entities/UserSessions.entity';
 
 const orm = () => sharedTestOrm(testDb);
 
@@ -329,8 +330,9 @@ describe('generateToken', () => {
     const { user } = createUser(testDb, { email: 'sso-session@example.com' });
     const token = await svc.generateToken({ id: user.id }, undefined, { userAgent: 'SSO Browser' });
     const { jti } = jwtLib.decode(token) as { jti: string };
-    const row = testDb.prepare('SELECT user_id, user_agent, revoked_at FROM user_sessions WHERE id = ?').get(jti);
-    expect(row).toEqual({ user_id: user.id, user_agent: 'SSO Browser', revoked_at: null });
+    const row = await findRow(await orm(), UserSessions, { id: jti });
+    expect(row && { user_id: row.user_id, user_agent: row.user_agent, revoked_at: row.revoked_at })
+      .toEqual({ user_id: user.id, user_agent: 'SSO Browser', revoked_at: null });
     expect((await auth.verifyJwtToken(token))?.id).toBe(user.id);
   });
 });
@@ -802,8 +804,9 @@ describe('findOrCreateUser', () => {
 
   it('OIDC-SVC-062: the identity switch and the avatar are one write: a failing avatar keeps the old link', async () => {
     const { user } = createUser(testDb, { email: 'switch4@example.com' });
-    testDb.prepare('UPDATE users SET oidc_sub = ?, oidc_issuer = ?, avatar = ? WHERE id = ?')
-      .run('sub-old-4', 'https://old-idp.example.com', 'https://old-idp.example.com/u/me.png', user.id);
+    await setUserColumns(user.id, {
+      oidc_sub: 'sub-old-4', oidc_issuer: 'https://old-idp.example.com', avatar: 'https://old-idp.example.com/u/me.png',
+    });
     const users = await createTestUsersRepo(testDb);
     const spy = vi.spyOn(users, 'setAvatarRaw').mockRejectedValueOnce(new Error('disk full'));
 
@@ -812,8 +815,8 @@ describe('findOrCreateUser', () => {
       { ...MOCK_CONFIG, issuer: 'https://new-idp.example.com' },
     )).rejects.toThrow('disk full');
 
-    expect(testDb.prepare('SELECT oidc_sub, oidc_issuer FROM users WHERE id = ?').get(user.id))
-      .toEqual({ oidc_sub: 'sub-old-4', oidc_issuer: 'https://old-idp.example.com' });
+    const { oidc_sub, oidc_issuer } = await readUser(await orm(), user.id);
+    expect({ oidc_sub, oidc_issuer }).toEqual({ oidc_sub: 'sub-old-4', oidc_issuer: 'https://old-idp.example.com' });
     spy.mockRestore();
   });
 

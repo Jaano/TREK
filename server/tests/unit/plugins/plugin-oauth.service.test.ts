@@ -40,7 +40,7 @@ import { Plugins } from '../../../src/db/entities/Plugins.entity';
 import { PluginOauthTokens } from '../../../src/db/entities/PluginOauthTokens.entity';
 import { PluginOauthState } from '../../../src/db/entities/PluginOauthState.entity';
 import { PluginSettingsFields } from '../../../src/db/entities/PluginSettingsFields.entity';
-import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
 
 const CFG = {
   oauth_authorize_url: 'https://provider.example/authorize',
@@ -130,8 +130,8 @@ describe('PluginOAuthService', () => {
     const orm = await sharedTestOrm(getDb.current as Database.Database);
     vi.spyOn(orm.repo(PluginOauthState), 'insertState').mockRejectedValueOnce(new Error('disk full'));
     await expect(svc.startConnect('p', 42, NOW)).rejects.toThrow('disk full');
-    const rows = getDb.current as unknown as InstanceType<typeof Database>;
-    expect(rows.prepare('SELECT state FROM plugin_oauth_state WHERE user_id = 42').all()).toEqual([{ state: first }]);
+    const rows = await findRows(orm, PluginOauthState, { user_id: 42 });
+    expect(rows.map(({ state }) => ({ state }))).toEqual([{ state: first }]);
   });
 
   it('rejects a non-https / loopback / metadata / internal authorize endpoint', async () => {

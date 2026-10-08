@@ -22,6 +22,9 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createTestReservationsRepo, createTestReservationEndpointsRepo, createTestUnitOfWork } from '../../../helpers/test-uow';
 import type { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
 import { createUser, createTrip } from '../../../helpers/factories';
+import { makeReservation } from '../../../helpers/factories/reservations';
+import { countRows } from '../../../helpers/factories/rows';
+import { ReservationEndpoints } from '../../../../src/db/entities/ReservationEndpoints.entity';
 import type { ReservationsRepository } from '../../../../src/db/repositories/Reservations.repository';
 import type { ReservationEndpointsRepository } from '../../../../src/db/repositories/ReservationEndpoints.repository';
 
@@ -112,8 +115,8 @@ describe('AirportsService boot backfill', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const meta = JSON.stringify({ departure_airport: 'FRA', arrival_airport: 'JFK' });
-    const half = Number(testDb.prepare("INSERT INTO reservations (trip_id, title, type, metadata) VALUES (?, 'Out', 'flight', ?)").run(trip.id, meta).lastInsertRowid);
-    const whole = Number(testDb.prepare("INSERT INTO reservations (trip_id, title, type, metadata) VALUES (?, 'Back', 'flight', ?)").run(trip.id, meta).lastInsertRowid);
+    const half = (await makeReservation(t, trip.id, { title: 'Out', type: 'flight', metadata: meta })).id;
+    const whole = (await makeReservation(t, trip.id, { title: 'Back', type: 'flight', metadata: meta })).id;
     const insert = endpointsRepo.insertEndpoint.bind(endpointsRepo);
     // The first flight's 'to' endpoint fails, which ends this run.
     const spy = vi.spyOn(endpointsRepo, 'insertEndpoint')
@@ -122,14 +125,14 @@ describe('AirportsService boot backfill', () => {
     const svc = new AirportsService(reservationsRepo, endpointsRepo, {} as CronRegistrarService, uow);
 
     await expect(svc.backfillFlightEndpoints()).rejects.toThrow('disk full');
-    const count = (id: number) => (testDb.prepare('SELECT COUNT(*) AS c FROM reservation_endpoints WHERE reservation_id = ?').get(id) as { c: number }).c;
-    expect(count(half)).toBe(0);
+    const count = (id: number) => countRows(t, ReservationEndpoints, { reservation: id });
+    expect(await count(half)).toBe(0);
     spy.mockRestore();
 
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     await svc.backfillFlightEndpoints();
     logSpy.mockRestore();
-    expect(count(half)).toBe(2);
-    expect(count(whole)).toBe(2);
+    expect(await count(half)).toBe(2);
+    expect(await count(whole)).toBe(2);
   });
 });

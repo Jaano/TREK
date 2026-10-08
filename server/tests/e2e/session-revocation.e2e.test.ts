@@ -14,6 +14,7 @@ import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
+import { MikroORM } from '@mikro-orm/core';
 
 vi.mock('../../src/db/database', async () => {
   const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
@@ -26,6 +27,8 @@ import { buildApp } from '../../src/bootstrap';
 import { resetRateLimits } from '../helpers/test-db';
 import { createAdmin, createUser } from '../helpers/factories';
 import { sessionRows } from '../helpers/sessions';
+import { findRow, updateRows } from '../helpers/factories/rows';
+import { Users } from '../../src/db/entities/Users.entity';
 
 let nestApp: INestApplication;
 let app: Application;
@@ -35,8 +38,8 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
-  resetRateLimits(nestApp);
+beforeEach(async () => {
+  await resetRateLimits(nestApp);
 });
 
 afterAll(async () => {
@@ -53,7 +56,7 @@ async function signIn(email: string, password: string, device: string): Promise<
 
 const sessionIdOf = (cookie: string) => (jwt.decode(cookie.slice('trek_session='.length)) as { jti: string }).jti;
 const me = (cookie: string) => request(app).get('/api/auth/me').set('Cookie', cookie);
-const liveRows = (userId: number) => sessionRows(testDb as never, userId).filter((row) => row.revoked_at === null);
+const liveRows = async (userId: number) => (await sessionRows(testDb as never, userId)).filter((row) => row.revoked_at === null);
 
 /** An admin and a member, each signed in; the member on two devices. */
 async function signedInPair(name: string) {
@@ -80,14 +83,14 @@ describe('Admin actions that end another account\'s sessions', () => {
 
     expect((await me(laptop)).status).toBe(401);
     expect((await me(phone)).status).toBe(401);
-    expect(sessionRows(testDb as never, member.id).map((row) => row.id).sort()).toEqual([sessionIdOf(laptop), sessionIdOf(phone)].sort());
-    expect(liveRows(member.id)).toEqual([]);
+    expect((await sessionRows(testDb as never, member.id)).map((row) => row.id).sort()).toEqual([sessionIdOf(laptop), sessionIdOf(phone)].sort());
+    expect(await liveRows(member.id)).toEqual([]);
     expect((await me(adminCookie)).status).toBe(200);
   }, 30000);
 
   it('SESS-E2E-ADMIN-002: clearing a member\'s two-factor ends every session of that member', async () => {
     const { adminCookie, member, laptop, phone } = await signedInPair('sess-admin-mfa');
-    testDb.prepare("UPDATE users SET mfa_enabled = 1, mfa_secret = 'x' WHERE id = ?").run(member.id);
+    await updateRows(nestApp.get(MikroORM), Users, { id: member.id }, { mfa_enabled: 1, mfa_secret: 'x' });
 
     const res = await request(app).delete(`/api/admin/users/${member.id}/mfa`).set('Cookie', adminCookie);
     expect(res.status).toBe(200);
@@ -95,20 +98,20 @@ describe('Admin actions that end another account\'s sessions', () => {
 
     expect((await me(laptop)).status).toBe(401);
     expect((await me(phone)).status).toBe(401);
-    expect(liveRows(member.id)).toEqual([]);
-    expect(testDb.prepare('SELECT mfa_enabled FROM users WHERE id = ?').get(member.id)).toEqual({ mfa_enabled: 0 });
+    expect(await liveRows(member.id)).toEqual([]);
+    expect((await findRow(nestApp.get(MikroORM), Users, { id: member.id }))?.mfa_enabled).toBe(0);
     expect((await me(adminCookie)).status).toBe(200);
   }, 30000);
 
   it('SESS-E2E-ADMIN-003: deleting a member takes the member\'s session rows with the account', async () => {
     const { adminCookie, member, laptop, phone } = await signedInPair('sess-admin-delete');
-    expect(sessionRows(testDb as never, member.id)).toHaveLength(2);
+    expect(await sessionRows(testDb as never, member.id)).toHaveLength(2);
 
     const res = await request(app).delete(`/api/admin/users/${member.id}`).set('Cookie', adminCookie);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true });
 
-    expect(sessionRows(testDb as never, member.id)).toEqual([]);
+    expect(await sessionRows(testDb as never, member.id)).toEqual([]);
     expect((await me(laptop)).status).toBe(401);
     expect((await me(phone)).status).toBe(401);
     expect((await me(adminCookie)).status).toBe(200);
@@ -125,6 +128,6 @@ describe('Admin actions that end another account\'s sessions', () => {
 
     expect((await me(laptop)).status).toBe(200);
     expect((await me(phone)).status).toBe(200);
-    expect(liveRows(member.id)).toHaveLength(2);
+    expect(await liveRows(member.id)).toHaveLength(2);
   }, 30000);
 });

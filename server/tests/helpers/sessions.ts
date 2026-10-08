@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3';
 import { sharedTestOrm } from './test-uow';
+import { findRows } from './factories/rows';
 import { UserSessions } from '../../src/db/entities/UserSessions.entity';
 import type { UserSessionsRepository } from '../../src/db/repositories/UserSessions.repository';
 import { SessionsService } from '../../src/nest/sessions/sessions.service';
@@ -19,12 +20,16 @@ export async function createTestSessionsService(db: Database.Database): Promise<
   return new SessionsService(await createTestUserSessionsRepo(db));
 }
 
-/** The session rows of a user, oldest first, straight from the table. */
-export function sessionRows(
+/** The session rows of a user, oldest first, read through the ORM on the suite's own handle. */
+export async function sessionRows(
   db: Database.Database,
   userId: number,
-): { id: string; revoked_at: string | null; expires_at: string; user_agent: string | null }[] {
-  return db
-    .prepare('SELECT id, revoked_at, expires_at, user_agent FROM user_sessions WHERE user_id = ? ORDER BY created_at, id')
-    .all(userId) as { id: string; revoked_at: string | null; expires_at: string; user_agent: string | null }[];
+): Promise<{ id: string; revoked_at: string | null; expires_at: string; user_agent: string | null }[]> {
+  const rows = await findRows(await sharedTestOrm(db), UserSessions, { user: userId }, { created_at: 'asc', id: 'asc' });
+  return rows.map(({ id, revoked_at, expires_at, user_agent }) => ({
+    id,
+    revoked_at: revoked_at ?? null,
+    expires_at,
+    user_agent: user_agent ?? null,
+  }));
 }
