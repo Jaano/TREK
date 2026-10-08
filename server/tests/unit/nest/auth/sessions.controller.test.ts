@@ -95,7 +95,11 @@ describe('SessionsController on a demo instance', () => {
     vi.stubEnv('DEMO_MODE', 'true');
     const mine = { id: SID, created_at: 'a', last_seen_at: 'b', expires_at: 'c', user_agent: 'Mine', current: true };
     const theirs = { id: OTHER, created_at: 'a', last_seen_at: 'b', expires_at: 'c', user_agent: 'Another visitor', current: false };
-    const { c } = controller({ list: vi.fn().mockResolvedValue([theirs, mine]) });
+    // Flags `current` from the id it is handed, as SessionsService.list does:
+    // a request without a tracked token has no current session at all.
+    const list = vi.fn((_userId: number, currentId?: string) =>
+      Promise.resolve([theirs, mine].map((session) => ({ ...session, current: session.id === currentId }))));
+    const { c } = controller({ list });
 
     expect(await c.list(demo, reqWith(SID))).toEqual({ sessions: [mine], current_tracked: true });
     expect(await c.list(demo, reqWith())).toEqual({ sessions: [], current_tracked: false });

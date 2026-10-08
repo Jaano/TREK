@@ -219,10 +219,10 @@ describe('Memories e2e (real auth guard + temp SQLite)', () => {
       immich.saveImmichSettings.mockResolvedValue({ success: true });
       const on = await request(server).put(`${IMMICH}/settings`).set('Cookie', sessionCookie(1)).send({ immich_url: 'https://x', immich_api_key: 'k', allow_insecure_tls: true });
       expect(on.status).toBe(200);
-      expect(immich.saveImmichSettings).toHaveBeenLastCalledWith(1, 'https://x', 'k', expect.anything(), true);
+      expect(immich.saveImmichSettings).toHaveBeenLastCalledWith(1, 'https://x', 'k', expect.anything(), true, undefined);
 
       await request(server).put(`${IMMICH}/settings`).set('Cookie', sessionCookie(1)).send({ immich_url: 'https://x', immich_api_key: 'k' });
-      expect(immich.saveImmichSettings).toHaveBeenLastCalledWith(1, 'https://x', 'k', expect.anything(), undefined);
+      expect(immich.saveImmichSettings).toHaveBeenLastCalledWith(1, 'https://x', 'k', expect.anything(), undefined, undefined);
     });
 
     it('400 PUT settings and /test with a switch value that is not a boolean, before the service runs', async () => {

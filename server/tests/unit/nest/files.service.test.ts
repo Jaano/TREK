@@ -78,6 +78,7 @@ import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 import type { EntityManager } from '@mikro-orm/core';
 import { Users } from '../../../src/db/entities/Users.entity';
+import { UserSessions } from '../../../src/db/entities/UserSessions.entity';
 
 const storageDelete = vi.fn();
 const storageStub = { delete: storageDelete } as unknown as import('../../../src/nest/storage/storage.service').StorageService;
@@ -814,16 +815,19 @@ describe('authenticateDownload', () => {
     // suite's stand-in for UsersRepository), not merely "a repository".
     // `getRepository` itself is a spy (task-1-rereview.md F-R4), so this ALSO
     // pins which entity class was asked for: the deep-equal alone would still
-    // hold if the production code called `em.getRepository(Trips)`.
-    expect(verifyJwtAndLoadUser).toHaveBeenCalledWith('cookie-jwt', {});
+    // hold if the production code called `em.getRepository(Trips)`. The third
+    // argument is the session lookup the session gate reads (UserSessions).
+    expect(verifyJwtAndLoadUser).toHaveBeenCalledWith('cookie-jwt', {}, {});
     expect(getRepository).toHaveBeenCalledWith(Users);
+    expect(getRepository).toHaveBeenCalledWith(UserSessions);
   });
 
   it('FILE-SVC-033: a bearer token is used when no cookie is present; invalid JWTs 401', async () => {
     verifyJwtAndLoadUser.mockReturnValue({ id: 7 });
     expect(await svc.authenticateDownload(req({ bearer: 'bearer-jwt' }))).toEqual({ userId: 7 });
-    expect(verifyJwtAndLoadUser).toHaveBeenCalledWith('bearer-jwt', {}); // see FILE-SVC-032's comment
+    expect(verifyJwtAndLoadUser).toHaveBeenCalledWith('bearer-jwt', {}, {}); // see FILE-SVC-032's comment
     expect(getRepository).toHaveBeenCalledWith(Users);
+    expect(getRepository).toHaveBeenCalledWith(UserSessions);
 
     verifyJwtAndLoadUser.mockReturnValue(null);
     expect(await svc.authenticateDownload(req({ bearer: 'stale' }))).toEqual({ error: 'Invalid or expired token', status: 401 });

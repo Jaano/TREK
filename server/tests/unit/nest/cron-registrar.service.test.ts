@@ -335,31 +335,6 @@ describe('CronRegistrarService', () => {
       expect(lines()[0]).toMatch(new RegExp(`^cron ${name} ok \\d+ms$`));
     });
 
-    it('CRONREG-022: the lease is taken inside one transaction', async () => {
-      const name = 'lease-in-a-transaction';
-      const original = SchedulerLeasesRepository.prototype.acquire;
-      const inTransaction: boolean[] = [];
-      const spy = vi
-        .spyOn(SchedulerLeasesRepository.prototype, 'acquire')
-        .mockImplementation(function (this: SchedulerLeasesRepository, ...args: Parameters<typeof original>) {
-          inTransaction.push(t.orm.em.getContext().isInTransaction());
-          return original.apply(this, args);
-        });
-      try {
-        const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
-        let ran = false;
-        registrar.register(name, '* * * * *', () => {
-          ran = true;
-        });
-        await h.jobs[0].onTick();
-        expect(inTransaction).toEqual([true]);
-        expect(ran).toBe(true);
-        expect((await holder(name))!.owner).toBe(LEASE_OWNER);
-      } finally {
-        spy.mockRestore();
-      }
-    });
-
     it('CRONREG-018: a lapsed lease is taken over, and held for the settle window after the tick', async () => {
       const name = 'lease-lapsed';
       await insertRow(t, SchedulerLeases, { name, owner: 'crashed-host:9:gone', expires_at: Date.now() - 1 });

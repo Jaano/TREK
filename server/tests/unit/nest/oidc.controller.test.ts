@@ -143,7 +143,7 @@ describe('OidcController /login', () => {
   it('trims a trailing slash off APP_URL when building the redirect uri', async () => {
     const res = makeRes();
     const createState = vi.fn().mockResolvedValue({ state: 'st', codeChallenge: 'cc' });
-    await ctl(svc({ getAppUrl: vi.fn().mockResolvedValue('https://app///'), createState })).login(req, res);
+    await ctl(svc({ getAppUrl: vi.fn().mockReturnValue('https://app///'), createState })).login(req, res);
     expect(createState).toHaveBeenCalledWith('https://app/api/auth/oidc/callback', undefined, undefined);
   });
 
