@@ -19,6 +19,9 @@ import { StorageRegistryService } from '../../../../src/nest/storage/storage-reg
 import { StorageService } from '../../../../src/nest/storage/storage.service';
 import { StatsBusyError, StorageStatsService } from '../../../../src/nest/storage/storage-stats.service';
 import { createTestUnitOfWork, createTestAppSettingsRepo, sharedTestOrm } from '../../../helpers/test-uow';
+import { deleteRows } from '../../../helpers/factories/rows';
+import { readAppSetting, setAppSetting } from '../../../helpers/factories/settings';
+import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
 
 const tmpDirs: string[] = [];
 function makeTmpDir(): string {
@@ -26,11 +29,11 @@ function makeTmpDir(): string {
   tmpDirs.push(dir);
   return dir;
 }
-function setSetting(key: string, value: string): void {
-  testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+async function setSetting(key: string, value: string): Promise<void> {
+  await setAppSetting(await sharedTestOrm(testDb), key, value);
 }
-beforeEach(() => {
-  testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'storage.%'").run();
+beforeEach(async () => {
+  await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: { $like: 'storage.%' } });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -40,7 +43,7 @@ afterEach(() => {
 async function makeWorld() {
   const uploadsRoot = makeTmpDir();
   const backupsRoot = makeTmpDir();
-  setSetting(
+  await setSetting(
     'storage.backends',
     JSON.stringify([
       { name: 'uploads-local', type: 'local', options: { root: uploadsRoot } },
@@ -77,8 +80,8 @@ describe('StorageStatsService', () => {
     expect(usage.computedAt).toBeGreaterThan(0);
     // Persisted round-trip:
     expect(await stats.readUsage()).toEqual(usage);
-    const raw = testDb.prepare("SELECT value FROM app_settings WHERE key = 'storage.usage'").get() as { value: string };
-    expect(JSON.parse(raw.value)).toEqual(usage);
+    const raw = await readAppSetting(await sharedTestOrm(testDb), 'storage.usage');
+    expect(JSON.parse(raw ?? 'null')).toEqual(usage);
   });
 
   it('STATS-002 photos-google/photos-trek nested content is NOT double-counted into legacy photos', async () => {
@@ -100,7 +103,7 @@ describe('StorageStatsService', () => {
   it('STATS-004 readUsage returns null on absent or unparseable rows', async () => {
     const { stats } = await makeWorld();
     expect(await stats.readUsage()).toBeNull();
-    setSetting('storage.usage', 'not json');
+    await setSetting('storage.usage', 'not json');
     expect(await stats.readUsage()).toBeNull();
   });
 });

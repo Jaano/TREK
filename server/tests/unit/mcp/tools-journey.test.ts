@@ -38,6 +38,11 @@ vi.mock('../../../src/nest/atlas/atlas-geo', async (importOriginal) => ({
 }));
 
 import { resetTestDb } from '../../helpers/test-db';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { createRow, findRow } from '../../helpers/factories/rows';
+import { addJourneyContributor } from '../../helpers/factories/journeys';
+import { Journeys } from '../../../src/db/entities/Journeys.entity';
+import { JourneyEntries } from '../../../src/db/entities/JourneyEntries.entity';
 import { createUser, createTrip } from '../../helpers/factories';
 import { setAddonEnabled } from '../../helpers/test-db';
 import { ADDON_IDS } from '../../../src/addons';
@@ -52,7 +57,14 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -164,12 +176,12 @@ describe('Tool: update_journey_preferences', () => {
 // ---------------------------------------------------------------------------
 
 /** A journey owned by someone else — every access check must refuse it. */
-function foreignJourney() {
+async function foreignJourney() {
   const { user: other } = createUser(testDb);
-  const j = testDb.prepare(
-    'INSERT INTO journeys (user_id, title, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-  ).run(other.id, 'Not yours', 'draft', Date.now(), Date.now());
-  return { otherId: other.id, journeyId: Number(j.lastInsertRowid) };
+  const j = await createRow(orm, Journeys, {
+    user: other.id, title: 'Not yours', status: 'draft', created_at: Date.now(), updated_at: Date.now(),
+  });
+  return { otherId: other.id, journeyId: j.id };
 }
 
 async function seedJourney(h: McpHarness, title = 'J') {
@@ -202,7 +214,7 @@ describe('journey read tools', () => {
 
   it('get_journey refuses a journey the caller cannot see', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_journey', arguments: { journeyId } });
       expect(result.isError).toBe(true);
@@ -225,7 +237,7 @@ describe('journey read tools', () => {
 
   it('list_journey_entries refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_journey_entries', arguments: { journeyId } });
       expect(result.isError).toBe(true);
@@ -245,7 +257,7 @@ describe('journey read tools', () => {
 
   it('list_journey_contributors refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_journey_contributors', arguments: { journeyId } });
       expect(result.isError).toBe(true);
@@ -266,7 +278,7 @@ describe('journey read tools', () => {
 describe('journey write tools', () => {
   it('update_journey applies the change and refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const journey = await seedJourney(h);
       const updated = parseToolResult(await h.client.callTool({
@@ -280,7 +292,7 @@ describe('journey write tools', () => {
 
   it('delete_journey removes it and refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const journey = await seedJourney(h);
       const gone = parseToolResult(await h.client.callTool({
@@ -311,7 +323,7 @@ describe('journey write tools', () => {
   it('add_journey_trip refuses a foreign journey; remove_journey_trip is idempotent but refuses one', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const journey = await seedJourney(h);
       expect((await h.client.callTool({
@@ -330,7 +342,7 @@ describe('journey write tools', () => {
 
   it('create_journey_entry refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'create_journey_entry', arguments: { journeyId, entry_date: '2026-07-01' },
@@ -401,7 +413,7 @@ describe('journey write tools', () => {
   it('contributor tools add, re-role and remove; each refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
     const { user: guest } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const journey = await seedJourney(h);
       expect((parseToolResult(await h.client.callTool({
@@ -427,7 +439,7 @@ describe('journey write tools', () => {
 
   it('update_journey_preferences refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_journey_preferences', arguments: { journeyId, hide_skeletons: true },
@@ -446,8 +458,10 @@ describe('journey write tools', () => {
 // could not be corrected. Asserted against the row, not the tool's echo.
 // ---------------------------------------------------------------------------
 
-function entryRow(id: number) {
-  return testDb.prepare('SELECT * FROM journey_entries WHERE id = ?').get(id) as any;
+async function entryRow(id: number) {
+  const row = await findRow(orm, JourneyEntries, { id });
+  if (!row) throw new Error(`no journey entry ${id}`);
+  return row;
 }
 
 async function seedEntry(h: McpHarness, journeyId: number, args: Record<string, unknown> = {}) {
@@ -474,13 +488,13 @@ describe('journey entry fields', () => {
         type: 'checkin',
       });
 
-      const row = entryRow(entry.id);
+      const row = await entryRow(entry.id);
       expect(row.location_name).toBe('Hallgrimskirkja');
       expect(row.location_lat).toBeCloseTo(64.1418, 4);
       expect(row.location_lng).toBeCloseTo(-21.9266, 4);
       expect(row.weather).toBe('overcast, 9C');
-      expect(JSON.parse(row.tags)).toEqual(['church', 'view']);
-      expect(JSON.parse(row.pros_cons)).toEqual({ pros: ['the tower'], cons: ['the queue'] });
+      expect(JSON.parse(String(row.tags))).toEqual(['church', 'view']);
+      expect(JSON.parse(String(row.pros_cons))).toEqual({ pros: ['the tower'], cons: ['the queue'] });
       expect(row.visibility).toBe('public');
       expect(row.type).toBe('checkin');
     });
@@ -491,7 +505,7 @@ describe('journey entry fields', () => {
     await withHarness(user.id, async (h) => {
       const journey = await seedJourney(h);
       const entry = await seedEntry(h, journey.id, { pros_cons: { pros: ['cheap'] } });
-      expect(JSON.parse(entryRow(entry.id).pros_cons)).toEqual({ pros: ['cheap'], cons: [] });
+      expect(JSON.parse(String((await entryRow(entry.id)).pros_cons))).toEqual({ pros: ['cheap'], cons: [] });
     });
   });
 
@@ -499,7 +513,7 @@ describe('journey entry fields', () => {
     const { user } = createUser(testDb);
     await withHarness(user.id, async (h) => {
       const journey = await seedJourney(h);
-      const row = entryRow((await seedEntry(h, journey.id)).id);
+      const row = await entryRow((await seedEntry(h, journey.id)).id);
       expect(row.visibility).toBe('private');
       expect(row.type).toBe('entry');
     });
@@ -536,7 +550,7 @@ describe('journey entry fields', () => {
         },
       });
 
-      const row = entryRow(entry.id);
+      const row = await entryRow(entry.id);
       expect(row.location_name).toBe('Hallgrimskirkja');
       expect(row.location_lat).toBeCloseTo(64.1418, 4);
       expect(row.location_lng).toBeCloseTo(-21.9266, 4);
@@ -561,10 +575,10 @@ describe('journey entry fields', () => {
         },
       })) as any;
 
-      const row = entryRow(entry.id);
+      const row = await entryRow(entry.id);
       expect(row.weather).toBe('rain all day');
-      expect(JSON.parse(row.tags)).toEqual(['museum']);
-      expect(JSON.parse(row.pros_cons)).toEqual({ pros: ['free on Sundays'], cons: ['packed'] });
+      expect(JSON.parse(String(row.tags))).toEqual(['museum']);
+      expect(JSON.parse(String(row.pros_cons))).toEqual({ pros: ['free on Sundays'], cons: ['packed'] });
       expect(row.visibility).toBe('shared');
       expect(row.sort_order).toBe(3);
       // The enrichment parses both back out, so the caller sees the objects.
@@ -578,10 +592,10 @@ describe('journey entry fields', () => {
     await withHarness(user.id, async (h) => {
       const journey = await seedJourney(h);
       const entry = await seedEntry(h, journey.id, { type: 'skeleton', title: 'Blue Lagoon' });
-      expect(entryRow(entry.id).type).toBe('skeleton');
+      expect((await entryRow(entry.id)).type).toBe('skeleton');
 
       await h.client.callTool({ name: 'update_journey_entry', arguments: { entryId: entry.id, type: 'entry' } });
-      expect(entryRow(entry.id).type).toBe('entry');
+      expect((await entryRow(entry.id)).type).toBe('entry');
     });
   });
 
@@ -613,7 +627,7 @@ describe('journey entry fields', () => {
         },
       });
 
-      const row = entryRow(entry.id);
+      const row = await entryRow(entry.id);
       expect(row.entry_time).toBeNull();
       expect(row.location_lat).toBeNull();
       expect(row.location_lng).toBeNull();
@@ -644,7 +658,7 @@ describe('journey entry fields', () => {
       const data = parseToolResult(await h.client.callTool({
         name: 'update_journey_entry', arguments: { entryId: airport.id, stats_excluded: true },
       })) as any;
-      expect(entryRow(airport.id).stats_excluded).toBe(1);
+      expect((await entryRow(airport.id)).stats_excluded).toBe(1);
       // The echo carries the boolean, as the REST answer does.
       expect(data.entry.stats_excluded).toBe(true);
 
@@ -661,7 +675,7 @@ describe('journey entry fields', () => {
       const on = parseToolResult(await h.client.callTool({
         name: 'get_journey_stats', arguments: { journeyId: journey.id },
       })) as any;
-      expect(entryRow(airport.id).stats_excluded).toBe(0);
+      expect((await entryRow(airport.id)).stats_excluded).toBe(0);
       expect(on.stats.steps).toBe(2);
       expect(on.stats.excluded).toEqual([]);
     });
@@ -675,7 +689,7 @@ describe('journey entry fields', () => {
       expect((await h.client.callTool({
         name: 'update_journey_entry', arguments: { entryId: entry.id, stats_excluded: 'yes' },
       })).isError).toBe(true);
-      expect(entryRow(entry.id).stats_excluded).toBe(0);
+      expect((await entryRow(entry.id)).stats_excluded).toBe(0);
     });
   });
 
@@ -690,7 +704,7 @@ describe('journey entry fields', () => {
         })).isError).toBe(true);
       }
       // And none of the refusals touched the row.
-      const row = entryRow(entry.id);
+      const row = await entryRow(entry.id);
       expect(row.visibility).toBe('private');
       expect(row.location_lng).toBeNull();
     });
@@ -752,7 +766,7 @@ describe('Tool: get_journey_stats', () => {
 
   it('refuses a journey the caller cannot see', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       expect((await h.client.callTool({
         name: 'get_journey_stats', arguments: { journeyId },
@@ -817,9 +831,7 @@ describe('journey share-link tools', () => {
       journeyId = journey.id;
       await h.client.callTool({ name: 'create_journey_share_link', arguments: { journeyId } });
     });
-    testDb.prepare(
-      'INSERT INTO journey_contributors (journey_id, user_id, role, added_at) VALUES (?, ?, ?, ?)',
-    ).run(journeyId, guest.id, 'viewer', Date.now());
+    await addJourneyContributor(orm, journeyId, guest.id, 'viewer');
     await withHarness(guest.id, async (h) => {
       // The token is the whole credential: a contributor must not be able to
       // read out a link that keeps working after they are removed.
@@ -831,7 +843,7 @@ describe('journey share-link tools', () => {
 
   it('every share tool refuses a foreign journey', async () => {
     const { user } = createUser(testDb);
-    const { journeyId } = foreignJourney();
+    const { journeyId } = await foreignJourney();
     await withHarness(user.id, async (h) => {
       for (const name of ['get_journey_share_link', 'create_journey_share_link', 'delete_journey_share_link']) {
         expect((await h.client.callTool({ name, arguments: { journeyId } })).isError).toBe(true);

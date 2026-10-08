@@ -26,8 +26,13 @@ vi.mock('../../../src/config', () => ({
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 
 import { resetTestDb } from '../../helpers/test-db';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { countRows, findRow, insertRow } from '../../helpers/factories/rows';
+import { setUserSetting } from '../../helpers/factories/settings';
+import { Settings } from '../../../src/db/entities/Settings.entity';
+import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
 import { encrypt_api_key } from '../../../src/nest/common/crypto/apiKeyCrypto';
 import { MASKED_SETTING_VALUE } from '@trek/shared';
 import { DISPLAY_PREFERENCE_KEYS } from '../../../src/nest/settings/settings.mcp';
@@ -39,7 +44,14 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -47,22 +59,17 @@ afterAll(() => {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function setSetting(userId: number, key: string, value: string): void {
-  testDb.prepare(
-    'INSERT INTO settings (user_id, key, value) VALUES (?, ?, ?) ' +
-      'ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value',
-  ).run(userId, key, value);
+async function setSetting(userId: number, key: string, value: string): Promise<void> {
+  await setUserSetting(orm, userId, key, value);
 }
 
-function readSetting(userId: number, key: string): string | undefined {
-  const row = testDb.prepare('SELECT value FROM settings WHERE user_id = ? AND key = ?').get(userId, key) as
-    | { value: string }
-    | undefined;
+async function readSetting(userId: number, key: string): Promise<string | null | undefined> {
+  const row = await findRow(orm, Settings, { user: userId, key });
   return row?.value;
 }
 
-function countSettings(userId: number): number {
-  return (testDb.prepare('SELECT COUNT(*) as c FROM settings WHERE user_id = ?').get(userId) as { c: number }).c;
+function countSettings(userId: number): Promise<number> {
+  return countRows(orm, Settings, { user: userId });
 }
 
 async function withHarness(userId: number, fn: (h: McpHarness) => Promise<void>) {
@@ -100,13 +107,13 @@ describe('Tool: get_display_settings', () => {
 
   it('returns the display preferences the user has stored', async () => {
     const { user } = createUser(testDb);
-    setSetting(user.id, 'temperature_unit', '"fahrenheit"');
-    setSetting(user.id, 'distance_unit', '"imperial"');
-    setSetting(user.id, 'time_format', '"12h"');
-    setSetting(user.id, 'language', '"de"');
-    setSetting(user.id, 'default_currency', '"USD"');
-    setSetting(user.id, 'start_page', '"active_trip"');
-    setSetting(user.id, 'blur_booking_codes', 'true');
+    await setSetting(user.id, 'temperature_unit', '"fahrenheit"');
+    await setSetting(user.id, 'distance_unit', '"imperial"');
+    await setSetting(user.id, 'time_format', '"12h"');
+    await setSetting(user.id, 'language', '"de"');
+    await setSetting(user.id, 'default_currency', '"USD"');
+    await setSetting(user.id, 'start_page', '"active_trip"');
+    await setSetting(user.id, 'blur_booking_codes', 'true');
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_display_settings', arguments: {} });
@@ -125,8 +132,7 @@ describe('Tool: get_display_settings', () => {
 
   it('falls back to the admin-set instance default for a key the user has not set', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)')
-      .run('default_user_setting_temperature_unit', '"fahrenheit"');
+    await insertRow(orm, AppSettings, { key: 'default_user_setting_temperature_unit', value: '"fahrenheit"' });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_display_settings', arguments: {} });
@@ -141,12 +147,12 @@ describe('Tool: get_display_settings', () => {
     // getUserSettings hands them back in cleartext. That is the leak this
     // surface must not have: store them the way the real write path does and
     // assert they are nowhere in the result.
-    setSetting(user.id, 'mapbox_access_token', String(encrypt_api_key('pk.super-secret-token')));
-    setSetting(user.id, 'carto_api_key', String(encrypt_api_key('carto-secret')));
-    setSetting(user.id, 'llm_api_key', String(encrypt_api_key('sk-secret')));
-    setSetting(user.id, 'ntfy_token', String(encrypt_api_key('ntfy-secret')));
-    setSetting(user.id, 'webhook_url', String(encrypt_api_key('https://hook.example/secret')));
-    setSetting(user.id, 'temperature_unit', '"celsius"');
+    await setSetting(user.id, 'mapbox_access_token', String(encrypt_api_key('pk.super-secret-token')));
+    await setSetting(user.id, 'carto_api_key', String(encrypt_api_key('carto-secret')));
+    await setSetting(user.id, 'llm_api_key', String(encrypt_api_key('sk-secret')));
+    await setSetting(user.id, 'ntfy_token', String(encrypt_api_key('ntfy-secret')));
+    await setSetting(user.id, 'webhook_url', String(encrypt_api_key('https://hook.example/secret')));
+    await setSetting(user.id, 'temperature_unit', '"celsius"');
 
     await withScopedHarness(user.id, ['settings:read'], async (h) => {
       const result = await h.client.callTool({ name: 'get_display_settings', arguments: {} });
@@ -166,9 +172,9 @@ describe('Tool: get_display_settings', () => {
 
   it('leaves out settings that are neither display preferences nor credentials', async () => {
     const { user } = createUser(testDb);
-    setSetting(user.id, 'map_tile_url', '"https://tiles.example/{z}/{x}/{y}.png"');
-    setSetting(user.id, 'dashboard_fx_from', '"EUR"');
-    setSetting(user.id, 'time_format', '"24h"');
+    await setSetting(user.id, 'map_tile_url', '"https://tiles.example/{z}/{x}/{y}.png"');
+    await setSetting(user.id, 'dashboard_fx_from', '"EUR"');
+    await setSetting(user.id, 'time_format', '"24h"');
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_display_settings', arguments: {} });
@@ -180,7 +186,7 @@ describe('Tool: get_display_settings', () => {
   it('does not leak another user\'s preferences', async () => {
     const { user: mine } = createUser(testDb);
     const { user: theirs } = createUser(testDb);
-    setSetting(theirs.id, 'temperature_unit', '"fahrenheit"');
+    await setSetting(theirs.id, 'temperature_unit', '"fahrenheit"');
 
     await withHarness(mine.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_display_settings', arguments: {} });
@@ -203,17 +209,17 @@ describe('Tool: update_display_settings', () => {
       expect(data.success).toBe(true);
       expect(data.updated).toBe(2);
       expect(data.settings).toEqual({ temperature_unit: 'fahrenheit', distance_unit: 'imperial' });
-      expect(readSetting(user.id, 'temperature_unit')).toBe('fahrenheit');
-      expect(readSetting(user.id, 'distance_unit')).toBe('imperial');
+      expect(await readSetting(user.id, 'temperature_unit')).toBe('fahrenheit');
+      expect(await readSetting(user.id, 'distance_unit')).toBe('imperial');
     });
   });
 
   it('leaves untouched keys alone', async () => {
     const { user } = createUser(testDb);
-    setSetting(user.id, 'time_format', '"12h"');
+    await setSetting(user.id, 'time_format', '"12h"');
     await withHarness(user.id, async (h) => {
       await update(h, { temperature_unit: 'celsius' });
-      expect(readSetting(user.id, 'time_format')).toBe('"12h"');
+      expect(await readSetting(user.id, 'time_format')).toBe('"12h"');
     });
   });
 
@@ -245,7 +251,7 @@ describe('Tool: update_display_settings', () => {
       expect(set.settings.place_language).toBe('en');
       const refused = await update(h, { place_language: 'klingon' });
       expect(refused.isError).toBe(true);
-      expect(readSetting(user.id, 'place_language')).toBe('en');
+      expect(await readSetting(user.id, 'place_language')).toBe('en');
       const cleared = parseToolResult(await update(h, { place_language: '' })) as any;
       expect(cleared.settings.place_language).toBe('');
     });
@@ -258,7 +264,7 @@ describe('Tool: update_display_settings', () => {
       expect(ok.settings.week_start).toBe('sunday');
       const refused = await update(h, { week_start: 'friday' });
       expect(refused.isError).toBe(true);
-      expect(readSetting(user.id, 'week_start')).toBe('sunday');
+      expect(await readSetting(user.id, 'week_start')).toBe('sunday');
     });
   });
 
@@ -290,25 +296,24 @@ describe('Tool: update_display_settings', () => {
       const result = await update(h, { dark_mode: false });
       const data = parseToolResult(result) as any;
       expect(data.settings.dark_mode).toBe(false);
-      expect(readSetting(user.id, 'dark_mode')).toBe('false');
+      expect(await readSetting(user.id, 'dark_mode')).toBe('false');
     });
   });
 
   it('accepts an empty default_currency, which falls back to each trip\'s own', async () => {
     const { user } = createUser(testDb);
-    setSetting(user.id, 'default_currency', '"USD"');
+    await setSetting(user.id, 'default_currency', '"USD"');
     await withHarness(user.id, async (h) => {
       const result = await update(h, { default_currency: '' });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(readSetting(user.id, 'default_currency')).toBe('');
+      expect(await readSetting(user.id, 'default_currency')).toBe('');
     });
   });
 
   it('reads back the admin default rather than echoing the input', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)')
-      .run('default_user_setting_distance_unit', '"imperial"');
+    await insertRow(orm, AppSettings, { key: 'default_user_setting_distance_unit', value: '"imperial"' });
     await withHarness(user.id, async (h) => {
       const result = await update(h, { temperature_unit: 'celsius' });
       const data = parseToolResult(result) as any;
@@ -328,7 +333,7 @@ describe('Tool: update_display_settings, refusals', () => {
       const result = await update(h, { mapbox_access_token: 'pk.attacker-token' });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('mapbox_access_token');
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -337,7 +342,7 @@ describe('Tool: update_display_settings, refusals', () => {
     await withScopedHarness(user.id, ['settings:write'], async (h) => {
       const result = await update(h, { llm_api_key: 'sk-attacker' });
       expect(result.isError).toBe(true);
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -348,7 +353,7 @@ describe('Tool: update_display_settings, refusals', () => {
         const result = await update(h, settings);
         expect(result.isError).toBe(true);
       }
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -358,8 +363,8 @@ describe('Tool: update_display_settings, refusals', () => {
       const result = await update(h, { made_up_preference: 'whatever' });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('made_up_preference');
-      expect(countSettings(user.id)).toBe(0);
-      expect(readSetting(user.id, 'made_up_preference')).toBeUndefined();
+      expect(await countSettings(user.id)).toBe(0);
+      expect(await readSetting(user.id, 'made_up_preference')).toBeUndefined();
     });
   });
 
@@ -368,7 +373,7 @@ describe('Tool: update_display_settings, refusals', () => {
     await withHarness(user.id, async (h) => {
       const result = await update(h, { toString: 'gotcha' });
       expect(result.isError).toBe(true);
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -377,7 +382,7 @@ describe('Tool: update_display_settings, refusals', () => {
     await withHarness(user.id, async (h) => {
       const result = await update(h, { temperature_unit: 'fahrenheit', llm_api_key: 'sk-attacker' });
       expect(result.isError).toBe(true);
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -386,7 +391,7 @@ describe('Tool: update_display_settings, refusals', () => {
     await withHarness(user.id, async (h) => {
       const result = await update(h, { temperature_unit: 'fahrenheit', time_format: '36h' });
       expect(result.isError).toBe(true);
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -396,7 +401,7 @@ describe('Tool: update_display_settings, refusals', () => {
       const result = await update(h, { temperature_unit: 'kelvin' });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('temperature_unit');
-      expect(readSetting(user.id, 'temperature_unit')).toBeUndefined();
+      expect(await readSetting(user.id, 'temperature_unit')).toBeUndefined();
     });
   });
 
@@ -407,7 +412,7 @@ describe('Tool: update_display_settings, refusals', () => {
       expect(bad.isError).toBe(true);
       const good = await update(h, { language: 'fr' });
       expect(good.isError).toBeFalsy();
-      expect(readSetting(user.id, 'language')).toBe('fr');
+      expect(await readSetting(user.id, 'language')).toBe('fr');
     });
   });
 
@@ -418,7 +423,7 @@ describe('Tool: update_display_settings, refusals', () => {
         const result = await update(h, { default_currency: value });
         expect(result.isError).toBe(true);
       }
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -427,7 +432,7 @@ describe('Tool: update_display_settings, refusals', () => {
     await withHarness(user.id, async (h) => {
       const result = await update(h, { blur_booking_codes: 'yes' });
       expect(result.isError).toBe(true);
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -436,7 +441,7 @@ describe('Tool: update_display_settings, refusals', () => {
     await withHarness(user.id, async (h) => {
       expect((await update(h, { start_trip_tab: '' })).isError).toBe(true);
       expect((await update(h, { start_trip_tab: 'x'.repeat(65) })).isError).toBe(true);
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -446,7 +451,7 @@ describe('Tool: update_display_settings, refusals', () => {
       const result = await update(h, { start_trip_tab: MASKED_SETTING_VALUE });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('start_trip_tab');
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -456,7 +461,7 @@ describe('Tool: update_display_settings, refusals', () => {
       const result = await update(h, {});
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('temperature_unit');
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
@@ -466,14 +471,14 @@ describe('Tool: update_display_settings, refusals', () => {
     await withHarness(user.id, async (h) => {
       const result = await update(h, { temperature_unit: 'fahrenheit' });
       expect(result.isError).toBe(true);
-      expect(countSettings(user.id)).toBe(0);
+      expect(await countSettings(user.id)).toBe(0);
     });
   });
 
   it('lets the demo user read', async () => {
     process.env.DEMO_MODE = 'true';
     const { user } = createUser(testDb, { email: 'demo@trek.app' });
-    setSetting(user.id, 'temperature_unit', '"celsius"');
+    await setSetting(user.id, 'temperature_unit', '"celsius"');
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_display_settings', arguments: {} });
       const data = parseToolResult(result) as any;

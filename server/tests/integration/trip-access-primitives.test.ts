@@ -42,18 +42,26 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createTrip, createDay, createPlace, addTripMember, createDayAssignment } from '../helpers/factories';
 import { authCookie, generateToken } from '../helpers/auth';
 import { closeMcpSessions } from '../../src/mcp/index';
+import { findRow, updateRows } from '../helpers/factories/rows';
+import { Addons } from '../../src/db/entities/Addons.entity';
+import { Categories } from '../../src/db/entities/Categories.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 beforeEach(async () => {
   resetTestDb(testDb);
@@ -137,8 +145,8 @@ describe('isOwner (async) — the delete_trip MCP tool', () => {
     return (JSON.parse(line.slice('data:'.length).trim()) as { result?: { isError?: boolean; content?: { type: string; text: string }[] } }).result ?? {};
   }
 
-  beforeEach(() => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+  beforeEach(async () => {
+    await updateRows(orm, Addons, { id: 'mcp' }, { enabled: true });
   });
 
   it('PRIM-ISOWN-001 — owner: 200, deletes the trip', async () => {
@@ -157,7 +165,7 @@ describe('isOwner (async) — the delete_trip MCP tool', () => {
     const result = toolResult(res.text);
     expect(result.isError).toBeFalsy();
     expect(JSON.parse(result.content?.[0]?.text ?? '{}')).toEqual({ success: true, tripId: trip.id });
-    expect(testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id)).toBeUndefined();
+    expect(await findRow(orm, Trips, { id: trip.id })).toBeNull();
   });
 
   /**
@@ -215,7 +223,7 @@ describe('isOwner (async) — the delete_trip MCP tool', () => {
     const result = toolResult(res.text);
     expect(result.isError).toBe(true);
     expect(result.content?.[0]?.text).toBe('Trip not found or access denied.');
-    expect(testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id)).toBeDefined();
+    expect(await findRow(orm, Trips, { id: trip.id })).not.toBeNull();
   });
 
   it('PRIM-ISOWN-003 — non-member/stranger: the identical refusal isOwner gives a member, trip untouched', async () => {
@@ -235,7 +243,7 @@ describe('isOwner (async) — the delete_trip MCP tool', () => {
     const result = toolResult(res.text);
     expect(result.isError).toBe(true);
     expect(result.content?.[0]?.text).toBe('Trip not found or access denied.');
-    expect(testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id)).toBeDefined();
+    expect(await findRow(orm, Trips, { id: trip.id })).not.toBeNull();
   });
 
   it('PRIM-ISOWN-004 — anonymous: 401, no session established', async () => {
@@ -333,8 +341,9 @@ describe('getPlaceWithTags (async) — GET /api/trips/:tripId/places/:id', () =>
     // actually assigned rather than assuming none, so this pins the real
     // production shape instead of a factory default that happens to be null.
     const place = createPlace(testDb, trip.id, { name: 'Eiffel Tower' });
-    const expectedCategory = place.category_id
-      ? testDb.prepare('SELECT id, name, color, icon FROM categories WHERE id = ?').get(place.category_id)
+    const category = place.category_id ? await findRow(orm, Categories, { id: place.category_id }) : null;
+    const expectedCategory = category
+      ? { id: category.id, name: category.name, color: category.color, icon: category.icon }
       : null;
 
     const res = await request(app).get(`/api/trips/${trip.id}/places/${place.id}`).set('Cookie', authCookie(owner.id));

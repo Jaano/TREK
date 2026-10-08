@@ -26,6 +26,10 @@ import type { StorageService } from '../../../src/nest/storage/storage.service';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { createUser, createTrip } from '../../helpers/factories';
+import { makeShareToken } from '../../helpers/factories/trips';
+import { deleteRows, insertRow } from '../../helpers/factories/rows';
+import { Photos } from '../../../src/db/entities/Photos.entity';
+import { ShareTokens } from '../../../src/db/entities/ShareTokens.entity';
 
 // The serving swap addresses files as (category, name) on the injected facade;
 // these unit tests only assert routing/auth/error mapping, so a two-method stub
@@ -212,24 +216,22 @@ describe('applyPlatformUploads', () => {
     // every case here seeds REAL rows in `uploadsTestDb` (bound to
     // `uploadsOrm.orm`) rather than mocking `db.prepare`'s return value; the
     // `h.dbPrepare` stub is dead for this whole describe block now.
-    function insertShareToken(tripId: number, userId: number, token: string, expiresAt: string | null = null) {
-      uploadsTestDb.prepare('INSERT INTO share_tokens (trip_id, token, created_by, expires_at) VALUES (?, ?, ?, ?)')
-        .run(tripId, token, userId, expiresAt);
+    async function insertShareToken(tripId: number, userId: number, token: string, expiresAt: string | null = null) {
+      await makeShareToken(uploadsOrm, tripId, userId, { token, expires_at: expiresAt });
     }
 
-    function insertPhoto(tripId: number, filename: string) {
-      uploadsTestDb.prepare('INSERT INTO photos (trip_id, filename, original_name) VALUES (?, ?, ?)')
-        .run(tripId, filename, filename);
+    async function insertPhoto(tripId: number, filename: string) {
+      await insertRow(uploadsOrm, Photos, { trip: tripId, filename, original_name: filename });
     }
 
     it('401 when a share token does not cover the photo trip', async () => {
       const { user } = createUser(uploadsTestDb);
       const photoTrip = createTrip(uploadsTestDb, user.id);
       const otherTrip = createTrip(uploadsTestDb, user.id);
-      insertShareToken(otherTrip.id, user.id, 'share-mismatch');
+      await insertShareToken(otherTrip.id, user.id, 'share-mismatch');
       h.exists.mockResolvedValue(true);
       h.verifyJwtAndLoadUser.mockReturnValue(null);
-      insertPhoto(photoTrip.id, 'photo-mismatch.jpg');
+      await insertPhoto(photoTrip.id, 'photo-mismatch.jpg');
       const res = makeRes();
       await photoHandler()({ params: { filename: 'photo-mismatch.jpg' }, headers: {}, query: { token: 'share-mismatch' } }, res, next);
       expect(res.statusCode).toBe(401);
@@ -240,7 +242,7 @@ describe('applyPlatformUploads', () => {
       const photoTrip = createTrip(uploadsTestDb, user.id);
       h.exists.mockResolvedValue(true);
       h.verifyJwtAndLoadUser.mockReturnValue(null);
-      insertPhoto(photoTrip.id, 'photo-unknown-token.jpg');
+      await insertPhoto(photoTrip.id, 'photo-unknown-token.jpg');
       const res = makeRes();
       await photoHandler()({ params: { filename: 'photo-unknown-token.jpg' }, headers: {}, query: { token: 'never-issued' } }, res, next);
       expect(res.statusCode).toBe(401);
@@ -249,11 +251,11 @@ describe('applyPlatformUploads', () => {
     it('R5: 401 when the token is revoked (deleted, not merely unknown)', async () => {
       const { user } = createUser(uploadsTestDb);
       const photoTrip = createTrip(uploadsTestDb, user.id);
-      insertShareToken(photoTrip.id, user.id, 'share-revoked');
-      uploadsTestDb.prepare('DELETE FROM share_tokens WHERE token = ?').run('share-revoked');
+      await insertShareToken(photoTrip.id, user.id, 'share-revoked');
+      await deleteRows(uploadsOrm, ShareTokens, { token: 'share-revoked' });
       h.exists.mockResolvedValue(true);
       h.verifyJwtAndLoadUser.mockReturnValue(null);
-      insertPhoto(photoTrip.id, 'photo-revoked.jpg');
+      await insertPhoto(photoTrip.id, 'photo-revoked.jpg');
       const res = makeRes();
       await photoHandler()({ params: { filename: 'photo-revoked.jpg' }, headers: {}, query: { token: 'share-revoked' } }, res, next);
       expect(res.statusCode).toBe(401);
@@ -262,10 +264,10 @@ describe('applyPlatformUploads', () => {
     it('R5: 401 when the token is expired', async () => {
       const { user } = createUser(uploadsTestDb);
       const photoTrip = createTrip(uploadsTestDb, user.id);
-      insertShareToken(photoTrip.id, user.id, 'share-expired', '2020-01-01 00:00:00');
+      await insertShareToken(photoTrip.id, user.id, 'share-expired', '2020-01-01 00:00:00');
       h.exists.mockResolvedValue(true);
       h.verifyJwtAndLoadUser.mockReturnValue(null);
-      insertPhoto(photoTrip.id, 'photo-expired.jpg');
+      await insertPhoto(photoTrip.id, 'photo-expired.jpg');
       const res = makeRes();
       await photoHandler()({ params: { filename: 'photo-expired.jpg' }, headers: {}, query: { token: 'share-expired' } }, res, next);
       expect(res.statusCode).toBe(401);
@@ -274,10 +276,10 @@ describe('applyPlatformUploads', () => {
     it('R5: 401 for a wrong-case token — no case-folding is introduced', async () => {
       const { user } = createUser(uploadsTestDb);
       const photoTrip = createTrip(uploadsTestDb, user.id);
-      insertShareToken(photoTrip.id, user.id, 'share-CaseSensitive');
+      await insertShareToken(photoTrip.id, user.id, 'share-CaseSensitive');
       h.exists.mockResolvedValue(true);
       h.verifyJwtAndLoadUser.mockReturnValue(null);
-      insertPhoto(photoTrip.id, 'photo-case.jpg');
+      await insertPhoto(photoTrip.id, 'photo-case.jpg');
       const res = makeRes();
       await photoHandler()({ params: { filename: 'photo-case.jpg' }, headers: {}, query: { token: 'share-casesensitive' } }, res, next);
       expect(res.statusCode).toBe(401);
@@ -286,10 +288,10 @@ describe('applyPlatformUploads', () => {
     it('R5: 401 for a token with an embedded NUL byte', async () => {
       const { user } = createUser(uploadsTestDb);
       const photoTrip = createTrip(uploadsTestDb, user.id);
-      insertShareToken(photoTrip.id, user.id, 'share-nul');
+      await insertShareToken(photoTrip.id, user.id, 'share-nul');
       h.exists.mockResolvedValue(true);
       h.verifyJwtAndLoadUser.mockReturnValue(null);
-      insertPhoto(photoTrip.id, 'photo-nul.jpg');
+      await insertPhoto(photoTrip.id, 'photo-nul.jpg');
       const res = makeRes();
       await photoHandler()({ params: { filename: 'photo-nul.jpg' }, headers: {}, query: { token: 'share-nul\0extra' } }, res, next);
       expect(res.statusCode).toBe(401);
@@ -298,11 +300,11 @@ describe('applyPlatformUploads', () => {
     it('serves the file when the share token covers the photo trip (R1 valid-token case)', async () => {
       const { user } = createUser(uploadsTestDb);
       const photoTrip = createTrip(uploadsTestDb, user.id);
-      insertShareToken(photoTrip.id, user.id, 'share-valid');
+      await insertShareToken(photoTrip.id, user.id, 'share-valid');
       h.exists.mockResolvedValue(true);
       h.sendToResponse.mockResolvedValue(undefined);
       h.verifyJwtAndLoadUser.mockReturnValue(null);
-      insertPhoto(photoTrip.id, 'photo-valid.jpg');
+      await insertPhoto(photoTrip.id, 'photo-valid.jpg');
       const res = makeRes();
       await photoHandler()(
         { params: { filename: 'photo-valid.jpg' }, headers: { authorization: 'Bearer share-valid' }, query: {} },

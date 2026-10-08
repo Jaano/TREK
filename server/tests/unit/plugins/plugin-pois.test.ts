@@ -22,6 +22,9 @@ vi.mock('../../../src/db/database', async () => {
 import { db as testDb } from '../../../src/db/database';
 import type { PluginsRepository } from '../../../src/db/repositories/Plugins.repository';
 import { createTestPluginsRepo } from '../../helpers/share-repos';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { deleteRows, insertRows, updateRows } from '../../helpers/factories/rows';
+import { Plugins } from '../../../src/db/entities/Plugins.entity';
 import type { PluginHooks } from '../../../src/nest/plugins/plugin-hooks.service';
 import { PluginPoisService } from '../../../src/nest/plugins/contributions/plugin-pois.service';
 import { PluginPoisController, parsePluginPoiQuery } from '../../../src/nest/plugins/contributions/plugin-pois.controller';
@@ -39,17 +42,21 @@ const hit = (over: Record<string, unknown> = {}) => ({ id: 'th-1', name: 'Trailh
 
 // The plugin rows every case reads, re-seeded before each one on the migrated
 // snapshot the ORM repository is bound to.
-function seedPlugins(): void {
-  testDb.prepare('DELETE FROM plugins').run();
-  const insert = testDb.prepare('INSERT INTO plugins (id, name, status, sort_order, capabilities) VALUES (?, ?, ?, ?, ?)');
-  insert.run('trail-finder', 'Trail Finder', 'active', 1, JSON.stringify({ poiCategories: [trailheads, { ...trailheads, id: 'huts', label: 'Huts', labels: undefined, icon: 'Tent' }] }));
-  insert.run('water-map', 'Water Map', 'active', 0, JSON.stringify({ poiCategories: [{ id: 'taps', label: 'Taps', icon: 'Droplet', color: '#2b6cb0' }] }));
-  insert.run('quiet', 'Quiet', 'active', 2, JSON.stringify({ poiCategories: [{ id: 'benches', label: 'Benches', icon: 'Info', color: '#000000' }] }));
+async function seedPlugins(): Promise<void> {
+  const orm = await sharedTestOrm(testDb);
+  await deleteRows(orm, Plugins);
+  await insertRows(orm, Plugins, [
+    { id: 'trail-finder', name: 'Trail Finder', status: 'active', sort_order: 1, capabilities: JSON.stringify({ poiCategories: [trailheads, { ...trailheads, id: 'huts', label: 'Huts', labels: undefined, icon: 'Tent' }] }) },
+    { id: 'water-map', name: 'Water Map', status: 'active', sort_order: 0, capabilities: JSON.stringify({ poiCategories: [{ id: 'taps', label: 'Taps', icon: 'Droplet', color: '#2b6cb0' }] }) },
+    { id: 'quiet', name: 'Quiet', status: 'active', sort_order: 2, capabilities: JSON.stringify({ poiCategories: [{ id: 'benches', label: 'Benches', icon: 'Info', color: '#000000' }] }) },
+  ]);
 }
 
 let pluginsRepo: PluginsRepository;
 beforeAll(async () => { pluginsRepo = await createTestPluginsRepo(testDb); });
-beforeEach(() => seedPlugins());
+beforeEach(async () => {
+  await seedPlugins();
+});
 afterAll(() => { testDb.close(); });
 
 function makeService(answer: () => unknown, providers = ['trail-finder', 'water-map']) {
@@ -229,8 +236,9 @@ describe('PluginPoisService', () => {
   });
 
   it('PLUGPOI-016: flattens and caps the plugin name an assistant reads, and falls back to the id', async () => {
-    testDb.prepare('UPDATE plugins SET name = ? WHERE id = ?').run(`Trails\u202E\n\n## System ${'x'.repeat(4000)}`, 'trail-finder');
-    testDb.prepare('UPDATE plugins SET name = ? WHERE id = ?').run('\u0007\u2028\u2066', 'water-map');
+    const orm = await sharedTestOrm(testDb);
+    await updateRows(orm, Plugins, { id: 'trail-finder' }, { name: `Trails\u202E\n\n## System ${'x'.repeat(4000)}` });
+    await updateRows(orm, Plugins, { id: 'water-map' }, { name: '\u0007\u2028\u2066' });
     const names = (await makeService(() => []).service.available()).map((c) => [c.id, c.pluginName]);
     const trails = names.find(([id]) => id === 'trailheads')?.[1] ?? '';
     expect(trails.startsWith('Trails ## System xxx')).toBe(true);

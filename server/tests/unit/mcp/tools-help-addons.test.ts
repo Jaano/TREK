@@ -42,10 +42,15 @@ const { wiki } = vi.hoisted(() => {
 vi.mock('../../../src/nest/help/wiki', () => wiki);
 
 import { resetTestDb, setAddonEnabled } from '../../helpers/test-db';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 import { createTestAddonsService } from '../../helpers/test-addons';
 import { ADDON_IDS } from '../../../src/addons';
+import { findRow, updateRows } from '../../helpers/factories/rows';
+import { setAppSetting } from '../../helpers/factories/settings';
+import { Addons } from '../../../src/db/entities/Addons.entity';
+import { PhotoProviders } from '../../../src/db/entities/PhotoProviders.entity';
 
 const SECTIONS = [
   { title: 'Getting Started', pages: [{ title: 'Quick Start', slug: 'Quick-Start' }] },
@@ -128,7 +133,14 @@ beforeEach(() => {
   }
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -340,10 +352,7 @@ describe('Tool: search_help', () => {
 describe('Tool: list_addons', () => {
   it('lists the enabled addons with the collab sub-features and bag tracking', async () => {
     const { user } = createUser(testDb);
-    const row = testDb.prepare('SELECT name, type FROM addons WHERE id = ?').get('budget') as {
-      name: string;
-      type: string;
-    };
+    const row = await findRow(orm, Addons, { id: 'budget' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_addons', arguments: {} });
       expect(result.isError).toBeFalsy();
@@ -352,8 +361,8 @@ describe('Tool: list_addons', () => {
       // on a photo provider) has to be absent rather than merely unasserted.
       expect(data.addons).toContainEqual({
         id: 'budget',
-        name: row.name,
-        type: row.type,
+        name: row?.name,
+        type: row?.type,
         enabled: true,
       });
       expect(data.collabFeatures).toEqual({ chat: true, notes: true, links: true, polls: true, whatsnext: true });
@@ -367,16 +376,14 @@ describe('Tool: list_addons', () => {
     setAddonEnabled(testDb, ADDON_IDS.JOURNEY, true);
     // PhotoProviderSeeder seeds immich disabled by default (enabled: 0) — flip
     // it on the way the admin panel would, same idiom as setAddonEnabled above.
-    testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'immich'").run();
-    const row = testDb.prepare('SELECT name FROM photo_providers WHERE id = ?').get('immich') as {
-      name: string;
-    };
+    await updateRows(orm, PhotoProviders, { id: 'immich' }, { enabled: 1 });
+    const row = await findRow(orm, PhotoProviders, { id: 'immich' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_addons', arguments: {} });
       const data = parseToolResult(result) as AddonsPayload;
       expect(data.addons).toContainEqual({
         id: 'immich',
-        name: row.name,
+        name: row?.name,
         type: 'photo_provider',
         enabled: true,
       });
@@ -418,9 +425,7 @@ describe('Tool: list_addons', () => {
   });
 
   it('reports bag tracking once it is switched on', async () => {
-    testDb
-      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('bag_tracking_enabled', 'true')")
-      .run();
+    await setAppSetting(orm, 'bag_tracking_enabled', 'true');
     const { user } = createUser(testDb);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_addons', arguments: {} });

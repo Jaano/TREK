@@ -25,6 +25,7 @@ import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { createUser, createTrip, addTripMember } from '../../helpers/factories';
+import { findRow, updateRows } from '../../helpers/factories/rows';
 import { Trips } from '../../../src/db/entities/Trips.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
 import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
@@ -86,16 +87,16 @@ afterAll(async () => {
   testDb.close();
 });
 
-function seedTrip(token?: string) {
+async function seedTrip(token?: string) {
   const { user } = createUser(testDb);
   const trip = createTrip(testDb, user.id);
-  if (token) testDb.prepare('UPDATE trips SET feed_token = ? WHERE id = ?').run(token, trip.id);
+  if (token) await updateRows(t, Trips, { id: trip.id }, { feed_token: token });
   return { user, trip };
 }
 
-function seedUserWithToken(token: string, overrides: Partial<{ username: string }> = {}) {
+async function seedUserWithToken(token: string, overrides: Partial<{ username: string }> = {}) {
   const { user } = createUser(testDb, overrides);
-  testDb.prepare('UPDATE users SET feed_token = ? WHERE id = ?').run(token, user.id);
+  await updateRows(t, Users, { id: user.id }, { feed_token: token });
   return user;
 }
 
@@ -103,13 +104,13 @@ function seedUserWithToken(token: string, overrides: Partial<{ username: string 
 
 describe('trip feed token lifecycle', () => {
   it('FEED-SVC-001: reports no URL while the trip has no token', async () => {
-    const { user, trip } = seedTrip();
+    const { user, trip } = await seedTrip();
 
     expect(await svc.getTripToken(trip.id, user.id, BASE)).toEqual({ feed_url: null });
   });
 
   it('FEED-SVC-002: reports the absolute feed URL once a token exists', async () => {
-    const { user, trip } = seedTrip('tok-trip');
+    const { user, trip } = await seedTrip('tok-trip');
 
     expect(await svc.getTripToken(trip.id, user.id, BASE)).toEqual({
       feed_url: `${BASE}/api/feed/trip/tok-trip.ics`,
@@ -119,7 +120,7 @@ describe('trip feed token lifecycle', () => {
   it('FEED-SVC-003: a trailing slash on the base is stripped, never doubled into //api', async () => {
     // APP_URL is user-supplied config; pasted with a trailing slash it would
     // otherwise produce https://host//api/feed/... which some clients reject.
-    const { user, trip } = seedTrip('tok-trip');
+    const { user, trip } = await seedTrip('tok-trip');
 
     expect((await svc.getTripToken(trip.id, user.id, `${BASE}/`)).feed_url).toBe(
       `${BASE}/api/feed/trip/tok-trip.ics`,
@@ -129,7 +130,7 @@ describe('trip feed token lifecycle', () => {
   it('FEED-SVC-004: a user without access gets null, not the token of a foreign trip', async () => {
     // The token is the credential for the public feed, so leaking it through the
     // authenticated GET would hand a stranger the whole trip.
-    const { trip } = seedTrip('tok-trip');
+    const { trip } = await seedTrip('tok-trip');
     const { user: outsider } = createUser(testDb);
 
     expect(await svc.getTripToken(trip.id, outsider.id, BASE)).toEqual({ feed_url: null });
@@ -139,7 +140,7 @@ describe('trip feed token lifecycle', () => {
   // caller may manage the credential at all is decided one layer up, by
   // TripAccessGuard + @RequirePermission('share_manage') on the controller.
   it('FEED-SVC-005: a trip shared with the user as a member resolves too', async () => {
-    const { trip } = seedTrip('tok-trip');
+    const { trip } = await seedTrip('tok-trip');
     const { user: member } = createUser(testDb);
     addTripMember(testDb, trip.id, member.id);
 
@@ -151,7 +152,7 @@ describe('trip feed token lifecycle', () => {
   it('FEED-SVC-006: generate mints a token once and stays idempotent', async () => {
     // Enabling twice must not invalidate a URL the user already handed to their
     // calendar client — that is what rotate is for.
-    const { user, trip } = seedTrip();
+    const { user, trip } = await seedTrip();
 
     const first = await svc.generateTripToken(trip.id, user.id, BASE);
     const second = await svc.generateTripToken(trip.id, user.id, BASE);
@@ -161,7 +162,7 @@ describe('trip feed token lifecycle', () => {
   });
 
   it('FEED-SVC-007: rotate issues a fresh token and the previous URL stops resolving', async () => {
-    const { user, trip } = seedTrip();
+    const { user, trip } = await seedTrip();
     const before = (await svc.generateTripToken(trip.id, user.id, BASE)).feed_url;
     const oldToken = before.match(/trip\/([0-9a-f-]+)\.ics$/)![1];
 
@@ -172,7 +173,7 @@ describe('trip feed token lifecycle', () => {
   });
 
   it('FEED-SVC-008: disable clears the column so the public URL dies', async () => {
-    const { user, trip } = seedTrip();
+    const { user, trip } = await seedTrip();
     const url = (await svc.generateTripToken(trip.id, user.id, BASE)).feed_url;
     const token = url.match(/trip\/([0-9a-f-]+)\.ics$/)![1];
 
@@ -186,7 +187,7 @@ describe('trip feed token lifecycle', () => {
     // The route guard is what enforces share_manage; this is the second lock, so
     // a caller reaching the service another way cannot mint or clear a token on
     // a trip id it merely guessed.
-    const { user, trip } = seedTrip();
+    const { user, trip } = await seedTrip();
     const { user: outsider } = createUser(testDb);
     const mine = (await svc.generateTripToken(trip.id, user.id, BASE)).feed_url;
     const myToken = mine.match(/trip\/([0-9a-f-]+)\.ics$/)![1];
@@ -205,7 +206,7 @@ describe('trip feed token lifecycle', () => {
   // Named for the hole, per the task brief; see the task report for the
   // one-line fix proposal (compare the affected count and 404/refuse on 0).
   it('R4 HOLE — generateTripToken returns a feed_url for a token it never stored, for a trip the caller cannot reach', async () => {
-    const { trip } = seedTrip(); // no token yet
+    const { trip } = await seedTrip(); // no token yet
     const { user: stranger } = createUser(testDb);
 
     const result = await svc.generateTripToken(trip.id, stranger.id, BASE);
@@ -215,7 +216,7 @@ describe('trip feed token lifecycle', () => {
     // ...but the column was never written (setFeedTokenIfReachable affected 0
     // rows: the stranger fails REACHABLE), so the URL 404s for anyone who tries it.
     const mintedToken = result.feed_url.match(/trip\/([0-9a-f-]+)\.ics$/)![1];
-    expect((testDb.prepare('SELECT feed_token FROM trips WHERE id = ?').get(trip.id) as { feed_token: string | null }).feed_token).toBeNull();
+    expect((await findRow(t, Trips, { id: trip.id }))?.feed_token).toBeNull();
     expect(await svc.buildTripIcs(mintedToken)).toBeNull();
     // Proven directly at the repository too — the affected count IS the 0-row signal.
     expect(await tripsRepo.setFeedTokenIfReachable(trip.id, stranger.id, mintedToken)).toBe(0);
@@ -230,7 +231,7 @@ describe('trip feed token lifecycle', () => {
   // one of the two minted URLs ever resolves. Pinning today's actual outcome
   // (same class as `roadtrip.service.test.ts`'s R7 vias pin), not a fix.
   it('R7: two concurrent generateTripToken calls both mint, but only the last write survives — the other caller\'s URL never resolves (unserialized FD1-then-FD2)', async () => {
-    const { user, trip } = seedTrip(); // no token yet
+    const { user, trip } = await seedTrip(); // no token yet
 
     const [r1, r2] = await Promise.all([
       svc.generateTripToken(trip.id, user.id, BASE),
@@ -242,7 +243,7 @@ describe('trip feed token lifecycle', () => {
     // FD1 saw no token for either caller, so two distinct tokens were minted.
     expect(token1).not.toBe(token2);
 
-    const stored = (testDb.prepare('SELECT feed_token FROM trips WHERE id = ?').get(trip.id) as { feed_token: string | null }).feed_token;
+    const stored = (await findRow(t, Trips, { id: trip.id }))?.feed_token;
     expect([token1, token2]).toContain(stored);
     const loser = stored === token1 ? token2 : token1;
     // The loser's URL is well-formed, but resolves nothing.
@@ -301,7 +302,7 @@ describe('user feed token lifecycle', () => {
 
 describe('buildTripIcs', () => {
   it('FEED-SVC-013: an unknown token yields null without asking the calendar', async () => {
-    seedTrip('tok-trip');
+    await seedTrip('tok-trip');
 
     expect(await svc.buildTripIcs('00000000-0000-0000-0000-000000000000')).toBeNull();
     expect(buildTripCalendar).not.toHaveBeenCalled();
@@ -311,7 +312,7 @@ describe('buildTripIcs', () => {
     // The public feed is unauthenticated: a trip the calendar cannot render (a row
     // deleted mid-request, unparseable data) has to come back as a 404, not a 500
     // that a subscribing client retries hourly forever.
-    seedTrip('tok-trip');
+    await seedTrip('tok-trip');
     buildTripCalendar.mockImplementation(() => {
       throw new Error('calendar exploded');
     });
@@ -324,7 +325,7 @@ describe('buildTripIcs', () => {
     // before the first component, and clients that scan only the preamble stop
     // re-fetching if they slip behind a VTIMEZONE. The document is concatenated from
     // the calendar's parts now, so the order is an assembly decision, not a given.
-    const { trip } = seedTrip('tok-trip');
+    const { trip } = await seedTrip('tok-trip');
     buildTripCalendar.mockImplementation(() =>
       calendarParts({
         calName: 'Golden Trip',
@@ -351,7 +352,7 @@ describe('buildTripIcs', () => {
 
 describe('buildUserIcs', () => {
   it('FEED-SVC-016: an unknown token yields null without asking the calendar', async () => {
-    seedUserWithToken('tok-user');
+    await seedUserWithToken('tok-user');
 
     expect(await svc.buildUserIcs('00000000-0000-0000-0000-000000000000')).toBeNull();
     expect(buildTripCalendar).not.toHaveBeenCalled();
@@ -360,7 +361,7 @@ describe('buildUserIcs', () => {
   it('FEED-SVC-017: a trip whose calendar throws is skipped, the rest are still emitted', async () => {
     // One unrenderable trip must not take the whole all-trips subscription down —
     // the user would silently lose every calendar entry because of a single bad row.
-    const user = seedUserWithToken('tok-user');
+    const user = await seedUserWithToken('tok-user');
     const good = createTrip(testDb, user.id, { start_date: '2026-01-01' });
     const broken = createTrip(testDb, user.id, { start_date: '2026-02-01' });
     const alsoGood = createTrip(testDb, user.id, { start_date: '2026-03-01' });
@@ -382,7 +383,7 @@ describe('buildUserIcs', () => {
     // Two VTIMEZONE blocks with the same TZID make the document invalid and clients
     // drop the events referencing it; a block emitted after the VEVENT that uses it
     // does not resolve either (#1453). First definition wins.
-    const user = seedUserWithToken('tok-user');
+    const user = await seedUserWithToken('tok-user');
     const first = createTrip(testDb, user.id, { start_date: '2026-01-01' });
     createTrip(testDb, user.id, { start_date: '2026-02-01' });
     buildTripCalendar.mockImplementation((id: number) => ({
@@ -408,7 +409,7 @@ describe('buildUserIcs', () => {
     // render as a truncated calendar title. The body still has to fold — RFC 5545
     // caps a content line at 75 octets.
     const username = 'Ferdinand-Bartholomew-'.repeat(5);
-    const user = seedUserWithToken('tok-user', { username });
+    const user = await seedUserWithToken('tok-user', { username });
     createTrip(testDb, user.id, { start_date: '2026-01-01' });
     const longSummary = 'A'.repeat(120);
     buildTripCalendar.mockImplementation(() => calendarParts({ events: [vevent(longSummary)] }));
@@ -428,7 +429,7 @@ describe('buildUserIcs', () => {
     // An unescaped ; or , ends the property value early, so the calendar shows up
     // under a truncated name. The returned calName feeds the HTTP layer, not ICS,
     // and must stay verbatim.
-    const user = seedUserWithToken('tok-user', { username: 'Alice; Bob, Co\\Ltd' });
+    const user = await seedUserWithToken('tok-user', { username: 'Alice; Bob, Co\\Ltd' });
     createTrip(testDb, user.id, { start_date: '2026-01-01' });
 
     const { ics, calName } = (await svc.buildUserIcs('tok-user'))!;

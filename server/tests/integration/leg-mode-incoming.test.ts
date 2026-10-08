@@ -29,18 +29,24 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { db as testDb2 } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createTrip, createDay, createPlace } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { findRow, updateRows } from '../helpers/factories/rows';
+import { DayAssignments } from '../../src/db/entities/DayAssignments.entity';
 
 describe('incoming_leg_transport_mode read-path parity', () => {
   let nestApp: INestApplication;
   let app: Application;
+  let orm: FactoryOrm;
 
   beforeAll(async () => {
     nestApp = await buildApp();
     app = nestApp.getHttpAdapter().getInstance();
+    orm = nestApp.get(MikroORM);
   });
 
   beforeEach(async () => {
@@ -66,7 +72,7 @@ describe('incoming_leg_transport_mode read-path parity', () => {
     expect(create.status).toBe(201);
     const assignmentId = create.body.assignment.id;
 
-    testDb2.prepare('UPDATE day_assignments SET incoming_leg_transport_mode = ? WHERE id = ?').run('transit', assignmentId);
+    await updateRows(orm, DayAssignments, { id: assignmentId }, { incoming_leg_transport_mode: 'transit' });
 
     const res = await request(app)
       .get(`/api/trips/${trip.id}/days`)
@@ -100,9 +106,9 @@ describe('incoming_leg_transport_mode read-path parity', () => {
         .send({ transport_mode: 'cycling' });
       expect(res.status).toBe(200);
 
-      const row = testDb2.prepare('SELECT leg_transport_mode, incoming_leg_transport_mode FROM day_assignments WHERE id = ?').get(assignmentId) as { leg_transport_mode: string | null; incoming_leg_transport_mode: string | null };
-      expect(row.leg_transport_mode).toBe('cycling');
-      expect(row.incoming_leg_transport_mode).toBeNull();
+      const row = await findRow(orm, DayAssignments, { id: assignmentId });
+      expect(row?.leg_transport_mode).toBe('cycling');
+      expect(row?.incoming_leg_transport_mode).toBeNull();
     });
 
     it("direction: 'incoming' writes the incoming column", async () => {
@@ -123,8 +129,8 @@ describe('incoming_leg_transport_mode read-path parity', () => {
         .send({ transport_mode: 'transit', direction: 'incoming' });
       expect(res.status).toBe(200);
 
-      const row = testDb2.prepare('SELECT incoming_leg_transport_mode FROM day_assignments WHERE id = ?').get(assignmentId) as { incoming_leg_transport_mode: string | null };
-      expect(row.incoming_leg_transport_mode).toBe('transit');
+      const row = await findRow(orm, DayAssignments, { id: assignmentId });
+      expect(row?.incoming_leg_transport_mode).toBe('transit');
     });
 
     it('rejects an invalid direction with 400', async () => {
@@ -170,9 +176,9 @@ describe('incoming_leg_transport_mode read-path parity', () => {
         .send({ transport_mode: 'transit', direction: 'incoming' })
         .expect(200);
 
-      const row = testDb2.prepare('SELECT leg_transport_mode, incoming_leg_transport_mode FROM day_assignments WHERE id = ?').get(assignmentId) as { leg_transport_mode: string | null; incoming_leg_transport_mode: string | null };
-      expect(row.leg_transport_mode).toBe('cycling');
-      expect(row.incoming_leg_transport_mode).toBe('transit');
+      const row = await findRow(orm, DayAssignments, { id: assignmentId });
+      expect(row?.leg_transport_mode).toBe('cycling');
+      expect(row?.incoming_leg_transport_mode).toBe('transit');
 
       const res = await request(app)
         .get(`/api/trips/${trip.id}/days`)

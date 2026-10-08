@@ -23,17 +23,26 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createTrip, createPackingItem, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { findRows, insertRow } from '../helpers/factories/rows';
+import { PackingItems } from '../../src/db/entities/PackingItems.entity';
+import { PackingTemplates } from '../../src/db/entities/PackingTemplates.entity';
+import { PackingTemplateCategories } from '../../src/db/entities/PackingTemplateCategories.entity';
+import { PackingTemplateItems } from '../../src/db/entities/PackingTemplateItems.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -352,9 +361,7 @@ describe('Reorder packing items', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-    const rows = testDb
-      .prepare('SELECT id, sort_order FROM packing_items WHERE trip_id = ? ORDER BY sort_order')
-      .all(trip.id) as Array<{ id: number; sort_order: number }>;
+    const rows = await findRows(orm, PackingItems, { trip: trip.id }, { sort_order: 'asc' });
     expect(rows[0].id).toBe(i2.id);
     expect(rows[1].id).toBe(i1.id);
   });
@@ -549,10 +556,9 @@ describe('Packing — apply-template, bag members, save-as-template', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const tpl = testDb.prepare("INSERT INTO packing_templates (name, created_by) VALUES ('Beach', ?)").run(user.id);
-    const cat = testDb.prepare("INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, 'Essentials', 0)").run(tpl.lastInsertRowid);
-    testDb.prepare("INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, 'Sunscreen', 0)").run(cat.lastInsertRowid);
-    const templateId = tpl.lastInsertRowid;
+    const templateId = await insertRow(orm, PackingTemplates, { name: 'Beach', createdByRef: user.id });
+    const categoryId = await insertRow(orm, PackingTemplateCategories, { template: templateId, name: 'Essentials', sort_order: 0 });
+    await insertRow(orm, PackingTemplateItems, { category: categoryId, name: 'Sunscreen', sort_order: 0 });
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/packing/apply-template/${templateId}`)
@@ -569,8 +575,7 @@ describe('Packing — apply-template, bag members, save-as-template', () => {
     const trip = createTrip(testDb, user.id);
 
     // Template with no items
-    const tpl = testDb.prepare("INSERT INTO packing_templates (name, created_by) VALUES ('Empty', ?)").run(user.id);
-    const emptyTemplateId = tpl.lastInsertRowid;
+    const emptyTemplateId = await insertRow(orm, PackingTemplates, { name: 'Empty', createdByRef: user.id });
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/packing/apply-template/${emptyTemplateId}`)

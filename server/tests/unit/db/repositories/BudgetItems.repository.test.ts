@@ -13,18 +13,25 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createBudgetItem, createPlace, createReservation, createTrip, createUser } from '../../../helpers/factories';
 import { createTestBudgetItemsRepo } from '../../../helpers/files-repos';
+import { sharedTestOrm } from '../../../helpers/test-uow';
+import type { TestOrm } from '../../../helpers/test-orm';
+import { findRow, findRows, updateRows } from '../../../helpers/factories/rows';
+import { BudgetItems } from '../../../../src/db/entities/BudgetItems.entity';
 import type { BudgetItemsRepository } from '../../../../src/db/repositories/BudgetItems.repository';
 
 const testDb = createSnapshotTestDb();
 let budgetItemsRepo: BudgetItemsRepository;
+let orm: TestOrm;
 
 beforeAll(async () => {
   budgetItemsRepo = await createTestBudgetItemsRepo(testDb);
+  orm = await sharedTestOrm(testDb);
 });
 beforeEach(() => resetTestDb(testDb));
 afterAll(() => testDb.close());
 
 function legacyPublicForShare(tripId: number): unknown {
+  // test-sql-allow: the raw SELECT is the legacy oracle this parity test holds the repository to.
   return testDb.prepare('SELECT * FROM budget_items WHERE trip_id = ? ORDER BY category ASC').all(tripId);
 }
 
@@ -38,18 +45,18 @@ describe('BudgetItemsRepository — share.service.ts SH14 read', () => {
 
     // Every nullable column set — sorts second by category.
     const withDetails = createBudgetItem(testDb, trip.id, { name: 'Hotel', category: 'Lodging', total_price: 250 });
-    testDb.prepare(`
-      UPDATE budget_items SET persons = 2, days = 3, note = 'non-refundable', sort_order = 4,
-        paid_by_user_id = ?, expense_date = '2026-09-02', reservation_id = ?, currency = 'EUR',
-        exchange_rate = 0.92, ticket_json = '{"seat":"12A"}', place_id = ?
-      WHERE id = ?`).run(user.id, reservation.id, place.id, withDetails.id);
+    await updateRows(orm, BudgetItems, { id: withDetails.id }, {
+      persons: 2, days: 3, note: 'non-refundable', sort_order: 4,
+      paidByUser: user.id, expense_date: '2026-09-02', reservation: reservation.id, currency: 'EUR',
+      exchange_rate: 0.92, ticket_json: '{"seat":"12A"}', place: place.id,
+    });
 
     // Every nullable column left null — sorts first by category.
     const bare = createBudgetItem(testDb, trip.id, { name: 'Snacks', category: 'Food', total_price: 12.5 });
-    testDb.prepare(`
-      UPDATE budget_items SET persons = NULL, days = NULL, note = NULL, paid_by_user_id = NULL,
-        expense_date = NULL, reservation_id = NULL, currency = NULL, place_id = NULL
-      WHERE id = ?`).run(bare.id);
+    await updateRows(orm, BudgetItems, { id: bare.id }, {
+      persons: null, days: null, note: null, paidByUser: null,
+      expense_date: null, reservation: null, currency: null, place: null,
+    });
 
     // A budget item on a different trip must never leak in.
     createBudgetItem(testDb, other.id, { category: 'Other' });
@@ -76,7 +83,7 @@ describe('BudgetItemsRepository — reservations.service.ts RS49 delete', () => 
     const kept = createBudgetItem(testDb, trip.id, { name: 'Hotel' });
 
     await budgetItemsRepo.deleteByIds([first.id, second.id]);
-    expect((testDb.prepare('SELECT id FROM budget_items WHERE trip_id = ?').all(trip.id) as { id: number }[]).map((r) => r.id))
+    expect((await findRows(orm, BudgetItems, { trip: trip.id })).map((r) => r.id))
       .toEqual([kept.id]);
   });
 
@@ -85,6 +92,6 @@ describe('BudgetItemsRepository — reservations.service.ts RS49 delete', () => 
     const trip = createTrip(testDb, user.id);
     const kept = createBudgetItem(testDb, trip.id);
     await budgetItemsRepo.deleteByIds([]);
-    expect(testDb.prepare('SELECT id FROM budget_items WHERE id = ?').get(kept.id)).toEqual({ id: kept.id });
+    expect(await findRow(orm, BudgetItems, { id: kept.id })).toMatchObject({ id: kept.id });
   });
 });

@@ -16,6 +16,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser, createTrip } from '../../../helpers/factories';
+import { findRow, insertRow } from '../../../helpers/factories/rows';
 import { TodoItems } from '../../../../src/db/entities/TodoItems.entity';
 import type { TodoItemsRepository } from '../../../../src/db/repositories/TodoItems.repository';
 
@@ -62,11 +63,12 @@ describe('listDueForReminder', () => {
       '',
     ];
     for (const s of shapes) {
-      testDb.prepare('INSERT INTO todo_items (trip_id, name, due_date, checked) VALUES (?, ?, ?, 0)').run(trip.id, 'n:' + s, s);
+      await insertRow(t, TodoItems, { trip: trip.id, name: 'n:' + s, due_date: s, checked: 0 });
     }
 
     const legacy = (
       testDb
+        // test-sql-allow: the legacy statement is this parity test's oracle and has to run as written.
         .prepare(
           `SELECT ti.id FROM todo_items ti JOIN trips t ON t.id = ti.trip_id
            WHERE ti.checked = 0 AND ti.due_date IS NOT NULL AND ti.due_date <> ''
@@ -79,9 +81,16 @@ describe('listDueForReminder', () => {
     ).map((r) => r.id);
 
     const head = (await repo.listDueForReminder(iso(t0), iso(plus(LEAD)))).map((r) => r.id).sort((a, b) => a - b);
-    const names = (ids: number[]) => ids.map((i) => (testDb.prepare('SELECT name FROM todo_items WHERE id=?').get(i) as { name: string }).name);
+    const names = (ids: number[]) =>
+      Promise.all(
+        ids.map(async (i) => {
+          const row = await findRow(t, TodoItems, { id: i });
+          if (!row) throw new Error(`no todo item ${i}`);
+          return row.name;
+        }),
+      );
 
-    expect(names(head)).toEqual(names(legacy));
+    expect(await names(head)).toEqual(await names(legacy));
     expect(head.length).toBeGreaterThan(0);
   });
 });

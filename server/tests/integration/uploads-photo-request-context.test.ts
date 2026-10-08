@@ -55,6 +55,9 @@ import { generateToken } from '../helpers/auth';
 import { applyPlatformUploads } from '../../src/nest/platform/platform.routes';
 import { StorageService } from '../../src/nest/storage/storage.service';
 import { Users } from '../../src/db/entities/Users.entity';
+import { Photos } from '../../src/db/entities/Photos.entity';
+import { insertRow } from '../helpers/factories/rows';
+import { makeShareToken } from '../helpers/factories/trips';
 
 let nestApp: INestApplication;
 let app: Application;
@@ -136,8 +139,8 @@ describe('GET /uploads/photos/:filename — request context (Plan 3b Task 0, D6)
   it('PHOTOCTX-004 (R1): a valid share token serves the SAME photo bytes as the JWT path, byte-identical', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare('INSERT INTO photos (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, photoName, photoName);
-    testDb.prepare('INSERT INTO share_tokens (trip_id, token, created_by) VALUES (?, ?, ?)').run(trip.id, 'ratchet-valid-token', user.id);
+    await insertRow(nestApp.get(MikroORM), Photos, { trip: trip.id, filename: photoName, original_name: photoName });
+    await makeShareToken(nestApp.get(MikroORM), trip.id, user.id, { token: 'ratchet-valid-token' });
 
     const res = await request(app).get(`/uploads/photos/${photoName}?token=ratchet-valid-token`);
 
@@ -148,7 +151,7 @@ describe('GET /uploads/photos/:filename — request context (Plan 3b Task 0, D6)
   it('PHOTOCTX-005 (R1): an invalid/unknown share token answers the legacy 401 — never `cannotUseGlobalContext`', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare('INSERT INTO photos (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, photoName, photoName);
+    await insertRow(nestApp.get(MikroORM), Photos, { trip: trip.id, filename: photoName, original_name: photoName });
     // No matching share_tokens row for this token at all.
 
     const res = await request(app).get(`/uploads/photos/${photoName}?token=ratchet-unknown-token`);

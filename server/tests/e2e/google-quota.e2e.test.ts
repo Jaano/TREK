@@ -21,7 +21,14 @@ import { AuditService } from '../../src/nest/audit/audit.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { todayUtc } from '@trek/shared';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
+import { GoogleApiUsage } from '../../src/db/entities/GoogleApiUsage.entity';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeAdmin, makeUser } from '../helpers/factories/users';
+import { deleteRows, upsertRow } from '../helpers/factories/rows';
+
+let orm: TestOrm;
 
 const USER = 1;
 const ADMIN = 2;
@@ -45,20 +52,18 @@ describe('/api/admin/google-quota e2e (real guards + temp SQLite)', () => {
   }
 
   beforeAll(async () => {
-    // harness.ts's seedUser() omits password_hash, which the migrated schema
-    // requires NOT NULL, so the two accounts are inserted here directly.
-    const insertUser = db.prepare(
-      'INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (?, ?, ?, ?, ?, 0)',
-    );
-    insertUser.run(USER, 'e2e-user', 'e2e@example.test', 'x', 'user');
-    insertUser.run(ADMIN, 'e2e-admin', 'admin@example.com', 'x', 'admin');
-    db.prepare("DELETE FROM app_settings WHERE key = 'google_daily_limit'").run();
+    orm = await createTestOrm(db);
+    // Pinned ids: sessionCookie(USER) and (ADMIN) sign for exactly these users.
+    await makeUser(orm, { id: USER, username: 'e2e-user', email: 'e2e@example.test' });
+    await makeAdmin(orm, { id: ADMIN, username: 'e2e-admin', email: 'admin@example.com' });
+    await deleteRows(orm, AppSettings, { key: 'google_daily_limit' });
     app = await build();
     server = app.getHttpServer();
   });
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   it('GQUOTA-E2E-001: 401 without a cookie and 403 for a non-admin', async () => {
@@ -68,7 +73,7 @@ describe('/api/admin/google-quota e2e (real guards + temp SQLite)', () => {
   });
 
   it('GQUOTA-E2E-002: stores the ceiling, reports today, and audits the change', async () => {
-    db.prepare("INSERT OR REPLACE INTO google_api_usage (day, calls) VALUES (date('now'), 7)").run();
+    await upsertRow(orm, GoogleApiUsage, { day: todayUtc(), calls: 7 });
     const put = await request(server).put('/api/admin/google-quota').set('Cookie', sessionCookie(ADMIN)).send({ daily_limit: 5 });
     expect(put.status).toBe(200);
     expect(put.body).toEqual({ daily_limit: 5, used_today: 7, exhausted: true });

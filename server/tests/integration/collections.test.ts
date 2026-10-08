@@ -29,37 +29,45 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn(), getOnlineUserIds: vi.fn(() => []) }));
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { insertRow, upsertRow } from '../helpers/factories/rows';
+import { Addons } from '../../src/db/entities/Addons.entity';
+import { Collections } from '../../src/db/entities/Collections.entity';
+import { CollectionPlaces } from '../../src/db/entities/CollectionPlaces.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 const FIXTURE_IMG = path.join(__dirname, '../fixtures/small-image.jpg');
 const coversDir = path.join(__dirname, '../../uploads/covers');
 const placesDir = path.join(__dirname, '../../uploads/places');
 
-function createCollection(ownerId: number): number {
-  return Number(testDb.prepare("INSERT INTO collections (owner_id, name) VALUES (?, 'C')").run(ownerId).lastInsertRowid);
+async function createCollection(ownerId: number): Promise<number> {
+  return insertRow(orm, Collections, { owner: ownerId, name: 'C' });
 }
 
-function createCollectionPlace(collectionId: number, ownerId: number): number {
-  return Number(testDb.prepare("INSERT INTO collection_places (collection_id, owner_id, name) VALUES (?, ?, 'P')").run(collectionId, ownerId).lastInsertRowid);
+async function createCollectionPlace(collectionId: number, ownerId: number): Promise<number> {
+  return insertRow(orm, CollectionPlaces, { collection: collectionId, owner: ownerId, name: 'P' });
 }
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
   resetTestDb(testDb);
   await resetRateLimits(nestApp);
   // Enable the collections addon (the controller sits behind AddonGuard).
-  testDb.prepare(
-    "INSERT OR REPLACE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('collections', 'Collections', 'Saved places', 'global', 'Bookmark', 1, 40)"
-  ).run();
+  await upsertRow(orm, Addons, {
+    id: 'collections', name: 'Collections', description: 'Saved places', type: 'global', icon: 'Bookmark', enabled: true, sort_order: 40,
+  });
 });
 
 afterAll(async () => {
@@ -72,7 +80,7 @@ afterAll(async () => {
 describe('Collection cover upload', () => {
   it('COLL-P01 — cover upload stores /uploads/covers/<uuid> and writes the file', async () => {
     const { user } = createUser(testDb);
-    const collectionId = createCollection(user.id);
+    const collectionId = await createCollection(user.id);
 
     const res = await request(app)
       .post(`/api/addons/collections/${collectionId}/cover`)
@@ -86,7 +94,7 @@ describe('Collection cover upload', () => {
 
   it('COLL-P02 — no file → 400 "No image uploaded"', async () => {
     const { user } = createUser(testDb);
-    const collectionId = createCollection(user.id);
+    const collectionId = await createCollection(user.id);
 
     const res = await request(app)
       .post(`/api/addons/collections/${collectionId}/cover`)
@@ -97,7 +105,7 @@ describe('Collection cover upload', () => {
 
   it('COLL-P03 — non-image cover is 500 (plain-Error filter quirk — pinned, do not "fix")', async () => {
     const { user } = createUser(testDb);
-    const collectionId = createCollection(user.id);
+    const collectionId = await createCollection(user.id);
 
     const res = await request(app)
       .post(`/api/addons/collections/${collectionId}/cover`)
@@ -110,8 +118,8 @@ describe('Collection cover upload', () => {
 describe('Collection place image upload', () => {
   it('COLL-P04 — place image upload stores /uploads/places/<uuid> and writes the file', async () => {
     const { user } = createUser(testDb);
-    const collectionId = createCollection(user.id);
-    const placeId = createCollectionPlace(collectionId, user.id);
+    const collectionId = await createCollection(user.id);
+    const placeId = await createCollectionPlace(collectionId, user.id);
 
     const res = await request(app)
       .post(`/api/addons/collections/places/${placeId}/image`)
@@ -125,8 +133,8 @@ describe('Collection place image upload', () => {
 
   it('COLL-P05 — non-image place upload is 400 with the bespoke message', async () => {
     const { user } = createUser(testDb);
-    const collectionId = createCollection(user.id);
-    const placeId = createCollectionPlace(collectionId, user.id);
+    const collectionId = await createCollection(user.id);
+    const placeId = await createCollectionPlace(collectionId, user.id);
 
     const res = await request(app)
       .post(`/api/addons/collections/places/${placeId}/image`)

@@ -16,6 +16,9 @@ import type { PlaceRatingsRepository } from '../../../src/db/repositories/PlaceR
 import { AssignmentParticipants } from '../../../src/db/entities/AssignmentParticipants.entity';
 import type { AssignmentParticipantsRepository } from '../../../src/db/repositories/AssignmentParticipants.repository';
 import { QueryHelpersService } from '../../../src/nest/query-helpers/query-helpers.service';
+import { Users } from '../../../src/db/entities/Users.entity';
+import { insertRow, updateRows } from '../../helpers/factories/rows';
+import { tagPlace } from '../../helpers/factories/places';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -31,16 +34,16 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function attachTag(tagId: number, placeId: number): void {
-  testDb.prepare('INSERT INTO place_tags (tag_id, place_id) VALUES (?, ?)').run(tagId, placeId);
+async function attachTag(tagId: number, placeId: number): Promise<void> {
+  await tagPlace(t, placeId, [tagId]);
 }
 
-function rate(placeId: number, userId: number, rating: number): void {
-  testDb.prepare('INSERT INTO place_ratings (place_id, user_id, rating) VALUES (?, ?, ?)').run(placeId, userId, rating);
+async function rate(placeId: number, userId: number, rating: number): Promise<void> {
+  await insertRow(t, PlaceRatings, { place: placeId, user: userId, rating });
 }
 
-function addParticipant(assignmentId: number, userId: number): void {
-  testDb.prepare('INSERT INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)').run(assignmentId, userId);
+async function addParticipant(assignmentId: number, userId: number): Promise<void> {
+  await insertRow(t, AssignmentParticipants, { assignment: assignmentId, user: userId });
 }
 
 describe('QueryHelpersService.loadTagsByPlaceIds', () => {
@@ -53,7 +56,7 @@ describe('QueryHelpersService.loadTagsByPlaceIds', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
     const tag = createTag(testDb, user.id, { name: 'Beach', color: '#ff0000' });
-    attachTag(tag.id, place.id);
+    await attachTag(tag.id, place.id);
 
     const byPlace = await svc.loadTagsByPlaceIds([place.id]);
     expect(byPlace[place.id]).toHaveLength(1);
@@ -66,7 +69,7 @@ describe('QueryHelpersService.loadTagsByPlaceIds', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
     const tag = createTag(testDb, user.id, { name: 'Compact' });
-    attachTag(tag.id, place.id);
+    await attachTag(tag.id, place.id);
 
     const byPlace = await svc.loadTagsByPlaceIds([place.id], { compact: true });
     expect(byPlace[place.id][0]).toEqual({ id: tag.id, name: 'Compact', color: tag.color, created_at: expect.any(String) });
@@ -79,8 +82,8 @@ describe('QueryHelpersService.loadTagsByPlaceIds', () => {
     const placeB = createPlace(testDb, trip.id, { name: 'B' });
     const placeC = createPlace(testDb, trip.id, { name: 'C' });
     const tag = createTag(testDb, user.id);
-    attachTag(tag.id, placeA.id);
-    attachTag(tag.id, placeB.id);
+    await attachTag(tag.id, placeA.id);
+    await attachTag(tag.id, placeB.id);
 
     const byPlace = await svc.loadTagsByPlaceIds([placeA.id, placeB.id, placeC.id]);
     expect(Object.keys(byPlace).map(Number).sort()).toEqual([placeA.id, placeB.id].sort());
@@ -93,8 +96,8 @@ describe('QueryHelpersService.loadTagsByPlaceIds', () => {
     const place = createPlace(testDb, trip.id);
     const tagA = createTag(testDb, user.id, { name: 'First' });
     const tagB = createTag(testDb, user.id, { name: 'Second' });
-    attachTag(tagA.id, place.id);
-    attachTag(tagB.id, place.id);
+    await attachTag(tagA.id, place.id);
+    await attachTag(tagB.id, place.id);
 
     const byPlace = await svc.loadTagsByPlaceIds([place.id]);
     expect(byPlace[place.id].map((t) => t.name).sort()).toEqual(['First', 'Second']);
@@ -111,7 +114,7 @@ describe('QueryHelpersService.loadRatingsByPlaceIds', () => {
     const { user: voter } = createUser(testDb, { username: 'rater1' });
     const trip = createTrip(testDb, owner.id);
     const place = createPlace(testDb, trip.id);
-    rate(place.id, voter.id, 4);
+    await rate(place.id, voter.id, 4);
 
     const byPlace = await svc.loadRatingsByPlaceIds([place.id]);
     expect(byPlace[place.id]).toEqual([{ user_id: voter.id, username: 'rater1', avatar: null, rating: 4 }]);
@@ -130,8 +133,8 @@ describe('QueryHelpersService.loadRatingsByPlaceIds', () => {
     const { user: voterB } = createUser(testDb, { username: 'voter-b' });
     const trip = createTrip(testDb, owner.id);
     const place = createPlace(testDb, trip.id);
-    rate(place.id, voterA.id, 5);
-    rate(place.id, voterB.id, 2);
+    await rate(place.id, voterA.id, 5);
+    await rate(place.id, voterB.id, 2);
 
     const byPlace = await svc.loadRatingsByPlaceIds([place.id]);
     expect(byPlace[place.id].map((r) => r.username).sort()).toEqual(['voter-a', 'voter-b']);
@@ -146,12 +149,12 @@ describe('QueryHelpersService.loadParticipantsByAssignmentIds', () => {
   it('QH-009: indexes participants by assignment id, with NO COALESCE(display_name, username) — raw username only', async () => {
     const { user: owner } = createUser(testDb);
     const { user: participant } = createUser(testDb, { username: 'raw-username' });
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Ignored Display Name', participant.id);
+    await updateRows(t, Users, { id: participant.id }, { display_name: 'Ignored Display Name' });
     const trip = createTrip(testDb, owner.id);
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(assignment.id, participant.id);
+    await addParticipant(assignment.id, participant.id);
 
     const byAssignment = await svc.loadParticipantsByAssignmentIds([assignment.id]);
     expect(byAssignment[assignment.id]).toEqual([{ user_id: participant.id, username: 'raw-username', avatar: null }]);
@@ -174,8 +177,8 @@ describe('QueryHelpersService.loadParticipantsByAssignmentIds', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    addParticipant(assignment.id, p1.id);
-    addParticipant(assignment.id, p2.id);
+    await addParticipant(assignment.id, p1.id);
+    await addParticipant(assignment.id, p2.id);
 
     const byAssignment = await svc.loadParticipantsByAssignmentIds([assignment.id]);
     expect(byAssignment[assignment.id].map((p) => p.username).sort()).toEqual(['p1', 'p2']);

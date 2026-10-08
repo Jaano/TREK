@@ -54,6 +54,7 @@ describe('primary-relation entities (Task 1 spike)', () => {
     t.em.clear();
 
     const rawInsert = testDb
+      // test-sql-allow: the raw row is the oracle the ORM's toObject() is held against.
       .prepare('SELECT * FROM budget_category_order WHERE trip_id = ? AND category = ?')
       .get(trip.id, 'Food');
     expect(rawInsert).toEqual({ trip_id: trip.id, category: 'Food', sort_order: 2 });
@@ -81,6 +82,7 @@ describe('primary-relation entities (Task 1 spike)', () => {
     await t.em.persist(created).flush();
     t.em.clear();
 
+    // test-sql-allow: the raw row is the oracle the ORM's toObject() is held against.
     const rawInsert = testDb.prepare('SELECT * FROM vacay_user_settings WHERE user_id = ?').get(user.id);
     expect(rawInsert).toEqual({
       user_id: user.id,
@@ -168,6 +170,7 @@ describe('primary-relation entities (Task 1 spike)', () => {
     expect(found?.key).toBe('spike_setting');
     expect(found?.value).toBe('on');
 
+    // test-sql-allow: the raw row is the oracle the ORM's toObject() is held against.
     const raw = testDb.prepare('SELECT * FROM app_settings WHERE key = ?').get('spike_setting');
     expect(wrap(found).toObject()).toStrictEqual(raw);
   });

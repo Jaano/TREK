@@ -33,7 +33,13 @@ import {
   createTestDayAccommodationsRepo,
   createTestRoadtripViasRepo,
   createTestRoadtripDayBoundariesRepo,
+  sharedTestOrm,
 } from '../helpers/test-uow';
+import { findRow, findRows, updateRows } from '../helpers/factories/rows';
+import { readTripDays } from '../helpers/factories/trips';
+import { DayAssignments } from '../../src/db/entities/DayAssignments.entity';
+import { Reservations } from '../../src/db/entities/Reservations.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
 
 let svc: DaysService;
 beforeAll(async () => {
@@ -65,50 +71,48 @@ beforeEach(() => {
 
 afterAll(() => testDb.close());
 
-const orderedDays = (tripId: number) =>
-  testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as
-    { id: number; day_number: number; date: string | null }[];
+const orderedDays = async (tripId: number) => readTripDays(await sharedTestOrm(testDb), tripId);
 
 describe('reorderDays', () => {
   it('permutes positions, pins dates to slots, and content rides along by id', async () => {
     const trip = createTrip(testDb, userId, { start_date: '2026-03-01', end_date: '2026-03-03' });
-    const [d1, d2, d3] = orderedDays(trip.id);
+    const [d1, d2, d3] = await orderedDays(trip.id);
     const place = createPlace(testDb, trip.id);
     createDayAssignment(testDb, d2.id, place.id); // place sits on day 2
 
     // Move day 2 to the front: [d2, d1, d3]
     await reorderDays(trip.id, [d2.id, d1.id, d3.id]);
 
-    const after = orderedDays(trip.id);
+    const after = await orderedDays(trip.id);
     expect(after.map(d => d.id)).toEqual([d2.id, d1.id, d3.id]);
     // Dates stay pinned to their calendar slots
     expect(after.map(d => d.date)).toEqual(['2026-03-01', '2026-03-02', '2026-03-03']);
     // The place rides along with its day row (still attached to d2.id, now at slot 1)
-    const onD2 = testDb.prepare('SELECT * FROM day_assignments WHERE day_id = ?').all(d2.id);
+    const onD2 = await findRows(await sharedTestOrm(testDb), DayAssignments, { day: d2.id });
     expect(onD2).toHaveLength(1);
   });
 
   it('re-stamps a booking\'s date onto its day\'s new date, keeping the time', async () => {
     const trip = createTrip(testDb, userId, { start_date: '2026-03-01', end_date: '2026-03-03' });
-    const [d1, d2, d3] = orderedDays(trip.id);
+    const [d1, d2, d3] = await orderedDays(trip.id);
     const res = createReservation(testDb, trip.id, { day_id: d2.id, type: 'restaurant' });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2026-03-02T19:00', res.id);
+    await updateRows(await sharedTestOrm(testDb), Reservations, { id: res.id }, { reservation_time: '2026-03-02T19:00' });
 
     await reorderDays(trip.id, [d2.id, d1.id, d3.id]); // d2 moves to the 2026-03-01 slot
 
-    const r = testDb.prepare('SELECT reservation_time FROM reservations WHERE id = ?').get(res.id) as { reservation_time: string };
-    expect(r.reservation_time).toBe('2026-03-01T19:00');
+    const r = await findRow(await sharedTestOrm(testDb), Reservations, { id: res.id });
+    expect(r?.reservation_time).toBe('2026-03-01T19:00');
   });
 
   it('rejects an orderedIds list that is not a permutation of the trip days', async () => {
     const trip = createTrip(testDb, userId, { start_date: '2026-03-01', end_date: '2026-03-03' });
-    const [d1, d2] = orderedDays(trip.id);
+    const [d1, d2] = await orderedDays(trip.id);
     await expect(reorderDays(trip.id, [d1.id, d2.id])).rejects.toThrow(DayReorderError);
   });
 
   it('blocks a move that would make an accommodation end before it starts, and rolls back', async () => {
     const trip = createTrip(testDb, userId, { start_date: '2026-03-01', end_date: '2026-03-03' });
-    const [d1, d2, d3] = orderedDays(trip.id);
+    const [d1, d2, d3] = await orderedDays(trip.id);
     const place = createPlace(testDb, trip.id);
     createDayAccommodation(testDb, trip.id, place.id, d1.id, d2.id); // stay spans day 1 -> day 2
 
@@ -116,7 +120,7 @@ describe('reorderDays', () => {
     await expect(reorderDays(trip.id, [d2.id, d3.id, d1.id])).rejects.toThrow(DayReorderError);
 
     // Transaction rolled back: original order intact
-    expect(orderedDays(trip.id).map(d => d.id)).toEqual([d1.id, d2.id, d3.id]);
+    expect((await orderedDays(trip.id)).map(d => d.id)).toEqual([d1.id, d2.id, d3.id]);
   });
 });
 
@@ -129,7 +133,7 @@ describe('insertDay', () => {
 
     const created = await insertDay(trip.id, 1);
 
-    const after = orderedDays(trip.id);
+    const after = await orderedDays(trip.id);
     expect(after).toHaveLength(4);
     expect(after[0].id).toBe(created.id);
     expect(after[0].date).toBeNull();
@@ -138,18 +142,18 @@ describe('insertDay', () => {
 
   it('inserts at the front of a dated trip: dates stay contiguous and the trip extends', async () => {
     const trip = createTrip(testDb, userId, { start_date: '2026-03-01', end_date: '2026-03-03' });
-    const [d1, d2, d3] = orderedDays(trip.id);
+    const [d1, d2, d3] = await orderedDays(trip.id);
 
     const created = await insertDay(trip.id, 1);
 
-    const after = orderedDays(trip.id);
+    const after = await orderedDays(trip.id);
     expect(after).toHaveLength(4);
     expect(after[0].id).toBe(created.id);
     expect(after.map(d => d.date)).toEqual(['2026-03-01', '2026-03-02', '2026-03-03', '2026-03-04']);
     // Old content shifted down a slot
     expect(after.slice(1).map(d => d.id)).toEqual([d1.id, d2.id, d3.id]);
     // Trip range extended by one day
-    const t = testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(trip.id) as { end_date: string };
-    expect(t.end_date).toBe('2026-03-04');
+    const stored = await findRow(await sharedTestOrm(testDb), Trips, { id: trip.id });
+    expect(stored?.end_date).toBe('2026-03-04');
   });
 });
