@@ -7,9 +7,11 @@
  * switched off and then forgotten (JourneyDetailPage.test.tsx has carried 35
  * skipped blocks since April); the files that hold some are listed in
  * scripts/skip-baseline.json with their count, and a file may hold no more.
- * A skip that decides at run time (skipIf, runIf, Playwright's
- * test.skip(condition, 'why')) is not counted. Covers the vitest tests under
- * src/ and tests/ and the Playwright specs under e2e/.
+ * Playwright's test.fixme counts as a skip. Only a skip that decides at run
+ * time is left out: skipIf, runIf, and in a Playwright spec
+ * test.skip(condition, 'why') unless the condition is the literal true.
+ * Covers the vitest tests under src/ and tests/ and the Playwright specs
+ * under e2e/.
  *
  *   npm run lint:skips              check against the baseline (CI)
  *   npm run lint:skips -- --update  lower the baseline to what the files hold now;

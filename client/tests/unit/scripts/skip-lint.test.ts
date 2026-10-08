@@ -45,8 +45,6 @@ describe('lint:skips', () => {
 
   it('SKIPS-002: leaves run-time skips, skipIf/runIf, comments and strings alone', () => {
     const source = [
-      "test.skip(!seed.collectionId, 'collections addon unavailable')",
-      "test('x', async () => { test.skip() })",
       "it.skipIf(process.platform === 'win32')('y', () => {})",
       "describe.runIf(hasS3)('z', () => {})",
       "// it.skip('commented out', () => {})",
@@ -54,6 +52,13 @@ describe('lint:skips', () => {
       'ctx.skip()',
     ].join('\n');
     expect(modifiers(source, 'x.test.ts')).toEqual({ skipped: [], only: [] });
+    const playwright = [
+      "test.skip(!seed.collectionId, 'collections addon unavailable')",
+      "test('x', async ({ page }) => { test.fixme(await page.isClosed(), 'flaky') })",
+      "test.skip(({ browserName }) => browserName === 'webkit', 'no webkit')",
+      "test.skip(false, 'never')",
+    ].join('\n');
+    expect(modifiers(playwright, 'e2e/x.spec.ts')).toEqual({ skipped: [], only: [] });
   });
 
   it('SKIPS-003: finds .only on any runner', () => {
@@ -86,6 +91,55 @@ describe('lint:skips', () => {
       true
     );
     expect(JSON.parse(readFileSync(tree.path(BASELINE), 'utf8'))).toEqual({ 'src/a.test.ts': 2 });
+  });
+
+  it('SKIPS-009: counts every vitest skip, whatever its title is', () => {
+    const source = [
+      "const T = 'a'",
+      'describe.skip(T, () => {})',
+      'it.skip(name, () => {})',
+      "it.skip(t('x'), () => {})",
+      'test.skip(!ready, () => {})',
+    ].join('\n');
+    expect(modifiers(source, 'tests/x.test.ts').skipped.map((s: string) => s.split(':')[0])).toEqual([
+      '2',
+      '3',
+      '4',
+      '5',
+    ]);
+  });
+
+  it('SKIPS-010: counts the Playwright skips that do not depend on a condition', () => {
+    const source = [
+      "test.skip(true, 'switched off')",
+      "test('x', async () => { test.skip() })",
+      "test.fixme('t', async () => {})",
+      'test.fixme(title, async () => {})',
+      'test.skip(title, async ({ page }) => {})',
+      "test.describe.fixme('group', () => {})",
+      "test.describe('group', () => { test.fixme() })",
+    ].join('\n');
+    expect(modifiers(source, 'e2e/a.spec.ts').skipped.map((s: string) => s.split(':')[0])).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+    ]);
+  });
+
+  it('SKIPS-011: fails a variable-title skip and an unconditional Playwright skip', () => {
+    expect(run({}, { 'tests/b.test.ts': "const name = 'x';\nit.skip(name, () => {});\n" })).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/tests\/b\.test\.ts: 1 skipped or todo test\(s\), baseline 0/);
+    tree.remove();
+    const e2e = "test('a', async () => { test.skip() });\ntest.fixme('b', async () => {});\n";
+    expect(run({}, { 'e2e/c.spec.ts': e2e })).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/e2e\/c\.spec\.ts: 2 skipped or todo test\(s\), baseline 0/);
+    tree.remove();
+    const conditional = "test('a', async () => { test.skip(!process.env.S3, 'needs S3') });\n";
+    expect(run({}, { 'e2e/c.spec.ts': conditional })).toBe(0);
   });
 
   it('SKIPS-008: a missing baseline or test directory stops the check', () => {

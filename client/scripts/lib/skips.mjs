@@ -21,17 +21,38 @@ function rootOf(node) {
   return ts.isIdentifier(node) ? node.text : null
 }
 
+/** Playwright specs live under e2e/; everything else runs under vitest. */
+const isPlaywright = (file) => file.startsWith('e2e/')
+
 const isTitle = (node) => Boolean(node) && (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node))
+const isFunction = (node) => Boolean(node) && (ts.isArrowFunction(node) || ts.isFunctionExpression(node))
+
+/**
+ * Whether a skip or fixme call switches tests off for good. Under vitest it
+ * always does: the first argument is the title, a literal or not. Playwright
+ * also knows a run-time form, test.skip(condition, 'why'), which only skips
+ * when the condition holds. A call counts there unless it is that form: it
+ * declares a test (a title first or a test body second), it has no argument
+ * (called bare, it skips the test or group it sits in), or its condition is
+ * the literal true.
+ */
+function switchesOff(call, file) {
+  const [first, second] = call.arguments
+  if (!isPlaywright(file) || !first || isTitle(first) || isFunction(second)) return true
+  return first.kind === ts.SyntaxKind.TrueKeyword
+}
 
 /**
  * The tests a file switches off or narrows down, as `line: code`.
  *
- * skipped: it.skip / describe.skip / test.todo and the x-shorthands, each
- * declaring a test that never runs. A skip with a condition first
- * (Playwright's test.skip(!seed.id, 'why'), or called bare inside a test)
- * decides at run time and is no declaration; neither are skipIf and runIf.
+ * skipped: it.skip / describe.skip / test.todo / test.fixme and the
+ * x-shorthands, each switching off a test that never runs. Playwright's
+ * test.skip(!seed.id, 'why') decides at run time and does not count (see
+ * switchesOff); neither do skipIf and runIf.
  *
  * only: .only anywhere, which silently drops every other test in the file.
+ *
+ * file is the path from the client root: it decides vitest or Playwright.
  */
 export function modifiers(source, file) {
   const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
@@ -44,10 +65,10 @@ export function modifiers(source, file) {
       const name = node.name.text
       if (name === 'only') only.push(at(node))
       else if (name === 'todo') skipped.push(at(node))
-      else if (name === 'skip') {
+      else if (name === 'skip' || name === 'fixme') {
         const call = ts.isCallExpression(node.parent) && node.parent.expression === node ? node.parent : null
-        // test.skip.each(table)(...) declares skipped tests; test.skip('title', fn) declares one.
-        if (!call || isTitle(call.arguments[0])) skipped.push(at(node))
+        // test.skip.each(table)(...) declares skipped tests without being called directly.
+        if (!call || switchesOff(call, file)) skipped.push(at(node))
       }
     } else if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && SHORTHAND.has(node.expression.text)) {
       skipped.push(at(node.expression))
@@ -63,8 +84,8 @@ export function scan(root) {
   const skipped = {}
   const only = {}
   for (const path of listFiles(root, DIRS, accepts)) {
-    const found = modifiers(readText(path), path)
     const key = toKey(root, path)
+    const found = modifiers(readText(path), key)
     if (found.skipped.length) skipped[key] = found.skipped
     if (found.only.length) only[key] = found.only
   }
