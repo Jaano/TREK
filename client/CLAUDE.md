@@ -12,6 +12,7 @@ npm run lint              # eslint .   (lint:check in CI)
 npm run lint:pages        # enforce the Page pattern (CI gate)
 npm run lint:rtl          # physical left/right sides and rtl-lint-disable comments may only shrink per file (CI gate; --list shows them, --update lowers both baselines)
 npm run lint:size         # no source file or stylesheet past 1000 lines, no test past 2000, counted wrapped at 120 columns; longer ones may only shrink (CI gate; --update lowers the baseline)
+npm run lint:format       # Prettier: every file outside scripts/format-baseline.json must be formatted, the list only shrinks (CI gate; npx prettier --write <file>, then --update)
 npm run test              # vitest run (tests/** + co-located src/**/*.test.{ts,tsx}); also test:unit / test:integration / test:coverage
 npm run e2e               # Playwright (CI runs --project=public --project=app; e2e:report opens the last report)
 npm run shots             # Playwright screenshot project (shots:promote to accept)
