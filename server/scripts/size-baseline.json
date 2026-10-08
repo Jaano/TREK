@@ -17,7 +17,7 @@
   "src/nest/places/places.service.ts": 2020,
   "src/nest/plugins/plugin-runtime.service.ts": 1463,
   "src/nest/plugins/runtime/plugin-sdk.ts": 1094,
-  "src/nest/reservations/reservations.service.ts": 1247,
+  "src/nest/reservations/reservations.service.ts": 1240,
   "src/nest/trips/trips.service.ts": 1013,
   "src/nest/vacay/vacay.service.ts": 1440
 }

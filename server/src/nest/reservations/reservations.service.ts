@@ -1133,24 +1133,21 @@ export class ReservationsService {
     return { ...rest, currency, ...(priced.exchange_rate != null ? { exchange_rate: priced.exchange_rate } : {}) };
   }
 
-  /** POST side effect: auto-create a linked budget item when a price is provided. `collect` holds the broadcast for a caller inside its transaction. */
+  /** POST side effect: link a budget item when a price is provided. `collect` holds the broadcast for the caller's transaction. */
   async syncBudgetOnCreate(tripId: string, reservationId: number, title: string, type: string | undefined, entry: BudgetEntry, socketId: string | undefined, collect?: CostEvent[]): Promise<void> {
     if (!entry || !(Number(entry.total_price) > 0)) return;
-    try {
-      const item = await this.budget.linkBudgetItemToReservation(tripId, reservationId, {
-        name: title,
-        category: entry.category || type || 'Other',
-        total_price: entry.total_price!,
-        ...(entry.currency ? { currency: entry.currency } : {}),
-        ...(entry.exchange_rate != null ? { exchange_rate: entry.exchange_rate } : {}),
-      });
-      this.sendCost(tripId, { event: 'budget:created', payload: { item } }, socketId, collect);
-    } catch (err) {
-      console.error('[reservations] Failed to create budget entry:', err);
-    }
+    // A failing cost write is not caught: it rolls the booking back with it in createWithCost.
+    const item = await this.budget.linkBudgetItemToReservation(tripId, reservationId, {
+      name: title,
+      category: entry.category || type || 'Other',
+      total_price: entry.total_price!,
+      ...(entry.currency ? { currency: entry.currency } : {}),
+      ...(entry.exchange_rate != null ? { exchange_rate: entry.exchange_rate } : {}),
+    });
+    this.sendCost(tripId, { event: 'budget:created', payload: { item } }, socketId, collect);
   }
 
-  /** PUT side effect: drop the linked budget item when the price is cleared, else create/update it. `collect` as on create. */
+  /** PUT side effect: drop the linked budget item when the price is cleared, else create/update it. `collect` and failures as on create. */
   async syncBudgetOnUpdate(tripId: string, id: string, title: string, type: string | undefined, currentTitle: string, currentType: string | undefined, entry: BudgetEntry, socketId: string | undefined, collect?: CostEvent[]): Promise<void> {
     // When the booking type changes, keep a linked expense's category in sync —
     // but only if it still carries the auto-derived category (so a manual pick in
@@ -1184,20 +1181,16 @@ export class ReservationsService {
       return;
     }
 
-    try {
-      const itemName = title || currentTitle;
-      const category = entry.category || type || currentType || 'Other';
-      const existing = await this.budgetItemsRepo.findIdByReservationInTrip(tripId, id);
-      if (existing) {
-        const updated = await this.budget.updateBudgetItem(existing.id, tripId, { name: itemName, category, total_price: entry.total_price });
-        this.sendCost(tripId, { event: 'budget:updated', payload: { item: updated } }, socketId, collect);
-      } else {
-        // The link travels on the insert, so a cost is never written without its booking.
-        const item = await this.budget.linkBudgetItemToReservation(tripId, Number(id), { name: itemName, category, total_price: entry.total_price! });
-        this.sendCost(tripId, { event: 'budget:created', payload: { item } }, socketId, collect);
-      }
-    } catch (err) {
-      console.error('[reservations] Failed to create/update budget entry:', err);
+    const itemName = title || currentTitle;
+    const category = entry.category || type || currentType || 'Other';
+    const existing = await this.budgetItemsRepo.findIdByReservationInTrip(tripId, id);
+    if (existing) {
+      const updated = await this.budget.updateBudgetItem(existing.id, tripId, { name: itemName, category, total_price: entry.total_price });
+      this.sendCost(tripId, { event: 'budget:updated', payload: { item: updated } }, socketId, collect);
+    } else {
+      // The link travels on the insert, so a cost is never written without its booking.
+      const item = await this.budget.linkBudgetItemToReservation(tripId, Number(id), { name: itemName, category, total_price: entry.total_price! });
+      this.sendCost(tripId, { event: 'budget:created', payload: { item } }, socketId, collect);
     }
   }
 }

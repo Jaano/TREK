@@ -555,9 +555,12 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       expect(broadcast).toHaveBeenCalledWith('5', 'budget:created', { item: { id: 7 } }, 'sock');
     });
 
-    it('falls back to type then "Other" for the category and swallows errors', async () => {
+    it('falls back to "Other" for the category and lets a failing cost write reach the caller', async () => {
       budget.linkBudgetItemToReservation.mockImplementation(() => { throw new Error('boom'); });
-      expect(() => svc.syncBudgetOnCreate('5', 9, 'Hotel', undefined, { total_price: 50 }, 'sock')).not.toThrow();
+      // createWithCost relies on the throw to roll the booking back with its cost.
+      await expect(svc.syncBudgetOnCreate('5', 9, 'Hotel', undefined, { total_price: 50 }, 'sock')).rejects.toThrow('boom');
+      expect(budget.linkBudgetItemToReservation).toHaveBeenCalledWith('5', 9, { name: 'Hotel', category: 'Other', total_price: 50 });
+      expect(broadcast).not.toHaveBeenCalled();
     });
 
     // #2525: an imported booking quoted in dollars became a cost of that many euros.
@@ -721,6 +724,21 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       expect(broadcast).not.toHaveBeenCalled();
     });
 
+    it('RESV-TX-006: updateWithCost rolls the booking edit back when the new price cannot be written', async () => {
+      const { trip, res, item } = linkedItem({ total_price: 100 });
+      testDb.prepare("UPDATE reservations SET title = 'Old' WHERE id = ?").run(res.id);
+      const current = (await svc.getReservation(String(res.id), String(trip.id)))!;
+      budget.updateBudgetItem.mockRejectedValueOnce(new Error('boom'));
+
+      // Same type, so only the price path writes, and that write throws.
+      await expect(svc.updateWithCost(String(res.id), String(trip.id), { title: 'New' } as never, current, { total_price: 250 }))
+        .rejects.toThrow('boom');
+
+      expect(testDb.prepare('SELECT title FROM reservations WHERE id = ?').get(res.id)).toEqual({ title: 'Old' });
+      expect(testDb.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(item.id)).toEqual({ total_price: 100 });
+      expect(broadcast).not.toHaveBeenCalled();
+    });
+
     it('RESV-TX-002: updateWithCost hands the cost events back instead of sending them inside the write', async () => {
       const { trip, res, item } = linkedItem();
       const current = (await svc.getReservation(String(res.id), String(trip.id)))!;
@@ -747,14 +765,15 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       expect(broadcast).not.toHaveBeenCalledWith(String(trip.id), 'budget:created', expect.anything(), expect.anything());
     });
 
-    it('RESV-TX-004: a failing cost keeps the booking, as the REST route always has', async () => {
+    it('RESV-TX-004: a failing cost rolls the new booking back with it', async () => {
       const { trip } = ownerTrip();
       budget.linkBudgetItemToReservation.mockRejectedValueOnce(new Error('boom'));
 
-      const out = await svc.createWithCost(String(trip.id), { title: 'Hotel', type: 'other' } as never, { total_price: 200 });
+      await expect(svc.createWithCost(String(trip.id), { title: 'Hotel', type: 'other' } as never, { total_price: 200 }))
+        .rejects.toThrow('boom');
 
-      expect(out.costEvents).toEqual([]);
-      expect(testDb.prepare('SELECT title FROM reservations WHERE id = ?').get(out.reservation.id)).toEqual({ title: 'Hotel' });
+      expect(testDb.prepare('SELECT COUNT(*) AS n FROM reservations WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+      expect(broadcast).not.toHaveBeenCalled();
     });
 
     it('RESV-TX-005: without a price there is no cost and no event', async () => {
