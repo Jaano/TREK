@@ -24,6 +24,18 @@ vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { makeDay } from '../../helpers/factories/trips';
+import { makeBudgetItem } from '../../helpers/factories/budget';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { ReservationEndpoints } from '../../../src/db/entities/ReservationEndpoints.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+
+/** Overwrites the booking's stored metadata text, the way an import or a legacy row leaves it. */
+async function setMetadata(metadata: string, reservationId: number): Promise<void> {
+  await updateRows(orm, Reservations, { id: reservationId }, { metadata });
+}
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -31,7 +43,14 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -53,9 +72,15 @@ const stopoverEndpoints = [
 ];
 
 const errorText = (result: unknown) => (result as { content: { text: string }[] }).content[0].text;
-const storedMetadata = (reservationId: number) => JSON.parse(
-  (testDb.prepare('SELECT metadata FROM reservations WHERE id = ?').get(reservationId) as { metadata: string }).metadata
-);
+const storedMetadata = async (reservationId: number) =>
+  JSON.parse(String((await findRow(orm, Reservations, { id: reservationId }))?.metadata));
+
+/** The ids of the booking's stored endpoints, in sequence order. */
+const endpointIds = async (reservationId: number) =>
+  (await findRows(orm, ReservationEndpoints, { reservation: reservationId }, { sequence: 'asc' })).map((r) => r.id);
+
+/** A second trip's day, which the tools must refuse as a foreign day. */
+const foreignDayOn = async (tripId: number, date: string) => (await makeDay(orm, tripId, { date, day_number: 1 })).id;
 
 describe('Tool: create_transport', () => {
   it('backfills lat/lng/timezone for code-only flight endpoints', async () => {
@@ -74,7 +99,7 @@ describe('Tool: create_transport', () => {
       expect(typeof from.lng).toBe('number');
       expect(from.timezone).toBe('Europe/Zurich');
       // persisted NOT NULL columns are populated
-      const rows = testDb.prepare('SELECT lat, lng FROM reservation_endpoints WHERE reservation_id = ?').all(data.reservation.id) as any[];
+      const rows = await findRows(orm, ReservationEndpoints, { reservation: data.reservation.id });
       expect(rows.every(r => r.lat != null && r.lng != null)).toBe(true);
     });
   });
@@ -250,7 +275,7 @@ describe('Transport tools: access and validation', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const otherTrip = createTrip(testDb, user.id);
-    const foreignDay = Number(testDb.prepare("INSERT INTO days (trip_id, date, day_number) VALUES (?, '2026-07-01', 1)").run(otherTrip.id).lastInsertRowid);
+    const foreignDay = await foreignDayOn(otherTrip.id, '2026-07-01');
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'create_transport',
@@ -265,7 +290,7 @@ describe('Transport tools: access and validation', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const otherTrip = createTrip(testDb, user.id);
-    const foreignDay = Number(testDb.prepare("INSERT INTO days (trip_id, date, day_number) VALUES (?, '2026-07-02', 1)").run(otherTrip.id).lastInsertRowid);
+    const foreignDay = await foreignDayOn(otherTrip.id, '2026-07-02');
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'create_transport',
@@ -288,7 +313,7 @@ describe('Transport tools: the price link', () => {
       });
       const data = parseToolResult(result) as { reservation: { id: number } };
 
-      const item = testDb.prepare('SELECT name, category, total_price FROM budget_items WHERE reservation_id = ?').get(data.reservation.id) as { name: string; category: string; total_price: number };
+      const item = await findRow(orm, BudgetItems, { reservation: data.reservation.id });
       expect(item).toMatchObject({ name: 'ZRH → CDG', category: 'Flights', total_price: 240 });
       // The price also rides along in the reservation metadata, as the REST path does.
       expect(broadcastMock.mock.calls.some(c => c[1] === 'budget:created')).toBe(true);
@@ -304,8 +329,8 @@ describe('Transport tools: the price link', () => {
         arguments: { tripId: trip.id, type: 'train', title: 'ICE 599', price: 89 },
       });
       const data = parseToolResult(result) as { reservation: { id: number } };
-      const item = testDb.prepare('SELECT category FROM budget_items WHERE reservation_id = ?').get(data.reservation.id) as { category: string };
-      expect(item.category).toBe('train');
+      const item = await findRow(orm, BudgetItems, { reservation: data.reservation.id });
+      expect(item?.category).toBe('train');
     });
   });
 
@@ -318,7 +343,7 @@ describe('Transport tools: the price link', () => {
         arguments: { tripId: trip.id, type: 'car', title: 'Rental', price: 0 },
       });
       const data = parseToolResult(result) as { reservation: { id: number } };
-      expect(testDb.prepare('SELECT id FROM budget_items WHERE reservation_id = ?').get(data.reservation.id)).toBeUndefined();
+      expect(await findRow(orm, BudgetItems, { reservation: data.reservation.id })).toBeNull();
     });
   });
 });
@@ -360,7 +385,7 @@ describe('Tool: update_transport (guards)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const otherTrip = createTrip(testDb, user.id);
-    const foreignDay = Number(testDb.prepare("INSERT INTO days (trip_id, date, day_number) VALUES (?, '2026-08-01', 1)").run(otherTrip.id).lastInsertRowid);
+    const foreignDay = await foreignDayOn(otherTrip.id, '2026-08-01');
     await withHarness(user.id, async (h) => {
       const created = await h.client.callTool({
         name: 'create_transport',
@@ -418,7 +443,7 @@ describe('Tool: delete_transport', () => {
         arguments: { tripId: trip.id, reservationId: reservation.id },
       });
       expect(parseToolResult(result)).toEqual({ success: true });
-      expect(testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(reservation.id)).toBeUndefined();
+      expect(await findRow(orm, Reservations, { id: reservation.id })).toBeNull();
       expect(broadcastMock.mock.calls.some(c => c[1] === 'reservation:deleted')).toBe(true);
       expect(broadcastMock.mock.calls.some(c => c[1] === 'budget:deleted')).toBe(false);
     });
@@ -433,11 +458,10 @@ describe('Tool: delete_transport', () => {
         arguments: { tripId: trip.id, type: 'flight', title: 'ZRH → CDG', endpoints: flightEndpoints },
       });
       const { reservation } = parseToolResult(created) as { reservation: { id: number } };
-      const expense = (name: string) => Number(testDb.prepare(
-        'INSERT INTO budget_items (trip_id, name, category, total_price, reservation_id) VALUES (?, ?, ?, ?, ?)',
-      ).run(trip.id, name, 'flights', 50, reservation.id).lastInsertRowid);
-      const fare = expense('Fare');
-      const seat = expense('Seat');
+      const expense = async (name: string) =>
+        (await makeBudgetItem(orm, trip.id, { name, category: 'flights', total_price: 50, reservation: reservation.id })).id;
+      const fare = await expense('Fare');
+      const seat = await expense('Seat');
       broadcastMock.mockClear();
 
       const result = await h.client.callTool({
@@ -445,7 +469,7 @@ describe('Tool: delete_transport', () => {
         arguments: { tripId: trip.id, reservationId: reservation.id },
       });
       expect(parseToolResult(result)).toEqual({ success: true });
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM budget_items WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+      expect(await countRows(orm, BudgetItems, { trip: trip.id })).toBe(0);
       // One event per expense, and all of them before the transport itself goes.
       expect(broadcastMock.mock.calls.map(c => c[1])).toEqual(['budget:deleted', 'budget:deleted', 'reservation:deleted']);
       expect(broadcastMock.mock.calls.slice(0, 2).map(c => (c[2] as { itemId: number }).itemId)).toEqual([fare, seat]);
@@ -507,7 +531,7 @@ describe('Tool: create_transport (multi-leg)', () => {
         },
       });
       const data = parseToolResult(result) as any;
-      expect(storedMetadata(data.reservation.id).legs).toEqual([
+      expect((await storedMetadata(data.reservation.id)).legs).toEqual([
         { from: 'AMS', to: 'CDG', dep_day_id: day.id, dep_time: '09:00', arr_day_id: null, arr_time: '10:00' },
         { from: 'CDG', to: 'FCO', dep_day_id: null, dep_time: '11:00', arr_day_id: null, arr_time: '12:00' },
       ]);
@@ -537,7 +561,7 @@ describe('Tool: create_transport (multi-leg)', () => {
           ],
         },
       })) as any;
-      const meta = storedMetadata(data.reservation.id);
+      const meta = await storedMetadata(data.reservation.id);
       expect(meta.departure_airport).toBe('AMS');
       expect(meta.arrival_airport).toBe('FCO');
       expect(meta.airline).toBe('KLM');
@@ -561,7 +585,7 @@ describe('Tool: create_transport (multi-leg)', () => {
           ],
         },
       })) as any;
-      const meta = storedMetadata(data.reservation.id);
+      const meta = await storedMetadata(data.reservation.id);
       expect(meta.legs[0].confirmation_number).toBe('ABC123');
       // A leg without one gets no key at all, rather than an undefined that
       // serialises away and back as null.
@@ -589,7 +613,7 @@ describe('Tool: create_transport (multi-leg)', () => {
           ],
         },
       })) as any;
-      const meta = storedMetadata(data.reservation.id);
+      const meta = await storedMetadata(data.reservation.id);
       expect(meta.airline).toBe('KLM Cityhopper');
       expect(meta.legs[0].airline).toBe('KLM');
     });
@@ -607,7 +631,7 @@ describe('Tool: create_transport (multi-leg)', () => {
           legs: [{ dep_time: '09:00', arr_time: '10:00' }, { dep_time: '11:00', arr_time: '12:00' }],
         },
       })) as any;
-      const meta = storedMetadata(data.reservation.id);
+      const meta = await storedMetadata(data.reservation.id);
       expect(meta.legs.map((l: any) => [l.from, l.to])).toEqual([['AMS', 'CDG'], ['CDG', 'FCO']]);
     });
   });
@@ -631,7 +655,7 @@ describe('Tool: create_transport (multi-leg)', () => {
           ],
         },
       })) as any;
-      const meta = storedMetadata(data.reservation.id);
+      const meta = await storedMetadata(data.reservation.id);
       // Station endpoints carry no code, so the labels come from their names.
       expect(meta.legs.map((l: any) => [l.from, l.to])).toEqual([
         ['Basel SBB', 'Lugano'], ['Lugano', 'Milano Centrale'],
@@ -846,7 +870,7 @@ describe('Tool: update_transport (multi-leg)', () => {
     await withHarness(user.id, async (h) => {
       const created = await seedStopover(h, trip.id);
       // What an AirTrail import leaves behind: sync ids plus per-leg planner positions.
-      testDb.prepare('UPDATE reservations SET metadata = ? WHERE id = ?').run(JSON.stringify({
+      await setMetadata(JSON.stringify({
         departure_airport: 'AMS', arrival_airport: 'FCO', airtrail_ids: ['17', '18'],
         legs: [
           { from: 'AMS', to: 'CDG', dep_time: '09:00', arr_time: '10:00', day_positions: { 5: 2 } },
@@ -864,7 +888,7 @@ describe('Tool: update_transport (multi-leg)', () => {
           ],
         },
       });
-      const meta = storedMetadata((parseToolResult(result) as any).reservation.id);
+      const meta = await storedMetadata((parseToolResult(result) as any).reservation.id);
       expect(meta.airtrail_ids).toEqual(['17', '18']);
       expect(meta.departure_airport).toBe('AMS');
       expect(meta.legs[0].arr_time).toBe('10:15');
@@ -888,7 +912,7 @@ describe('Tool: update_transport (multi-leg)', () => {
           ],
         },
       });
-      const meta = storedMetadata((parseToolResult(result) as any).reservation.id);
+      const meta = await storedMetadata((parseToolResult(result) as any).reservation.id);
       // The copy-through list in applyLegs is what carries the field: a field
       // missing from it is accepted by the schema and then silently dropped.
       expect(meta.legs.map((l: any) => l.confirmation_number)).toEqual(['ABC123', 'XYZ789']);
@@ -912,7 +936,7 @@ describe('Tool: update_transport (multi-leg)', () => {
           ],
         },
       });
-      const meta = storedMetadata((parseToolResult(result) as any).reservation.id);
+      const meta = await storedMetadata((parseToolResult(result) as any).reservation.id);
       expect(meta.confirmation_source).toBe('email');
       expect(meta.legs).toHaveLength(2);
       // departure_airport is mirrored back in because the supplied metadata dropped it.
@@ -925,12 +949,12 @@ describe('Tool: update_transport (multi-leg)', () => {
     const trip = createTrip(testDb, user.id);
     await withHarness(user.id, async (h) => {
       const created = await seedStopover(h, trip.id);
-      const before = storedMetadata(created.reservation.id);
+      const before = await storedMetadata(created.reservation.id);
       await h.client.callTool({
         name: 'update_transport',
         arguments: { tripId: trip.id, reservationId: created.reservation.id, status: 'confirmed' },
       });
-      expect(storedMetadata(created.reservation.id)).toEqual(before);
+      expect(await storedMetadata(created.reservation.id)).toEqual(before);
     });
   });
 
@@ -959,8 +983,7 @@ describe('Tool: update_transport (multi-leg)', () => {
     const trip = createTrip(testDb, user.id);
     await withHarness(user.id, async (h) => {
       const created = await seedStopover(h, trip.id);
-      const idsBefore = (testDb.prepare('SELECT id FROM reservation_endpoints WHERE reservation_id = ? ORDER BY sequence')
-        .all(created.reservation.id) as any[]).map(r => r.id);
+      const idsBefore = await endpointIds(created.reservation.id);
       await h.client.callTool({
         name: 'update_transport',
         arguments: {
@@ -971,8 +994,7 @@ describe('Tool: update_transport (multi-leg)', () => {
           ],
         },
       });
-      const idsAfter = (testDb.prepare('SELECT id FROM reservation_endpoints WHERE reservation_id = ? ORDER BY sequence')
-        .all(created.reservation.id) as any[]).map(r => r.id);
+      const idsAfter = await endpointIds(created.reservation.id);
       expect(idsAfter).toEqual(idsBefore);
     });
   });
@@ -1005,7 +1027,7 @@ describe('Tool: update_transport (multi-leg)', () => {
     const trip = createTrip(testDb, user.id);
     await withHarness(user.id, async (h) => {
       const created = await seedStopover(h, trip.id);
-      testDb.prepare('UPDATE reservations SET metadata = ? WHERE id = ?').run('not json at all', created.reservation.id);
+      await setMetadata('not json at all', created.reservation.id);
       const result = await h.client.callTool({
         name: 'update_transport',
         arguments: {
@@ -1017,7 +1039,7 @@ describe('Tool: update_transport (multi-leg)', () => {
         },
       });
       expect((result as { isError?: boolean }).isError).toBeFalsy();
-      expect(storedMetadata((parseToolResult(result) as any).reservation.id).legs).toHaveLength(2);
+      expect((await storedMetadata((parseToolResult(result) as any).reservation.id)).legs).toHaveLength(2);
     });
   });
 
@@ -1026,7 +1048,7 @@ describe('Tool: update_transport (multi-leg)', () => {
     const trip = createTrip(testDb, user.id);
     await withHarness(user.id, async (h) => {
       const created = await seedStopover(h, trip.id);
-      testDb.prepare('UPDATE reservations SET metadata = ? WHERE id = ?').run(JSON.stringify(JSON.stringify({
+      await setMetadata(JSON.stringify(JSON.stringify({
         legs: [{ from: 'AMS', to: 'CDG', day_positions: { 9: 1 } }, { from: 'CDG', to: 'FCO' }],
       })), created.reservation.id);
       const result = await h.client.callTool({
@@ -1039,7 +1061,7 @@ describe('Tool: update_transport (multi-leg)', () => {
           ],
         },
       });
-      expect(storedMetadata((parseToolResult(result) as any).reservation.id).legs[0].day_positions).toEqual({ 9: 1 });
+      expect((await storedMetadata((parseToolResult(result) as any).reservation.id)).legs[0].day_positions).toEqual({ 9: 1 });
     });
   });
 
@@ -1110,8 +1132,7 @@ describe('Transport tools: the full type list', () => {
       expect((result as { isError?: boolean }).isError).toBeFalsy();
       const data = parseToolResult(result) as any;
       expect(data.reservation.type).toBe(type);
-      const row = testDb.prepare('SELECT type FROM reservations WHERE id = ?').get(data.reservation.id) as any;
-      expect(row.type).toBe(type);
+      expect((await findRow(orm, Reservations, { id: data.reservation.id }))?.type).toBe(type);
     });
   });
 
@@ -1138,9 +1159,9 @@ describe('Transport tools: the full type list', () => {
       expect(data.reservation.type).toBe('bus');
       expect(data.reservation.confirmation_number).toBe('FLIX-8891');
       expect(data.reservation.endpoints).toHaveLength(2);
-      const row = testDb.prepare('SELECT day_id, end_day_id FROM reservations WHERE id = ?').get(data.reservation.id) as any;
-      expect(row.day_id).toBe(depDay.id);
-      expect(row.end_day_id).toBe(arrDay.id);
+      const row = (await findRow(orm, Reservations, { id: data.reservation.id }));
+      expect(row?.day_id).toBe(depDay.id);
+      expect(row?.end_day_id).toBe(arrDay.id);
     });
   });
 
@@ -1175,8 +1196,7 @@ describe('Transport tools: the full type list', () => {
         arguments: { tripId: trip.id, reservationId: reservation.id, type },
       });
       expect((result as { isError?: boolean }).isError).toBeFalsy();
-      const row = testDb.prepare('SELECT type FROM reservations WHERE id = ?').get(reservation.id) as any;
-      expect(row.type).toBe(type);
+      expect((await findRow(orm, Reservations, { id: reservation.id }))?.type).toBe(type);
     });
   });
 
@@ -1195,8 +1215,7 @@ describe('Transport tools: the full type list', () => {
         arguments: { tripId: trip.id, reservationId: reservation.id, status: 'confirmed' },
       });
       expect((result as { isError?: boolean }).isError).toBeFalsy();
-      const row = testDb.prepare('SELECT status FROM reservations WHERE id = ?').get(reservation.id) as any;
-      expect(row.status).toBe('confirmed');
+      expect((await findRow(orm, Reservations, { id: reservation.id }))?.status).toBe('confirmed');
     });
   });
 
@@ -1228,16 +1247,14 @@ describe('Transport tools: the full type list', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     // As create_transit_journey leaves it: a transport row carrying an itinerary.
-    const reservationId = Number(testDb.prepare(
-      "INSERT INTO reservations (trip_id, title, type, status) VALUES (?, 'Tram 4', 'transit', 'pending')"
-    ).run(trip.id).lastInsertRowid);
+    const reservationId = await insertRow(orm, Reservations, { trip: trip.id, title: 'Tram 4', type: 'transit', status: 'pending' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_transport',
         arguments: { tripId: trip.id, reservationId, status: 'confirmed' },
       });
       expect((result as { isError?: boolean }).isError).toBeFalsy();
-      const row = testDb.prepare('SELECT status, type FROM reservations WHERE id = ?').get(reservationId) as any;
+      const row = (await findRow(orm, Reservations, { id: reservationId }));
       expect(row).toMatchObject({ status: 'confirmed', type: 'transit' });
     });
   });
