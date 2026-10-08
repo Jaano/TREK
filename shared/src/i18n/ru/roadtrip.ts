@@ -213,6 +213,9 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'По пути ничего не соответствует «{name}».',
   'roadtrip.poi.noneMatchFilters': 'На маршруте нет ничего, что подходит под эти фильтры.',
   'roadtrip.poi.foundFiltered': '{count} из {total} по пути',
+  'roadtrip.poi.foundFiltered.one': '{count} из {total} по пути',
+  'roadtrip.poi.foundFiltered.few': '{count} из {total} по пути',
+  'roadtrip.poi.foundFiltered.many': '{count} из {total} по пути',
   'roadtrip.poi.truncated':
     'На {count} участка нашлось больше, чем помещается в один ответ. Сузьте коридор, чтобы увидеть остальное.',
   'roadtrip.poi.truncated.one':

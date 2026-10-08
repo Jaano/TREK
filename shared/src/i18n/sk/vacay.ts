@@ -90,6 +90,8 @@ const vacay: TranslationStrings = {
   'vacay.carryOverHint': 'Automaticky prevádzať zostávajúce dni dovolenky do ďalšieho roka',
   'vacay.carriedOverPrevPeriod': 'z predchádzajúceho obdobia',
   'vacay.compUsedCount': '{count} náhradné / pružné',
+  'vacay.compUsedCount.one': '{count} náhradné / pružné',
+  'vacay.compUsedCount.few': '{count} náhradné / pružné',
   'vacay.yearType': 'Dovolenkový rok',
   'vacay.yearTypeHint': 'Kedy začína váš dovolenkový rok — podľa toho sa riadi nárok, čerpanie aj prevod',
   'vacay.yearTypeCalendar': 'Kalendárny',

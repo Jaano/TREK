@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} resor ({archived} i arkivet)',
   'dashboard.subtitle.trips.one': '{count} resa ({archived} i arkivet)',
   'dashboard.subtitle.empty': 'Påbörja din första resa',
-  'dashboard.subtitle.activeOne': '{count} aktiv resa',
-  'dashboard.subtitle.activeMany': '{count} aktiva resor',
+  'dashboard.subtitle.active': '{count} aktiva resor',
+  'dashboard.subtitle.active.one': '{count} aktiv resa',
   'dashboard.subtitle.archivedSuffix': ' · {count} arkiverade',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} arkiverad',
   'dashboard.newTrip': 'Ny resa',
@@ -126,6 +126,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Ta bort dagar?',
   'dashboard.shrinkIntro': 'När de nya datumen sparas tas de här dagarna bort:',
   'dashboard.shrinkMoreDays': '+{count} till',
+  'dashboard.shrinkMoreDays.one': '+{count} till',
   'dashboard.shrinkLastDays': 'Det är de sista dagarna som försvinner, inte de första',
   'dashboard.shrinkLastDaysHint':
     'Dagsplanerna följer med de nya datumen, så det är alltid de sista dagarna i planen som tas bort, även när starten har flyttats.',

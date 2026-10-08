@@ -61,6 +61,8 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Kas jagada reisi liikmetega?',
   'memories.confirmShareHint':
     '{count} fotot on nähtavad kõigile selle reisi liikmetele. Hiljem saad üksikuid fotosid privaatseks muuta.',
+  'memories.confirmShareHint.one':
+    '{count} foto on nähtav kõigile selle reisi liikmetele. Hiljem saad selle privaatseks muuta.',
   'memories.confirmShareButton': 'Jaga fotosid',
   'memories.error.loadAlbums': 'Albumite laadimine ebaõnnestus',
   'memories.error.linkAlbum': 'Albumi sidumine ebaõnnestus',

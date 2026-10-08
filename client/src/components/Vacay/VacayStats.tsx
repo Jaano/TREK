@@ -203,7 +203,7 @@ function StatCard({ stat: s, isMe, canEdit, selectedYear, isShiftedYear, onSave,
           {compUsed > 0 && (
             <div className="flex items-center gap-1.5 px-2 py-1 rounded-md" style={{ background: 'var(--vg-surf2)', border: '1px solid var(--vg-line)' }}>
               <Clock size={9} style={{ color: 'var(--vg-ink3)' }} />
-              <span className="text-[10px]" style={{ color: 'var(--vg-ink2)' }}>{t('vacay.compUsedCount', { count: fmtDays(compUsed) })}</span>
+              <span className="text-[10px]" style={{ color: 'var(--vg-ink2)' }}>{t('vacay.compUsedCount', { count: Number(fmtDays(compUsed)) })}</span>
             </div>
           )}
         </div>

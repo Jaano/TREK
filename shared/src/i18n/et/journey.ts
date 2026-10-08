@@ -679,6 +679,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Soovitus kõrvale jäetud',
   'journey.suggestions.restore': 'Taasta kõrvale jäetud soovitused',
   'journey.suggestions.restoreCount': 'Kõrvale jäetud soovitused ({count})',
+  'journey.suggestions.restoreCount.one': 'Kõrvale jäetud soovitused ({count})',
   'journey.suggestions.restored': '{count} soovitust taastatud',
   'journey.suggestions.restored.one': '{count} soovitus taastatud',
   'journey.detail.addOnThisDay': 'Lisa sellele päevale sissekanne',

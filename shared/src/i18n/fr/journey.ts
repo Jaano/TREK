@@ -675,6 +675,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Suggestion écartée',
   'journey.suggestions.restore': 'Récupérer les suggestions écartées',
   'journey.suggestions.restoreCount': 'Suggestions écartées ({count})',
+  'journey.suggestions.restoreCount.one': 'Suggestions écartées ({count})',
   'journey.suggestions.restored': '{count} suggestions sont de retour',
   'journey.suggestions.restored.one': '{count} suggestion est de retour',
   'journey.detail.addOnThisDay': 'Ajouter une entrée ce jour-là',

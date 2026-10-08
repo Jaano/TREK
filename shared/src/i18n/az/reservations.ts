@@ -212,6 +212,7 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Digər uçuşlar',
   'reservations.airtrail.empty': 'AirTrail hesabınızda heç bir uçuş tapılmadı.',
   'reservations.airtrail.importCta': '{count} uçuşu idxal et',
+  'reservations.airtrail.importCta.one': '{count} uçuşu idxal et',
   'reservations.airtrail.joinConnection': '{stops} dayanacağında tranzit gözləmə ilə bir uçuş kimi idxal et',
 
   'reservations.costsLabel': 'Xərclər',

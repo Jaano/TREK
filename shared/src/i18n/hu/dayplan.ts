@@ -104,11 +104,15 @@ const dayplan: TranslationStrings = {
     'Minden hely lekerül erről a napról. A helyek az utazásban maradnak, a nap pedig megtartja a jegyzeteit és foglalásait.',
   'dayplan.deleteDayEmpty': 'Erre a napra nincs semmi tervezve.',
   'dayplan.impactPlaces': 'Tervezett helyek: {count}',
+  'dayplan.impactPlaces.one': 'Tervezett helyek: {count}',
   'dayplan.impactPlacesHint': 'A helyek listájában maradnak.',
   'dayplan.impactNotes': 'Jegyzetek: {count}',
+  'dayplan.impactNotes.one': 'Jegyzetek: {count}',
   'dayplan.impactTexts': 'Napcímek és leírások: {count}',
+  'dayplan.impactTexts.one': 'Napcímek és leírások: {count}',
   'dayplan.impactDeletedHint': 'Ezek is törlődnek.',
   'dayplan.impactBookings': 'Foglalások: {count}',
+  'dayplan.impactBookings.one': 'Foglalások: {count}',
   'dayplan.impactStay': 'Szállás: {name}',
   'dayplan.deleteDayBookingsHint': 'A Foglalások között maradnak, nap nélkül.',
   'dayplan.deleteDayStayHint':
@@ -120,8 +124,11 @@ const dayplan: TranslationStrings = {
   'dayplan.deleteDayStayPaidHint':
     'A bejelentkezés vagy a kijelentkezés erre a napra esik, ezért a szállás lemondásra kerül a(z) „{booking}” foglalással és annak {amount} összegű kiadásával együtt.',
   'dayplan.deleteDayShift': 'Későbbi napok: {count}',
+  'dayplan.deleteDayShift.one': 'Későbbi napok: {count}',
   'dayplan.deleteDayShiftHint': 'Mindegyik egy dátummal előrébb kerül.',
   'dayplan.deleteDayShiftBookingsHint': 'Mindegyik egy dátummal előrébb kerül. Velük együtt mozgó foglalások: {count}',
+  'dayplan.deleteDayShiftBookingsHint.one':
+    'Mindegyik egy dátummal előrébb kerül. Velük együtt mozgó foglalások: {count}',
   'dayplan.deleteDayShrink': 'Az utazás mostantól ekkor ér véget: {date}',
   'dayplan.deleteDayShrinkHint': 'Nincs dátum nélküli nap, amely átvehetné az utolsó dátumot.',
   'dayplan.impactStayShorter': 'Szállás: {name}, eggyel kevesebb éjszaka',

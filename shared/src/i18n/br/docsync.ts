@@ -71,6 +71,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Saiu da pasta',
 
   'docsync.conflict.resolve': 'Resolver {count}',
+  'docsync.conflict.resolve.one': 'Resolver {count}',
 
   'docsync.conflict.title': 'As duas cópias mudaram',
   'docsync.conflict.keepTrek': 'Manter a versão do TREK',

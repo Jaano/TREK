@@ -73,6 +73,7 @@ const trip: TranslationStrings = {
   'transit.transfers': '{count} μετεπιβιβάσεις',
   'transit.transfers.one': '{count} μετεπιβίβαση',
   'transit.min': '{count} λεπτά',
+  'transit.min.one': '{count} λεπτό',
   'transit.stops': '{count} στάσεις',
   'transit.stops.one': '{count} στάση',
   'transit.walkTo': 'Περπάτημα προς {name}',

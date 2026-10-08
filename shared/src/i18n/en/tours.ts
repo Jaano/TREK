@@ -67,6 +67,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Waypoints',
   'tours.planner.waypointLabel': 'Waypoint {n}',
   'tours.durationMinutes': '{count} min',
+  'tours.durationMinutes.one': '{count} min',
   'tours.planner.empty': 'Add at least two points to calculate a walking route.',
   'tours.planner.start': 'Start',
   'tours.planner.via': 'Via',

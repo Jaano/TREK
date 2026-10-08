@@ -73,6 +73,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Kikerült a mappából',
 
   'docsync.conflict.resolve': '{count} megoldása',
+  'docsync.conflict.resolve.one': '{count} megoldása',
 
   'docsync.conflict.title': 'Mindkét példány megváltozott',
   'docsync.conflict.keepTrek': 'A TREK-verzió megtartása',

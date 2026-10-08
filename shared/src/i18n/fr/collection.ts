@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': 'Enregistrer {count} dans une liste',
+  'collections.saveNToList.one': 'Enregistrer {count} dans une liste',
   'collections.addedNToList': '{count} enregistrés dans {name}',
+  'collections.addedNToList.one': '{count} enregistré dans {name}',
   'collections.noOwnLists': "Vous n'avez pas encore de listes",
   'collections.saveToListHint': 'Les doublons sont ignorés automatiquement',
   'collections.role.label': 'Rôle',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Déplacer vers une liste',
   'collections.duplicateToList': 'Dupliquer dans une liste',
   'collections.moveToListTitle': 'Déplacer {count} vers une autre liste',
+  'collections.moveToListTitle.one': 'Déplacer {count} vers une autre liste',
   'collections.duplicateToListTitle': 'Dupliquer {count} dans une autre liste',
+  'collections.duplicateToListTitle.one': 'Dupliquer {count} dans une autre liste',
   'collections.noOtherLists': 'Aucune autre liste',
   'collections.movedCount': '{count} lieux déplacés',
   'collections.movedCount.one': '{count} lieu déplacé',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} sélectionnés',
   'collections.importSelectedCount.one': '{count} sélectionné',
   'collections.importAction': 'Importer {count}',
+  'collections.importAction.one': 'Importer {count}',
   'collections.importEmptyTrip': 'Ce voyage n’a pas encore de lieux',
   'collections.importNothingNew': 'Tout ce voyage figure déjà dans cette liste',
   'collections.importDone': '{count} lieux ajoutés',
@@ -115,6 +120,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Copier vers un voyage',
   'collections.copyToTripTitle': 'Copier vers un voyage',
   'collections.copyN': 'Copier {count} vers un voyage',
+  'collections.copyN.one': 'Copier {count} vers un voyage',
   'collections.copyToTripSearch': 'Rechercher des voyages',
   'collections.searchLists': 'Rechercher des listes',
   'collections.copyToTripConfirm': 'Copier',
@@ -150,6 +156,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Retiré de la collection',
   'collections.picker.title': 'Lieux enregistrés',
   'collections.picker.showMore': 'Afficher {count} de plus',
+  'collections.picker.showMore.one': 'Afficher {count} de plus',
   'collections.picker.search': 'Rechercher dans vos lieux enregistrés',
   'collections.picker.empty': 'Aucun lieu enregistré à ajouter',
   'collections.picker.hint': 'Choisissez un lieu dans vos collections',
@@ -172,6 +179,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{count} lieux ajoutés à {name}',
   'collections.file.doneInto.one': '{count} lieu ajouté à {name}',
   'collections.file.doneIntoDuplicates': '{count} ajoutés à {name}, {duplicates} y étaient déjà',
+  'collections.file.doneIntoDuplicates.one': '{count} ajouté à {name}, {duplicates} y étaient déjà',
   'collections.file.doneIntoNothing': 'Tous les lieux du fichier sont déjà dans {name}',
   'collections.file.change': 'Changer',
   'collections.file.labelCount': '{count} étiquettes',
@@ -204,6 +212,8 @@ const collection: TranslationStrings = {
   'collections.file.errorNotGpx': 'Ce n’est pas un fichier GPX.',
   'collections.file.errorTooManyPlaces':
     'Ce fichier contient plus de {count} lieux. Découpez-le et importez les parties une par une.',
+  'collections.file.errorTooManyPlaces.one':
+    'Ce fichier contient plus de {count} lieu. Découpez-le et importez les parties une par une.',
 
   'collections.share.title': 'Partager la liste',
   'collections.share.titleNamed': 'Partager « {name} »',

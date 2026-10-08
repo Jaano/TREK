@@ -55,7 +55,13 @@ const common: TranslationStrings = {
   'common.copied': 'Скопировано',
   'common.justNow': 'только что',
   'common.hoursAgo': '{count} ч назад',
-  'common.daysAgo': '{count} д назад',
+  'common.hoursAgo.one': '{count} ч назад',
+  'common.hoursAgo.few': '{count} ч назад',
+  'common.hoursAgo.many': '{count} ч назад',
+  'common.daysAgo': '{count} дн. назад',
+  'common.daysAgo.one': '{count} дн. назад',
+  'common.daysAgo.few': '{count} дн. назад',
+  'common.daysAgo.many': '{count} дн. назад',
   'common.datepicker.prevMonth': 'Previous month', // en-fallback
   'common.datepicker.nextMonth': 'Next month', // en-fallback
   'common.datepicker.prevYear': 'Previous year', // en-fallback

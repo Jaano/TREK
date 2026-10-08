@@ -312,6 +312,7 @@ const admin: TranslationStrings = {
   'admin.audit.refresh': 'Actualitzar',
   'admin.audit.loadMore': 'Carregar més',
   'admin.audit.showing': '{count} carregats · {total} en total',
+  'admin.audit.showing.one': '{count} carregat · {total} en total',
   'admin.audit.col.time': 'Data i hora',
   'admin.audit.col.user': 'Usuari',
   'admin.audit.col.action': 'Acció',
@@ -818,7 +819,9 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.requiresAddon': 'Requereix {addon}',
   'admin.plugins.cap.dependsOn': 'Necessita {id} {version}',
   'admin.plugins.dep.addonDisabledToast': 'Activa primer els complements necessaris: {addons}',
+  'admin.plugins.dep.addonDisabledToast.one': 'Activa primer el complement necessari: {addons}',
   'admin.plugins.dep.autoEnabled': "S'han activat primer els connectors necessaris: {plugins}",
+  'admin.plugins.dep.autoEnabled.one': "S'ha activat primer el connector necessari: {plugins}",
   'admin.plugins.dep.downloaded': "S'ha baixat {id}",
   'admin.plugins.dep.resolveTitle': 'Dependències que falten',
   'admin.plugins.dep.resolveBody':

@@ -70,6 +70,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Moved out of the folder',
 
   'docsync.conflict.resolve': 'Resolve {count}',
+  'docsync.conflict.resolve.one': 'Resolve {count}',
 
   'docsync.conflict.title': 'Both copies changed',
   'docsync.conflict.keepTrek': 'Keep the TREK version',

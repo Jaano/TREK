@@ -321,7 +321,7 @@ export default function MJourneySettingsSheet({
             <div className="min-w-0 flex-1">
               <div className="text-[0.8125rem] font-bold">{t('journey.suggestions.restore')}</div>
               <div className="font-geist text-[0.625rem] text-m-muted">
-                {t('journey.suggestions.restoreCount', { count: String(journey.dismissed_count) })}
+                {t('journey.suggestions.restoreCount', { count: journey.dismissed_count ?? 0 })}
               </div>
             </div>
           </button>

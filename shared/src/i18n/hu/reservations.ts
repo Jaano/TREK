@@ -182,6 +182,7 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Egyéb járatok',
   'reservations.airtrail.empty': 'Nem található járat az AirTrail-fiókodban.',
   'reservations.airtrail.importCta': '{count} importálása',
+  'reservations.airtrail.importCta.one': '{count} importálása',
   'reservations.airtrail.joinConnection': 'Importálás egyetlen járatként, átszállással itt: {stops}',
   'reservations.costsLabel': 'Költségek',
   'reservations.createExpense': 'Költség létrehozása',

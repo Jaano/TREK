@@ -16,6 +16,7 @@ const photos: TranslationStrings = {
   'photos.linkPlace': 'Σύνδεση Τοποθεσίας',
   'photos.noPlace': 'Καμία Τοποθεσία',
   'photos.uploadN': 'Μεταφόρτωση {n} φωτογραφιών',
+  'photos.uploadN.one': 'Μεταφόρτωση {n} φωτογραφίας',
   'photos.linkDay': 'Σύνδεση Ημέρας',
   'photos.noDay': 'Καμία Ημέρα',
   'photos.dayLabel': 'Ημέρα {number}',

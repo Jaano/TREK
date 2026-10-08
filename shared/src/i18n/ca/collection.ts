@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': 'Desa {count} a una llista',
+  'collections.saveNToList.one': 'Desa {count} a una llista',
   'collections.addedNToList': 'Desat {count} a {name}',
+  'collections.addedNToList.one': 'Desat {count} a {name}',
   'collections.noOwnLists': 'Encara no tens cap llista',
   'collections.saveToListHint': "Els duplicats s'ometen automàticament",
   'collections.role.label': 'Rol',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Moure a la llista',
   'collections.duplicateToList': 'Duplicar a la llista',
   'collections.moveToListTitle': 'Mou {count} a una altra llista',
+  'collections.moveToListTitle.one': 'Mou {count} a una altra llista',
   'collections.duplicateToListTitle': 'Duplica {count} a una altra llista',
+  'collections.duplicateToListTitle.one': 'Duplica {count} a una altra llista',
   'collections.noOtherLists': 'Encara no hi ha cap altra llista',
   'collections.movedCount': "S'han mogut {count} llocs",
   'collections.movedCount.one': "S'ha mogut {count} lloc",
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} seleccionats',
   'collections.importSelectedCount.one': '{count} seleccionat',
   'collections.importAction': 'Importa {count}',
+  'collections.importAction.one': 'Importa {count}',
   'collections.importEmptyTrip': 'Aquest viatge encara no té llocs',
   'collections.importNothingNew': 'Tot aquest viatge ja és en aquesta llista',
   'collections.importDone': 'S’han afegit {count} llocs',
@@ -110,6 +115,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Copiar al viatge',
   'collections.copyToTripTitle': 'Copiar al viatge',
   'collections.copyN': 'Copia {count} al viatge',
+  'collections.copyN.one': 'Copia al viatge',
   'collections.copyToTripSearch': 'Cercar viatges',
   'collections.searchLists': 'Cerca llistes',
   'collections.copyToTripConfirm': 'Copiar',
@@ -142,6 +148,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Eliminat de la col·lecció',
   'collections.picker.title': 'Llocs desats',
   'collections.picker.showMore': "Mostra'n {count} més",
+  'collections.picker.showMore.one': "Mostra'n {count} més",
   'collections.picker.search': 'Cerca entre els teus llocs desats',
   'collections.picker.empty': 'No hi ha llocs desats per afegir',
   'collections.picker.hint': 'Tria un lloc de les teves col·leccions',
@@ -164,6 +171,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{count} llocs afegits a {name}',
   'collections.file.doneInto.one': '{count} lloc afegit a {name}',
   'collections.file.doneIntoDuplicates': '{count} afegits a {name}, {duplicates} ja hi eren',
+  'collections.file.doneIntoDuplicates.one': '{count} afegit a {name}, {duplicates} ja hi eren',
   'collections.file.doneIntoNothing': 'Tots els llocs del fitxer ja són a {name}',
   'collections.file.change': 'Canvia',
   'collections.file.labelCount': '{count} etiquetes',
@@ -195,6 +203,8 @@ const collection: TranslationStrings = {
   'collections.file.errorNotGpx': 'Això no és un fitxer GPX.',
   'collections.file.errorTooManyPlaces':
     'Aquest fitxer té més de {count} llocs. Divideix-lo i importa’n les parts d’una en una.',
+  'collections.file.errorTooManyPlaces.one':
+    'Aquest fitxer té més de {count} lloc. Divideix-lo i importa’n les parts d’una en una.',
 
   'collections.share.title': 'Compartir llista',
   'collections.share.titleNamed': 'Compartir «{name}»',

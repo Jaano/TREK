@@ -183,6 +183,8 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Ostatní lety',
   'reservations.airtrail.empty': 'Ve vašem účtu AirTrail nebyly nalezeny žádné lety.',
   'reservations.airtrail.importCta': 'Importovat {count}',
+  'reservations.airtrail.importCta.one': 'Importovat {count}',
+  'reservations.airtrail.importCta.few': 'Importovat {count}',
   'reservations.airtrail.joinConnection': 'Importovat jako jeden let s přestupem v {stops}',
   'reservations.costsLabel': 'Náklady',
   'reservations.createExpense': 'Vytvořit výdaj',

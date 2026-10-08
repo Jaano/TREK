@@ -366,7 +366,7 @@ export function JourneySettingsDialog({ journey, onClose, onSaved, onOpenInvite,
                 <span className="min-w-0 flex-1">
                   <span className="block text-content" style={fs(13, 'body')}>{t('journey.suggestions.restore')}</span>
                   <span className="block text-content-faint" style={fs(11.5)}>
-                    {t('journey.suggestions.restoreCount', { count: String(journey.dismissed_count) })}
+                    {t('journey.suggestions.restoreCount', { count: journey.dismissed_count ?? 0 })}
                   </span>
                 </span>
               </button>

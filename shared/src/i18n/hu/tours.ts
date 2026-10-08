@@ -67,6 +67,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Útvonalpontok',
   'tours.planner.waypointLabel': '{n}. útvonalpont',
   'tours.durationMinutes': '{count} perc',
+  'tours.durationMinutes.one': '{count} perc',
   'tours.planner.empty': 'Adj hozzá legalább két pontot egy gyalogos útvonal kiszámításához.',
   'tours.planner.start': 'Kezdőpont',
   'tours.planner.via': 'Köztes pont',

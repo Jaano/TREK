@@ -64,6 +64,8 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Delen met reisgenoten?',
   'memories.confirmShareHint':
     "{count} foto's worden zichtbaar voor alle leden van deze reis. Je kunt individuele foto's later privé maken.",
+  'memories.confirmShareHint.one':
+    '{count} foto wordt zichtbaar voor alle leden van deze reis. Je kunt hem later privé maken.',
   'memories.confirmShareButton': "Foto's delen",
   'memories.error.loadAlbums': 'Albums laden mislukt',
   'memories.error.linkAlbum': 'Album koppelen mislukt',

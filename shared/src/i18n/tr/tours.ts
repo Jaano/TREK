@@ -67,6 +67,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Rota noktaları',
   'tours.planner.waypointLabel': 'Rota noktası {n}',
   'tours.durationMinutes': '{count} dk',
+  'tours.durationMinutes.one': '{count} dk',
   'tours.planner.empty': 'Yürüyüş rotasını hesaplamak için en az iki nokta ekleyin.',
   'tours.planner.start': 'Başlangıç',
   'tours.planner.via': 'Ara nokta',

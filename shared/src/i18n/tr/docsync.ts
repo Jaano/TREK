@@ -70,6 +70,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Klasörün dışına taşındı',
 
   'docsync.conflict.resolve': '{count} tanesini çöz',
+  'docsync.conflict.resolve.one': '{count} tanesini çöz',
 
   'docsync.conflict.title': 'İki kopya da değişti',
   'docsync.conflict.keepTrek': 'TREK sürümünü tut',

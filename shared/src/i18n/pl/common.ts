@@ -55,7 +55,13 @@ const common: TranslationStrings = {
   'common.saved': 'Zapisano',
   'common.justNow': 'przed chwilą',
   'common.hoursAgo': '{count} godz. temu',
-  'common.daysAgo': '{count} dn. temu',
+  'common.hoursAgo.one': '{count} godz. temu',
+  'common.hoursAgo.few': '{count} godz. temu',
+  'common.hoursAgo.many': '{count} godz. temu',
+  'common.daysAgo': '{count} dnia temu',
+  'common.daysAgo.one': '{count} dzień temu',
+  'common.daysAgo.few': '{count} dni temu',
+  'common.daysAgo.many': '{count} dni temu',
   'common.datepicker.prevMonth': 'Previous month', // en-fallback
   'common.datepicker.nextMonth': 'Next month', // en-fallback
   'common.datepicker.prevYear': 'Previous year', // en-fallback

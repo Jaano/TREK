@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} seyahat ({archived} arşivde)',
   'dashboard.subtitle.trips.one': '{count} seyahat ({archived} arşivde)',
   'dashboard.subtitle.empty': 'İlk seyahatinizi başlatın',
-  'dashboard.subtitle.activeOne': '{count} etkin seyahat',
-  'dashboard.subtitle.activeMany': '{count} etkin seyahat',
+  'dashboard.subtitle.active': '{count} etkin seyahat',
+  'dashboard.subtitle.active.one': '{count} etkin seyahat',
   'dashboard.subtitle.archivedSuffix': ' · {count} arşivde',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} arşivde',
   'dashboard.newTrip': 'Yeni Seyahat',
@@ -127,6 +127,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Günler kaldırılsın mı?',
   'dashboard.shrinkIntro': 'Yeni tarihler kaydedilince bu günler kaldırılır:',
   'dashboard.shrinkMoreDays': '+{count} daha',
+  'dashboard.shrinkMoreDays.one': '+{count} daha',
   'dashboard.shrinkLastDays': 'İlk günler değil, son günler kaldırılır',
   'dashboard.shrinkLastDaysHint':
     'Gün planları yeni tarihlerle birlikte kayar, bu yüzden başlangıç değişse bile her zaman planın son günleri kaldırılır.',

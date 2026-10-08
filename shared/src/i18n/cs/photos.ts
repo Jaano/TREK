@@ -17,6 +17,8 @@ const photos: TranslationStrings = {
   'photos.linkPlace': 'Propojit s místem',
   'photos.noPlace': 'Žádné místo',
   'photos.uploadN': 'Nahrát {n} fotek',
+  'photos.uploadN.one': 'Nahrát {n} fotku',
+  'photos.uploadN.few': 'Nahrát {n} fotky',
   'photos.linkDay': 'Propojit den',
   'photos.noDay': 'Žádný den',
   'photos.dayLabel': 'Den {number}',

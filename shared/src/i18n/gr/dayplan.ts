@@ -104,11 +104,15 @@ const dayplan: TranslationStrings = {
     'Όλα τα μέρη αφαιρούνται από αυτή την ημέρα. Τα μέρη παραμένουν στο ταξίδι και η ημέρα κρατά τις σημειώσεις και τις κρατήσεις της.',
   'dayplan.deleteDayEmpty': 'Δεν υπάρχει τίποτα προγραμματισμένο αυτή την ημέρα.',
   'dayplan.impactPlaces': 'Προγραμματισμένα μέρη: {count}',
+  'dayplan.impactPlaces.one': 'Προγραμματισμένα μέρη: {count}',
   'dayplan.impactPlacesHint': 'Παραμένουν στη λίστα μερών.',
   'dayplan.impactNotes': 'Σημειώσεις: {count}',
+  'dayplan.impactNotes.one': 'Σημειώσεις: {count}',
   'dayplan.impactTexts': 'Τίτλοι και περιγραφές ημέρας: {count}',
+  'dayplan.impactTexts.one': 'Τίτλοι και περιγραφές ημέρας: {count}',
   'dayplan.impactDeletedHint': 'Διαγράφονται επίσης.',
   'dayplan.impactBookings': 'Κρατήσεις: {count}',
+  'dayplan.impactBookings.one': 'Κρατήσεις: {count}',
   'dayplan.impactStay': 'Διαμονή στο {name}',
   'dayplan.deleteDayBookingsHint': 'Παραμένουν στις Κρατήσεις, χωρίς ημέρα.',
   'dayplan.deleteDayStayHint': 'Η άφιξη ή η αναχώρηση είναι αυτή την ημέρα, οπότε η διαμονή ακυρώνεται.',
@@ -119,8 +123,11 @@ const dayplan: TranslationStrings = {
   'dayplan.deleteDayStayPaidHint':
     'Η άφιξη ή η αναχώρηση είναι αυτή την ημέρα, οπότε η διαμονή ακυρώνεται μαζί με την κράτηση «{booking}» και το έξοδό της, ύψους {amount}.',
   'dayplan.deleteDayShift': 'Επόμενες ημέρες: {count}',
+  'dayplan.deleteDayShift.one': 'Επόμενες ημέρες: {count}',
   'dayplan.deleteDayShiftHint': 'Καθεμία μετακινείται μία ημερομηνία νωρίτερα.',
   'dayplan.deleteDayShiftBookingsHint':
+    'Καθεμία μετακινείται μία ημερομηνία νωρίτερα. Κρατήσεις που μετακινούνται μαζί: {count}',
+  'dayplan.deleteDayShiftBookingsHint.one':
     'Καθεμία μετακινείται μία ημερομηνία νωρίτερα. Κρατήσεις που μετακινούνται μαζί: {count}',
   'dayplan.deleteDayShrink': 'Το ταξίδι τελειώνει τώρα στις {date}',
   'dayplan.deleteDayShrinkHint': 'Δεν υπάρχει ημέρα χωρίς ημερομηνία για να πάρει την τελευταία ημερομηνία.',

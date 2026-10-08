@@ -65,6 +65,12 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Поділитися з учасниками поїздки?',
   'memories.confirmShareHint':
     '{count} фото стануть видимі всім учасникам цієї поїздки. Ви зможете зробити окремі фото приватними пізніше.',
+  'memories.confirmShareHint.one':
+    '{count} фото стане видимим усім учасникам цієї поїздки. Ви зможете зробити його приватним пізніше.',
+  'memories.confirmShareHint.few':
+    '{count} фото стануть видимі всім учасникам цієї поїздки. Ви зможете зробити окремі фото приватними пізніше.',
+  'memories.confirmShareHint.many':
+    '{count} фото стануть видимі всім учасникам цієї поїздки. Ви зможете зробити окремі фото приватними пізніше.',
   'memories.confirmShareButton': 'Поділитися фото',
   'memories.error.loadAlbums': 'Не вдалося завантажити альбоми',
   'memories.error.linkAlbum': "Не вдалося прив'язати альбом",

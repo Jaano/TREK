@@ -182,6 +182,7 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Άλλες πτήσεις',
   'reservations.airtrail.empty': 'Δεν βρέθηκαν πτήσεις στον λογαριασμό σας στο AirTrail.',
   'reservations.airtrail.importCta': 'Εισαγωγή {count}',
+  'reservations.airtrail.importCta.one': 'Εισαγωγή {count}',
   'reservations.airtrail.joinConnection': 'Εισαγωγή ως μία πτήση με ενδιάμεση στάση σε {stops}',
   'reservations.costsLabel': 'Κόστη',
   'reservations.createExpense': 'Δημιουργία εξόδου',

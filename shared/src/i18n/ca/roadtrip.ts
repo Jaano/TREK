@@ -200,6 +200,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Res del trajecte no coincideix amb «{name}».',
   'roadtrip.poi.noneMatchFilters': 'Res del camí no coincideix amb aquests filtres.',
   'roadtrip.poi.foundFiltered': '{count} de {total} al trajecte',
+  'roadtrip.poi.foundFiltered.one': '{count} de {total} al trajecte',
   'roadtrip.poi.truncated':
     'En {count} trams hi havia més del que cap en una resposta: estreny el corredor per veure la resta.',
   'roadtrip.poi.truncated.one':

@@ -63,6 +63,7 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Megosztás az utazótársakkal?',
   'memories.confirmShareHint':
     '{count} fotó lesz látható az utazás összes tagja számára. Később egyenként is priváttá teheted őket.',
+  'memories.confirmShareHint.one': '{count} fotó lesz látható az utazás összes tagja számára. Később priváttá teheted.',
   'memories.confirmShareButton': 'Fotók megosztása',
   'memories.error.loadAlbums': 'Az albumok betöltése sikertelen',
   'memories.error.linkAlbum': 'Az album csatolása sikertelen',

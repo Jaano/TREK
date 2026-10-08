@@ -33,6 +33,7 @@ const packing: TranslationStrings = {
   'packing.importHintMarkdown':
     'Markdown siyahısı da işləyir: başlıq kateqoriyanı adlandırır, "- [ ]" və "- [x]" elementə çevrilir, adın önündəki "3x" isə miqdarı təyin edir.',
   'packing.importAction': '{count} elementi idxal et',
+  'packing.importAction.one': '{count} elementi idxal et',
   'packing.importSuccess': '{count} element idxal edildi',
   'packing.importSuccess.one': '{count} element idxal edildi',
   'packing.importError': 'İdxal uğursuz oldu',
@@ -41,7 +42,9 @@ const packing: TranslationStrings = {
   'packing.progress':
     '{total} elementdən {packed} yığılıb ({percent}%)',
   'packing.clearChecked': 'İşarələnmiş {count} elementi sil',
+  'packing.clearChecked.one': 'İşarələnmiş {count} elementi sil',
   'packing.clearCheckedShort': '{count} elementi sil',
+  'packing.clearCheckedShort.one': '{count} elementi sil',
 
   'packing.allPacked': 'Hər şey yığılıb!',
 
@@ -107,6 +110,7 @@ const packing: TranslationStrings = {
 
   'packing.takenCareOf': '{name} cavabdehdir',
   'packing.sharedWithCount': '{count} nəfərlə paylaşılıb',
+  'packing.sharedWithCount.one': '{count} nəfərlə paylaşılıb',
   'packing.broughtBy': '{name} gətirir',
   'packing.alsoBring': 'Mən də bunu gətirə bilərəm',
   'packing.alsoBringingStop': 'Mən bunu gətirməyəcəyəm',

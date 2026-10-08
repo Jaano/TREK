@@ -62,6 +62,8 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Dela med resedeltagarna?',
   'memories.confirmShareHint':
     '{count} foton kommer att vara synliga för alla deltagare i resan. Du kan senare göra enskilda foton privata.',
+  'memories.confirmShareHint.one':
+    '{count} foto kommer att vara synligt för alla deltagare i resan. Du kan göra det privat senare.',
   'memories.confirmShareButton': 'Dela foton',
   'memories.error.loadAlbums': 'Det gick inte att ladda albumen',
   'memories.error.linkAlbum': 'Det gick inte att länka albumet',

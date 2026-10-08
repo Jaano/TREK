@@ -55,7 +55,9 @@ const common: TranslationStrings = {
   'common.copied': 'Copiat',
   'common.justNow': 'ara mateix',
   'common.hoursAgo': 'fa {count} h',
+  'common.hoursAgo.one': 'fa {count} h',
   'common.daysAgo': 'fa {count} d',
+  'common.daysAgo.one': 'fa {count} d',
 
   'common.datepicker.prevMonth': 'Mes anterior',
   'common.datepicker.nextMonth': 'Mes següent',

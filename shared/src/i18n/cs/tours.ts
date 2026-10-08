@@ -67,6 +67,8 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Průjezdní body',
   'tours.planner.waypointLabel': 'Bod {n}',
   'tours.durationMinutes': '{count} min',
+  'tours.durationMinutes.one': '{count} min',
+  'tours.durationMinutes.few': '{count} min',
   'tours.planner.empty': 'Pro výpočet pěší trasy přidejte alespoň dva body.',
   'tours.planner.start': 'Start',
   'tours.planner.via': 'Přes',

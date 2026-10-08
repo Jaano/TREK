@@ -67,6 +67,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Teekonnapunktid',
   'tours.planner.waypointLabel': 'Teekonnapunkt {n}',
   'tours.durationMinutes': '{count} min',
+  'tours.durationMinutes.one': '{count} min',
   'tours.planner.empty': 'Lisa jalgsimarsruudi arvutamiseks vähemalt kaks punkti.',
   'tours.planner.start': 'Algus',
   'tours.planner.via': 'Vahepunkt',

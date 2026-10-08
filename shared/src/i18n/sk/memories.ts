@@ -64,6 +64,10 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Zdieľať s členmi cesty?',
   'memories.confirmShareHint':
     '{count} fotiek bude viditeľných pre všetkých členov tejto cesty. Jednotlivé fotky môžete neskôr nastaviť ako súkromné.',
+  'memories.confirmShareHint.one':
+    '{count} fotka bude viditeľná pre všetkých členov tejto cesty. Neskôr ju môžete nastaviť ako súkromnú.',
+  'memories.confirmShareHint.few':
+    '{count} fotky budú viditeľné pre všetkých členov tejto cesty. Jednotlivé fotky môžete neskôr nastaviť ako súkromné.',
   'memories.confirmShareButton': 'Zdieľať fotky',
   'memories.error.loadAlbums': 'Načítanie albumov zlyhalo',
   'memories.error.linkAlbum': 'Prepojenie albumu zlyhalo',

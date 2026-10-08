@@ -68,6 +68,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Yol nöqtələri',
   'tours.planner.waypointLabel': 'Yol nöqtəsi {n}',
   'tours.durationMinutes': '{count} dəq.',
+  'tours.durationMinutes.one': '{count} dəq.',
   'tours.planner.empty': 'Piyada marşrutunu hesablamaq üçün ən azı iki nöqtə əlavə edin.',
   'tours.planner.start': 'Başlanğıc',
   'tours.planner.via': 'Aralıq nöqtə',

@@ -675,6 +675,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Η πρόταση απορρίφθηκε',
   'journey.suggestions.restore': 'Επαναφορά των απορριμμένων προτάσεων',
   'journey.suggestions.restoreCount': 'Απορριμμένες προτάσεις ({count})',
+  'journey.suggestions.restoreCount.one': 'Απορριμμένες προτάσεις ({count})',
   'journey.suggestions.restored': 'Επέστρεψαν {count} προτάσεις',
   'journey.suggestions.restored.one': 'Επέστρεψε {count} πρόταση',
   'journey.detail.addOnThisDay': 'Προσθήκη καταχώρισης σε αυτήν την ημέρα',

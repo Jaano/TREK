@@ -180,6 +180,7 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Andere vluchten',
   'reservations.airtrail.empty': 'Geen vluchten gevonden in je AirTrail-account.',
   'reservations.airtrail.importCta': '{count} importeren',
+  'reservations.airtrail.importCta.one': '{count} importeren',
   'reservations.airtrail.joinConnection': 'Importeren als één vlucht met een tussenstop in {stops}',
   'reservations.costsLabel': 'Kosten',
   'reservations.createExpense': 'Kostenpost aanmaken',

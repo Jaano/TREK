@@ -55,7 +55,9 @@ const common: TranslationStrings = {
   'common.copied': 'Copiado',
   'common.justNow': 'justo ahora',
   'common.hoursAgo': 'hace {count}h',
+  'common.hoursAgo.one': 'hace {count}h',
   'common.daysAgo': 'hace {count}d',
+  'common.daysAgo.one': 'hace {count}d',
   'common.datepicker.prevMonth': 'Previous month', // en-fallback
   'common.datepicker.nextMonth': 'Next month', // en-fallback
   'common.datepicker.prevYear': 'Previous year', // en-fallback

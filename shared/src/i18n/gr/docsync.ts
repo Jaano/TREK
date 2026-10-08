@@ -74,6 +74,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Μετακινήθηκε εκτός του φακέλου',
 
   'docsync.conflict.resolve': 'Επίλυση {count}',
+  'docsync.conflict.resolve.one': 'Επίλυση {count}',
 
   'docsync.conflict.title': 'Άλλαξαν και τα δύο αντίγραφα',
   'docsync.conflict.keepTrek': 'Διατήρηση της έκδοσης του TREK',

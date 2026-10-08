@@ -183,6 +183,7 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Altres vols',
   'reservations.airtrail.empty': "No s'han trobat vols al teu compte d'AirTrail.",
   'reservations.airtrail.importCta': 'Importar {count}',
+  'reservations.airtrail.importCta.one': 'Importar {count}',
   'reservations.costsLabel': 'Despeses',
   'reservations.createExpense': 'Crear despesa',
   'reservations.createExpenseHint': "Desa la reserva i obre l'editor de Despeses.",

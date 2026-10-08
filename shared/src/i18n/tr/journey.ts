@@ -673,6 +673,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Öneri yok sayıldı',
   'journey.suggestions.restore': 'Yok sayılan önerileri geri getir',
   'journey.suggestions.restoreCount': 'Yok sayılan öneriler ({count})',
+  'journey.suggestions.restoreCount.one': 'Yok sayılan öneriler ({count})',
   'journey.suggestions.restored': '{count} öneri geri geldi',
   'journey.suggestions.restored.one': '{count} öneri geri geldi',
   'journey.detail.addOnThisDay': 'Bu güne bir kayıt ekle',

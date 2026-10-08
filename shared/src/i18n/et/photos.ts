@@ -16,6 +16,7 @@ const photos: TranslationStrings = {
   'photos.linkPlace': 'Seo kohaga',
   'photos.noPlace': 'Kohata',
   'photos.uploadN': 'Laadi üles {n} fotot',
+  'photos.uploadN.one': 'Laadi üles {n} foto',
   'photos.linkDay': 'Seo päevaga',
   'photos.noDay': 'Päevata',
   'photos.dayLabel': 'Päev {number}',

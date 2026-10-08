@@ -81,6 +81,7 @@ const trip: TranslationStrings = {
   'transit.transfers': '{count} dəyişmə',
   'transit.transfers.one': '{count} dəyişmə',
   'transit.min': '{count} dəq.',
+  'transit.min.one': '{count} dəq.',
   'transit.stops': '{count} dayanacaq',
   'transit.stops.one': '{count} dayanacaq',
   'transit.walkTo': '{name} istiqamətinə piyada gedin',

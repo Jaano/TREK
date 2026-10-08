@@ -16,6 +16,7 @@ const photos: TranslationStrings = {
   'photos.linkPlace': 'Məkanla əlaqələndir',
   'photos.noPlace': 'Məkan seçilməyib',
   'photos.uploadN': '{n} foto yüklə',
+  'photos.uploadN.one': '{n} foto yüklə',
   'photos.linkDay': 'Günlə əlaqələndir',
   'photos.noDay': 'Gün seçilməyib',
   'photos.dayLabel': '{number}-ci gün',

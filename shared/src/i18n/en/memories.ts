@@ -61,6 +61,8 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Share with trip members?',
   'memories.confirmShareHint':
     '{count} photos will be visible to all members of this trip. You can make individual photos private later.',
+  'memories.confirmShareHint.one':
+    '{count} photo will be visible to all members of this trip. You can make it private later.',
   'memories.confirmShareButton': 'Share photos',
   'memories.error.loadAlbums': 'Failed to load albums',
   'memories.error.linkAlbum': 'Failed to link album',

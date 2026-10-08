@@ -104,7 +104,7 @@ export default function CopyToTripModal({ isOpen, onClose, placeIds, onCopy, t }
           tint={NEUTRAL_TINT}
           labelId={labelId}
           onClose={onClose}
-          title={placeIds.length > 1 ? t('collections.copyN', { count: placeIds.length }) : t('collections.copyToTripTitle')}
+          title={t('collections.copyN', { count: placeIds.length })}
         />
       )}
       footer={(

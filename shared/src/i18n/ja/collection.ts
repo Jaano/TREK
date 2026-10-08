@@ -180,8 +180,7 @@ const collection: TranslationStrings = {
     'このファイルにはトラックポイントも {count} 件あります。トラックはインポートされず、ウェイポイントのみが対象です。',
   'collections.file.gpxEmpty': 'この GPX ファイルにはウェイポイントがないため、インポートするものがありません。',
   'collections.file.errorNotGpx': 'これは GPX ファイルではありません。',
-  'collections.file.errorTooManyPlaces':
-    'このファイルには {count} 件を超える場所があります。分割して、1 つずつインポートしてください。',
+  'collections.file.errorTooManyPlaces': 'このファイルには {count} 件を超える場所があります。分割して、1 つずつインポートしてください。',
 
   'collections.share.title': 'リストを共有',
   'collections.share.titleNamed': '「{name}」を共有',

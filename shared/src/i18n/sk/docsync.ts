@@ -70,6 +70,8 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Presunuté mimo priečinka',
 
   'docsync.conflict.resolve': 'Vyriešiť {count}',
+  'docsync.conflict.resolve.one': 'Vyriešiť {count}',
+  'docsync.conflict.resolve.few': 'Vyriešiť {count}',
 
   'docsync.conflict.title': 'Zmenili sa obe kópie',
   'docsync.conflict.keepTrek': 'Ponechať verziu z TREKu',

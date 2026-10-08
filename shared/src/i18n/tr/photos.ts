@@ -16,6 +16,7 @@ const photos: TranslationStrings = {
   'photos.linkPlace': 'Yere Bağla',
   'photos.noPlace': 'Yer Yok',
   'photos.uploadN': '{n} fotoğraf yükle',
+  'photos.uploadN.one': '{n} fotoğraf yükle',
   'photos.linkDay': 'Güne Bağla',
   'photos.noDay': 'Gün Yok',
   'photos.dayLabel': '{number}. gün',

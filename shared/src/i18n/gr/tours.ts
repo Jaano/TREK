@@ -70,6 +70,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Σημεία διέλευσης',
   'tours.planner.waypointLabel': 'Σημείο διέλευσης {n}',
   'tours.durationMinutes': '{count} λεπτά',
+  'tours.durationMinutes.one': '{count} λεπτό',
   'tours.planner.empty': 'Προσθέστε τουλάχιστον δύο σημεία για να υπολογιστεί μια διαδρομή πεζοπορίας.',
   'tours.planner.start': 'Αφετηρία',
   'tours.planner.via': 'Μέσω',

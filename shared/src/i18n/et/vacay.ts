@@ -90,6 +90,7 @@ const vacay: TranslationStrings = {
   'vacay.carryOverHint': 'Kanna allesjäänud puhkusepäevad automaatselt järgmisse aastasse',
   'vacay.carriedOverPrevPeriod': 'eelmisest perioodist',
   'vacay.compUsedCount': '{count} vaba / tasaarvestuspäeva',
+  'vacay.compUsedCount.one': '{count} vaba / tasaarvestuspäev',
   'vacay.yearType': 'Puhkuseaasta',
   'vacay.yearTypeHint': 'Puhkuseaasta algus — selle järgi arvestatakse puhkuseõigust, kasutatud päevi ja ülekandmist',
   'vacay.yearTypeCalendar': 'Kalendriaasta',

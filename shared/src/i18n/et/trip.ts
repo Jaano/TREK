@@ -73,6 +73,7 @@ const trip: TranslationStrings = {
   'transit.transfers': '{count} ümberistumist',
   'transit.transfers.one': '{count} ümberistumine',
   'transit.min': '{count} min',
+  'transit.min.one': '{count} min',
   'transit.stops': '{count} peatust',
   'transit.stops.one': '{count} peatus',
   'transit.walkTo': 'Kõnni peatusesse {name}',

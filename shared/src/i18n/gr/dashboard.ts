@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} ταξίδια (αρχειοθετημένα: {archived})',
   'dashboard.subtitle.trips.one': '{count} ταξίδι (αρχειοθετημένα: {archived})',
   'dashboard.subtitle.empty': 'Ξεκινήστε το πρώτο σας ταξίδι',
-  'dashboard.subtitle.activeOne': '{count} ενεργό ταξίδι',
-  'dashboard.subtitle.activeMany': '{count} ενεργά ταξίδια',
+  'dashboard.subtitle.active': '{count} ενεργά ταξίδια',
+  'dashboard.subtitle.active.one': '{count} ενεργό ταξίδι',
   'dashboard.subtitle.archivedSuffix': ' · {count} αρχειοθετημένα',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} αρχειοθετημένο',
   'dashboard.newTrip': 'Νέο Ταξίδι',
@@ -126,6 +126,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Αφαίρεση ημερών;',
   'dashboard.shrinkIntro': 'Με την αποθήκευση των νέων ημερομηνιών αφαιρούνται αυτές οι ημέρες:',
   'dashboard.shrinkMoreDays': '+{count} ακόμη',
+  'dashboard.shrinkMoreDays.one': '+{count} ακόμη',
   'dashboard.shrinkLastDays': 'Αφαιρούνται οι τελευταίες ημέρες, όχι οι πρώτες',
   'dashboard.shrinkLastDaysHint':
     'Τα πλάνα των ημερών μετακινούνται μαζί με τις νέες ημερομηνίες, οπότε αφαιρούνται πάντα οι τελευταίες ημέρες του πλάνου σας, ακόμη κι όταν άλλαξε η αρχή.',

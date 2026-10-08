@@ -192,6 +192,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Yolboyu “{name}” ilə uyğun heç nə yoxdur.',
   'roadtrip.poi.noneMatchFilters': 'Yolboyu bu filtrlərə uyğun heç nə yoxdur.',
   'roadtrip.poi.foundFiltered': 'Yolboyu {total} nəticədən {count}',
+  'roadtrip.poi.foundFiltered.one': 'Yolboyu {total} nəticədən {count}',
   'roadtrip.poi.truncated':
     '{count} marşrut hissəsində bir cavaba sığmayacaq qədər nəticə var. Qalanlarını görmək üçün axtarış dəhlizini daraldın.',
   'roadtrip.poi.truncated.one':

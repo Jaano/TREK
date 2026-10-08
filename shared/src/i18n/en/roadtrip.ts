@@ -192,6 +192,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Nothing on the way matches “{name}”.',
   'roadtrip.poi.noneMatchFilters': 'Nothing on the way matches these filters.',
   'roadtrip.poi.foundFiltered': '{count} of {total} on the way',
+  'roadtrip.poi.foundFiltered.one': '{count} of {total} on the way',
   'roadtrip.poi.truncated': '{count} stretches had more than fits in one answer. Narrow the corridor to see the rest.',
   'roadtrip.poi.truncated.one': '{count} stretch had more than fits in one answer. Narrow the corridor to see the rest.',
   'roadtrip.poi.search': 'Search',

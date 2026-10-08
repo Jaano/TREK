@@ -672,6 +672,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Suggestion dismissed',
   'journey.suggestions.restore': 'Bring back dismissed suggestions',
   'journey.suggestions.restoreCount': 'Dismissed suggestions ({count})',
+  'journey.suggestions.restoreCount.one': 'Dismissed suggestions ({count})',
   'journey.suggestions.restored': '{count} suggestions are back',
   'journey.suggestions.restored.one': '{count} suggestion is back',
   'journey.detail.addOnThisDay': 'Add an entry on this day',

@@ -68,6 +68,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Punts de pas',
   'tours.planner.waypointLabel': 'Punt de pas {n}',
   'tours.durationMinutes': '{count} min',
+  'tours.durationMinutes.one': '{count} min',
   'tours.planner.empty': 'Afegeix almenys dos punts per calcular una ruta a peu.',
   'tours.planner.start': 'Inici',
   'tours.planner.via': 'Pas per',

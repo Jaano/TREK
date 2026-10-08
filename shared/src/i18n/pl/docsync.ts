@@ -71,6 +71,9 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Przeniesiony poza folder',
 
   'docsync.conflict.resolve': 'Rozwiąż {count}',
+  'docsync.conflict.resolve.one': 'Rozwiąż {count}',
+  'docsync.conflict.resolve.few': 'Rozwiąż {count}',
+  'docsync.conflict.resolve.many': 'Rozwiąż {count}',
 
   'docsync.conflict.title': 'Obie kopie zostały zmienione',
   'docsync.conflict.keepTrek': 'Zachowaj wersję z TREK',

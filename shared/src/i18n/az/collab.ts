@@ -54,7 +54,9 @@ const collab: TranslationStrings = {
   'collab.chat.loadMore': 'Əvvəlki mesajları yüklə',
   'collab.chat.justNow': 'indicə',
   'collab.chat.minutesAgo': '{n} dəq. əvvəl',
+  'collab.chat.minutesAgo.one': '{n} dəq. əvvəl',
   'collab.chat.hoursAgo': '{n} saat əvvəl',
+  'collab.chat.hoursAgo.one': '{n} saat əvvəl',
 
   'collab.notes.title': 'Qeydlər',
   'collab.notes.new': 'Yeni qeyd',
@@ -79,6 +81,7 @@ const collab: TranslationStrings = {
   'collab.notes.pin': 'Bərkit',
   'collab.notes.unpin': 'Bərkidilməni ləğv et',
   'collab.notes.daysAgo': '{n} gün əvvəl',
+  'collab.notes.daysAgo.one': '{n} gün əvvəl',
   'collab.notes.categorySettings': 'Kateqoriyaları idarə et',
   'collab.notes.create': 'Yarat',
   'collab.notes.website': 'Veb-sayt',

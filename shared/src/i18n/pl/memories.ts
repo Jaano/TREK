@@ -58,6 +58,12 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Udostępnić członkom podróży?',
   'memories.confirmShareHint':
     '{count} zdjęć będzie widocznych dla wszystkich członków tej podróży. Możesz później ustawić poszczególne zdjęcia jako prywatne.',
+  'memories.confirmShareHint.one':
+    '{count} zdjęcie będzie widoczne dla wszystkich członków tej podróży. Możesz później ustawić je jako prywatne.',
+  'memories.confirmShareHint.few':
+    '{count} zdjęcia będą widoczne dla wszystkich członków tej podróży. Możesz później ustawić poszczególne zdjęcia jako prywatne.',
+  'memories.confirmShareHint.many':
+    '{count} zdjęć będzie widocznych dla wszystkich członków tej podróży. Możesz później ustawić poszczególne zdjęcia jako prywatne.',
   'memories.confirmShareButton': 'Udostępnij zdjęcia',
   'memories.testFirst': 'Najpierw przetestuj połączenie',
   'memories.linkAlbum': 'Połącz album',

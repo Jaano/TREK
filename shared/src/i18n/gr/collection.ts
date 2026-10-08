@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': 'Αποθήκευση {count} σε λίστα',
+  'collections.saveNToList.one': 'Αποθήκευση {count} σε λίστα',
   'collections.addedNToList': 'Αποθηκεύτηκαν {count} στο {name}',
+  'collections.addedNToList.one': 'Αποθηκεύτηκε {count} στο {name}',
   'collections.noOwnLists': 'Δεν έχετε λίστες ακόμη',
   'collections.saveToListHint': 'Τα διπλότυπα παραλείπονται αυτόματα',
   'collections.role.label': 'Ρόλος',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Μετακίνηση σε λίστα',
   'collections.duplicateToList': 'Αντιγραφή σε λίστα',
   'collections.moveToListTitle': 'Μετακίνηση {count} σε άλλη λίστα',
+  'collections.moveToListTitle.one': 'Μετακίνηση {count} σε άλλη λίστα',
   'collections.duplicateToListTitle': 'Αντιγραφή {count} σε άλλη λίστα',
+  'collections.duplicateToListTitle.one': 'Αντιγραφή {count} σε άλλη λίστα',
   'collections.noOtherLists': 'Δεν υπάρχουν άλλες λίστες',
   'collections.movedCount': 'Μετακινήθηκαν {count} τοποθεσίες',
   'collections.movedCount.one': 'Μετακινήθηκε {count} τοποθεσία',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': 'Επιλέχθηκαν {count}',
   'collections.importSelectedCount.one': 'Επιλέχθηκε {count}',
   'collections.importAction': 'Εισαγωγή {count}',
+  'collections.importAction.one': 'Εισαγωγή {count}',
   'collections.importEmptyTrip': 'Αυτό το ταξίδι δεν έχει ακόμη μέρη',
   'collections.importNothingNew': 'Όλα από αυτό το ταξίδι είναι ήδη στη λίστα',
   'collections.importDone': 'Προστέθηκαν {count} μέρη',
@@ -115,6 +120,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Αντιγραφή σε ταξίδι',
   'collections.copyToTripTitle': 'Αντιγραφή σε ταξίδι',
   'collections.copyN': 'Αντιγραφή {count} σε ταξίδι',
+  'collections.copyN.one': 'Αντιγραφή σε ταξίδι',
   'collections.copyToTripSearch': 'Αναζήτηση ταξιδιών',
   'collections.searchLists': 'Αναζήτηση λιστών',
   'collections.copyToTripConfirm': 'Αντιγραφή',
@@ -150,6 +156,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Αφαιρέθηκε από τη συλλογή',
   'collections.picker.title': 'Αποθηκευμένα μέρη',
   'collections.picker.showMore': 'Εμφάνιση {count} ακόμη',
+  'collections.picker.showMore.one': 'Εμφάνιση {count} ακόμη',
   'collections.picker.search': 'Αναζήτηση στα αποθηκευμένα μέρη σου',
   'collections.picker.empty': 'Δεν υπάρχουν αποθηκευμένα μέρη για προσθήκη',
   'collections.picker.hint': 'Διάλεξε ένα μέρος από τις συλλογές σου',
@@ -172,6 +179,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{count} μέρη προστέθηκαν στη λίστα {name}',
   'collections.file.doneInto.one': '{count} μέρος προστέθηκε στη λίστα {name}',
   'collections.file.doneIntoDuplicates': '{count} προστέθηκαν στη λίστα {name}, {duplicates} υπήρχαν ήδη',
+  'collections.file.doneIntoDuplicates.one': '{count} προστέθηκε στη λίστα {name}, {duplicates} υπήρχαν ήδη',
   'collections.file.doneIntoNothing': 'Όλα τα μέρη του αρχείου είναι ήδη στη λίστα {name}',
   'collections.file.change': 'Αλλαγή',
   'collections.file.labelCount': '{count} ετικέτες',
@@ -203,6 +211,8 @@ const collection: TranslationStrings = {
   'collections.file.errorNotGpx': 'Αυτό δεν είναι αρχείο GPX.',
   'collections.file.errorTooManyPlaces':
     'Αυτό το αρχείο έχει περισσότερα από {count} μέρη. Χωρίστε το και εισαγάγετε τα κομμάτια ένα ένα.',
+  'collections.file.errorTooManyPlaces.one':
+    'Αυτό το αρχείο έχει περισσότερα από {count} μέρος. Χωρίστε το και εισαγάγετε τα κομμάτια ένα ένα.',
 
   'collections.share.title': 'Κοινή χρήση λίστας',
   'collections.share.titleNamed': 'Κοινή χρήση «{name}»',

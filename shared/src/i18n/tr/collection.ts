@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': '{count} öğeyi bir listeye kaydet',
+  'collections.saveNToList.one': '{count} öğeyi bir listeye kaydet',
   'collections.addedNToList': '{count} öğe {name} listesine kaydedildi',
+  'collections.addedNToList.one': '{count} öğe {name} listesine kaydedildi',
   'collections.noOwnLists': 'Henüz listeniz yok',
   'collections.saveToListHint': 'Yinelenenler otomatik olarak atlanır',
   'collections.role.label': 'Rol',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Listeye taşı',
   'collections.duplicateToList': 'Listeye çoğalt',
   'collections.moveToListTitle': '{count} öğeyi başka listeye taşı',
+  'collections.moveToListTitle.one': '{count} öğeyi başka listeye taşı',
   'collections.duplicateToListTitle': '{count} öğeyi başka listeye çoğalt',
+  'collections.duplicateToListTitle.one': '{count} öğeyi başka listeye çoğalt',
   'collections.noOtherLists': 'Henüz başka liste yok',
   'collections.movedCount': '{count} yer taşındı',
   'collections.movedCount.one': '{count} yer taşındı',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} seçildi',
   'collections.importSelectedCount.one': '{count} seçildi',
   'collections.importAction': '{count} yeri aktar',
+  'collections.importAction.one': '{count} yeri aktar',
   'collections.importEmptyTrip': 'Bu gezide henüz yer yok',
   'collections.importNothingNew': 'Bu gezideki her şey zaten bu listede',
   'collections.importDone': '{count} yer eklendi',
@@ -115,6 +120,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Geziye kopyala',
   'collections.copyToTripTitle': 'Geziye kopyala',
   'collections.copyN': '{count} öğeyi geziye kopyala',
+  'collections.copyN.one': 'Geziye kopyala',
   'collections.copyToTripSearch': 'Gezi ara',
   'collections.searchLists': 'Listelerde ara',
   'collections.copyToTripConfirm': 'Kopyala',
@@ -150,6 +156,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Koleksiyondan kaldırıldı',
   'collections.picker.title': 'Kaydedilen yerler',
   'collections.picker.showMore': '{count} tane daha göster',
+  'collections.picker.showMore.one': '{count} tane daha göster',
   'collections.picker.search': 'Kaydedilen yerlerinde ara',
   'collections.picker.empty': 'Eklenecek kayıtlı yer yok',
   'collections.picker.hint': 'Koleksiyonlarından bir yer seç',
@@ -172,6 +179,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{name} listesine {count} yer eklendi',
   'collections.file.doneInto.one': '{name} listesine {count} yer eklendi',
   'collections.file.doneIntoDuplicates': '{name} listesine {count} eklendi, {duplicates} tanesi zaten vardı',
+  'collections.file.doneIntoDuplicates.one': '{name} listesine {count} eklendi, {duplicates} tanesi zaten vardı',
   'collections.file.doneIntoNothing': 'Dosyadaki tüm yerler zaten {name} listesinde',
   'collections.file.change': 'Değiştir',
   'collections.file.labelCount': '{count} etiket',
@@ -201,6 +209,8 @@ const collection: TranslationStrings = {
   'collections.file.gpxEmpty': 'Bu GPX dosyasında yol noktası yok, bu yüzden içe aktarılacak bir şey yok.',
   'collections.file.errorNotGpx': 'Bu bir GPX dosyası değil.',
   'collections.file.errorTooManyPlaces':
+    'Bu dosyada {count} yerden fazlası var. Dosyayı bölüp parçaları tek tek içe aktar.',
+  'collections.file.errorTooManyPlaces.one':
     'Bu dosyada {count} yerden fazlası var. Dosyayı bölüp parçaları tek tek içe aktar.',
 
   'collections.share.title': 'Listeyi paylaş',

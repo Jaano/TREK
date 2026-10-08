@@ -55,7 +55,9 @@ const common: TranslationStrings = {
   'common.copied': 'Gekopieerd',
   'common.justNow': 'zojuist',
   'common.hoursAgo': '{count}u geleden',
+  'common.hoursAgo.one': '{count}u geleden',
   'common.daysAgo': '{count}d geleden',
+  'common.daysAgo.one': '{count}d geleden',
   'common.datepicker.prevMonth': 'Previous month', // en-fallback
   'common.datepicker.nextMonth': 'Next month', // en-fallback
   'common.datepicker.prevYear': 'Previous year', // en-fallback

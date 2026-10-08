@@ -73,6 +73,9 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Перемещено за пределы папки',
 
   'docsync.conflict.resolve': 'Решить: {count}',
+  'docsync.conflict.resolve.one': 'Решить: {count}',
+  'docsync.conflict.resolve.few': 'Решить: {count}',
+  'docsync.conflict.resolve.many': 'Решить: {count}',
 
   'docsync.conflict.title': 'Изменились обе копии',
   'docsync.conflict.keepTrek': 'Оставить версию TREK',

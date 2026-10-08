@@ -68,6 +68,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Routepunten',
   'tours.planner.waypointLabel': 'Routepunt {n}',
   'tours.durationMinutes': '{count} min',
+  'tours.durationMinutes.one': '{count} min',
   'tours.planner.empty': 'Voeg minstens twee punten toe om een wandelroute te berekenen.',
   'tours.planner.start': 'Vertrek',
   'tours.planner.via': 'Via',

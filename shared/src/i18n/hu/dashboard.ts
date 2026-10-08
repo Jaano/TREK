@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} utazás ({archived} archivált)',
   'dashboard.subtitle.trips.one': '{count} utazás ({archived} archivált)',
   'dashboard.subtitle.empty': 'Indítsd el az első utazásodat',
-  'dashboard.subtitle.activeOne': '{count} aktív utazás',
-  'dashboard.subtitle.activeMany': '{count} aktív utazás',
+  'dashboard.subtitle.active': '{count} aktív utazás',
+  'dashboard.subtitle.active.one': '{count} aktív utazás',
   'dashboard.subtitle.archivedSuffix': ' · {count} archivált',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} archivált',
   'dashboard.newTrip': 'Új utazás',
@@ -115,6 +115,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Eltávolítod a napokat?',
   'dashboard.shrinkIntro': 'Az új dátumok mentésekor ezek a napok eltávolításra kerülnek:',
   'dashboard.shrinkMoreDays': '+{count} további',
+  'dashboard.shrinkMoreDays.one': '+{count} további',
   'dashboard.shrinkLastDays': 'Az utolsó napok kerülnek ki, nem az elsők',
   'dashboard.shrinkLastDaysHint':
     'A napi tervek az új dátumokkal együtt mozognak, ezért mindig a terv utolsó napjai kerülnek ki, akkor is, ha a kezdés változott.',

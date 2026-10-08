@@ -55,7 +55,9 @@ const common: TranslationStrings = {
   'common.copied': 'Másolva',
   'common.justNow': 'az imént',
   'common.hoursAgo': '{count} órája',
+  'common.hoursAgo.one': '{count} órája',
   'common.daysAgo': '{count} napja',
+  'common.daysAgo.one': '{count} napja',
   'common.datepicker.prevMonth': 'Previous month', // en-fallback
   'common.datepicker.nextMonth': 'Next month', // en-fallback
   'common.datepicker.prevYear': 'Previous year', // en-fallback

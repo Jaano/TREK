@@ -679,6 +679,8 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Návrh zahozen',
   'journey.suggestions.restore': 'Vrátit zahozené návrhy',
   'journey.suggestions.restoreCount': 'Zahozené návrhy ({count})',
+  'journey.suggestions.restoreCount.one': 'Zahozené návrhy ({count})',
+  'journey.suggestions.restoreCount.few': 'Zahozené návrhy ({count})',
   'journey.suggestions.restored': 'Vrátilo se {count} návrhů',
   'journey.suggestions.restored.one': 'Vrátil se {count} návrh',
   'journey.suggestions.restored.few': 'Vrátily se {count} návrhy',

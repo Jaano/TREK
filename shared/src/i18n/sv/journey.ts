@@ -669,6 +669,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Förslaget avfärdat',
   'journey.suggestions.restore': 'Hämta tillbaka avfärdade förslag',
   'journey.suggestions.restoreCount': 'Avfärdade förslag ({count})',
+  'journey.suggestions.restoreCount.one': 'Avfärdade förslag ({count})',
   'journey.suggestions.restored': '{count} förslag är tillbaka',
   'journey.suggestions.restored.one': '{count} förslag är tillbaka',
   'journey.detail.addOnThisDay': 'Lägg till ett inlägg den här dagen',

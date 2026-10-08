@@ -190,6 +190,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Tee ääres pole vasteid nimele „{name}“.',
   'roadtrip.poi.noneMatchFilters': 'Tee ääres pole nendele filtritele vastavaid kohti.',
   'roadtrip.poi.foundFiltered': '{count} / {total} tee ääres',
+  'roadtrip.poi.foundFiltered.one': '{count} / {total} tee ääres',
   'roadtrip.poi.truncated':
     '{count} lõigul oli rohkem tulemusi, kui vastusesse mahub. Ülejäänute nägemiseks kitsenda otsinguala.',
   'roadtrip.poi.truncated.one':

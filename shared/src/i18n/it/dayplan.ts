@@ -105,11 +105,15 @@ const dayplan: TranslationStrings = {
     'Tutti i luoghi vengono tolti da questo giorno. I luoghi restano nel viaggio e il giorno conserva note e prenotazioni.',
   'dayplan.deleteDayEmpty': "Non c'è nulla di pianificato in questo giorno.",
   'dayplan.impactPlaces': 'Luoghi pianificati: {count}',
+  'dayplan.impactPlaces.one': 'Luoghi pianificati: {count}',
   'dayplan.impactPlacesHint': "Restano nell'elenco dei luoghi.",
   'dayplan.impactNotes': 'Note: {count}',
+  'dayplan.impactNotes.one': 'Note: {count}',
   'dayplan.impactTexts': 'Titoli e descrizioni del giorno: {count}',
+  'dayplan.impactTexts.one': 'Titoli e descrizioni del giorno: {count}',
   'dayplan.impactDeletedHint': 'Vengono eliminati anche questi.',
   'dayplan.impactBookings': 'Prenotazioni: {count}',
+  'dayplan.impactBookings.one': 'Prenotazioni: {count}',
   'dayplan.impactStay': 'Soggiorno presso {name}',
   'dayplan.deleteDayBookingsHint': 'Restano in Prenotazioni, senza giorno.',
   'dayplan.deleteDayStayHint': 'Il check-in o il check-out cade in questo giorno, quindi il soggiorno viene annullato.',
@@ -120,8 +124,11 @@ const dayplan: TranslationStrings = {
   'dayplan.deleteDayStayPaidHint':
     'Il check-in o il check-out cade in questo giorno, quindi il soggiorno viene annullato insieme alla prenotazione «{booking}» e alla sua spesa di {amount}.',
   'dayplan.deleteDayShift': 'Giorni successivi: {count}',
+  'dayplan.deleteDayShift.one': 'Giorni successivi: {count}',
   'dayplan.deleteDayShiftHint': 'Ognuno passa alla data precedente.',
   'dayplan.deleteDayShiftBookingsHint':
+    'Ognuno passa alla data precedente. Prenotazioni che si spostano con loro: {count}',
+  'dayplan.deleteDayShiftBookingsHint.one':
     'Ognuno passa alla data precedente. Prenotazioni che si spostano con loro: {count}',
   'dayplan.deleteDayShrink': 'Il viaggio ora termina il {date}',
   'dayplan.deleteDayShrinkHint': "Non c'è alcun giorno senza data che possa prendere l'ultima data.",

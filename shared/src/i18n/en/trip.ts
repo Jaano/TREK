@@ -73,6 +73,7 @@ const trip: TranslationStrings = {
   'transit.transfers': '{count} transfers',
   'transit.transfers.one': '{count} transfer',
   'transit.min': '{count} min',
+  'transit.min.one': '{count} min',
   'transit.stops': '{count} stops',
   'transit.stops.one': '{count} stop',
   'transit.walkTo': 'Walk to {name}',

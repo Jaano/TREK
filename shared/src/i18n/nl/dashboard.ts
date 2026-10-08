@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} reizen ({archived} gearchiveerd)',
   'dashboard.subtitle.trips.one': '{count} reis ({archived} gearchiveerd)',
   'dashboard.subtitle.empty': 'Begin je eerste reis',
-  'dashboard.subtitle.activeOne': '{count} actieve reis',
-  'dashboard.subtitle.activeMany': '{count} actieve reizen',
+  'dashboard.subtitle.active': '{count} actieve reizen',
+  'dashboard.subtitle.active.one': '{count} actieve reis',
   'dashboard.subtitle.archivedSuffix': ' · {count} gearchiveerd',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} gearchiveerd',
   'dashboard.newTrip': 'Nieuwe reis',
@@ -114,6 +114,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Dagen verwijderen?',
   'dashboard.shrinkIntro': 'Bij het opslaan van de nieuwe datums worden deze dagen verwijderd:',
   'dashboard.shrinkMoreDays': '+{count} meer',
+  'dashboard.shrinkMoreDays.one': '+{count} meer',
   'dashboard.shrinkLastDays': 'De laatste dagen vallen weg, niet de eerste',
   'dashboard.shrinkLastDaysHint':
     'Dagplanningen schuiven mee met de nieuwe datums, dus het zijn altijd de laatste dagen van je planning die wegvallen, ook als het begin is verschoven.',

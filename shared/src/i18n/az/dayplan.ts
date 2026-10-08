@@ -129,11 +129,15 @@ const dayplan: TranslationStrings = {
     'Bütün məkanlar bu gündən çıxarılır. Məkanlar səyahətdə qalır, gün isə öz qeydlərini və rezervasiyalarını saxlayır.',
   'dayplan.deleteDayEmpty': 'Bu gün üçün heç nə planlaşdırılmayıb.',
   'dayplan.impactPlaces': 'Planlaşdırılmış məkanlar: {count}',
+  'dayplan.impactPlaces.one': 'Planlaşdırılmış məkanlar: {count}',
   'dayplan.impactPlacesHint': 'Onlar məkanlar siyahısında qalır.',
   'dayplan.impactNotes': 'Qeydlər: {count}',
+  'dayplan.impactNotes.one': 'Qeydlər: {count}',
   'dayplan.impactTexts': 'Gün başlıqları və təsvirləri: {count}',
+  'dayplan.impactTexts.one': 'Gün başlıqları və təsvirləri: {count}',
   'dayplan.impactDeletedHint': 'Onlar da silinəcək.',
   'dayplan.impactBookings': 'Rezervasiyalar: {count}',
+  'dayplan.impactBookings.one': 'Rezervasiyalar: {count}',
   'dayplan.impactStay': '{name} məkanında qalma',
   'dayplan.deleteDayBookingsHint': 'Onlar gün təyin edilmədən Rezervasiyalar bölməsində qalır.',
   'dayplan.deleteDayStayHint': 'Giriş və ya çıxış bu günə düşdüyü üçün qalma qeydi ləğv edilir.',
@@ -144,8 +148,11 @@ const dayplan: TranslationStrings = {
   'dayplan.deleteDayStayPaidHint':
     'Giriş və ya çıxış bu günə düşdüyü üçün qalma qeydi, “{booking}” rezervasiyası və onun {amount} məbləğində xərci birlikdə ləğv edilir.',
   'dayplan.deleteDayShift': 'Sonrakı günlər: {count}',
+  'dayplan.deleteDayShift.one': 'Sonrakı günlər: {count}',
   'dayplan.deleteDayShiftHint': 'Hər biri bir tarix əvvələ keçiriləcək.',
   'dayplan.deleteDayShiftBookingsHint':
+    'Hər biri bir tarix əvvələ keçiriləcək. Birlikdə köçürülən rezervasiyalar: {count}',
+  'dayplan.deleteDayShiftBookingsHint.one':
     'Hər biri bir tarix əvvələ keçiriləcək. Birlikdə köçürülən rezervasiyalar: {count}',
   'dayplan.deleteDayShrink': 'Səyahət artıq {date} tarixində bitir',
   'dayplan.deleteDayShrinkHint': 'Son tarixi qəbul edəcək tarixsiz gün yoxdur.',

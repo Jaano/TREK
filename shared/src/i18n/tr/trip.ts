@@ -73,6 +73,7 @@ const trip: TranslationStrings = {
   'transit.transfers': '{count} aktarma',
   'transit.transfers.one': '{count} aktarma',
   'transit.min': '{count} dk',
+  'transit.min.one': '{count} dk',
   'transit.stops': '{count} durak',
   'transit.stops.one': '{count} durak',
   'transit.walkTo': '{name} durağına yürü',

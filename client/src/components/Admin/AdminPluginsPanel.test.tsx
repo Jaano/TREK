@@ -924,7 +924,7 @@ describe('AdminPluginsPanel — enabling a plugin', () => {
     fireEvent.click(rowToggle('Gotify'))
 
     expect(await screen.findByText('Plugin activated')).toBeInTheDocument()
-    expect(await screen.findByText(/enabled required plugin\(s\) first: core/i)).toBeInTheDocument()
+    expect(await screen.findByText(/enabled the required plugin first: core/i)).toBeInTheDocument()
   })
 
   it('FE-COMP-PLUGINS-PANEL-023: a disabled required addon is reported as a toast, not a dialog', async () => {
@@ -936,7 +936,7 @@ describe('AdminPluginsPanel — enabling a plugin', () => {
 
     fireEvent.click(rowToggle('Gotify'))
 
-    expect(await screen.findByText(/enable the required addon\(s\) first: journey/i)).toBeInTheDocument()
+    expect(await screen.findByText(/enable the required addon first: journey/i)).toBeInTheDocument()
   })
 
   it('FE-COMP-PLUGINS-PANEL-024: any other activation failure surfaces the server message', async () => {
@@ -984,7 +984,7 @@ describe('AdminPluginsPanel — enabling a plugin', () => {
 
     expect(await screen.findByText('Downloaded trek-core')).toBeInTheDocument()
     expect(installed).toEqual({ id: 'trek-core', constraint: '^1.0.0', withDependencies: true })
-    expect(await screen.findByText(/enable the required addon\(s\) first: journey/i)).toBeInTheDocument()
+    expect(await screen.findByText(/enable the required addon first: journey/i)).toBeInTheDocument()
     await waitFor(() => expect(screen.queryByText('Missing dependencies')).not.toBeInTheDocument())
   })
 

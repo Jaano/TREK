@@ -72,6 +72,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Buiten de map verplaatst',
 
   'docsync.conflict.resolve': '{count} oplossen',
+  'docsync.conflict.resolve.one': '{count} oplossen',
 
   'docsync.conflict.title': 'Beide kopieën zijn gewijzigd',
   'docsync.conflict.keepTrek': 'De TREK-versie behouden',

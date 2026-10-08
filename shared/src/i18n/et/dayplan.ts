@@ -104,11 +104,15 @@ const dayplan: TranslationStrings = {
     'Kõik kohad eemaldatakse sellest päevast. Kohad jäävad reisi alles ning päev säilitab oma märkmed ja broneeringud.',
   'dayplan.deleteDayEmpty': 'Sellele päevale pole midagi plaanitud.',
   'dayplan.impactPlaces': 'Plaanitud kohad: {count}',
+  'dayplan.impactPlaces.one': 'Plaanitud kohad: {count}',
   'dayplan.impactPlacesHint': 'Need jäävad kohtade nimekirja.',
   'dayplan.impactNotes': 'Märkmed: {count}',
+  'dayplan.impactNotes.one': 'Märkmed: {count}',
   'dayplan.impactTexts': 'Päevade pealkirjad ja kirjeldused: {count}',
+  'dayplan.impactTexts.one': 'Päevade pealkirjad ja kirjeldused: {count}',
   'dayplan.impactDeletedHint': 'Kustutatakse samuti.',
   'dayplan.impactBookings': 'Broneeringud: {count}',
+  'dayplan.impactBookings.one': 'Broneeringud: {count}',
   'dayplan.impactStay': 'Peatumine kohas {name}',
   'dayplan.deleteDayBookingsHint': 'Need jäävad Broneeringute alla, ilma päevata.',
   'dayplan.deleteDayStayHint': 'Sisse- või väljaregistreerimine on sellel päeval, seega see tühistatakse.',
@@ -119,8 +123,11 @@ const dayplan: TranslationStrings = {
   'dayplan.deleteDayStayPaidHint':
     'Sisse- või väljaregistreerimine on sellel päeval, seega see tühistatakse koos broneeringuga „{booking}“ ja selle kuluga summas {amount}.',
   'dayplan.deleteDayShift': 'Hilisemad päevad: {count}',
+  'dayplan.deleteDayShift.one': 'Hilisemad päevad: {count}',
   'dayplan.deleteDayShiftHint': 'Igaüks nihkub ühe kuupäeva võrra varasemaks.',
   'dayplan.deleteDayShiftBookingsHint':
+    'Igaüks nihkub ühe kuupäeva võrra varasemaks. Kaasa liikuvad broneeringud: {count}',
+  'dayplan.deleteDayShiftBookingsHint.one':
     'Igaüks nihkub ühe kuupäeva võrra varasemaks. Kaasa liikuvad broneeringud: {count}',
   'dayplan.deleteDayShrink': 'Reis lõpeb nüüd kuupäeval {date}',
   'dayplan.deleteDayShrinkHint': 'Pole kuupäevata päeva, mis viimase kuupäeva üle võtaks.',

@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': '{count} in een lijst opslaan',
+  'collections.saveNToList.one': '{count} in een lijst opslaan',
   'collections.addedNToList': '{count} opgeslagen in {name}',
+  'collections.addedNToList.one': '{count} opgeslagen in {name}',
   'collections.noOwnLists': 'Je hebt nog geen lijsten',
   'collections.saveToListHint': 'Duplicaten worden automatisch overgeslagen',
   'collections.role.label': 'Rol',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Naar lijst verplaatsen',
   'collections.duplicateToList': 'Naar lijst dupliceren',
   'collections.moveToListTitle': '{count} naar andere lijst verplaatsen',
+  'collections.moveToListTitle.one': '{count} naar andere lijst verplaatsen',
   'collections.duplicateToListTitle': '{count} naar andere lijst dupliceren',
+  'collections.duplicateToListTitle.one': '{count} naar andere lijst dupliceren',
   'collections.noOtherLists': 'Nog geen andere lijsten',
   'collections.movedCount': '{count} plaatsen verplaatst',
   'collections.movedCount.one': '{count} plaats verplaatst',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} geselecteerd',
   'collections.importSelectedCount.one': '{count} geselecteerd',
   'collections.importAction': '{count} importeren',
+  'collections.importAction.one': '{count} importeren',
   'collections.importEmptyTrip': 'Deze reis heeft nog geen plekken',
   'collections.importNothingNew': 'Alles uit deze reis staat al op deze lijst',
   'collections.importDone': '{count} plekken toegevoegd',
@@ -115,6 +120,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Naar reis kopiëren',
   'collections.copyToTripTitle': 'Naar reis kopiëren',
   'collections.copyN': '{count} naar reis kopiëren',
+  'collections.copyN.one': 'Naar reis kopiëren',
   'collections.copyToTripSearch': 'Reizen zoeken',
   'collections.searchLists': 'Lijsten zoeken',
   'collections.copyToTripConfirm': 'Kopiëren',
@@ -150,6 +156,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Uit collectie verwijderd',
   'collections.picker.title': 'Opgeslagen plekken',
   'collections.picker.showMore': 'Nog {count} tonen',
+  'collections.picker.showMore.one': 'Nog {count} tonen',
   'collections.picker.search': 'Zoek in je opgeslagen plekken',
   'collections.picker.empty': 'Geen opgeslagen plekken om toe te voegen',
   'collections.picker.hint': 'Kies een plek uit je collecties',
@@ -172,6 +179,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{count} plekken toegevoegd aan {name}',
   'collections.file.doneInto.one': '{count} plek toegevoegd aan {name}',
   'collections.file.doneIntoDuplicates': '{count} toegevoegd aan {name}, {duplicates} stonden er al in',
+  'collections.file.doneIntoDuplicates.one': '{count} toegevoegd aan {name}, {duplicates} stonden er al in',
   'collections.file.doneIntoNothing': 'Alle plekken uit het bestand staan al in {name}',
   'collections.file.change': 'Wijzigen',
   'collections.file.labelCount': '{count} labels',
@@ -203,6 +211,8 @@ const collection: TranslationStrings = {
   'collections.file.errorNotGpx': 'Dit is geen GPX-bestand.',
   'collections.file.errorTooManyPlaces':
     'Dit bestand bevat meer dan {count} plekken. Splits het op en importeer de delen een voor een.',
+  'collections.file.errorTooManyPlaces.one':
+    'Dit bestand bevat meer dan {count} plek. Splits het op en importeer de delen een voor een.',
 
   'collections.share.title': 'Lijst delen',
   'collections.share.titleNamed': '“{name}” delen',

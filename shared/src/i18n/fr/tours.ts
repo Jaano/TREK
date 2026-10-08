@@ -70,6 +70,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Points de passage',
   'tours.planner.waypointLabel': 'Point de passage {n}',
   'tours.durationMinutes': '{count} min',
+  'tours.durationMinutes.one': '{count} min',
   'tours.planner.empty': 'Ajoutez au moins deux points pour calculer un itinéraire à pied.',
   'tours.planner.start': 'Départ',
   'tours.planner.via': 'Passage par',

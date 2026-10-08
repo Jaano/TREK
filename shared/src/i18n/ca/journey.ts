@@ -677,6 +677,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Suggeriment descartat',
   'journey.suggestions.restore': 'Recupera els suggeriments descartats',
   'journey.suggestions.restoreCount': 'Suggeriments descartats ({count})',
+  'journey.suggestions.restoreCount.one': 'Suggeriments descartats ({count})',
   'journey.suggestions.restored': 'S’han recuperat {count} suggeriments',
   'journey.suggestions.restored.one': 'S’ha recuperat {count} suggeriment',
   'journey.detail.addOnThisDay': 'Afegeix una entrada en aquest dia',

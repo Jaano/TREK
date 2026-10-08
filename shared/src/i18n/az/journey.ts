@@ -800,6 +800,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Təklif bağlandı',
   'journey.suggestions.restore': 'Bağlanmış təklifləri geri qaytar',
   'journey.suggestions.restoreCount': 'Bağlanmış təkliflər ({count})',
+  'journey.suggestions.restoreCount.one': 'Bağlanmış təkliflər ({count})',
   'journey.suggestions.restored': '{count} təklif geri qaytarıldı',
   'journey.suggestions.restored.one': '{count} təklif geri qaytarıldı',
 

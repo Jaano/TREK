@@ -198,6 +198,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Rien sur le trajet ne correspond à « {name} ».',
   'roadtrip.poi.noneMatchFilters': 'Rien sur le trajet ne correspond à ces filtres.',
   'roadtrip.poi.foundFiltered': '{count} sur {total} sur le trajet',
+  'roadtrip.poi.foundFiltered.one': '{count} sur {total} sur le trajet',
   'roadtrip.poi.truncated':
     'Sur {count} tronçons, il y en avait plus que ce qu’une réponse peut contenir : réduisez le corridor pour voir le reste.',
   'roadtrip.poi.truncated.one':

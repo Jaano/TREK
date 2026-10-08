@@ -61,6 +61,8 @@ const memories: TranslationStrings = {
   'memories.confirmShareTitle': 'Seyahat üyeleriyle paylaşılsın mı?',
   'memories.confirmShareHint':
     '{count} fotoğraf bu seyahatin tüm üyelerine görünür olacak. Daha sonra tek tek gizli yapabilirsiniz.',
+  'memories.confirmShareHint.one':
+    '{count} fotoğraf bu seyahatin tüm üyelerine görünür olacak. Daha sonra gizli yapabilirsiniz.',
   'memories.confirmShareButton': 'Fotoğrafları paylaş',
   'memories.error.loadAlbums': 'Albümler yüklenemedi',
   'memories.error.linkAlbum': 'Albüm bağlanamadı',

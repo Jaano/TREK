@@ -66,7 +66,14 @@ const memories: TranslationStrings = {
   'memories.tripDates': 'تواريخ الرحلة',
   'memories.allPhotos': 'جميع الصور',
   'memories.confirmShareTitle': 'مشاركة مع أعضاء الرحلة؟',
-  'memories.confirmShareHint': '{count} صور ستكون مرئية لجميع أعضاء هذه الرحلة. يمكنك جعل الصور الفردية خاصة لاحقًا.',
+  'memories.confirmShareHint': 'ستكون {count} صورة مرئية لجميع أعضاء هذه الرحلة. يمكنك جعل الصور الفردية خاصة لاحقًا.',
+  'memories.confirmShareHint.zero': 'لن تكون أي صورة مرئية لأعضاء هذه الرحلة.',
+  'memories.confirmShareHint.one': 'ستكون صورة واحدة مرئية لجميع أعضاء هذه الرحلة. يمكنك جعلها خاصة لاحقًا.',
+  'memories.confirmShareHint.two': 'ستكون صورتان مرئيتين لجميع أعضاء هذه الرحلة. يمكنك جعل الصور الفردية خاصة لاحقًا.',
+  'memories.confirmShareHint.few':
+    'ستكون {count} صور مرئية لجميع أعضاء هذه الرحلة. يمكنك جعل الصور الفردية خاصة لاحقًا.',
+  'memories.confirmShareHint.many':
+    'ستكون {count} صورة مرئية لجميع أعضاء هذه الرحلة. يمكنك جعل الصور الفردية خاصة لاحقًا.',
   'memories.confirmShareButton': 'مشاركة الصور',
   'memories.error.loadAlbums': 'فشل تحميل الألبومات',
   'memories.error.linkAlbum': 'فشل ربط الألبوم',

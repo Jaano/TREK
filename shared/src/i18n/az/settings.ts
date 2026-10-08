@@ -706,10 +706,13 @@ const settings: TranslationStrings = {
   'settings.offline.banner.offline': 'Oflayn',
   'settings.offline.banner.forced': 'Oflayn rejim',
   'settings.offline.banner.queued': 'Oflayn · növbədə {count}',
+  'settings.offline.banner.queued.one': 'Oflayn · növbədə {count}',
   'settings.offline.banner.syncing': '{count} sinxronlaşdırılır…',
-  'settings.offline.banner.failed':
-    'Sinxronlaşdırmaq mümkün olmadı: {count}',
+  'settings.offline.banner.syncing.one': '{count} sinxronlaşdırılır…',
+  'settings.offline.banner.failed': 'Sinxronlaşdırmaq mümkün olmadı: {count}',
+  'settings.offline.banner.failed.one': 'Sinxronlaşdırmaq mümkün olmadı: {count}',
   'settings.offline.banner.conflicts': 'Ziddiyyətlər: {count}',
+  'settings.offline.banner.conflicts.one': 'Ziddiyyətlər: {count}',
 
   'settings.alwaysShowRoutes':
     'Rezervasiya marşrutlarını həmişə göstər',
@@ -725,6 +728,7 @@ const settings: TranslationStrings = {
   'settings.apiScopes.noneSelected':
     'Ən azı bir sahə seçin, əks halda açar heç bir məlumatı oxuya bilməyəcək.',
   'settings.apiScopes.limited': '{total} sahədən {count}',
+  'settings.apiScopes.limited.one': '{total} sahədən {count}',
   'settings.apiScopes.trips': 'Səyahətlər',
   'settings.apiScopes.days': 'Günlər',
   'settings.apiScopes.places': 'Məkanlar',

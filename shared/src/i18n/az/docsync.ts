@@ -77,6 +77,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Qovluqdan kənara köçürülüb',
 
   'docsync.conflict.resolve': '{count} ziddiyyəti həll et',
+  'docsync.conflict.resolve.one': '{count} ziddiyyəti həll et',
 
   'docsync.conflict.title': 'Hər iki nüsxə dəyişdirilib',
   'docsync.conflict.keepTrek': 'TREK versiyasını saxla',

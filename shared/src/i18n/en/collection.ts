@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': 'Save {count} to a list',
+  'collections.saveNToList.one': 'Save {count} to a list',
   'collections.addedNToList': 'Saved {count} to {name}',
+  'collections.addedNToList.one': 'Saved {count} to {name}',
   'collections.noOwnLists': 'You have no lists yet',
   'collections.saveToListHint': 'Duplicates are skipped automatically',
   'collections.role.label': 'Role',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Move to list',
   'collections.duplicateToList': 'Duplicate to list',
   'collections.moveToListTitle': 'Move {count} to another list',
+  'collections.moveToListTitle.one': 'Move {count} to another list',
   'collections.duplicateToListTitle': 'Duplicate {count} to another list',
+  'collections.duplicateToListTitle.one': 'Duplicate {count} to another list',
   'collections.noOtherLists': 'No other lists yet',
   'collections.movedCount': 'Moved {count} places',
   'collections.movedCount.one': 'Moved {count} place',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} selected',
   'collections.importSelectedCount.one': '{count} selected',
   'collections.importAction': 'Import {count}',
+  'collections.importAction.one': 'Import {count}',
   'collections.importEmptyTrip': 'This trip has no places yet',
   'collections.importNothingNew': 'Everything from this trip is already on this list',
   'collections.importDone': '{count} places added',
@@ -115,6 +120,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Copy to trip',
   'collections.copyToTripTitle': 'Copy to trip',
   'collections.copyN': 'Copy {count} to trip',
+  'collections.copyN.one': 'Copy to trip',
   'collections.copyToTripSearch': 'Search trips',
   'collections.searchLists': 'Search lists',
   'collections.copyToTripConfirm': 'Copy',
@@ -150,6 +156,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Removed from collection',
   'collections.picker.title': 'Saved places',
   'collections.picker.showMore': 'Show {count} more',
+  'collections.picker.showMore.one': 'Show {count} more',
   'collections.picker.search': 'Search your saved places',
   'collections.picker.empty': 'No saved places to add',
   'collections.picker.hint': 'Pick a place from your collections',
@@ -172,6 +179,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{count} places added to {name}',
   'collections.file.doneInto.one': '{count} place added to {name}',
   'collections.file.doneIntoDuplicates': '{count} added to {name}, {duplicates} were already there',
+  'collections.file.doneIntoDuplicates.one': '{count} added to {name}, {duplicates} were already there',
   'collections.file.doneIntoNothing': 'Every place in the file is already in {name}',
   'collections.file.change': 'Change',
   'collections.file.labelCount': '{count} labels',
@@ -200,6 +208,8 @@ const collection: TranslationStrings = {
   'collections.file.errorNotGpx': 'That is not a GPX file.',
   'collections.file.errorTooManyPlaces':
     'That file has more than {count} places. Split it and import the parts one at a time.',
+  'collections.file.errorTooManyPlaces.one':
+    'That file has more than {count} place. Split it and import the parts one at a time.',
 
   'collections.share.title': 'Share list',
   'collections.share.titleNamed': 'Share “{name}”',

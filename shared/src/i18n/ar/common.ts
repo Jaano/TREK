@@ -54,8 +54,18 @@ const common: TranslationStrings = {
   'common.copy': 'نسخ',
   'common.copied': 'تم النسخ',
   'common.justNow': 'just now', // en-fallback
-  'common.hoursAgo': '{count}h ago', // en-fallback
-  'common.daysAgo': '{count}d ago', // en-fallback
+  'common.hoursAgo': 'منذ {count} ساعة',
+  'common.hoursAgo.zero': 'منذ {count} ساعة',
+  'common.hoursAgo.one': 'منذ ساعة واحدة',
+  'common.hoursAgo.two': 'منذ ساعتين',
+  'common.hoursAgo.few': 'منذ {count} ساعات',
+  'common.hoursAgo.many': 'منذ {count} ساعة',
+  'common.daysAgo': 'منذ {count} يوم',
+  'common.daysAgo.zero': 'منذ {count} يوم',
+  'common.daysAgo.one': 'منذ يوم واحد',
+  'common.daysAgo.two': 'منذ يومين',
+  'common.daysAgo.few': 'منذ {count} أيام',
+  'common.daysAgo.many': 'منذ {count} يومًا',
   'common.datepicker.prevMonth': 'Previous month', // en-fallback
   'common.datepicker.nextMonth': 'Next month', // en-fallback
   'common.datepicker.prevYear': 'Previous year', // en-fallback

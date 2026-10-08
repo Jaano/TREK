@@ -201,6 +201,8 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Na trase nič nezodpovedá „{name}“.',
   'roadtrip.poi.noneMatchFilters': 'Nič na trase nezodpovedá týmto filtrom.',
   'roadtrip.poi.foundFiltered': '{count} z {total} na trase',
+  'roadtrip.poi.foundFiltered.one': '{count} z {total} na trase',
+  'roadtrip.poi.foundFiltered.few': '{count} z {total} na trase',
   'roadtrip.poi.truncated':
     'Na {count} úsekoch ich bolo viac, než sa zmestí do jednej odpovede. Zúžte koridor, aby ste videli zvyšok.',
   'roadtrip.poi.truncated.one':

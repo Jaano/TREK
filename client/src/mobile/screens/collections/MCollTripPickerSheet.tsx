@@ -78,7 +78,7 @@ export default function MCollTripPickerSheet({ open, count, onCopy, onClose, t }
     }
   }
 
-  const title = count > 1 ? t('collections.copyN', { count }) : t('collections.copyToTripTitle')
+  const title = t('collections.copyN', { count })
 
   return (
     <MSheet open={open} onClose={onClose} material="opaque" ariaLabel={title}>

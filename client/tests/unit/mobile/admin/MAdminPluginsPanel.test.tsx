@@ -1170,7 +1170,7 @@ describe('MAdminPluginsPanel — enabling a plugin', () => {
 
     await screen.findByText('Gotify');
     fireEvent.click(screen.getAllByRole('switch', { name: 'Enable plugin' })[0]);
-    await waitFor(() => expect(toastMessages()).toContain('Enabled required plugin(s) first: Zzz Base'));
+    await waitFor(() => expect(toastMessages()).toContain('Enabled the required plugin first: Zzz Base'));
     expect(toastMessages()).toContain('Plugin activated');
   });
 
@@ -1193,7 +1193,7 @@ describe('MAdminPluginsPanel — enabling a plugin', () => {
     render(<MAdminPluginsPanel />);
 
     fireEvent.click(await screen.findByRole('switch', { name: 'Enable plugin' }));
-    await waitFor(() => expect(toastMessages()).toContain('Enable the required addon(s) first: budget, vacay'));
+    await waitFor(() => expect(toastMessages()).toContain('Enable the required addons first: budget, vacay'));
   });
 
   it('FE-MOB-PLUGP-066: any other activation failure surfaces the server message', async () => {
@@ -1239,7 +1239,7 @@ describe('MAdminPluginsPanel — enabling a plugin', () => {
     await waitFor(() => expect(installBody).toEqual({ id: 'trek-base', constraint: '^1.0.0', withDependencies: true }));
     await waitFor(() => expect(toastMessages()).toContain('Downloaded trek-base'));
     // The dependency install revealed a disabled addon on top.
-    expect(toastMessages()).toContain('Enable the required addon(s) first: budget');
+    expect(toastMessages()).toContain('Enable the required addon first: budget');
     await waitFor(() => expect(activateCalls).toBe(2));
   });
 

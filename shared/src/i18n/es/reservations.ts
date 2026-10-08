@@ -181,6 +181,7 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Otros vuelos',
   'reservations.airtrail.empty': 'No se encontraron vuelos en tu cuenta de AirTrail.',
   'reservations.airtrail.importCta': 'Importar {count}',
+  'reservations.airtrail.importCta.one': 'Importar {count}',
   'reservations.airtrail.joinConnection': 'Importar como un solo vuelo con escala en {stops}',
   'reservations.costsLabel': 'Costes',
   'reservations.createExpense': 'Crear gasto',

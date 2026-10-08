@@ -198,6 +198,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Niets onderweg komt overeen met “{name}”.',
   'roadtrip.poi.noneMatchFilters': 'Niets onderweg voldoet aan deze filters.',
   'roadtrip.poi.foundFiltered': '{count} van {total} onderweg',
+  'roadtrip.poi.foundFiltered.one': '{count} van {total} onderweg',
   'roadtrip.poi.truncated':
     '{count} stukken hadden meer dan in één antwoord past. Maak de corridor smaller om de rest te zien.',
   'roadtrip.poi.truncated.one':

@@ -16,6 +16,7 @@ const photos: TranslationStrings = {
   'photos.linkPlace': 'Collega luogo',
   'photos.noPlace': 'Nessun luogo',
   'photos.uploadN': 'Caricamento di {n} foto',
+  'photos.uploadN.one': 'Caricamento di {n} foto',
   'photos.linkDay': 'Collega giorno',
   'photos.noDay': 'Nessun giorno',
   'photos.dayLabel': 'Giorno {number}',

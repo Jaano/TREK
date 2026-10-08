@@ -72,6 +72,9 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Переміщено за межі теки',
 
   'docsync.conflict.resolve': "Розв'язати {count}",
+  'docsync.conflict.resolve.one': "Розв'язати {count}",
+  'docsync.conflict.resolve.few': "Розв'язати {count}",
+  'docsync.conflict.resolve.many': "Розв'язати {count}",
 
   'docsync.conflict.title': 'Змінилися обидві копії',
   'docsync.conflict.keepTrek': 'Залишити версію TREK',

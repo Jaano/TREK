@@ -80,6 +80,8 @@ const memories: TranslationStrings = {
     'Səyahət üzvləri ilə paylaşılsın?',
   'memories.confirmShareHint':
     '{count} foto bu səyahətin bütün üzvlərinə görünəcək. Daha sonra ayrı-ayrı fotoları şəxsi edə bilərsiniz.',
+  'memories.confirmShareHint.one':
+    '{count} foto bu səyahətin bütün üzvlərinə görünəcək. Daha sonra onu şəxsi edə bilərsiniz.',
   'memories.confirmShareButton': 'Fotoları paylaş',
 
   'memories.error.loadAlbums':

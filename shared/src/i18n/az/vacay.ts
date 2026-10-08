@@ -89,6 +89,7 @@ const vacay: TranslationStrings = {
   'vacay.carryOverHint': 'Qalan məzuniyyət günlərini avtomatik olaraq növbəti ilə keçirin',
   'vacay.carriedOverPrevPeriod': 'əvvəlki dövrdən',
   'vacay.compUsedCount': '{count} kompensasiya / çevik gün',
+  'vacay.compUsedCount.one': '{count} kompensasiya / çevik gün',
   'vacay.yearType': 'Məzuniyyət ili',
   'vacay.yearTypeHint': 'Məzuniyyət ilinin nə vaxt başladığını seçin — limit, istifadə və növbəti dövrə keçirmə buna əsaslanır',
   'vacay.yearTypeCalendar': 'Təqvim ili',

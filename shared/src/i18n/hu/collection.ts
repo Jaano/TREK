@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': '{count} mentése listába',
+  'collections.saveNToList.one': '{count} mentése listába',
   'collections.addedNToList': '{count} mentve ide: {name}',
+  'collections.addedNToList.one': '{count} mentve ide: {name}',
   'collections.noOwnLists': 'Még nincsenek listáid',
   'collections.saveToListHint': 'A duplikátumok automatikusan kimaradnak',
   'collections.role.label': 'Szerep',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Áthelyezés listába',
   'collections.duplicateToList': 'Másolás listába',
   'collections.moveToListTitle': '{count} áthelyezése másik listába',
+  'collections.moveToListTitle.one': '{count} áthelyezése másik listába',
   'collections.duplicateToListTitle': '{count} másolása másik listába',
+  'collections.duplicateToListTitle.one': '{count} másolása másik listába',
   'collections.noOtherLists': 'Nincs még másik lista',
   'collections.movedCount': '{count} hely áthelyezve',
   'collections.movedCount.one': '{count} hely áthelyezve',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} kijelölve',
   'collections.importSelectedCount.one': '{count} kijelölve',
   'collections.importAction': '{count} importálása',
+  'collections.importAction.one': '{count} importálása',
   'collections.importEmptyTrip': 'Ennek az utazásnak még nincsenek helyei',
   'collections.importNothingNew': 'Ebből az utazásból már minden rajta van a listán',
   'collections.importDone': '{count} hely hozzáadva',
@@ -116,6 +121,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Másolás utazásba',
   'collections.copyToTripTitle': 'Másolás utazásba',
   'collections.copyN': '{count} másolása utazásba',
+  'collections.copyN.one': 'Másolás utazásba',
   'collections.copyToTripSearch': 'Utazások keresése',
   'collections.searchLists': 'Listák keresése',
   'collections.copyToTripConfirm': 'Másolás',
@@ -151,6 +157,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Eltávolítva a gyűjteményből',
   'collections.picker.title': 'Mentett helyek',
   'collections.picker.showMore': 'További {count} megjelenítése',
+  'collections.picker.showMore.one': 'További {count} megjelenítése',
   'collections.picker.search': 'Mentett helyek keresése',
   'collections.picker.empty': 'Nincs hozzáadható mentett hely',
   'collections.picker.hint': 'Válassz egy helyet a gyűjteményeidből',
@@ -173,6 +180,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{count} hely hozzáadva ehhez: {name}',
   'collections.file.doneInto.one': '{count} hely hozzáadva ehhez: {name}',
   'collections.file.doneIntoDuplicates': '{count} hozzáadva ehhez: {name}, {duplicates} már benne volt',
+  'collections.file.doneIntoDuplicates.one': '{count} hozzáadva ehhez: {name}, {duplicates} már benne volt',
   'collections.file.doneIntoNothing': 'A fájl minden helye már benne van ebben: {name}',
   'collections.file.change': 'Csere',
   'collections.file.labelCount': '{count} címke',
@@ -202,6 +210,8 @@ const collection: TranslationStrings = {
   'collections.file.gpxEmpty': 'Ebben a GPX-fájlban nincsenek útpontok, így nincs mit importálni.',
   'collections.file.errorNotGpx': 'Ez nem GPX-fájl.',
   'collections.file.errorTooManyPlaces':
+    'Ebben a fájlban több mint {count} hely van. Oszd fel, és importáld a részeket egyenként.',
+  'collections.file.errorTooManyPlaces.one':
     'Ebben a fájlban több mint {count} hely van. Oszd fel, és importáld a részeket egyenként.',
 
   'collections.share.title': 'Lista megosztása',

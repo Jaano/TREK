@@ -55,7 +55,11 @@ const common: TranslationStrings = {
   'common.copied': 'Zkopírováno',
   'common.justNow': 'právě teď',
   'common.hoursAgo': 'před {count} h',
+  'common.hoursAgo.one': 'před {count} h',
+  'common.hoursAgo.few': 'před {count} h',
   'common.daysAgo': 'před {count} d',
+  'common.daysAgo.one': 'před {count} d',
+  'common.daysAgo.few': 'před {count} d',
   'common.datepicker.prevMonth': 'Previous month', // en-fallback
   'common.datepicker.nextMonth': 'Next month', // en-fallback
   'common.datepicker.prevYear': 'Previous year', // en-fallback

@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': 'Spara {count} i en lista',
+  'collections.saveNToList.one': 'Spara {count} i en lista',
   'collections.addedNToList': 'Sparade {count} i {name}',
+  'collections.addedNToList.one': 'Sparade {count} i {name}',
   'collections.noOwnLists': 'Du har inga listor än',
   'collections.saveToListHint': 'Dubbletter hoppas över automatiskt',
   'collections.role.label': 'Roll',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Flytta till lista',
   'collections.duplicateToList': 'Duplicera till lista',
   'collections.moveToListTitle': 'Flytta {count} till annan lista',
+  'collections.moveToListTitle.one': 'Flytta {count} till annan lista',
   'collections.duplicateToListTitle': 'Duplicera {count} till annan lista',
+  'collections.duplicateToListTitle.one': 'Duplicera {count} till annan lista',
   'collections.noOtherLists': 'Inga andra listor än',
   'collections.movedCount': 'Flyttade {count} platser',
   'collections.movedCount.one': 'Flyttade {count} plats',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} markerade',
   'collections.importSelectedCount.one': '{count} markerad',
   'collections.importAction': 'Importera {count}',
+  'collections.importAction.one': 'Importera {count}',
   'collections.importEmptyTrip': 'Den här resan har inga platser än',
   'collections.importNothingNew': 'Allt från den här resan finns redan i listan',
   'collections.importDone': '{count} platser tillagda',
@@ -114,6 +119,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Kopiera till resa',
   'collections.copyToTripTitle': 'Kopiera till resa',
   'collections.copyN': 'Kopiera {count} till resa',
+  'collections.copyN.one': 'Kopiera till resa',
   'collections.copyToTripSearch': 'Sök resor',
   'collections.searchLists': 'Sök listor',
   'collections.copyToTripConfirm': 'Kopiera',
@@ -149,6 +155,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Borttagen från samlingen',
   'collections.picker.title': 'Sparade platser',
   'collections.picker.showMore': 'Visa {count} till',
+  'collections.picker.showMore.one': 'Visa {count} till',
   'collections.picker.search': 'Sök bland dina sparade platser',
   'collections.picker.empty': 'Inga sparade platser att lägga till',
   'collections.picker.hint': 'Välj en plats från dina samlingar',
@@ -171,6 +178,7 @@ const collection: TranslationStrings = {
   'collections.file.doneInto': '{count} platser tillagda i {name}',
   'collections.file.doneInto.one': '{count} plats tillagd i {name}',
   'collections.file.doneIntoDuplicates': '{count} tillagda i {name}, {duplicates} fanns redan',
+  'collections.file.doneIntoDuplicates.one': '{count} tillagd i {name}, {duplicates} fanns redan',
   'collections.file.doneIntoNothing': 'Alla platser i filen finns redan i {name}',
   'collections.file.change': 'Byt',
   'collections.file.labelCount': '{count} etiketter',
@@ -200,6 +208,8 @@ const collection: TranslationStrings = {
   'collections.file.errorNotGpx': 'Det här är ingen GPX-fil.',
   'collections.file.errorTooManyPlaces':
     'Filen har fler än {count} platser. Dela upp den och importera delarna en i taget.',
+  'collections.file.errorTooManyPlaces.one':
+    'Filen har fler än {count} plats. Dela upp den och importera delarna en i taget.',
 
   'collections.share.title': 'Dela lista',
   'collections.share.titleNamed': 'Dela ”{name}”',

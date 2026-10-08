@@ -14,7 +14,7 @@ const photos: TranslationStrings = {
   'photos.clickToSelect': 'hoặc bấm để chọn',
   'photos.linkPlace': 'Địa điểm liên kết',
   'photos.noPlace': 'Không có nơi nào',
-  'photos.uploadN': '{n} tải lên ảnh',
+  'photos.uploadN': 'Tải lên {n} ảnh',
   'photos.linkDay': 'Ngày liên kết',
   'photos.noDay': 'Không có ngày',
   'photos.dayLabel': 'Ngày {number}',

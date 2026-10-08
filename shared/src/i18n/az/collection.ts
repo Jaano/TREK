@@ -2,7 +2,9 @@ import type { TranslationStrings } from '../types';
 
 const collection: TranslationStrings = {
   'collections.saveNToList': '{count} məkanı siyahıya əlavə et',
+  'collections.saveNToList.one': '{count} məkanı siyahıya əlavə et',
   'collections.addedNToList': '{count} məkan {name} siyahısında saxlanıldı',
+  'collections.addedNToList.one': '{count} məkan {name} siyahısında saxlanıldı',
   'collections.noOwnLists': 'Hələ siyahınız yoxdur',
   'collections.saveToListHint': 'Dublikatlar avtomatik buraxılır',
   'collections.role.label': 'Rol',
@@ -16,7 +18,9 @@ const collection: TranslationStrings = {
   'collections.moveToList': 'Siyahıya köçür',
   'collections.duplicateToList': 'Siyahıya kopyala',
   'collections.moveToListTitle': '{count} məkanı başqa siyahıya köçür',
+  'collections.moveToListTitle.one': '{count} məkanı başqa siyahıya köçür',
   'collections.duplicateToListTitle': '{count} məkanı başqa siyahıya kopyala',
+  'collections.duplicateToListTitle.one': '{count} məkanı başqa siyahıya kopyala',
   'collections.noOtherLists': 'Başqa siyahı yoxdur',
   'collections.movedCount': '{count} məkan köçürüldü',
   'collections.movedCount.one': '{count} məkan köçürüldü',
@@ -56,6 +60,7 @@ const collection: TranslationStrings = {
   'collections.importSelectedCount': '{count} seçilib',
   'collections.importSelectedCount.one': '{count} seçilib',
   'collections.importAction': '{count} məkanı idxal et',
+  'collections.importAction.one': '{count} məkanı idxal et',
   'collections.importEmptyTrip': 'Bu səyahətdə hələ məkan yoxdur',
   'collections.importNothingNew': 'Bu səyahətdəki bütün məkanlar artıq siyahıdadır',
   'collections.importDone': '{count} məkan əlavə edildi',
@@ -115,6 +120,7 @@ const collection: TranslationStrings = {
   'collections.copyToTrip': 'Səyahətə kopyala',
   'collections.copyToTripTitle': 'Səyahətə kopyala',
   'collections.copyN': '{count} məkanı səyahətə kopyala',
+  'collections.copyN.one': 'Səyahətə kopyala',
   'collections.copyToTripSearch': 'Səyahətləri axtar',
   'collections.searchLists': 'Siyahıları axtar',
   'collections.copyToTripConfirm': 'Kopyala',
@@ -150,6 +156,7 @@ const collection: TranslationStrings = {
   'collections.removedFromAll': 'Kolleksiyadan silindi',
   'collections.picker.title': 'Saxlanılan məkanlar',
   'collections.picker.showMore': 'Daha {count} məkan göstər',
+  'collections.picker.showMore.one': 'Daha {count} məkan göstər',
   'collections.picker.search': 'Saxlanılan məkanlarınızda axtar',
   'collections.picker.empty': 'Əlavə ediləcək saxlanılan məkan yoxdur',
   'collections.picker.hint': 'Kolleksiyalarınızdan məkan seçin',
@@ -171,7 +178,10 @@ const collection: TranslationStrings = {
   'collections.file.confirmInto': 'Siyahıya əlavə et',
   'collections.file.doneInto': '{count} məkan {name} siyahısına əlavə edildi',
   'collections.file.doneInto.one': '{count} məkan {name} siyahısına əlavə edildi',
-  'collections.file.doneIntoDuplicates': '{count} məkan {name} siyahısına əlavə edildi, {duplicates} məkan artıq orada idi',
+  'collections.file.doneIntoDuplicates':
+    '{count} məkan {name} siyahısına əlavə edildi, {duplicates} məkan artıq orada idi',
+  'collections.file.doneIntoDuplicates.one':
+    '{count} məkan {name} siyahısına əlavə edildi, {duplicates} məkan artıq orada idi',
   'collections.file.doneIntoNothing': 'Fayldakı bütün məkanlar artıq {name} siyahısındadır',
   'collections.file.change': 'Dəyiş',
   'collections.file.labelCount': '{count} etiket',
@@ -200,6 +210,8 @@ const collection: TranslationStrings = {
   'collections.file.gpxEmpty': 'Bu GPX faylında yol nöqtəsi yoxdur, buna görə idxal ediləcək heç nə yoxdur.',
   'collections.file.errorNotGpx': 'Bu, GPX faylı deyil.',
   'collections.file.errorTooManyPlaces':
+    'Bu faylda {count} ədəddən çox məkan var. Faylı hissələrə bölün və hər hissəni ayrıca idxal edin.',
+  'collections.file.errorTooManyPlaces.one':
     'Bu faylda {count} ədəddən çox məkan var. Faylı hissələrə bölün və hər hissəni ayrıca idxal edin.',
 
   'collections.share.title': 'Siyahını paylaş',

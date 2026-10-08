@@ -67,6 +67,7 @@ const tours: TranslationStrings = {
   'tours.planner.waypoints': 'Ruttpunkter',
   'tours.planner.waypointLabel': 'Ruttpunkt {n}',
   'tours.durationMinutes': '{count} min',
+  'tours.durationMinutes.one': '{count} min',
   'tours.planner.empty': 'Lägg till minst två punkter för att beräkna en vandringsrutt.',
   'tours.planner.start': 'Startpunkt',
   'tours.planner.via': 'Via',

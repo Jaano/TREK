@@ -16,6 +16,7 @@ const photos: TranslationStrings = {
   'photos.linkPlace': 'Hely társítása',
   'photos.noPlace': 'Nincs hely',
   'photos.uploadN': '{n} fotó feltöltése',
+  'photos.uploadN.one': '{n} fotó feltöltése',
   'photos.linkDay': 'Nap csatolása',
   'photos.noDay': 'Nincs nap',
   'photos.dayLabel': '{number}. nap',

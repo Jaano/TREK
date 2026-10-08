@@ -647,7 +647,7 @@ export default function AdminPluginsPanel() {
     if (e?.response?.status === 409 && d?.code === 'CONSENT_REQUIRED') {
       setConsentQueue(qq => [...qq, { plugin: p, version: latest[p.id] ?? p.version ?? '', newPermissions: d.newPermissions ?? [], newEgress: d.newEgress ?? [] }])
     } else if (e?.response?.status === 409 && d?.code === 'ADDON_DISABLED') {
-      toast.error(t('admin.plugins.dep.addonDisabledToast', { addons: (d.addons ?? []).join(', ') }))
+      toast.error(t('admin.plugins.dep.addonDisabledToast', { count: (d.addons ?? []).length, addons: (d.addons ?? []).join(', ') }))
     } else if (e?.response?.status === 409 && d?.code === 'DEPENDENCY_MISSING') {
       setDepResolve({ plugin: p, missing: d.missing ?? [], versionMismatch: d.versionMismatch ?? [] })
     } else {
@@ -661,7 +661,7 @@ export default function AdminPluginsPanel() {
     return adminApi.pluginActivate(p.id)
       .then(() => {
         toast.success(t('admin.plugins.activated'))
-        if (cascaded.length) toast.success(t('admin.plugins.dep.autoEnabled', { plugins: cascaded.join(', ') }))
+        if (cascaded.length) toast.success(t('admin.plugins.dep.autoEnabled', { count: cascaded.length, plugins: cascaded.join(', ') }))
         setDepResolve(null)
       })
       .catch((e: ActivateErr) => onActivateError(p, e))
@@ -686,7 +686,7 @@ export default function AdminPluginsPanel() {
     adminApi.pluginInstall(depId, { constraint, withDependencies: true })
       .then((r: { installed?: string[]; requiredAddons?: string[]; trekRangeBypassed?: TrekRangeBypass | null }) => {
         toast.success(t('admin.plugins.dep.downloaded', { id: depId }))
-        if (r?.requiredAddons?.length) toast.error(t('admin.plugins.dep.addonDisabledToast', { addons: r.requiredAddons.join(', ') }))
+        if (r?.requiredAddons?.length) toast.error(t('admin.plugins.dep.addonDisabledToast', { count: r.requiredAddons.length, addons: r.requiredAddons.join(', ') }))
         bypass.notice(depId, r?.trekRangeBypassed)
         return attemptActivate(parent)
       })

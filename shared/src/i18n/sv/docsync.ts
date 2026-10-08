@@ -69,6 +69,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Flyttad ut ur mappen',
 
   'docsync.conflict.resolve': 'Lös {count}',
+  'docsync.conflict.resolve.one': 'Lös {count}',
 
   'docsync.conflict.title': 'Båda kopiorna har ändrats',
   'docsync.conflict.keepTrek': 'Behåll TREK-versionen',

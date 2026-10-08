@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} reisi ({archived} arhiveeritud)',
   'dashboard.subtitle.trips.one': '{count} reis ({archived} arhiveeritud)',
   'dashboard.subtitle.empty': 'Alusta oma esimest reisi',
-  'dashboard.subtitle.activeOne': '{count} aktiivne reis',
-  'dashboard.subtitle.activeMany': '{count} aktiivset reisi',
+  'dashboard.subtitle.active': '{count} aktiivset reisi',
+  'dashboard.subtitle.active.one': '{count} aktiivne reis',
   'dashboard.subtitle.archivedSuffix': ' · {count} arhiveeritud',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} arhiveeritud',
   'dashboard.newTrip': 'Uus reis',
@@ -125,6 +125,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Kas eemaldada päevad?',
   'dashboard.shrinkIntro': 'Uute kuupäevade salvestamine eemaldab need päevad:',
   'dashboard.shrinkMoreDays': '+{count} veel',
+  'dashboard.shrinkMoreDays.one': '+{count} veel',
   'dashboard.shrinkLastDays': 'Eemaldatakse viimased päevad, mitte esimesed',
   'dashboard.shrinkLastDaysHint':
     'Päevaplaanid liiguvad koos uute kuupäevadega, seega eemaldatakse alati plaani viimased päevad, ka siis, kui algus nihkus.',

@@ -19,20 +19,21 @@
 //      out each category whole counts reach in its language, and may not
 //      carry one its language never selects. The rules come from
 //      `Intl.PluralRules`, through the same helpers the client resolves with.
+//   4. Count strings: an en string carrying {count} or {n} (the two params
+//      `t()` picks a plural form by) must be a plural group, so every
+//      language gets the forms it needs. The exceptions are NOT_PLURAL: a
+//      number that is never a quantity ("Day {n}", a step, a multiplier).
 //
 // Limitations: we only parse *top-level* string keys (those declared as the
 // first column of the file, matching the regex below). Nested objects, function
 // bodies, and inline comments are ignored. This matches how `t(key)` calls
 // resolve at runtime in TranslationContext.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getIntlLanguage } from '../src/i18n/languages.ts';
 import { allPluralCategories, integerPluralCategories, pluralFormOf, pluralGroups } from '../src/i18n/plural.ts';
-
-const here = dirname(fileURLToPath(import.meta.url));
-const i18nRoot = join(here, '..', 'src', 'i18n');
+import { I18N_ROOT, listDomainFiles, listLocales, readCatalog } from './i18n-catalog.mjs';
 
 // Match a top-level translation key declaration: leading whitespace, then a
 // quoted key (must start with a lowercase letter), then a colon. This is the
@@ -41,21 +42,8 @@ const i18nRoot = join(here, '..', 'src', 'i18n');
 // never compared, and two locales lacked dozens of them unnoticed.
 const TOP_LEVEL_KEY_RE = /^\s*'([a-z][a-zA-Z0-9.\-_:]*)'\s*:/gm;
 
-function listLocales() {
-  return readdirSync(i18nRoot)
-    .filter((name) => statSync(join(i18nRoot, name)).isDirectory())
-    // externalNotifications is a barrel module, not a locale.
-    .filter((name) => name !== 'externalNotifications');
-}
-
-function listDomainFiles(locale) {
-  return readdirSync(join(i18nRoot, locale))
-    .filter((f) => f.endsWith('.ts') && f !== 'index.ts')
-    .sort();
-}
-
 function extractKeys(locale, file) {
-  const content = readFileSync(join(i18nRoot, locale, file), 'utf8');
+  const content = readFileSync(join(I18N_ROOT, locale, file), 'utf8');
   const keys = new Set();
   for (const match of content.matchAll(TOP_LEVEL_KEY_RE)) {
     keys.add(match[1]);
@@ -82,6 +70,49 @@ function checkPluralForms(locale, keys, groups) {
     if (form && !allowed.has(form.category)) invalid.push(key);
   }
   return { missing, invalid };
+}
+
+/**
+ * en strings that carry {count} or {n} without being a quantity of
+ * something, so no word in any language agrees with the number. Everything
+ * else with a count is a plural group. An entry that stops matching an
+ * ungrouped count string fails the check, so the list cannot go stale.
+ */
+export const NOT_PLURAL = [
+  { key: 'collab.polls.optionPlaceholder', because: 'the position of a poll option ("Option 3")' },
+  { key: 'collections.importOnDay', because: 'the number of the day a place is planned on' },
+  { key: 'dashboard.atlas.aroundEquator', because: 'a decimal multiplier ("≈ 1.37×"), not a count of things' },
+  { key: 'dayplan.dayN', because: 'the number of a day in the trip' },
+  { key: 'planner.dayN', because: 'the number of a day in the trip' },
+  { key: 'help.center.step', because: 'the position of a step in a guide' },
+  { key: 'help.center.stepOf', because: 'the position of a step in a guide' },
+  { key: 'help.center.imageAlt', because: 'the position of a step in a guide' },
+  { key: 'system_notice.pager.goto', because: 'the position of a notice in the pager' },
+  { key: 'tours.addedToDay', because: 'the number of the day a tour was added to' },
+  { key: 'tours.planner.waypointLabel', because: 'the position of a waypoint on the tour' },
+];
+
+const COUNT_PARAM_RE = /\{(?:count|n)\}/;
+
+/**
+ * en strings carrying a count param outside any plural group, and NOT_PLURAL
+ * entries that no longer name such a string.
+ */
+function checkCountStrings(enFiles, notPlural = NOT_PLURAL, root = I18N_ROOT) {
+  const allowed = new Set(notPlural.map((e) => e.key));
+  const ungrouped = [];
+  const seen = new Set();
+  for (const file of enFiles) {
+    const entries = readCatalog('en', file, root);
+    const groups = pluralGroups(entries.map((e) => e.key));
+    for (const { key, value } of entries) {
+      if (!COUNT_PARAM_RE.test(value) || groups.has(key) || pluralFormOf(key, groups)) continue;
+      if (key.endsWith('.other') && groups.has(key.slice(0, -'.other'.length))) continue;
+      if (allowed.has(key)) seen.add(key);
+      else ungrouped.push({ file, key });
+    }
+  }
+  return { ungrouped, stale: [...allowed].filter((key) => !seen.has(key)) };
 }
 
 function diffSets(reference, candidate) {
@@ -141,6 +172,7 @@ function checkParity() {
     }
   }
 
+  report.countDrift = checkCountStrings(enFiles);
   return report;
 }
 
@@ -181,24 +213,39 @@ function formatReport(report) {
     }
   }
 
+  if (report.countDrift) {
+    const { ungrouped, stale } = report.countDrift;
+    if (ungrouped.length === 0 && stale.length === 0) {
+      lines.push('Count strings: OK');
+    } else {
+      lines.push('Count strings: en strings with {count} or {n} that are no plural group');
+      for (const { file, key } of ungrouped) {
+        lines.push(`  en/${file}: ${key} (add ${key}.one and the other forms, see shared/CLAUDE.md)`);
+      }
+      for (const key of stale) lines.push(`  NOT_PLURAL lists ${key}, which is no ungrouped count string: remove it`);
+    }
+  }
+
   return lines.join('\n');
 }
 
 // Export a structured API for vitest. The CLI entry point only runs when
 // executed directly (`node scripts/i18n-parity.mjs`), so importing this file
 // from a spec does not produce side effects.
-export { checkParity, formatReport };
+export { checkCountStrings, checkParity, formatReport };
 
 const isCli = process.argv[1] && process.argv[1].endsWith('i18n-parity.mjs');
 if (isCli) {
   const strict = process.argv.includes('--strict');
   const filesOnly = process.argv.includes('--files-only');
   const report = checkParity();
-  process.stdout.write(formatReport(filesOnly ? { ...report, keyDrift: [], pluralDrift: [] } : report) + '\n');
+  const shown = filesOnly ? { ...report, keyDrift: [], pluralDrift: [], countDrift: null } : report;
+  process.stdout.write(formatReport(shown) + '\n');
 
   if (strict) {
     const hasFileDrift = report.fileDrift.length > 0;
     const hasKeyDrift = filesOnly ? false : report.keyDrift.length > 0 || report.pluralDrift.length > 0;
-    if (hasFileDrift || hasKeyDrift) process.exit(1);
+    const hasCountDrift = !filesOnly && (report.countDrift.ungrouped.length > 0 || report.countDrift.stale.length > 0);
+    if (hasFileDrift || hasKeyDrift || hasCountDrift) process.exit(1);
   }
 }

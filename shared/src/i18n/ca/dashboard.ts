@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} viatges (arxivats: {archived})',
   'dashboard.subtitle.trips.one': '{count} viatge (arxivats: {archived})',
   'dashboard.subtitle.empty': 'Comença el teu primer viatge',
-  'dashboard.subtitle.activeOne': '{count} viatge actiu',
-  'dashboard.subtitle.activeMany': '{count} viatges actius',
+  'dashboard.subtitle.active': '{count} viatges actius',
+  'dashboard.subtitle.active.one': '{count} viatge actiu',
   'dashboard.subtitle.archivedSuffix': ' · {count} arxivats',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} arxivat',
   'dashboard.newTrip': 'Viatge nou',
@@ -200,6 +200,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Vols treure dies?',
   'dashboard.shrinkIntro': 'En desar les noves dates es treuen aquests dies:',
   'dashboard.shrinkMoreDays': '+{count} més',
+  'dashboard.shrinkMoreDays.one': '+{count} més',
   'dashboard.shrinkLastDays': 'Es treuen els últims dies, no els primers',
   'dashboard.shrinkLastDaysHint':
     "Els plans de cada dia es mouen amb les noves dates, així que sempre es treuen els últims dies del pla, també quan ha canviat l'inici.",

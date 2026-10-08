@@ -6,8 +6,8 @@ const dashboard: TranslationStrings = {
   'dashboard.subtitle.trips': '{count} voyages (archivés : {archived})',
   'dashboard.subtitle.trips.one': '{count} voyage (archivés : {archived})',
   'dashboard.subtitle.empty': 'Commencez votre premier voyage',
-  'dashboard.subtitle.activeOne': '{count} voyage actif',
-  'dashboard.subtitle.activeMany': '{count} voyages actifs',
+  'dashboard.subtitle.active': '{count} voyages actifs',
+  'dashboard.subtitle.active.one': '{count} voyage actif',
   'dashboard.subtitle.archivedSuffix': ' · {count} archivés',
   'dashboard.subtitle.archivedSuffix.one': ' · {count} archivé',
   'dashboard.newTrip': 'Nouveau voyage',
@@ -116,6 +116,7 @@ const dashboard: TranslationStrings = {
   'dashboard.shrinkTitle': 'Retirer des jours ?',
   'dashboard.shrinkIntro': 'En enregistrant les nouvelles dates, ces jours sont retirés :',
   'dashboard.shrinkMoreDays': '+{count} de plus',
+  'dashboard.shrinkMoreDays.one': '+{count} de plus',
   'dashboard.shrinkLastDays': 'Ce sont les derniers jours qui partent, pas les premiers',
   'dashboard.shrinkLastDaysHint':
     'Les programmes des jours suivent les nouvelles dates : ce sont donc toujours les derniers jours de votre plan qui sont retirés, même quand le début a changé.',

@@ -76,6 +76,8 @@ const trip: TranslationStrings = {
   'transit.transfers.one': '{count} přestup',
   'transit.transfers.few': '{count} přestupy',
   'transit.min': '{count} min',
+  'transit.min.one': '{count} min',
+  'transit.min.few': '{count} min',
   'transit.stops': '{count} zastávek',
   'transit.stops.one': '{count} zastávka',
   'transit.stops.few': '{count} zastávky',

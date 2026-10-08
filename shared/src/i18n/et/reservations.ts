@@ -182,6 +182,7 @@ const reservations: TranslationStrings = {
   'reservations.airtrail.otherFlights': 'Teised lennud',
   'reservations.airtrail.empty': 'Sinu AirTraili kontolt lende ei leitud.',
   'reservations.airtrail.importCta': 'Impordi {count}',
+  'reservations.airtrail.importCta.one': 'Impordi {count}',
   'reservations.airtrail.joinConnection': 'Impordi ühe lennuna vahepeatusega: {stops}',
   'reservations.costsLabel': 'Kulud',
   'reservations.createExpense': 'Loo kulu',

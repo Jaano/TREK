@@ -73,6 +73,7 @@ const trip: TranslationStrings = {
   'transit.transfers': '{count} átszállás',
   'transit.transfers.one': '{count} átszállás',
   'transit.min': '{count} perc',
+  'transit.min.one': '{count} perc',
   'transit.stops': '{count} megálló',
   'transit.stops.one': '{count} megálló',
   'transit.walkTo': 'Gyaloglás ide: {name}',

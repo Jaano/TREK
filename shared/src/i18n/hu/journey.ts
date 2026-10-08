@@ -669,6 +669,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Javaslat elvetve',
   'journey.suggestions.restore': 'Elvetett javaslatok visszahozása',
   'journey.suggestions.restoreCount': 'Elvetett javaslatok ({count})',
+  'journey.suggestions.restoreCount.one': 'Elvetett javaslatok ({count})',
   'journey.suggestions.restored': '{count} javaslat visszahozva',
   'journey.suggestions.restored.one': '{count} javaslat visszahozva',
   'journey.detail.addOnThisDay': 'Bejegyzés hozzáadása ehhez a naphoz',

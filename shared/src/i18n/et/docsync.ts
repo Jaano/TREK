@@ -71,6 +71,7 @@ const docsync: TranslationStrings = {
   'docsync.state.scope_drift': 'Kaustast välja teisaldatud',
 
   'docsync.conflict.resolve': 'Lahenda {count}',
+  'docsync.conflict.resolve.one': 'Lahenda {count}',
 
   'docsync.conflict.title': 'Mõlemad koopiad on muutunud',
   'docsync.conflict.keepTrek': 'Säilita TREKi versioon',

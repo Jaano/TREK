@@ -197,6 +197,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noMatch': 'Yol boyunca “{name}” ile eşleşen bir şey yok.',
   'roadtrip.poi.noneMatchFilters': 'Yol boyunca bu filtrelere uyan bir yer yok.',
   'roadtrip.poi.foundFiltered': 'yol üzerinde {total} içinden {count}',
+  'roadtrip.poi.foundFiltered.one': 'yol üzerinde {total} içinden {count}',
   'roadtrip.poi.truncated':
     '{count} bölümde bir yanıta sığandan fazlası vardı. Geri kalanı görmek için koridoru daraltın.',
   'roadtrip.poi.truncated.one':

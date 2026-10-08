@@ -672,7 +672,9 @@ const admin: TranslationStrings = {
   'admin.plugins.cap.requiresAddon': '{addon} əlavəsini tələb edir',
   'admin.plugins.cap.dependsOn': '{id} {version} tələb edir',
   'admin.plugins.dep.addonDisabledToast': 'Əvvəlcə tələb olunan əlavələri aktivləşdirin: {addons}',
+  'admin.plugins.dep.addonDisabledToast.one': 'Əvvəlcə tələb olunan əlavəni aktivləşdirin: {addons}',
   'admin.plugins.dep.autoEnabled': 'Əvvəlcə tələb olunan plaginlər aktivləşdirildi: {plugins}',
+  'admin.plugins.dep.autoEnabled.one': 'Əvvəlcə tələb olunan plagin aktivləşdirildi: {plugins}',
   'admin.plugins.dep.downloaded': '{id} endirildi',
   'admin.plugins.dep.resolveTitle': 'Çatışmayan asılılıqlar',
   'admin.plugins.dep.resolveBody':
@@ -821,6 +823,7 @@ const admin: TranslationStrings = {
   'admin.audit.refresh': 'Yenilə',
   'admin.audit.loadMore': 'Daha çox yüklə',
   'admin.audit.showing': '{count} yüklənib · cəmi {total}',
+  'admin.audit.showing.one': '{count} yüklənib · cəmi {total}',
   'admin.audit.col.time': 'Vaxt',
   'admin.audit.col.user': 'İstifadəçi',
   'admin.audit.col.action': 'Əməliyyat',
