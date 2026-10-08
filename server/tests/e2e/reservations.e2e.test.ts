@@ -83,6 +83,7 @@ async function seedDay(tripId: number, dayNumber: number, date: string) {
   return (await makeDay(orm, tripId, { day_number: dayNumber, date })).id;
 }
 import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
+import { legacyBoundIntegerText } from '../../src/nest/common/row-id';
 
 describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real reservation SQL)', () => {
   let server: Server;
@@ -269,7 +270,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     expect(create.status).toBe(201);
     expect(create.body.accommodation).toMatchObject({ place_id: placeId, start_day_id: dayId, end_day_id: dayId, place_name: 'Grand Hotel' });
     // The partner hotel reservation is auto-created by the real DaysService SQL.
-    const linked = await findRow(orm, Reservations, { accommodation_id: String(create.body.accommodation.id) });
+    const linked = await findRow(orm, Reservations, { accommodation_id: legacyBoundIntegerText(create.body.accommodation.id) });
     expect(linked).toMatchObject({ type: 'hotel', status: 'confirmed' });
     const list = await request(server).get(`/api/trips/${tripId}/accommodations`).set('Cookie', sessionCookie(1));
     expect(list.status).toBe(200);

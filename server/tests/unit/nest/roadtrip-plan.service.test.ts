@@ -30,6 +30,7 @@ import type { RoadtripPreferences } from '@trek/shared';
 import { bookendAssignmentId, type RoadtripStop } from '@trek/shared/roadtrip';
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { legacyBoundIntegerText } from '../../../src/nest/common/row-id';
 
 /** Every leg an hour and 60 km, whatever it joins. */
 function hourlyRouter() {
@@ -94,7 +95,7 @@ async function addReservation(fields: {
   const { accommodation_id, ...rest } = fields;
   return insertRow(await sharedTestOrm(db), Reservations, {
     ...rest,
-    ...(accommodation_id === undefined ? {} : { accommodation_id: String(accommodation_id) }),
+    ...(accommodation_id === undefined ? {} : { accommodation_id: legacyBoundIntegerText(accommodation_id) }),
   });
 }
 

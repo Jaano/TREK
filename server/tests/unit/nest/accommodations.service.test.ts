@@ -43,27 +43,28 @@ import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
 import { Places } from '../../../src/db/entities/Places.entity';
 import { Reservations } from '../../../src/db/entities/Reservations.entity';
 import { RoadtripVias } from '../../../src/db/entities/RoadtripVias.entity';
+import { legacyBoundIntegerText } from '../../../src/nest/common/row-id';
 
 const orm = () => sharedTestOrm(testDb);
 
 /** The first booking linked to a stay, or null. */
 async function linkedReservation(accommodationId: number) {
-  return findRow(await orm(), Reservations, { accommodation_id: String(accommodationId) });
+  return findRow(await orm(), Reservations, { accommodation_id: legacyBoundIntegerText(accommodationId) });
 }
 
 /** Every booking linked to a stay. */
 async function linkedReservations(accommodationId: number) {
-  return findRows(await orm(), Reservations, { accommodation_id: String(accommodationId) }, { id: 'asc' });
+  return findRows(await orm(), Reservations, { accommodation_id: legacyBoundIntegerText(accommodationId) }, { id: 'asc' });
 }
 
 /** How many bookings a stay holds. */
 async function linkedCount(accommodationId: number): Promise<{ n: number }> {
-  return { n: await countRows(await orm(), Reservations, { accommodation_id: String(accommodationId) }) };
+  return { n: await countRows(await orm(), Reservations, { accommodation_id: legacyBoundIntegerText(accommodationId) }) };
 }
 
 /** A second hotel booking on the same stay. */
 async function addSecondBooking(tripId: number, accommodationId: number): Promise<number> {
-  return insertRow(await orm(), Reservations, { trip: tripId, type: 'hotel', title: 'Second booking', accommodation_id: String(accommodationId) });
+  return insertRow(await orm(), Reservations, { trip: tripId, type: 'hotel', title: 'Second booking', accommodation_id: legacyBoundIntegerText(accommodationId) });
 }
 
 /** An expense, optionally on a booking. */
@@ -312,7 +313,7 @@ describe('updateAccommodation', () => {
     const { accommodation: accom } = (await svc.createAccommodation(trip.id, {
       place_id: place.id, start_day_id: day.id, end_day_id: day.id,
     })) as any;
-    await updateRows(await orm(), Reservations, { accommodation_id: String(accom.id) }, { confirmation_number: 'RES-9' });
+    await updateRows(await orm(), Reservations, { accommodation_id: legacyBoundIntegerText(accom.id) }, { confirmation_number: 'RES-9' });
 
     const existing = (await svc.getAccommodation(accom.id, trip.id))!;
     await svc.updateAccommodation(accom.id, existing as any, { check_in: '15:00' });
@@ -332,7 +333,7 @@ describe('updateAccommodation', () => {
     // The linked reservation already carries a DIFFERENT, non-null confirmation —
     // if the stay-side update used `coalesceParam`'s (existing-wins) direction
     // instead of `coalesceOverride`'s (new-wins), it would keep this value.
-    await updateRows(await orm(), Reservations, { accommodation_id: String(accom.id) }, { confirmation_number: 'RES-OLD' });
+    await updateRows(await orm(), Reservations, { accommodation_id: legacyBoundIntegerText(accom.id) }, { confirmation_number: 'RES-OLD' });
 
     const existing = (await svc.getAccommodation(accom.id, trip.id))!;
     await svc.updateAccommodation(accom.id, existing as any, { confirmation: 'ACC-CHANGED' });
@@ -373,7 +374,7 @@ describe('deleteAccommodation', () => {
     const accom = createDayAccommodation(testDb, trip.id, place.id, day.id, day.id) as any;
 
     // Remove the auto-created reservation so there's no linked one
-    await deleteRows(await orm(), Reservations, { accommodation_id: String(accom.id) });
+    await deleteRows(await orm(), Reservations, { accommodation_id: legacyBoundIntegerText(accom.id) });
 
     const result = await svc.deleteAccommodation(accom.id);
     expect(result.linkedReservationId).toBeNull();

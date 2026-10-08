@@ -39,6 +39,7 @@ import { Days } from '../../../src/db/entities/Days.entity';
 import { Places } from '../../../src/db/entities/Places.entity';
 import { Reservations } from '../../../src/db/entities/Reservations.entity';
 import { Trips } from '../../../src/db/entities/Trips.entity';
+import { legacyBoundIntegerText } from '../../../src/nest/common/row-id';
 
 let orm: TestOrm;
 
@@ -184,7 +185,7 @@ describe('Tool: delete_day', () => {
     const place = createPlace(testDb, trip.id, { name: 'Harbour Hotel' });
     const stay = createDayAccommodation(testDb, trip.id, place.id, d2.id, d2.id);
     const { id: reservationId } = await makeReservation(orm, trip.id, {
-      day: d2.id, title: 'Harbour Hotel', type: 'hotel', accommodation_id: String(stay.id),
+      day: d2.id, title: 'Harbour Hotel', type: 'hotel', accommodation_id: legacyBoundIntegerText(stay.id),
     });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'delete_day', arguments: { tripId: trip.id, dayId: d2.id } });
@@ -492,7 +493,7 @@ describe('Tool: create_place_accommodation', () => {
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'place:created', expect.objectContaining({ place: expect.anything() }));
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'accommodation:created', expect.objectContaining({ accommodation: expect.anything() }));
       // The partner hotel reservation rides along.
-      const linked = (await findRow(orm, Reservations, { accommodation_id: String(data.accommodation.id) }))!;
+      const linked = (await findRow(orm, Reservations, { accommodation_id: legacyBoundIntegerText(data.accommodation.id) }))!;
       expect(linked.type).toBe('hotel');
     });
   });
