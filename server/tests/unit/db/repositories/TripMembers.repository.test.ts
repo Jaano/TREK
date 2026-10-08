@@ -12,6 +12,8 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { addTripMember, createTrip, createUser } from '../../../helpers/factories';
 import { TripMembers } from '../../../../src/db/entities/TripMembers.entity';
 import type { TripMembersRepository } from '../../../../src/db/repositories/TripMembers.repository';
+import { Users } from '../../../../src/db/entities/Users.entity';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -24,8 +26,19 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
+/** The membership row of the user on the trip, or null. */
+function memberRow(tripId: number, userId: number) {
+  return findRow(t, TripMembers, { trip: tripId, user: userId });
+}
+
+/** The three columns a membership is: trip, user and who invited them. */
+function membership(row: { trip_id?: number; user_id?: number; invited_by?: number | null } | null) {
+  return row ? { trip_id: row.trip_id, user_id: row.user_id, invited_by: row.invited_by } : row;
+}
+
 const legacyRoster = (tripId: number): Set<number> => {
   const rows = testDb
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     .prepare('SELECT user_id FROM trip_members WHERE trip_id = ? UNION SELECT user_id FROM trips WHERE id = ?')
     .all(tripId, tripId) as { user_id: number }[];
   return new Set(rows.map((r) => r.user_id));
@@ -92,9 +105,9 @@ describe('TripMembersRepository — listUserIdsByTrip / exists / addMember (Plan
     const { user: second } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, first.id);
-    testDb.prepare('UPDATE trip_members SET added_at = ? WHERE trip_id = ? AND user_id = ?').run('2026-01-01 00:00:00', trip.id, first.id);
+    await updateRows(t, TripMembers, { trip: trip.id, user: first.id }, { added_at: '2026-01-01 00:00:00' });
     addTripMember(testDb, trip.id, second.id);
-    testDb.prepare('UPDATE trip_members SET added_at = ? WHERE trip_id = ? AND user_id = ?').run('2026-02-01 00:00:00', trip.id, second.id);
+    await updateRows(t, TripMembers, { trip: trip.id, user: second.id }, { added_at: '2026-02-01 00:00:00' });
 
     expect(await tripMembers.listUserIdsByTrip(trip.id)).toEqual([first.id, second.id]);
   });
@@ -125,13 +138,13 @@ describe('TripMembersRepository — listUserIdsByTrip / exists / addMember (Plan
     const trip = createTrip(testDb, owner.id);
 
     await tripMembers.addMember(trip.id, joiner.id, inviter.id);
-    const row = testDb.prepare('SELECT trip_id, user_id, invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, joiner.id);
+    const row = membership(await memberRow(trip.id, joiner.id));
     expect(row).toEqual({ trip_id: trip.id, user_id: joiner.id, invited_by: inviter.id });
 
     const { user: joiner2 } = createUser(testDb);
     await tripMembers.addMember(trip.id, joiner2.id, null);
-    const row2 = testDb.prepare('SELECT invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, joiner2.id);
-    expect(row2).toEqual({ invited_by: null });
+    const row2 = await memberRow(trip.id, joiner2.id);
+    expect({ invited_by: row2?.invited_by }).toEqual({ invited_by: null });
   });
 });
 
@@ -142,6 +155,7 @@ describe('TripMembersRepository — listUserIdsByTrip / exists / addMember (Plan
 
 /** TM2's statement, run raw on the same rows — the parity oracle every assertion below is checked against. */
 function legacyListWithUserAndInviter(tripId: number, ownerId: number): unknown {
+  // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
   return testDb.prepare(`
     SELECT u.id, COALESCE(u.display_name, u.username) AS username, u.email, u.avatar, u.is_guest,
       CASE WHEN u.id = ? THEN 'owner' ELSE 'member' END as role,
@@ -161,27 +175,27 @@ describe('TripMembersRepository.listWithUserAndInviter (TM2, Plan 3c Task 6)', (
     const trip = createTrip(testDb, owner.id);
 
     const { user: inviterWithName } = createUser(testDb, { username: 'inviter-1' });
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Inviter One', inviterWithName.id);
+    await updateRows(t, Users, { id: inviterWithName.id }, { display_name: 'Inviter One' });
     const { user: inviterBare } = createUser(testDb, { username: 'inviter-2' });
 
     const { user: memberWithDisplayName } = createUser(testDb, { username: 'member-1-handle' });
-    testDb.prepare('UPDATE users SET display_name = ?, avatar = ? WHERE id = ?').run('Member One', 'm1.png', memberWithDisplayName.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(trip.id, memberWithDisplayName.id, inviterWithName.id);
+    await updateRows(t, Users, { id: memberWithDisplayName.id }, { display_name: 'Member One', avatar: 'm1.png' });
+    await insertRow(t, TripMembers, { trip: trip.id, user: memberWithDisplayName.id, invitedByRef: inviterWithName.id });
 
     const { user: memberBare } = createUser(testDb, { username: 'member-2-handle' });
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(trip.id, memberBare.id, inviterBare.id);
+    await insertRow(t, TripMembers, { trip: trip.id, user: memberBare.id, invitedByRef: inviterBare.id });
 
     const { user: memberNoInviter } = createUser(testDb, { username: 'member-3-handle' });
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, NULL)').run(trip.id, memberNoInviter.id);
+    await insertRow(t, TripMembers, { trip: trip.id, user: memberNoInviter.id, invitedByRef: null });
 
     const { user: guest } = createUser(testDb, { username: 'guest-handle' });
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(trip.id, guest.id, owner.id);
+    await updateRows(t, Users, { id: guest.id }, { is_guest: 1 });
+    await insertRow(t, TripMembers, { trip: trip.id, user: guest.id, invitedByRef: owner.id });
 
-    testDb.prepare('UPDATE trip_members SET added_at = ? WHERE trip_id = ? AND user_id = ?').run('2026-01-01 00:00:00', trip.id, memberWithDisplayName.id);
-    testDb.prepare('UPDATE trip_members SET added_at = ? WHERE trip_id = ? AND user_id = ?').run('2026-01-02 00:00:00', trip.id, memberBare.id);
-    testDb.prepare('UPDATE trip_members SET added_at = ? WHERE trip_id = ? AND user_id = ?').run('2026-01-03 00:00:00', trip.id, memberNoInviter.id);
-    testDb.prepare('UPDATE trip_members SET added_at = ? WHERE trip_id = ? AND user_id = ?').run('2026-01-04 00:00:00', trip.id, guest.id);
+    await updateRows(t, TripMembers, { trip: trip.id, user: memberWithDisplayName.id }, { added_at: '2026-01-01 00:00:00' });
+    await updateRows(t, TripMembers, { trip: trip.id, user: memberBare.id }, { added_at: '2026-01-02 00:00:00' });
+    await updateRows(t, TripMembers, { trip: trip.id, user: memberNoInviter.id }, { added_at: '2026-01-03 00:00:00' });
+    await updateRows(t, TripMembers, { trip: trip.id, user: guest.id }, { added_at: '2026-01-04 00:00:00' });
 
     const rows = await tripMembers.listWithUserAndInviter(trip.id, owner.id);
     expect(rows).toEqual(legacyListWithUserAndInviter(trip.id, owner.id));
@@ -196,7 +210,7 @@ describe('TripMembersRepository.listWithUserAndInviter (TM2, Plan 3c Task 6)', (
   it('TMEMREPO-012: the trip owner\'s own row (if ever a member) reports role "owner"', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, NULL)').run(trip.id, owner.id);
+    await insertRow(t, TripMembers, { trip: trip.id, user: owner.id, invitedByRef: null });
     const rows = await tripMembers.listWithUserAndInviter(trip.id, owner.id);
     expect(rows).toEqual([expect.objectContaining({ id: owner.id, role: 'owner' })]);
   });
@@ -228,7 +242,7 @@ describe('TripMembersRepository.isGuestOfTrip (TM18, security-sensitive, Plan 3c
   it('TMEMREPO-015: true only for a guest who is actually a member of THIS trip', async () => {
     const { user: owner } = createUser(testDb);
     const { user: guest } = createUser(testDb, { username: 'guest-scoped' });
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(t, Users, { id: guest.id }, { is_guest: 1 });
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, guest.id);
 
@@ -247,7 +261,7 @@ describe('TripMembersRepository.isGuestOfTrip (TM18, security-sensitive, Plan 3c
     const { user: ownerA } = createUser(testDb);
     const { user: ownerB } = createUser(testDb);
     const { user: guest } = createUser(testDb, { username: 'guest-of-a' });
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(t, Users, { id: guest.id }, { is_guest: 1 });
     const tripA = createTrip(testDb, ownerA.id);
     const tripB = createTrip(testDb, ownerB.id);
     addTripMember(testDb, tripA.id, guest.id);
@@ -270,7 +284,7 @@ describe('TripMembersRepository.addIgnoringConflict / remove (TM8/TM14/TM15, sec
     const { user: newOwner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     await tripMembers.addIgnoringConflict(trip.id, former.id, newOwner.id);
-    const row = testDb.prepare('SELECT trip_id, user_id, invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, former.id);
+    const row = membership(await memberRow(trip.id, former.id));
     expect(row).toEqual({ trip_id: trip.id, user_id: former.id, invited_by: newOwner.id });
   });
 
@@ -282,9 +296,9 @@ describe('TripMembersRepository.addIgnoringConflict / remove (TM8/TM14/TM15, sec
     // The existing row's invited_by (NULL, from addTripMember) must survive —
     // an upsert-merge would overwrite it, which is NOT what `INSERT OR IGNORE` does.
     await expect(tripMembers.addIgnoringConflict(trip.id, member.id, owner.id)).resolves.toBeUndefined();
-    const row = testDb.prepare('SELECT invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, member.id);
-    expect(row).toEqual({ invited_by: null });
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, member.id) as { n: number }).n).toBe(1);
+    const row = await memberRow(trip.id, member.id);
+    expect({ invited_by: row?.invited_by }).toEqual({ invited_by: null });
+    expect(await countRows(t, TripMembers, { trip: trip.id, user: member.id })).toBe(1);
   });
 
   it('TMEMREPO-021: remove deletes exactly the (trip, user) row, leaving other members untouched', async () => {
@@ -296,8 +310,8 @@ describe('TripMembersRepository.addIgnoringConflict / remove (TM8/TM14/TM15, sec
     addTripMember(testDb, trip.id, memberB.id);
 
     await tripMembers.remove(trip.id, memberA.id);
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, memberA.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, memberB.id)).toBeDefined();
+    expect(await memberRow(trip.id, memberA.id)).toBeNull();
+    expect(await memberRow(trip.id, memberB.id)).not.toBeNull();
   });
 
   it('TMEMREPO-022: remove on a missing row is a silent no-op', async () => {
@@ -330,13 +344,13 @@ describe('NaN user_id — rule 15 (a non-numeric route id parses to NaN, must no
     addTripMember(testDb, trip.id, member.id);
     await expect(tripMembers.remove(trip.id, NaN)).resolves.toBeUndefined();
     // The real member row survives — NaN must not accidentally match anything.
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, member.id)).toBeDefined();
+    expect(await memberRow(trip.id, member.id)).not.toBeNull();
   });
 
   it('TMEMREPO-025: isGuestOfTrip(tripId, NaN) resolves false, matching the legacy 404 Guest not found', async () => {
     const { user: owner } = createUser(testDb);
     const { user: guest } = createUser(testDb);
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(t, Users, { id: guest.id }, { is_guest: 1 });
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, guest.id);
     await expect(tripMembers.isGuestOfTrip(trip.id, NaN)).resolves.toBe(false);
@@ -349,12 +363,13 @@ describe('TripMembersRepository.listRawUsernameAndDisplayName (RP3)', () => {
   it('TMEMREPO-026: byte-identical to the legacy statement — raw username AND display_name, NOT TM2\'s COALESCE', async () => {
     const { user: owner } = createUser(testDb);
     const { user: named } = createUser(testDb, { username: 'bare-name' });
-    testDb.prepare('UPDATE users SET display_name = ?, avatar = ? WHERE id = ?').run('Displayed', 'a.png', named.id);
+    await updateRows(t, Users, { id: named.id }, { display_name: 'Displayed', avatar: 'a.png' });
     const { user: bare } = createUser(testDb, { username: 'no-display' });
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, named.id);
     addTripMember(testDb, trip.id, bare.id);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(
       'SELECT u.id, u.username, u.display_name, u.avatar FROM trip_members tm JOIN users u ON u.id = tm.user_id WHERE tm.trip_id = ?',
     ).all(trip.id);
@@ -388,15 +403,15 @@ describe('TripMembersRepository.clearInvitedBy (Plan 4 Task 1, UC4)', () => {
     const { user: other } = createUser(testDb, { username: 'other' });
     const tripA = createTrip(testDb, owner.id);
     const tripB = createTrip(testDb, owner.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(tripA.id, other.id, departing.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(tripB.id, owner.id, departing.id);
+    await insertRow(t, TripMembers, { trip: tripA.id, user: other.id, invitedByRef: departing.id });
+    await insertRow(t, TripMembers, { trip: tripB.id, user: owner.id, invitedByRef: departing.id });
     // Control row: invited by someone else entirely — must survive untouched.
     const { user: controlMember } = createUser(testDb, { username: 'control-member' });
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(tripA.id, controlMember.id, owner.id);
+    await insertRow(t, TripMembers, { trip: tripA.id, user: controlMember.id, invitedByRef: owner.id });
 
     await tripMembers.clearInvitedBy(departing.id);
 
-    const rows = testDb.prepare('SELECT trip_id, user_id, invited_by FROM trip_members ORDER BY trip_id, user_id').all();
+    const rows = (await findRows(t, TripMembers, {}, { trip: 'asc', user: 'asc' })).map(membership);
     expect(rows).toEqual([
       { trip_id: tripA.id, user_id: other.id, invited_by: null },
       { trip_id: tripA.id, user_id: controlMember.id, invited_by: owner.id },
@@ -411,6 +426,6 @@ describe('TripMembersRepository.clearInvitedBy (Plan 4 Task 1, UC4)', () => {
     addTripMember(testDb, trip.id, member.id);
 
     await expect(tripMembers.clearInvitedBy(999999)).resolves.toBeUndefined();
-    expect((testDb.prepare('SELECT invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, member.id) as { invited_by: number | null }).invited_by).toBeNull();
+    expect((await memberRow(trip.id, member.id))?.invited_by).toBeNull();
   });
 });

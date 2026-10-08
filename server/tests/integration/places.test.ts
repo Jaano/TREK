@@ -29,16 +29,28 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createAdmin, createTrip, createPlace, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { countRows, findRow, findRows, updateRows } from '../helpers/factories/rows';
+import { makeCategory, makeTag } from '../helpers/factories/places';
+import { makeBudgetItem } from '../helpers/factories/budget';
+import { setAppSetting } from '../helpers/factories/settings';
+import { Addons } from '../../src/db/entities/Addons.entity';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { Categories } from '../../src/db/entities/Categories.entity';
+import { PlaceRatings } from '../../src/db/entities/PlaceRatings.entity';
+import { Places } from '../../src/db/entities/Places.entity';
 import { PlacesService } from '../../src/nest/places/places.service';
 import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions-cache';
 import { broadcast } from '../../src/websocket';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 // Since the place DI fold the two outbound-I/O paths are stubbed as spies on the
 // container's PlacesService singleton (permissions precedent) instead of a path
 // mock of the deleted services/placeService. Bare spies keep the real
@@ -54,6 +66,7 @@ const KMZ_FIXTURE = path.join(__dirname, '../fixtures/test.kmz');
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -127,7 +140,8 @@ describe('Create place', () => {
   it('PLACE-016 — create place with category assigns it correctly', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const cat = testDb.prepare('SELECT id FROM categories LIMIT 1').get() as { id: number };
+    const cat = await findRow(orm, Categories, {});
+    if (!cat) throw new Error('the snapshot seeds no category');
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/places`)
@@ -185,7 +199,7 @@ describe('List places', () => {
   it('PLACE-017 — GET /api/trips/:tripId/places?category=X filters by category id', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const cats = testDb.prepare('SELECT id, name FROM categories LIMIT 2').all() as { id: number; name: string }[];
+    const cats = (await findRows(orm, Categories)).slice(0, 2);
     expect(cats.length).toBeGreaterThanOrEqual(2);
 
     createPlace(testDb, trip.id, { name: 'Hotel Alpha', category_id: cats[0].id });
@@ -306,7 +320,7 @@ describe('Tags', () => {
   it('PLACE-013 — GET /api/tags returns user tags', async () => {
     const { user } = createUser(testDb);
     // Create a tag in DB
-    testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('Must-see', user.id);
+    await makeTag(orm, user.id, { name: 'Must-see' });
 
     const res = await request(app)
       .get('/api/tags')
@@ -321,8 +335,8 @@ describe('Tags', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     // Pre-create a tag
-    const tagResult = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('Romantic', user.id);
-    const tagId = tagResult.lastInsertRowid as number;
+    const tagResult = await makeTag(orm, user.id, { name: 'Romantic' });
+    const tagId = tagResult.id;
 
     // The places API accepts `tags` as an array of tag IDs
     const res = await request(app)
@@ -340,8 +354,8 @@ describe('Tags', () => {
 
   it('PLACE-012 — DELETE /api/tags/:id removes tag', async () => {
     const { user } = createUser(testDb);
-    const tagResult = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('OldTag', user.id);
-    const tagId = tagResult.lastInsertRowid as number;
+    const tagResult = await makeTag(orm, user.id, { name: 'OldTag' });
+    const tagId = tagResult.id;
 
     const res = await request(app)
       .delete(`/api/tags/${tagId}`)
@@ -362,10 +376,10 @@ describe('Update place tags', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const tag1Result = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('OldTag', user.id);
-    const tag2Result = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('NewTag', user.id);
-    const tag1Id = tag1Result.lastInsertRowid as number;
-    const tag2Id = tag2Result.lastInsertRowid as number;
+    const tag1Result = await makeTag(orm, user.id, { name: 'OldTag' });
+    const tag2Result = await makeTag(orm, user.id, { name: 'NewTag' });
+    const tag1Id = tag1Result.id;
+    const tag2Id = tag2Result.id;
 
     // Create place with tag1
     const createRes = await request(app)
@@ -390,8 +404,8 @@ describe('Update place tags', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const tagResult = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('RemovableTag', user.id);
-    const tagId = tagResult.lastInsertRowid as number;
+    const tagResult = await makeTag(orm, user.id, { name: 'RemovableTag' });
+    const tagId = tagResult.id;
 
     const createRes = await request(app)
       .post(`/api/trips/${trip.id}/places`)
@@ -462,8 +476,8 @@ describe('Search places', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const tagResult = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('Scenic', user.id);
-    const tagId = tagResult.lastInsertRowid as number;
+    const tagResult = await makeTag(orm, user.id, { name: 'Scenic' });
+    const tagId = tagResult.id;
 
     // Create place with the tag and one without
     const createRes = await request(app)
@@ -517,7 +531,7 @@ describe('Naver list import', () => {
     const trip = createTrip(testDb, user.id);
     const folderId = 'a04c3f7a8dd24d42a8eb52d710a700cc';
 
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
+    await updateRows(orm, Addons, { id: 'naver_list_import' }, { enabled: true });
 
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({
@@ -569,7 +583,7 @@ describe('Naver list import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
+    await updateRows(orm, Addons, { id: 'naver_list_import' }, { enabled: true });
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/places/import/naver-list`)
@@ -585,7 +599,7 @@ describe('Naver list import', () => {
     const trip = createTrip(testDb, user.id);
     const folderId = 'abc123';
 
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
+    await updateRows(orm, Addons, { id: 'naver_list_import' }, { enabled: true });
 
     const fetchMock = vi.fn()
       .mockResolvedValueOnce({ ok: false });
@@ -606,7 +620,7 @@ describe('Naver list import', () => {
     const trip = createTrip(testDb, user.id);
     const folderId = 'abc123';
 
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
+    await updateRows(orm, Addons, { id: 'naver_list_import' }, { enabled: true });
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
@@ -629,7 +643,7 @@ describe('Naver list import', () => {
     const trip = createTrip(testDb, user.id);
     const folderId = 'abc123';
 
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
+    await updateRows(orm, Addons, { id: 'naver_list_import' }, { enabled: true });
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
@@ -658,7 +672,7 @@ describe('Naver list import', () => {
     const trip = createTrip(testDb, user.id);
     const folderId = 'abc123';
 
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
+    await updateRows(orm, Addons, { id: 'naver_list_import' }, { enabled: true });
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
@@ -719,8 +733,7 @@ describe('KML/KMZ Import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)')
-      .run('Museums', '#3b82f6', 'Landmark', user.id);
+    await makeCategory(orm, { name: 'Museums', color: '#3b82f6', icon: 'Landmark', user: user.id });
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/places/import/map`)
@@ -745,8 +758,7 @@ describe('KML/KMZ Import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)')
-      .run('Parks', '#22c55e', 'Trees', user.id);
+    await makeCategory(orm, { name: 'Parks', color: '#22c55e', icon: 'Trees', user: user.id });
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/places/import/map`)
@@ -983,7 +995,7 @@ describe('Delete place — permission edge cases', () => {
     const place = createPlace(testDb, trip.id, { name: 'Restricted Place' });
 
     // Restrict place edits to trip owner only
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_place_edit', 'trip_owner')").run();
+    await setAppSetting(orm, 'perm_place_edit', 'trip_owner');
     await invalidatePermissionsCache();
 
     const res = await request(app)
@@ -1077,8 +1089,8 @@ describe('H1 — trip id parsed once at the gate (rule 21)', () => {
   it('PUT with tags by the hex-spelled trip id 404s "Trip not found" (Task 9 fix wave: `verifyTripAccess` now gates BEFORE the place-id read, so the string changed from "Place not found") and leaves the tags untouched (H1 live: they used to be wiped)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const tagResult = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('Original', user.id);
-    const tagId = tagResult.lastInsertRowid as number;
+    const tagResult = await makeTag(orm, user.id, { name: 'Original' });
+    const tagId = tagResult.id;
     const createRes = await request(app)
       .post(`/api/trips/${trip.id}/places`)
       .set('Cookie', authCookie(user.id))
@@ -1113,7 +1125,7 @@ describe('H1 — trip id parsed once at the gate (rule 21)', () => {
       .send({ rating: 4 });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ?').get(place.id)).toEqual({ n: 0 });
+    expect(await countRows(orm, PlaceRatings, { place: place.id })).toBe(0);
   });
 
   it('POST create by the hex-spelled trip id now 404s "Trip not found" (Task 9 fix wave, M1: `verifyTripAccess` gates with `toRowId` before `create()` is ever reached — the base 94c6efbbc 500 this test used to mirror was ruled a defect, not the contract to preserve, once the gate itself refuses the id)', async () => {
@@ -1127,14 +1139,14 @@ describe('H1 — trip id parsed once at the gate (rule 21)', () => {
       .send({ name: 'Should not land' });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+    expect(await countRows(orm, Places, { trip: trip.id })).toBe(0);
   });
 
   it('DELETE :id by the hex-spelled trip id 404s, deletes nothing and broadcasts nothing, even with a linked expense (#1298)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Louvre' });
-    testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Tickets', 34, ?)").run(trip.id, place.id);
+    await makeBudgetItem(orm, trip.id, { name: 'Tickets', total_price: 34, place: place.id });
     const hexTripId = '0x' + trip.id.toString(16);
     vi.mocked(broadcast).mockClear();
 
@@ -1143,8 +1155,8 @@ describe('H1 — trip id parsed once at the gate (rule 21)', () => {
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Place not found' });
-    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(place.id)).toBeTruthy();
-    expect(testDb.prepare('SELECT id FROM budget_items WHERE place_id = ?').get(place.id)).toBeTruthy();
+    expect(await findRow(orm, Places, { id: place.id })).toBeTruthy();
+    expect(await findRow(orm, BudgetItems, { place: place.id })).toBeTruthy();
     expect(broadcast).not.toHaveBeenCalled();
   });
 
@@ -1152,7 +1164,7 @@ describe('H1 — trip id parsed once at the gate (rule 21)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Louvre' });
-    testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Tickets', 34, ?)").run(trip.id, place.id);
+    await makeBudgetItem(orm, trip.id, { name: 'Tickets', total_price: 34, place: place.id });
     const hexTripId = '0x' + trip.id.toString(16);
     vi.mocked(broadcast).mockClear();
 
@@ -1162,7 +1174,7 @@ describe('H1 — trip id parsed once at the gate (rule 21)', () => {
       .send({ ids: [place.id] });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(place.id)).toBeTruthy();
+    expect(await findRow(orm, Places, { id: place.id })).toBeTruthy();
     expect(broadcast).not.toHaveBeenCalled();
   });
 });
@@ -1206,7 +1218,7 @@ describe('A-H1 / A-M1 / B-H1 — verifyTripAccess parses once with toRowId (Task
         .send({ name: 'Should not land' });
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+      expect(await countRows(orm, Places, { trip: trip.id })).toBe(0);
     });
   });
 
@@ -1223,8 +1235,8 @@ describe('A-H1 / A-M1 / B-H1 — verifyTripAccess parses once with toRowId (Task
         .send({ name: 'Renamed' });
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
-      const row = testDb.prepare('SELECT name FROM places WHERE id = ?').get(place.id) as { name: string };
-      expect(row.name).toBe('Untouched');
+      const row = await findRow(orm, Places, { id: place.id });
+      expect(row?.name).toBe('Untouched');
     });
   });
 
@@ -1242,7 +1254,7 @@ describe('A-H1 / A-M1 / B-H1 — verifyTripAccess parses once with toRowId (Task
         .send({ ids: [place.id] });
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
-      expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(place.id)).toBeTruthy();
+      expect(await findRow(orm, Places, { id: place.id })).toBeTruthy();
       expect(broadcast).not.toHaveBeenCalled();
     });
   });
@@ -1276,7 +1288,7 @@ describe('A-H1 / A-M1 / B-H1 — verifyTripAccess parses once with toRowId (Task
         .send({ rating: 4 });
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ?').get(place.id)).toEqual({ n: 0 });
+      expect(await countRows(orm, PlaceRatings, { place: place.id })).toBe(0);
     });
   });
 
@@ -1306,7 +1318,7 @@ describe('A-H1 / A-M1 / B-H1 — verifyTripAccess parses once with toRowId (Task
         .attach('file', GPX_FIXTURE);
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+      expect(await countRows(orm, Places, { trip: trip.id })).toBe(0);
     });
   });
 });
@@ -1347,8 +1359,8 @@ describe('M1 — NUL-safe value quoting on the SQLite platform (rule 22)', () =>
     expect(res.status).toBe(201);
     expect(res.body.place.name).toBe(name);
 
-    const stored = testDb.prepare('SELECT name FROM places WHERE id = ?').get(res.body.place.id) as { name: string };
-    expect(stored.name).toBe(name);
+    const stored = await findRow(orm, Places, { id: res.body.place.id });
+    expect(stored?.name).toBe(name);
   });
 
   it('fuzzes every 0x01-0x1F control character in a created place name: none 500 and every one round-trips', async () => {
