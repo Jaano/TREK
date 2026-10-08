@@ -2,6 +2,7 @@ import archiver from 'archiver';
 import path from 'path';
 import { pipeline } from 'node:stream/promises';
 import { readEnv } from '../../app-config';
+import { resolveDataPaths } from '../../app-config/data-paths';
 import fs from 'fs';
 import { logError, logWarn } from '../audit/audit-log.logger';
 import type { DatabaseBackupStrategy } from '../database/database-backup.interface';
@@ -33,7 +34,7 @@ const describeError = (err: unknown): string => (err instanceof Error ? err.mess
 
 // The scratch and key directory. The database itself may live elsewhere
 // (TREK_DB_FILE); the database port knows where.
-const dataDir = path.join(__dirname, '../../../data');
+const { dataDir, encryptionKeyFile } = resolveDataPaths();
 const PRECOMPRESSED = /\.(jpe?g|png|webp|gif|heic|heif|avif|mp4|mov|m4v|webm|pdf|zip|gz)$/i;
 
 // Compressed upload cap for restore archives. Defaults to 500 MB, raisable via
@@ -281,7 +282,7 @@ export async function createBackup(
       // them. NOTE: this makes the backup file as sensitive as the key itself —
       // store/transfer it securely. Skipped when ENCRYPTION_KEY is provided via
       // env, since in that case the file is not the source of truth.
-      const encKeyPath = path.join(dataDir, '.encryption_key');
+      const encKeyPath = encryptionKeyFile;
       if (!readEnv().backup.encryptionKeyFromEnv && fs.existsSync(encKeyPath)) {
         archive.file(encKeyPath, { name: '.encryption_key' });
       }
@@ -438,7 +439,7 @@ export async function restoreFromZip({ storage, database }: BackupDeps, zipPath:
       // still overrides the file).
       const extractedEncKey = path.join(extractDir, '.encryption_key');
       if (fs.existsSync(extractedEncKey)) {
-        fs.copyFileSync(extractedEncKey, path.join(dataDir, '.encryption_key'));
+        fs.copyFileSync(extractedEncKey, encryptionKeyFile);
       }
     } finally {
       // The restored DB has different permission-override rows from

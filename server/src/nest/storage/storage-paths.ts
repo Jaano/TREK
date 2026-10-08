@@ -1,23 +1,20 @@
 import path from 'node:path';
+import { resolveDataPaths } from '../../app-config/data-paths';
 
 /**
- * The storage domain's one `__dirname` anchor (the uploads-root.ts idiom, and
- * eventually its replacement: the registry's defaults make this the single
- * source of truth the other 16 copies collapse onto in later slices).
- *
- * `__dirname` moves with the file — `server/{src,dist}/nest/storage` sits
- * three levels under `server/`, so three `..` hops resolve to `<server>/`
- * under both the src (vitest) and dist (runtime) layouts. The depth is stated
- * rather than counted by hand and pinned by storage-keys.test.ts, exactly
- * like uploads-root.test.ts pins UPLOADS_ROOT. In Docker both anchors are
- * symlinks (`/app/server/uploads → /app/uploads`, `/app/server/data →
- * /app/data`), which is why LocalDriver realpaths its root at init.
+ * The storage domain's view of the data layout. Both roots come from
+ * `resolveDataPaths()` (src/app-config/data-paths.ts), the one place the server
+ * anchors `data/` and `uploads/`, so this file no longer counts `..` hops of
+ * its own. In Docker both are symlinks (`/app/server/uploads -> /app/uploads`,
+ * `/app/server/data -> /app/data`), which is why LocalDriver realpaths its root
+ * at init. storage-keys.test.ts pins the resolved values.
  */
-export const DEFAULT_UPLOADS_ROOT = path.resolve(__dirname, '..', '..', '..', 'uploads');
-export const DATA_ROOT = path.resolve(__dirname, '..', '..', '..', 'data');
-export const DEFAULT_BACKUPS_ROOT = path.join(DATA_ROOT, 'backups');
+const LAYOUT = resolveDataPaths();
+export const DEFAULT_UPLOADS_ROOT = LAYOUT.uploadsDir;
+export const DATA_ROOT = LAYOUT.dataDir;
+export const DEFAULT_BACKUPS_ROOT = LAYOUT.backupsDir;
 /** Driver-agnostic global scratch space (`data/tmp`) — see StorageService.tempDir(). */
-export const GLOBAL_TEMP_DIR = path.join(DATA_ROOT, 'tmp');
+export const GLOBAL_TEMP_DIR = LAYOUT.tmpDir;
 /** Seed-once boot provisioning file — imported only when no storage.* row exists. */
 const DEFAULT_SEED_CONFIG_PATH = path.join(DATA_ROOT, 'storage-config.json');
 

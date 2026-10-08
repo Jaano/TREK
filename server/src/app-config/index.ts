@@ -25,3 +25,4 @@ export {
 } from './derive';
 export * from './parsers';
 export { envSchema } from './env.schema';
+export { resolveDataPaths, SERVER_ROOT, type DataPaths } from './data-paths';

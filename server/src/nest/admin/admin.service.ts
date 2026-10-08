@@ -3,7 +3,6 @@ import { InjectRepository } from '@mikro-orm/nestjs';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
 import { ADDON_IDS, MCP_GATED_ADDON_IDS } from '../../addons';
 import { readEnv } from '../../app-config';
 import { updateJwtSecret } from '../../config';
@@ -23,6 +22,7 @@ import { getPhotoProviderConfig } from '../memories/memories.helpers';
 import { validatePassword } from '../common/passwordPolicy';
 import { UserCleanupService } from '../auth/user-cleanup.service';
 import { UnitOfWork } from '../database/unit-of-work';
+import { DataPathsService } from '../app-config/data-paths.service';
 import { AddonsService } from '../addons/addons.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PasskeyService } from '../auth/passkey.service';
@@ -130,6 +130,7 @@ export class AdminService {
     private readonly realtime: RealtimeService,
     private readonly uow: UnitOfWork,
     @Inject(DATABASE_BACKUP) private readonly database: DatabaseBackupStrategy,
+    private readonly dataPaths: DataPathsService,
   ) {}
 
   // ── User CRUD ──────────────────────────────────────────────────────────────
@@ -777,9 +778,7 @@ export class AdminService {
 
   rotateJwtSecret(): { error?: string; status?: number } {
     const newSecret = crypto.randomBytes(32).toString('hex');
-    // Re-anchored one directory deeper for nest/admin/ (was '../../data' in services/).
-    const dataDir = path.resolve(__dirname, '../../../data');
-    const secretFile = path.join(dataDir, '.jwt_secret');
+    const { dataDir, jwtSecretFile: secretFile } = this.dataPaths;
     try {
       if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
       fs.writeFileSync(secretFile, newSecret, { mode: 0o600 });

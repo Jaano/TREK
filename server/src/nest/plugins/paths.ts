@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readEnv } from '../../app-config';
+import { resolveDataPaths } from '../../app-config/data-paths';
 
 /**
  * Filesystem layout for the plugin system (#plugins). Code and data are two
@@ -12,7 +13,7 @@ import { readEnv } from '../../app-config';
  * so a Docker deployment can point them at dedicated volumes.
  */
 
-const DATA_ROOT = path.resolve(__dirname, '../../../data');
+const DATA_ROOT = resolveDataPaths().dataDir;
 
 // Read lazily so a deployment (or a test) can point these at dedicated volumes
 // via env without import-order surprises.

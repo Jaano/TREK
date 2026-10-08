@@ -2,11 +2,11 @@ import fs from 'fs';
 import path from 'path';
 import { RequestContext, type EntityManager } from '@mikro-orm/core';
 import { readEnv } from '../app-config';
+import { resolveDataPaths } from '../app-config/data-paths';
 import { DemoRepository, type DemoAdminCredentialsRow, type DemoInstanceKeyRow } from '../db/repositories/DemoRepository';
 import { DatabaseConnectionLostError, type DatabaseBackupStrategy } from '../nest/database/database-backup.interface';
 
-const dataDir = path.join(__dirname, '../../data');
-const baselinePath = path.join(dataDir, 'travel-baseline.db');
+const baselinePath = path.join(resolveDataPaths().dataDir, 'travel-baseline.db');
 
 /**
  * The active fork's `EntityManager`, resolved via `RequestContext.getEntityManager()`

@@ -1,4 +1,5 @@
 import { readEnv } from '../../app-config';
+import { resolveDataPaths } from '../../app-config/data-paths';
 import fs from 'fs';
 import path from 'path';
 
@@ -30,7 +31,9 @@ const C = {
 
 // ── File logger with rotation ─────────────────────────────────────────────
 
-const logsDir = path.join(process.cwd(), 'data/logs');
+// From the data layout, like every other data path. It used to be cwd-based,
+// which agreed only because the image and `npm run dev` both start in server/.
+const logsDir = resolveDataPaths().logsDir;
 const logFilePath = path.join(logsDir, 'trek.log');
 let logsDirReady = false;
 

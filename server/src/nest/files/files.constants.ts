@@ -1,5 +1,6 @@
 import path from 'path';
 import { readEnv } from '../../app-config';
+import { resolveDataPaths } from '../../app-config/data-paths';
 
 /**
  * File-domain constants and pure helpers, split out of FilesService because
@@ -43,10 +44,8 @@ export const BLOCKED_EXTENSIONS = [
   // Executables
   '.exe', '.bat', '.sh', '.cmd', '.msi', '.dll', '.com', '.vbs', '.ps1', '.app',
 ];
-// One directory level deeper than the legacy src/services/fileService.ts, so
-// the extra '..' keeps the same absolute <server>/uploads/files under both the
-// src (vitest) and dist (runtime) layouts.
-export const filesDir = path.join(__dirname, '../../../uploads/files');
+/** `<server>/uploads/files`, from the one data layout. */
+export const filesDir = path.join(resolveDataPaths().uploadsDir, 'files');
 
 /**
  * Whether a trip-file upload named `originalname` passes the extension rules:

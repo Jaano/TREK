@@ -21,6 +21,7 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigModule as NestConfigModule } from '@nestjs/config';
 import { BOOT_STABLE_TOKENS } from './tokens';
 import { RuntimeEnvService } from './runtime-env.service';
+import { DataPathsService } from './data-paths.service';
 
 @Global()
 @Module({
@@ -32,7 +33,7 @@ import { RuntimeEnvService } from './runtime-env.service';
       load: BOOT_STABLE_TOKENS,
     }),
   ],
-  providers: [RuntimeEnvService],
-  exports: [RuntimeEnvService],
+  providers: [RuntimeEnvService, DataPathsService],
+  exports: [RuntimeEnvService, DataPathsService],
 })
 export class AppConfigModule {}

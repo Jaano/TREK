@@ -72,6 +72,7 @@ import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import { AdminService } from '../../../src/nest/admin/admin.service';
+import { DataPathsService } from '../../../src/nest/app-config/data-paths.service';
 import { VersionCheckJob } from '../../../src/nest/admin/version-check.job';
 import type { CronRegistrarService } from '../../../src/nest/scheduling/cron-registrar.service';
 import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
@@ -174,6 +175,7 @@ beforeAll(async () => {
   realtime,
   await createTestUnitOfWork(testDb),
   databaseBackupStub,
+  new DataPathsService(),
 );
 });
 

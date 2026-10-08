@@ -2,6 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { logInfo, logError } from '../audit/audit-log.logger';
 import type { StorageService } from '../storage/storage.service';
+import { resolveDataPaths } from '../../app-config/data-paths';
 
 /**
  * Auto-backup settings and retention — the pure half of the auto-backup cron
@@ -13,7 +14,7 @@ import type { StorageService } from '../storage/storage.service';
  * replicas too.
  */
 
-const dataDir = path.join(__dirname, '../../../data');
+const { dataDir } = resolveDataPaths();
 const settingsFile = path.join(dataDir, 'backup-settings.json');
 
 export const VALID_INTERVALS = ['hourly', 'daily', 'weekly', 'monthly'];

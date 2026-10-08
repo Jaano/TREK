@@ -1,4 +1,5 @@
 import { readEnv } from '../app-config';
+import { resolveDataPaths } from '../app-config/data-paths';
 
 import fs from 'fs';
 import path from 'path';
@@ -19,16 +20,10 @@ export function resolveDbPath(): string {
   // parallel forks can't race on the same file or share migration state.
   if (readEnv().app.isTest) return ':memory:';
 
-  const explicit = readEnv().db.trekDbFile;
-  if (explicit) {
-    // Explicit DB file (used by the Playwright E2E harness to run against an
-    // isolated, throwaway database instead of the real data/travel.db).
-    const dir = path.dirname(explicit);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    return explicit;
-  }
-
-  const dataDir = path.join(__dirname, '../../data');
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  return path.join(dataDir, 'travel.db');
+  // TREK_DB_FILE (the Playwright E2E harness runs against a throwaway file this
+  // way) or data/travel.db, both resolved by the one data layout.
+  const file = resolveDataPaths().dbFile;
+  const dir = path.dirname(file);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  return file;
 }

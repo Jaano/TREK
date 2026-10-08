@@ -4,7 +4,6 @@ import 'dotenv/config';
 // variable aborts before any other module runs its import-time side effects
 // (config.ts key resolution, ...).
 import './app-config/boot-validate';
-import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
 import type { INestApplication } from '@nestjs/common';
@@ -16,6 +15,10 @@ import type { INestApplication } from '@nestjs/common';
 import type * as Bootstrap from './bootstrap';
 import type { DatabaseLifecycle } from './nest/database/database-lifecycle.service';
 
+import { getAppUrl, getMcpSafeUrl, readEnv } from './app-config';
+import { resolveDataPaths } from './app-config/data-paths';
+import { resolveDbPath } from './db/db-path';
+
 // data/tmp is the driver-agnostic global scratch dir (restore-upload spool,
 // mirror stream staging) and stays boot-created here. Driver-owned roots — the
 // uploads/ category tree and data/backups — are ensured by LocalDriver.init on
@@ -24,11 +27,8 @@ import type { DatabaseLifecycle } from './nest/database/database-lifecycle.servi
 // fails loudly at startup, inside app.init(), instead of as a stray 500 on
 // first upload. The Dockerfile `mkdir -p` list is pinned to the registry's
 // category prefixes by tests/unit/uploads-dirs.test.ts.
-const tmpDir = path.join(__dirname, '../data/tmp');
+const { tmpDir } = resolveDataPaths();
 if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
-
-import { getAppUrl, getMcpSafeUrl, readEnv } from './app-config';
-import { resolveDbPath } from './db/db-path';
 
 const PORT = readEnv().app.port;
 const HOST = readEnv().app.host;
@@ -130,11 +130,10 @@ async function bootstrap(): Promise<void> {
 async function restoreBeforeTheDatabaseOpens() {
   const { restoreOnFirstBoot } = require('./nest/backup/boot-restore') as typeof import('./nest/backup/boot-restore');
   const env = readEnv();
-  const dataDir = path.join(__dirname, '../data');
   return restoreOnFirstBoot({
     archive: env.backup.restoreFromBackup,
     dbFile: resolveDbPath(),
-    dataDir,
+    dataDir: resolveDataPaths(env).dataDir,
   });
 }
 

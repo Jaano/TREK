@@ -1,10 +1,9 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import { readEnv } from './app-config';
+import { resolveDataPaths } from './app-config/data-paths';
 
-const dataDir = path.resolve(__dirname, '../data');
-const jwtSecretFile = path.join(dataDir, '.jwt_secret');
+const { dataDir, jwtSecretFile, encryptionKeyFile: encKeyFile } = resolveDataPaths();
 
 // ENCRYPTION_KEY is used to derive at-rest encryption keys for stored secrets
 // (API keys, MFA TOTP secrets, SMTP password, OIDC client secret, etc.).
@@ -20,7 +19,6 @@ const jwtSecretFile = path.join(dataDir, '.jwt_secret');
 //      data/.encryption_key so JWT rotation can never break decryption later.
 //   4. Auto-generated — fresh install with none of the above; persisted to
 //      data/.encryption_key.
-const encKeyFile = path.join(dataDir, '.encryption_key');
 let _encryptionKey: string = process.env.ENCRYPTION_KEY || '';
 
 // Under test the suite sets its own fixed ENCRYPTION_KEY. Comparing it with, or

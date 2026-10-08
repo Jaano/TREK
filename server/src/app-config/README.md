@@ -10,6 +10,7 @@ env.schema.ts    Zod catalog of the whole env surface; fail-fast at boot
 derive.ts        pure (raw env) → typed namespace functions, exact per-site coercions
 env.ts           readEnv() live accessor + validateEnvAtBoot()
 app-url.ts       getAppUrl()/getMcpSafeUrl() instance base-URL resolution
+data-paths.ts    resolveDataPaths(): data/, uploads/, backups, tmp, logs, key files, DB file
 boot-validate.ts side-effect import used by index.ts (validates before other modules load)
 parsers.ts       shared coercion helpers (boolTrueLoose, numberOr, csvList, …)
 ```
@@ -52,6 +53,17 @@ tokens, `RuntimeEnvService`) and consumes the SAME derive functions.
    captured env in module-top `const`s (mcp, backupService, ssrfGuard, plugin
    rate limits, …) keep freeze-at-import timing, merely sourcing the value from
    `readEnv()` at module top. Request-time reads stay request-time.
+
+## data-paths.ts: the one data layout
+
+`resolveDataPaths()` is the only place the server anchors `data/` and
+`uploads/` (on `SERVER_ROOT`, the package directory, never on `process.cwd()`)
+and names what lives in them: backups, the scratch dir, the logs, the JWT
+secret and encryption key files, and the database file (TREK_DB_FILE when set,
+else `data/travel.db`). Code that runs before the container exists imports it
+directly; Nest classes inject `DataPathsService` (`src/nest/app-config/`),
+which resolves the same layout once per built app. Never derive one of these
+paths from `__dirname` in a new file: a moved file would quietly move the data.
 
 ## app-url.ts — instance base-URL resolution (moved 2026-07-28)
 

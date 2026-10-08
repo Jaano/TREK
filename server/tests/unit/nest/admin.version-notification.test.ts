@@ -54,6 +54,7 @@ import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import { AdminService } from '../../../src/nest/admin/admin.service';
+import { DataPathsService } from '../../../src/nest/app-config/data-paths.service';
 import { makeNotificationsService, makeNotificationPreferencesService } from '../../helpers/notifications';
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 import { AllowedFileTypesService } from '../../../src/nest/files/allowed-file-types.service';
@@ -139,6 +140,7 @@ beforeAll(async () => {
   realtime,
   await createTestUnitOfWork(testDb),
   databaseBackupStub,
+  new DataPathsService(),
 );
 });
 const checkAndNotifyVersion = () => svc.checkAndNotifyVersion();
