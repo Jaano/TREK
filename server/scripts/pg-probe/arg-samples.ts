@@ -7,9 +7,12 @@
  * date-shaped string when the name says so, an object gets every property
  * it can sample, an array one element). The values only have to get the
  * method to send its SQL; what the probe measures is whether Postgres
- * accepts that SQL against an empty schema. A parameter the sampler cannot
- * build (a callback, an EntityManager, an entity instance) makes the method
- * unprobeable, which the report lists instead of guessing.
+ * accepts that SQL against an empty schema. A sample the column cannot take
+ * (a name-shaped string in a date column) is a data error, which the
+ * ratchet does not hold (pg-probe/baseline.ts). A parameter the sampler
+ * cannot build (a callback, an EntityManager, an entity instance) makes the
+ * method unprobeable: the report lists it instead of guessing, and the
+ * baseline's `uncovered` list must name it, so a new one fails the run.
  */
 
 import path from 'node:path';

@@ -11,7 +11,17 @@ import { describe, expect, it } from 'vitest';
 import { exitCode, parseArgs, repositoryFiles } from '../../../../scripts/pg-probe';
 import type { BaselineVerdict } from '../../../../scripts/pg-probe/baseline';
 import type { HelperResult } from '../../../../scripts/pg-probe/helper-cases';
-import { formatConsole, formatMarkdown, oneLine, passed, probedNothing, summarize, type MethodResult, type ReportInput } from '../../../../scripts/pg-probe/report';
+import {
+  formatConsole,
+  formatMarkdown,
+  oneLine,
+  passed,
+  probedNothing,
+  splitRefusals,
+  summarize,
+  type MethodResult,
+  type ReportInput,
+} from '../../../../scripts/pg-probe/report';
 
 const ok = (sql: string) => ({ sql, outcome: { ok: true as const } });
 const refused = (sql: string, code = '42883', message = 'function datetime(unknown) does not exist') => ({
@@ -25,9 +35,12 @@ const RESULTS: MethodResult[] = [
   { key: 'C.silent', statements: [] },
   { key: 'D.hung', statements: [ok('select 4')], timedOut: true },
   { key: 'E.skipped', statements: [], unprobeable: 'fn: a function parameter' },
+  { key: 'F.thrower', statements: [], threw: 'no trip 1' },
+  { key: 'G.sampled', statements: [refused('select $1::date', '22007', 'invalid input syntax for type date: "probe"'), ok('select 5')] },
 ];
 
-const CLEAN: BaselineVerdict = { unseeded: false, grown: [], stale: [] };
+const CLEAN: BaselineVerdict = { unseeded: false, grown: [], stale: [], newlyUncovered: [], nowCovered: [] };
+const UNSEEDED: BaselineVerdict = { ...CLEAN, unseeded: true };
 const helper = (failure: string | null): HelperResult => ({ engine: 'postgres', name: 'dateOf', failure });
 
 function input(overrides: Partial<ReportInput> = {}): ReportInput {
@@ -37,10 +50,34 @@ function input(overrides: Partial<ReportInput> = {}): ReportInput {
 describe('pg-probe report', () => {
   it('PGPROBE-060: counts methods and distinct statements, and what Postgres refused per method and SQLSTATE', () => {
     const summary = summarize(RESULTS);
-    expect(summary).toMatchObject({ methods: 5, called: 4, unprobeable: 1, withoutSql: 1, timedOut: 1, statements: 6 });
-    expect(summary.failingByMethod).toEqual(new Map([['A.clean', 0], ['B.broken', 2], ['C.silent', 0], ['D.hung', 0]]));
-    expect(summary.failuresByCode).toEqual(new Map([['42883', 1], ['42601', 1]]));
-    expect(summary.failedStatements.map((f) => `${f.method} ${f.code}`)).toEqual(['B.broken 42883', 'B.broken 42601']);
+    expect(summary).toMatchObject({ methods: 7, called: 6, unprobeable: 1, withoutSql: 2, timedOut: 1, statements: 8 });
+    expect(summary.failingByMethod).toEqual(
+      new Map([['A.clean', 0], ['B.broken', 2], ['C.silent', 0], ['D.hung', 0], ['F.thrower', 0], ['G.sampled', 0]]),
+    );
+    expect(summary.failuresByCode).toEqual(new Map([['42883', 1], ['42601', 1], ['22007', 1]]));
+    expect(summary.failedStatements.map((f) => `${f.method} ${f.code} ${f.counted}`)).toEqual([
+      'B.broken 42883 true',
+      'B.broken 42601 true',
+      'G.sampled 22007 false',
+    ]);
+  });
+
+  it('PGPROBE-068: a data error from a sample value is reported but not held to the baseline', () => {
+    const summary = summarize([{ key: 'G.sampled', statements: [refused('select $1::date', '22P02', 'bad'), refused('select x', '0A000', 'nope')] }]);
+    expect(summary.failingByMethod.get('G.sampled')).toBe(1);
+    expect(splitRefusals(summary).counted.map((f) => f.code)).toEqual(['0A000']);
+    expect(splitRefusals(summary).reported.map((f) => f.code)).toEqual(['22P02']);
+  });
+
+  it('PGPROBE-069: names every method whose SQL the probe did not see, and why', () => {
+    expect(summarize(RESULTS).uncovered).toEqual(
+      new Map([
+        ['C.silent', 'sent no SQL'],
+        ['D.hung', 'timed out'],
+        ['E.skipped', 'could not be called: fn: a function parameter'],
+        ['F.thrower', 'threw before any statement: no trip 1'],
+      ]),
+    );
   });
 
   it('PGPROBE-061: passes only with every helper case green and the ratchet held', () => {
@@ -48,14 +85,16 @@ describe('pg-probe report', () => {
     expect(passed(input({ helpers: [helper('expected 1, got 2')] }))).toBe(false);
     expect(passed(input({ verdict: { ...CLEAN, grown: [{ method: 'B.broken', allowed: 1, now: 2 }] } }))).toBe(false);
     expect(passed(input({ verdict: { ...CLEAN, stale: [{ method: 'B.broken', allowed: 3, now: 2 }] } }))).toBe(false);
+    expect(passed(input({ verdict: { ...CLEAN, newlyUncovered: ['E.skipped'] } }))).toBe(false);
+    expect(passed(input({ verdict: { ...CLEAN, nowCovered: ['Z.gone'] } }))).toBe(false);
   });
 
   it('PGPROBE-066: an unmeasured baseline fails the run, and only --update (which seeds it) passes', () => {
-    const unseeded = input({ verdict: { unseeded: true, grown: [], stale: [] } });
+    const unseeded = input({ verdict: UNSEEDED });
     expect(passed(unseeded)).toBe(false);
     expect(exitCode(unseeded, false)).toBe(1);
     expect(exitCode(unseeded, true)).toBe(0);
-    expect(exitCode(input({ verdict: { unseeded: true, grown: [], stale: [] }, helpers: [helper('threw: boom')] }), true)).toBe(1);
+    expect(exitCode(input({ verdict: UNSEEDED, helpers: [helper('threw: boom')] }), true)).toBe(1);
   });
 
   it('PGPROBE-067: a run that called no repository method fails, also under --update', () => {
@@ -67,7 +106,7 @@ describe('pg-probe report', () => {
       expect(passed(empty)).toBe(false);
       expect(exitCode(empty, false)).toBe(1);
       expect(exitCode(empty, true)).toBe(1);
-      expect(exitCode(input({ summary, results, verdict: { unseeded: true, grown: [], stale: [] } }), true)).toBe(1);
+      expect(exitCode(input({ summary, results, verdict: UNSEEDED }), true)).toBe(1);
     }
     expect(probedNothing(summarize(RESULTS))).toBe(false);
   });
@@ -81,22 +120,41 @@ describe('pg-probe report', () => {
     expect(exitCode(input(), false)).toBe(0);
   });
 
+  it('PGPROBE-072: --update forgives an uncovered entry that is measured now, never a newly unmeasured method', () => {
+    const covered = input({ verdict: { ...CLEAN, nowCovered: ['Z.gone'] } });
+    expect(exitCode(covered, false)).toBe(1);
+    expect(exitCode(covered, true)).toBe(0);
+    const uncovered = input({ verdict: { ...CLEAN, newlyUncovered: ['E.skipped'] } });
+    expect(exitCode(uncovered, false)).toBe(1);
+    expect(exitCode(uncovered, true)).toBe(1);
+  });
+
   it('PGPROBE-063: the console log names every refused statement and every ratchet failure', () => {
     const text = formatConsole(
       input({
         helpers: [helper('expected 1, got 2')],
-        verdict: { unseeded: false, grown: [{ method: 'B.broken', allowed: 1, now: 2 }], stale: [{ method: 'Z.gone', allowed: 1, now: 0 }] },
+        verdict: {
+          ...CLEAN,
+          grown: [{ method: 'B.broken', allowed: 1, now: 2 }],
+          stale: [{ method: 'Z.gone', allowed: 1, now: 0 }],
+          newlyUncovered: ['F.thrower'],
+          nowCovered: ['Y.measured'],
+        },
         schemaFailures: [{ statement: 'create table "x" (a text collate "NOCASE")', message: 'collation "NOCASE" does not exist' }],
       }),
     );
     expect(text).toContain('FAIL  [postgres] dateOf: expected 1, got 2');
     expect(text).toContain('collation "NOCASE" does not exist');
-    expect(text).toContain('Statements: 6 distinct, 2 refused by Postgres.');
+    expect(text).toContain('Statements: 8 distinct, 3 refused by Postgres (2 as SQL, held to the baseline; 1 over a sample value');
+    expect(text).toContain('  22007: 1 (not held)');
+    expect(text).toContain('  F.thrower: threw before any statement: no trip 1');
+    expect(text).toContain('FAIL  F.thrower threw before any statement: no trip 1, and the baseline does not list it as uncovered.');
+    expect(text).toContain('FAIL  Y.measured is listed as uncovered but is measured now (or gone); drop it from the baseline.');
     expect(text).toContain('B.broken  42883  function datetime(unknown) does not exist');
     expect(text).toContain('FAIL  B.broken sends 2 statement(s) Postgres refuses, 1 allowed.');
     expect(text).toContain('FAIL  Z.gone is held at 1 failing statement(s) but fails 0 now; lower the baseline.');
     expect(text.trim().endsWith('Postgres probe failed.')).toBe(true);
-    const unseeded = formatConsole(input({ verdict: { unseeded: true, grown: [], stale: [] } }));
+    const unseeded = formatConsole(input({ verdict: UNSEEDED }));
     expect(unseeded).toContain('FAIL  Baseline: not measured yet');
     expect(unseeded).toContain('as scripts/pg-probe-baseline.json');
     expect(unseeded.trim().endsWith('Postgres probe failed.')).toBe(true);
@@ -109,8 +167,15 @@ describe('pg-probe report', () => {
     expect(md).toContain('Result: **failed**');
     expect(md).toContain('| postgres | a\\|b | got \'x\' |');
     expect(md).toContain('| 42883 | 1 |');
-    expect(md).toContain('| E.skipped | fn: a function parameter |');
-    const unseeded = formatMarkdown(input({ verdict: { unseeded: true, grown: [], stale: [] } }));
+    expect(md).toContain('| E.skipped | could not be called: fn: a function parameter |');
+    expect(md).toContain('| Refused by Postgres as SQL (held) | 2 |');
+    expect(md).toContain('| Refused over a sample value or the empty tables (reported only) | 1 |');
+    expect(md).toContain('| G.sampled | 22007 | no | invalid input syntax for type date: "probe" |');
+    const ratchet = formatMarkdown(input({ verdict: { ...CLEAN, newlyUncovered: ['C.silent'], nowCovered: ['Z.gone'] } }));
+    expect(ratchet).toContain('### Coverage ratchet');
+    expect(ratchet).toContain('| C.silent | measured | sent no SQL |');
+    expect(ratchet).toContain('| Z.gone | uncovered | measured or gone |');
+    const unseeded = formatMarkdown(input({ verdict: UNSEEDED }));
     expect(unseeded).toContain('Result: **failed**');
     expect(unseeded).toContain('has not been measured yet, which fails the run');
     expect(formatMarkdown(input({ summary: summarize([]), results: [] }))).toContain('No repository method was called');

@@ -15,9 +15,18 @@
  *      (pg-probe/arg-samples.ts), through a MikroORM Postgres driver that
  *      runs each statement in its own rolled-back transaction and records
  *      whether Postgres accepted it (pg-probe/recorder.ts);
- *   4. holds the statements Postgres refuses, per method, to
- *      scripts/pg-probe-baseline.json, which may only shrink
- *      (pg-probe/baseline.ts).
+ *   4. holds the statements Postgres refuses as SQL (SQLSTATE class 42 or
+ *      0A), per method, to scripts/pg-probe-baseline.json, which may only
+ *      shrink (pg-probe/baseline.ts); a refusal over a sample value
+ *      (class 22) or the empty tables is reported, not held;
+ *   5. holds the methods whose SQL it did not see (it could not call them,
+ *      they sent no SQL, or they timed out) to the same file's `uncovered`
+ *      list, which may only shrink too, so a new method the probe cannot
+ *      reach fails the run instead of landing unmeasured.
+ *
+ * What it measures is the statements each method reaches with sample
+ * arguments against empty tables, not every statement the code can send: a
+ * branch that only runs on data the empty tables do not hold stays unseen.
  *
  * It needs a Postgres server, so CI runs it in the `postgres-probe` job
  * against a service container. Locally:
@@ -30,7 +39,7 @@
  *   --update                   lower scripts/pg-probe-baseline.json to this run (never raises or adds an entry;
  *                              an unmeasured baseline gets its first measurement)
  *
- * A baseline whose `failing` is `null` has never been measured and fails the
+ * A baseline whose `failing` or `uncovered` is `null` has never been measured and fails the
  * run (outside `--update`); the baseline the run writes with
  * `--next-baseline` (the CI artifact) is the first measurement to commit. A
  * run that called no repository method fails as well.
@@ -102,15 +111,18 @@ export function repositoryFiles(dir: string): string[] {
 
 /**
  * 0 when every helper case passed, the probe called at least one repository
- * method, the baseline is measured and no method fails more statements than
- * its entry allows. An entry above what its method fails now fails the run
- * too, and so does an unmeasured baseline, unless this run is the `--update`
- * that lowers or seeds it.
+ * method, the baseline is measured, no method fails more statements than
+ * its entry allows and every method the probe did not measure is listed as
+ * uncovered. An entry above what the run saw (a count above what its method
+ * fails, an uncovered method that is measured now) fails the run too, and so
+ * does an unmeasured baseline, unless this run is the `--update` that lowers
+ * or seeds it.
  */
 export function exitCode(input: Pick<ReportInput, 'verdict' | 'helpers' | 'summary'>, update: boolean): number {
   if (passed(input)) return 0;
   const helpersOk = input.helpers.every((result) => result.failure === null);
-  return helpersOk && !probedNothing(input.summary) && input.verdict.grown.length === 0 && update ? 0 : 1;
+  const held = input.verdict.grown.length === 0 && input.verdict.newlyUncovered.length === 0;
+  return helpersOk && !probedNothing(input.summary) && held && update ? 0 : 1;
 }
 
 /** GitHub annotations when running in Actions, plain lines otherwise. */
@@ -163,18 +175,23 @@ async function main(): Promise<number> {
   }
 
   const summary = summarize(results);
-  const verdict = compareWithBaseline(baseline, summary.failingByMethod);
+  const uncoveredNow = new Set(summary.uncovered.keys());
+  const verdict = compareWithBaseline(baseline, summary.failingByMethod, uncoveredNow);
   const input: ReportInput = { summary, verdict, helpers, schemaFailures, results };
   console.log(formatConsole(input));
 
-  const next = lowerBaseline(baseline, summary.failingByMethod);
+  const next = lowerBaseline(baseline, summary.failingByMethod, uncoveredNow);
   if (args.nextBaseline) writeFileSync(args.nextBaseline, formatBaseline(next));
   if (args.update) {
     writeFileSync(BASELINE_PATH, formatBaseline(next));
     console.log(`Wrote ${path.relative(SERVER_ROOT, BASELINE_PATH)}.`);
   }
   if (args.report) {
-    const counts = { failingByMethod: Object.fromEntries(summary.failingByMethod), failuresByCode: Object.fromEntries(summary.failuresByCode) };
+    const counts = {
+      failingByMethod: Object.fromEntries(summary.failingByMethod),
+      uncovered: Object.fromEntries(summary.uncovered),
+      failuresByCode: Object.fromEntries(summary.failuresByCode),
+    };
     const report = { summary: { ...summary, ...counts }, verdict, helpers, schemaFailures, results };
     writeFileSync(args.report, `${JSON.stringify(report, null, 2)}\n`);
   }
@@ -192,6 +209,16 @@ async function main(): Promise<number> {
       `pg-probe: ${entry.method} fails ${entry.now} statement(s), the baseline allows ${entry.allowed}. ` +
         'Lower it (--update, or the pg-probe-baseline artifact).',
     );
+  }
+  for (const method of verdict.newlyUncovered) {
+    annotate(
+      'error',
+      `pg-probe: ${method} ${summary.uncovered.get(method) ?? 'went unmeasured'}, so its SQL was not checked. ` +
+        'Give it arguments the probe can sample, or make it reach its SQL with them.',
+    );
+  }
+  for (const method of verdict.nowCovered) {
+    annotate('error', `pg-probe: ${method} is listed as uncovered but is measured now (or gone). Drop it (--update, or the pg-probe-baseline artifact).`);
   }
   if (probedNothing(summary)) annotate('error', `pg-probe: no repository method was called (${summary.methods} planned).`);
   if (verdict.unseeded) {

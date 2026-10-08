@@ -20,8 +20,8 @@ permissions:
 #     gates cleared in preflight, they can only fail because tests failed.
 #     client-e2e drives the real app in Chromium and WebKit, client-bundle
 #     builds the client and checks each map engine keeps a chunk of its own,
-#     and postgres-probe runs the dialect helpers and every repository
-#     statement against a Postgres service. None of them feeds the scan.
+#     and postgres-probe runs the dialect helpers and the repository
+#     statements it reaches against a Postgres service. None of them feeds the scan.
 #   - Scan `needs:` exactly the four coverage jobs. A coverage job failing
 #     must stop the scan — a missing lcov file would make every line of that
 #     package report as uncovered, and the dashboard would show a collapse
@@ -529,9 +529,10 @@ jobs:
   # Postgres it derives a schema from the entities, runs every dialect helper
   # on SQLite and Postgres (every case must pass), and calls every public
   # repository method once, each statement in its own rolled-back transaction.
-  # The statements Postgres refuses are held per method to
-  # server/scripts/pg-probe-baseline.json, which may only shrink; an unmeasured
-  # baseline (failing: null) or a run that called no method fails. The measured
+  # The statements Postgres refuses as SQL are held per method to
+  # server/scripts/pg-probe-baseline.json, and so is the list of methods it
+  # could not measure (uncovered); both may only shrink. An unmeasured
+  # baseline (failing or uncovered null) or a run that called no method fails. The measured
   # baseline and the full report are uploaded either way, so the first run's
   # artifact seeds the file and a change that fixes a statement can lower it
   # without a local Postgres.
