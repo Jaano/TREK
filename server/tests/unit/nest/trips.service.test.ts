@@ -25,15 +25,6 @@ vi.mock('../../../src/db/database', async () => {
     db,
     closeDb: () => {},
     reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
     return mock;
 });
@@ -132,6 +123,76 @@ import { SettingsService } from '../../../src/nest/settings/settings.service';
 import { noGoogleQuota } from '../../helpers/google-quota';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import type { EntityClass, EntityDTO, FilterQuery, FindOptions } from '@mikro-orm/core';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { setAppSetting, setUserSetting } from '../../helpers/factories/settings';
+import { tagPlace } from '../../helpers/factories/places';
+import { AssignmentParticipants } from '../../../src/db/entities/AssignmentParticipants.entity';
+import { BudgetCategoryOrder } from '../../../src/db/entities/BudgetCategoryOrder.entity';
+import { BudgetItemMembers } from '../../../src/db/entities/BudgetItemMembers.entity';
+import { BudgetItemPayers } from '../../../src/db/entities/BudgetItemPayers.entity';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { DayAccommodations } from '../../../src/db/entities/DayAccommodations.entity';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { DayNotes } from '../../../src/db/entities/DayNotes.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { Journeys } from '../../../src/db/entities/Journeys.entity';
+import { PackingBags } from '../../../src/db/entities/PackingBags.entity';
+import { PackingItems } from '../../../src/db/entities/PackingItems.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { RoadtripDayBoundaries } from '../../../src/db/entities/RoadtripDayBoundaries.entity';
+import { RoadtripDayTracks } from '../../../src/db/entities/RoadtripDayTracks.entity';
+import { RoadtripPreferences } from '../../../src/db/entities/RoadtripPreferences.entity';
+import { RoadtripVias } from '../../../src/db/entities/RoadtripVias.entity';
+import { Tags } from '../../../src/db/entities/Tags.entity';
+import { TodoItems } from '../../../src/db/entities/TodoItems.entity';
+import { TourWaypoints } from '../../../src/db/entities/TourWaypoints.entity';
+import { Tours } from '../../../src/db/entities/Tours.entity';
+import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
+import { legacyBoundIntegerText } from '../../../src/nest/common/row-id';
+
+const orm = () => sharedTestOrm(testDb);
+
+/** The stored row matching `where`, or undefined when there is none. */
+async function storedRow<T extends object>(entity: EntityClass<T>, where: FilterQuery<T>): Promise<EntityDTO<T> | undefined> {
+  return (await findRow(await orm(), entity, where)) ?? undefined;
+}
+
+/** Only `cols` of a stored row, the way a SELECT of those columns returns it. */
+function pickColumns<T extends object>(row: EntityDTO<T>, cols: string[]): Record<string, unknown> {
+  const all = row as Record<string, unknown>;
+  return Object.fromEntries(cols.map((col) => [col, all[col]]));
+}
+
+/** Only `cols` of the stored row matching `where`, or undefined when there is none. */
+async function storedFields<T extends object>(
+  entity: EntityClass<T>,
+  where: FilterQuery<T>,
+  cols: string[],
+): Promise<Record<string, unknown> | undefined> {
+  const row = await findRow(await orm(), entity, where);
+  return row ? pickColumns(row, cols) : undefined;
+}
+
+/** The stored rows matching `where`, whole or cut down to `cols`. */
+async function storedRows<T extends object>(
+  entity: EntityClass<T>,
+  where: FilterQuery<T>,
+  orderBy?: FindOptions<T>['orderBy'],
+  cols?: string[],
+): Promise<Array<Record<string, unknown>>> {
+  const rows = await findRows(await orm(), entity, where, orderBy);
+  return cols ? rows.map((row) => pickColumns(row, cols)) : (rows as Array<Record<string, unknown>>);
+}
+
+/** The tag a place carries, read the way a `SELECT tag_id FROM place_tags` would. */
+async function placeTagRow(placeId: number): Promise<{ tag_id: number } | undefined> {
+  const [tag] = await findRows(await orm(), Tags, { place_tags_inverse: placeId });
+  return tag ? { tag_id: tag.id } : undefined;
+}
 
 // Real sibling services over the same in-memory DB — updateTrip's date-shift
 // resyncs and the summary/bundle aggregation run their actual SQL.
@@ -294,18 +355,18 @@ afterAll(() => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function getDays(tripId: number) {
-  return testDb.prepare('SELECT * FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as {
+async function getDays(tripId: number) {
+  return await storedRows(Days, { trip: tripId }, { day_number: 'asc' }) as {
     id: number; trip_id: number; day_number: number; date: string | null;
   }[];
 }
 
-function getAssignments(dayId: number) {
-  return testDb.prepare('SELECT * FROM day_assignments WHERE day_id = ?').all(dayId) as { id: number; day_id: number }[];
+async function getAssignments(dayId: number) {
+  return await storedRows(DayAssignments, { day: dayId }) as { id: number; day_id: number }[];
 }
 
-function getNotes(dayId: number) {
-  return testDb.prepare('SELECT * FROM day_notes WHERE day_id = ?').all(dayId) as { id: number; day_id: number }[];
+async function getNotes(dayId: number) {
+  return await storedRows(DayNotes, { day: dayId }) as { id: number; day_id: number }[];
 }
 
 function addDaysIso(date: string, n: number) {
@@ -318,7 +379,7 @@ describe('generateDays', () => {
   it('TRIP-SVC-010: full range shift preserves day assignments and notes positionally', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });
-    const daysBefore = getDays(trip.id);
+    const daysBefore = (await getDays(trip.id));
     expect(daysBefore).toHaveLength(5);
 
     const place = createPlace(testDb, trip.id);
@@ -328,7 +389,7 @@ describe('generateDays', () => {
     // Shift forward 9 days — zero overlap with original dates
     await svc.generateDays(trip.id, '2025-06-10', '2025-06-14');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(5);
     expect(daysAfter.map(d => d.date)).toEqual([
       '2025-06-10', '2025-06-11', '2025-06-12', '2025-06-13', '2025-06-14',
@@ -337,16 +398,16 @@ describe('generateDays', () => {
     // day_number 1 (formerly June 1) now has date June 10 — assignment still attached
     const day1 = daysAfter[0];
     const day2 = daysAfter[1];
-    expect(getAssignments(day1.id)).toHaveLength(1);
-    expect(getAssignments(day1.id)[0].id).toBe(assignment.id);
-    expect(getNotes(day2.id)).toHaveLength(1);
-    expect(getNotes(day2.id)[0].id).toBe(note.id);
+    expect((await getAssignments(day1.id))).toHaveLength(1);
+    expect((await getAssignments(day1.id))[0].id).toBe(assignment.id);
+    expect((await getNotes(day2.id))).toHaveLength(1);
+    expect((await getNotes(day2.id))[0].id).toBe(note.id);
   });
 
   it('TRIP-SVC-011: shrinking range deletes overflow days and their assignments (issue #909)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-07-01', end_date: '2025-07-05' });
-    const daysBefore = getDays(trip.id);
+    const daysBefore = (await getDays(trip.id));
     expect(daysBefore).toHaveLength(5);
 
     const place = createPlace(testDb, trip.id);
@@ -356,7 +417,7 @@ describe('generateDays', () => {
     // Shrink from 5 to 3 days — surplus days and their content are removed
     await svc.generateDays(trip.id, '2025-07-01', '2025-07-03');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(3);
     expect(daysAfter.map(d => d.date)).toEqual(['2025-07-01', '2025-07-02', '2025-07-03']);
   });
@@ -364,12 +425,12 @@ describe('generateDays', () => {
   it('TRIP-SVC-016: shrinking range deletes empty overflow days (issue #909)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-07-01', end_date: '2025-07-07' });
-    expect(getDays(trip.id)).toHaveLength(7);
+    expect((await getDays(trip.id))).toHaveLength(7);
 
     // Shrink 7 → 5; days 6 and 7 have no content
     await svc.generateDays(trip.id, '2025-07-01', '2025-07-05');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(5);
     expect(daysAfter.map(d => d.date)).toEqual([
       '2025-07-01', '2025-07-02', '2025-07-03', '2025-07-04', '2025-07-05',
@@ -379,7 +440,7 @@ describe('generateDays', () => {
   it('TRIP-SVC-012: growing range keeps existing day content and appends new empty days', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-08-01', end_date: '2025-08-03' });
-    const daysBefore = getDays(trip.id);
+    const daysBefore = (await getDays(trip.id));
     expect(daysBefore).toHaveLength(3);
 
     const place = createPlace(testDb, trip.id);
@@ -388,19 +449,19 @@ describe('generateDays', () => {
     // Grow to 5 days
     await svc.generateDays(trip.id, '2025-08-01', '2025-08-05');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(5);
     expect(daysAfter.map(d => d.date)).toEqual([
       '2025-08-01', '2025-08-02', '2025-08-03', '2025-08-04', '2025-08-05',
     ]);
 
     // Existing day 1 retains its assignment
-    expect(getAssignments(daysAfter[0].id)).toHaveLength(1);
-    expect(getAssignments(daysAfter[0].id)[0].id).toBe(assignment.id);
+    expect((await getAssignments(daysAfter[0].id))).toHaveLength(1);
+    expect((await getAssignments(daysAfter[0].id))[0].id).toBe(assignment.id);
 
     // New days 4 and 5 are empty
-    expect(getAssignments(daysAfter[3].id)).toHaveLength(0);
-    expect(getAssignments(daysAfter[4].id)).toHaveLength(0);
+    expect((await getAssignments(daysAfter[3].id))).toHaveLength(0);
+    expect((await getAssignments(daysAfter[4].id))).toHaveLength(0);
   });
 
   it('TRIP-SVC-062: a range longer than a year gets every one of its days (#2403)', async () => {
@@ -408,7 +469,7 @@ describe('generateDays', () => {
     const trip = createTrip(testDb, user.id, { start_date: '2025-01-26', end_date: '2025-01-28' });
     // The reporter's range: 368 days, and the days used to stop at 365.
     await svc.generateDays(trip.id, '2025-01-26', '2026-01-28');
-    const days = getDays(trip.id);
+    const days = (await getDays(trip.id));
     expect(days).toHaveLength(368);
     expect(days[364].date).toBe('2026-01-25');
     expect(days[367]).toMatchObject({ day_number: 368, date: '2026-01-28' });
@@ -418,13 +479,13 @@ describe('generateDays', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     await svc.generateDays(trip.id, null, null, MAX_TRIP_DAYS + 50);
-    expect(getDays(trip.id)).toHaveLength(MAX_TRIP_DAYS);
+    expect((await getDays(trip.id))).toHaveLength(MAX_TRIP_DAYS);
   });
 
   it('TRIP-SVC-013: clearing dates converts all days to dateless without destroying assignments', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-09-01', end_date: '2025-09-04' });
-    const daysBefore = getDays(trip.id);
+    const daysBefore = (await getDays(trip.id));
     expect(daysBefore).toHaveLength(4);
 
     const place = createPlace(testDb, trip.id);
@@ -433,22 +494,22 @@ describe('generateDays', () => {
     // Clear both dates
     await svc.generateDays(trip.id, null, null);
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(4);
     expect(daysAfter.every(d => d.date === null)).toBe(true);
 
     // The assignment on the former day 2 still exists
     const formerDay2 = daysAfter.find(d => d.id === daysBefore[1].id);
     expect(formerDay2).toBeDefined();
-    expect(getAssignments(formerDay2!.id)).toHaveLength(1);
-    expect(getAssignments(formerDay2!.id)[0].id).toBe(assignment.id);
+    expect((await getAssignments(formerDay2!.id))).toHaveLength(1);
+    expect((await getAssignments(formerDay2!.id))[0].id).toBe(assignment.id);
   });
 
   it('TRIP-SVC-014: partial overlap shift remaps by position (day 1→3 kept, 4-5 overflow)', async () => {
     // Original: Jun 1-5. New: Jun 3-7 (overlap on Jun 3-5, but we map by position)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-10-01', end_date: '2025-10-05' });
-    const daysBefore = getDays(trip.id);
+    const daysBefore = (await getDays(trip.id));
     const place = createPlace(testDb, trip.id);
     // Assign to each of the 5 days
     for (const day of daysBefore) createDayAssignment(testDb, day.id, place.id);
@@ -456,7 +517,7 @@ describe('generateDays', () => {
     // Shift forward 2 days (partial overlap with original range)
     await svc.generateDays(trip.id, '2025-10-03', '2025-10-07');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(5);
     expect(daysAfter.map(d => d.date)).toEqual([
       '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07',
@@ -464,7 +525,7 @@ describe('generateDays', () => {
 
     // All 5 assignments survive
     for (const day of daysAfter) {
-      expect(getAssignments(day.id)).toHaveLength(1);
+      expect((await getAssignments(day.id))).toHaveLength(1);
     }
   });
 
@@ -476,11 +537,11 @@ describe('generateDays', () => {
     const trip = createTrip(testDb, user.id, { start_date: '2025-11-01', end_date: '2025-11-03' });
 
     // Insert 2 dateless days directly
-    const daysBefore = getDays(trip.id);
-    testDb.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, NULL)').run(trip.id, 4);
-    testDb.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, NULL)').run(trip.id, 5);
+    const daysBefore = (await getDays(trip.id));
+    await insertRow(await orm(), Days, { trip: trip.id, day_number: 4, date: null });
+    await insertRow(await orm(), Days, { trip: trip.id, day_number: 5, date: null });
 
-    const allDays = getDays(trip.id);
+    const allDays = (await getDays(trip.id));
     expect(allDays).toHaveLength(5);
 
     const place = createPlace(testDb, trip.id);
@@ -491,7 +552,7 @@ describe('generateDays', () => {
     // This is the scenario that triggered the UNIQUE collision bug
     await svc.generateDays(trip.id, '2025-11-01', '2025-11-04');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(5);
 
     const dated = daysAfter.filter(d => d.date !== null);
@@ -500,8 +561,8 @@ describe('generateDays', () => {
     expect(dateless).toHaveLength(1);
 
     // The remaining dateless day still has its assignment
-    expect(getAssignments(dateless[0].id)).toHaveLength(1);
-    expect(getAssignments(dateless[0].id)[0].id).toBe(assignment.id);
+    expect((await getAssignments(dateless[0].id))).toHaveLength(1);
+    expect((await getAssignments(dateless[0].id))[0].id).toBe(assignment.id);
 
     // All day_numbers are unique 1..5
     const nums = daysAfter.map(d => d.day_number).sort((a, b) => a - b);
@@ -513,7 +574,7 @@ describe('generateDays', () => {
     // A 7-day trip, then cleared to dateless placeholders (day_count = 7).
     const trip = createTrip(testDb, user.id, { start_date: '2025-12-01', end_date: '2025-12-07' });
     await svc.generateDays(trip.id, null, null);
-    const dateless = getDays(trip.id);
+    const dateless = (await getDays(trip.id));
     expect(dateless).toHaveLength(7);
     expect(dateless.every(d => d.date === null)).toBe(true);
 
@@ -525,69 +586,69 @@ describe('generateDays', () => {
     // the dates; the four empty leftovers must be removed, the one with content kept.
     await svc.generateDays(trip.id, '2026-01-10', '2026-01-11');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     const dated = daysAfter.filter(d => d.date !== null);
     const stillDateless = daysAfter.filter(d => d.date === null);
     expect(dated.map(d => d.date)).toEqual(['2026-01-10', '2026-01-11']);
     // day_count is COUNT(*) FROM days: 2 dated + 1 content-bearing dateless = 3 (not the stale 7)
     expect(daysAfter).toHaveLength(3);
     expect(stillDateless).toHaveLength(1);
-    expect(getAssignments(stillDateless[0].id)[0].id).toBe(assignment.id);
+    expect((await getAssignments(stillDateless[0].id))[0].id).toBe(assignment.id);
   });
 
   // ── generateDays carries out the shared planDayGrid plan ──────────────────
   // The trip dialog warns about lost days by the same plan, so the plan has to
   // be exactly what the rebuild did before it was written down in shared.
 
-  function addUndatedDay(tripId: number) {
-    const next = (testDb.prepare('SELECT COALESCE(MAX(day_number), 0) + 1 AS n FROM days WHERE trip_id = ?').get(tripId) as { n: number }).n;
-    const id = Number(testDb.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, NULL)').run(tripId, next).lastInsertRowid);
+  async function addUndatedDay(tripId: number) {
+    const [last] = await findRows(await orm(), Days, { trip: tripId }, { day_number: 'desc' });
+    const next = (last?.day_number ?? 0) + 1;
+    const id = Number(await insertRow(await orm(), Days, { trip: tripId, day_number: next, date: null }));
     return id;
   }
 
-  function addStay(tripId: number, placeId: number, startDayId: number, endDayId: number) {
-    return Number(testDb.prepare(
-      'INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id) VALUES (?, ?, ?, ?)',
-    ).run(tripId, placeId, startDayId, endDayId).lastInsertRowid);
+  async function addStay(tripId: number, placeId: number, startDayId: number, endDayId: number) {
+    return Number(await insertRow(await orm(), DayAccommodations, { trip: tripId, place: placeId, startDay: startDayId, endDay: endDayId }));
   }
 
-  const stayExists = (id: number) => !!testDb.prepare('SELECT 1 FROM day_accommodations WHERE id = ?').get(id);
+  const stayExists = async (id: number) => !!await storedRow(DayAccommodations, { id });
 
   it('TRIP-SVC-074: a stay from a removed day to a spare day goes, and the spare day it left empty goes too', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-07-01', end_date: '2025-07-05' });
-    const days = getDays(trip.id);
-    const spare = addUndatedDay(trip.id);
+    const days = (await getDays(trip.id));
+    const spare = await addUndatedDay(trip.id);
     const place = createPlace(testDb, trip.id);
-    const stay = addStay(trip.id, place.id, days[4].id, spare);
+    const stay = await addStay(trip.id, place.id, days[4].id, spare);
 
     const plan = await svc.generateDays(trip.id, '2025-07-01', '2025-07-04');
 
     expect(plan.removed.map(r => [r.id, r.reason])).toEqual([[days[4].id, 'overflow'], [spare, 'spare']]);
-    expect(stayExists(stay)).toBe(false);
-    expect(getDays(trip.id).map(d => d.id)).toEqual(days.slice(0, 4).map(d => d.id));
+    expect(await stayExists(stay)).toBe(false);
+    expect((await getDays(trip.id)).map(d => d.id)).toEqual(days.slice(0, 4).map(d => d.id));
   });
 
   it('TRIP-SVC-075: only moving the dates drops an empty spare day and keeps one with a note', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-07-01', end_date: '2025-07-03' });
-    const empty = addUndatedDay(trip.id);
-    const noted = addUndatedDay(trip.id);
+    const empty = await addUndatedDay(trip.id);
+    const noted = await addUndatedDay(trip.id);
     createDayNote(testDb, noted, trip.id, { text: 'Buffer' });
 
     const plan = await svc.generateDays(trip.id, '2025-07-11', '2025-07-13');
 
     expect(plan.removed).toEqual([{ id: empty, day_number: 4, date: null, reason: 'spare' }]);
-    const after = getDays(trip.id);
+    const after = (await getDays(trip.id));
     expect(after.map(d => d.date)).toEqual(['2025-07-11', '2025-07-12', '2025-07-13', null]);
     expect(after[3]).toMatchObject({ id: noted, day_number: 4 });
-    expect(getNotes(noted)).toHaveLength(1);
+    expect((await getNotes(noted))).toHaveLength(1);
   });
 
   it('TRIP-SVC-076: without dates only empty days are trimmed, the highest numbers first', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const ids = Array.from({ length: 6 }, () => addUndatedDay(trip.id));
+    const ids: number[] = [];
+    for (let i = 0; i < 6; i++) ids.push(await addUndatedDay(trip.id));
     const place = createPlace(testDb, trip.id);
     createDayAssignment(testDb, ids[1], place.id);
     createDayAssignment(testDb, ids[5], place.id);
@@ -595,18 +656,18 @@ describe('generateDays', () => {
     const plan = await svc.generateDays(trip.id, null, null, 3);
 
     expect(plan.removed.map(r => r.id)).toEqual([ids[4], ids[3], ids[2]]);
-    expect(getDays(trip.id).map(d => [d.id, d.day_number])).toEqual([[ids[0], 1], [ids[1], 2], [ids[5], 3]]);
+    expect((await getDays(trip.id)).map(d => [d.id, d.day_number])).toEqual([[ids[0], 1], [ids[1], 2], [ids[5], 3]]);
   });
 
   it('TRIP-SVC-077: generateDays returns the plan it carried out', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-07-01', end_date: '2025-07-03' });
-    const before = getDays(trip.id);
-    const spare = addUndatedDay(trip.id);
+    const before = (await getDays(trip.id));
+    const spare = await addUndatedDay(trip.id);
 
     const plan = await svc.generateDays(trip.id, '2025-07-01', '2025-07-06');
 
-    const after = getDays(trip.id);
+    const after = (await getDays(trip.id));
     expect(plan.removed).toEqual([]);
     expect(plan.rows.map(r => r.date)).toEqual(after.map(d => d.date));
     expect(plan.rows.slice(0, 4).map(r => r.id)).toEqual([...before.map(d => d.id), spare]);
@@ -616,26 +677,32 @@ describe('generateDays', () => {
 
     const shrink = await svc.generateDays(trip.id, '2025-07-01', '2025-07-02');
     expect(shrink.removed.map(r => r.id)).toEqual(after.slice(2).map(d => d.id));
-    expect(getDays(trip.id).map(d => d.id)).toEqual(shrink.rows.map(r => r.id));
+    expect((await getDays(trip.id)).map(d => d.id)).toEqual(shrink.rows.map(r => r.id));
   });
 
   it('TRIP-SVC-078: fuzz, 300 random day grids end exactly where the rebuild before the shared plan left them', async () => {
     // The rebuild as it stood before planDayGrid, kept here as the oracle.
     function legacyGenerateDays(tripId: number, startDate: string | null, endDate: string | null, dayCount?: number) {
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       const existing = testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ?').all(tripId) as { id: number; day_number: number; date: string | null }[];
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       const setDayNumber = testDb.prepare('UPDATE days SET day_number = ? WHERE id = ?');
       const renumber = (list: { id: number }[]) => {
         list.forEach((d, i) => setDayNumber.run(-(i + 1), d.id));
         list.forEach((d, i) => setDayNumber.run(i + 1, d.id));
       };
       if (!startDate || !endDate) {
+        // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
         for (const d of existing.filter(d => d.date)) testDb.prepare('UPDATE days SET date = NULL WHERE id = ?').run(d.id);
+        // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
         const all = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as { id: number }[];
         const target = Math.min(Math.max(dayCount ?? (all.length || 7), 1), MAX_TRIP_DAYS);
         const needed = target - all.length;
         if (needed > 0) {
+          // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
           for (let i = 0; i < needed; i++) testDb.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, NULL)').run(tripId, all.length + i + 1);
         } else if (needed < 0) {
+          // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
           const candidates = testDb.prepare(
             `SELECT d.id FROM days d WHERE d.trip_id = ?
                AND NOT EXISTS (SELECT 1 FROM day_assignments da WHERE da.day_id = d.id)
@@ -643,8 +710,10 @@ describe('generateDays', () => {
                AND NOT EXISTS (SELECT 1 FROM day_accommodations dac WHERE dac.start_day_id = d.id OR dac.end_day_id = d.id)
              ORDER BY d.day_number DESC LIMIT ?`,
           ).all(tripId, -needed) as { id: number }[];
+          // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
           for (const d of candidates) testDb.prepare('DELETE FROM days WHERE id = ?').run(d.id);
         }
+        // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
         renumber(testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as { id: number }[]);
         return;
       }
@@ -653,14 +722,18 @@ describe('generateDays', () => {
       const dated = existing.filter(d => d.date).sort((a, b) => a.day_number - b.day_number);
       const dateless = existing.filter(d => !d.date).sort((a, b) => a.day_number - b.day_number);
       [...dated, ...dateless].forEach((d, i) => setDayNumber.run(-(i + 1), d.id));
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       const assignDay = testDb.prepare('UPDATE days SET date = ?, day_number = ? WHERE id = ?');
       let datelessIdx = 0;
       targetDates.forEach((date, i) => {
         if (i < dated.length) assignDay.run(date, i + 1, dated[i].id);
         else if (datelessIdx < dateless.length) assignDay.run(date, i + 1, dateless[datelessIdx++].id);
+        // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
         else testDb.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, ?)').run(tripId, i + 1, date);
       });
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       for (let i = targetDates.length; i < dated.length; i++) testDb.prepare('DELETE FROM days WHERE id = ?').run(dated[i].id);
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       const isEmpty = testDb.prepare(
         `SELECT NOT EXISTS (SELECT 1 FROM day_assignments da WHERE da.day_id = @id)
               AND NOT EXISTS (SELECT 1 FROM day_notes dn WHERE dn.day_id = @id)
@@ -669,9 +742,11 @@ describe('generateDays', () => {
       const maxAssigned = Math.max(targetDates.length, dated.length);
       let kept = 0;
       for (let i = datelessIdx; i < dateless.length; i++) {
+        // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
         if ((isEmpty.get({ id: dateless[i].id }) as { empty: number }).empty) testDb.prepare('DELETE FROM days WHERE id = ?').run(dateless[i].id);
         else setDayNumber.run(maxAssigned + ++kept, dateless[i].id);
       }
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       renumber(testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as { id: number }[]);
     }
 
@@ -686,11 +761,15 @@ describe('generateDays', () => {
     const int = (lo: number, hi: number) => lo + Math.floor(rand() * (hi - lo + 1));
 
     const snapshot = (tripId: number) => ({
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       days: testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId),
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       stays: testDb.prepare('SELECT id FROM day_accommodations WHERE trip_id = ? ORDER BY id').all(tripId),
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       assignments: testDb.prepare(
         'SELECT da.id, da.day_id FROM day_assignments da JOIN days d ON d.id = da.day_id WHERE d.trip_id = ? ORDER BY da.id',
       ).all(tripId),
+      // test-sql-allow: the legacy rebuild oracle runs inside a synchronous transaction it rolls back, so it stays on the raw handle.
       notes: testDb.prepare('SELECT id, day_id FROM day_notes WHERE trip_id = ? ORDER BY id').all(tripId),
     });
     const ROLLBACK = new Error('rollback');
@@ -704,13 +783,13 @@ describe('generateDays', () => {
       const count = int(0, 9);
       for (let n = 1; n <= count; n++) {
         const date = rand() < 0.7 ? addDaysIso('2026-03-20', int(0, 20)) : null;
-        const id = Number(testDb.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, ?)').run(trip.id, n, date).lastInsertRowid);
+        const id = await insertRow(await orm(), Days, { trip: trip.id, day_number: n, date });
         dayIds.push(id);
         if (rand() < 0.3) createDayAssignment(testDb, id, place.id);
         if (rand() < 0.2) createDayNote(testDb, id, trip.id);
       }
       if (dayIds.length > 0) {
-        for (let k = int(0, 3); k > 0; k--) addStay(trip.id, place.id, dayIds[int(0, dayIds.length - 1)], dayIds[int(0, dayIds.length - 1)]);
+        for (let k = int(0, 3); k > 0; k--) await addStay(trip.id, place.id, dayIds[int(0, dayIds.length - 1)], dayIds[int(0, dayIds.length - 1)]);
       }
       let range: [string | null, string | null, number | undefined];
       if (rand() < 0.25) {
@@ -810,22 +889,20 @@ describe('deleteOldCover', () => {
 });
 
 describe('resyncReservationDays (#1288)', () => {
-  const dayFor = (tripId: number, date: string) =>
-    (testDb.prepare('SELECT id FROM days WHERE trip_id = ? AND date = ?').get(tripId, date) as { id: number }).id;
-  const insertDatedReservation = (tripId: number, dayId: number, time: string) =>
-    Number(testDb.prepare(
-      "INSERT INTO reservations (trip_id, day_id, title, reservation_time, type, status) VALUES (?, ?, 'Dinner', ?, 'restaurant', 'pending')",
-    ).run(tripId, dayId, time).lastInsertRowid);
+  const dayFor = async (tripId: number, date: string) =>
+    (await storedFields(Days, { trip: tripId, date }, ['id']) as { id: number }).id;
+  const insertDatedReservation = async (tripId: number, dayId: number, time: string) =>
+    Number(await insertRow(await orm(), Reservations, { trip: tripId, day: dayId, title: 'Dinner', reservation_time: time, type: 'restaurant', status: 'pending' }));
 
   it('TRIP-SVC-018: changing the start date re-anchors a dated reservation to the day matching its time', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });
-    const resId = insertDatedReservation(trip.id, dayFor(trip.id, '2025-06-02'), '2025-06-02T19:00:00');
+    const resId = (await insertDatedReservation(trip.id, (await dayFor(trip.id, '2025-06-02')), '2025-06-02T19:00:00'));
     // Shift the whole range one day forward (days become 2025-06-02..06).
     await svc.updateTrip(trip.id, user.id, { start_date: '2025-06-02', end_date: '2025-06-06' }, 'user');
-    const res = testDb.prepare('SELECT day_id FROM reservations WHERE id = ?').get(resId) as { day_id: number };
+    const res = await storedFields(Reservations, { id: resId }, ['day_id']) as { day_id: number };
     // The booking stays on its absolute date (2025-06-02) instead of shifting with its old day row.
-    expect(res.day_id).toBe(dayFor(trip.id, '2025-06-02'));
+    expect(res.day_id).toBe((await dayFor(trip.id, '2025-06-02')));
   });
 
   it('TRIP-SVC-018b: the trip row and its rebuilt days are one write: a failing rebuild keeps the old dates', async () => {
@@ -844,47 +921,45 @@ describe('resyncReservationDays (#1288)', () => {
   it('TRIP-SVC-019: a reservation whose date falls outside the new range keeps its day_id (not nulled)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });
-    const origDayId = dayFor(trip.id, '2025-06-02');
-    const resId = insertDatedReservation(trip.id, origDayId, '2025-06-02T19:00:00');
+    const origDayId = (await dayFor(trip.id, '2025-06-02'));
+    const resId = (await insertDatedReservation(trip.id, origDayId, '2025-06-02T19:00:00'));
     // Shift far forward so 2025-06-02 is no longer covered by any day.
     await svc.updateTrip(trip.id, user.id, { start_date: '2025-06-10', end_date: '2025-06-14' }, 'user');
-    const res = testDb.prepare('SELECT day_id FROM reservations WHERE id = ?').get(resId) as { day_id: number };
+    const res = await storedFields(Reservations, { id: resId }, ['day_id']) as { day_id: number };
     expect(res.day_id).toBe(origDayId);
   });
 });
 
 describe('resyncAccommodationDays (#1288)', () => {
-  const dayFor = (tripId: number, date: string) =>
-    (testDb.prepare('SELECT id FROM days WHERE trip_id = ? AND date = ?').get(tripId, date) as { id: number }).id;
+  const dayFor = async (tripId: number, date: string) =>
+    (await storedFields(Days, { trip: tripId, date }, ['id']) as { id: number }).id;
 
   const insertAccommodation = async (tripId: number, startDayId: number, endDayId: number) => {
     const place = createPlace(testDb, tripId, { name: 'Grand Hotel' });
     const { accommodation: acc } = (await createAccommodation(tripId, {
       place_id: place.id, start_day_id: startDayId, end_day_id: endDayId,
     })) as { accommodation: { id: number } };
-    const linkedRes = testDb.prepare(
-      'SELECT id FROM reservations WHERE accommodation_id = ?',
-    ).get(acc.id) as { id: number };
+    const linkedRes = await storedFields(Reservations, { accommodation_id: legacyBoundIntegerText(acc.id) }, ['id']) as { id: number };
     return { accId: acc.id, linkedResId: linkedRes.id };
   };
 
-  const getAcc = (id: number) =>
-    testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(id) as
+  const getAcc = async (id: number) =>
+    await storedFields(DayAccommodations, { id }, ['start_day_id', 'end_day_id']) as
       { start_day_id: number; end_day_id: number };
-  const getRes = (id: number) =>
-    testDb.prepare('SELECT day_id, reservation_time FROM reservations WHERE id = ?').get(id) as
+  const getRes = async (id: number) =>
+    await storedFields(Reservations, { id }, ['day_id', 'reservation_time']) as
       { day_id: number | null; reservation_time: string | null };
 
   it('TRIP-SVC-035: extending the start keeps an accommodation on its absolute dates', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-10', end_date: '2025-06-14' });
-    const { accId, linkedResId } = await insertAccommodation(trip.id, dayFor(trip.id, '2025-06-11'), dayFor(trip.id, '2025-06-13'));
+    const { accId, linkedResId } = await insertAccommodation(trip.id, (await dayFor(trip.id, '2025-06-11')), (await dayFor(trip.id, '2025-06-13')));
     // Add a day at the start: days re-date positionally (old 06-11 row becomes 06-10, …).
     await svc.updateTrip(trip.id, user.id, { start_date: '2025-06-09', end_date: '2025-06-14' }, 'user');
-    const acc = getAcc(accId);
-    expect(acc.start_day_id).toBe(dayFor(trip.id, '2025-06-11'));
-    expect(acc.end_day_id).toBe(dayFor(trip.id, '2025-06-13'));
-    const res = getRes(linkedResId);
+    const acc = (await getAcc(accId));
+    expect(acc.start_day_id).toBe((await dayFor(trip.id, '2025-06-11')));
+    expect(acc.end_day_id).toBe((await dayFor(trip.id, '2025-06-13')));
+    const res = (await getRes(linkedResId));
     expect(res.day_id).toBe(acc.start_day_id);
     expect(res.reservation_time?.slice(0, 10)).toBe('2025-06-11');
   });
@@ -895,28 +970,28 @@ describe('resyncAccommodationDays (#1288)', () => {
     // it, or the route runs through a day the traveller is no longer staying on.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-10', end_date: '2025-06-14' });
-    const { accId } = await insertAccommodation(trip.id, dayFor(trip.id, '2025-06-11'), dayFor(trip.id, '2025-06-13'));
-    const stopOf = () => testDb.prepare('SELECT day_id FROM day_assignments WHERE accommodation_id = ?').get(accId) as { day_id: number };
-    expect(stopOf().day_id).toBe(dayFor(trip.id, '2025-06-11'));
+    const { accId } = await insertAccommodation(trip.id, (await dayFor(trip.id, '2025-06-11')), (await dayFor(trip.id, '2025-06-13')));
+    const stopOf = async () => await storedFields(DayAssignments, { accommodation_id: accId }, ['day_id']) as { day_id: number };
+    expect((await stopOf()).day_id).toBe((await dayFor(trip.id, '2025-06-11')));
 
     await svc.updateTrip(trip.id, user.id, { start_date: '2025-06-09', end_date: '2025-06-14' }, 'user');
 
-    expect(stopOf().day_id).toBe(getAcc(accId).start_day_id);
-    expect(stopOf().day_id).toBe(dayFor(trip.id, '2025-06-11'));
+    expect((await stopOf()).day_id).toBe((await getAcc(accId)).start_day_id);
+    expect((await stopOf()).day_id).toBe((await dayFor(trip.id, '2025-06-11')));
   });
 
   it('TRIP-SVC-036: moving the whole trip out of the old range keeps the accommodation glued to its days', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });
-    const startDayId = dayFor(trip.id, '2025-06-02');
-    const endDayId = dayFor(trip.id, '2025-06-03');
+    const startDayId = (await dayFor(trip.id, '2025-06-02'));
+    const endDayId = (await dayFor(trip.id, '2025-06-03'));
     const { accId, linkedResId } = await insertAccommodation(trip.id, startDayId, endDayId);
     await svc.updateTrip(trip.id, user.id, { start_date: '2025-07-01', end_date: '2025-07-05' }, 'user');
-    const acc = getAcc(accId);
+    const acc = (await getAcc(accId));
     expect(acc.start_day_id).toBe(startDayId);
     expect(acc.end_day_id).toBe(endDayId);
     // The linked reservation follows the (re-dated) start day instead of keeping a stale date snapshot.
-    const res = getRes(linkedResId);
+    const res = (await getRes(linkedResId));
     expect(res.day_id).toBe(startDayId);
     expect(res.reservation_time?.slice(0, 10)).toBe('2025-07-02');
   });
@@ -924,31 +999,27 @@ describe('resyncAccommodationDays (#1288)', () => {
   it("TRIP-SVC-038: date_shift_mode 'shift_all' glues bookings to their days and restamps their times", async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });
-    const origDayId = dayFor(trip.id, '2025-06-02');
-    const resId = Number(testDb.prepare(
-      "INSERT INTO reservations (trip_id, day_id, title, reservation_time, type, status) VALUES (?, ?, 'Dinner', '2025-06-02T19:00:00', 'restaurant', 'pending')",
-    ).run(trip.id, origDayId).lastInsertRowid);
-    const { accId } = await insertAccommodation(trip.id, origDayId, dayFor(trip.id, '2025-06-03'));
+    const origDayId = (await dayFor(trip.id, '2025-06-02'));
+    const resId = Number(await insertRow(await orm(), Reservations, { trip: trip.id, day: origDayId, title: 'Dinner', reservation_time: '2025-06-02T19:00:00', type: 'restaurant', status: 'pending' }));
+    const { accId } = await insertAccommodation(trip.id, origDayId, (await dayFor(trip.id, '2025-06-03')));
     await svc.updateTrip(trip.id, user.id, { start_date: '2025-06-03', end_date: '2025-06-07', date_shift_mode: 'shift_all' }, 'user');
     // The booking stays on its day row (now 2025-06-04) and its time follows.
-    const res = testDb.prepare('SELECT day_id, reservation_time FROM reservations WHERE id = ?').get(resId) as
+    const res = await storedFields(Reservations, { id: resId }, ['day_id', 'reservation_time']) as
       { day_id: number; reservation_time: string };
     expect(res.day_id).toBe(origDayId);
     expect(res.reservation_time).toBe('2025-06-04T19:00:00');
     // The accommodation stays glued to its (re-dated) day rows too.
-    const acc = getAcc(accId);
+    const acc = (await getAcc(accId));
     expect(acc.start_day_id).toBe(origDayId);
   });
 
   it('TRIP-SVC-037: a dated hotel reservation without a linked accommodation is re-anchored like other bookings', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-05' });
-    const resId = Number(testDb.prepare(
-      "INSERT INTO reservations (trip_id, day_id, title, reservation_time, type, status) VALUES (?, ?, 'Imported hotel', ?, 'hotel', 'pending')",
-    ).run(trip.id, dayFor(trip.id, '2025-06-02'), '2025-06-02T15:00:00').lastInsertRowid);
+    const resId = Number(await insertRow(await orm(), Reservations, { trip: trip.id, day: (await dayFor(trip.id, '2025-06-02')), title: 'Imported hotel', reservation_time: '2025-06-02T15:00:00', type: 'hotel', status: 'pending' }));
     await svc.updateTrip(trip.id, user.id, { start_date: '2025-06-02', end_date: '2025-06-06' }, 'user');
-    const res = testDb.prepare('SELECT day_id FROM reservations WHERE id = ?').get(resId) as { day_id: number };
-    expect(res.day_id).toBe(dayFor(trip.id, '2025-06-02'));
+    const res = await storedFields(Reservations, { id: resId }, ['day_id']) as { day_id: number };
+    expect(res.day_id).toBe((await dayFor(trip.id, '2025-06-02')));
   });
 });
 
@@ -962,11 +1033,11 @@ describe('transferOwnership (#973)', () => {
     const result = await membersSvc.transferOwnership(trip.id, member.id, owner.id);
     expect(result.toEmail).toBe(member.email);
 
-    const updated = testDb.prepare('SELECT user_id FROM trips WHERE id = ?').get(trip.id) as { user_id: number };
+    const updated = await storedFields(Trips, { id: trip.id }, ['user_id']) as { user_id: number };
     expect(updated.user_id).toBe(member.id);
 
     // New owner no longer sits in trip_members, former owner now does.
-    const memberIds = (testDb.prepare('SELECT user_id FROM trip_members WHERE trip_id = ?').all(trip.id) as { user_id: number }[]).map(r => r.user_id);
+    const memberIds = (await storedRows(TripMembers, { trip: trip.id }, undefined, ['user_id']) as { user_id: number }[]).map(r => r.user_id);
     expect(memberIds).toContain(owner.id);
     expect(memberIds).not.toContain(member.id);
   });
@@ -1003,14 +1074,14 @@ describe('guest members (#1362)', () => {
     expect(member.username).toBe('Anna');
     expect(member.is_guest).toBe(true);
 
-    const row = testDb.prepare('SELECT username, email, password_hash, is_guest, role FROM users WHERE id = ?').get(member.id) as any;
+    const row = await storedFields(Users, { id: member.id }, ['username', 'email', 'password_hash', 'is_guest', 'role']) as any;
     expect(row.is_guest).toBe(1);
     expect(row.password_hash).toBe('');
     expect(row.email).toMatch(/@guests\.invalid$/);
     expect(row.role).toBe('user');
 
     // Joined as a trip member.
-    const m = testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, member.id);
+    const m = await storedFields(TripMembers, { trip: trip.id, user: member.id }, ['id']);
     expect(m).toBeTruthy();
 
     // Surfaces in listMembers with is_guest=true and the typed display name.
@@ -1029,7 +1100,7 @@ describe('guest members (#1362)', () => {
     expect(a.member.username).toBe('Sam');
     expect(b.member.username).toBe('Sam');
     expect(b.member.id).not.toBe(a.member.id);
-    const usernames = testDb.prepare('SELECT username FROM users WHERE id IN (?, ?)').all(a.member.id, b.member.id) as { username: string }[];
+    const usernames = await storedRows(Users, { id: { $in: [a.member.id, b.member.id] } }, undefined, ['username']) as { username: string }[];
     expect(usernames[0].username).not.toBe(usernames[1].username);
   });
 
@@ -1041,7 +1112,7 @@ describe('guest members (#1362)', () => {
     const { member } = await membersSvc.createGuest(trip.id, 'Bob', owner.id);
 
     expect(await membersSvc.renameGuest(trip.id, member.id, 'Robert')).toBe(true);
-    expect((testDb.prepare('SELECT display_name FROM users WHERE id = ?').get(member.id) as any).display_name).toBe('Robert');
+    expect((await storedFields(Users, { id: member.id }, ['display_name']) as any).display_name).toBe('Robert');
 
     // A real user cannot be renamed through the guest path…
     expect(await membersSvc.renameGuest(trip.id, owner.id, 'Hacked')).toBe(false);
@@ -1058,8 +1129,8 @@ describe('guest members (#1362)', () => {
     expect(await membersSvc.deleteGuest(trip.id, owner.id)).toBe(false);
 
     expect(await membersSvc.deleteGuest(trip.id, member.id)).toBe(true);
-    expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(member.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE user_id = ?').get(member.id)).toBeUndefined();
+    expect(await storedFields(Users, { id: member.id }, ['id'])).toBeUndefined();
+    expect(await storedFields(TripMembers, { user: member.id }, ['id'])).toBeUndefined();
   });
 
   it('TRIP-SVC-034: a guest is never invitable (addMember) nor a transfer target', async () => {
@@ -1082,8 +1153,8 @@ describe('folded trip CRUD', () => {
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id, { start_date: '2025-06-01', end_date: '2025-06-02' });
     addTripMember(testDb, trip.id, member.id);
-    testDb.prepare("INSERT INTO budget_items (trip_id, category, name, total_price) VALUES (?, 'food', 'Dinner', 40)").run(trip.id);
-    testDb.prepare("INSERT INTO packing_items (trip_id, name, checked) VALUES (?, 'Socks', 1)").run(trip.id);
+    await insertRow(await orm(), BudgetItems, { trip: trip.id, category: 'food', name: 'Dinner', total_price: 40 });
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Socks', checked: 1 });
 
     const summary = (await readModelSvc.getTripSummary(trip.id, owner.id))!;
     expect(summary).toBeTruthy();
@@ -1109,7 +1180,7 @@ describe('folded trip CRUD', () => {
     const shared = createTrip(testDb, other.id, { title: 'Shared' });
     addTripMember(testDb, shared.id, owner.id);
     const archived = createTrip(testDb, owner.id, { title: 'Old' });
-    testDb.prepare('UPDATE trips SET is_archived = 1 WHERE id = ?').run(archived.id);
+    await updateRows(await orm(), Trips, { id: archived.id }, { is_archived: 1 });
 
     const active = (await svc.list(owner.id, 0)) as any[];
     expect(active.map(t => t.id).sort()).toEqual([own.id, shared.id].sort());
@@ -1127,85 +1198,77 @@ describe('folded trip CRUD', () => {
     });
     expect(reminderDays).toBe(3); // out-of-range → default 3
     expect((trip as any).currency).toBe('EUR'); // no currency → 'EUR'
-    expect(getDays(tripId)).toHaveLength(3);
+    expect((await getDays(tripId))).toHaveLength(3);
   });
 
   it('TRIP-SVC-090: one given date makes a week, counted in calendar days across a DST change', async () => {
     const { user } = createUser(testDb);
     const fromStart = await svc.create(user.id, { title: 'Spring', start_date: '2026-03-25' });
     expect(fromStart.trip).toMatchObject({ start_date: '2026-03-25', end_date: '2026-03-31' });
-    expect(getDays(fromStart.tripId)).toHaveLength(7);
+    expect((await getDays(fromStart.tripId))).toHaveLength(7);
     const fromEnd = await svc.create(user.id, { title: 'Autumn', end_date: '2026-10-30' });
     expect(fromEnd.trip).toMatchObject({ start_date: '2026-10-24', end_date: '2026-10-30' });
   });
 
   it('TRIP-SVC-091: the trip and its days commit together', async () => {
     const { user } = createUser(testDb);
-    const before = (testDb.prepare('SELECT COUNT(*) AS c FROM trips').get() as { c: number }).c;
+    const before = ({ c: await countRows(await orm(), Trips, {}) } as { c: number }).c;
     const generate = vi.spyOn(svc, 'generateDays').mockRejectedValueOnce(new Error('disk I/O error'));
     await expect(svc.create(user.id, { title: 'Half', start_date: '2026-05-01', end_date: '2026-05-03' })).rejects.toThrow('disk I/O error');
     generate.mockRestore();
-    expect((testDb.prepare('SELECT COUNT(*) AS c FROM trips').get() as { c: number }).c).toBe(before);
+    expect(({ c: await countRows(await orm(), Trips, {}) } as { c: number }).c).toBe(before);
   });
 
   it('TRIP-SVC-080: create without a currency takes the display currency, admin default included, else EUR', async () => {
     const { user } = createUser(testDb);
-    const setUser = (value: string) =>
-      testDb.prepare("INSERT INTO settings (user_id, key, value) VALUES (?, 'default_currency', ?) ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value")
-        .run(user.id, JSON.stringify(value));
-    const setAdmin = (value: string) =>
-      testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('default_user_setting_default_currency', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        .run(JSON.stringify(value));
+    const setUser = async (value: string) =>
+      setUserSetting(await orm(), user.id, 'default_currency', JSON.stringify(value));
+    const setAdmin = async (value: string) =>
+      setAppSetting(await orm(), 'default_user_setting_default_currency', JSON.stringify(value));
     const currencyOf = async (data: Parameters<typeof svc.create>[1]) => ((await svc.create(user.id, data)).trip as any).currency;
 
     expect(await currencyOf({ title: 'Nothing set' })).toBe('EUR');
     // "Trip currency" in the settings stores an empty string, which counts as unset.
-    setUser('');
+    await setUser('');
     expect(await currencyOf({ title: 'Cleared, no admin default' })).toBe('EUR');
-    setUser('   ');
+    await setUser('   ');
     expect(await currencyOf({ title: 'Blank, no admin default' })).toBe('EUR');
-    setUser('');
-    setAdmin('CHF');
+    await setUser('');
+    await setAdmin('CHF');
     expect(await currencyOf({ title: 'Admin default' })).toBe('CHF');
-    setUser('USD');
+    await setUser('USD');
     expect(await currencyOf({ title: 'Own display currency' })).toBe('USD');
-    setUser('');
+    await setUser('');
     expect(await currencyOf({ title: 'Back on the admin default' })).toBe('CHF');
     // An explicit currency always wins.
-    setUser('USD');
+    await setUser('USD');
     expect(await currencyOf({ title: 'Explicit', currency: 'JPY' })).toBe('JPY');
   });
 
   it('TRIP-SVC-064: create refuses a range past MAX_TRIP_DAYS and writes nothing', async () => {
     const { user } = createUser(testDb);
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM trips').get() as { n: number }).n;
+    const before = ({ n: await countRows(await orm(), Trips, {}) } as { n: number }).n;
     await expect(svc.create(user.id, { title: 'Decade', start_date: '2026-01-01', end_date: '2036-01-01' }))
       .rejects.toThrow(`A trip can span at most ${MAX_TRIP_DAYS} days`);
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM trips').get() as { n: number }).n).toBe(before);
+    expect(({ n: await countRows(await orm(), Trips, {}) } as { n: number }).n).toBe(before);
     // The longest allowed range goes through in full.
     const { tripId } = await svc.create(user.id, { title: 'Longest', start_date: '2026-01-01', end_date: addDaysIso('2026-01-01', MAX_TRIP_DAYS - 1) });
-    expect(getDays(tripId)).toHaveLength(MAX_TRIP_DAYS);
+    expect((await getDays(tripId))).toHaveLength(MAX_TRIP_DAYS);
   });
 
   it('TRIP-SVC-045: remove deletes the trip, cleans skeleton journey entries and detaches filled ones', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const journeyId = Number(testDb.prepare(
-      "INSERT INTO journeys (user_id, title, created_at, updated_at) VALUES (?, 'J', 0, 0)",
-    ).run(user.id).lastInsertRowid);
-    testDb.prepare(
-      "INSERT INTO journey_entries (journey_id, source_trip_id, author_id, type, title, entry_date, created_at, updated_at) VALUES (?, ?, ?, 'skeleton', 'S', '2025-06-01', 0, 0)",
-    ).run(journeyId, trip.id, user.id);
-    const filledId = Number(testDb.prepare(
-      "INSERT INTO journey_entries (journey_id, source_trip_id, author_id, type, title, entry_date, created_at, updated_at) VALUES (?, ?, ?, 'story', 'F', '2025-06-01', 0, 0)",
-    ).run(journeyId, trip.id, user.id).lastInsertRowid);
+    const journeyId = Number(await insertRow(await orm(), Journeys, { user: user.id, title: 'J', created_at: 0, updated_at: 0 }));
+    await insertRow(await orm(), JourneyEntries, { journey: journeyId, sourceTrip: trip.id, author: user.id, type: 'skeleton', title: 'S', entry_date: '2025-06-01', created_at: 0, updated_at: 0 });
+    const filledId = Number(await insertRow(await orm(), JourneyEntries, { journey: journeyId, sourceTrip: trip.id, author: user.id, type: 'story', title: 'F', entry_date: '2025-06-01', created_at: 0, updated_at: 0 }));
 
     const info = await svc.remove(trip.id, user.id, 'user');
     expect(info).toMatchObject({ tripId: trip.id, ownerId: user.id, isAdminDelete: false });
 
-    expect(testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id)).toBeUndefined();
-    expect(testDb.prepare("SELECT id FROM journey_entries WHERE type = 'skeleton'").get()).toBeUndefined();
-    const filled = testDb.prepare('SELECT source_trip_id FROM journey_entries WHERE id = ?').get(filledId) as any;
+    expect(await storedFields(Trips, { id: trip.id }, ['id'])).toBeUndefined();
+    expect(await storedFields(JourneyEntries, { type: 'skeleton' }, ['id'])).toBeUndefined();
+    const filled = await storedFields(JourneyEntries, { id: filledId }, ['source_trip_id']) as any;
     expect(filled.source_trip_id).toBeNull();
 
     // Missing trips throw the byte-identical error.
@@ -1215,26 +1278,26 @@ describe('folded trip CRUD', () => {
   it('TRIP-SVC-046: copy duplicates days/places/assignments and resets packing to unchecked', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Origin', start_date: '2025-06-01', end_date: '2025-06-02' });
-    const days = getDays(trip.id);
+    const days = (await getDays(trip.id));
     const place = createPlace(testDb, trip.id, { name: 'Louvre' });
     createDayAssignment(testDb, days[0].id, place.id);
-    testDb.prepare("INSERT INTO packing_items (trip_id, name, checked) VALUES (?, 'Socks', 1)").run(trip.id);
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Socks', checked: 1 });
 
     const newTripId = await svc.copy(trip.id, user.id, 'Clone');
 
-    const copied = testDb.prepare('SELECT title, is_archived FROM trips WHERE id = ?').get(newTripId) as any;
+    const copied = await storedFields(Trips, { id: newTripId }, ['title', 'is_archived']) as any;
     expect(copied.title).toBe('Clone');
     expect(copied.is_archived).toBe(0);
-    expect(getDays(newTripId)).toHaveLength(2);
-    const newPlaces = testDb.prepare('SELECT id, name FROM places WHERE trip_id = ?').all(newTripId) as any[];
+    expect((await getDays(newTripId))).toHaveLength(2);
+    const newPlaces = await storedRows(Places, { trip: newTripId }, undefined, ['id', 'name']) as any[];
     expect(newPlaces.map(p => p.name)).toEqual(['Louvre']);
-    expect(getAssignments(getDays(newTripId)[0].id)).toHaveLength(1);
-    const packing = testDb.prepare('SELECT checked FROM packing_items WHERE trip_id = ?').all(newTripId) as any[];
+    expect(await getAssignments((await getDays(newTripId))[0].id)).toHaveLength(1);
+    const packing = await storedRows(PackingItems, { trip: newTripId }, undefined, ['checked']) as any[];
     expect(packing).toEqual([{ checked: 0 }]);
 
     // No title → source title (|| fallback).
     const secondCopy = await svc.copy(trip.id, user.id);
-    expect((testDb.prepare('SELECT title FROM trips WHERE id = ?').get(secondCopy) as any).title).toBe('Origin');
+    expect((await storedFields(Trips, { id: secondCopy }, ['title']) as any).title).toBe('Origin');
   });
 
   it('TRIP-SVC-061: copy carries the road-trip shaping, not just the places', async () => {
@@ -1244,59 +1307,50 @@ describe('folded trip CRUD', () => {
     // only once somebody edits the copy, with nothing left to recover from.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Norway', start_date: '2025-06-01', end_date: '2025-06-02' });
-    const days = getDays(trip.id);
+    const days = (await getDays(trip.id));
     const stop = createPlace(testDb, trip.id, { name: 'Geiranger' });
     const track = createPlace(testDb, trip.id, { name: 'Scenic route' });
-    testDb.prepare("UPDATE places SET stop_type = 'fuel' WHERE id = ?").run(stop.id);
-    testDb.prepare("UPDATE places SET route_geometry = '[[1,2],[3,4]]' WHERE id = ?").run(track.id);
+    await updateRows(await orm(), Places, { id: stop.id }, { stop_type: 'fuel' });
+    await updateRows(await orm(), Places, { id: track.id }, { route_geometry: '[[1,2],[3,4]]' });
     createDayAssignment(testDb, days[0].id, stop.id);
-    testDb.prepare(
-      'INSERT INTO roadtrip_vias (day_id, after_order_index, sequence, lat, lng) VALUES (?, 0, 0, 62.1, 7.2), (?, 0, 1, 62.2, 7.3)',
-    ).run(days[0].id, days[0].id);
-    testDb.prepare('INSERT INTO roadtrip_day_tracks (day_id, place_id, stray_km) VALUES (?, ?, 1.5)')
-      .run(days[0].id, track.id);
+    await insertRow(await orm(), RoadtripVias, { day: days[0].id, after_order_index: 0, sequence: 0, lat: 62.1, lng: 7.2 });
+    await insertRow(await orm(), RoadtripVias, { day: days[0].id, after_order_index: 0, sequence: 1, lat: 62.2, lng: 7.3 });
+    await insertRow(await orm(), RoadtripDayTracks, { day: days[0].id, place: track.id, stray_km: 1.5 });
 
     const newTripId = await svc.copy(trip.id, user.id, 'Clone');
-    const newDays = getDays(newTripId);
+    const newDays = (await getDays(newTripId));
 
     // The kind of stop each place is survives the copy.
-    const copiedStop = testDb.prepare("SELECT stop_type FROM places WHERE trip_id = ? AND name = 'Geiranger'")
-      .get(newTripId) as { stop_type: string | null };
+    const copiedStop = await storedFields(Places, { trip: newTripId, name: 'Geiranger' }, ['stop_type']) as { stop_type: string | null };
     expect(copiedStop.stop_type).toBe('fuel');
 
-    const vias = testDb.prepare('SELECT after_order_index, sequence, lat, lng FROM roadtrip_vias WHERE day_id = ? ORDER BY sequence')
-      .all(newDays[0].id) as { after_order_index: number; sequence: number; lat: number; lng: number }[];
+    const vias = await storedRows(RoadtripVias, { day: newDays[0].id }, { sequence: 'asc' }, ['after_order_index', 'sequence', 'lat', 'lng']) as { after_order_index: number; sequence: number; lat: number; lng: number }[];
     expect(vias).toEqual([
       { after_order_index: 0, sequence: 0, lat: 62.1, lng: 7.2 },
       { after_order_index: 0, sequence: 1, lat: 62.2, lng: 7.3 },
     ]);
 
     // The track points at the COPY's place, never back at the original.
-    const copiedTrack = testDb.prepare('SELECT place_id, stray_km FROM roadtrip_day_tracks WHERE day_id = ?')
-      .get(newDays[0].id) as { place_id: number; stray_km: number };
-    const copiedTrackPlace = testDb.prepare("SELECT id FROM places WHERE trip_id = ? AND name = 'Scenic route'")
-      .get(newTripId) as { id: number };
+    const copiedTrack = await storedFields(RoadtripDayTracks, { day: newDays[0].id }, ['place_id', 'stray_km']) as { place_id: number; stray_km: number };
+    const copiedTrackPlace = await storedFields(Places, { trip: newTripId, name: 'Scenic route' }, ['id']) as { id: number };
     expect(copiedTrack.place_id).toBe(copiedTrackPlace.id);
     expect(copiedTrack.stray_km).toBe(1.5);
 
     // And the original keeps exactly what it had.
-    expect(testDb.prepare('SELECT COUNT(*) c FROM roadtrip_vias WHERE day_id = ?').get(days[0].id)).toEqual({ c: 2 });
+    expect({ c: await countRows(await orm(), RoadtripVias, { day: days[0].id }) }).toEqual({ c: 2 });
   });
 
   it('TRIP-SVC-060: copying a trip keeps a staged booking staged', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Origin', start_date: '2025-06-01', end_date: '2025-06-02' });
-    testDb.prepare(`INSERT INTO reservations (trip_id, title, type, status, ingest_state)
-      VALUES (?, 'Parked', 'flight', 'confirmed', 'staged')`).run(trip.id);
-    testDb.prepare(`INSERT INTO reservations (trip_id, title, type, status)
-      VALUES (?, 'Booked', 'flight', 'confirmed')`).run(trip.id);
+    await insertRow(await orm(), Reservations, { trip: trip.id, title: 'Parked', type: 'flight', status: 'confirmed', ingest_state: 'staged' });
+    await insertRow(await orm(), Reservations, { trip: trip.id, title: 'Booked', type: 'flight', status: 'confirmed' });
 
     const newTripId = await svc.copy(trip.id, user.id, 'Clone');
 
     // Without ingest_state on the duplicate INSERT the staged row falls back to
     // the column default and shows up in the copy's public feed.
-    const rows = testDb.prepare('SELECT title, ingest_state FROM reservations WHERE trip_id = ? ORDER BY title')
-      .all(newTripId) as any[];
+    const rows = await storedRows(Reservations, { trip: newTripId }, { title: 'asc' }, ['title', 'ingest_state']) as any[];
     expect(rows).toEqual([
       { title: 'Booked', ingest_state: 'live' },
       { title: 'Parked', ingest_state: 'staged' },
@@ -1313,13 +1367,14 @@ describe('folded trip CRUD', () => {
     const { user: owner } = createUser(testDb);
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id, { title: 'Origin', start_date: '2025-06-01', end_date: '2025-06-02' });
-    const ins = testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, is_private, owner_id) VALUES (?, ?, 0, ?, ?)');
-    ins.run(trip.id, 'Shared tent', 0, null);            // Common
-    ins.run(trip.id, "Owner's diary", 1, owner.id);      // the owner's Personal
-    ins.run(trip.id, "Member's meds", 1, member.id);     // the copier's own Personal
+    const ins = async (name: string, isPrivate: number, ownerId: number | null) =>
+      insertRow(await orm(), PackingItems, { trip: trip.id, name, checked: 0, is_private: isPrivate, owner: ownerId });
+    await ins('Shared tent', 0, null);            // Common
+    await ins("Owner's diary", 1, owner.id);      // the owner's Personal
+    await ins("Member's meds", 1, member.id);     // the copier's own Personal
 
     const newTripId = await svc.copy(trip.id, member.id, 'Copy');
-    const rows = testDb.prepare('SELECT name, is_private, owner_id FROM packing_items WHERE trip_id = ? ORDER BY name').all(newTripId) as any[];
+    const rows = await storedRows(PackingItems, { trip: newTripId }, { name: 'asc' }, ['name', 'is_private', 'owner_id']) as any[];
 
     // The owner's private row is gone, not relabelled as Common.
     expect(rows.map(r => r.name)).toEqual(["Member's meds", 'Shared tent']);
@@ -1332,61 +1387,52 @@ describe('folded trip CRUD', () => {
     const { user: owner } = createUser(testDb);
     const { user: friend } = createUser(testDb);
     const trip = createTrip(testDb, owner.id, { title: 'Linked', start_date: '2025-06-01', end_date: '2025-06-02' });
-    const days = getDays(trip.id);
+    const days = (await getDays(trip.id));
     const place = createPlace(testDb, trip.id, { name: 'Hotel Le Test' });
     const assignment = createDayAssignment(testDb, days[0].id, place.id);
-    testDb.prepare('INSERT INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)').run(assignment.id, owner.id);
+    await insertRow(await orm(), AssignmentParticipants, { assignment: assignment.id, user: owner.id });
 
-    const accomId = Number(testDb.prepare(`
-      INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_out)
-      VALUES (?, ?, ?, ?, '15:00', '11:00')
-    `).run(trip.id, place.id, days[0].id, days[1].id).lastInsertRowid);
+    const accomId = Number(await insertRow(await orm(), DayAccommodations, { trip: trip.id, place: place.id, startDay: days[0].id, endDay: days[1].id, check_in: '15:00', check_out: '11:00' }));
 
-    const resId = Number(testDb.prepare(`
-      INSERT INTO reservations (trip_id, day_id, assignment_id, accommodation_id, title, type, url)
-      VALUES (?, ?, ?, ?, 'Hotel booking', 'hotel', 'https://example.test/booking')
-    `).run(trip.id, days[0].id, assignment.id, accomId).lastInsertRowid);
+    const resId = Number(await insertRow(await orm(), Reservations, { trip: trip.id, day: days[0].id, assignment: assignment.id, accommodation_id: legacyBoundIntegerText(accomId), title: 'Hotel booking', type: 'hotel', url: 'https://example.test/booking' }));
 
-    const itemId = Number(testDb.prepare(`
-      INSERT INTO budget_items (trip_id, category, name, total_price, persons, reservation_id, currency, exchange_rate, expense_date)
-      VALUES (?, 'Accommodation', 'Hotel', 240, 2, ?, 'JPY', 0.0062, '2025-06-01')
-    `).run(trip.id, resId).lastInsertRowid);
-    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 1, 120)').run(itemId, owner.id);
-    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, 120)').run(itemId, friend.id);
-    testDb.prepare('INSERT INTO budget_item_payers (budget_item_id, user_id, amount) VALUES (?, ?, 240)').run(itemId, owner.id);
-    testDb.prepare("INSERT INTO todo_items (trip_id, name, checked) VALUES (?, 'Book transfer', 1)").run(trip.id);
+    const itemId = Number(await insertRow(await orm(), BudgetItems, { trip: trip.id, category: 'Accommodation', name: 'Hotel', total_price: 240, persons: 2, reservation: resId, currency: 'JPY', exchange_rate: 0.0062, expense_date: '2025-06-01' }));
+    await insertRow(await orm(), BudgetItemMembers, { budgetItem: itemId, user: owner.id, paid: 1, amount: 120 });
+    await insertRow(await orm(), BudgetItemMembers, { budgetItem: itemId, user: friend.id, paid: 0, amount: 120 });
+    await insertRow(await orm(), BudgetItemPayers, { budgetItem: itemId, user: owner.id, amount: 240 });
+    await insertRow(await orm(), TodoItems, { trip: trip.id, name: 'Book transfer', checked: 1 });
 
     const newTripId = await svc.copy(trip.id, owner.id, 'Linked copy');
 
     // Budget → reservation link points at the copied reservation, not null / not the old id.
-    const newItem = testDb.prepare('SELECT * FROM budget_items WHERE trip_id = ?').get(newTripId) as any;
-    const newRes = testDb.prepare('SELECT * FROM reservations WHERE trip_id = ?').get(newTripId) as any;
+    const newItem = await storedRow(BudgetItems, { trip: newTripId }) as any;
+    const newRes = await storedRow(Reservations, { trip: newTripId }) as any;
     expect(newRes.id).not.toBe(resId);
     expect(newItem.reservation_id).toBe(newRes.id);
     expect(newItem).toMatchObject({ currency: 'JPY', exchange_rate: 0.0062, expense_date: '2025-06-01' });
 
     // Reservation → accommodation resolves to the copied accommodation (accommodation_id is TEXT).
-    const newAccom = testDb.prepare('SELECT * FROM day_accommodations WHERE trip_id = ?').get(newTripId) as any;
+    const newAccom = await storedRow(DayAccommodations, { trip: newTripId }) as any;
     expect(newAccom.id).not.toBe(accomId);
     expect(Number(newRes.accommodation_id)).toBe(newAccom.id);
     expect(newRes.url).toBe('https://example.test/booking');
 
     // Splits carried over with per-member paid flags and amounts.
-    const members = testDb.prepare('SELECT user_id, paid, amount FROM budget_item_members WHERE budget_item_id = ? ORDER BY user_id').all(newItem.id) as any[];
+    const members = await storedRows(BudgetItemMembers, { budgetItem: newItem.id }, { user: 'asc' }, ['user_id', 'paid', 'amount']) as any[];
     expect(members).toEqual([
       { user_id: owner.id, paid: 1, amount: 120 },
       { user_id: friend.id, paid: 0, amount: 120 },
     ]);
-    const payers = testDb.prepare('SELECT user_id, amount FROM budget_item_payers WHERE budget_item_id = ?').all(newItem.id) as any[];
+    const payers = await storedRows(BudgetItemPayers, { budgetItem: newItem.id }, undefined, ['user_id', 'amount']) as any[];
     expect(payers).toEqual([{ user_id: owner.id, amount: 240 }]);
 
     // Assignment participants copied onto the remapped assignment.
-    const newAssignment = getAssignments(getDays(newTripId)[0].id)[0];
-    const participants = testDb.prepare('SELECT user_id FROM assignment_participants WHERE assignment_id = ?').all(newAssignment.id) as any[];
+    const newAssignment = (await getAssignments((await getDays(newTripId))[0].id))[0];
+    const participants = await storedRows(AssignmentParticipants, { assignment: newAssignment.id }, undefined, ['user_id']) as any[];
     expect(participants).toEqual([{ user_id: owner.id }]);
 
     // To-dos come across but reset to unchecked (documented behaviour).
-    const todos = testDb.prepare('SELECT name, checked FROM todo_items WHERE trip_id = ?').all(newTripId) as any[];
+    const todos = await storedRows(TodoItems, { trip: newTripId }, undefined, ['name', 'checked']) as any[];
     expect(todos).toEqual([{ name: 'Book transfer', checked: 0 }]);
   });
 });
@@ -1492,8 +1538,8 @@ describe('TripsService wrapper helpers', () => {
     const trip = createTrip(testDb, owner.id, { start_date: '2025-06-01', end_date: '2025-06-02' });
     addTripMember(testDb, trip.id, viewer.id);
     // A personal item of the OWNER must stay out of the other member's bundle.
-    testDb.prepare("INSERT INTO packing_items (trip_id, name, is_private, owner_id) VALUES (?, 'Secret', 1, ?)").run(trip.id, owner.id);
-    testDb.prepare("INSERT INTO packing_items (trip_id, name) VALUES (?, 'Shared')").run(trip.id);
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Secret', is_private: 1, owner: owner.id });
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Shared' });
 
     const result = (await readModelSvc.bundle(String(trip.id), { user_id: owner.id }, viewer.id)) as any;
     expect(result.days).toHaveLength(2);
@@ -1512,7 +1558,7 @@ describe('folded quirk branches', () => {
   it('TRIP-SVC-047: updateTrip admin edit collects changes and the owner email; reminder 0 reads "none"', async () => {
     const { user: owner } = createUser(testDb);
     const { user: admin } = createUser(testDb);
-    testDb.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(admin.id);
+    await updateRows(await orm(), Users, { id: admin.id }, { role: 'admin' });
     const trip = createTrip(testDb, owner.id, { title: 'Old' });
 
     const result = await svc.updateTrip(trip.id, admin.id, { title: 'New', is_archived: true, reminder_days: 0 }, 'admin');
@@ -1535,15 +1581,15 @@ describe('folded quirk branches', () => {
     // A pre-migration row (or any row the `is_archived` column default never
     // touched) can genuinely hold NULL — the legacy statement wrote it back
     // unfolded whenever the request itself never sent `is_archived`.
-    testDb.prepare('UPDATE trips SET is_archived = NULL WHERE id = ?').run(trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { is_archived: null });
 
     await svc.updateTrip(trip.id, user.id, { title: 'Renamed' }, 'user');
 
-    expect((testDb.prepare('SELECT is_archived FROM trips WHERE id = ?').get(trip.id) as { is_archived: number | null }).is_archived).toBeNull();
+    expect((await storedFields(Trips, { id: trip.id }, ['is_archived']) as { is_archived: number | null }).is_archived).toBeNull();
 
     // Explicitly archiving still writes 1/0 as before — only the "untouched, was NULL" path is preserved.
     await svc.updateTrip(trip.id, user.id, { is_archived: true }, 'user');
-    expect((testDb.prepare('SELECT is_archived FROM trips WHERE id = ?').get(trip.id) as { is_archived: number | null }).is_archived).toBe(1);
+    expect((await storedFields(Trips, { id: trip.id }, ['is_archived']) as { is_archived: number | null }).is_archived).toBe(1);
   });
 
   it('TRIP-SVC-072 (Task 7 security review L2, absorbed): the trip UPDATE (TP25) commits before the days-regeneration transaction — a failed regen leaves the new dates in place', async () => {
@@ -1561,12 +1607,12 @@ describe('folded quirk branches', () => {
     // TP25's own write already landed — R5/§18.6's documented, unfixed quirk:
     // it runs BEFORE generateDays' transaction, so a regen failure never
     // rolls it back with the day rows it failed to regenerate.
-    const row = testDb.prepare('SELECT start_date, end_date FROM trips WHERE id = ?').get(trip.id) as { start_date: string; end_date: string };
+    const row = await storedFields(Trips, { id: trip.id }, ['start_date', 'end_date']) as { start_date: string; end_date: string };
     expect(row).toEqual({ start_date: '2025-07-01', end_date: '2025-07-03' });
     // The day rows themselves never got touched by the failed regen — still
     // the original 3, on their original dates.
-    expect(getDays(trip.id)).toHaveLength(3);
-    expect(getDays(trip.id).map(d => d.date)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03']);
+    expect((await getDays(trip.id))).toHaveLength(3);
+    expect((await getDays(trip.id)).map(d => d.date)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03']);
   });
 
   it('TRIP-SVC-073 (Task 7 security review L2, absorbed): the two-phase renumber avoids a UNIQUE(trip_id, day_number) collision on a genuine swap', async () => {
@@ -1586,7 +1632,7 @@ describe('folded quirk branches', () => {
 
     await svc.generateDays(trip.id, '2025-01-01', '2025-01-03');
 
-    const daysAfter = getDays(trip.id);
+    const daysAfter = (await getDays(trip.id));
     expect(daysAfter).toHaveLength(3);
     const byId = new Map(daysAfter.map(d => [d.id, d]));
     expect(byId.get(dayA.id)).toMatchObject({ day_number: 1, date: '2025-01-01' });
@@ -1594,8 +1640,8 @@ describe('folded quirk branches', () => {
     expect(byId.get(dayB.id)).toMatchObject({ day_number: 3, date: '2025-01-03' });
     // dayB's own identity (and its assignment) survived the swap — renumbered
     // in place, never deleted-and-recreated.
-    expect(getAssignments(dayB.id)).toHaveLength(1);
-    expect(getAssignments(dayB.id)[0].id).toBe(assignmentOnB.id);
+    expect((await getAssignments(dayB.id))).toHaveLength(1);
+    expect((await getAssignments(dayB.id))[0].id).toBe(assignmentOnB.id);
   });
 
   it('TRIP-SVC-065: updateTrip refuses a range past MAX_TRIP_DAYS before touching the row', async () => {
@@ -1603,8 +1649,8 @@ describe('folded quirk branches', () => {
     const trip = createTrip(testDb, user.id, { title: 'Week', start_date: '2026-07-01', end_date: '2026-07-07' });
     await expect(svc.updateTrip(trip.id, user.id, { title: 'Decade', end_date: '2036-07-01' }, 'user'))
       .rejects.toThrow(`A trip can span at most ${MAX_TRIP_DAYS} days`);
-    expect(testDb.prepare('SELECT title, end_date FROM trips WHERE id = ?').get(trip.id)).toEqual({ title: 'Week', end_date: '2026-07-07' });
-    expect(getDays(trip.id)).toHaveLength(7);
+    expect(await storedFields(Trips, { id: trip.id }, ['title', 'end_date'])).toEqual({ title: 'Week', end_date: '2026-07-07' });
+    expect((await getDays(trip.id))).toHaveLength(7);
     // Moving only the start keeps the stored end and is measured against it.
     await expect(svc.updateTrip(trip.id, user.id, { start_date: '2020-01-01' }, 'user'))
       .rejects.toThrow(`A trip can span at most ${MAX_TRIP_DAYS} days`);
@@ -1613,14 +1659,14 @@ describe('folded quirk branches', () => {
   it('TRIP-SVC-066: a trip whose stored range already exceeds the limit can still be renamed', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Legacy' });
-    testDb.prepare("UPDATE trips SET start_date = '2020-01-01', end_date = '2030-01-01' WHERE id = ?").run(trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { start_date: '2020-01-01', end_date: '2030-01-01' });
     const result = await svc.updateTrip(trip.id, user.id, { title: 'Renamed' }, 'user');
     expect(result.newTitle).toBe('Renamed');
     expect(result.changes).toEqual({ title: 'Renamed' });
     // A day_count would rebuild the grid over the whole stored range, so it is held to the limit too.
     await expect(svc.updateTrip(trip.id, user.id, { day_count: 5 }, 'user'))
       .rejects.toThrow(`A trip can span at most ${MAX_TRIP_DAYS} days`);
-    expect(getDays(trip.id)).toHaveLength(0);
+    expect((await getDays(trip.id))).toHaveLength(0);
   });
 
   it('TRIP-SVC-067: a start date moved past the stored end is refused instead of emptying the trip', async () => {
@@ -1628,8 +1674,8 @@ describe('folded quirk branches', () => {
     const trip = createTrip(testDb, user.id, { title: 'Week', start_date: '2026-07-01', end_date: '2026-07-07' });
     await expect(svc.updateTrip(trip.id, user.id, { start_date: '2026-07-10' }, 'user'))
       .rejects.toThrow('End date must be after start date');
-    expect(testDb.prepare('SELECT start_date FROM trips WHERE id = ?').get(trip.id)).toEqual({ start_date: '2026-07-01' });
-    expect(getDays(trip.id)).toHaveLength(7);
+    expect(await storedFields(Trips, { id: trip.id }, ['start_date'])).toEqual({ start_date: '2026-07-01' });
+    expect((await getDays(trip.id))).toHaveLength(7);
   });
 
   it('TRIP-SVC-049: addMember inserts the membership and reports the trip title; removeMember deletes it', async () => {
@@ -1648,53 +1694,49 @@ describe('folded quirk branches', () => {
     await expect(membersSvc.addMember(trip.id, '', owner.id, owner.id)).rejects.toThrow('Email or username required');
 
     await membersSvc.removeMember(trip.id, invitee.id);
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, invitee.id)).toBeUndefined();
+    expect(await storedFields(TripMembers, { trip: trip.id, user: invitee.id }, ['id'])).toBeUndefined();
   });
 
   it('TRIP-SVC-050: copy remaps tags, accommodations, reservations, day notes, budget, bags and category order', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Deep', start_date: '2025-06-01', end_date: '2025-06-02' });
-    const days = getDays(trip.id);
+    const days = (await getDays(trip.id));
     const place = createPlace(testDb, trip.id, { name: 'Hotel Zed' });
     const assignment = createDayAssignment(testDb, days[0].id, place.id);
-    const tagId = Number(testDb.prepare("INSERT INTO tags (name, user_id) VALUES ('beach', ?)").run(user.id).lastInsertRowid);
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tagId);
-    const accomId = Number(testDb.prepare(
-      "INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_out) VALUES (?, ?, ?, ?, '15:00', '11:00')",
-    ).run(trip.id, place.id, days[0].id, days[1].id).lastInsertRowid);
-    testDb.prepare(
-      'INSERT INTO reservations (trip_id, day_id, end_day_id, place_id, assignment_id, accommodation_id, title, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(trip.id, days[0].id, days[1].id, place.id, assignment.id, accomId, 'Stay', 'hotel');
-    testDb.prepare("INSERT INTO budget_items (trip_id, category, name, total_price) VALUES (?, 'stay', 'Hotel', 120)").run(trip.id);
-    const bagId = Number(testDb.prepare("INSERT INTO packing_bags (trip_id, name) VALUES (?, 'Backpack')").run(trip.id).lastInsertRowid);
-    testDb.prepare("INSERT INTO packing_items (trip_id, name, checked, bag_id) VALUES (?, 'Towel', 1, ?)").run(trip.id, bagId);
+    const tagId = Number(await insertRow(await orm(), Tags, { name: 'beach', user: user.id }));
+    await tagPlace(await orm(), place.id, [tagId]);
+    const accomId = Number(await insertRow(await orm(), DayAccommodations, { trip: trip.id, place: place.id, startDay: days[0].id, endDay: days[1].id, check_in: '15:00', check_out: '11:00' }));
+    await insertRow(await orm(), Reservations, { trip: trip.id, day: days[0].id, endDay: days[1].id, place: place.id, assignment: assignment.id, accommodation_id: legacyBoundIntegerText(accomId), title: 'Stay', type: 'hotel' });
+    await insertRow(await orm(), BudgetItems, { trip: trip.id, category: 'stay', name: 'Hotel', total_price: 120 });
+    const bagId = Number(await insertRow(await orm(), PackingBags, { trip: trip.id, name: 'Backpack' }));
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Towel', checked: 1, bag: bagId });
     createDayNote(testDb, days[0].id, trip.id, { text: 'note' });
-    testDb.prepare("INSERT INTO todo_items (trip_id, name, checked) VALUES (?, 'Book', 1)").run(trip.id);
-    testDb.prepare("INSERT INTO budget_category_order (trip_id, category, sort_order) VALUES (?, 'stay', 2)").run(trip.id);
+    await insertRow(await orm(), TodoItems, { trip: trip.id, name: 'Book', checked: 1 });
+    await insertRow(await orm(), BudgetCategoryOrder, { trip: trip.id, category: 'stay', sort_order: 2 });
 
     const newTripId = await svc.copy(trip.id, user.id);
 
-    const newDays = getDays(newTripId);
+    const newDays = (await getDays(newTripId));
     expect(newDays).toHaveLength(2);
-    const newPlace = testDb.prepare('SELECT id FROM places WHERE trip_id = ?').get(newTripId) as { id: number };
-    expect(testDb.prepare('SELECT tag_id FROM place_tags WHERE place_id = ?').get(newPlace.id)).toEqual({ tag_id: tagId });
-    const newAccom = testDb.prepare('SELECT id, place_id, start_day_id, end_day_id FROM day_accommodations WHERE trip_id = ?').get(newTripId) as any;
+    const newPlace = await storedFields(Places, { trip: newTripId }, ['id']) as { id: number };
+    expect(await placeTagRow(newPlace.id)).toEqual({ tag_id: tagId });
+    const newAccom = await storedFields(DayAccommodations, { trip: newTripId }, ['id', 'place_id', 'start_day_id', 'end_day_id']) as any;
     expect(newAccom.place_id).toBe(newPlace.id);
     expect(newAccom.start_day_id).toBe(newDays[0].id);
-    const newRes = testDb.prepare('SELECT day_id, end_day_id, place_id, accommodation_id FROM reservations WHERE trip_id = ?').get(newTripId) as any;
+    const newRes = await storedFields(Reservations, { trip: newTripId }, ['day_id', 'end_day_id', 'place_id', 'accommodation_id']) as any;
     // The legacy copyTripById nulled this link (TEXT column vs number-keyed map);
     // fixed with smoke-test I-01 — the copy now coerces and remaps it.
     expect(newRes.day_id).toBe(newDays[0].id);
     expect(newRes.end_day_id).toBe(newDays[1].id);
     expect(newRes.place_id).toBe(newPlace.id);
     expect(Number(newRes.accommodation_id)).toBe(newAccom.id);
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM budget_items WHERE trip_id = ?').get(newTripId) as any).n).toBe(1);
-    const newItem = testDb.prepare('SELECT checked, bag_id FROM packing_items WHERE trip_id = ?').get(newTripId) as any;
+    expect(({ n: await countRows(await orm(), BudgetItems, { trip: newTripId }) } as any).n).toBe(1);
+    const newItem = await storedFields(PackingItems, { trip: newTripId }, ['checked', 'bag_id']) as any;
     expect(newItem.checked).toBe(0);
     expect(newItem.bag_id).not.toBeNull();
-    expect((testDb.prepare('SELECT checked, assigned_user_id FROM todo_items WHERE trip_id = ?').get(newTripId) as any)).toEqual({ checked: 0, assigned_user_id: null });
-    expect((testDb.prepare('SELECT sort_order FROM budget_category_order WHERE trip_id = ?').get(newTripId) as any).sort_order).toBe(2);
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM day_notes WHERE trip_id = ?').get(newTripId) as any).n).toBe(1);
+    expect((await storedFields(TodoItems, { trip: newTripId }, ['checked', 'assigned_user_id']) as any)).toEqual({ checked: 0, assigned_user_id: null });
+    expect((await storedFields(BudgetCategoryOrder, { trip: newTripId }, ['sort_order']) as any).sort_order).toBe(2);
+    expect(({ n: await countRows(await orm(), DayNotes, { trip: newTripId }) } as any).n).toBe(1);
 
     // Missing source throws the byte-identical error.
     await expect(svc.copy(99999, user.id)).rejects.toThrow('Trip not found');
@@ -1710,34 +1752,33 @@ describe('copy — whole-trip parity (Task 8)', () => {
     const trip = createTrip(testDb, owner.id, {
       title: 'Full Fixture', start_date: '2025-09-01', end_date: '2025-09-03',
     });
-    testDb.prepare("UPDATE trips SET description = 'A full trip', currency = 'EUR', cover_image = 'cover.png', reminder_days = 5 WHERE id = ?").run(trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { description: 'A full trip', currency: 'EUR', cover_image: 'cover.png', reminder_days: 5 });
     addTripMember(testDb, trip.id, member.id);
-    const days = getDays(trip.id);
-    testDb.prepare("UPDATE days SET notes = 'Pack light', title = 'Arrival' WHERE id = ?").run(days[0].id);
-    testDb.prepare("UPDATE days SET notes = 'Checkout' WHERE id = ?").run(days[1].id);
+    const days = (await getDays(trip.id));
+    await updateRows(await orm(), Days, { id: days[0].id }, { notes: 'Pack light', title: 'Arrival' });
+    await updateRows(await orm(), Days, { id: days[1].id }, { notes: 'Checkout' });
 
     const stop = createPlace(testDb, trip.id, { name: 'Hotel Full', description: 'Nice place' });
     const track = createPlace(testDb, trip.id, { name: 'Scenic road' });
-    testDb.prepare("UPDATE places SET reservation_status = 'booked', reservation_notes = 'rn', reservation_datetime = '2025-09-01T14:00', route_color = '#ff0000', stop_type = 'hotel', fill_percent = 80 WHERE id = ?").run(stop.id);
+    await updateRows(await orm(), Places, { id: stop.id }, { reservation_status: 'booked', reservation_notes: 'rn', reservation_datetime: '2025-09-01T14:00', route_color: '#ff0000', stop_type: 'hotel', fill_percent: 80 });
 
-    const tag = Number(testDb.prepare("INSERT INTO tags (name, user_id) VALUES ('beach', ?)").run(owner.id).lastInsertRowid);
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(stop.id, tag);
+    const tag = Number(await insertRow(await orm(), Tags, { name: 'beach', user: owner.id }));
+    await tagPlace(await orm(), stop.id, [tag]);
 
     const assignment = createDayAssignment(testDb, days[0].id, stop.id);
-    testDb.prepare(`UPDATE day_assignments SET reservation_status = 'booked', reservation_notes = 'arn', reservation_datetime = '2025-09-01T15:00',
-      assignment_time = '15:00', assignment_end_time = '16:00', end_day = 1 WHERE id = ?`).run(assignment.id);
-    testDb.prepare('INSERT INTO assignment_participants (assignment_id, user_id) VALUES (?, ?), (?, ?)').run(assignment.id, owner.id, assignment.id, member.id);
+    await updateRows(await orm(), DayAssignments, { id: assignment.id }, { reservation_status: 'booked', reservation_notes: 'arn', reservation_datetime: '2025-09-01T15:00', assignment_time: '15:00', assignment_end_time: '16:00', end_day: 1 });
+    await insertRow(await orm(), AssignmentParticipants, { assignment: assignment.id, user: owner.id });
+    await insertRow(await orm(), AssignmentParticipants, { assignment: assignment.id, user: member.id });
 
-    testDb.prepare('INSERT INTO roadtrip_vias (day_id, after_order_index, sequence, lat, lng) VALUES (?, 0, 0, 48.1, 2.1)').run(days[0].id);
-    testDb.prepare('INSERT INTO roadtrip_day_tracks (day_id, place_id, stray_km) VALUES (?, ?, 2.5)').run(days[0].id, track.id);
-    testDb.prepare("INSERT INTO roadtrip_preferences (trip_id, key, value) VALUES (?, 'avoid_tolls', 'true')").run(trip.id);
-    testDb.prepare('INSERT INTO roadtrip_day_boundaries (trip_id, day_number, from_assignment_id, to_assignment_id, fraction) VALUES (?, 1, ?, NULL, 0.5)').run(trip.id, assignment.id);
+    await insertRow(await orm(), RoadtripVias, { day: days[0].id, after_order_index: 0, sequence: 0, lat: 48.1, lng: 2.1 });
+    await insertRow(await orm(), RoadtripDayTracks, { day: days[0].id, place: track.id, stray_km: 2.5 });
+    await insertRow(await orm(), RoadtripPreferences, { trip: trip.id, key: 'avoid_tolls', value: 'true' });
+    await insertRow(await orm(), RoadtripDayBoundaries, { trip: trip.id, day_number: 1, fromAssignment: assignment.id, toAssignment: null, fraction: 0.5 });
 
-    const accomId = Number(testDb.prepare(
-      "INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes) VALUES (?, ?, ?, ?, '15:00', '15:30', '11:00', 'CONF-1', 'Late checkout ok')",
-    ).run(trip.id, stop.id, days[0].id, days[1].id).lastInsertRowid);
-    testDb.prepare('UPDATE day_assignments SET accommodation_id = ? WHERE id = ?').run(accomId, assignment.id);
+    const accomId = Number(await insertRow(await orm(), DayAccommodations, { trip: trip.id, place: stop.id, startDay: days[0].id, endDay: days[1].id, check_in: '15:00', check_in_end: '15:30', check_out: '11:00', confirmation: 'CONF-1', notes: 'Late checkout ok' }));
+    await updateRows(await orm(), DayAssignments, { id: assignment.id }, { accommodation_id: accomId });
 
+    // test-sql-allow: the seed reproduces the legacy raw binding of a number into the TEXT accommodation_id.
     const resId = Number(testDb.prepare(`
       INSERT INTO reservations (trip_id, day_id, end_day_id, place_id, assignment_id, accommodation_id, title, reservation_time, reservation_end_time,
         location, confirmation_number, notes, url, status, type, metadata, day_plan_position, needs_review, ingest_state,
@@ -1749,29 +1790,27 @@ describe('copy — whole-trip parity (Task 8)', () => {
     // (this is the SOURCE row's own accommodation_id, written the same way
     // the pre-migration `copy` bound it — a plain number through
     // better-sqlite3 into the TEXT column).
-    expect((testDb.prepare('SELECT accommodation_id FROM reservations WHERE id = ?').get(resId) as { accommodation_id: string }).accommodation_id).toBe(`${accomId}.0`);
+    expect((await storedFields(Reservations, { id: resId }, ['accommodation_id']) as { accommodation_id: string }).accommodation_id).toBe(`${accomId}.0`);
 
-    const itemId = Number(testDb.prepare(
-      "INSERT INTO budget_items (trip_id, category, name, total_price, reservation_id, currency) VALUES (?, 'Accommodation', 'Hotel', 300, ?, 'EUR')",
-    ).run(trip.id, resId).lastInsertRowid);
-    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 1, 150), (?, ?, 0, 150)')
-      .run(itemId, owner.id, itemId, member.id);
-    testDb.prepare('INSERT INTO budget_item_payers (budget_item_id, user_id, amount) VALUES (?, ?, 300)').run(itemId, owner.id);
-    testDb.prepare("INSERT INTO budget_category_order (trip_id, category, sort_order) VALUES (?, 'Accommodation', 1)").run(trip.id);
+    const itemId = Number(await insertRow(await orm(), BudgetItems, { trip: trip.id, category: 'Accommodation', name: 'Hotel', total_price: 300, reservation: resId, currency: 'EUR' }));
+    await insertRow(await orm(), BudgetItemMembers, { budgetItem: itemId, user: owner.id, paid: 1, amount: 150 });
+    await insertRow(await orm(), BudgetItemMembers, { budgetItem: itemId, user: member.id, paid: 0, amount: 150 });
+    await insertRow(await orm(), BudgetItemPayers, { budgetItem: itemId, user: owner.id, amount: 300 });
+    await insertRow(await orm(), BudgetCategoryOrder, { trip: trip.id, category: 'Accommodation', sort_order: 1 });
 
-    const bagId = Number(testDb.prepare("INSERT INTO packing_bags (trip_id, name) VALUES (?, 'Carry-on')").run(trip.id).lastInsertRowid);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, bag_id) VALUES (?, ?, 1, ?)').run(trip.id, 'Shared tent', bagId);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, is_private, owner_id) VALUES (?, ?, 1, 1, ?)').run(trip.id, "Owner's diary", owner.id);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, is_private, owner_id) VALUES (?, ?, 1, 1, ?)').run(trip.id, "Member's meds", member.id);
+    const bagId = Number(await insertRow(await orm(), PackingBags, { trip: trip.id, name: 'Carry-on' }));
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Shared tent', checked: 1, bag: bagId });
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: "Owner's diary", checked: 1, is_private: 1, owner: owner.id });
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: "Member's meds", checked: 1, is_private: 1, owner: member.id });
 
     createDayNote(testDb, days[0].id, trip.id, { text: 'Remember passport', time: '08:00', icon: '🛂', sort_order: 1 });
-    testDb.prepare("INSERT INTO todo_items (trip_id, name, checked, category, sort_order) VALUES (?, 'Book taxi', 1, 'travel', 1)").run(trip.id);
+    await insertRow(await orm(), TodoItems, { trip: trip.id, name: 'Book taxi', checked: 1, category: 'travel', sort_order: 1 });
 
     // ── copy, run by the OWNER (so their own private item copies, member's does not) ──
     const newTripId = await svc.copy(trip.id, owner.id, 'Full Copy');
 
     // trips
-    const newTrip = testDb.prepare('SELECT * FROM trips WHERE id = ?').get(newTripId) as Record<string, unknown>;
+    const newTrip = await storedRow(Trips, { id: newTripId }) as Record<string, unknown>;
     expect(newTrip).toMatchObject({
       user_id: owner.id, title: 'Full Copy', description: 'A full trip',
       start_date: '2025-09-01', end_date: '2025-09-03', currency: 'EUR',
@@ -1779,31 +1818,31 @@ describe('copy — whole-trip parity (Task 8)', () => {
     });
 
     // days
-    const newDays = getDays(newTripId);
+    const newDays = (await getDays(newTripId));
     expect(newDays).toHaveLength(3);
     expect(newDays.map(d => ({ day_number: d.day_number, date: d.date }))).toEqual(
       days.map(d => ({ day_number: d.day_number, date: d.date })),
     );
-    expect((testDb.prepare('SELECT notes, title FROM days WHERE id = ?').get(newDays[0].id) as { notes: string | null; title: string | null })).toEqual({ notes: 'Pack light', title: 'Arrival' });
-    expect((testDb.prepare('SELECT notes FROM days WHERE id = ?').get(newDays[1].id) as { notes: string | null }).notes).toBe('Checkout');
+    expect((await storedFields(Days, { id: newDays[0].id }, ['notes', 'title']) as { notes: string | null; title: string | null })).toEqual({ notes: 'Pack light', title: 'Arrival' });
+    expect((await storedFields(Days, { id: newDays[1].id }, ['notes']) as { notes: string | null }).notes).toBe('Checkout');
 
     // places
-    const newStop = testDb.prepare('SELECT * FROM places WHERE trip_id = ? AND name = ?').get(newTripId, 'Hotel Full') as {
+    const newStop = await storedRow(Places, { trip: newTripId, name: 'Hotel Full' }) as {
       id: number; description: string | null; reservation_status: string | null; reservation_notes: string | null;
       reservation_datetime: string | null; route_color: string | null; stop_type: string | null; fill_percent: number | null;
     };
-    const newTrack = testDb.prepare('SELECT * FROM places WHERE trip_id = ? AND name = ?').get(newTripId, 'Scenic road') as { id: number };
+    const newTrack = await storedRow(Places, { trip: newTripId, name: 'Scenic road' }) as { id: number };
     expect(newStop).toMatchObject({
       description: 'Nice place', reservation_status: 'booked', reservation_notes: 'rn',
       reservation_datetime: '2025-09-01T14:00', route_color: '#ff0000', stop_type: 'hotel', fill_percent: 80,
     });
 
     // place_tags
-    expect((testDb.prepare('SELECT tag_id FROM place_tags WHERE place_id = ?').get(newStop.id) as { tag_id: number }).tag_id).toBe(tag);
+    expect((await placeTagRow(newStop.id))!.tag_id).toBe(tag);
 
     // day_assignments (+ the TP57 accommodation stamp)
-    const newAssignment = getAssignments(newDays[0].id)[0];
-    const newAssignmentFull = testDb.prepare('SELECT * FROM day_assignments WHERE id = ?').get(newAssignment.id) as {
+    const newAssignment = (await getAssignments(newDays[0].id))[0];
+    const newAssignmentFull = await storedRow(DayAssignments, { id: newAssignment.id }) as {
       place_id: number; reservation_status: string | null; reservation_notes: string | null; reservation_datetime: string | null;
       assignment_time: string | null; assignment_end_time: string | null; end_day: number; accommodation_id: number | null;
     };
@@ -1813,20 +1852,20 @@ describe('copy — whole-trip parity (Task 8)', () => {
     });
 
     // assignment_participants
-    const newParticipants = testDb.prepare('SELECT user_id FROM assignment_participants WHERE assignment_id = ?').all(newAssignment.id) as { user_id: number }[];
+    const newParticipants = await storedRows(AssignmentParticipants, { assignment: newAssignment.id }, undefined, ['user_id']) as { user_id: number }[];
     expect(newParticipants.map(p => p.user_id).sort((a, b) => a - b)).toEqual([owner.id, member.id].sort((a, b) => a - b));
 
     // roadtrip_vias / roadtrip_day_tracks
-    const newVia = testDb.prepare('SELECT after_order_index, sequence, lat, lng FROM roadtrip_vias WHERE day_id = ?').get(newDays[0].id) as {
+    const newVia = await storedFields(RoadtripVias, { day: newDays[0].id }, ['after_order_index', 'sequence', 'lat', 'lng']) as {
       after_order_index: number; sequence: number; lat: number; lng: number;
     };
     expect(newVia).toEqual({ after_order_index: 0, sequence: 0, lat: 48.1, lng: 2.1 });
-    const newTrackRow = testDb.prepare('SELECT place_id, stray_km FROM roadtrip_day_tracks WHERE day_id = ?').get(newDays[0].id) as { place_id: number; stray_km: number | null };
+    const newTrackRow = await storedFields(RoadtripDayTracks, { day: newDays[0].id }, ['place_id', 'stray_km']) as { place_id: number; stray_km: number | null };
     expect(newTrackRow).toEqual({ place_id: newTrack.id, stray_km: 2.5 });
 
     // roadtrip_preferences / roadtrip_day_boundaries
-    expect((testDb.prepare("SELECT value FROM roadtrip_preferences WHERE trip_id = ? AND key = 'avoid_tolls'").get(newTripId) as { value: string }).value).toBe('true');
-    const newBoundary = testDb.prepare('SELECT day_number, from_assignment_id, to_assignment_id, fraction FROM roadtrip_day_boundaries WHERE trip_id = ?').get(newTripId) as {
+    expect((await storedFields(RoadtripPreferences, { trip: newTripId, key: 'avoid_tolls' }, ['value']) as { value: string }).value).toBe('true');
+    const newBoundary = await storedFields(RoadtripDayBoundaries, { trip: newTripId }, ['day_number', 'from_assignment_id', 'to_assignment_id', 'fraction']) as {
       day_number: number; from_assignment_id: number; to_assignment_id: number | null; fraction: number;
     };
     expect(newBoundary).toEqual({ day_number: 1, from_assignment_id: newAssignment.id, to_assignment_id: null, fraction: 0.5 });
@@ -1835,11 +1874,11 @@ describe('copy — whole-trip parity (Task 8)', () => {
     // key set modulo id/trip_id/place_id/start_day_id/end_day_id/created_at,
     // every one of which is either a remapped FK or excluded on principle),
     // and the assignment's accommodation_id stamped at the NEW accommodation
-    const newAccom = testDb.prepare('SELECT * FROM day_accommodations WHERE trip_id = ?').get(newTripId) as {
+    const newAccom = await storedRow(DayAccommodations, { trip: newTripId }) as {
       id: number; place_id: number | null; start_day_id: number; end_day_id: number;
       check_in: string | null; check_in_end: string | null; check_out: string | null; confirmation: string | null; notes: string | null;
     };
-    const sourceAccom = testDb.prepare('SELECT check_in, check_in_end, check_out, confirmation, notes FROM day_accommodations WHERE id = ?').get(accomId) as {
+    const sourceAccom = await storedFields(DayAccommodations, { id: accomId }, ['check_in', 'check_in_end', 'check_out', 'confirmation', 'notes']) as {
       check_in: string | null; check_in_end: string | null; check_out: string | null; confirmation: string | null; notes: string | null;
     };
     expect({ check_in: newAccom.check_in, check_in_end: newAccom.check_in_end, check_out: newAccom.check_out, confirmation: newAccom.confirmation, notes: newAccom.notes }).toEqual(sourceAccom);
@@ -1850,7 +1889,7 @@ describe('copy — whole-trip parity (Task 8)', () => {
     // set modulo id/trip_id/day_id/end_day_id/place_id/assignment_id/
     // created_at (remapped FKs) and the external_*/sync_enabled columns
     // (deliberately NOT copied, asserted below).
-    const newRes = testDb.prepare('SELECT * FROM reservations WHERE trip_id = ?').get(newTripId) as {
+    const newRes = await storedRow(Reservations, { trip: newTripId }) as {
       id: number; day_id: number | null; end_day_id: number | null; place_id: number | null; assignment_id: number | null;
       title: string; reservation_time: string | null; reservation_end_time: string | null; location: string | null;
       confirmation_number: string | null; notes: string | null; url: string | null; status: string | null; type: string | null;
@@ -1882,21 +1921,21 @@ describe('copy — whole-trip parity (Task 8)', () => {
     expect(newRes.sync_enabled).toBe(1); // the column's own DB DEFAULT, never the source's `0`
 
     // budget_items / members / payers / category order
-    const newItem = testDb.prepare('SELECT * FROM budget_items WHERE trip_id = ?').get(newTripId) as {
+    const newItem = await storedRow(BudgetItems, { trip: newTripId }) as {
       id: number; category: string; name: string; total_price: number; reservation_id: number | null; currency: string | null;
     };
     expect(newItem).toMatchObject({ category: 'Accommodation', name: 'Hotel', total_price: 300, reservation_id: newRes.id, currency: 'EUR' });
-    const newMembers = testDb.prepare('SELECT user_id, paid, amount FROM budget_item_members WHERE budget_item_id = ? ORDER BY user_id').all(newItem.id) as { user_id: number; paid: number; amount: number | null }[];
+    const newMembers = await storedRows(BudgetItemMembers, { budgetItem: newItem.id }, { user: 'asc' }, ['user_id', 'paid', 'amount']) as { user_id: number; paid: number; amount: number | null }[];
     expect(newMembers).toEqual([owner.id, member.id].sort((a, b) => a - b).map((uid) =>
       uid === owner.id ? { user_id: owner.id, paid: 1, amount: 150 } : { user_id: member.id, paid: 0, amount: 150 },
     ));
-    const newPayers = testDb.prepare('SELECT user_id, amount FROM budget_item_payers WHERE budget_item_id = ?').all(newItem.id) as { user_id: number; amount: number }[];
+    const newPayers = await storedRows(BudgetItemPayers, { budgetItem: newItem.id }, undefined, ['user_id', 'amount']) as { user_id: number; amount: number }[];
     expect(newPayers).toEqual([{ user_id: owner.id, amount: 300 }]);
-    expect((testDb.prepare("SELECT sort_order FROM budget_category_order WHERE trip_id = ? AND category = 'Accommodation'").get(newTripId) as { sort_order: number }).sort_order).toBe(1);
+    expect((await storedFields(BudgetCategoryOrder, { trip: newTripId, category: 'Accommodation' }, ['sort_order']) as { sort_order: number }).sort_order).toBe(1);
 
     // packing_bags / packing_items (incl. the TP68 privacy filter — the copIER is the owner)
-    const newBag = testDb.prepare("SELECT id FROM packing_bags WHERE trip_id = ? AND name = 'Carry-on'").get(newTripId) as { id: number };
-    const newPacking = testDb.prepare('SELECT name, checked, is_private, owner_id, bag_id FROM packing_items WHERE trip_id = ? ORDER BY name').all(newTripId) as {
+    const newBag = await storedFields(PackingBags, { trip: newTripId, name: 'Carry-on' }, ['id']) as { id: number };
+    const newPacking = await storedRows(PackingItems, { trip: newTripId }, { name: 'asc' }, ['name', 'checked', 'is_private', 'owner_id', 'bag_id']) as {
       name: string; checked: number | null; is_private: number; owner_id: number | null; bag_id: number | null;
     }[];
     expect(newPacking.map(p => p.name)).toEqual(['Owner\'s diary', 'Shared tent']); // member's private item is NOT copied
@@ -1904,30 +1943,30 @@ describe('copy — whole-trip parity (Task 8)', () => {
     expect(newPacking.find(p => p.name === "Owner's diary")).toMatchObject({ checked: 0, is_private: 1, owner_id: owner.id });
 
     // day_notes
-    const newNote = testDb.prepare('SELECT day_id, text, time, icon, sort_order FROM day_notes WHERE trip_id = ?').get(newTripId) as {
+    const newNote = await storedFields(DayNotes, { trip: newTripId }, ['day_id', 'text', 'time', 'icon', 'sort_order']) as {
       day_id: number; text: string; time: string | null; icon: string | null; sort_order: number | null;
     };
     expect(newNote).toEqual({ day_id: newDays[0].id, text: 'Remember passport', time: '08:00', icon: '🛂', sort_order: 1 });
 
     // todo_items — reset to unchecked, no assignee
-    const newTodo = testDb.prepare('SELECT name, checked, category, sort_order, assigned_user_id FROM todo_items WHERE trip_id = ?').get(newTripId) as {
+    const newTodo = await storedFields(TodoItems, { trip: newTripId }, ['name', 'checked', 'category', 'sort_order', 'assigned_user_id']) as {
       name: string; checked: number | null; category: string | null; sort_order: number | null; assigned_user_id: number | null;
     };
     expect(newTodo).toEqual({ name: 'Book taxi', checked: 0, category: 'travel', sort_order: 1, assigned_user_id: null });
 
     // The source trip is untouched.
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id)).toEqual({ n: 3 });
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM packing_items WHERE trip_id = ?').get(trip.id)).toEqual({ n: 3 });
+    expect({ n: await countRows(await orm(), Days, { trip: trip.id }) }).toEqual({ n: 3 });
+    expect({ n: await countRows(await orm(), PackingItems, { trip: trip.id }) }).toEqual({ n: 3 });
   });
 
   it('TRIP-SVC-070 (mutation-proved): copy is atomic — a failing late insert leaves no new trip and no partial rows', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Rollback source', start_date: '2025-10-01', end_date: '2025-10-02' });
-    const days = getDays(trip.id);
+    const days = (await getDays(trip.id));
     const place = createPlace(testDb, trip.id, { name: 'Doomed place' });
     createDayAssignment(testDb, days[0].id, place.id);
-    const tripsBefore = (testDb.prepare('SELECT COUNT(*) AS n FROM trips').get() as { n: number }).n;
-    const daysBefore = (testDb.prepare('SELECT COUNT(*) AS n FROM days').get() as { n: number }).n;
+    const tripsBefore = ({ n: await countRows(await orm(), Trips, {}) } as { n: number }).n;
+    const daysBefore = ({ n: await countRows(await orm(), Days, {}) } as { n: number }).n;
 
     const dayNotesRepo = await createTestDayNotesRepo(testDb);
     const spy = vi.spyOn(dayNotesRepo, 'insertNoteCopy').mockRejectedValueOnce(new Error('boom'));
@@ -1940,61 +1979,62 @@ describe('copy — whole-trip parity (Task 8)', () => {
 
     // No new trip, and every earlier insert in the same transaction (trips/days/
     // places/assignments/…) rolled back with it — nothing partially lands.
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM trips').get() as { n: number }).n).toBe(tripsBefore);
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM days').get() as { n: number }).n).toBe(daysBefore);
-    expect(testDb.prepare("SELECT id FROM trips WHERE title = 'Never lands'").get()).toBeUndefined();
+    expect(({ n: await countRows(await orm(), Trips, {}) } as { n: number }).n).toBe(tripsBefore);
+    expect(({ n: await countRows(await orm(), Days, {}) } as { n: number }).n).toBe(daysBefore);
+    expect(await storedFields(Trips, { title: 'Never lands' }, ['id'])).toBeUndefined();
     // The source trip itself is untouched.
-    expect(testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id)).toBeDefined();
+    expect(await storedFields(Trips, { id: trip.id }, ['id'])).toBeDefined();
   });
 });
 
 describe('copy: Tours (#2586)', () => {
   /** A Tour on `tripId`: the place, its `tours` facet and three route waypoints. */
-  function seedTour(tripId: number, name: string) {
+  async function seedTour(tripId: number, name: string) {
     const place = createPlace(testDb, tripId, { name });
-    testDb.prepare("UPDATE places SET transport_mode = 'walking', route_geometry = '[[47,11],[47.2,11.2]]' WHERE id = ?").run(place.id);
+    await updateRows(await orm(), Places, { id: place.id }, { transport_mode: 'walking', route_geometry: '[[47,11],[47.2,11.2]]' });
     createTour(testDb, place.id, { distance: 12.5, match_confidence: 0.9, max_hiking_difficulty: 4, created_at: '2025-01-02 03:04:05' });
-    testDb.prepare("UPDATE tours SET elevation_gain = 800, elevation_loss = 790, duration = 5.5, difficulty = 'T3', wanderer_ref = 'w-1' WHERE place_id = ?").run(place.id);
-    const insert = testDb.prepare('INSERT INTO tour_waypoints (place_id, lat, lng, role, sequence) VALUES (?, ?, ?, ?, ?)');
-    insert.run(place.id, 47, 11, 'start', 0);
-    insert.run(place.id, 47.1, 11.1, 'via', 1);
-    insert.run(place.id, 47.2, 11.2, 'end', 2);
+    await updateRows(await orm(), Tours, { place: place.id }, { elevation_gain: 800, elevation_loss: 790, duration: 5.5, difficulty: 'T3', wanderer_ref: 'w-1' });
+    const insert = async (lat: number, lng: number, role: string, sequence: number) =>
+      insertRow(await orm(), TourWaypoints, { place: place.id, lat, lng, role, sequence });
+    await insert(47, 11, 'start', 0);
+    await insert(47.1, 11.1, 'via', 1);
+    await insert(47.2, 11.2, 'end', 2);
     return place;
   }
 
-  const tourColumns = (placeId: number) => {
-    const { place_id: _placeId, ...rest } = testDb.prepare('SELECT * FROM tours WHERE place_id = ?').get(placeId) as Record<string, unknown>;
+  const tourColumns = async (placeId: number) => {
+    const { place_id: _placeId, ...rest } = await storedRow(Tours, { place: placeId }) as Record<string, unknown>;
     return rest;
   };
-  const waypoints = (placeId: number) =>
-    testDb.prepare('SELECT lat, lng, role, sequence FROM tour_waypoints WHERE place_id = ? ORDER BY sequence').all(placeId);
+  const waypoints = async (placeId: number) =>
+    await storedRows(TourWaypoints, { place: placeId }, { sequence: 'asc' }, ['lat', 'lng', 'role', 'sequence']);
 
   it('TRIP-SVC-081: a copied Tour keeps its facet row and waypoints, remapped onto the copied place', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Alps' });
-    const tour = seedTour(trip.id, 'Ridge walk');
+    const tour = await seedTour(trip.id, 'Ridge walk');
     createPlace(testDb, trip.id, { name: 'Plain stop' });
 
     const newTripId = await svc.copy(trip.id, user.id, 'Alps again');
 
-    const newTour = testDb.prepare("SELECT id FROM places WHERE trip_id = ? AND name = 'Ridge walk'").get(newTripId) as { id: number };
-    const newPlain = testDb.prepare("SELECT id FROM places WHERE trip_id = ? AND name = 'Plain stop'").get(newTripId) as { id: number };
+    const newTour = await storedFields(Places, { trip: newTripId, name: 'Ridge walk' }, ['id']) as { id: number };
+    const newPlain = await storedFields(Places, { trip: newTripId, name: 'Plain stop' }, ['id']) as { id: number };
     expect(newTour.id).not.toBe(tour.id);
-    expect(tourColumns(newTour.id)).toEqual(tourColumns(tour.id));
-    expect(tourColumns(newTour.id)).toMatchObject({ tour_type: 'hike', created_at: '2025-01-02 03:04:05', max_hiking_difficulty: 4 });
-    expect(waypoints(newTour.id)).toEqual(waypoints(tour.id));
-    expect(waypoints(newTour.id)).toHaveLength(3);
+    expect((await tourColumns(newTour.id))).toEqual((await tourColumns(tour.id)));
+    expect((await tourColumns(newTour.id))).toMatchObject({ tour_type: 'hike', created_at: '2025-01-02 03:04:05', max_hiking_difficulty: 4 });
+    expect((await waypoints(newTour.id))).toEqual((await waypoints(tour.id)));
+    expect((await waypoints(newTour.id))).toHaveLength(3);
     // The plain place stays plain, and the source keeps its own rows.
-    expect(testDb.prepare('SELECT 1 FROM tours WHERE place_id = ?').get(newPlain.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM tours t JOIN places p ON p.id = t.place_id WHERE p.trip_id = ?').get(trip.id)).toEqual({ n: 1 });
-    expect(waypoints(tour.id)).toHaveLength(3);
+    expect(await storedRow(Tours, { place: newPlain.id })).toBeUndefined();
+    expect({ n: await countRows(await orm(), Tours, { place: { trip: trip.id } }) }).toEqual({ n: 1 });
+    expect((await waypoints(tour.id))).toHaveLength(3);
   });
 
   it('TRIP-SVC-082: a failing waypoint insert rolls the copied Tour back with the rest of the copy', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Doomed alps' });
-    seedTour(trip.id, 'Doomed ridge');
-    const toursBefore = (testDb.prepare('SELECT COUNT(*) AS n FROM tours').get() as { n: number }).n;
+    await seedTour(trip.id, 'Doomed ridge');
+    const toursBefore = ({ n: await countRows(await orm(), Tours, {}) } as { n: number }).n;
 
     const waypointsRepo = await createTestTourWaypointsRepo(testDb);
     const spy = vi.spyOn(waypointsRepo, 'insertForPlace').mockRejectedValueOnce(new Error('boom'));
@@ -2004,8 +2044,8 @@ describe('copy: Tours (#2586)', () => {
       spy.mockRestore();
     }
 
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM tours').get() as { n: number }).n).toBe(toursBefore);
-    expect(testDb.prepare("SELECT id FROM trips WHERE title = 'Never lands'").get()).toBeUndefined();
+    expect(({ n: await countRows(await orm(), Tours, {}) } as { n: number }).n).toBe(toursBefore);
+    expect(await storedFields(Trips, { title: 'Never lands' }, ['id'])).toBeUndefined();
   });
 });
 
@@ -2026,12 +2066,8 @@ describe('quirk fixes', () => {
   it('TRIP-SVC-051 (mutation-proved): remove is atomic — a failed trip DELETE keeps the journey entries intact', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const journeyId = Number(testDb.prepare(
-      "INSERT INTO journeys (user_id, title, created_at, updated_at) VALUES (?, 'J', 0, 0)",
-    ).run(user.id).lastInsertRowid);
-    testDb.prepare(
-      "INSERT INTO journey_entries (journey_id, source_trip_id, author_id, type, title, entry_date, created_at, updated_at) VALUES (?, ?, ?, 'skeleton', 'S', '2025-06-01', 0, 0)",
-    ).run(journeyId, trip.id, user.id);
+    const journeyId = Number(await insertRow(await orm(), Journeys, { user: user.id, title: 'J', created_at: 0, updated_at: 0 }));
+    await insertRow(await orm(), JourneyEntries, { journey: journeyId, sourceTrip: trip.id, author: user.id, type: 'skeleton', title: 'S', entry_date: '2025-06-01', created_at: 0, updated_at: 0 });
 
     const tripsRepo = await createTestTripsRepo(testDb);
     const spy = vi.spyOn(tripsRepo, 'deleteById').mockRejectedValueOnce(new Error('boom'));
@@ -2042,14 +2078,14 @@ describe('quirk fixes', () => {
     }
 
     // The skeleton cleanup rolled back with the failed delete.
-    expect(testDb.prepare("SELECT id FROM journey_entries WHERE type = 'skeleton'").get()).toBeDefined();
-    expect(testDb.prepare('SELECT id FROM trips WHERE id = ?').get(trip.id)).toBeDefined();
+    expect(await storedFields(JourneyEntries, { type: 'skeleton' }, ['id'])).toBeDefined();
+    expect(await storedFields(Trips, { id: trip.id }, ['id'])).toBeDefined();
   });
 
   // R8 (Plan 3c program brief item 8): the SQL-text-keyed `failingConnection`
   // Proxy this test used to build a `failingMembers(match)` service around is
   // rewritten as a repository-level fault (Task 6 converted `deleteGuest` off
-  // `this.db.prepare(...)` entirely, onto `UsersRepository.deleteGuest` — the
+  // the raw `this.db` statements entirely, onto `UsersRepository.deleteGuest` — the
   // Proxy could never trigger any more, since no statement text runs through
   // `this.db` inside `deleteGuest`'s transaction).
   it('TRIP-SVC-052: deleteGuest is atomic — a failed user DELETE rolls the budget re-split back', async () => {
@@ -2067,14 +2103,14 @@ describe('quirk fixes', () => {
     }
 
     // Neither the guest nor their split membership was touched.
-    expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(guest.id)).toBeDefined();
-    const row = testDb.prepare('SELECT persons FROM budget_items WHERE id = ?').get(item.id) as { persons: number | null };
+    expect(await storedFields(Users, { id: guest.id }, ['id'])).toBeDefined();
+    const row = await storedFields(BudgetItems, { id: item.id }, ['persons']) as { persons: number | null };
     expect(row.persons).toBe(2);
   });
 
   it('TRIP-SVC-053: listMembers prefers the owner display_name over the raw username (quirk fix)', async () => {
     const { user: owner } = createUser(testDb, { username: 'owner-handle' });
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Olive Displayed', owner.id);
+    await updateRows(await orm(), Users, { id: owner.id }, { display_name: 'Olive Displayed' });
     const trip = createTrip(testDb, owner.id);
     const { owner: row } = await membersSvc.listMembers(trip.id, owner.id);
     expect(row.username).toBe('Olive Displayed');
@@ -2097,10 +2133,10 @@ describe('searchPlaces (#2190)', () => {
     const foreign = createTrip(testDb, other.id, { title: 'Hidden' });
     createPlace(testDb, own.id, { name: "Dante's Diner" });
     const museum = createPlace(testDb, own.id, { name: 'Museum' });
-    testDb.prepare('UPDATE places SET address = ? WHERE id = ?').run('1 Diner Street', museum.id);
+    await updateRows(await orm(), Places, { id: museum.id }, { address: '1 Diner Street' });
     createPlace(testDb, shared.id, { name: 'City Lights Books' });
     createPlace(testDb, foreign.id, { name: 'Secret Diner' });
-    testDb.prepare('UPDATE trips SET is_archived = 1 WHERE id = ?').run(own.id);
+    await updateRows(await orm(), Trips, { id: own.id }, { is_archived: 1 });
 
     expect(await svc.searchPlaces(user.id, 'diner')).toEqual([{ trip_id: own.id, places: ["Dante's Diner", 'Museum'] }]);
     expect(await svc.searchPlaces(user.id, 'books')).toEqual([{ trip_id: shared.id, places: ['City Lights Books'] }]);
@@ -2145,7 +2181,7 @@ describe('activeTrip (startup destination)', () => {
   it('TRIP-SVC-057: skips archived trips and returns undefined when nothing is left', async () => {
     const { user } = createUser(testDb);
     const archived = createTrip(testDb, user.id, { title: 'archived', start_date: '2026-08-05', end_date: '2026-08-12' });
-    testDb.prepare('UPDATE trips SET is_archived = 1 WHERE id = ?').run(archived.id);
+    await updateRows(await orm(), Trips, { id: archived.id }, { is_archived: 1 });
     expect(await svc.activeTrip(user.id, TODAY)).toBeUndefined();
   });
 

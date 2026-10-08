@@ -10,7 +10,6 @@ vi.mock('../../../src/db/database', async () => {
     db,
     closeDb: () => {},
     reinitialize: () => {},
-    canAccessTrip: () => null,
   };
     return mock;
 });
@@ -39,6 +38,58 @@ import {
   createTestVacaySharesRepo, createTestVacayUserSettingsRepo,
 } from '../../helpers/vacay-repos';
 import { createTestVacayHolidayCalendarsRepo, createTestSchoolHolidayRegionsRepo } from '../../helpers/school-holidays-repos';
+import type { EntityClass, EntityDTO, FilterQuery, FindOptions } from '@mikro-orm/core';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import {
+  countRows, deleteRows, findRow, findRows, insertRow, insertRowIgnoringConflict, updateRows, upsertRow,
+} from '../../helpers/factories/rows';
+import { SchoolHolidayCountries } from '../../../src/db/entities/SchoolHolidayCountries.entity';
+import { SchoolHolidayRegions } from '../../../src/db/entities/SchoolHolidayRegions.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
+import { VacayCompanyHolidays } from '../../../src/db/entities/VacayCompanyHolidays.entity';
+import { VacayEntries } from '../../../src/db/entities/VacayEntries.entity';
+import { VacayHolidayCalendars } from '../../../src/db/entities/VacayHolidayCalendars.entity';
+import { VacayPlanMembers } from '../../../src/db/entities/VacayPlanMembers.entity';
+import { VacayPlans } from '../../../src/db/entities/VacayPlans.entity';
+import { VacayShares } from '../../../src/db/entities/VacayShares.entity';
+import { VacayUserColors } from '../../../src/db/entities/VacayUserColors.entity';
+import { VacayUserSettings } from '../../../src/db/entities/VacayUserSettings.entity';
+import { VacayUserYears } from '../../../src/db/entities/VacayUserYears.entity';
+import { VacayYears } from '../../../src/db/entities/VacayYears.entity';
+
+const orm = () => sharedTestOrm(testDb);
+
+/** The stored row matching `where`, or undefined when there is none. */
+async function storedRow<T extends object>(entity: EntityClass<T>, where: FilterQuery<T>): Promise<EntityDTO<T> | undefined> {
+  return (await findRow(await orm(), entity, where)) ?? undefined;
+}
+
+/** Only `cols` of a stored row, the way a SELECT of those columns returns it. */
+function pickColumns<T extends object>(row: EntityDTO<T>, cols: string[]): Record<string, unknown> {
+  const all = row as Record<string, unknown>;
+  return Object.fromEntries(cols.map((col) => [col, all[col]]));
+}
+
+/** Only `cols` of the stored row matching `where`, or undefined when there is none. */
+async function storedFields<T extends object>(
+  entity: EntityClass<T>,
+  where: FilterQuery<T>,
+  cols: string[],
+): Promise<Record<string, unknown> | undefined> {
+  const row = await findRow(await orm(), entity, where);
+  return row ? pickColumns(row, cols) : undefined;
+}
+
+/** The stored rows matching `where`, whole or cut down to `cols`. */
+async function storedRows<T extends object>(
+  entity: EntityClass<T>,
+  where: FilterQuery<T>,
+  orderBy?: FindOptions<T>['orderBy'],
+  cols?: string[],
+): Promise<Array<Record<string, unknown>>> {
+  const rows = await findRows(await orm(), entity, where, orderBy);
+  return cols ? rows.map((row) => pickColumns(row, cols)) : (rows as Array<Record<string, unknown>>);
+}
 
 // VACAY-SVC-001 through VACAY-SVC-066 moved 1:1 from the legacy
 // tests/unit/services/vacayService.test.ts (the named-function imports became
@@ -80,10 +131,8 @@ afterAll(() => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /** Insert a vacay_plan_members row directly (no service factory for it). */
-function insertMember(planId: number, userId: number, status: 'pending' | 'accepted'): void {
-  testDb.prepare(
-    "INSERT INTO vacay_plan_members (plan_id, user_id, status) VALUES (?, ?, ?)"
-  ).run(planId, userId, status);
+async function insertMember(planId: number, userId: number, status: 'pending' | 'accepted'): Promise<void> {
+  await insertRow(await orm(), VacayPlanMembers, { plan: planId, user: userId, status });
 }
 
 /** Fast helper: create a user and immediately materialise their own plan. */
@@ -97,8 +146,8 @@ async function setupUserWithPlan() {
  * Lift the (default-on) weekend blocking for tests whose dates are derived
  * from the current year and can land on any weekday.
  */
-function allowWeekends(planId: number) {
-  testDb.prepare('UPDATE vacay_plans SET block_weekends = 0 WHERE id = ?').run(planId);
+async function allowWeekends(planId: number) {
+  await updateRows(await orm(), VacayPlans, { id: planId }, { block_weekends: 0 });
 }
 
 // ── getOwnPlan ────────────────────────────────────────────────────────────────
@@ -126,9 +175,7 @@ describe('getOwnPlan', () => {
     const plan = await svc.getOwnPlan(user.id);
     const yr = new Date().getFullYear();
 
-    const row = testDb
-      .prepare('SELECT * FROM vacay_years WHERE plan_id = ? AND year = ?')
-      .get(plan.id, yr);
+    const row = await storedRow(VacayYears, { plan: plan.id, year: yr });
 
     expect(row).toBeDefined();
   });
@@ -138,9 +185,7 @@ describe('getOwnPlan', () => {
     const plan = await svc.getOwnPlan(user.id);
     const yr = new Date().getFullYear();
 
-    const row = testDb
-      .prepare('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?')
-      .get(user.id, plan.id, yr) as { vacation_days: number } | undefined;
+    const row = await storedRow(VacayUserYears, { user: user.id, plan: plan.id, year: yr }) as { vacation_days: number } | undefined;
 
     expect(row).toBeDefined();
     expect(row!.vacation_days).toBe(30);
@@ -164,7 +209,7 @@ describe('getActivePlan', () => {
     // Make sure member also has their own plan materialised first
     await svc.getOwnPlan(member.id);
 
-    insertMember(ownerPlan.id, member.id, 'accepted');
+    await insertMember(ownerPlan.id, member.id, 'accepted');
 
     const active = await svc.getActivePlan(member.id);
     expect(active.id).toBe(ownerPlan.id);
@@ -175,7 +220,7 @@ describe('getActivePlan', () => {
     const { user: member } = createUser(testDb);
     await svc.getOwnPlan(member.id);
 
-    insertMember(ownerPlan.id, member.id, 'pending');
+    await insertMember(ownerPlan.id, member.id, 'pending');
 
     const active = await svc.getActivePlan(member.id);
     // Should still point to member's own plan
@@ -197,7 +242,7 @@ describe('getPlanUsers', () => {
   it('VACAY-SVC-009: returns [owner, member] after an accepted membership is inserted', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: member } = createUser(testDb);
-    insertMember(plan.id, member.id, 'accepted');
+    await insertMember(plan.id, member.id, 'accepted');
 
     const users = await svc.getPlanUsers(plan.id);
 
@@ -209,7 +254,7 @@ describe('getPlanUsers', () => {
   it('VACAY-SVC-010: pending membership members are NOT included in plan users', async () => {
     const { plan } = await setupUserWithPlan();
     const { user: pendingUser } = createUser(testDb);
-    insertMember(plan.id, pendingUser.id, 'pending');
+    await insertMember(plan.id, pendingUser.id, 'pending');
 
     const users = await svc.getPlanUsers(plan.id);
     expect(users.map(u => u.id)).not.toContain(pendingUser.id);
@@ -230,9 +275,7 @@ describe('migrateHolidayCalendars', () => {
 
     await svc.migrateHolidayCalendars(plan.id, planRow);
 
-    const rows = testDb
-      .prepare('SELECT * FROM vacay_holiday_calendars WHERE plan_id = ?')
-      .all(plan.id);
+    const rows = await storedRows(VacayHolidayCalendars, { plan: plan.id });
     expect(rows).toHaveLength(0);
   });
 
@@ -242,9 +285,7 @@ describe('migrateHolidayCalendars', () => {
 
     await svc.migrateHolidayCalendars(plan.id, planRow);
 
-    const rows = testDb
-      .prepare('SELECT * FROM vacay_holiday_calendars WHERE plan_id = ?')
-      .all(plan.id) as { region: string }[];
+    const rows = await storedRows(VacayHolidayCalendars, { plan: plan.id }) as { region: string }[];
     expect(rows).toHaveLength(1);
     expect(rows[0].region).toBe('DE');
   });
@@ -257,9 +298,7 @@ describe('migrateHolidayCalendars', () => {
     // Call a second time — should NOT insert another row
     await svc.migrateHolidayCalendars(plan.id, planRow);
 
-    const rows = testDb
-      .prepare('SELECT * FROM vacay_holiday_calendars WHERE plan_id = ?')
-      .all(plan.id);
+    const rows = await storedRows(VacayHolidayCalendars, { plan: plan.id });
     expect(rows).toHaveLength(1);
   });
 });
@@ -272,9 +311,7 @@ describe('updatePlan', () => {
 
     await svc.updatePlan(plan.id, { block_weekends: true }, undefined);
 
-    const updated = testDb
-      .prepare('SELECT block_weekends FROM vacay_plans WHERE id = ?')
-      .get(plan.id) as { block_weekends: number };
+    const updated = await storedFields(VacayPlans, { id: plan.id }, ['block_weekends']) as { block_weekends: number };
     expect(updated.block_weekends).toBe(1);
   });
 
@@ -283,9 +320,7 @@ describe('updatePlan', () => {
 
     await svc.updatePlan(plan.id, { holidays_enabled: true }, undefined);
 
-    const updated = testDb
-      .prepare('SELECT holidays_enabled FROM vacay_plans WHERE id = ?')
-      .get(plan.id) as { holidays_enabled: number };
+    const updated = await storedFields(VacayPlans, { id: plan.id }, ['holidays_enabled']) as { holidays_enabled: number };
     expect(updated.holidays_enabled).toBe(1);
   });
 
@@ -303,15 +338,11 @@ describe('updatePlan', () => {
     const yr = new Date().getFullYear();
 
     // Manually set a non-zero carried_over value
-    testDb
-      .prepare('UPDATE vacay_user_years SET carried_over = 5 WHERE user_id = ? AND plan_id = ? AND year = ?')
-      .run(user.id, plan.id, yr);
+    await updateRows(await orm(), VacayUserYears, { user: user.id, plan: plan.id, year: yr }, { carried_over: 5 });
 
     await svc.updatePlan(plan.id, { carry_over_enabled: false }, undefined);
 
-    const row = testDb
-      .prepare('SELECT carried_over FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?')
-      .get(user.id, plan.id, yr) as { carried_over: number };
+    const row = await storedFields(VacayUserYears, { user: user.id, plan: plan.id, year: yr }, ['carried_over']) as { carried_over: number };
     expect(row.carried_over).toBe(0);
   });
 });
@@ -321,14 +352,14 @@ describe('updatePlan', () => {
 describe('addHolidayCalendar', () => {
   it('validates manual region references for creates and updates', async () => {
     const { plan } = await setupUserWithPlan();
-    testDb.prepare("INSERT INTO school_holiday_countries (code, name) VALUES ('US', 'USA')").run();
-    const inserted = testDb.prepare("INSERT INTO school_holiday_regions (country, name) VALUES ('US', 'Seattle')").run();
-    const code = `US-MANUAL-${inserted.lastInsertRowid}`;
+    await insertRow(await orm(), SchoolHolidayCountries, { code: 'US', name: 'USA' });
+    const inserted = await insertRow(await orm(), SchoolHolidayRegions, { countryRef: 'US', name: 'Seattle' });
+    const code = `US-MANUAL-${inserted}`;
     const calendar = await svc.addHolidayCalendar(plan.id, code, null, undefined, 0, undefined, 'school_holiday');
     expect(calendar.region).toBe(code);
     expect((await svc.updateHolidayCalendar(calendar.id, plan.id, { label: 'School' }, undefined))?.region).toBe(code);
     await expect(svc.updateHolidayCalendar(calendar.id, plan.id, { type: 'public_holiday' }, undefined)).rejects.toThrow('Unknown manual');
-    for (const region of ['US-MANUAL-0', 'US-MANUAL-999999', `CA-MANUAL-${inserted.lastInsertRowid}`]) {
+    for (const region of ['US-MANUAL-0', 'US-MANUAL-999999', `CA-MANUAL-${inserted}`]) {
       await expect(svc.addHolidayCalendar(plan.id, region, null, undefined, 0, undefined, 'school_holiday')).rejects.toThrow('Unknown manual');
     }
   });
@@ -386,7 +417,7 @@ describe('deleteHolidayCalendar', () => {
     const result = await svc.deleteHolidayCalendar(cal.id, plan.id, undefined);
 
     expect(result).toBe(true);
-    const row = testDb.prepare('SELECT id FROM vacay_holiday_calendars WHERE id = ?').get(cal.id);
+    const row = await storedFields(VacayHolidayCalendars, { id: cal.id }, ['id']);
     expect(row).toBeUndefined();
   });
 
@@ -407,9 +438,7 @@ describe('setUserColor', () => {
 
     await svc.setUserColor(user.id, plan.id, '#123456', undefined);
 
-    const row = testDb
-      .prepare('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?')
-      .get(user.id, plan.id) as { color: string } | undefined;
+    const row = await storedFields(VacayUserColors, { user: user.id, plan: plan.id }, ['color']) as { color: string } | undefined;
     expect(row?.color).toBe('#123456');
   });
 
@@ -419,9 +448,7 @@ describe('setUserColor', () => {
 
     await svc.setUserColor(user.id, plan.id, '#bbbbbb', undefined);
 
-    const row = testDb
-      .prepare('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?')
-      .get(user.id, plan.id) as { color: string };
+    const row = await storedFields(VacayUserColors, { user: user.id, plan: plan.id }, ['color']) as { color: string };
     expect(row.color).toBe('#bbbbbb');
   });
 });
@@ -449,9 +476,7 @@ describe('addYear', () => {
     const years = await svc.listYears(plan.id);
     expect(years).toContain(newYear);
 
-    const userYear = testDb
-      .prepare('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?')
-      .get(user.id, plan.id, newYear) as { vacation_days: number } | undefined;
+    const userYear = await storedRow(VacayUserYears, { user: user.id, plan: plan.id, year: newYear }) as { vacation_days: number } | undefined;
     expect(userYear).toBeDefined();
     expect(userYear!.vacation_days).toBe(30);
   });
@@ -462,23 +487,18 @@ describe('addYear', () => {
     const nextYear = currentYear + 1;
 
     // Enable carry-over and seed some entries for the current year
-    testDb.prepare('UPDATE vacay_plans SET carry_over_enabled = 1 WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { carry_over_enabled: 1 });
     // Ensure current year row exists with 10 vacation days
-    testDb.prepare(`
-      INSERT OR REPLACE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over)
-      VALUES (?, ?, ?, 10, 0)
-    `).run(user.id, plan.id, currentYear);
+    await upsertRow(await orm(), VacayUserYears, { user: user.id, plan: plan.id, year: currentYear, vacation_days: 10, carried_over: 0 });
     // Add 3 entries (used days) in the current year
     for (let day = 1; day <= 3; day++) {
       const dateStr = `${currentYear}-06-0${day}`;
-      testDb.prepare('INSERT OR IGNORE INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(plan.id, user.id, dateStr, '');
+      await insertRowIgnoringConflict(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: dateStr, note: '' });
     }
 
     await svc.addYear(plan.id, nextYear, undefined);
 
-    const userYear = testDb
-      .prepare('SELECT carried_over FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?')
-      .get(user.id, plan.id, nextYear) as { carried_over: number } | undefined;
+    const userYear = await storedFields(VacayUserYears, { user: user.id, plan: plan.id, year: nextYear }, ['carried_over']) as { carried_over: number } | undefined;
     // 10 vacation days - 3 used = 7 carried over
     expect(userYear?.carried_over).toBe(7);
   });
@@ -491,20 +511,14 @@ describe('deleteYear', () => {
 
     await svc.addYear(plan.id, targetYear, undefined);
     // Insert an entry for that year
-    testDb
-      .prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)')
-      .run(plan.id, user.id, `${targetYear}-07-15`, '');
+    await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: `${targetYear}-07-15`, note: '' });
 
     await svc.deleteYear(plan.id, targetYear, undefined);
 
-    const yearRow = testDb
-      .prepare('SELECT * FROM vacay_years WHERE plan_id = ? AND year = ?')
-      .get(plan.id, targetYear);
+    const yearRow = await storedRow(VacayYears, { plan: plan.id, year: targetYear });
     expect(yearRow).toBeUndefined();
 
-    const entries = testDb
-      .prepare("SELECT * FROM vacay_entries WHERE plan_id = ? AND date LIKE ?")
-      .all(plan.id, `${targetYear}-%`);
+    const entries = await storedRows(VacayEntries, { plan: plan.id, date: { $like: `${targetYear}-%` } });
     expect(entries).toHaveLength(0);
   });
 
@@ -521,20 +535,20 @@ describe('deleteYear', () => {
     const { user: userA, plan } = await setupUserWithPlan();
     const { user: userB } = createUser(testDb);
     await svc.getOwnPlan(userB.id);
-    insertMember(plan.id, userB.id, 'accepted');
+    await insertMember(plan.id, userB.id, 'accepted');
     await svc.updateYearSettings(userB.id, { year_type: 'fiscal', year_start_month: 4, year_start_day: 1 });
     await svc.addYear(plan.id, 2026, undefined);
 
-    const insertEntry = (userId: number, date: string) =>
-      testDb.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(plan.id, userId, date, '');
-    insertEntry(userA.id, '2026-02-10'); // inside A's CALENDAR 2026 window [2026-01-01, 2027-01-01) — must be deleted
-    insertEntry(userA.id, '2025-11-01'); // inside A's CALENDAR 2025 window — must survive
-    insertEntry(userB.id, '2026-02-10'); // inside B's FISCAL 2025 window [2025-04-01, 2026-04-01) — must survive
-    insertEntry(userB.id, '2026-05-10'); // inside B's FISCAL 2026 window [2026-04-01, 2027-04-01) — must be deleted
+    const insertEntry = async (userId: number, date: string) =>
+      await insertRow(await orm(), VacayEntries, { plan: plan.id, user: userId, date, note: '' });
+    await insertEntry(userA.id, '2026-02-10'); // inside A's CALENDAR 2026 window [2026-01-01, 2027-01-01) — must be deleted
+    await insertEntry(userA.id, '2025-11-01'); // inside A's CALENDAR 2025 window — must survive
+    await insertEntry(userB.id, '2026-02-10'); // inside B's FISCAL 2025 window [2025-04-01, 2026-04-01) — must survive
+    await insertEntry(userB.id, '2026-05-10'); // inside B's FISCAL 2026 window [2026-04-01, 2027-04-01) — must be deleted
 
     await svc.deleteYear(plan.id, 2026, undefined);
 
-    const remaining = testDb.prepare('SELECT user_id, date FROM vacay_entries WHERE plan_id = ? ORDER BY user_id, date').all(plan.id);
+    const remaining = await storedRows(VacayEntries, { plan: plan.id }, { user: 'asc', date: 'asc' }, ['user_id', 'date']);
     expect(remaining).toEqual([
       { user_id: userA.id, date: '2025-11-01' },
       { user_id: userB.id, date: '2026-02-10' },
@@ -559,33 +573,33 @@ describe('shiftOwnerEntriesForTripWindow', () => {
       ['2026-06-10', '2026-06-20', '2026-06-03', '2026-06-15', '2026-06-08'], // -7 days
     ];
     for (const [oldStart, oldEnd, newStart, entryDate, expectedShifted] of cases) {
-      testDb.prepare('DELETE FROM vacay_entries WHERE plan_id = ?').run(plan.id);
-      testDb.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(plan.id, user.id, entryDate, '');
+      await deleteRows(await orm(), VacayEntries, { plan: plan.id });
+      await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: entryDate, note: '' });
 
       await svc.shiftOwnerEntriesForTripWindow(user.id, oldStart, oldEnd, newStart);
 
-      const row = testDb.prepare('SELECT date FROM vacay_entries WHERE plan_id = ? AND user_id = ?').get(plan.id, user.id) as { date: string };
+      const row = await storedFields(VacayEntries, { plan: plan.id, user: user.id }, ['date']) as { date: string };
       expect(row.date).toBe(expectedShifted);
     }
   });
 
   it('VACAY-SVC-030c: a zero offset is a no-op (no write at all)', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(plan.id, user.id, '2026-05-05', '');
+    await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: '2026-05-05', note: '' });
 
     await svc.shiftOwnerEntriesForTripWindow(user.id, '2026-05-01', '2026-05-10', '2026-05-01');
 
-    const row = testDb.prepare('SELECT date FROM vacay_entries WHERE plan_id = ? AND user_id = ?').get(plan.id, user.id) as { date: string };
+    const row = await storedFields(VacayEntries, { plan: plan.id, user: user.id }, ['date']) as { date: string };
     expect(row.date).toBe('2026-05-05');
   });
 
   it('VACAY-SVC-030d (M2 parity): an unparseable start (garbage) resolves as a no-op, same as legacy\'s NULL-julianday offset of 0, instead of writing a NaN date', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(plan.id, user.id, '2026-05-05', '');
+    await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: '2026-05-05', note: '' });
 
     await expect(svc.shiftOwnerEntriesForTripWindow(user.id, '2026-05-01', '2026-05-10', 'soon')).resolves.toBeUndefined();
 
-    const row = testDb.prepare('SELECT date FROM vacay_entries WHERE plan_id = ? AND user_id = ?').get(plan.id, user.id) as { date: string };
+    const row = await storedFields(VacayEntries, { plan: plan.id, user: user.id }, ['date']) as { date: string };
     expect(row.date).toBe('2026-05-05');
   });
 
@@ -594,11 +608,11 @@ describe('shiftOwnerEntriesForTripWindow', () => {
     // (2 days 23.5 hours, truncated toward zero) — a local-time Date.parse +
     // Math.round of the same pair computed 3 instead (task-7-review.md M2).
     const { user, plan } = await setupUserWithPlan();
-    testDb.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(plan.id, user.id, '2025-06-15', '');
+    await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: '2025-06-15', note: '' });
 
     await svc.shiftOwnerEntriesForTripWindow(user.id, '2025-06-10', '2025-06-20', '2025-06-12T23:30');
 
-    const row = testDb.prepare('SELECT date FROM vacay_entries WHERE plan_id = ? AND user_id = ?').get(plan.id, user.id) as { date: string };
+    const row = await storedFields(VacayEntries, { plan: plan.id, user: user.id }, ['date']) as { date: string };
     expect(row.date).toBe('2025-06-17');
   });
 
@@ -610,27 +624,27 @@ describe('shiftOwnerEntriesForTripWindow', () => {
     // (task-7-review.md M1). Inserting the latest date first makes the id
     // order run opposite the date order, so the two orderings disagree.
     const { user, plan } = await setupUserWithPlan();
-    const insertEntry = (date: string) =>
-      testDb.prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)').run(plan.id, user.id, date, '');
-    const readDates = () =>
-      (testDb.prepare('SELECT date FROM vacay_entries WHERE plan_id = ? AND user_id = ? ORDER BY date').all(plan.id, user.id) as { date: string }[]).map(
+    const insertEntry = async (date: string) =>
+      await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date, note: '' });
+    const readDates = async () =>
+      (await storedRows(VacayEntries, { plan: plan.id, user: user.id }, { date: 'asc' }, ['date']) as { date: string }[]).map(
         (r) => r.date,
       );
 
-    insertEntry('2026-07-12');
-    insertEntry('2026-07-11');
-    insertEntry('2026-07-10');
+    await insertEntry('2026-07-12');
+    await insertEntry('2026-07-11');
+    await insertEntry('2026-07-10');
 
     await svc.shiftOwnerEntriesForTripWindow(user.id, '2026-07-01', '2026-07-20', '2026-07-02'); // offset +1
-    expect(readDates()).toEqual(['2026-07-11', '2026-07-12', '2026-07-13']);
+    expect((await readDates())).toEqual(['2026-07-11', '2026-07-12', '2026-07-13']);
 
-    testDb.prepare('DELETE FROM vacay_entries WHERE plan_id = ?').run(plan.id);
-    insertEntry('2026-07-12');
-    insertEntry('2026-07-11');
-    insertEntry('2026-07-10');
+    await deleteRows(await orm(), VacayEntries, { plan: plan.id });
+    await insertEntry('2026-07-12');
+    await insertEntry('2026-07-11');
+    await insertEntry('2026-07-10');
 
     await svc.shiftOwnerEntriesForTripWindow(user.id, '2026-07-02', '2026-07-21', '2026-07-01'); // offset -1
-    expect(readDates()).toEqual(['2026-07-09', '2026-07-11', '2026-07-12']);
+    expect((await readDates())).toEqual(['2026-07-09', '2026-07-11', '2026-07-12']);
   });
 });
 
@@ -653,13 +667,13 @@ describe('getEntries', () => {
     // exercise the COALESCE(c.color, '#6366f1') fallback branch too — rule
     // 19's "fully seeded" bar for this read model.
     const { user: owner, plan } = await setupUserWithPlan();
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     const { user: userB } = createUser(testDb);
     const { user: userC } = createUser(testDb);
     await svc.getOwnPlan(userB.id);
     await svc.getOwnPlan(userC.id);
-    insertMember(plan.id, userB.id, 'accepted');
-    insertMember(plan.id, userC.id, 'accepted');
+    await insertMember(plan.id, userB.id, 'accepted');
+    await insertMember(plan.id, userC.id, 'accepted');
     await svc.updateYearSettings(userB.id, { year_type: 'fiscal', year_start_month: 4, year_start_day: 1 });
     await svc.updateYearSettings(userC.id, { year_type: 'anniversary', hire_date: '2020-06-15' });
     await svc.setUserColor(owner.id, plan.id, '#111111', undefined);
@@ -674,6 +688,7 @@ describe('getEntries', () => {
 
     const result = await svc.getEntries(plan.id, '2026', owner.id);
 
+    // test-sql-allow: legacy read-model oracle, recomputed from raw SQL on purpose.
     const legacy = testDb.prepare(`
       SELECT e.*, u.username as person_name, COALESCE(c.color, '#6366f1') as person_color
       FROM vacay_entries e
@@ -695,9 +710,7 @@ describe('toggleEntry', () => {
     const result = await svc.toggleEntry(user.id, plan.id, '2025-08-01', undefined);
 
     expect(result.action).toBe('added');
-    const row = testDb
-      .prepare('SELECT * FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-08-01');
+    const row = await storedRow(VacayEntries, { user: user.id, plan: plan.id, date: '2025-08-01' });
     expect(row).toBeDefined();
   });
 
@@ -708,9 +721,7 @@ describe('toggleEntry', () => {
     const result = await svc.toggleEntry(user.id, plan.id, '2025-08-04', undefined);
 
     expect(result.action).toBe('removed');
-    const row = testDb
-      .prepare('SELECT * FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-08-04');
+    const row = await storedRow(VacayEntries, { user: user.id, plan: plan.id, date: '2025-08-04' });
     expect(row).toBeUndefined();
   });
 
@@ -720,9 +731,7 @@ describe('toggleEntry', () => {
     const result = await svc.toggleEntry(user.id, plan.id, '2025-08-05', 0.5);
 
     expect(result).toMatchObject({ action: 'added', fraction: 0.5 });
-    const row = testDb
-      .prepare('SELECT fraction FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-08-05') as { fraction: number };
+    const row = await storedFields(VacayEntries, { user: user.id, plan: plan.id, date: '2025-08-05' }, ['fraction']) as { fraction: number };
     expect(row.fraction).toBe(0.5);
   });
 
@@ -733,9 +742,7 @@ describe('toggleEntry', () => {
     const result = await svc.toggleEntry(user.id, plan.id, '2025-08-06', 0.5);
 
     expect(result).toMatchObject({ action: 'updated', fraction: 0.5 });
-    const row = testDb
-      .prepare('SELECT fraction FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-08-06') as { fraction: number };
+    const row = await storedFields(VacayEntries, { user: user.id, plan: plan.id, date: '2025-08-06' }, ['fraction']) as { fraction: number };
     expect(row.fraction).toBe(0.5);
   });
 
@@ -746,9 +753,7 @@ describe('toggleEntry', () => {
     const result = await svc.toggleEntry(user.id, plan.id, '2025-08-07', 0.5);
 
     expect(result.action).toBe('removed');
-    const row = testDb
-      .prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-08-07');
+    const row = await storedFields(VacayEntries, { user: user.id, plan: plan.id, date: '2025-08-07' }, ['id']);
     expect(row).toBeUndefined();
   });
 
@@ -759,9 +764,7 @@ describe('toggleEntry', () => {
     const result = await svc.toggleEntry(user.id, plan.id, '2025-07-19', undefined); // Saturday
 
     expect(result).toEqual({ error: 'weekend_blocked' });
-    const row = testDb
-      .prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-07-19');
+    const row = await storedFields(VacayEntries, { user: user.id, plan: plan.id, date: '2025-07-19' }, ['id']);
     expect(row).toBeUndefined();
   });
 
@@ -775,7 +778,7 @@ describe('toggleEntry', () => {
 
   it('VACAY-SVC-033f: accepts a weekend day when block_weekends is off', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb.prepare('UPDATE vacay_plans SET block_weekends = 0 WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { block_weekends: 0 });
 
     const result = await svc.toggleEntry(user.id, plan.id, '2025-07-19', undefined); // Saturday
 
@@ -784,7 +787,7 @@ describe('toggleEntry', () => {
 
   it('VACAY-SVC-033g: honours custom weekend_days (5,6 blocks Friday, frees Sunday)', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb.prepare("UPDATE vacay_plans SET weekend_days = '5,6' WHERE id = ?").run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { weekend_days: '5,6' });
 
     expect(await svc.toggleEntry(user.id, plan.id, '2025-07-18', undefined)).toEqual({ error: 'weekend_blocked' }); // Friday
     expect(await svc.toggleEntry(user.id, plan.id, '2025-07-20', undefined)).toMatchObject({ action: 'added' }); // Sunday
@@ -792,38 +795,30 @@ describe('toggleEntry', () => {
 
   it('VACAY-SVC-033h: a NULL weekend_days column falls back to Sat/Sun', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb.prepare('UPDATE vacay_plans SET weekend_days = NULL WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { weekend_days: null });
 
     expect(await svc.toggleEntry(user.id, plan.id, '2025-07-19', undefined)).toEqual({ error: 'weekend_blocked' }); // Saturday
   });
 
   it('VACAY-SVC-033i: still removes an existing entry on a blocked day (stray-data cleanup)', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb
-      .prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, fraction, kind) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(plan.id, user.id, '2025-07-19', '', 1, 'vacation');
+    await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: '2025-07-19', note: '', fraction: 1, kind: 'vacation' });
 
     const result = await svc.toggleEntry(user.id, plan.id, '2025-07-19', 1, 'vacation');
 
     expect(result.action).toBe('removed');
-    const row = testDb
-      .prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-07-19');
+    const row = await storedFields(VacayEntries, { user: user.id, plan: plan.id, date: '2025-07-19' }, ['id']);
     expect(row).toBeUndefined();
   });
 
   it('VACAY-SVC-033j: refuses to convert an existing entry in place on a blocked day', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb
-      .prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, fraction, kind) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(plan.id, user.id, '2025-07-19', '', 0.5, 'vacation');
+    await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: '2025-07-19', note: '', fraction: 0.5, kind: 'vacation' });
 
     const result = await svc.toggleEntry(user.id, plan.id, '2025-07-19', 1, 'vacation');
 
     expect(result).toEqual({ error: 'weekend_blocked' });
-    const row = testDb
-      .prepare('SELECT fraction FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-07-19') as { fraction: number };
+    const row = await storedFields(VacayEntries, { user: user.id, plan: plan.id, date: '2025-07-19' }, ['fraction']) as { fraction: number };
     expect(row.fraction).toBe(0.5);
   });
 });
@@ -837,9 +832,7 @@ describe('toggleCompanyHoliday', () => {
     const result = await svc.toggleCompanyHoliday(plan.id, '2025-12-25', 'Christmas', undefined);
 
     expect(result.action).toBe('added');
-    const row = testDb
-      .prepare('SELECT * FROM vacay_company_holidays WHERE plan_id = ? AND date = ?')
-      .get(plan.id, '2025-12-25');
+    const row = await storedRow(VacayCompanyHolidays, { plan: plan.id, date: '2025-12-25' });
     expect(row).toBeDefined();
   });
 
@@ -850,9 +843,7 @@ describe('toggleCompanyHoliday', () => {
     const result = await svc.toggleCompanyHoliday(plan.id, '2025-12-26', undefined, undefined);
 
     expect(result.action).toBe('removed');
-    const row = testDb
-      .prepare('SELECT * FROM vacay_company_holidays WHERE plan_id = ? AND date = ?')
-      .get(plan.id, '2025-12-26');
+    const row = await storedRow(VacayCompanyHolidays, { plan: plan.id, date: '2025-12-26' });
     expect(row).toBeUndefined();
   });
 
@@ -865,25 +856,23 @@ describe('toggleCompanyHoliday', () => {
     // Now declare it a company holiday — the personal entry should be wiped
     await svc.toggleCompanyHoliday(plan.id, '2025-05-01', 'Labour Day', undefined);
 
-    const personalEntry = testDb
-      .prepare('SELECT * FROM vacay_entries WHERE plan_id = ? AND date = ?')
-      .get(plan.id, '2025-05-01');
+    const personalEntry = await storedRow(VacayEntries, { plan: plan.id, date: '2025-05-01' });
     expect(personalEntry).toBeUndefined();
   });
 });
 
 describe('half company holidays (#2439)', () => {
-  const entryOf = (planId: number, date: string) =>
-    testDb.prepare('SELECT fraction FROM vacay_entries WHERE plan_id = ? AND date = ?').get(planId, date) as { fraction: number } | undefined;
-  const holidayOf = (planId: number, date: string) =>
-    testDb.prepare('SELECT fraction FROM vacay_company_holidays WHERE plan_id = ? AND date = ?').get(planId, date) as { fraction: number } | undefined;
+  const entryOf = async (planId: number, date: string) =>
+    await storedFields(VacayEntries, { plan: planId, date }, ['fraction']) as { fraction: number } | undefined;
+  const holidayOf = async (planId: number, date: string) =>
+    await storedFields(VacayCompanyHolidays, { plan: planId, date }, ['fraction']) as { fraction: number } | undefined;
 
   it('VACAY-SVC-036b: a half company holiday halves a whole vacation day instead of wiping it', async () => {
     const { user, plan } = await setupUserWithPlan();
     await svc.toggleEntry(user.id, plan.id, '2025-12-24', 1);
     expect(await svc.toggleCompanyHoliday(plan.id, '2025-12-24', 'Christmas Eve', undefined, 0.5)).toEqual({ action: 'added', fraction: 0.5 });
-    expect(entryOf(plan.id, '2025-12-24')?.fraction).toBe(0.5);
-    expect(holidayOf(plan.id, '2025-12-24')?.fraction).toBe(0.5);
+    expect((await entryOf(plan.id, '2025-12-24'))?.fraction).toBe(0.5);
+    expect((await holidayOf(plan.id, '2025-12-24'))?.fraction).toBe(0.5);
   });
 
   it('VACAY-SVC-036c: the other size converts the holiday, the same size clears it', async () => {
@@ -891,14 +880,14 @@ describe('half company holidays (#2439)', () => {
     await svc.toggleCompanyHoliday(plan.id, '2025-12-31', undefined, undefined, 0.5);
     await svc.toggleEntry(user.id, plan.id, '2025-12-31', 0.5);
     expect(await svc.toggleCompanyHoliday(plan.id, '2025-12-31', undefined, undefined, 1)).toEqual({ action: 'updated', fraction: 1 });
-    expect(entryOf(plan.id, '2025-12-31')).toBeUndefined();
+    expect((await entryOf(plan.id, '2025-12-31'))).toBeUndefined();
     expect(await svc.toggleCompanyHoliday(plan.id, '2025-12-31', undefined, undefined, 1)).toEqual({ action: 'removed' });
-    expect(holidayOf(plan.id, '2025-12-31')).toBeUndefined();
+    expect((await holidayOf(plan.id, '2025-12-31'))).toBeUndefined();
   });
 
   it('VACAY-SVC-036d: leave on a half company holiday is half a day, whatever was asked', async () => {
     const { user, plan } = await setupUserWithPlan();
-    testDb.prepare('UPDATE vacay_plans SET company_holidays_enabled = 1 WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { company_holidays_enabled: 1 });
     await svc.toggleCompanyHoliday(plan.id, '2025-12-24', undefined, undefined, 0.5);
     expect(await svc.toggleEntry(user.id, plan.id, '2025-12-24', 1)).toMatchObject({ action: 'added', fraction: 0.5 });
   });
@@ -911,14 +900,12 @@ describe('acceptInvite', () => {
     const { user: owner, plan: ownerPlan } = await setupUserWithPlan();
     const { user: invitee } = createUser(testDb);
     await svc.getOwnPlan(invitee.id); // ensure own plan exists for data migration path
-    insertMember(ownerPlan.id, invitee.id, 'pending');
+    await insertMember(ownerPlan.id, invitee.id, 'pending');
 
     const result = await svc.acceptInvite(invitee.id, ownerPlan.id, undefined);
 
     expect(result.error).toBeUndefined();
-    const row = testDb
-      .prepare('SELECT status FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?')
-      .get(ownerPlan.id, invitee.id) as { status: string } | undefined;
+    const row = await storedFields(VacayPlanMembers, { plan: ownerPlan.id, user: invitee.id }, ['status']) as { status: string } | undefined;
     expect(row?.status).toBe('accepted');
   });
 
@@ -935,7 +922,7 @@ describe('acceptInvite', () => {
     const { user: owner, plan: ownerPlan } = await setupUserWithPlan();
     const { user: invitee } = createUser(testDb);
     await svc.getOwnPlan(invitee.id);
-    insertMember(ownerPlan.id, invitee.id, 'pending');
+    await insertMember(ownerPlan.id, invitee.id, 'pending');
 
     await svc.acceptInvite(invitee.id, ownerPlan.id, undefined);
 
@@ -948,13 +935,11 @@ describe('declineInvite', () => {
   it('VACAY-SVC-040: removes the pending invite row', async () => {
     const { user: owner, plan: ownerPlan } = await setupUserWithPlan();
     const { user: invitee } = createUser(testDb);
-    insertMember(ownerPlan.id, invitee.id, 'pending');
+    await insertMember(ownerPlan.id, invitee.id, 'pending');
 
     await svc.declineInvite(invitee.id, ownerPlan.id, undefined);
 
-    const row = testDb
-      .prepare('SELECT * FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?')
-      .get(ownerPlan.id, invitee.id);
+    const row = await storedRow(VacayPlanMembers, { plan: ownerPlan.id, user: invitee.id });
     expect(row).toBeUndefined();
   });
 });
@@ -963,13 +948,11 @@ describe('cancelInvite', () => {
   it('VACAY-SVC-041: removes the pending invite when owner cancels it', async () => {
     const { user: owner, plan: ownerPlan } = await setupUserWithPlan();
     const { user: target } = createUser(testDb);
-    insertMember(ownerPlan.id, target.id, 'pending');
+    await insertMember(ownerPlan.id, target.id, 'pending');
 
     await svc.cancelInvite(ownerPlan.id, target.id);
 
-    const row = testDb
-      .prepare('SELECT * FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?')
-      .get(ownerPlan.id, target.id);
+    const row = await storedRow(VacayPlanMembers, { plan: ownerPlan.id, user: target.id });
     expect(row).toBeUndefined();
   });
 });
@@ -993,7 +976,7 @@ describe('getAvailableUsers', () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: alreadyFused } = createUser(testDb);
     const { plan: otherPlan } = await setupUserWithPlan();
-    insertMember(otherPlan.id, alreadyFused.id, 'accepted');
+    await insertMember(otherPlan.id, alreadyFused.id, 'accepted');
 
     const available = await svc.getAvailableUsers(owner.id, plan.id) as { id: number }[];
 
@@ -1006,7 +989,7 @@ describe('getAvailableUsers', () => {
   it('VACAY-SVC-073: guest accounts are not offered in the plan invite picker', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: guest } = createUser(testDb);
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(await orm(), Users, { id: guest.id }, { is_guest: 1 });
 
     const available = await svc.getAvailableUsers(owner.id, plan.id) as { id: number }[];
 
@@ -1016,7 +999,7 @@ describe('getAvailableUsers', () => {
   it('VACAY-SVC-074: guest accounts are not offered in the shared-calendar picker', async () => {
     const { user: owner } = await setupUserWithPlan();
     const { user: guest } = createUser(testDb);
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(await orm(), Users, { id: guest.id }, { is_guest: 1 });
 
     const available = await svc.getShareAvailableUsers(owner.id) as { id: number }[];
 
@@ -1026,7 +1009,7 @@ describe('getAvailableUsers', () => {
   it('VACAY-SVC-075: a guest id sent straight to the write paths is refused', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: guest } = createUser(testDb);
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(await orm(), Users, { id: guest.id }, { is_guest: 1 });
 
     // The picker is only a list. The id comes back from the client, and the MCP
     // tools reach the same two methods, so refusing has to happen here.
@@ -1064,7 +1047,7 @@ describe('getStats', () => {
     // n` coercion without lying about the row on the wire.
     const { user, plan } = await setupUserWithPlan();
     const yr = new Date().getFullYear();
-    testDb.prepare('UPDATE vacay_user_years SET vacation_days = NULL, carried_over = NULL WHERE user_id = ? AND plan_id = ? AND year = ?').run(user.id, plan.id, yr);
+    await updateRows(await orm(), VacayUserYears, { user: user.id, plan: plan.id, year: yr }, { vacation_days: null, carried_over: null });
 
     const stats = await svc.getStats(plan.id, yr);
 
@@ -1078,7 +1061,7 @@ describe('getStats', () => {
     const { user, plan } = await setupUserWithPlan();
     const yr = new Date().getFullYear();
 
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-10`, undefined);
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-11`, undefined);
 
@@ -1092,7 +1075,7 @@ describe('getStats', () => {
     const { user, plan } = await setupUserWithPlan();
     const yr = new Date().getFullYear();
 
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-12`, 1);    // full day
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-13`, 0.5);  // half day
 
@@ -1106,7 +1089,7 @@ describe('getStats', () => {
     const { user, plan } = await setupUserWithPlan();
     const yr = new Date().getFullYear();
 
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-14`, 1, 'vacation');
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-15`, 1, 'comp');
 
@@ -1120,7 +1103,7 @@ describe('getStats', () => {
     const { user, plan } = await setupUserWithPlan();
     const yr = new Date().getFullYear();
 
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-16`, 0.5, 'comp');
 
     const stats = await svc.getStats(plan.id, yr);
@@ -1133,7 +1116,7 @@ describe('getStats', () => {
     const { user, plan } = await setupUserWithPlan();
     const yr = new Date().getFullYear();
 
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-17`, 1, 'comp');
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-18`, 0.5, 'comp');
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-19`, 1, 'vacation');
@@ -1148,7 +1131,7 @@ describe('getStats', () => {
     const { user, plan } = await setupUserWithPlan();
     const yr = new Date().getFullYear();
 
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     await svc.toggleEntry(user.id, plan.id, `${yr}-09-20`, 1, 'vacation');
     expect((await svc.getStats(plan.id, yr))[0].used).toBe(1);
 
@@ -1259,7 +1242,7 @@ describe('updateUserYearSettings', () => {
     const saved = await svc.updateYearSettings(user.id, { year_type: 'calendar' });
 
     expect(saved.year_type).toBe('calendar');
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM vacay_user_settings WHERE user_id = ?').get(user.id)).toEqual({ n: 1 });
+    expect({ n: await countRows(await orm(), VacayUserSettings, { user: user.id }) }).toEqual({ n: 1 });
   });
 
   it('VACAY-SVC-045n: clamps an out-of-range month and day instead of storing them', async () => {
@@ -1340,11 +1323,8 @@ describe('usage over a shifted window (#737)', () => {
   it('VACAY-SVC-045v: carry-over is computed over the previous period, not the previous calendar year', async () => {
     const { user, plan } = await setupUserWithPlan();
     await svc.updateYearSettings(user.id, { year_type: 'fiscal', year_start_month: 7 });
-    testDb.prepare('UPDATE vacay_plans SET carry_over_enabled = 1 WHERE id = ?').run(plan.id);
-    testDb.prepare(`
-      INSERT OR REPLACE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over)
-      VALUES (?, ?, 2030, 10, 0)
-    `).run(user.id, plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { carry_over_enabled: 1 });
+    await upsertRow(await orm(), VacayUserYears, { user: user.id, plan: plan.id, year: 2030, vacation_days: 10, carried_over: 0 });
 
     // Two days inside the 2030 period (Jul 2030 – Jun 2031), one of them in 2031.
     await svc.toggleEntry(user.id, plan.id, '2030-09-02', 1, 'vacation');
@@ -1352,28 +1332,21 @@ describe('usage over a shifted window (#737)', () => {
 
     await svc.addYear(plan.id, 2031, undefined);
 
-    const row = testDb
-      .prepare('SELECT carried_over FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = 2031')
-      .get(user.id, plan.id) as { carried_over: number };
+    const row = await storedFields(VacayUserYears, { user: user.id, plan: plan.id, year: 2031 }, ['carried_over']) as { carried_over: number };
     expect(row.carried_over).toBe(8);
   });
 
   it('VACAY-SVC-045w: comp days are excluded from the carry-over of a shifted period too', async () => {
     const { user, plan } = await setupUserWithPlan();
     await svc.updateYearSettings(user.id, { year_type: 'fiscal', year_start_month: 7 });
-    testDb.prepare('UPDATE vacay_plans SET carry_over_enabled = 1 WHERE id = ?').run(plan.id);
-    testDb.prepare(`
-      INSERT OR REPLACE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over)
-      VALUES (?, ?, 2030, 10, 0)
-    `).run(user.id, plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { carry_over_enabled: 1 });
+    await upsertRow(await orm(), VacayUserYears, { user: user.id, plan: plan.id, year: 2030, vacation_days: 10, carried_over: 0 });
 
     await svc.toggleEntry(user.id, plan.id, '2031-02-03', 1, 'comp');
 
     await svc.addYear(plan.id, 2031, undefined);
 
-    const row = testDb
-      .prepare('SELECT carried_over FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = 2031')
-      .get(user.id, plan.id) as { carried_over: number };
+    const row = await storedFields(VacayUserYears, { user: user.id, plan: plan.id, year: 2031 }, ['carried_over']) as { carried_over: number };
     expect(row.carried_over).toBe(10);
   });
 
@@ -1388,9 +1361,7 @@ describe('usage over a shifted window (#737)', () => {
 
     await svc.deleteYear(plan.id, 2026, undefined);
 
-    const left = testDb
-      .prepare('SELECT date FROM vacay_entries WHERE plan_id = ? ORDER BY date')
-      .all(plan.id) as { date: string }[];
+    const left = await storedRows(VacayEntries, { plan: plan.id }, { date: 'asc' }, ['date']) as { date: string }[];
     expect(left.map(r => r.date)).toEqual(['2026-06-30']);
   });
 });
@@ -1450,14 +1421,12 @@ describe('applyHolidayCalendars', () => {
     const yr = new Date().getFullYear();
 
     // Enable holidays and add a calendar
-    testDb.prepare('UPDATE vacay_plans SET holidays_enabled = 1 WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { holidays_enabled: 1 });
     await svc.addHolidayCalendar(plan.id, 'DE', null, undefined, 0, undefined);
 
     // Add a vacay entry on the holiday date
     const holidayDate = `${yr}-01-01`;
-    testDb
-      .prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note) VALUES (?, ?, ?, ?)')
-      .run(plan.id, user.id, holidayDate, '');
+    await insertRow(await orm(), VacayEntries, { plan: plan.id, user: user.id, date: holidayDate, note: '' });
 
     // Override fetch to return one global holiday matching that entry
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
@@ -1467,15 +1436,13 @@ describe('applyHolidayCalendars', () => {
 
     await svc.applyHolidayCalendars(plan.id);
 
-    const remaining = testDb
-      .prepare('SELECT * FROM vacay_entries WHERE plan_id = ? AND date = ?')
-      .all(plan.id, holidayDate);
+    const remaining = await storedRows(VacayEntries, { plan: plan.id, date: holidayDate });
     expect(remaining).toHaveLength(0);
   });
 
   it('VACAY-SVC-047b: a holiday API that does not answer is skipped, a failing delete is not', async () => {
     const { plan } = await setupUserWithPlan();
-    testDb.prepare('UPDATE vacay_plans SET holidays_enabled = 1 WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { holidays_enabled: 1 });
     await svc.addHolidayCalendar(plan.id, 'FR', null, undefined, 0, undefined);
 
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
@@ -1499,9 +1466,7 @@ describe('shareCalendar', () => {
     const result = await svc.shareCalendar(owner.id, owner.email, target.id);
 
     expect(result.error).toBeUndefined();
-    const row = testDb
-      .prepare('SELECT * FROM vacay_shares WHERE owner_id = ? AND user_id = ?')
-      .get(owner.id, target.id);
+    const row = await storedRow(VacayShares, { owner: owner.id, user: target.id });
     expect(row).toBeDefined();
   });
 
@@ -1534,7 +1499,7 @@ describe('shareCalendar', () => {
   it('VACAY-SVC-052: returns 400 when the target is already a member of the owner plan', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: member } = createUser(testDb);
-    insertMember(plan.id, member.id, 'accepted');
+    await insertMember(plan.id, member.id, 'accepted');
 
     const result = await svc.shareCalendar(owner.id, owner.email, member.id);
 
@@ -1603,7 +1568,7 @@ describe('removeShare', () => {
     const shareId = (await svc.listShares(owner.id)).outgoing[0].id as number;
 
     expect(await svc.removeShare(shareId, owner.id)).toBe(true);
-    const row = testDb.prepare('SELECT id FROM vacay_shares WHERE id = ?').get(shareId);
+    const row = await storedFields(VacayShares, { id: shareId }, ['id']);
     expect(row).toBeUndefined();
   });
 
@@ -1624,7 +1589,7 @@ describe('removeShare', () => {
     const shareId = (await svc.listShares(owner.id)).outgoing[0].id as number;
 
     expect(await svc.removeShare(shareId, stranger.id)).toBe(false);
-    const row = testDb.prepare('SELECT id FROM vacay_shares WHERE id = ?').get(shareId);
+    const row = await storedFields(VacayShares, { id: shareId }, ['id']);
     expect(row).toBeDefined();
 
     expect(await svc.removeShare(99999, owner.id)).toBe(false);
@@ -1639,12 +1604,12 @@ describe('setShareHidden', () => {
     const shareId = (await svc.listShares(viewer.id)).incoming[0].id;
 
     expect(await svc.setShareHidden(shareId, viewer.id, true)).toBe(true);
-    let row = testDb.prepare('SELECT hidden FROM vacay_shares WHERE id = ?').get(shareId) as { hidden: number };
+    let row = await storedFields(VacayShares, { id: shareId }, ['hidden']) as { hidden: number };
     expect(row.hidden).toBe(1);
     expect((await svc.listShares(viewer.id)).incoming[0].hidden).toBe(true);
 
     expect(await svc.setShareHidden(shareId, viewer.id, false)).toBe(true);
-    row = testDb.prepare('SELECT hidden FROM vacay_shares WHERE id = ?').get(shareId) as { hidden: number };
+    row = await storedFields(VacayShares, { id: shareId }, ['hidden']) as { hidden: number };
     expect(row.hidden).toBe(0);
   });
 
@@ -1655,7 +1620,7 @@ describe('setShareHidden', () => {
     const shareId = (await svc.listShares(owner.id)).outgoing[0].id as number;
 
     expect(await svc.setShareHidden(shareId, owner.id, true)).toBe(false);
-    const row = testDb.prepare('SELECT hidden FROM vacay_shares WHERE id = ?').get(shareId) as { hidden: number };
+    const row = await storedFields(VacayShares, { id: shareId }, ['hidden']) as { hidden: number };
     expect(row.hidden).toBe(0);
   });
 });
@@ -1664,7 +1629,7 @@ describe('getShareAvailableUsers', () => {
   it('VACAY-SVC-061: excludes self, already-shared users and plan members', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: member } = createUser(testDb);
-    insertMember(plan.id, member.id, 'accepted');
+    await insertMember(plan.id, member.id, 'accepted');
     const { user: shared } = createUser(testDb);
     await svc.shareCalendar(owner.id, owner.email, shared.id);
     const { user: unrelated } = createUser(testDb);
@@ -1682,7 +1647,7 @@ describe('getSharedCalendars', () => {
   it('VACAY-SVC-062: returns only the owner entries of the shared plan, including fractions', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: member } = createUser(testDb);
-    insertMember(plan.id, member.id, 'accepted');
+    await insertMember(plan.id, member.id, 'accepted');
     const { user: viewer } = await setupUserWithPlan();
     await svc.toggleEntry(owner.id, plan.id, '2025-06-10', 1);
     await svc.toggleEntry(owner.id, plan.id, '2025-06-11', 0.5);
@@ -1704,7 +1669,7 @@ describe('getSharedCalendars', () => {
   it('VACAY-SVC-063: company holidays stay hidden while the owner plan has them disabled', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: viewer } = createUser(testDb);
-    testDb.prepare('UPDATE vacay_plans SET company_holidays_enabled = 0 WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { company_holidays_enabled: 0 });
     await svc.toggleCompanyHoliday(plan.id, '2025-12-24', 'Christmas Eve', undefined);
     await svc.shareCalendar(owner.id, owner.email, viewer.id);
 
@@ -1716,7 +1681,7 @@ describe('getSharedCalendars', () => {
   it('VACAY-SVC-064: company holidays appear once the owner plan enables them', async () => {
     const { user: owner, plan } = await setupUserWithPlan();
     const { user: viewer } = createUser(testDb);
-    testDb.prepare('UPDATE vacay_plans SET company_holidays_enabled = 1 WHERE id = ?').run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { company_holidays_enabled: 1 });
     await svc.toggleCompanyHoliday(plan.id, '2025-12-24', 'Christmas Eve', undefined);
     await svc.shareCalendar(owner.id, owner.email, viewer.id);
 
@@ -1728,14 +1693,14 @@ describe('getSharedCalendars', () => {
   it('VACAY-SVC-065: an owner without any plan yields empty arrays (no lazy creation)', async () => {
     const { user: owner } = createUser(testDb); // never touched vacay — no plan row
     const { user: viewer } = createUser(testDb);
-    testDb.prepare('INSERT INTO vacay_shares (owner_id, user_id) VALUES (?, ?)').run(owner.id, viewer.id);
+    await insertRow(await orm(), VacayShares, { owner: owner.id, user: viewer.id });
 
     const calendars = await svc.getSharedCalendars(viewer.id, '2025');
 
     expect(calendars).toHaveLength(1);
     expect(calendars[0].entries).toEqual([]);
     expect(calendars[0].companyHolidays).toEqual([]);
-    const plan = testDb.prepare('SELECT id FROM vacay_plans WHERE owner_id = ?').get(owner.id);
+    const plan = await storedFields(VacayPlans, { owner: owner.id }, ['id']);
     expect(plan).toBeUndefined();
   });
 
@@ -1743,7 +1708,7 @@ describe('getSharedCalendars', () => {
     const { user: host, plan: hostPlan } = await setupUserWithPlan();
     const { user: owner } = createUser(testDb);
     await svc.getOwnPlan(owner.id);
-    insertMember(hostPlan.id, owner.id, 'accepted');
+    await insertMember(hostPlan.id, owner.id, 'accepted');
     const { user: viewer } = createUser(testDb);
     await svc.toggleEntry(owner.id, hostPlan.id, '2025-03-03', 1);
     await svc.shareCalendar(owner.id, owner.email, viewer.id);
@@ -1820,26 +1785,26 @@ describe('quirk fixes', () => {
     const { plan } = await setupUserWithPlan();
     const { user: member } = createUser(testDb);
     await svc.getOwnPlan(member.id);
-    insertMember(plan.id, member.id, 'pending');
+    await insertMember(plan.id, member.id, 'pending');
 
     const broken = await failingService('INSERT OR IGNORE INTO vacay_user_years');
     await expect(broken.acceptInvite(member.id, plan.id, undefined)).rejects.toThrow('boom');
 
-    const row = testDb.prepare('SELECT status FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?').get(plan.id, member.id) as { status: string };
+    const row = await storedFields(VacayPlanMembers, { plan: plan.id, user: member.id }, ['status']) as { status: string };
     expect(row.status).toBe('pending');
   });
 
   it('VACAY-SVC-069: deleteYear is atomic — a failure mid-flow keeps the year and its entries', async () => {
     const { user, plan } = await setupUserWithPlan();
     const year = new Date().getFullYear();
-    allowWeekends(plan.id);
+    await allowWeekends(plan.id);
     await svc.toggleEntry(user.id, plan.id, `${year}-03-03`, 1);
 
     const broken = await failingService('DELETE FROM vacay_user_years');
     await expect(broken.deleteYear(plan.id, year, undefined)).rejects.toThrow('boom');
 
-    expect(testDb.prepare('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?').get(plan.id, year)).toBeDefined();
-    expect(testDb.prepare('SELECT id FROM vacay_entries WHERE plan_id = ?').get(plan.id)).toBeDefined();
+    expect(await storedFields(VacayYears, { plan: plan.id, year }, ['id'])).toBeDefined();
+    expect(await storedFields(VacayEntries, { plan: plan.id }, ['id'])).toBeDefined();
   });
 
   it('VACAY-SVC-070: getCountries surfaces an upstream non-2xx as the fetch error and caches nothing', async () => {
@@ -1917,8 +1882,8 @@ describe('quirk fixes', () => {
 
   it('VACAY-SVC-071: applyHolidayCalendars honors the cache TTL', async () => {
     const { plan } = await setupUserWithPlan();
-    testDb.prepare('UPDATE vacay_plans SET holidays_enabled = 1 WHERE id = ?').run(plan.id);
-    testDb.prepare("INSERT INTO vacay_holiday_calendars (plan_id, region) VALUES (?, 'DE')").run(plan.id);
+    await updateRows(await orm(), VacayPlans, { id: plan.id }, { holidays_enabled: 1 });
+    await insertRow(await orm(), VacayHolidayCalendars, { plan: plan.id, region: 'DE' });
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
     vi.stubGlobal('fetch', fetchMock);
     const fresh = await freshVacayService();
@@ -1948,6 +1913,6 @@ describe('quirk fixes', () => {
     const broken = await failingService('INSERT OR IGNORE INTO vacay_user_years');
     await expect(broken.addYear(plan.id, year + 1, undefined)).rejects.toThrow('boom');
     // And atomically: the failed year was not half-added.
-    expect(testDb.prepare('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?').get(plan.id, year + 1)).toBeUndefined();
+    expect(await storedFields(VacayYears, { plan: plan.id, year: year + 1 }, ['id'])).toBeUndefined();
   });
 });
