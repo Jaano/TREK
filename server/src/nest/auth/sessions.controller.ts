@@ -12,6 +12,8 @@ import { clearAuthCookie } from '../common/cookie';
 import { getClientIp } from '../audit/client-ip';
 import { AuditService } from '../audit/audit.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { isDemoEmail } from '../common/demo';
+import { readEnv } from '../../app-config';
 import type { User } from '../../types';
 import { CurrentUser } from './current-user.decorator';
 import { currentSessionId } from './jwt-verify';
@@ -27,6 +29,11 @@ import { JwtAuthGuard } from './jwt-auth.guard';
  * current session (`current_tracked: false`). Signing out the others then
  * ends every tracked session, while that token itself runs on to its expiry.
  *
+ * On a demo instance every visitor signs in as the one shared demo account,
+ * so its sessions are other people's browsers: the list shows the caller only
+ * their own session, and ending sessions is refused with the 403 the other
+ * account changes answer in demo mode.
+ *
  * No MCP tool mirrors these routes: MCP exposes no account or session tools,
  * and a session is a browser credential an assistant has no business ending.
  */
@@ -41,13 +48,18 @@ export class SessionsController {
   @Get()
   async list(@CurrentUser() user: User, @Req() req: Request): Promise<UserSessionListResponse> {
     const current = currentSessionId(req);
-    return { sessions: await this.sessions.list(user.id, current), current_tracked: current !== undefined };
+    const sessions = await this.sessions.list(user.id, current);
+    return {
+      sessions: isSharedDemoAccount(user) ? sessions.filter((session) => session.current) : sessions,
+      current_tracked: current !== undefined,
+    };
   }
 
   // Static sub-route before the `:id` one.
   @Post('revoke-others')
   @HttpCode(200)
   async revokeOthers(@CurrentUser() user: User, @Req() req: Request): Promise<UserSessionRevokeOthersResponse> {
+    refuseForSharedDemoAccount(user);
     const revoked = await this.sessions.revokeAll(user.id, currentSessionId(req));
     await this.audit.writeAudit({ userId: user.id, action: 'user.sessions_revoke_others', ip: getClientIp(req), details: { revoked } });
     return { success: true, revoked };
@@ -60,6 +72,7 @@ export class SessionsController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<UserSessionRevokeResponse> {
+    refuseForSharedDemoAccount(user);
     if (!(await this.sessions.revoke(user.id, params.id))) {
       throw new HttpException({ error: 'Session not found' }, 404);
     }
@@ -67,5 +80,16 @@ export class SessionsController {
     if (params.id === currentSessionId(req)) clearAuthCookie(res, req);
     await this.audit.writeAudit({ userId: user.id, action: 'user.session_revoke', ip: getClientIp(req), resource: params.id });
     return { success: true };
+  }
+}
+
+/** The demo account every visitor of a demo instance shares. */
+function isSharedDemoAccount(user: User): boolean {
+  return readEnv().demo.enabled && isDemoEmail(user.email);
+}
+
+function refuseForSharedDemoAccount(user: User): void {
+  if (isSharedDemoAccount(user)) {
+    throw new HttpException({ error: 'Sessions cannot be ended in demo mode.' }, 403);
   }
 }

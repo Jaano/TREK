@@ -50,7 +50,7 @@ A session ends when:
 | Admin clears a user's two-factor authentication | Every session of that user. |
 | Account deletion | Every session, with the account. |
 
-`GET /api/auth/sessions` lists the active sessions of your account, most recently used first, with when each started, when it was last used (refreshed at most every few minutes), when it expires, the browser's User-Agent at sign-in (cut to 256 characters) and which one is the current one. No IP address is stored. The settings screen does not show this list yet; the routes are there for it and for API clients.
+`GET /api/auth/sessions` lists the active sessions of your account, most recently used first, with when each started, when it was last used (refreshed at most every few minutes), when it expires, the browser's User-Agent at sign-in (cut to 256 characters) and which one is the current one. No IP address is stored. The settings screen does not show this list yet; the routes are there for it and for API clients. On a demo instance the shared demo account sees only its own session in the list and cannot end sessions (403), since its sessions are other visitors' browsers.
 
 Sessions issued before this was introduced carry no session id. They keep working until they expire (or until the password changes, which ends them through the password version), are not listed, and are not ended by **revoke-others**. Once such a session passes half its lifetime, the sliding renewal replaces it with a tracked one. Expired and ended session rows are removed by a nightly job.
 

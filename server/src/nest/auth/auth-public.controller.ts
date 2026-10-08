@@ -58,7 +58,7 @@ export class AuthPublicController {
   @Public('issues a session for the demo account; there is nothing to authenticate yet')
   @HttpCode(200)
   async demoLogin(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const result = await this.auth.demoLogin();
+    const result = await this.auth.demoLogin(sessionClientFrom(req));
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }

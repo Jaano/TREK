@@ -415,13 +415,13 @@ export class AuthService {
   // Auth: register, login, demo
   // -------------------------------------------------------------------------
 
-  async demoLogin(): Promise<{ error?: string; status?: number; token?: string; user?: Record<string, unknown> }> {
+  async demoLogin(client?: SessionClient): Promise<{ error?: string; status?: number; token?: string; user?: Record<string, unknown> }> {
     if (!readEnv().demo.enabled) {
       return { error: 'Not found', status: 404 };
     }
     const user = await this.usersRepo.findByEmailExact(DEMO_EMAIL_PRIMARY);
     if (!user) return { error: 'Demo user not found', status: 500 };
-    const token = await this.generateToken(user);
+    const token = await this.generateToken(user, undefined, client);
     const safe = stripUserForClient(toClientUser(user)) as Record<string, unknown>;
     return { token, user: { ...safe, avatar_url: avatarUrl(user) } };
   }

@@ -229,4 +229,35 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     expect(list.body.current_tracked).toBe(true);
     expect(list.body.sessions).toEqual([expect.objectContaining({ id: sessionIdOf(renewed), user_agent: 'Renewed', current: true })]);
   }, 10000);
+
+  it("on a demo instance, visitors of the shared demo account neither see nor end each other's sessions", async () => {
+    createUser(db as never, { username: 'demo', email: 'demo@trek.app' });
+    vi.stubEnv('DEMO_MODE', 'true');
+    try {
+      const visit = async (device: string) => {
+        const res = await request(server).post('/api/auth/demo-login').set('User-Agent', device);
+        expect(res.status).toBe(200);
+        const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('trek_session='))!;
+        return /^(trek_session=[^;]+)/.exec(cookie)![1];
+      };
+      const first = await visit('First visitor');
+      const second = await visit('Second visitor');
+
+      const list = await request(server).get('/api/auth/sessions').set('Cookie', first);
+      expect(list.status).toBe(200);
+      expect(list.body.sessions).toEqual([expect.objectContaining({ id: sessionIdOf(first), user_agent: 'First visitor', current: true })]);
+
+      const one = await request(server).delete(`/api/auth/sessions/${sessionIdOf(second)}`).set('Cookie', first);
+      expect(one.status).toBe(403);
+      expect(one.body).toEqual({ error: 'Sessions cannot be ended in demo mode.' });
+      const others = await request(server).post('/api/auth/sessions/revoke-others').set('Cookie', first);
+      expect(others.status).toBe(403);
+      expect(others.body).toEqual({ error: 'Sessions cannot be ended in demo mode.' });
+
+      expect((await me(second)).status).toBe(200);
+      expect((await me(first)).status).toBe(200);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }, 15000);
 });

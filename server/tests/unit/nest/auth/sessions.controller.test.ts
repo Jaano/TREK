@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { HttpException } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
 import type { Request, Response } from 'express';
@@ -33,6 +33,7 @@ function controller(o: Partial<Record<'list' | 'revoke' | 'revokeAll', ReturnTyp
 }
 
 beforeEach(() => vi.clearAllMocks());
+afterEach(() => vi.unstubAllEnvs());
 
 describe('SessionsController', () => {
   it('GET lists the sessions with the current one flagged', async () => {
@@ -84,5 +85,49 @@ describe('SessionsController', () => {
     expect((err as HttpException).getStatus()).toBe(404);
     expect((err as HttpException).getResponse()).toEqual({ error: 'Session not found' });
     expect(writeAudit).not.toHaveBeenCalled();
+  });
+});
+
+describe('SessionsController on a demo instance', () => {
+  const demo = { id: 3, username: 'demo', email: 'demo@trek.app', role: 'user' } as User;
+
+  it('GET shows the shared demo account only the session it was called with', async () => {
+    vi.stubEnv('DEMO_MODE', 'true');
+    const mine = { id: SID, created_at: 'a', last_seen_at: 'b', expires_at: 'c', user_agent: 'Mine', current: true };
+    const theirs = { id: OTHER, created_at: 'a', last_seen_at: 'b', expires_at: 'c', user_agent: 'Another visitor', current: false };
+    const { c } = controller({ list: vi.fn().mockResolvedValue([theirs, mine]) });
+
+    expect(await c.list(demo, reqWith(SID))).toEqual({ sessions: [mine], current_tracked: true });
+    expect(await c.list(demo, reqWith())).toEqual({ sessions: [], current_tracked: false });
+  });
+
+  it('DELETE and revoke-others answer 403 for the shared demo account and end nothing', async () => {
+    vi.stubEnv('DEMO_MODE', 'true');
+    const { c, sessions } = controller({ revoke: vi.fn(), revokeAll: vi.fn() });
+
+    for (const call of [() => c.revokeOthers(demo, reqWith(SID)), () => c.revoke(demo, { id: OTHER }, reqWith(SID), resStub())]) {
+      const err = await call().catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(HttpException);
+      expect((err as HttpException).getStatus()).toBe(403);
+      expect((err as HttpException).getResponse()).toEqual({ error: 'Sessions cannot be ended in demo mode.' });
+    }
+    expect(sessions.revoke).not.toHaveBeenCalled();
+    expect(sessions.revokeAll).not.toHaveBeenCalled();
+    expect(writeAudit).not.toHaveBeenCalled();
+  });
+
+  it('another account on a demo instance, and the demo address without demo mode, keep the full routes', async () => {
+    vi.stubEnv('DEMO_MODE', 'true');
+    const listed = [
+      { id: SID, created_at: 'a', last_seen_at: 'b', expires_at: 'c', user_agent: null, current: true },
+      { id: OTHER, created_at: 'a', last_seen_at: 'b', expires_at: 'c', user_agent: null, current: false },
+    ];
+    const { c } = controller({ list: vi.fn().mockResolvedValue(listed), revokeAll: vi.fn().mockResolvedValue(1) });
+    expect((await c.list(user, reqWith(SID))).sessions).toHaveLength(2);
+    expect(await c.revokeOthers(user, reqWith(SID))).toEqual({ success: true, revoked: 1 });
+
+    vi.stubEnv('DEMO_MODE', '');
+    expect((await c.list(demo, reqWith(SID))).sessions).toHaveLength(2);
+    expect(await c.revokeOthers(demo, reqWith(SID))).toEqual({ success: true, revoked: 1 });
   });
 });

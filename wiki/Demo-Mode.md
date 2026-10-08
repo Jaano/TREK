@@ -62,6 +62,7 @@ On first start with demo mode active, TREK seeds three example trips (Tokyo & Ky
 
 - Demo mode is not for production use with real user data. The hourly reset deletes all visitor-created content.
 - All demo visitors share a single account — there is no isolation between sessions.
+- Because the demo account is shared, its session list (`GET /api/auth/sessions`) shows each visitor only their own session, and ending sessions (`DELETE /api/auth/sessions/{id}`, `POST /api/auth/sessions/revoke-others`) answers 403 `Sessions cannot be ended in demo mode.`, so one visitor cannot see or sign out the others. Logging out still ends the visitor's own session.
 - File uploads (photos, documents, trip covers, avatars) are disabled for the demo user.
 
 ## See also

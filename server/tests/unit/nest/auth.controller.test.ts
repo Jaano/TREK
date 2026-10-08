@@ -92,9 +92,12 @@ describe('AuthPublicController', () => {
   it('demo-login maps error, else sets the cookie + returns token/user', async () => {
     expect(await thrownAsync(() => apc(asvc({ demoLogin: vi.fn().mockReturnValue({ error: 'Demo disabled', status: 403 }) } as Partial<AuthService>), rl()).demoLogin(req, res))).toEqual({ status: 403, body: { error: 'Demo disabled' } });
     const setAuthCookie = vi.fn();
-    const c = apc(asvc({ demoLogin: vi.fn().mockReturnValue({ token: 'tk', user }), setAuthCookie } as Partial<AuthService>), rl());
-    expect(await c.demoLogin(req, res)).toEqual({ token: 'tk', user });
-    expect(setAuthCookie).toHaveBeenCalledWith(res, 'tk', req);
+    const demoLogin = vi.fn().mockReturnValue({ token: 'tk', user });
+    const c = apc(asvc({ demoLogin, setAuthCookie } as Partial<AuthService>), rl());
+    expect(await c.demoLogin({ ...req, headers: { 'user-agent': 'Visitor' } } as Request, res)).toEqual({ token: 'tk', user });
+    expect(setAuthCookie).toHaveBeenCalledWith(res, 'tk', expect.objectContaining({ ip: '9.9.9.9' }));
+    // The session records the device like every other sign-in does.
+    expect(demoLogin).toHaveBeenCalledWith({ userAgent: 'Visitor' });
   });
 
   it('register audits + sets cookie; maps error', async () => {

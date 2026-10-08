@@ -783,10 +783,11 @@ describe('demoLogin', () => {
     vi.stubEnv('DEMO_MODE', 'true');
     expect(await svc.demoLogin()).toEqual({ error: 'Demo user not found', status: 500 });
     // demoLogin looks up DEMO_EMAIL_PRIMARY specifically (not any demo alias).
-    createUser(testDb, { email: 'demo@trek.app' });
-    const result = await svc.demoLogin();
+    const { user } = createUser(testDb, { email: 'demo@trek.app' });
+    const result = await svc.demoLogin({ userAgent: 'Demo visitor' });
     expect(typeof result.token).toBe('string');
     expect(result.user).not.toHaveProperty('password_hash');
+    expect(sessionRows(testDb, user.id).map((r) => r.user_agent)).toEqual(['Demo visitor']);
     vi.unstubAllEnvs();
   });
 });
