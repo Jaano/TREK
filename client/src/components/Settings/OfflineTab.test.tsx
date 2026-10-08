@@ -1,4 +1,4 @@
-// FE-COMP-OFFLINETAB-001 to FE-COMP-OFFLINETAB-028
+// FE-COMP-OFFLINETAB-001 to FE-COMP-OFFLINETAB-031
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -498,6 +498,22 @@ describe('OfflineTab', () => {
 
     expect(await screen.findByText(/Could not read this device’s offline storage/)).toBeInTheDocument();
     expect(screen.queryByText('No trips cached yet. Connect to the internet to sync.')).not.toBeInTheDocument();
+  });
+
+  it('FE-COMP-OFFLINETAB-031: an archived trip still stored here gets a switch that takes it off', async () => {
+    const user = userEvent.setup();
+    const soon = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
+    const archived = buildTrip({ id: 9, title: 'Rome', start_date: '2025-01-01', end_date: soon, is_archived: 1 });
+    // The server's list leaves archived trips out; the device still holds Rome.
+    h.tripsToArray.mockResolvedValue([archived, paris]);
+    render(<OfflineTab />);
+
+    const toggle = await screen.findByRole('button', { name: 'Rome' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByRole('button', { name: 'Paris' })).toHaveLength(1);
+
+    await user.click(toggle);
+    expect(h.clearTripData).toHaveBeenCalledWith(9);
   });
 
   it('FE-COMP-OFFLINETAB-020: the per-trip section disappears when there are no trips at all', async () => {

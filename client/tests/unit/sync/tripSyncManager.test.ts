@@ -10,7 +10,7 @@ import { server } from '../../helpers/msw/server';
 import { http, HttpResponse } from 'msw';
 import { tripSyncManager } from '../../../src/sync/tripSyncManager';
 import { setAuthed } from '../../../src/sync/authGate';
-import { setTripPinned, _resetOfflinePrefs } from '../../../src/sync/offlinePrefs';
+import { setTripPinned, setTripOfflineEnabled, _resetOfflinePrefs } from '../../../src/sync/offlinePrefs';
 import { offlineDb, clearAll, upsertTrip } from '../../../src/db/offlineDb';
 import { useAddonStore } from '../../../src/store/addonStore';
 import {
@@ -544,6 +544,56 @@ describe('tripSyncManager.syncAll: deletions made elsewhere', () => {
     expect(await offlineDb.trips.get(601)).toBeDefined();
     expect(await offlineDb.places.get(8101)).toBeDefined();
     expect(await offlineDb.mutationQueue.get('parked-601')).toBeDefined();
+  });
+
+  /** The server lists `active` as the user's trips and `archived` behind ?archived=1. */
+  function listTrips(active: ReturnType<typeof buildTrip>[], archived: ReturnType<typeof buildTrip>[]) {
+    return http.get('/api/trips', ({ request }) => HttpResponse.json({
+      trips: new URL(request.url).searchParams.get('archived') === '1' ? archived : active,
+    }));
+  }
+
+  it('evicts an archived trip that ended more than 7 days ago, and keeps its parked changes', async () => {
+    const archived = buildTrip({ id: 605, end_date: dateOffset(-30), is_archived: 1 });
+    await upsertTrip(archived);
+    await offlineDb.places.put(buildPlace({ trip_id: 605, id: 8105 }));
+    await offlineDb.mutationQueue.put({
+      id: 'parked-605', tripId: 605, method: 'PUT', url: '/trips/605/places/8105', body: { name: 'X' },
+      createdAt: 1, status: 'failed', attempts: 8, lastError: 'boom', resource: 'places', entityId: 8105,
+    });
+
+    server.use(listTrips([], [archived]));
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(605)).toBeUndefined();
+    expect(await offlineDb.places.get(8105)).toBeUndefined();
+    expect(await offlineDb.mutationQueue.get('parked-605')).toBeDefined();
+  });
+
+  it('evicts an archived trip the user switched off, however recent', async () => {
+    const archived = buildTrip({ id: 606, end_date: dateOffset(5), is_archived: 1 });
+    await upsertTrip(archived);
+    setTripOfflineEnabled(606, false);
+
+    server.use(listTrips([], [archived]));
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(606)).toBeUndefined();
+  });
+
+  it('keeps an archived trip that is still within the date rule, without syncing it', async () => {
+    const archived = buildTrip({ id: 607, end_date: dateOffset(5), is_archived: 1 });
+    await upsertTrip(archived);
+    let bundles = 0;
+
+    server.use(
+      listTrips([], [archived]),
+      http.get('/api/trips/607/bundle', () => { bundles++; return HttpResponse.json({ ...makeBundle(607), trip: archived }); }),
+    );
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(607)).toBeDefined();
+    expect(bundles).toBe(0);
   });
 
   it('treats nothing as gone when the archived list cannot be read', async () => {

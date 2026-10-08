@@ -68,7 +68,7 @@ On login, when the browser comes back online, and when you lift **Force offline 
 
 - Ongoing and future trips are cached (trips whose `end_date` is today or later, or has no end date).
 - Trips that ended more than 7 days ago are automatically evicted from IndexedDB on the next sync.
-- A trip that was deleted, or that you were removed from, is cleared from the device on the next sync. Archiving a trip does not count as either: archived trips stay.
+- A trip that was deleted, or that you were removed from, is cleared from the device on the next sync. Archiving a trip does not count as either: an archived trip stays on the device as it was last synced, until the 7-day rule above applies to it or you switch it off under what to store offline.
 - Evicting or clearing a trip never throws away a change that has not reached the server. Queued changes and conflicts stay, and failed changes stay under **Failed changes** in Settings → Offline until you try them again or discard them.
 - A finished trip is cached too when you switch it on yourself under **Settings → Offline → What to store offline**, and it is then kept regardless of its dates.
 
