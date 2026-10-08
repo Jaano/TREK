@@ -636,7 +636,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Endpunkt',
   'settings.apiKeys.neverUsed': 'nie genutzt',
   'settings.apiKeys.loadFailed': 'Deine Schlüssel konnten nicht geladen werden. Lade die Seite neu, um es noch einmal zu versuchen.',
-  'settings.apiKeys.limitReached': 'Du hast {max} Schlüssel, mehr geht pro Konto nicht. Lösche einen, den du nicht mehr brauchst, um einen neuen zu erstellen.',
+  'settings.apiKeys.limitReached':
+    'Du hast {count} Schlüssel, mehr geht pro Konto nicht. Lösche einen, den du nicht mehr brauchst, um einen neuen zu erstellen.',
+  'settings.apiKeys.limitReached.one':
+    'Du hast {count} Schlüssel, mehr geht pro Konto nicht. Lösche ihn, wenn du ihn nicht mehr brauchst, um einen neuen zu erstellen.',
   'settings.apiKeys.copyFailed': 'Kopieren hat nicht geklappt. Markiere den Text und kopiere ihn von Hand.',
   'settings.apiKeys.modal.createTitle': 'API-Schlüssel erstellen',
   'settings.apiKeys.modal.name': 'Name',

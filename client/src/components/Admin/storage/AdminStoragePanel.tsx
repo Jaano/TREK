@@ -716,7 +716,7 @@ export default function AdminStoragePanel(): React.ReactElement {
                       {m.reclaimable && (
                         <p className={META} style={fs(11.5)}>
                           {t('storage.migrate.reclaimable', {
-                            objects: String(m.reclaimable.objects),
+                            count: m.reclaimable.objects,
                             size: formatBytes(m.reclaimable.bytes),
                             from: m.from,
                           })}
@@ -837,7 +837,7 @@ export default function AdminStoragePanel(): React.ReactElement {
                     })
                   : t('storage.migrate.promptLine', {
                       category: t(`storage.category.${c.category}`),
-                      objects: String(c.objects),
+                      count: c.objects,
                       size: formatBytes(c.bytes ?? 0),
                       from: c.from,
                       to: c.to,

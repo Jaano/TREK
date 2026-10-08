@@ -116,7 +116,12 @@ const collab: TranslationStrings = {
   'collab.polls.delete': 'حذف',
   'collab.polls.closedSection': 'مغلق',
   'collab.notes.websitePlaceholder': 'https://...', // en-fallback
-  'collab.chat.imageLimit': 'يمكنك إرفاق ما يصل إلى {max} صور لكل رسالة',
+  'collab.chat.imageLimit': 'يمكنك إرفاق ما يصل إلى {count} صورة لكل رسالة',
+  'collab.chat.imageLimit.zero': 'يمكنك إرفاق ما يصل إلى {count} صورة لكل رسالة',
+  'collab.chat.imageLimit.one': 'يمكنك إرفاق صورة واحدة فقط لكل رسالة',
+  'collab.chat.imageLimit.two': 'يمكنك إرفاق صورتين كحد أقصى لكل رسالة',
+  'collab.chat.imageLimit.few': 'يمكنك إرفاق ما يصل إلى {count} صور لكل رسالة',
+  'collab.chat.imageLimit.many': 'يمكنك إرفاق ما يصل إلى {count} صورة لكل رسالة',
   'collab.chat.uploading': 'جارٍ الرفع {percent}%',
   'collab.chat.attachImages': 'إرفاق صور',
   'collab.chat.attachedImage': 'صورة مرفقة',

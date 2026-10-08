@@ -96,7 +96,7 @@ const collab: TranslationStrings = {
   'collab.polls.options': 'Pilihan',
   'collab.polls.delete': 'Hapus',
   'collab.polls.closedSection': 'Ditutup',
-  'collab.chat.imageLimit': 'Anda dapat melampirkan hingga {max} gambar per pesan',
+  'collab.chat.imageLimit': 'Anda dapat melampirkan hingga {count} gambar per pesan',
   'collab.chat.uploading': 'Mengunggah {percent}%',
   'collab.chat.attachImages': 'Lampirkan gambar',
   'collab.chat.attachedImage': 'Gambar terlampir',

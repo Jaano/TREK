@@ -136,8 +136,8 @@ const storage: TranslationStrings = {
   'storage.usage.legacyNote': 'köhnə foto kitabxanası daxildir',
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Mövcud obyektlər yeni saxlama sisteminə köçürülsün?',
-  'storage.migrate.promptLine':
-    '{category}: {from} sistemindən {to} sisteminə {objects} obyekt ({size})',
+  'storage.migrate.promptLine': '{category}: {from} sistemindən {to} sisteminə {count} obyekt ({size})',
+  'storage.migrate.promptLine.one': '{category}: {from} sistemindən {to} sisteminə {count} obyekt ({size})',
   'storage.migrate.promptLineUnknown':
     '{category}: {from} sistemindən {to} sisteminə naməlum ölçü (istifadə hələ skan edilməyib)',
   'storage.migrate.move': 'Mövcud obyektləri köçür',
@@ -149,8 +149,8 @@ const storage: TranslationStrings = {
   'storage.migrate.failed':
     'Köçürmə uğursuz oldu: {error} — kateqoriya dəyişdirilmədi',
   'storage.migrate.cancelled': 'Köçürmə ləğv edildi — heç nə dəyişdirilmədi',
-  'storage.migrate.reclaimable':
-    '{objects} obyekt ({size}) {from} üzərində qalıb — əl ilə geri qazanın',
+  'storage.migrate.reclaimable': '{count} obyekt ({size}) {from} üzərində qalıb, əl ilə geri qazanın',
+  'storage.migrate.reclaimable.one': '{count} obyekt ({size}) {from} üzərində qalıb, əl ilə geri qazanın',
   'storage.migrate.cancel': 'Köçürməni ləğv et',
   'storage.migrate.promptCancel': 'Ləğv et',
   'storage.migrate.queued': 'Növbədədir: {categories}',

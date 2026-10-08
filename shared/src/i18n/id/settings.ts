@@ -621,7 +621,8 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Endpoint',
   'settings.apiKeys.neverUsed': 'belum pernah dipakai',
   'settings.apiKeys.loadFailed': 'Kunci tidak dapat dimuat. Muat ulang halaman untuk mencoba lagi.',
-  'settings.apiKeys.limitReached': 'Kamu punya {max} kunci, batas maksimum per akun. Hapus kunci yang tidak lagi dipakai untuk membuat yang baru.',
+  'settings.apiKeys.limitReached':
+    'Kamu punya {count} kunci, batas maksimum per akun. Hapus kunci yang tidak lagi dipakai untuk membuat yang baru.',
   'settings.apiKeys.copyFailed': 'Gagal menyalin. Pilih teksnya dan salin secara manual.',
   'settings.apiKeys.modal.createTitle': 'Buat kunci API',
   'settings.apiKeys.modal.name': 'Nama',

@@ -120,7 +120,8 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'Προσθήκη καταχώρησης',
   'dawarich.accept.confirm.bucket_list': 'Σημείωση ως εκπληρωμένης',
   'dawarich.accept.recorded': 'Καταγράφηκε από {from} έως {to}',
-  'dawarich.accept.duration': '{minutes} λεπτά',
+  'dawarich.accept.duration': '{count} λεπτά',
+  'dawarich.accept.duration.one': '{count} λεπτό',
   'dawarich.accept.name': 'Όνομα',
   'dawarich.accept.date': 'Ημερομηνία',
   'dawarich.accept.from': 'Άφιξη',
@@ -186,7 +187,10 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'Έλεγχος ξανά',
   'dawarich.bucket.metersAway': '{meters} μ. μακριά',
   'dawarich.bucket.kilometersAway': '{km} χλμ. μακριά',
-  'dawarich.bucket.rule': 'Μια επιθυμία μετράει ως εκπληρωμένη σε απόσταση έως {meters} μ. και μετά από {minutes} λεπτά στο σημείο.',
+  'dawarich.bucket.rule':
+    'Μια επιθυμία μετράει ως εκπληρωμένη σε απόσταση έως {meters} μ. και μετά από {count} λεπτά στο σημείο.',
+  'dawarich.bucket.rule.one':
+    'Μια επιθυμία μετράει ως εκπληρωμένη σε απόσταση έως {meters} μ. και μετά από {count} λεπτό στο σημείο.',
   'dawarich.journey.dayStays.other': '{count} στάσεις από το Dawarich',
   'dawarich.journey.dayStays.one': '1 στάση από το Dawarich',
 

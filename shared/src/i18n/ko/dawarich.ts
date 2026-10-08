@@ -112,7 +112,7 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': '항목 추가',
   'dawarich.accept.confirm.bucket_list': '완료 처리',
   'dawarich.accept.recorded': '{from}부터 {to}까지 기록됨',
-  'dawarich.accept.duration': '{minutes}분',
+  'dawarich.accept.duration': '{count}분',
   'dawarich.accept.name': '이름',
   'dawarich.accept.date': '날짜',
   'dawarich.accept.from': '도착',
@@ -170,7 +170,7 @@ const dawarich: TranslationStrings = {
   'dawarich.again': '다시 확인',
   'dawarich.bucket.metersAway': '{meters} m 거리',
   'dawarich.bucket.kilometersAway': '{km} km 거리',
-  'dawarich.bucket.rule': '{meters} m 이내에서 {minutes}분 이상 머무르면 소원을 이룬 것으로 봅니다.',
+  'dawarich.bucket.rule': '{meters} m 이내에서 {count}분 이상 머무르면 소원을 이룬 것으로 봅니다.',
   'dawarich.journey.dayStays.other': 'Dawarich 방문 기록 {count}건',
 
 };

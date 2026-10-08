@@ -648,7 +648,14 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Эндпоинт',
   'settings.apiKeys.neverUsed': 'не использовался',
   'settings.apiKeys.loadFailed': 'Не удалось загрузить ключи. Обновите страницу, чтобы попробовать снова.',
-  'settings.apiKeys.limitReached': 'У вас {max} ключей, это максимум для одного аккаунта. Удалите ненужный ключ, чтобы создать новый.',
+  'settings.apiKeys.limitReached':
+    'У вас {count} ключа, это максимум для одного аккаунта. Удалите ненужный ключ, чтобы создать новый.',
+  'settings.apiKeys.limitReached.one':
+    'У вас {count} ключ, это максимум для одного аккаунта. Удалите ненужный ключ, чтобы создать новый.',
+  'settings.apiKeys.limitReached.few':
+    'У вас {count} ключа, это максимум для одного аккаунта. Удалите ненужный ключ, чтобы создать новый.',
+  'settings.apiKeys.limitReached.many':
+    'У вас {count} ключей, это максимум для одного аккаунта. Удалите ненужный ключ, чтобы создать новый.',
   'settings.apiKeys.copyFailed': 'Не удалось скопировать. Выделите текст и скопируйте его вручную.',
   'settings.apiKeys.modal.createTitle': 'Создать ключ API',
   'settings.apiKeys.modal.name': 'Название',

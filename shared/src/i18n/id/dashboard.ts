@@ -92,7 +92,7 @@ const dashboard: TranslationStrings = {
   'dashboard.useUnsplashPhoto': 'Gunakan foto Unsplash oleh {photographer}',
   'dashboard.titleRequired': 'Judul wajib diisi',
   'dashboard.endDateError': 'Tanggal selesai harus setelah tanggal mulai',
-  'dashboard.tripTooLong': 'Perjalanan paling lama {days} hari',
+  'dashboard.tripTooLong': 'Perjalanan paling lama {count} hari',
   'dashboard.dateShiftTitle': 'Tanggal mulai baru',
   'dashboard.dateShiftIntro':
     'Kamu mengubah tanggal mulai perjalanan ini. Bagaimana rencanamu harus mengikuti tanggal baru?',

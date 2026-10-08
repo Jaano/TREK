@@ -216,7 +216,7 @@ export default function DawarichAtlasDialog({
               scan?.truncated ? t('dawarich.bucket.truncated') : null,
               t('dawarich.bucket.rule', {
                 meters: DAWARICH_BUCKET_MATCH_RADIUS_M,
-                minutes: DAWARICH_BUCKET_MATCH_MIN_MINUTES,
+                count: DAWARICH_BUCKET_MATCH_MIN_MINUTES,
               }),
             ]}
           >

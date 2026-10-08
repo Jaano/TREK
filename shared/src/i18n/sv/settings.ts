@@ -626,7 +626,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Ändpunkt',
   'settings.apiKeys.neverUsed': 'aldrig använd',
   'settings.apiKeys.loadFailed': 'Det gick inte att läsa in dina nycklar. Ladda om sidan för att försöka igen.',
-  'settings.apiKeys.limitReached': 'Du har {max} nycklar, det högsta antalet per konto. Ta bort en som du inte längre använder för att skapa en ny.',
+  'settings.apiKeys.limitReached':
+    'Du har {count} nycklar, det högsta antalet per konto. Ta bort en som du inte längre använder för att skapa en ny.',
+  'settings.apiKeys.limitReached.one':
+    'Du har {count} nyckel, det högsta antalet per konto. Ta bort den om du inte längre använder den för att skapa en ny.',
   'settings.apiKeys.copyFailed': 'Det gick inte att kopiera. Markera texten och kopiera den manuellt.',
   'settings.apiKeys.modal.createTitle': 'Skapa API-nyckel',
   'settings.apiKeys.modal.name': 'Namn',

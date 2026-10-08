@@ -162,7 +162,7 @@ export default function MCollabChat({ planner }: MCollabChatProps) {
   const addImageFiles = (incoming: FileList | File[]) => {
     images.add(incoming, ({ rejected, overflow }) => {
       if (rejected) toast.error(t('collab.chat.imageRejected'))
-      if (overflow) toast.error(t('collab.chat.imageLimit', { max: MAX_CHAT_IMAGES }))
+      if (overflow) toast.error(t('collab.chat.imageLimit', { count: MAX_CHAT_IMAGES }))
     })
   }
 

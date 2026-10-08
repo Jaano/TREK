@@ -208,7 +208,7 @@ export function Arrival({ entry }: { entry: ScheduleEntry }): React.ReactElement
  */
 export function LateBadge({ late }: { late: ScheduleWarning }): React.ReactElement {
   const { t } = useTranslation()
-  const label = t(late.code === 'missedLeave' ? 'roadtrip.warn.missedLeave' : 'roadtrip.warn.late', { minutes: late.minutes ?? 0 })
+  const label = t(late.code === 'missedLeave' ? 'roadtrip.warn.missedLeave' : 'roadtrip.warn.late', { count: late.minutes ?? 0 })
   // The same two-part shell the stay and the drive findings wear, so a row of badges reads
   // as one set instead of a pill among boxes.
   return (

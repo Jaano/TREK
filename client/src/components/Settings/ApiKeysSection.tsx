@@ -250,7 +250,7 @@ export default function ApiKeysSection(): React.ReactElement {
         {atLimit && (
           <div className="flex gap-2.5 rounded-[12px] bg-warning-soft px-3.5 py-2.5 text-content" style={fs(12.5, 'body')}>
             <AlertTriangle size={15} className="mt-px flex-none text-warning" />
-            <p className="m-0 leading-snug">{t('settings.apiKeys.limitReached', { max: MAX_KEYS })}</p>
+            <p className="m-0 leading-snug">{t('settings.apiKeys.limitReached', { count: MAX_KEYS })}</p>
           </div>
         )}
 

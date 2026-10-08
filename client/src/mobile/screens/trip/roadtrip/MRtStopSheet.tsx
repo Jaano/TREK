@@ -209,8 +209,8 @@ export default function MRtStopSheet({ planner, shell }: MTripSheetsProps) {
     ...day.driveWarnings.filter(w => w.index === index && (w.code === 'leg' || w.code === 'range')),
   ]
   const warningText = (w: ScheduleWarning): string => {
-    if (w.code === 'late') return t('roadtrip.warn.late', { minutes: w.minutes ?? 0 })
-    if (w.code === 'missedLeave') return t('roadtrip.warn.missedLeave', { minutes: w.minutes ?? 0 })
+    if (w.code === 'late') return t('roadtrip.warn.late', { count: w.minutes ?? 0 })
+    if (w.code === 'missedLeave') return t('roadtrip.warn.missedLeave', { count: w.minutes ?? 0 })
     if (w.code === 'range') return t('roadtrip.limit.range', { distance: formatDistance(w.sinceKm ?? 0, unit) })
     return t('roadtrip.limit.legOver', { time: formatDurationShort((w.overMinutes ?? 0) * 60) })
   }

@@ -127,7 +127,7 @@ export default function MNewTripSheet({ open, trip, onClose, onSave, onCoverUpda
       const span = tripSpanDays(startDate, endDate)
       if (span < 1) { setError(t('dashboard.endDateError')); return null }
       const datesTouched = !trip || startDate !== (trip.start_date || '') || endDate !== (trip.end_date || '')
-      if (datesTouched && span > MAX_TRIP_DAYS) { setError(t('dashboard.tripTooLong', { days: MAX_TRIP_DAYS })); return null }
+      if (datesTouched && span > MAX_TRIP_DAYS) { setError(t('dashboard.tripTooLong', { count: MAX_TRIP_DAYS })); return null }
     }
     return {
       title: title.trim(),

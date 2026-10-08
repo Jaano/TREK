@@ -640,7 +640,11 @@ const settings: TranslationStrings = {
   'settings.apiKeys.neverUsed': 'nikdy nepoužitý',
   'settings.apiKeys.loadFailed': 'Vaše kľúče sa nepodarilo načítať. Obnovte stránku a skúste to znovu.',
   'settings.apiKeys.limitReached':
-    'Máte {max} kľúčov, čo je najviac, koľko účet môže mať. Zmažte niektorý, ktorý už nepoužívate, a vytvorte ďalší.',
+    'Máte {count} kľúčov, čo je najviac, koľko účet môže mať. Zmažte niektorý, ktorý už nepoužívate, a vytvorte ďalší.',
+  'settings.apiKeys.limitReached.one':
+    'Máte {count} kľúč, čo je najviac, koľko účet môže mať. Zmažte ho, ak ho už nepoužívate, a vytvorte ďalší.',
+  'settings.apiKeys.limitReached.few':
+    'Máte {count} kľúče, čo je najviac, koľko účet môže mať. Zmažte niektorý, ktorý už nepoužívate, a vytvorte ďalší.',
   'settings.apiKeys.copyFailed': 'Kopírovanie sa nepodarilo. Označte text a skopírujte ho ručne.',
   'settings.apiKeys.modal.createTitle': 'Vytvoriť API kľúč',
   'settings.apiKeys.modal.name': 'Názov',

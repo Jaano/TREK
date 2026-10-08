@@ -127,7 +127,10 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Перенести существующие объекты на новый бэкенд?',
-  'storage.migrate.promptLine': '{category}: {objects} объектов ({size}) из {from} в {to}',
+  'storage.migrate.promptLine': '{category}: {count} объекта ({size}) из {from} в {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} объект ({size}) из {from} в {to}',
+  'storage.migrate.promptLine.few': '{category}: {count} объекта ({size}) из {from} в {to}',
+  'storage.migrate.promptLine.many': '{category}: {count} объектов ({size}) из {from} в {to}',
   'storage.migrate.promptLineUnknown':
     '{category}: неизвестный размер (использование ещё не просканировано) из {from} в {to}',
   'storage.migrate.move': 'Перенести существующие объекты',
@@ -137,7 +140,10 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} не удалось — эти объекты не были скопированы на новый бэкенд',
   'storage.migrate.failed': 'Перенос не удался: {error} — категория не была переключена',
   'storage.migrate.cancelled': 'Перенос отменён — ничего не было переключено',
-  'storage.migrate.reclaimable': '{objects} объектов ({size}) остаются на {from} — освободите вручную',
+  'storage.migrate.reclaimable': '{count} объекта ({size}) остаются на {from}, освободите вручную',
+  'storage.migrate.reclaimable.one': '{count} объект ({size}) остаётся на {from}, освободите вручную',
+  'storage.migrate.reclaimable.few': '{count} объекта ({size}) остаются на {from}, освободите вручную',
+  'storage.migrate.reclaimable.many': '{count} объектов ({size}) остаются на {from}, освободите вручную',
   'storage.migrate.cancel': 'Отменить перенос',
   'storage.migrate.promptCancel': 'Отмена',
   'storage.migrate.queued': 'В очереди: {categories}',

@@ -21,8 +21,11 @@
 //      `Intl.PluralRules`, through the same helpers the client resolves with.
 //   4. Count strings: an en string carrying {count} or {n} (the two params
 //      `t()` picks a plural form by) must be a plural group, so every
-//      language gets the forms it needs. The exceptions are NOT_PLURAL: a
-//      number that is never a quantity ("Day {n}", a step, a multiplier).
+//      language gets the forms it needs. So must one carrying a quantity
+//      under another name ({days}, {minutes}, {objects}, QUANTITY_PARAMS),
+//      which no form is picked by: it is renamed to {count}. The exceptions
+//      are NOT_PLURAL: a number that is never a quantity ("Day {n}", a step,
+//      a multiplier), or one followed only by a unit symbol.
 //   5. Untranslated strings: the marked `// en-fallback` and unmarked English
 //      copies per locale and file may only shrink (i18n-untranslated.mjs,
 //      which also lowers the baseline with --update).
@@ -94,13 +97,37 @@ export const NOT_PLURAL = [
   { key: 'system_notice.pager.goto', because: 'the position of a notice in the pager' },
   { key: 'tours.addedToDay', because: 'the number of the day a tour was added to' },
   { key: 'tours.planner.waypointLabel', because: 'the position of a waypoint on the tour' },
+  { key: 'dawarich.duration.minutes', because: 'a duration in a unit symbol (min), the same for any number' },
+  { key: 'dawarich.duration.hours', because: 'a duration in a unit symbol (h), the same for any number' },
+  { key: 'dawarich.duration.hoursMinutes', because: 'a duration in unit symbols (h, min), the same for any number' },
+  { key: 'files.uploadErrorSize', because: 'a size limit in a unit symbol (MB), the same for any number' },
 ];
 
-const COUNT_PARAM_RE = /\{(?:count|n)\}/;
+/**
+ * Param names that hold a quantity of something but are not the ones `t()`
+ * picks a plural form by. A string using one keeps a single form in every
+ * language ("Все {days} дней" for 2 days), so it is held like {count}: rename
+ * the param to {count} and make the string a plural group.
+ */
+export const QUANTITY_PARAMS = [
+  'days',
+  'nights',
+  'weeks',
+  'months',
+  'years',
+  'hours',
+  'minutes',
+  'seconds',
+  'items',
+  'objects',
+  'max',
+];
+
+const COUNT_PARAM_RE = new RegExp(`\\{(?:count|n|${QUANTITY_PARAMS.join('|')})\\}`);
 
 /**
- * en strings carrying a count param outside any plural group, and NOT_PLURAL
- * entries that no longer name such a string.
+ * en strings carrying a count or quantity param outside any plural group,
+ * and NOT_PLURAL entries that no longer name such a string.
  */
 function checkCountStrings(enFiles, notPlural = NOT_PLURAL, root = I18N_ROOT) {
   const allowed = new Set(notPlural.map((e) => e.key));
@@ -233,9 +260,11 @@ function formatReport(report) {
     if (ungrouped.length === 0 && stale.length === 0) {
       lines.push('Count strings: OK');
     } else {
-      lines.push('Count strings: en strings with {count} or {n} that are no plural group');
+      lines.push('Count strings: en strings with {count}, {n} or a quantity param that are no plural group');
       for (const { file, key } of ungrouped) {
-        lines.push(`  en/${file}: ${key} (add ${key}.one and the other forms, see shared/CLAUDE.md)`);
+        lines.push(
+          `  en/${file}: ${key} (name the quantity {count} and add ${key}.one and the other forms, see shared/CLAUDE.md)`,
+        );
       }
       for (const key of stale) lines.push(`  NOT_PLURAL lists ${key}, which is no ungrouped count string: remove it`);
     }

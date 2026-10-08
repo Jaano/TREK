@@ -628,7 +628,12 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Endpoint',
   'settings.apiKeys.neverUsed': 'nikdy nepoužit',
   'settings.apiKeys.loadFailed': 'Klíče se nepodařilo načíst. Obnov stránku a zkus to znovu.',
-  'settings.apiKeys.limitReached': 'Máš {max} klíčů, víc jeden účet mít nemůže. Smaž klíč, který už nepotřebuješ, a vytvoř nový.',
+  'settings.apiKeys.limitReached':
+    'Máš {count} klíčů, víc jeden účet mít nemůže. Smaž klíč, který už nepotřebuješ, a vytvoř nový.',
+  'settings.apiKeys.limitReached.one':
+    'Máš {count} klíč, víc jeden účet mít nemůže. Smaž ho, pokud ho už nepotřebuješ, a vytvoř nový.',
+  'settings.apiKeys.limitReached.few':
+    'Máš {count} klíče, víc jeden účet mít nemůže. Smaž klíč, který už nepotřebuješ, a vytvoř nový.',
   'settings.apiKeys.copyFailed': 'Kopírování se nepodařilo. Označ text a zkopíruj ho ručně.',
   'settings.apiKeys.modal.createTitle': 'Vytvořit klíč API',
   'settings.apiKeys.modal.name': 'Název',

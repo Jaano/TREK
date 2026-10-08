@@ -112,8 +112,8 @@ const collab: TranslationStrings = {
   'collab.polls.delete': 'Sil',
   'collab.polls.closedSection': 'Bağlanmış sorğular',
 
-  'collab.chat.imageLimit':
-    'Hər mesaja maksimum {max} şəkil əlavə edə bilərsiniz',
+  'collab.chat.imageLimit': 'Hər mesaja maksimum {count} şəkil əlavə edə bilərsiniz',
+  'collab.chat.imageLimit.one': 'Hər mesaja yalnız {count} şəkil əlavə edə bilərsiniz',
   'collab.chat.uploading': 'Yüklənir: {percent}%',
   'collab.chat.attachImages': 'Şəkillər əlavə et',
   'collab.chat.attachedImage': 'Əlavə edilmiş şəkil',

@@ -125,7 +125,8 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Vols moure els objectes existents al nou backend?',
-  'storage.migrate.promptLine': '{category}: {objects} objectes ({size}) de {from} a {to}',
+  'storage.migrate.promptLine': '{category}: {count} objectes ({size}) de {from} a {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} objecte ({size}) de {from} a {to}',
   'storage.migrate.promptLineUnknown': "{category}: mida desconeguda (encara no s'ha calculat l'ús) de {from} a {to}",
   'storage.migrate.move': 'Mou els objectes existents',
   'storage.migrate.routeOnly': 'Només enruta les escriptures noves',
@@ -134,7 +135,8 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': "{failed} han fallat — aquests objectes no s'han copiat al nou backend",
   'storage.migrate.failed': "Ha fallat el trasllat: {error} — la categoria no s'ha canviat",
   'storage.migrate.cancelled': "Trasllat cancel·lat — no s'ha canviat res",
-  'storage.migrate.reclaimable': "{objects} objectes ({size}) romanen a {from} — recupera'ls manualment",
+  'storage.migrate.reclaimable': "{count} objectes ({size}) romanen a {from}, recupera'ls manualment",
+  'storage.migrate.reclaimable.one': "{count} objecte ({size}) roman a {from}, recupera'l manualment",
   'storage.migrate.cancel': 'Cancel·la el trasllat',
   'storage.migrate.promptCancel': 'Cancel·la',
   'storage.migrate.queued': 'En cua: {categories}',

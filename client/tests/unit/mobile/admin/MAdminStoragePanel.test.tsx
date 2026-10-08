@@ -415,7 +415,7 @@ describe('MAdminStoragePanel', () => {
     );
     expect(screen.getByText(/Moving Trip documents… 2\/5/)).toBeInTheDocument();
     expect(screen.getByText(/Move finished: 4 copied, 0 skipped/)).toBeInTheDocument();
-    expect(screen.getByText(/4 objects \(4\.0 KB\) remain on uploads-local — reclaim manually/)).toBeInTheDocument();
+    expect(screen.getByText(/4 objects \(4\.0 KB\) remain on uploads-local, reclaim manually/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel move' }));
     await waitFor(() => expect(cancelledCategory).toBe('files'));
   });

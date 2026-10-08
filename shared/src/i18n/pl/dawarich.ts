@@ -124,7 +124,10 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'Dodaj wpis',
   'dawarich.accept.confirm.bucket_list': 'Odhacz',
   'dawarich.accept.recorded': 'Zapisano od {from} do {to}',
-  'dawarich.accept.duration': '{minutes} min',
+  'dawarich.accept.duration': '{count} min',
+  'dawarich.accept.duration.one': '{count} min',
+  'dawarich.accept.duration.few': '{count} min',
+  'dawarich.accept.duration.many': '{count} min',
   'dawarich.accept.name': 'Nazwa',
   'dawarich.accept.date': 'Data',
   'dawarich.accept.from': 'Przyjazd',
@@ -203,7 +206,13 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'Sprawdź ponownie',
   'dawarich.bucket.metersAway': '{meters} m stąd',
   'dawarich.bucket.kilometersAway': '{km} km stąd',
-  'dawarich.bucket.rule': 'Marzenie uznaje się za spełnione w promieniu {meters} m i po {minutes} minutach na miejscu.',
+  'dawarich.bucket.rule': 'Marzenie uznaje się za spełnione w promieniu {meters} m i po {count} minuty na miejscu.',
+  'dawarich.bucket.rule.one':
+    'Marzenie uznaje się za spełnione w promieniu {meters} m i po {count} minucie na miejscu.',
+  'dawarich.bucket.rule.few':
+    'Marzenie uznaje się za spełnione w promieniu {meters} m i po {count} minutach na miejscu.',
+  'dawarich.bucket.rule.many':
+    'Marzenie uznaje się za spełnione w promieniu {meters} m i po {count} minutach na miejscu.',
   'dawarich.journey.dayStays.other': '{count} pobytu z Dawarich',
   'dawarich.journey.dayStays.one': '{count} pobyt z Dawarich',
   'dawarich.journey.dayStays.few': '{count} pobyty z Dawarich',

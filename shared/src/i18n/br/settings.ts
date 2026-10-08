@@ -633,7 +633,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Endpoint',
   'settings.apiKeys.neverUsed': 'nunca usada',
   'settings.apiKeys.loadFailed': 'Não foi possível carregar suas chaves. Recarregue a página para tentar de novo.',
-  'settings.apiKeys.limitReached': 'Você tem {max} chaves, o máximo por conta. Exclua uma que não usa mais para criar outra.',
+  'settings.apiKeys.limitReached':
+    'Você tem {count} chaves, o máximo por conta. Exclua uma que não usa mais para criar outra.',
+  'settings.apiKeys.limitReached.one':
+    'Você tem {count} chave, o máximo por conta. Exclua-a se não a usa mais para criar outra.',
   'settings.apiKeys.copyFailed': 'Não foi possível copiar. Selecione o texto e copie manualmente.',
   'settings.apiKeys.modal.createTitle': 'Criar chave de API',
   'settings.apiKeys.modal.name': 'Nome',

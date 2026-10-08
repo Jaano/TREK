@@ -345,7 +345,7 @@ function RtLeaveTime({ name, leave, arrival, departure, onClose }: {
         {leave.missedBy !== null ? (
           <div className="mt-[10px] flex items-center justify-center gap-1.5 text-center text-[0.8125rem] font-medium leading-snug text-[color:var(--m-st-pending)]">
             <AlertTriangle size={14} strokeWidth={2} className="flex-none" aria-hidden="true" />
-            {t('roadtrip.warn.missedLeave', { minutes: leave.missedBy })}
+            {t('roadtrip.warn.missedLeave', { count: leave.missedBy })}
           </div>
         ) : (
           <div className="mt-[10px] text-center text-[0.8125rem] leading-snug text-m-muted">

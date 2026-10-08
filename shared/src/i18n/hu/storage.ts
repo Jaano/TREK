@@ -125,7 +125,8 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Áthelyezed a meglévő objektumokat az új backendre?',
-  'storage.migrate.promptLine': '{category}: {objects} objektum ({size}) innen: {from} ide: {to}',
+  'storage.migrate.promptLine': '{category}: {count} objektum ({size}) innen: {from} ide: {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} objektum ({size}) innen: {from} ide: {to}',
   'storage.migrate.promptLineUnknown':
     '{category}: ismeretlen méret (a használat még nincs kiszámítva) innen: {from} ide: {to}',
   'storage.migrate.move': 'Meglévő objektumok áthelyezése',
@@ -135,7 +136,8 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} sikertelen — ezek az objektumok nem lettek átmásolva az új backendre',
   'storage.migrate.failed': 'Az áthelyezés sikertelen: {error} — a kategória nem lett átváltva',
   'storage.migrate.cancelled': 'Áthelyezés megszakítva — semmi sem lett átváltva',
-  'storage.migrate.reclaimable': '{objects} objektum ({size}) marad a(z) {from} helyen — kézzel szabadítsd fel',
+  'storage.migrate.reclaimable': '{count} objektum ({size}) marad a(z) {from} helyen, kézzel szabadítsd fel',
+  'storage.migrate.reclaimable.one': '{count} objektum ({size}) marad a(z) {from} helyen, kézzel szabadítsd fel',
   'storage.migrate.cancel': 'Áthelyezés megszakítása',
   'storage.migrate.promptCancel': 'Mégse',
   'storage.migrate.queued': 'Várólistán: {categories}',

@@ -99,7 +99,8 @@ const dashboard: TranslationStrings = {
   'dashboard.useUnsplashPhoto': 'Unsplash-foto van {photographer} gebruiken',
   'dashboard.titleRequired': 'Titel is verplicht',
   'dashboard.endDateError': 'Einddatum moet na de startdatum liggen',
-  'dashboard.tripTooLong': 'Een reis kan maximaal {days} dagen duren',
+  'dashboard.tripTooLong': 'Een reis kan maximaal {count} dagen duren',
+  'dashboard.tripTooLong.one': 'Een reis kan maximaal {count} dag duren',
   'dashboard.dateShiftTitle': 'Nieuwe startdatum',
   'dashboard.dateShiftIntro':
     'Je hebt gewijzigd wanneer deze reis begint. Hoe moeten je plannen de nieuwe datums volgen?',

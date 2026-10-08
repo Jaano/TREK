@@ -638,7 +638,9 @@ const settings: TranslationStrings = {
   'settings.apiKeys.loadFailed':
     "No s'han pogut carregar les teves claus. Torna a carregar la pàgina per tornar-ho a provar.",
   'settings.apiKeys.limitReached':
-    "Tens {max} claus, el màxim per compte. Esborra'n una que ja no facis servir per crear-ne una altra.",
+    "Tens {count} claus, el màxim per compte. Esborra'n una que ja no facis servir per crear-ne una altra.",
+  'settings.apiKeys.limitReached.one':
+    'Tens {count} clau, el màxim per compte. Esborra-la si ja no la fas servir per crear-ne una altra.',
   'settings.apiKeys.copyFailed': "No s'ha pogut copiar. Selecciona el text i copia'l a mà.",
   'settings.apiKeys.modal.createTitle': 'Crea una clau API',
   'settings.apiKeys.modal.name': 'Nom',

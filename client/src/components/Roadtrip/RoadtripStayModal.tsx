@@ -264,7 +264,7 @@ function LeaveTime({ stop, leave, until: leaveAt, is12h, onClose }: {
         {leave.missedBy !== null ? (
           <p className="flex items-center justify-center gap-1.5 text-center text-body font-medium text-warning">
             <AlertTriangle size={14} className="shrink-0" aria-hidden />
-            {t('roadtrip.warn.missedLeave', { minutes: leave.missedBy })}
+            {t('roadtrip.warn.missedLeave', { count: leave.missedBy })}
           </p>
         ) : (
           <p className="text-center text-body text-content-secondary">

@@ -592,7 +592,7 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'エンドポイント',
   'settings.apiKeys.neverUsed': '未使用',
   'settings.apiKeys.loadFailed': 'キーを読み込めませんでした。ページを再読み込みしてもう一度お試しください。',
-  'settings.apiKeys.limitReached': 'キーは {max} 個あり、1 アカウントの上限に達しています。新しく作成するには、使わなくなったキーを削除してください。',
+  'settings.apiKeys.limitReached': 'キーは {count} 個あり、1 アカウントの上限に達しています。新しく作成するには、使わなくなったキーを削除してください。',
   'settings.apiKeys.copyFailed': 'コピーできませんでした。テキストを選択して手動でコピーしてください。',
   'settings.apiKeys.modal.createTitle': 'API キーを作成',
   'settings.apiKeys.modal.name': '名前',

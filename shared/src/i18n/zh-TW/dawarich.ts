@@ -112,7 +112,7 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': '新增條目',
   'dawarich.accept.confirm.bucket_list': '打勾',
   'dawarich.accept.recorded': '記錄時間 {from} 至 {to}',
-  'dawarich.accept.duration': '{minutes} 分鐘',
+  'dawarich.accept.duration': '{count} 分鐘',
   'dawarich.accept.name': '名稱',
   'dawarich.accept.date': '日期',
   'dawarich.accept.from': '抵達',
@@ -170,7 +170,7 @@ const dawarich: TranslationStrings = {
   'dawarich.again': '再查一次',
   'dawarich.bucket.metersAway': '{meters} 公尺外',
   'dawarich.bucket.kilometersAway': '{km} 公里外',
-  'dawarich.bucket.rule': '在 {meters} 公尺內停留 {minutes} 分鐘以上，才算實現心願。',
+  'dawarich.bucket.rule': '在 {meters} 公尺內停留 {count} 分鐘以上，才算實現心願。',
   'dawarich.journey.dayStays.other': '來自 Dawarich 的 {count} 個停留點',
 
 };

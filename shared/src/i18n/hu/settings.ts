@@ -631,7 +631,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Végpont',
   'settings.apiKeys.neverUsed': 'még nem használt',
   'settings.apiKeys.loadFailed': 'Nem sikerült betölteni a kulcsaidat. Töltsd újra az oldalt, és próbáld újra.',
-  'settings.apiKeys.limitReached': '{max} kulcsod van, ennél több egy fiókhoz nem tartozhat. Törölj egy már nem használt kulcsot, hogy újat hozhass létre.',
+  'settings.apiKeys.limitReached':
+    '{count} kulcsod van, ennél több egy fiókhoz nem tartozhat. Törölj egy már nem használt kulcsot, hogy újat hozhass létre.',
+  'settings.apiKeys.limitReached.one':
+    '{count} kulcsod van, ennél több egy fiókhoz nem tartozhat. Töröld, ha már nem használod, hogy újat hozhass létre.',
   'settings.apiKeys.copyFailed': 'A másolás nem sikerült. Jelöld ki a szöveget, és másold ki kézzel.',
   'settings.apiKeys.modal.createTitle': 'API-kulcs létrehozása',
   'settings.apiKeys.modal.name': 'Név',

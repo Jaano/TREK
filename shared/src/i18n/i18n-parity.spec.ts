@@ -35,11 +35,13 @@ describe('i18n parity', () => {
 describe('i18n count strings', () => {
   const ROOT = new URL('../../scripts/fixtures/i18n/', import.meta.url);
 
-  it('refuses an en string with {count} or {n} outside a plural group', () => {
+  it('refuses an en string with {count}, {n} or a quantity param outside a plural group', () => {
     const { ungrouped, stale } = checkCountStrings(['a.ts'], [], ROOT);
+    // a.stay carries its quantity as {days}, which no plural form is picked by.
     expect(ungrouped).toEqual([
       { file: 'a.ts', key: 'a.lone' },
       { file: 'a.ts', key: 'a.day' },
+      { file: 'a.ts', key: 'a.stay' },
     ]);
     expect(stale).toEqual([]);
   });
@@ -50,7 +52,10 @@ describe('i18n count strings', () => {
       { key: 'a.count', because: 'a group now' },
     ];
     expect(checkCountStrings(['a.ts'], allowed, ROOT)).toEqual({
-      ungrouped: [{ file: 'a.ts', key: 'a.lone' }],
+      ungrouped: [
+        { file: 'a.ts', key: 'a.lone' },
+        { file: 'a.ts', key: 'a.stay' },
+      ],
       stale: ['a.count'],
     });
   });

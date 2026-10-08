@@ -644,7 +644,14 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Ендпоінт',
   'settings.apiKeys.neverUsed': 'не використовувався',
   'settings.apiKeys.loadFailed': 'Не вдалося завантажити ключі. Оновіть сторінку, щоб спробувати ще раз.',
-  'settings.apiKeys.limitReached': 'У вас {max} ключів, це максимум для одного облікового запису. Видаліть непотрібний ключ, щоб створити новий.',
+  'settings.apiKeys.limitReached':
+    'У вас {count} ключа, це максимум для одного облікового запису. Видаліть непотрібний ключ, щоб створити новий.',
+  'settings.apiKeys.limitReached.one':
+    'У вас {count} ключ, це максимум для одного облікового запису. Видаліть непотрібний ключ, щоб створити новий.',
+  'settings.apiKeys.limitReached.few':
+    'У вас {count} ключі, це максимум для одного облікового запису. Видаліть непотрібний ключ, щоб створити новий.',
+  'settings.apiKeys.limitReached.many':
+    'У вас {count} ключів, це максимум для одного облікового запису. Видаліть непотрібний ключ, щоб створити новий.',
   'settings.apiKeys.copyFailed': 'Не вдалося скопіювати. Виділіть текст і скопіюйте його вручну.',
   'settings.apiKeys.modal.createTitle': 'Створити ключ API',
   'settings.apiKeys.modal.name': 'Назва',

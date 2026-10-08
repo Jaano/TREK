@@ -761,7 +761,9 @@ const settings: TranslationStrings = {
   'settings.apiKeys.loadFailed':
     'Açarlarınızı yükləmək mümkün olmadı. Yenidən sınamaq üçün səhifəni yeniləyin.',
   'settings.apiKeys.limitReached':
-    'Hesab üçün maksimum say olan {max} açarınız var. Yeni açar yaratmaq üçün artıq istifadə etmədiyiniz açarlardan birini silin.',
+    'Hesab üçün maksimum say olan {count} açarınız var. Yeni açar yaratmaq üçün artıq istifadə etmədiyiniz açarlardan birini silin.',
+  'settings.apiKeys.limitReached.one':
+    'Hesab üçün maksimum say olan {count} açarınız var. Yeni açar yaratmaq üçün ondan artıq istifadə etmirsinizsə, onu silin.',
   'settings.apiKeys.copyFailed':
     'Kopyalamaq mümkün olmadı. Mətni seçərək əl ilə kopyalayın.',
 

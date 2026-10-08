@@ -122,7 +122,8 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Flytta befintliga objekt till den nya backend?',
-  'storage.migrate.promptLine': '{category}: {objects} objekt ({size}) från {from} till {to}',
+  'storage.migrate.promptLine': '{category}: {count} objekt ({size}) från {from} till {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} objekt ({size}) från {from} till {to}',
   'storage.migrate.promptLineUnknown': '{category}: okänd storlek (användning inte skannad än) från {from} till {to}',
   'storage.migrate.move': 'Flytta befintliga objekt',
   'storage.migrate.routeOnly': 'Dirigera bara nya skrivningar',
@@ -131,7 +132,8 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} misslyckades — dessa objekt kopierades inte till den nya backend',
   'storage.migrate.failed': 'Flytt misslyckades: {error} — kategorin byttes inte',
   'storage.migrate.cancelled': 'Flytt avbruten — inget byttes',
-  'storage.migrate.reclaimable': '{objects} objekt ({size}) finns kvar på {from} — återvinn manuellt',
+  'storage.migrate.reclaimable': '{count} objekt ({size}) finns kvar på {from}, återvinn manuellt',
+  'storage.migrate.reclaimable.one': '{count} objekt ({size}) finns kvar på {from}, återvinn manuellt',
   'storage.migrate.cancel': 'Avbryt flytt',
   'storage.migrate.promptCancel': 'Avbryt',
   'storage.migrate.queued': 'I kö: {categories}',

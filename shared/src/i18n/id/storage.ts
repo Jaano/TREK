@@ -122,7 +122,7 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Pindahkan objek yang ada ke backend baru?',
-  'storage.migrate.promptLine': '{category}: {objects} objek ({size}) dari {from} ke {to}',
+  'storage.migrate.promptLine': '{category}: {count} objek ({size}) dari {from} ke {to}',
   'storage.migrate.promptLineUnknown':
     '{category}: ukuran tidak diketahui (penggunaan belum dipindai) dari {from} ke {to}',
   'storage.migrate.move': 'Pindahkan objek yang ada',
@@ -132,7 +132,7 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} gagal — objek tersebut tidak disalin ke backend baru',
   'storage.migrate.failed': 'Pemindahan gagal: {error} — kategori tidak diubah',
   'storage.migrate.cancelled': 'Pemindahan dibatalkan — tidak ada yang diubah',
-  'storage.migrate.reclaimable': '{objects} objek ({size}) masih tersisa di {from} — ambil kembali secara manual',
+  'storage.migrate.reclaimable': '{count} objek ({size}) masih tersisa di {from}, ambil kembali secara manual',
   'storage.migrate.cancel': 'Batalkan pemindahan',
   'storage.migrate.promptCancel': 'Batal',
   'storage.migrate.queued': 'Dalam antrean: {categories}',

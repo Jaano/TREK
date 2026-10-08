@@ -10,5 +10,6 @@ const a = {
   'a.quote': "It's here",
   'a.multi':
     'A long sentence that wraps onto the next line',
+  'a.stay': 'Stay {days} days',
 };
 export default a;

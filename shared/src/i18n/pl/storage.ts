@@ -125,7 +125,10 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Przenieść istniejące obiekty do nowego backendu?',
-  'storage.migrate.promptLine': '{category}: {objects} obiektów ({size}) z {from} do {to}',
+  'storage.migrate.promptLine': '{category}: {count} obiektu ({size}) z {from} do {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} obiekt ({size}) z {from} do {to}',
+  'storage.migrate.promptLine.few': '{category}: {count} obiekty ({size}) z {from} do {to}',
+  'storage.migrate.promptLine.many': '{category}: {count} obiektów ({size}) z {from} do {to}',
   'storage.migrate.promptLineUnknown':
     '{category}: nieznany rozmiar (wykorzystanie jeszcze nie obliczone) z {from} do {to}',
   'storage.migrate.move': 'Przenieś istniejące obiekty',
@@ -135,7 +138,10 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} nie powiodło się — te obiekty nie zostały skopiowane do nowego backendu',
   'storage.migrate.failed': 'Przenoszenie nie powiodło się: {error} — kategoria nie została przełączona',
   'storage.migrate.cancelled': 'Przenoszenie anulowane — nic nie zostało przełączone',
-  'storage.migrate.reclaimable': '{objects} obiektów ({size}) pozostaje na {from} — odzyskaj ręcznie',
+  'storage.migrate.reclaimable': '{count} obiektu ({size}) pozostaje na {from}, odzyskaj ręcznie',
+  'storage.migrate.reclaimable.one': '{count} obiekt ({size}) pozostaje na {from}, odzyskaj ręcznie',
+  'storage.migrate.reclaimable.few': '{count} obiekty ({size}) pozostają na {from}, odzyskaj ręcznie',
+  'storage.migrate.reclaimable.many': '{count} obiektów ({size}) pozostaje na {from}, odzyskaj ręcznie',
   'storage.migrate.cancel': 'Anuluj przenoszenie',
   'storage.migrate.promptCancel': 'Anuluj',
   'storage.migrate.queued': 'W kolejce: {categories}',

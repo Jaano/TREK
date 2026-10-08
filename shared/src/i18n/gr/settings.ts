@@ -642,7 +642,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Endpoint',
   'settings.apiKeys.neverUsed': 'δεν χρησιμοποιήθηκε ποτέ',
   'settings.apiKeys.loadFailed': 'Δεν ήταν δυνατή η φόρτωση των κλειδιών σου. Φόρτωσε ξανά τη σελίδα για να δοκιμάσεις πάλι.',
-  'settings.apiKeys.limitReached': 'Έχεις {max} κλειδιά, το μέγιστο για έναν λογαριασμό. Διάγραψε ένα που δεν χρησιμοποιείς πια για να δημιουργήσεις νέο.',
+  'settings.apiKeys.limitReached':
+    'Έχεις {count} κλειδιά, το μέγιστο για έναν λογαριασμό. Διάγραψε ένα που δεν χρησιμοποιείς πια για να δημιουργήσεις νέο.',
+  'settings.apiKeys.limitReached.one':
+    'Έχεις {count} κλειδί, το μέγιστο για έναν λογαριασμό. Διάγραψέ το αν δεν το χρησιμοποιείς πια για να δημιουργήσεις νέο.',
   'settings.apiKeys.copyFailed': 'Η αντιγραφή απέτυχε. Επίλεξε το κείμενο και αντίγραψέ το χειροκίνητα.',
   'settings.apiKeys.modal.createTitle': 'Δημιουργία κλειδιού API',
   'settings.apiKeys.modal.name': 'Όνομα',

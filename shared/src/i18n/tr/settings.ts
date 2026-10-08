@@ -629,7 +629,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Uç nokta',
   'settings.apiKeys.neverUsed': 'hiç kullanılmadı',
   'settings.apiKeys.loadFailed': 'Anahtarların yüklenemedi. Tekrar denemek için sayfayı yenile.',
-  'settings.apiKeys.limitReached': '{max} anahtarın var, bir hesap için üst sınır bu. Yeni bir anahtar oluşturmak için artık kullanmadığın birini sil.',
+  'settings.apiKeys.limitReached':
+    '{count} anahtarın var, bir hesap için üst sınır bu. Yeni bir anahtar oluşturmak için artık kullanmadığın birini sil.',
+  'settings.apiKeys.limitReached.one':
+    '{count} anahtarın var, bir hesap için üst sınır bu. Yeni bir anahtar oluşturmak için artık kullanmıyorsan onu sil.',
   'settings.apiKeys.copyFailed': 'Kopyalanamadı. Metni seçip elle kopyala.',
   'settings.apiKeys.modal.createTitle': 'API anahtarı oluştur',
   'settings.apiKeys.modal.name': 'Ad',

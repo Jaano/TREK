@@ -147,7 +147,7 @@ export default function DawarichAcceptDialog({
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-1">
             <DawarichBadge icon={Hourglass} size="sm">
-              {t('dawarich.accept.duration', { minutes: suggestion.durationMinutes })}
+              {t('dawarich.accept.duration', { count: suggestion.durationMinutes })}
             </DawarichBadge>
             {/* The source's own verdict, shown here rather than on every row of
                 the list: since Dawarich 1.12.0 "unconfirmed" is the normal state
@@ -180,7 +180,7 @@ export default function DawarichAcceptDialog({
               {' — '}
               {t('dawarich.bucket.rule', {
                 meters: DAWARICH_BUCKET_MATCH_RADIUS_M,
-                minutes: DAWARICH_BUCKET_MATCH_MIN_MINUTES,
+                count: DAWARICH_BUCKET_MATCH_MIN_MINUTES,
               })}
             </span>
           </p>

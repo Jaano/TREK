@@ -139,7 +139,8 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Kas teisaldada olemasolevad objektid uude taustsüsteemi?',
-  'storage.migrate.promptLine': '{category}: {objects} objekti ({size}), {from} → {to}',
+  'storage.migrate.promptLine': '{category}: {count} objekti ({size}), {from} → {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} objekt ({size}), {from} → {to}',
   'storage.migrate.promptLineUnknown': '{category}: suurus teadmata (kasutust pole veel kontrollitud), {from} → {to}',
   'storage.migrate.move': 'Teisalda olemasolevad objektid',
   'storage.migrate.routeOnly': 'Suuna ainult uued kirjutused',
@@ -148,7 +149,8 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} ebaõnnestus — neid objekte ei kopeeritud uude taustsüsteemi',
   'storage.migrate.failed': 'Teisaldamine ebaõnnestus: {error} — kategooriat ei suunatud ümber',
   'storage.migrate.cancelled': 'Teisaldamine tühistatud — midagi ei suunatud ümber',
-  'storage.migrate.reclaimable': '{objects} objekti ({size}) jäid taustsüsteemi {from} — vabasta ruum käsitsi',
+  'storage.migrate.reclaimable': '{count} objekti ({size}) jäid taustsüsteemi {from}, vabasta ruum käsitsi',
+  'storage.migrate.reclaimable.one': '{count} objekt ({size}) jäi taustsüsteemi {from}, vabasta ruum käsitsi',
   'storage.migrate.cancel': 'Tühista teisaldamine',
   'storage.migrate.promptCancel': 'Tühista',
   'storage.migrate.queued': 'Järjekorras: {categories}',

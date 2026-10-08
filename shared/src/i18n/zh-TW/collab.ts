@@ -96,7 +96,7 @@ const collab: TranslationStrings = {
   'collab.polls.options': '選項',
   'collab.polls.delete': '刪除',
   'collab.polls.closedSection': '已關閉',
-  'collab.chat.imageLimit': '每則訊息最多可附加 {max} 張圖片',
+  'collab.chat.imageLimit': '每則訊息最多可附加 {count} 張圖片',
   'collab.chat.uploading': '上傳中 {percent}%',
   'collab.chat.attachImages': '附加圖片',
   'collab.chat.attachedImage': '附加的圖片',

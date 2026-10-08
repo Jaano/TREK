@@ -624,7 +624,8 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Điểm cuối',
   'settings.apiKeys.neverUsed': 'chưa từng dùng',
   'settings.apiKeys.loadFailed': 'Không thể tải các khóa của bạn. Hãy tải lại trang để thử lại.',
-  'settings.apiKeys.limitReached': 'Bạn đã có {max} khóa, mức tối đa cho một tài khoản. Hãy xóa một khóa không còn dùng để tạo khóa mới.',
+  'settings.apiKeys.limitReached':
+    'Bạn đã có {count} khóa, mức tối đa cho một tài khoản. Hãy xóa một khóa không còn dùng để tạo khóa mới.',
   'settings.apiKeys.copyFailed': 'Không thể sao chép. Hãy chọn đoạn văn bản và sao chép thủ công.',
   'settings.apiKeys.modal.createTitle': 'Tạo khóa API',
   'settings.apiKeys.modal.name': 'Tên',

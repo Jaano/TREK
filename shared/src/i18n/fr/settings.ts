@@ -644,7 +644,9 @@ const settings: TranslationStrings = {
   'settings.apiKeys.neverUsed': 'jamais utilisée',
   'settings.apiKeys.loadFailed': 'Impossible de charger vos clés. Rechargez la page pour réessayer.',
   'settings.apiKeys.limitReached':
-    "Vous avez {max} clés, le maximum pour un compte. Supprimez-en une dont vous n'avez plus besoin pour en créer une autre.",
+    "Vous avez {count} clés, le maximum pour un compte. Supprimez-en une dont vous n'avez plus besoin pour en créer une autre.",
+  'settings.apiKeys.limitReached.one':
+    "Vous avez {count} clé, le maximum pour un compte. Supprimez-la si vous n'en avez plus besoin pour en créer une autre.",
   'settings.apiKeys.copyFailed': 'Impossible de copier. Sélectionnez le texte et copiez-le manuellement.',
   'settings.apiKeys.modal.createTitle': 'Créer une clé API',
   'settings.apiKeys.modal.name': 'Nom',

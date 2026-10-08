@@ -633,7 +633,9 @@ const settings: TranslationStrings = {
   'settings.apiKeys.neverUsed': 'pole kunagi kasutatud',
   'settings.apiKeys.loadFailed': 'Võtmeid ei saanud laadida. Uuesti proovimiseks laadi leht uuesti.',
   'settings.apiKeys.limitReached':
-    'Sul on {max} võtit — konto suurim lubatud arv. Uue loomiseks kustuta võti, mida enam ei kasuta.',
+    'Sul on {count} võtit, konto suurim lubatud arv. Uue loomiseks kustuta võti, mida enam ei kasuta.',
+  'settings.apiKeys.limitReached.one':
+    'Sul on {count} võti, konto suurim lubatud arv. Uue loomiseks kustuta see, kui sa seda enam ei kasuta.',
   'settings.apiKeys.copyFailed': 'Kopeerimine ebaõnnestus. Vali tekst ja kopeeri käsitsi.',
   'settings.apiKeys.modal.createTitle': 'Loo API-võti',
   'settings.apiKeys.modal.name': 'Nimi',

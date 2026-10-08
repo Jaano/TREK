@@ -119,7 +119,8 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'Bejegyzés hozzáadása',
   'dawarich.accept.confirm.bucket_list': 'Pipáld ki',
   'dawarich.accept.recorded': 'Rögzítve {from} és {to} között',
-  'dawarich.accept.duration': '{minutes} perc',
+  'dawarich.accept.duration': '{count} perc',
+  'dawarich.accept.duration.one': '{count} perc',
   'dawarich.accept.name': 'Név',
   'dawarich.accept.date': 'Dátum',
   'dawarich.accept.from': 'Érkezés',
@@ -184,7 +185,10 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'Ellenőrzés újra',
   'dawarich.bucket.metersAway': '{meters} m-re',
   'dawarich.bucket.kilometersAway': '{km} km-re',
-  'dawarich.bucket.rule': 'Egy kívánság {meters} méteren belül és {minutes} perc helyszíni idő után számít teljesítettnek.',
+  'dawarich.bucket.rule':
+    'Egy kívánság {meters} méteren belül és {count} perc helyszíni idő után számít teljesítettnek.',
+  'dawarich.bucket.rule.one':
+    'Egy kívánság {meters} méteren belül és {count} perc helyszíni idő után számít teljesítettnek.',
   'dawarich.journey.dayStays.other': '{count} tartózkodás a Dawarichból',
   'dawarich.journey.dayStays.one': '{count} tartózkodás a Dawarichból',
 

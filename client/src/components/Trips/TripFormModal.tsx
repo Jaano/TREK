@@ -169,7 +169,7 @@ export default function TripFormModal({ isOpen, onClose, onSave, trip, onCoverUp
       // Only a range being set is held to the limit, as on the server: a trip that
       // already carries a longer one can still be renamed.
       const datesTouched = !trip || formData.start_date !== (trip.start_date || '') || formData.end_date !== (trip.end_date || '')
-      if (datesTouched && span > MAX_TRIP_DAYS) { setError(t('dashboard.tripTooLong', { days: MAX_TRIP_DAYS })); return }
+      if (datesTouched && span > MAX_TRIP_DAYS) { setError(t('dashboard.tripTooLong', { count: MAX_TRIP_DAYS })); return }
     }
     if (!formData.start_date && !formData.end_date) {
       const dc = Number(formData.day_count)

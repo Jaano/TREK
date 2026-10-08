@@ -111,7 +111,7 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': '将现有对象移动到新后端？',
-  'storage.migrate.promptLine': '{category}：从 {from} 到 {to} 共 {objects} 个对象（{size}）',
+  'storage.migrate.promptLine': '{category}：从 {from} 到 {to} 共 {count} 个对象（{size}）',
   'storage.migrate.promptLineUnknown': '{category}：大小未知（尚未扫描用量）从 {from} 到 {to}',
   'storage.migrate.move': '移动现有对象',
   'storage.migrate.routeOnly': '仅路由新写入',
@@ -120,7 +120,7 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} 个失败 — 这些对象未复制到新后端',
   'storage.migrate.failed': '移动失败：{error} — 该分类未切换',
   'storage.migrate.cancelled': '移动已取消 — 未切换任何内容',
-  'storage.migrate.reclaimable': '{objects} 个对象（{size}）仍保留在 {from} 上 — 请手动回收',
+  'storage.migrate.reclaimable': '{count} 个对象（{size}）仍保留在 {from} 上，请手动回收',
   'storage.migrate.cancel': '取消移动',
   'storage.migrate.promptCancel': '取消',
   'storage.migrate.queued': '排队中：{categories}',

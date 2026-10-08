@@ -136,7 +136,7 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'ย้ายวัตถุที่มีอยู่ไปยังแบ็กเอนด์ใหม่หรือไม่',
-  'storage.migrate.promptLine': '{category}: {objects} วัตถุ ({size}) จาก {from} ถึง {to}',
+  'storage.migrate.promptLine': '{category}: {count} วัตถุ ({size}) จาก {from} ถึง {to}',
   'storage.migrate.promptLineUnknown': '{category}: ไม่ทราบขนาด (ยังไม่มีการสแกนการใช้งาน) จาก {from} ถึง {to}',
   'storage.migrate.move': 'ย้ายวัตถุที่มีอยู่',
   'storage.migrate.routeOnly': 'เพียงกำหนดเส้นทางการเขียนใหม่',
@@ -145,7 +145,7 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} ล้มเหลว — ออบเจ็กต์เหล่านั้นไม่ได้ถูกคัดลอกไปยังแบ็กเอนด์ใหม่',
   'storage.migrate.failed': 'การย้ายล้มเหลว: {error} — หมวดหมู่ไม่ได้ถูกเปลี่ยน',
   'storage.migrate.cancelled': 'การย้ายถูกยกเลิก — ไม่มีอะไรถูกเปลี่ยน',
-  'storage.migrate.reclaimable': 'วัตถุ {objects} ({size}) ยังคงอยู่บน {from} — เรียกคืนด้วยตนเอง',
+  'storage.migrate.reclaimable': 'วัตถุ {count} ({size}) ยังคงอยู่บน {from} เรียกคืนด้วยตนเอง',
   'storage.migrate.cancel': 'ยกเลิกการย้าย',
   'storage.migrate.promptCancel': 'ยกเลิก',
   'storage.migrate.queued': 'อยู่ในคิว: {categories}',

@@ -116,7 +116,8 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'Qeyd əlavə et',
   'dawarich.accept.confirm.bucket_list': 'Tamamlandı kimi işarələ',
   'dawarich.accept.recorded': '{from}–{to} aralığında qeydə alınıb',
-  'dawarich.accept.duration': '{minutes} dəq.',
+  'dawarich.accept.duration': '{count} dəq.',
+  'dawarich.accept.duration.one': '{count} dəq.',
   'dawarich.accept.name': 'Ad',
   'dawarich.accept.date': 'Tarix',
   'dawarich.accept.from': 'Çatma',
@@ -181,7 +182,10 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'Yenidən yoxla',
   'dawarich.bucket.metersAway': '{meters} m uzaqda',
   'dawarich.bucket.kilometersAway': '{km} km uzaqda',
-  'dawarich.bucket.rule': 'Arzu məkandan {meters} m məsafə daxilində və orada ən azı {minutes} dəqiqə qaldıqda tamamlanmış sayılır.',
+  'dawarich.bucket.rule':
+    'Arzu məkandan {meters} m məsafə daxilində və orada ən azı {count} dəqiqə qaldıqda tamamlanmış sayılır.',
+  'dawarich.bucket.rule.one':
+    'Arzu məkandan {meters} m məsafə daxilində və orada ən azı {count} dəqiqə qaldıqda tamamlanmış sayılır.',
 
   'dawarich.journey.dayStays.one': 'Dawarich-dən 1 dayanma qeydi',
   'dawarich.journey.dayStays.other': 'Dawarich-dən {count} dayanma qeydi',

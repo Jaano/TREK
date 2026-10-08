@@ -622,7 +622,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Endpoint',
   'settings.apiKeys.neverUsed': 'never used',
   'settings.apiKeys.loadFailed': 'Could not load your keys. Reload the page to try again.',
-  'settings.apiKeys.limitReached': 'You have {max} keys, the most an account can hold. Delete one you no longer use to create another.',
+  'settings.apiKeys.limitReached':
+    'You have {count} keys, the most an account can hold. Delete one you no longer use to create another.',
+  'settings.apiKeys.limitReached.one':
+    'You have {count} key, the most an account can hold. Delete it if you no longer use it to create another.',
   'settings.apiKeys.copyFailed': 'Could not copy. Select the text and copy it by hand.',
   'settings.apiKeys.modal.createTitle': 'Create API key',
   'settings.apiKeys.modal.name': 'Name',

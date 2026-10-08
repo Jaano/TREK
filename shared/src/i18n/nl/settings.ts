@@ -633,7 +633,10 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Eindpunt',
   'settings.apiKeys.neverUsed': 'nooit gebruikt',
   'settings.apiKeys.loadFailed': 'Je sleutels konden niet worden geladen. Herlaad de pagina om het opnieuw te proberen.',
-  'settings.apiKeys.limitReached': 'Je hebt {max} sleutels, het maximum per account. Verwijder er een die je niet meer gebruikt om een nieuwe te maken.',
+  'settings.apiKeys.limitReached':
+    'Je hebt {count} sleutels, het maximum per account. Verwijder er een die je niet meer gebruikt om een nieuwe te maken.',
+  'settings.apiKeys.limitReached.one':
+    'Je hebt {count} sleutel, het maximum per account. Verwijder hem als je hem niet meer gebruikt om een nieuwe te maken.',
   'settings.apiKeys.copyFailed': 'Kopiëren is mislukt. Selecteer de tekst en kopieer hem handmatig.',
   'settings.apiKeys.modal.createTitle': 'API-sleutel aanmaken',
   'settings.apiKeys.modal.name': 'Naam',

@@ -703,7 +703,7 @@ export default function MAdminStoragePanel(): React.ReactElement {
                   {m.reclaimable && (
                     <p className="mt-1 font-geist text-[0.625rem] text-m-muted">
                       {t('storage.migrate.reclaimable', {
-                        objects: String(m.reclaimable.objects),
+                        count: m.reclaimable.objects,
                         size: formatBytes(m.reclaimable.bytes),
                         from: m.from,
                       })}
@@ -834,7 +834,7 @@ export default function MAdminStoragePanel(): React.ReactElement {
                     })
                   : t('storage.migrate.promptLine', {
                       category: t(`storage.category.${c.category}`),
-                      objects: String(c.objects),
+                      count: c.objects,
                       size: formatBytes(c.bytes ?? 0),
                       from: c.from,
                       to: c.to,

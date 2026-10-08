@@ -609,7 +609,7 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': '엔드포인트',
   'settings.apiKeys.neverUsed': '사용한 적 없음',
   'settings.apiKeys.loadFailed': '키를 불러오지 못했습니다. 페이지를 새로 고친 뒤 다시 시도하세요.',
-  'settings.apiKeys.limitReached': '키가 {max}개로 계정당 최대 개수입니다. 새 키를 만들려면 더 이상 쓰지 않는 키를 삭제하세요.',
+  'settings.apiKeys.limitReached': '키가 {count}개로 계정당 최대 개수입니다. 새 키를 만들려면 더 이상 쓰지 않는 키를 삭제하세요.',
   'settings.apiKeys.copyFailed': '복사하지 못했습니다. 텍스트를 선택해 직접 복사하세요.',
   'settings.apiKeys.modal.createTitle': 'API 키 만들기',
   'settings.apiKeys.modal.name': '이름',

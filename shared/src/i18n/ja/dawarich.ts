@@ -116,7 +116,7 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'エントリーを追加',
   'dawarich.accept.confirm.bucket_list': 'チェックを付ける',
   'dawarich.accept.recorded': '記録：{from}から{to}まで',
-  'dawarich.accept.duration': '{minutes}分',
+  'dawarich.accept.duration': '{count}分',
   'dawarich.accept.name': '名前',
   'dawarich.accept.date': '日付',
   'dawarich.accept.from': '到着',
@@ -175,7 +175,7 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'もう一度確認',
   'dawarich.bucket.metersAway': '{meters} m 先',
   'dawarich.bucket.kilometersAway': '{km} km 先',
-  'dawarich.bucket.rule': '{meters} m 以内に {minutes} 分以上滞在すると、願いがかなったとみなします。',
+  'dawarich.bucket.rule': '{meters} m 以内に {count} 分以上滞在すると、願いがかなったとみなします。',
   'dawarich.journey.dayStays.other': 'Dawarich の滞在 {count} 件',
 
 };

@@ -81,7 +81,7 @@ const collab: TranslationStrings = {
   'collab.polls.options': 'ตัวเลือก',
   'collab.polls.delete': 'ลบ',
   'collab.polls.closedSection': 'ปิดแล้ว',
-  'collab.chat.imageLimit': 'คุณแนบรูปภาพได้สูงสุด {max} รูปต่อข้อความ',
+  'collab.chat.imageLimit': 'คุณแนบรูปภาพได้สูงสุด {count} รูปต่อข้อความ',
   'collab.chat.uploading': 'กำลังอัปโหลด {percent}%',
   'collab.chat.attachImages': 'แนบรูปภาพ',
   'collab.chat.attachedImage': 'รูปภาพที่แนบ',

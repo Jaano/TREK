@@ -124,7 +124,7 @@ export function useCollabChat(tripId: any, currentUser: any) {
   const addImageFiles = useCallback((incoming: File[] | FileList) => {
     images.add(incoming, ({ rejected, overflow }) => {
       if (rejected) toast.error(t('collab.chat.imageRejected'))
-      if (overflow) toast.error(t('collab.chat.imageLimit', { max: MAX_CHAT_IMAGES }))
+      if (overflow) toast.error(t('collab.chat.imageLimit', { count: MAX_CHAT_IMAGES }))
     })
   }, [images, toast, t])
   const removeImage = images.remove

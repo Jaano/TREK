@@ -114,7 +114,7 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'Tambah entri',
   'dawarich.accept.confirm.bucket_list': 'Coret',
   'dawarich.accept.recorded': 'Terekam {from} sampai {to}',
-  'dawarich.accept.duration': '{minutes} mnt',
+  'dawarich.accept.duration': '{count} mnt',
   'dawarich.accept.name': 'Nama',
   'dawarich.accept.date': 'Tanggal',
   'dawarich.accept.from': 'Tiba',
@@ -172,7 +172,8 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'Periksa lagi',
   'dawarich.bucket.metersAway': '{meters} m dari sana',
   'dawarich.bucket.kilometersAway': '{km} km dari sana',
-  'dawarich.bucket.rule': 'Sebuah keinginan dianggap tercapai dalam radius {meters} m dan setelah {minutes} menit di lokasi.',
+  'dawarich.bucket.rule':
+    'Sebuah keinginan dianggap tercapai dalam radius {meters} m dan setelah {count} menit di lokasi.',
   'dawarich.journey.dayStays.other': '{count} persinggahan dari Dawarich',
 
 };

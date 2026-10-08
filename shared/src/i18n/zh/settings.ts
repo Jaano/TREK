@@ -580,7 +580,7 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': '端点',
   'settings.apiKeys.neverUsed': '从未使用',
   'settings.apiKeys.loadFailed': '无法加载你的密钥。请刷新页面后重试。',
-  'settings.apiKeys.limitReached': '你已有 {max} 个密钥，已达到每个账户的上限。请删除一个不再使用的密钥后再创建。',
+  'settings.apiKeys.limitReached': '你已有 {count} 个密钥，已达到每个账户的上限。请删除一个不再使用的密钥后再创建。',
   'settings.apiKeys.copyFailed': '无法复制。请选中文本后手动复制。',
   'settings.apiKeys.modal.createTitle': '创建 API 密钥',
   'settings.apiKeys.modal.name': '名称',

@@ -121,7 +121,8 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Mover objetos existentes para o novo backend?',
-  'storage.migrate.promptLine': '{category}: {objects} objetos ({size}) de {from} para {to}',
+  'storage.migrate.promptLine': '{category}: {count} objetos ({size}) de {from} para {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} objeto ({size}) de {from} para {to}',
   'storage.migrate.promptLineUnknown': '{category}: tamanho desconhecido (uso ainda não calculado) de {from} para {to}',
   'storage.migrate.move': 'Mover objetos existentes',
   'storage.migrate.routeOnly': 'Apenas rotear novas gravações',
@@ -130,7 +131,8 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} falharam — esses objetos não foram copiados para o novo backend',
   'storage.migrate.failed': 'Falha ao mover: {error} — a categoria não foi alterada',
   'storage.migrate.cancelled': 'Movimentação cancelada — nada foi alterado',
-  'storage.migrate.reclaimable': '{objects} objetos ({size}) permanecem em {from} — recupere manualmente',
+  'storage.migrate.reclaimable': '{count} objetos ({size}) permanecem em {from}, recupere manualmente',
+  'storage.migrate.reclaimable.one': '{count} objeto ({size}) permanece em {from}, recupere manualmente',
   'storage.migrate.cancel': 'Cancelar movimentação',
   'storage.migrate.promptCancel': 'Cancelar',
   'storage.migrate.queued': 'Na fila: {categories}',

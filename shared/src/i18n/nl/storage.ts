@@ -125,7 +125,8 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Bestaande objecten naar de nieuwe backend verplaatsen?',
-  'storage.migrate.promptLine': '{category}: {objects} objecten ({size}) van {from} naar {to}',
+  'storage.migrate.promptLine': '{category}: {count} objecten ({size}) van {from} naar {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} object ({size}) van {from} naar {to}',
   'storage.migrate.promptLineUnknown': '{category}: onbekende grootte (gebruik nog niet gescand) van {from} naar {to}',
   'storage.migrate.move': 'Bestaande objecten verplaatsen',
   'storage.migrate.routeOnly': 'Alleen nieuwe schrijfacties omleiden',
@@ -134,7 +135,8 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} mislukt — die objecten zijn niet gekopieerd naar de nieuwe backend',
   'storage.migrate.failed': 'Verplaatsen mislukt: {error} — de categorie is niet omgezet',
   'storage.migrate.cancelled': 'Verplaatsen geannuleerd — er is niets omgezet',
-  'storage.migrate.reclaimable': '{objects} objecten ({size}) blijven op {from} — handmatig terugwinnen',
+  'storage.migrate.reclaimable': '{count} objecten ({size}) blijven op {from}, handmatig terugwinnen',
+  'storage.migrate.reclaimable.one': '{count} object ({size}) blijft op {from}, handmatig terugwinnen',
   'storage.migrate.cancel': 'Verplaatsen annuleren',
   'storage.migrate.promptCancel': 'Annuleren',
   'storage.migrate.queued': 'In wachtrij: {categories}',

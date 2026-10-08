@@ -119,7 +119,8 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'Lisa sissekanne',
   'dawarich.accept.confirm.bucket_list': 'Märgi täidetuks',
   'dawarich.accept.recorded': 'Salvestatud {from} kuni {to}',
-  'dawarich.accept.duration': '{minutes} min',
+  'dawarich.accept.duration': '{count} min',
+  'dawarich.accept.duration.one': '{count} min',
   'dawarich.accept.name': 'Nimi',
   'dawarich.accept.date': 'Kuupäev',
   'dawarich.accept.from': 'Saabusid',
@@ -184,7 +185,9 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'Kontrolli uuesti',
   'dawarich.bucket.metersAway': '{meters} m kaugusel',
   'dawarich.bucket.kilometersAway': '{km} km kaugusel',
-  'dawarich.bucket.rule': 'Soov loetakse täidetuks, kui viibid vähemalt {minutes} minutit kohast {meters} m raadiuses.',
+  'dawarich.bucket.rule': 'Soov loetakse täidetuks, kui viibid vähemalt {count} minutit kohast {meters} m raadiuses.',
+  'dawarich.bucket.rule.one':
+    'Soov loetakse täidetuks, kui viibid vähemalt {count} minuti kohast {meters} m raadiuses.',
   'dawarich.journey.dayStays.other': '{count} peatumist Dawarichist',
   'dawarich.journey.dayStays.one': '{count} peatumine Dawarichist',
 

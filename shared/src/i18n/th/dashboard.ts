@@ -106,7 +106,7 @@ const dashboard: TranslationStrings = {
   'dashboard.useUnsplashPhoto': 'ใช้รูปภาพ Unsplash โดย {photographer}',
   'dashboard.titleRequired': 'ต้องระบุชื่อ',
   'dashboard.endDateError': 'วันที่สิ้นสุดต้องอยู่หลังวันที่เริ่มต้น',
-  'dashboard.tripTooLong': 'การเดินทางหนึ่งครั้งยาวได้สูงสุด {days} วัน',
+  'dashboard.tripTooLong': 'การเดินทางหนึ่งครั้งยาวได้สูงสุด {count} วัน',
   'dashboard.dateShiftTitle': 'วันที่เริ่มต้นใหม่',
   'dashboard.dateShiftIntro': 'คุณเปลี่ยนวันที่เริ่มต้นของการเดินทางครั้งนี้ แผนของคุณควรปรับตามวันที่ใหม่อย่างไร',
   'dashboard.dateShiftKeepBookings': 'ทำการจองตามวันที่ของพวกเขา',

@@ -98,7 +98,7 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'เพิ่มรายการ',
   'dawarich.accept.confirm.bucket_list': 'ทำเครื่องหมายว่าสำเร็จ',
   'dawarich.accept.recorded': 'บันทึกตั้งแต่ {from} ถึง {to}',
-  'dawarich.accept.duration': '{minutes} นาที',
+  'dawarich.accept.duration': '{count} นาที',
   'dawarich.accept.name': 'ชื่อ',
   'dawarich.accept.date': 'วันที่',
   'dawarich.accept.from': 'มาถึง',
@@ -149,7 +149,7 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'ตรวจสอบอีกครั้ง',
   'dawarich.bucket.metersAway': 'ห่าง {meters} ม.',
   'dawarich.bucket.kilometersAway': 'ห่าง {km} กม.',
-  'dawarich.bucket.rule': 'จะนับว่าไปถึงเมื่ออยู่ในระยะ {meters} ม. และอยู่ที่จุดนั้นอย่างน้อย {minutes} นาที',
+  'dawarich.bucket.rule': 'จะนับว่าไปถึงเมื่ออยู่ในระยะ {meters} ม. และอยู่ที่จุดนั้นอย่างน้อย {count} นาที',
   'dawarich.journey.dayStays.other': 'การพักจาก Dawarich {count} รายการ',
 };
 

@@ -643,7 +643,14 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Endpoint',
   'settings.apiKeys.neverUsed': 'nigdy nieużywany',
   'settings.apiKeys.loadFailed': 'Nie udało się wczytać kluczy. Odśwież stronę, aby spróbować ponownie.',
-  'settings.apiKeys.limitReached': 'Masz {max} kluczy, czyli maksimum na konto. Usuń klucz, którego już nie używasz, aby utworzyć nowy.',
+  'settings.apiKeys.limitReached':
+    'Masz {count} klucza, czyli maksimum na konto. Usuń klucz, którego już nie używasz, aby utworzyć nowy.',
+  'settings.apiKeys.limitReached.one':
+    'Masz {count} klucz, czyli maksimum na konto. Usuń go, jeśli już go nie używasz, aby utworzyć nowy.',
+  'settings.apiKeys.limitReached.few':
+    'Masz {count} klucze, czyli maksimum na konto. Usuń klucz, którego już nie używasz, aby utworzyć nowy.',
+  'settings.apiKeys.limitReached.many':
+    'Masz {count} kluczy, czyli maksimum na konto. Usuń klucz, którego już nie używasz, aby utworzyć nowy.',
   'settings.apiKeys.copyFailed': 'Nie udało się skopiować. Zaznacz tekst i skopiuj go ręcznie.',
   'settings.apiKeys.modal.createTitle': 'Utwórz klucz API',
   'settings.apiKeys.modal.name': 'Nazwa',

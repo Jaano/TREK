@@ -112,7 +112,7 @@ const dawarich: TranslationStrings = {
   'dawarich.accept.confirm.journal': 'Thêm mục nhập',
   'dawarich.accept.confirm.bucket_list': 'Đánh dấu hoàn thành',
   'dawarich.accept.recorded': 'Được ghi từ {from} đến {to}',
-  'dawarich.accept.duration': '{minutes} phút',
+  'dawarich.accept.duration': '{count} phút',
   'dawarich.accept.name': 'Tên',
   'dawarich.accept.date': 'Ngày',
   'dawarich.accept.from': 'Đến nơi',
@@ -170,7 +170,7 @@ const dawarich: TranslationStrings = {
   'dawarich.again': 'Kiểm tra lại',
   'dawarich.bucket.metersAway': 'cách {meters} m',
   'dawarich.bucket.kilometersAway': 'cách {km} km',
-  'dawarich.bucket.rule': 'Một điều ước được tính là đã đến khi trong vòng {meters} m và sau {minutes} phút tại chỗ.',
+  'dawarich.bucket.rule': 'Một điều ước được tính là đã đến khi trong vòng {meters} m và sau {count} phút tại chỗ.',
   'dawarich.journey.dayStays.other': '{count} điểm lưu trú từ Dawarich',
 
 };

@@ -584,7 +584,7 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': '端點',
   'settings.apiKeys.neverUsed': '從未使用',
   'settings.apiKeys.loadFailed': '無法載入你的金鑰。請重新整理頁面後再試一次。',
-  'settings.apiKeys.limitReached': '你已有 {max} 組金鑰，已達每個帳號的上限。請刪除一組不再使用的金鑰後再建立。',
+  'settings.apiKeys.limitReached': '你已有 {count} 組金鑰，已達每個帳號的上限。請刪除一組不再使用的金鑰後再建立。',
   'settings.apiKeys.copyFailed': '無法複製。請選取文字後手動複製。',
   'settings.apiKeys.modal.createTitle': '建立 API 金鑰',
   'settings.apiKeys.modal.name': '名稱',

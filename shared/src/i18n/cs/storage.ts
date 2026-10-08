@@ -121,7 +121,9 @@ const storage: TranslationStrings = {
 
   // Category migration (copy → flip → delta sweep)
   'storage.migrate.promptTitle': 'Přesunout stávající objekty do nového backendu?',
-  'storage.migrate.promptLine': '{category}: {objects} objektů ({size}) z {from} do {to}',
+  'storage.migrate.promptLine': '{category}: {count} objektů ({size}) z {from} do {to}',
+  'storage.migrate.promptLine.one': '{category}: {count} objekt ({size}) z {from} do {to}',
+  'storage.migrate.promptLine.few': '{category}: {count} objekty ({size}) z {from} do {to}',
   'storage.migrate.promptLineUnknown': '{category}: neznámá velikost (využití ještě nebylo vypočteno) z {from} do {to}',
   'storage.migrate.move': 'Přesunout stávající objekty',
   'storage.migrate.routeOnly': 'Pouze směrovat nové zápisy',
@@ -130,7 +132,9 @@ const storage: TranslationStrings = {
   'storage.migrate.doneFailures': '{failed} se nezdařilo — tyto objekty nebyly zkopírovány do nového backendu',
   'storage.migrate.failed': 'Přesun selhal: {error} — kategorie nebyla přepnuta',
   'storage.migrate.cancelled': 'Přesun zrušen — nic nebylo přepnuto',
-  'storage.migrate.reclaimable': '{objects} objektů ({size}) zůstává na {from} — uvolněte ručně',
+  'storage.migrate.reclaimable': '{count} objektů ({size}) zůstává na {from}, uvolněte ručně',
+  'storage.migrate.reclaimable.one': '{count} objekt ({size}) zůstává na {from}, uvolněte ručně',
+  'storage.migrate.reclaimable.few': '{count} objekty ({size}) zůstávají na {from}, uvolněte ručně',
   'storage.migrate.cancel': 'Zrušit přesun',
   'storage.migrate.promptCancel': 'Zrušit',
   'storage.migrate.queued': 'Ve frontě: {categories}',

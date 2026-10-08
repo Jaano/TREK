@@ -640,7 +640,18 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'نقطة النهاية',
   'settings.apiKeys.neverUsed': 'لم يُستخدم قط',
   'settings.apiKeys.loadFailed': 'تعذّر تحميل مفاتيحك. أعد تحميل الصفحة للمحاولة مرة أخرى.',
-  'settings.apiKeys.limitReached': 'لديك {max} مفاتيح، وهو الحد الأقصى للحساب الواحد. احذف مفتاحًا لم تعد تستخدمه لإنشاء مفتاح جديد.',
+  'settings.apiKeys.limitReached':
+    'لديك {count} مفتاح، وهو الحد الأقصى للحساب الواحد. احذف مفتاحًا لم تعد تستخدمه لإنشاء مفتاح جديد.',
+  'settings.apiKeys.limitReached.zero':
+    'لديك {count} مفتاح، وهو الحد الأقصى للحساب الواحد. احذف مفتاحًا لم تعد تستخدمه لإنشاء مفتاح جديد.',
+  'settings.apiKeys.limitReached.one':
+    'لديك مفتاح واحد، وهو الحد الأقصى للحساب الواحد. احذفه إن لم تعد تستخدمه لإنشاء مفتاح جديد.',
+  'settings.apiKeys.limitReached.two':
+    'لديك مفتاحان، وهو الحد الأقصى للحساب الواحد. احذف مفتاحًا لم تعد تستخدمه لإنشاء مفتاح جديد.',
+  'settings.apiKeys.limitReached.few':
+    'لديك {count} مفاتيح، وهو الحد الأقصى للحساب الواحد. احذف مفتاحًا لم تعد تستخدمه لإنشاء مفتاح جديد.',
+  'settings.apiKeys.limitReached.many':
+    'لديك {count} مفتاحًا، وهو الحد الأقصى للحساب الواحد. احذف مفتاحًا لم تعد تستخدمه لإنشاء مفتاح جديد.',
   'settings.apiKeys.copyFailed': 'تعذّر النسخ. حدّد النص وانسخه يدويًا.',
   'settings.apiKeys.modal.createTitle': 'إنشاء مفتاح API',
   'settings.apiKeys.modal.name': 'الاسم',
