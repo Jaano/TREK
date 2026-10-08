@@ -21,6 +21,8 @@ import { Users } from '../../../src/db/entities/Users.entity';
 import { Days } from '../../../src/db/entities/Days.entity';
 import { PluginEntityMetadata } from '../../../src/db/entities/PluginEntityMetadata.entity';
 import { PluginScheduledTasks } from '../../../src/db/entities/PluginScheduledTasks.entity';
+import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -36,11 +38,16 @@ afterAll(async () => {
   testDb.close();
 });
 
-function seed() {
+async function seed(): Promise<void> {
   for (let i = 1; i <= 6; i++) {
-    testDb
-      .prepare("INSERT INTO users (id, username, email, password_hash, display_name, avatar) VALUES (?, ?, ?, 'x', ?, ?)")
-      .run(i, 'u' + i, `u${i}@x`, i % 2 ? 'D' + i : null, i === 3 ? 'a.png' : null);
+    await insertRow(t, Users, {
+      id: i,
+      username: 'u' + i,
+      email: `u${i}@x`,
+      password_hash: 'x',
+      display_name: i % 2 ? 'D' + i : null,
+      avatar: i === 3 ? 'a.png' : null,
+    });
   }
   const trips: Array<[number, number]> = [
     [1, 1],
@@ -48,7 +55,7 @@ function seed() {
     [3, 1],
     [4, 5],
   ];
-  for (const [id, owner] of trips) testDb.prepare('INSERT INTO trips (id, user_id, title) VALUES (?, ?, ?)').run(id, owner, 't');
+  for (const [id, owner] of trips) await insertRow(t, Trips, { id, user: owner, title: 't' });
   for (const [trip, user] of [
     [1, 2],
     [1, 3],
@@ -56,15 +63,23 @@ function seed() {
     [3, 4],
     [4, 1],
   ]) {
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(trip, user);
+    await insertRow(t, TripMembers, { trip, user });
   }
-  for (let d = 1; d <= 5; d++) testDb.prepare('INSERT INTO days (id, trip_id, day_number) VALUES (?, ?, ?)').run(10 + d, d % 2 ? 1 : 2, d);
+  for (let d = 1; d <= 5; d++) await insertRow(t, Days, { id: 10 + d, trip: d % 2 ? 1 : 2, day_number: d });
+}
+
+/** The stored metadata row for the plugin and key; fails the case when it is gone. */
+async function metadataRow(pluginId: string, key: string) {
+  const row = await findRow(t, PluginEntityMetadata, { plugin_id: pluginId, key });
+  if (!row) throw new Error(`no metadata ${pluginId}/${key}`);
+  return row;
 }
 
 describe('R3J-PARITY (Plan 3j Task 7 fix wave, must-land 4c)', () => {
   it('HR9 Trips.sharesTripWith == legacy bilateral SQL for every ordered user pair (incl. missing users)', async () => {
-    seed();
+    await seed();
     const repo = t.repo(Trips);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`SELECT 1 FROM trips t
                LEFT JOIN trip_members m1 ON m1.trip_id = t.id AND m1.user_id = ?
                LEFT JOIN trip_members m2 ON m2.trip_id = t.id AND m2.user_id = ?
@@ -83,18 +98,20 @@ describe('R3J-PARITY (Plan 3j Task 7 fix wave, must-land 4c)', () => {
   });
 
   it('Trips.existsById == legacy row-exists SQL, including a miss', async () => {
-    seed();
+    await seed();
     const repo = t.repo(Trips);
     for (const id of [1, 2, 3, 4, 99]) {
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = !!testDb.prepare('SELECT 1 FROM trips WHERE id = ?').get(id);
       expect(await repo.existsById(id)).toBe(legacy);
     }
   });
 
   it('HR1 Users.findPublicIdentity == legacy row (full key, key order) and miss', async () => {
-    seed();
+    await seed();
     const repo = t.repo(Users);
     for (let i = 1; i <= 7; i++) {
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = testDb.prepare('SELECT id, username, display_name, avatar FROM users WHERE id = ?').get(i);
       const converted = (await repo.findPublicIdentity(i)) ?? undefined;
       // JSON.stringify: same keys, same order, same values — catches M15 (key order)
@@ -110,32 +127,30 @@ describe('R3J-PARITY (Plan 3j Task 7 fix wave, must-land 4c)', () => {
   });
 
   it('CT1/CT2 Days.listIdsByTrip + MR9 Days.findTripId == legacy', async () => {
-    seed();
+    await seed();
     const repo = t.repo(Days);
     for (const trip of [1, 2, 3, 99]) {
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = (testDb.prepare('SELECT id FROM days WHERE trip_id = ?').all(trip) as Array<{ id: number }>).map((r) => r.id);
       expect(await repo.listIdsByTrip(trip)).toEqual(legacy);
     }
     for (const id of [11, 12, 99]) {
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       const legacy = (testDb.prepare('SELECT trip_id FROM days WHERE id = ?').get(id) as { trip_id: number } | undefined)?.trip_id;
       expect(await repo.findTripId(id)).toEqual(legacy);
     }
   });
 
   it('MR1-MR6 PluginEntityMetadata repository == legacy statements', async () => {
-    seed();
+    await seed();
     const repo = t.repo(PluginEntityMetadata);
     await repo.upsertValue('p', 'trip', 1, 'b', '"1"');
     await repo.upsertValue('p', 'trip', 1, 'a', '"2"');
     await repo.upsertValue('q', 'trip', 1, 'a', '"x"');
-    const before = testDb.prepare("SELECT updated_at FROM plugin_entity_metadata WHERE plugin_id='p' AND key='b'").get() as { updated_at: string };
-    testDb.prepare("UPDATE plugin_entity_metadata SET updated_at='2000-01-01 00:00:00' WHERE plugin_id='p' AND key='b'").run();
+    const before = await metadataRow('p', 'b');
+    await updateRows(t, PluginEntityMetadata, { plugin_id: 'p', key: 'b' }, { updated_at: '2000-01-01 00:00:00' });
     await repo.upsertValue('p', 'trip', 1, 'b', '"3"');
-    const after = testDb.prepare("SELECT id, value, updated_at FROM plugin_entity_metadata WHERE plugin_id='p' AND key='b'").get() as {
-      id: number;
-      value: string;
-      updated_at: string;
-    };
+    const after = await metadataRow('p', 'b');
     expect(after.value).toBe('"3"'); // MR4: upsert replaces the value
     expect(after.updated_at).not.toBe('2000-01-01 00:00:00'); // MR4: updated_at refreshed on conflict
     expect(after.updated_at).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/);
@@ -144,19 +159,29 @@ describe('R3J-PARITY (Plan 3j Task 7 fix wave, must-land 4c)', () => {
     expect(await repo.findValue('p', 'trip', 1, 'zz')).toBeNull(); // MR1 miss
     expect(await repo.countForEntity('p', 'trip', 1)).toBe(2); // MR3
     expect(await repo.listForEntity('p', 'trip', 1)).toEqual(
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       testDb.prepare("SELECT key, value FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? ORDER BY key").all('p', 'trip', 1),
     ); // MR5, ORDER BY key
     expect(await repo.deleteValue('p', 'trip', 1, 'a')).toBe(true); // MR6
     expect(await repo.deleteValue('p', 'trip', 1, 'a')).toBe(false); // MR6, already gone
-    expect(testDb.prepare('SELECT COUNT(*) c FROM plugin_entity_metadata').get()).toEqual({ c: 2 }); // 'p'/'b' + 'q'/'a' survive
+    expect(await countRows(t, PluginEntityMetadata)).toBe(2); // 'p'/'b' + 'q'/'a' survive
   });
 
   it('HR5-HR8 PluginScheduledTasks repository == legacy statements (upsert keeps id, replaces fields)', async () => {
     const repo = t.repo(PluginScheduledTasks);
     await repo.upsertTask({ plugin_id: 'p', name: 'n', due_at: 5, payload: '1', every_ms: null });
-    const id1 = (testDb.prepare("SELECT id FROM plugin_scheduled_tasks WHERE name='n'").get() as { id: number }).id;
+    const id1 = (await findRow(t, PluginScheduledTasks, { name: 'n' }))!.id;
     await repo.upsertTask({ plugin_id: 'p', name: 'n', due_at: 9, payload: '2', every_ms: 60000 });
-    expect(testDb.prepare('SELECT id, plugin_id, name, due_at, payload, every_ms FROM plugin_scheduled_tasks').all()).toEqual([
+    expect(
+      (await findRows(t, PluginScheduledTasks)).map(({ id, plugin_id, name, due_at, payload, every_ms }) => ({
+        id,
+        plugin_id,
+        name,
+        due_at,
+        payload,
+        every_ms,
+      })),
+    ).toEqual([
       { id: id1, plugin_id: 'p', name: 'n', due_at: 9, payload: '2', every_ms: 60000 },
     ]); // HR7: same id, replaced fields — an upsert, not a delete+insert
     expect(await repo.existsForPluginAndName('p', 'n')).toBeTruthy(); // HR5
@@ -170,14 +195,14 @@ describe('R3J-PARITY (Plan 3j Task 7 fix wave, must-land 4c)', () => {
     const repo = t.repo(PluginScheduledTasks);
     const now = Date.now();
     await repo.upsertTask({ plugin_id: 'p', name: 'claim', due_at: now - 1000, payload: '1', every_ms: 60000 });
-    const id = (testDb.prepare("SELECT id FROM plugin_scheduled_tasks WHERE name='claim'").get() as { id: number }).id;
+    const id = (await findRow(t, PluginScheduledTasks, { name: 'claim' }))!.id;
     // The winning claim: due_at <= claimedFromDueAt (the row's own current due_at).
     expect(await repo.rearm(id, now + 60000, now - 1000)).toBe(true);
     // A second, losing claim against the SAME stale claimedFromDueAt now fails — the
     // row's due_at already moved forward past it (RACE-SCHED-001/002's guard).
     expect(await repo.rearm(id, now + 120000, now - 1000)).toBe(false);
-    const row = testDb.prepare('SELECT due_at FROM plugin_scheduled_tasks WHERE id = ?').get(id) as { due_at: number };
-    expect(row.due_at).toBe(now + 60000); // the losing rearm never wrote
+    const row = await findRow(t, PluginScheduledTasks, { id });
+    expect(row?.due_at).toBe(now + 60000); // the losing rearm never wrote
     // deleteById carries the identical guard shape for the one-shot branch.
     expect(await repo.deleteById(id, now - 1000)).toBe(false); // stale claim, no-op
     expect(await repo.deleteById(id, now + 60000)).toBe(true); // current due_at, claims + deletes
@@ -196,7 +221,7 @@ describe('R3J-PARITY (Plan 3j Task 7 fix wave, must-land 4c)', () => {
     );
     expect(results.filter(Boolean).length).toBe(100); // exactly 100 writes accepted
     expect(await repo.countForEntity('capbomb', 'trip', 1)).toBe(100); // never more than 100 rows
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugin_entity_metadata WHERE plugin_id='capbomb'").get()).toEqual({ c: 100 });
+    expect(await countRows(t, PluginEntityMetadata, { plugin_id: 'capbomb' })).toBe(100);
   });
 
   it('must-land 3: 130 concurrent PluginScheduledTasks.upsertTaskCapped calls for the SAME plugin, 130 DIFFERENT new names, never exceed the 100 cap', async () => {
@@ -207,6 +232,6 @@ describe('R3J-PARITY (Plan 3j Task 7 fix wave, must-land 4c)', () => {
     );
     expect(results.filter(Boolean).length).toBe(100); // exactly 100 writes accepted
     expect(await repo.countForPlugin('schedbomb')).toBe(100); // never more than 100 rows
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugin_scheduled_tasks WHERE plugin_id='schedbomb'").get()).toEqual({ c: 100 });
+    expect(await countRows(t, PluginScheduledTasks, { plugin_id: 'schedbomb' })).toBe(100);
   });
 });

@@ -40,7 +40,19 @@ import path from 'node:path';
 import { UserProfileService } from '../../../src/nest/auth/user-profile.service';
 import { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
-import { createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { updateRows } from '../../helpers/factories/rows';
+import { readUser } from '../../helpers/factories/users';
+import { readAppSetting, setAppSetting } from '../../helpers/factories/settings';
+import { Users } from '../../../src/db/entities/Users.entity';
+
+/** Writes columns of the user row directly, the state a case starts from. */
+async function setUserColumns(
+  userId: number,
+  data: { maps_api_key?: string | null; openweather_api_key?: string | null; avatar?: string | null },
+): Promise<void> {
+  await updateRows(await sharedTestOrm(testDb), Users, { id: userId }, data);
+}
 import { SEARCH_TEXT_FIELD_MASK } from '../../../src/nest/maps/maps.helpers';
 
 const avatarsFx = makeStorageFixture('avatars/');
@@ -141,9 +153,7 @@ describe('getSettings', () => {
 
   it('AUTH-DB-010: returns maps_api_key and openweather_api_key for admin', async () => {
     const { user } = createAdmin(testDb);
-    testDb
-      .prepare('UPDATE users SET maps_api_key = ?, openweather_api_key = ? WHERE id = ?')
-      .run('maps-key-value', 'weather-key-value', user.id);
+    await setUserColumns(user.id, { maps_api_key: 'maps-key-value', openweather_api_key: 'weather-key-value' });
     const result = await profile.getSettings(user.id);
     expect(result.status).toBeUndefined();
     expect(result.settings).toBeDefined();
@@ -233,7 +243,7 @@ describe('validateKeys', () => {
 
   it('AUTH-DB-017: returns { maps: true } when fetch returns 200', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('test-key', user.id);
+    await setUserColumns(user.id, { maps_api_key: 'test-key' });
 
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       status: 200,
@@ -250,7 +260,7 @@ describe('validateKeys', () => {
 
   it('AUTH-DB-018: returns { maps: false } when fetch throws a network error', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('test-key', user.id);
+    await setUserColumns(user.id, { maps_api_key: 'test-key' });
 
     const fetchSpy = vi
       .spyOn(global, 'fetch')
@@ -266,7 +276,7 @@ describe('validateKeys', () => {
 
   it('AUTH-DB-098: sends Referer from APP_URL so referrer-restricted keys validate like real requests', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('test-key', user.id);
+    await setUserColumns(user.id, { maps_api_key: 'test-key' });
 
     const prevAppUrl = process.env.APP_URL;
     process.env.APP_URL = 'https://trek.example.com';
@@ -315,8 +325,8 @@ describe('validateKeys', () => {
     // What a second admin sees after the instance key was saved by the first
     // one: their column still holds whatever they pasted long ago, while every
     // search on the install runs on the app_settings row.
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('stale-personal-key', user.id);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('maps_api_key', 'live-instance-key')").run();
+    await setUserColumns(user.id, { maps_api_key: 'stale-personal-key' });
+    await setAppSetting(await sharedTestOrm(testDb), 'maps_api_key', 'live-instance-key');
 
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
       status: 200,
@@ -351,9 +361,9 @@ describe('updateMapsKey / avatar', () => {
 
   it('AUTH-DB-070: deleteAvatar nulls the column; an OIDC https avatar skips the file rm', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('https://idp/pic.jpg', user.id);
+    await setUserColumns(user.id, { avatar: 'https://idp/pic.jpg' });
     expect(await profile.deleteAvatar(user.id)).toEqual({ success: true });
-    const row = testDb.prepare('SELECT avatar FROM users WHERE id = ?').get(user.id) as { avatar: string | null };
+    const row = await readUser(await sharedTestOrm(testDb), user.id);
     expect(row.avatar).toBeNull();
   });
 
@@ -368,7 +378,7 @@ describe('updateMapsKey / avatar', () => {
   it('AUTH-DB-069b: saveAvatar reclaims the previous uploaded avatar file', async () => {
     const { user } = createUser(testDb);
     const old = writeAvatar('old.png');
-    testDb.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('old.png', user.id);
+    await setUserColumns(user.id, { avatar: 'old.png' });
 
     await profile.saveAvatar(user.id, 'new.png');
     expect(fs.existsSync(old)).toBe(false);
@@ -377,7 +387,7 @@ describe('updateMapsKey / avatar', () => {
   it('AUTH-DB-070b: deleteAvatar removes the uploaded avatar file', async () => {
     const { user } = createUser(testDb);
     const fp = writeAvatar('mine.png');
-    testDb.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('mine.png', user.id);
+    await setUserColumns(user.id, { avatar: 'mine.png' });
 
     expect(await profile.deleteAvatar(user.id)).toEqual({ success: true });
     expect(fs.existsSync(fp)).toBe(false);
@@ -385,7 +395,7 @@ describe('updateMapsKey / avatar', () => {
 
   it('AUTH-DB-070c: a hostile stored avatar value is swallowed, never thrown', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('../../etc/passwd', user.id);
+    await setUserColumns(user.id, { avatar: '../../etc/passwd' });
     // Central key validation rejects the value; the delete swallows it exactly
     // like the old rm().catch did — the DB update still wins.
     expect(await profile.deleteAvatar(user.id)).toEqual({ success: true });
@@ -408,17 +418,16 @@ describe('profile quirk fixes', () => {
 // tests/integration/security.test.ts, which runs with a real ENCRYPTION_KEY.
 // ---------------------------------------------------------------------------
 
-const instanceRow = (key: string) =>
-  (testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+const instanceRow = async (key: string) => (await readAppSetting(await sharedTestOrm(testDb), key)) ?? undefined;
 
 describe('instance-wide API keys', () => {
   it('AUTH-DB-102: an admin save lands in app_settings AND in their own column', async () => {
     const { user } = createAdmin(testDb);
     await profile.updateApiKeys(user.id, { maps_api_key: 'instance-google-key', unsplash_api_key: 'instance-unsplash-key' });
-    expect(instanceRow('maps_api_key')).toBe('instance-google-key');
-    expect(instanceRow('unsplash_api_key')).toBe('instance-unsplash-key');
+    expect(await instanceRow('maps_api_key')).toBe('instance-google-key');
+    expect(await instanceRow('unsplash_api_key')).toBe('instance-unsplash-key');
     // The column stays in step so clearing the field clears both.
-    const row = testDb.prepare('SELECT maps_api_key FROM users WHERE id = ?').get(user.id) as { maps_api_key: string };
+    const row = await readUser(await sharedTestOrm(testDb), user.id);
     expect(row.maps_api_key).toBe('instance-google-key');
   });
 
@@ -427,8 +436,8 @@ describe('instance-wide API keys', () => {
     await profile.updateApiKeys(admin.id, { maps_api_key: 'admin-set' });
     const { user } = createUser(testDb);
     await profile.updateApiKeys(user.id, { maps_api_key: 'members-own' });
-    expect(instanceRow('maps_api_key')).toBe('admin-set');
-    const row = testDb.prepare('SELECT maps_api_key FROM users WHERE id = ?').get(user.id) as { maps_api_key: string };
+    expect(await instanceRow('maps_api_key')).toBe('admin-set');
+    const row = await readUser(await sharedTestOrm(testDb), user.id);
     expect(row.maps_api_key).toBe('members-own');
   });
 
@@ -438,13 +447,13 @@ describe('instance-wide API keys', () => {
     await profile.updateApiKeys(user.id, { maps_api_key: '' });
     // '' and not a missing row: a missing row would fall through to whatever
     // still sat in the admin's own column.
-    expect(instanceRow('maps_api_key')).toBe('');
+    expect(await instanceRow('maps_api_key')).toBe('');
   });
 
   it('AUTH-DB-105: getSettings reads the instance value, not the admin own column', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('stale-personal-key', user.id);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('maps_api_key', 'live-instance-key')").run();
+    await setUserColumns(user.id, { maps_api_key: 'stale-personal-key' });
+    await setAppSetting(await sharedTestOrm(testDb), 'maps_api_key', 'live-instance-key');
     expect((await profile.getSettings(user.id)).settings?.maps_api_key).toBe('live-instance-key');
     // openweather is per-user and unaffected.
     expect((await profile.getSettings(user.id)).settings?.openweather_api_key).toBeNull();
@@ -453,10 +462,10 @@ describe('instance-wide API keys', () => {
   it('AUTH-DB-106: updateMapsKey mirrors for an admin and stays personal for a member', async () => {
     const { user: admin } = createAdmin(testDb);
     expect((await profile.updateMapsKey(admin.id, 'via-maps-key-route')).changedKeys).toEqual(['maps_api_key']);
-    expect(instanceRow('maps_api_key')).toBe('via-maps-key-route');
+    expect(await instanceRow('maps_api_key')).toBe('via-maps-key-route');
     const { user } = createUser(testDb);
     await profile.updateMapsKey(user.id, 'members-own');
-    expect(instanceRow('maps_api_key')).toBe('via-maps-key-route');
+    expect(await instanceRow('maps_api_key')).toBe('via-maps-key-route');
   });
 
   it('AUTH-DB-107: updateSettings mirrors the key half without touching name/email handling', async () => {
@@ -464,7 +473,7 @@ describe('instance-wide API keys', () => {
     const result = await profile.updateSettings(user.id, { maps_api_key: 'from-settings-route', username: 'renamed' });
     expect(result.success).toBe(true);
     expect(result.user?.username).toBe('renamed');
-    expect(instanceRow('maps_api_key')).toBe('from-settings-route');
+    expect(await instanceRow('maps_api_key')).toBe('from-settings-route');
     expect(result.changedKeys).toEqual(['maps_api_key']);
   });
 });
@@ -497,7 +506,7 @@ describe('changedKeys', () => {
       const result = await profile.updateApiKeys(user.id, { maps_api_key: 'operator-owns-this' });
       expect(result.managed_keys).toEqual(['maps_api_key']);
       expect(result.changedKeys).toEqual([]);
-      expect(instanceRow('maps_api_key')).toBeUndefined();
+      expect(await instanceRow('maps_api_key')).toBeUndefined();
       expect((await profile.updateMapsKey(user.id, 'operator-owns-this')).changedKeys).toEqual([]);
       expect((await profile.updateSettings(user.id, { maps_api_key: 'operator-owns-this' })).changedKeys).toEqual([]);
     } finally {

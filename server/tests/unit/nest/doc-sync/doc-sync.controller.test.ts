@@ -73,6 +73,14 @@ import type {
 import type { User } from '../../../../src/types';
 import { createTestUnitOfWork, createTestTripsRepo } from '../../../helpers/test-uow';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { deleteRows, findRow, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { addTripMember } from '../../../helpers/factories/trips';
+import { DocumentConnections } from '../../../../src/db/entities/DocumentConnections.entity';
+import { DocumentProviders } from '../../../../src/db/entities/DocumentProviders.entity';
+import { DocumentSyncItems } from '../../../../src/db/entities/DocumentSyncItems.entity';
+import { TripDocumentLinks } from '../../../../src/db/entities/TripDocumentLinks.entity';
+import { TripFiles } from '../../../../src/db/entities/TripFiles.entity';
+import { TripMembers } from '../../../../src/db/entities/TripMembers.entity';
 import {
   createTestDocumentConnectionsRepo,
   createTestDocumentProviderFieldsRepo,
@@ -126,23 +134,11 @@ const sync = {
   // real read against this file's own testDb, not a stub: "the document
   // list" describe block below is testing the join/trip-scoping SHAPE this
   // method now owns, and a canned return would only restate the assertion.
-  itemsForTrip: vi.fn((tripId: number, state?: string) =>
-    state
-      ? testDb
-          .prepare(
-            `SELECT i.*, f.original_name AS file_name FROM document_sync_items i
-               LEFT JOIN trip_files f ON f.id = i.file_id
-              WHERE i.trip_id = ? AND i.state = ? ORDER BY i.id DESC LIMIT 500`,
-          )
-          .all(tripId, state)
-      : testDb
-          .prepare(
-            `SELECT i.*, f.original_name AS file_name FROM document_sync_items i
-               LEFT JOIN trip_files f ON f.id = i.file_id
-              WHERE i.trip_id = ? ORDER BY i.id DESC LIMIT 500`,
-          )
-          .all(tripId),
-  ),
+  // It answers through the same two repository reads DocSyncService makes.
+  itemsForTrip: vi.fn(async (tripId: number, state?: string) => {
+    const items = await createTestDocumentSyncItemsRepo(testDb);
+    return state ? items.listForTripByState(tripId, state) : items.listForTrip(tripId);
+  }),
 };
 
 const registry = new DocumentProviderRegistry([paperless, nextcloud] as unknown as DocumentProvider[]);
@@ -228,7 +224,7 @@ beforeAll(async () => {
   admin = { id: a.id, role: 'admin' } as User;
   tripId = createTrip(testDb, o.id, { title: 'Japan' }).id;
   otherTripId = createTrip(testDb, m.id, { title: 'Norway' }).id;
-  testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, m.id);
+  await addTripMember(t, tripId, m.id);
 });
 
 afterAll(async () => {
@@ -236,11 +232,14 @@ afterAll(async () => {
   testDb.close();
 });
 
-beforeEach(() => {
-  testDb.exec('DELETE FROM document_sync_items; DELETE FROM trip_document_links; DELETE FROM document_connections; DELETE FROM trip_files');
+beforeEach(async () => {
+  await deleteRows(t, DocumentSyncItems);
+  await deleteRows(t, TripDocumentLinks);
+  await deleteRows(t, DocumentConnections);
+  await deleteRows(t, TripFiles);
   // Providers ship switched off; these three are what the cases below need.
-  testDb.prepare("UPDATE document_providers SET enabled = 0").run();
-  testDb.prepare("UPDATE document_providers SET enabled = 1 WHERE id IN ('paperless', 'nextcloud', 'papra')").run();
+  await updateRows(t, DocumentProviders, {}, { enabled: 0 });
+  await updateRows(t, DocumentProviders, { id: { $in: ['paperless', 'nextcloud', 'papra'] } }, { enabled: 1 });
   vi.clearAllMocks();
 });
 
@@ -330,7 +329,7 @@ describe('storing a connection', () => {
   });
 
   it('refuses a provider the instance admin has not switched on, and names it', async () => {
-    testDb.prepare("UPDATE document_providers SET enabled = 0 WHERE id = 'papra'").run();
+    await updateRows(t, DocumentProviders, { id: 'papra' }, { enabled: 0 });
     const err = await thrown(() =>
       controller.upsertConnection(String(tripId), owner, connBody({ providerId: 'papra', credentials: { api_key: 'k', organization_id: 'org_1' } })),
     );
@@ -428,7 +427,7 @@ describe('a secret the adapter earned itself', () => {
   const EARNED = 'a1b2c3:DEVICE-SECRET';
 
   it('is in neither connection payload the form is rendered from', async () => {
-    testDb.prepare("UPDATE document_providers SET enabled = 1 WHERE id = 'synologydrive'").run();
+    await updateRows(t, DocumentProviders, { id: 'synologydrive' }, { enabled: 1 });
     const nas = connBody({
       providerId: 'synologydrive',
       baseUrl: 'https://nas.example.com:5001',
@@ -480,14 +479,11 @@ describe('reading the trip state', () => {
 describe('removing a connection', () => {
   it('unbinds without touching the documents that came through it', async () => {
     const conn = await storedPaperless();
-    const fileId = Number(
-      testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)')
-        .run(tripId, 'stored.pdf', 'boarding.pdf').lastInsertRowid,
-    );
+    const fileId = await insertRow(t, TripFiles, { trip: tripId, filename: 'stored.pdf', original_name: 'boarding.pdf' });
 
     await expect(controller.deleteConnection(String(tripId), String(conn.id), owner)).resolves.toEqual({ success: true });
     expect(await config.getConnection(conn.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM trip_files WHERE id = ?').get(fileId)).toBeTruthy();
+    expect(await findRow(t, TripFiles, { id: fileId })).toBeTruthy();
   });
 
   it('takes down every subscription TREK registered for its bindings, before the credential goes', async () => {
@@ -577,10 +573,12 @@ describe('the scope picker', () => {
   });
 
   it('refuses a connection whose provider has no adapter on this instance', async () => {
-    const id = Number(
-      testDb.prepare('INSERT INTO document_connections (trip_id, provider_id, owner_user_id, base_url) VALUES (?, ?, ?, ?)')
-        .run(tripId, 'papra', Number(owner.id), 'https://papra.example.com').lastInsertRowid,
-    );
+    const id = await insertRow(t, DocumentConnections, {
+      trip: tripId,
+      provider: 'papra',
+      ownerUser: Number(owner.id),
+      base_url: 'https://papra.example.com',
+    });
     const err = await thrown(() => controller.listScopes(String(tripId), String(id), owner));
     expect(err.getStatus()).toBe(400);
     expect(err.message).toBe('Provider not available');
@@ -780,7 +778,7 @@ describe('a manual run', () => {
     if ('error' in res) throw new Error('fixture failed');
     const created = (await controller.createLink(String(tripId), owner, linkBody(res.data.id, { syncEnabled: false }), makeReq())) as { id: number };
     sync.syncLink.mockClear();
-    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(tripId, member.id);
+    await deleteRows(t, TripMembers, { trip: tripId, user: member.id });
     try {
       const err = await thrown(() => controller.syncNow(String(tripId), String(created.id), { full: false }));
 
@@ -788,7 +786,7 @@ describe('a manual run', () => {
       expect(sync.retryShelvedItems).not.toHaveBeenCalled();
       expect(sync.syncLink).not.toHaveBeenCalled();
     } finally {
-      testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member.id);
+      await addTripMember(t, tripId, member.id);
     }
   });
 });
@@ -796,21 +794,19 @@ describe('a manual run', () => {
 describe('the document list', () => {
   async function seedItems() {
     const conn = await storedPaperless();
-    const fileId = Number(
-      testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)')
-        .run(tripId, 'stored.pdf', 'boarding.pdf').lastInsertRowid,
-    );
-    const linkId = Number(
-      testDb.prepare(
-        `INSERT INTO trip_document_links (trip_id, connection_id, provider_id, remote_scope_key)
-         VALUES (?, ?, ?, ?)`,
-      ).run(tripId, conn.id, 'paperless', 'tag:1').lastInsertRowid,
-    );
-    const insert = testDb.prepare('INSERT INTO document_sync_items (link_id, trip_id, file_id, trek_doc_uid, state) VALUES (?, ?, ?, ?, ?)');
-    insert.run(linkId, tripId, fileId, 'uid-1', 'synced');
-    insert.run(linkId, tripId, null, 'uid-2', 'conflict');
+    const fileId = await insertRow(t, TripFiles, { trip: tripId, filename: 'stored.pdf', original_name: 'boarding.pdf' });
+    const linkId = await insertRow(t, TripDocumentLinks, {
+      trip: tripId,
+      connection: conn.id,
+      provider_id: 'paperless',
+      remote_scope_key: 'tag:1',
+    });
+    const insert = (trip: number, file: number | null, trekDocUid: string, state: string) =>
+      insertRow(t, DocumentSyncItems, { link: linkId, trip, file, trek_doc_uid: trekDocUid, state });
+    await insert(tripId, fileId, 'uid-1', 'synced');
+    await insert(tripId, null, 'uid-2', 'conflict');
     // Another trip's row, which must never appear in this trip's list.
-    insert.run(linkId, otherTripId, null, 'uid-3', 'conflict');
+    await insert(otherTripId, null, 'uid-3', 'conflict');
   }
 
   it('carries the local file name, so the list reads as documents rather than as ids', async () => {
@@ -845,20 +841,15 @@ describe('removing a binding', () => {
       linkBody(conn.id),
       makeReq({ host: 'trek.example' }),
     )) as { id: number };
-    const fileId = Number(
-      testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)')
-        .run(tripId, 'stored.pdf', 'boarding.pdf').lastInsertRowid,
-    );
-    testDb
-      .prepare('INSERT INTO document_sync_items (link_id, trip_id, file_id, trek_doc_uid, state) VALUES (?, ?, ?, ?, ?)')
-      .run(created.id, tripId, fileId, 'uid-1', 'synced');
+    const fileId = await insertRow(t, TripFiles, { trip: tripId, filename: 'stored.pdf', original_name: 'boarding.pdf' });
+    await insertRow(t, DocumentSyncItems, { link: created.id, trip: tripId, file: fileId, trek_doc_uid: 'uid-1', state: 'synced' });
 
     const res = await controller.deleteLink(String(tripId), String(created.id), owner);
 
     expect(res).toEqual({ success: true, documentsKept: true });
     expect(paperless.unregisterWebhook.mock.calls[0][1]).toBe('sub-7');
     expect(await config.getLink(created.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM trip_files WHERE id = ?').get(fileId)).toBeTruthy();
+    expect(await findRow(t, TripFiles, { id: fileId })).toBeTruthy();
   });
 
   it('pings the trip that the binding is gone', async () => {

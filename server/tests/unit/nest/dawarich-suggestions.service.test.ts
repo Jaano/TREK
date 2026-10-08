@@ -42,6 +42,13 @@ import type { JourneyDomainService } from '../../../src/nest/journey/journey-dom
 import type { DawarichVisitSuggestionsRepository } from '../../../src/db/repositories/DawarichVisitSuggestions.repository';
 import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import { BucketList } from '../../../src/db/entities/BucketList.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { DawarichVisitSuggestions } from '../../../src/db/entities/DawarichVisitSuggestions.entity';
+import { Journeys } from '../../../src/db/entities/Journeys.entity';
+import { JourneyEntries } from '../../../src/db/entities/JourneyEntries.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { VisitedCountries } from '../../../src/db/entities/VisitedCountries.entity';
+import { countRows, deleteRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
 import type { PlacesRepository } from '../../../src/db/repositories/Places.repository';
 import type { BucketListRepository } from '../../../src/db/repositories/BucketList.repository';
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
@@ -137,8 +144,10 @@ const CREATED_ENTRY_ID = 7702;
  * the acceptance fail on the constraint instead of on anything a case is about.
  */
 function insertPlaceRow(tripId: string, body: { name?: string; lat?: number; lng?: number }): { id: number } {
+  // test-sql-allow: runs inside the service's open transaction, on the connection that transaction holds.
   const category = testDb.prepare('SELECT id FROM categories LIMIT 1').get() as { id: number } | undefined;
   const result = testDb
+    // test-sql-allow: runs inside the service's open transaction, on the connection that transaction holds.
     .prepare('INSERT INTO places (trip_id, name, lat, lng, category_id) VALUES (?, ?, ?, ?, ?)')
     .run(Number(tripId), body.name ?? 'Imported stay', body.lat ?? null, body.lng ?? null, category?.id ?? null);
   return { id: Number(result.lastInsertRowid) };
@@ -167,8 +176,8 @@ function armStubs(): void {
   assignmentsStub.dayExists
     .mockReset()
     .mockImplementation(
-      (dayId: unknown, tripId: unknown) =>
-        !!testDb.prepare('SELECT id FROM days WHERE id = ? AND trip_id = ?').get(dayId, tripId),
+      async (dayId: unknown, tripId: unknown) =>
+        !!(await findRow(t, Days, { id: Number(dayId), trip: Number(tripId) })),
     );
   placesStub.broadcast.mockReset();
   placesStub.onCreated.mockReset();
@@ -198,56 +207,33 @@ interface SuggestionSeed {
 
 let _visitSeq = 0;
 
-function seedSuggestion(seed: SuggestionSeed): number {
+async function seedSuggestion(seed: SuggestionSeed): Promise<number> {
   _visitSeq++;
-  const result = testDb
-    .prepare(
-      `INSERT INTO dawarich_visit_suggestions
-         (user_id, source_visit_id, trip_id, name, lat, lng, started_at, ended_at,
-          duration_minutes, local_date, state, matched_bucket_list_item_id, source_hash)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      seed.userId,
-      `visit-${_visitSeq}`,
-      seed.tripId ?? null,
-      seed.name ?? 'Cafe Central',
-      seed.lat === undefined ? 48.2092 : seed.lat,
-      seed.lng === undefined ? 16.3658 : seed.lng,
-      seed.startedAt ?? '2026-09-01T09:30:00Z',
-      seed.endedAt ?? '2026-09-01T11:45:00Z',
-      seed.durationMinutes ?? 135,
-      seed.localDate ?? '2026-09-01',
-      seed.state ?? 'new',
-      seed.matchedBucketListItemId ?? null,
-      seed.sourceHash ?? `hash-${_visitSeq}`,
-    );
-  return Number(result.lastInsertRowid);
+  return insertRow(t, DawarichVisitSuggestions, {
+    user: seed.userId,
+    source_visit_id: `visit-${_visitSeq}`,
+    trip: seed.tripId ?? null,
+    name: seed.name ?? 'Cafe Central',
+    lat: seed.lat === undefined ? 48.2092 : seed.lat,
+    lng: seed.lng === undefined ? 16.3658 : seed.lng,
+    started_at: seed.startedAt ?? '2026-09-01T09:30:00Z',
+    ended_at: seed.endedAt ?? '2026-09-01T11:45:00Z',
+    duration_minutes: seed.durationMinutes ?? 135,
+    local_date: seed.localDate ?? '2026-09-01',
+    state: seed.state ?? 'new',
+    matchedBucketListItem: seed.matchedBucketListItemId ?? null,
+    source_hash: seed.sourceHash ?? `hash-${_visitSeq}`,
+  });
 }
 
-interface SuggestionRow {
-  id: number;
-  state: string;
-  target: string | null;
-  accepted_place_id: number | null;
-  accepted_journal_entry_id: number | null;
-  accepted_bucket_list_item_id: number | null;
-  source_hash: string;
-  accepted_hash: string | null;
+/** The stored suggestion; fails the case when it is gone. */
+async function rowOf(id: number) {
+  const row = await findRow(t, DawarichVisitSuggestions, { id });
+  if (!row) throw new Error(`no suggestion ${id}`);
+  return row;
 }
 
-function rowOf(id: number): SuggestionRow {
-  return testDb.prepare('SELECT * FROM dawarich_visit_suggestions WHERE id = ?').get(id) as SuggestionRow;
-}
-
-interface BucketRow {
-  id: number;
-  name: string;
-  visited_at: string | null;
-  visited_source: string | null;
-}
-
-function seedBucketItem(
+async function seedBucketItem(
   userId: number,
   overrides: Partial<{
     name: string;
@@ -256,24 +242,22 @@ function seedBucketItem(
     visitedAt: string | null;
     visitedSource: string | null;
   }> = {},
-): number {
-  const result = testDb
-    .prepare(
-      'INSERT INTO bucket_list (user_id, name, lat, lng, visited_at, visited_source) VALUES (?, ?, ?, ?, ?, ?)',
-    )
-    .run(
-      userId,
-      overrides.name ?? 'Zell am See',
-      overrides.lat === undefined ? 47.3232 : overrides.lat,
-      overrides.lng === undefined ? 12.7981 : overrides.lng,
-      overrides.visitedAt ?? null,
-      overrides.visitedSource ?? null,
-    );
-  return Number(result.lastInsertRowid);
+): Promise<number> {
+  return insertRow(t, BucketList, {
+    user: userId,
+    name: overrides.name ?? 'Zell am See',
+    lat: overrides.lat === undefined ? 47.3232 : overrides.lat,
+    lng: overrides.lng === undefined ? 12.7981 : overrides.lng,
+    visited_at: overrides.visitedAt ?? null,
+    visited_source: overrides.visitedSource ?? null,
+  });
 }
 
-function bucketOf(id: number): BucketRow {
-  return testDb.prepare('SELECT * FROM bucket_list WHERE id = ?').get(id) as BucketRow;
+/** The stored wish; fails the case when it is gone. */
+async function bucketOf(id: number) {
+  const row = await findRow(t, BucketList, { id });
+  if (!row) throw new Error(`no bucket list item ${id}`);
+  return row;
 }
 
 /**
@@ -311,8 +295,8 @@ describe('DawarichSuggestionsService — the review list', () => {
   it("DAWARICH-SUG-001: list() is scoped in SQL — a stranger's suggestion never appears", async () => {
     const { user: mine } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const mineId = seedSuggestion({ userId: mine.id, name: 'Volksgarten' });
-    const strangerId = seedSuggestion({ userId: stranger.id, name: 'Their Kitchen' });
+    const mineId = await seedSuggestion({ userId: mine.id, name: 'Volksgarten' });
+    const strangerId = await seedSuggestion({ userId: stranger.id, name: 'Their Kitchen' });
 
     const list = await svc.list(mine.id, {});
 
@@ -329,10 +313,10 @@ describe('DawarichSuggestionsService — the review list', () => {
     const otherTrip = createTrip(testDb, user.id);
     const strangerTrip = createTrip(testDb, stranger.id);
 
-    const onTrip = seedSuggestion({ userId: user.id, tripId: trip.id, startedAt: '2026-09-03T08:00:00Z' });
-    const dismissed = seedSuggestion({ userId: user.id, tripId: trip.id, state: 'dismissed' });
-    seedSuggestion({ userId: user.id, tripId: otherTrip.id });
-    seedSuggestion({ userId: stranger.id, tripId: strangerTrip.id });
+    const onTrip = await seedSuggestion({ userId: user.id, tripId: trip.id, startedAt: '2026-09-03T08:00:00Z' });
+    const dismissed = await seedSuggestion({ userId: user.id, tripId: trip.id, state: 'dismissed' });
+    await seedSuggestion({ userId: user.id, tripId: otherTrip.id });
+    await seedSuggestion({ userId: stranger.id, tripId: strangerTrip.id });
 
     const byTrip = (await svc.list(user.id, { tripId: trip.id }))
       .suggestions.map((s) => s.id)
@@ -348,7 +332,7 @@ describe('DawarichSuggestionsService — the review list', () => {
 
   it('DAWARICH-SUG-003: list() carries the connection state so a panel needs no second request', async () => {
     const { user } = createUser(testDb);
-    seedSuggestion({ userId: user.id });
+    await seedSuggestion({ userId: user.id });
 
     const list = await svc.list(user.id, {});
 
@@ -362,7 +346,7 @@ describe('DawarichSuggestionsService — the review list', () => {
   it('DAWARICH-SUG-004: getOne() answers null for a suggestion that belongs to somebody else', async () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const theirs = seedSuggestion({ userId: stranger.id, name: 'Their Kitchen' });
+    const theirs = await seedSuggestion({ userId: stranger.id, name: 'Their Kitchen' });
 
     expect(await svc.getOne(user.id, theirs)).toBeNull();
     expect((await svc.getOne(stranger.id, theirs))?.name).toBe('Their Kitchen');
@@ -370,22 +354,19 @@ describe('DawarichSuggestionsService — the review list', () => {
 
   it('DAWARICH-SUG-059: the flags the panel warns with are read off the row, never acted on', async () => {
     const { user } = createUser(testDb);
-    const wish = seedBucketItem(user.id);
-    const id = seedSuggestion({ userId: user.id });
+    const wish = await seedBucketItem(user.id);
+    const id = await seedSuggestion({ userId: user.id });
     await svc.accept(user.id, id, { target: 'bucket_list', bucketListItemId: wish });
 
     // Everything a later sync is allowed to do to a row somebody already
     // accepted: the detector re-ran and the hash moved, it upgraded the stay
     // from suggested to confirmed, and then the visit disappeared from
     // Dawarich altogether. The tick the user made stands through all of it.
-    testDb
-      .prepare(
-        `UPDATE dawarich_visit_suggestions
-            SET source_hash = 'hash-after-redetection', source_status = 'confirmed',
-                source_missing_at = '2026-09-07T00:00:00Z'
-          WHERE id = ?`,
-      )
-      .run(id);
+    await updateRows(t, DawarichVisitSuggestions, { id }, {
+      source_hash: 'hash-after-redetection',
+      source_status: 'confirmed',
+      source_missing_at: '2026-09-07T00:00:00Z',
+    });
 
     const wire = (await svc.getOne(user.id, id))!;
     expect(wire.sourceStatus).toBe('confirmed');
@@ -404,14 +385,14 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
     const strangerTrip = createTrip(testDb, stranger.id);
-    const id = seedSuggestion({ userId: user.id });
+    const id = await seedSuggestion({ userId: user.id });
 
     const err = await asyncRefusalFrom(() => svc.accept(user.id, id, { target: 'place', tripId: strangerTrip.id }));
 
     expect(err.status).toBe(404);
     expect(err.code).toBe('not_found');
     expect(placesStub.create).not.toHaveBeenCalled();
-    expect(rowOf(id).state).toBe('new');
+    expect((await rowOf(id)).state).toBe('new');
   });
 
   it('DAWARICH-SUG-006: a day from another trip is a 400 — trip access is not day access', async () => {
@@ -419,7 +400,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     const trip = createTrip(testDb, user.id);
     const otherTrip = createTrip(testDb, user.id);
     const foreignDay = createDay(testDb, otherTrip.id, { date: '2026-09-01' });
-    const id = seedSuggestion({ userId: user.id });
+    const id = await seedSuggestion({ userId: user.id });
 
     const err = await asyncRefusalFrom(() =>
       svc.accept(user.id, id, { target: 'place', tripId: trip.id, dayId: foreignDay.id }),
@@ -431,7 +412,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     expect(assignmentsStub.dayExists).toHaveBeenCalledWith(foreignDay.id, trip.id);
     expect(placesStub.create).not.toHaveBeenCalled();
     expect(assignmentsStub.createAssignment).not.toHaveBeenCalled();
-    expect(rowOf(id).state).toBe('new');
+    expect((await rowOf(id)).state).toBe('new');
   });
 
   it('DAWARICH-SUG-007: a stay on a trip the caller is a member of becomes a place pinned to the day', async () => {
@@ -440,7 +421,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
     const day = createDay(testDb, trip.id, { date: '2026-09-01' });
-    const id = seedSuggestion({ userId: member.id, tripId: trip.id, name: 'Cafe Central' });
+    const id = await seedSuggestion({ userId: member.id, tripId: trip.id, name: 'Cafe Central' });
 
     const result = await svc.accept(member.id, id, {
       target: 'place',
@@ -467,7 +448,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     expect(result.createdJournalEntryId).toBeNull();
     expect(result.suggestion.state).toBe('accepted');
 
-    const row = rowOf(id);
+    const row = await rowOf(id);
     expect(row.target).toBe('place');
     expect(row.accepted_place_id).toBe(placeId);
     // The hash is frozen at acceptance, which is what makes "changed since" answerable.
@@ -488,16 +469,17 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     // the write", not merely "changed before either ran".
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id, sourceHash: 'hash-at-accept-start' });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id, sourceHash: 'hash-at-accept-start' });
 
     placesStub.create.mockImplementationOnce((tripId: string, body: { name?: string; lat?: number; lng?: number }) => {
+      // test-sql-allow: runs inside the service's open transaction, on the connection that transaction holds.
       testDb.prepare('UPDATE dawarich_visit_suggestions SET source_hash = ? WHERE id = ?').run('hash-changed-concurrently', id);
       return insertPlaceRow(tripId, body);
     });
 
     await svc.accept(user.id, id, { target: 'place', tripId: trip.id });
 
-    const row = rowOf(id);
+    const row = await rowOf(id);
     expect(row.source_hash).toBe('hash-changed-concurrently');
     // A bound-at-read-time literal would have frozen 'hash-at-accept-start'
     // here instead — the whole point of the column-ref form.
@@ -507,7 +489,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
 
   it('DAWARICH-SUG-008: a stay with no trip anywhere is a 400 rather than a place nobody can see', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id, tripId: null });
+    const id = await seedSuggestion({ userId: user.id, tripId: null });
 
     const err = await asyncRefusalFrom(() => svc.accept(user.id, id, { target: 'place' }));
 
@@ -522,7 +504,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     // the whole form decorative.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id, name: 'Unnamed stay' });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id, name: 'Unnamed stay' });
 
     await svc.accept(user.id, id, {
       target: 'place',
@@ -556,7 +538,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     // coast of Africa with a duration of "0 min" is worse than one with none.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id, lat: null, lng: null, durationMinutes: 0 });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id, lat: null, lng: null, durationMinutes: 0 });
 
     await svc.accept(user.id, id, { target: 'place', tripId: trip.id });
 
@@ -569,7 +551,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
   it('DAWARICH-SUG-045: with no trip in the body, the one the sync filed the stay under is used', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
 
     const result = await svc.accept(user.id, id, { target: 'place' });
 
@@ -584,7 +566,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     // time field.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({
+    const id = await seedSuggestion({
       userId: user.id,
       tripId: trip.id,
       startedAt: '2026-09-01',
@@ -603,7 +585,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const theirs = seedSuggestion({ userId: stranger.id });
+    const theirs = await seedSuggestion({ userId: stranger.id });
 
     const err = await asyncRefusalFrom(() => svc.accept(user.id, theirs, { target: 'place', tripId: trip.id }));
 
@@ -618,7 +600,7 @@ describe('DawarichSuggestionsService — accepting into a trip', () => {
 describe('DawarichSuggestionsService — accepting into a journey', () => {
   it('DAWARICH-SUG-010: a journey the caller may not edit refuses before createEntry is reached', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id });
+    const id = await seedSuggestion({ userId: user.id });
     journeyStub.canEdit.mockReturnValue(false);
 
     const err = await asyncRefusalFrom(() => svc.accept(user.id, id, { target: 'journal', journalId: 4242 }));
@@ -627,12 +609,12 @@ describe('DawarichSuggestionsService — accepting into a journey', () => {
     expect(err.status).toBe(404);
     expect(err.code).toBe('journal_forbidden');
     expect(journeyStub.createEntry).not.toHaveBeenCalled();
-    expect(rowOf(id).state).toBe('new');
+    expect((await rowOf(id)).state).toBe('new');
   });
 
   it('DAWARICH-SUG-011: a permitted journey gets a dated entry, with the socket id passed through', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id, name: 'Cafe Central', localDate: '2026-09-01' });
+    const id = await seedSuggestion({ userId: user.id, name: 'Cafe Central', localDate: '2026-09-01' });
 
     const result = await svc.accept(user.id, id, { target: 'journal', journalId: 88 }, 'socket-7');
 
@@ -653,7 +635,7 @@ describe('DawarichSuggestionsService — accepting into a journey', () => {
     expect(result.createdJournalEntryId).toBe(CREATED_ENTRY_ID);
     expect(result.createdPlaceId).toBeNull();
 
-    const row = rowOf(id);
+    const row = await rowOf(id);
     expect(row.state).toBe('accepted');
     expect(row.target).toBe('journal');
     expect(row.accepted_journal_entry_id).toBe(CREATED_ENTRY_ID);
@@ -661,7 +643,7 @@ describe('DawarichSuggestionsService — accepting into a journey', () => {
 
   it('DAWARICH-SUG-012: a journey id missing from the body is a 400, not a guess', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id });
+    const id = await seedSuggestion({ userId: user.id });
 
     const err = await asyncRefusalFrom(() => svc.accept(user.id, id, { target: 'journal' }));
 
@@ -672,7 +654,7 @@ describe('DawarichSuggestionsService — accepting into a journey', () => {
 
   it('DAWARICH-SUG-047: a corrected entry carries the corrections, not the recording', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id, name: 'Cafe Central', localDate: '2026-09-01' });
+    const id = await seedSuggestion({ userId: user.id, name: 'Cafe Central', localDate: '2026-09-01' });
 
     await svc.accept(user.id, id, {
       target: 'journal',
@@ -706,7 +688,7 @@ describe('DawarichSuggestionsService — accepting into a journey', () => {
     // (a location_lat of null would put a pin on the map at the equator), so
     // everything unknown has to arrive as undefined rather than as null.
     const { user } = createUser(testDb);
-    const id = seedSuggestion({
+    const id = await seedSuggestion({
       userId: user.id,
       lat: null,
       lng: null,
@@ -726,13 +708,13 @@ describe('DawarichSuggestionsService — accepting into a journey', () => {
 
   it('DAWARICH-SUG-013: a journey domain that returns nothing leaves the suggestion in review', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id });
+    const id = await seedSuggestion({ userId: user.id });
     journeyStub.createEntry.mockReturnValue(null);
 
     const err = await asyncRefusalFrom(() => svc.accept(user.id, id, { target: 'journal', journalId: 12 }));
 
     expect(err.status).toBe(404);
-    expect(rowOf(id).state).toBe('new');
+    expect((await rowOf(id)).state).toBe('new');
   });
 });
 
@@ -742,8 +724,8 @@ describe('DawarichSuggestionsService — ticking off a wish', () => {
   it('DAWARICH-SUG-014: a wish owned by somebody else is a 404 and stays untouched', async () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const theirWish = seedBucketItem(stranger.id, { name: 'Their Hallstatt' });
-    const id = seedSuggestion({ userId: user.id });
+    const theirWish = await seedBucketItem(stranger.id, { name: 'Their Hallstatt' });
+    const id = await seedSuggestion({ userId: user.id });
 
     const err = await asyncRefusalFrom(() =>
       svc.accept(user.id, id, { target: 'bucket_list', bucketListItemId: theirWish }),
@@ -751,39 +733,39 @@ describe('DawarichSuggestionsService — ticking off a wish', () => {
 
     expect(err.status).toBe(404);
     expect(err.code).toBe('not_found');
-    expect(bucketOf(theirWish).visited_at).toBeNull();
-    expect(rowOf(id).state).toBe('new');
+    expect((await bucketOf(theirWish)).visited_at).toBeNull();
+    expect((await rowOf(id)).state).toBe('new');
   });
 
   it("DAWARICH-SUG-015: the caller's own wish is ticked with the stay's arrival and marked as imported", async () => {
     const { user } = createUser(testDb);
-    const wish = seedBucketItem(user.id, { name: 'Hallstatt' });
-    const id = seedSuggestion({ userId: user.id, startedAt: '2026-09-01T09:30:00Z' });
+    const wish = await seedBucketItem(user.id, { name: 'Hallstatt' });
+    const id = await seedSuggestion({ userId: user.id, startedAt: '2026-09-01T09:30:00Z' });
 
     const result = await svc.accept(user.id, id, { target: 'bucket_list', bucketListItemId: wish });
 
-    const item = bucketOf(wish);
+    const item = await bucketOf(wish);
     expect(item.visited_at).toBe('2026-09-01T09:30:00Z');
     expect(item.visited_source).toBe('dawarich');
     expect(result.bucketListItemId).toBe(wish);
     expect(result.createdPlaceId).toBeNull();
-    expect(rowOf(id).accepted_bucket_list_item_id).toBe(wish);
+    expect((await rowOf(id)).accepted_bucket_list_item_id).toBe(wish);
   });
 
   it('DAWARICH-SUG-016: with no wish named in the body, the matched one is used', async () => {
     const { user } = createUser(testDb);
-    const wish = seedBucketItem(user.id, { name: 'Hallstatt' });
-    const id = seedSuggestion({ userId: user.id, matchedBucketListItemId: wish });
+    const wish = await seedBucketItem(user.id, { name: 'Hallstatt' });
+    const id = await seedSuggestion({ userId: user.id, matchedBucketListItemId: wish });
 
     const result = await svc.accept(user.id, id, { target: 'bucket_list' });
 
     expect(result.bucketListItemId).toBe(wish);
-    expect(bucketOf(wish).visited_source).toBe('dawarich');
+    expect((await bucketOf(wish)).visited_source).toBe('dawarich');
   });
 
   it('DAWARICH-SUG-017: with nothing named and nothing matched it is a 400', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id, matchedBucketListItemId: null });
+    const id = await seedSuggestion({ userId: user.id, matchedBucketListItemId: null });
 
     const err = await asyncRefusalFrom(() => svc.accept(user.id, id, { target: 'bucket_list' }));
 
@@ -798,7 +780,7 @@ describe('DawarichSuggestionsService — what an acceptance closes off', () => {
   it('DAWARICH-SUG-018: accepting an already accepted suggestion is a 409, not a second place', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
 
     const first = await svc.accept(user.id, id, { target: 'place', tripId: trip.id });
     expect(placesStub.create).toHaveBeenCalledTimes(1);
@@ -809,28 +791,28 @@ describe('DawarichSuggestionsService — what an acceptance closes off', () => {
     expect(err.code).toBe('already_accepted');
     expect(placesStub.create).toHaveBeenCalledTimes(1);
     // Still pointing at the first place, so the refusal cost nothing and created nothing.
-    expect(rowOf(id).accepted_place_id).toBe(first.createdPlaceId);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ n: 1 });
+    expect((await rowOf(id)).accepted_place_id).toBe(first.createdPlaceId);
+    expect(await countRows(t, Places, { trip: trip.id })).toBe(1);
   });
 
   it('DAWARICH-SUG-019: setState cannot pull an accepted suggestion back into review', async () => {
     const { user } = createUser(testDb);
-    const wish = seedBucketItem(user.id);
-    const id = seedSuggestion({ userId: user.id });
+    const wish = await seedBucketItem(user.id);
+    const id = await seedSuggestion({ userId: user.id });
     await svc.accept(user.id, id, { target: 'bucket_list', bucketListItemId: wish });
 
     const back = await svc.setState(user.id, id, 'new');
 
     expect(back?.state).toBe('accepted');
-    expect(rowOf(id).state).toBe('accepted');
+    expect((await rowOf(id)).state).toBe('accepted');
     // Dismissing it is refused the same way — the tick it produced is its own thing now.
     expect((await svc.setState(user.id, id, 'dismissed'))?.state).toBe('accepted');
-    expect(rowOf(id).target).toBe('bucket_list');
+    expect((await rowOf(id)).target).toBe('bucket_list');
   });
 
   it('DAWARICH-SUG-020: a suggestion still in review dismisses and restores', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id });
+    const id = await seedSuggestion({ userId: user.id });
 
     expect((await svc.setState(user.id, id, 'dismissed'))?.state).toBe('dismissed');
     expect((await svc.setState(user.id, id, 'new'))?.state).toBe('new');
@@ -839,10 +821,10 @@ describe('DawarichSuggestionsService — what an acceptance closes off', () => {
   it("DAWARICH-SUG-021: setState on a stranger's suggestion answers null and writes nothing", async () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const theirs = seedSuggestion({ userId: stranger.id });
+    const theirs = await seedSuggestion({ userId: stranger.id });
 
     expect(await svc.setState(user.id, theirs, 'dismissed')).toBeNull();
-    expect(rowOf(theirs).state).toBe('new');
+    expect((await rowOf(theirs)).state).toBe('new');
   });
 });
 
@@ -851,8 +833,8 @@ describe('DawarichSuggestionsService — what an acceptance closes off', () => {
 describe('DawarichSuggestionsService — confirming a scan', () => {
   it('DAWARICH-SUG-022: confirmBucketVisits only touches wishes that were not ticked yet', async () => {
     const { user } = createUser(testDb);
-    const open = seedBucketItem(user.id, { name: 'Hallstatt' });
-    const alreadyTicked = seedBucketItem(user.id, {
+    const open = await seedBucketItem(user.id, { name: 'Hallstatt' });
+    const alreadyTicked = await seedBucketItem(user.id, {
       name: 'Kyoto',
       visitedAt: '2026-01-04T12:00:00Z',
       visitedSource: 'manual',
@@ -861,24 +843,24 @@ describe('DawarichSuggestionsService — confirming a scan', () => {
     const updated = await svc.confirmBucketVisits(user.id, [open, alreadyTicked], '2026-09-05T10:00:00Z');
 
     expect(updated).toBe(1);
-    expect(bucketOf(open).visited_at).toBe('2026-09-05T10:00:00Z');
-    expect(bucketOf(open).visited_source).toBe('dawarich');
+    expect((await bucketOf(open)).visited_at).toBe('2026-09-05T10:00:00Z');
+    expect((await bucketOf(open)).visited_source).toBe('dawarich');
     // The hand-ticked one keeps both its date and who decided it.
-    expect(bucketOf(alreadyTicked).visited_at).toBe('2026-01-04T12:00:00Z');
-    expect(bucketOf(alreadyTicked).visited_source).toBe('manual');
+    expect((await bucketOf(alreadyTicked)).visited_at).toBe('2026-01-04T12:00:00Z');
+    expect((await bucketOf(alreadyTicked)).visited_source).toBe('manual');
   });
 
   it("DAWARICH-SUG-023: confirmBucketVisits ignores ids that are not the caller's", async () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const mine = seedBucketItem(user.id);
-    const theirs = seedBucketItem(stranger.id);
+    const mine = await seedBucketItem(user.id);
+    const theirs = await seedBucketItem(stranger.id);
 
     const updated = await svc.confirmBucketVisits(user.id, [mine, theirs]);
 
     expect(updated).toBe(1);
-    expect(bucketOf(theirs).visited_at).toBeNull();
-    expect(bucketOf(mine).visited_at).not.toBeNull();
+    expect((await bucketOf(theirs)).visited_at).toBeNull();
+    expect((await bucketOf(mine)).visited_at).not.toBeNull();
   });
 
   it('DAWARICH-SUG-056: a confirmed wish is dated from the stay that matched it, not from today', async () => {
@@ -886,28 +868,28 @@ describe('DawarichSuggestionsService — confirming a scan', () => {
     // entry in a list people keep for years. The clock is only the answer when
     // nothing else knows better.
     const { user } = createUser(testDb);
-    const wish = seedBucketItem(user.id, { name: 'Hallstatt' });
-    seedSuggestion({ userId: user.id, matchedBucketListItemId: wish, startedAt: '2023-07-14T08:20:00Z' });
+    const wish = await seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedSuggestion({ userId: user.id, matchedBucketListItemId: wish, startedAt: '2023-07-14T08:20:00Z' });
 
     const updated = await svc.confirmBucketVisits(user.id, [wish]);
 
     expect(updated).toBe(1);
-    expect(bucketOf(wish).visited_at).toBe('2023-07-14T08:20:00Z');
-    expect(bucketOf(wish).visited_source).toBe('dawarich');
+    expect((await bucketOf(wish)).visited_at).toBe('2023-07-14T08:20:00Z');
+    expect((await bucketOf(wish)).visited_source).toBe('dawarich');
   });
 
   it('DAWARICH-SUG-024: clearBucketVisit clears the source with the date, and only for the owner', async () => {
     const { user } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const mine = seedBucketItem(user.id, { visitedAt: '2026-09-05T10:00:00Z', visitedSource: 'dawarich' });
-    const theirs = seedBucketItem(stranger.id, { visitedAt: '2026-09-05T10:00:00Z', visitedSource: 'dawarich' });
+    const mine = await seedBucketItem(user.id, { visitedAt: '2026-09-05T10:00:00Z', visitedSource: 'dawarich' });
+    const theirs = await seedBucketItem(stranger.id, { visitedAt: '2026-09-05T10:00:00Z', visitedSource: 'dawarich' });
 
     expect(await svc.clearBucketVisit(user.id, mine)).toBe(true);
-    expect(bucketOf(mine).visited_at).toBeNull();
-    expect(bucketOf(mine).visited_source).toBeNull();
+    expect((await bucketOf(mine)).visited_at).toBeNull();
+    expect((await bucketOf(mine)).visited_source).toBeNull();
 
     expect(await svc.clearBucketVisit(user.id, theirs)).toBe(false);
-    expect(bucketOf(theirs).visited_at).toBe('2026-09-05T10:00:00Z');
+    expect((await bucketOf(theirs)).visited_at).toBe('2026-09-05T10:00:00Z');
   });
 });
 
@@ -916,7 +898,7 @@ describe('DawarichSuggestionsService — confirming a scan', () => {
 describe('DawarichSuggestionsService — scanning for stays', () => {
   it('DAWARICH-SUG-025: a scan without a connection refuses before a single request', async () => {
     const { user } = createUser(testDb);
-    seedBucketItem(user.id);
+    await seedBucketItem(user.id);
     dawarichStub.getCredentials.mockReturnValue(null);
 
     const err = await asyncRefusalFrom(() => svc.scanBucketList(user.id));
@@ -928,8 +910,8 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
 
   it('DAWARICH-SUG-026: the longest stay wins over the nearest, and a wish without coordinates reports as skipped', async () => {
     const { user } = createUser(testDb);
-    const wish = seedBucketItem(user.id, { name: 'Hallstatt' });
-    seedBucketItem(user.id, { name: 'Somewhere vague', lat: null, lng: null });
+    const wish = await seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedBucketItem(user.id, { name: 'Somewhere vague', lat: null, lng: null });
     clientStub.findVisitsNear.mockResolvedValue([
       {
         timestamp: 1757000000,
@@ -965,7 +947,7 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
     // mode this flag exists to prevent.
     const { user } = createUser(testDb);
     for (let i = 0; i < DAWARICH_BUCKET_SCAN_LIMIT + 1; i++) {
-      seedBucketItem(user.id, { name: `Wish ${i}` });
+      await seedBucketItem(user.id, { name: `Wish ${i}` });
     }
     clientStub.findVisitsNear.mockResolvedValue([]);
 
@@ -983,8 +965,8 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
     // tick did, but flagged, so the list reads as "these are new" rather than
     // as a wall of things the user has known for years.
     const { user } = createUser(testDb);
-    const open = seedBucketItem(user.id, { name: 'Hallstatt' });
-    const ticked = seedBucketItem(user.id, { name: 'Kyoto', visitedAt: '2023-04-02T09:00:00Z' });
+    const open = await seedBucketItem(user.id, { name: 'Hallstatt' });
+    const ticked = await seedBucketItem(user.id, { name: 'Kyoto', visitedAt: '2023-04-02T09:00:00Z' });
     clientStub.findVisitsNear.mockResolvedValue([]);
 
     const scan = await svc.scanBucketList(user.id);
@@ -999,7 +981,7 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
     // it answers with stays from its own default 500 m, and a four-hour stay
     // 600 m away is somewhere else entirely.
     const { user } = createUser(testDb);
-    seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedBucketItem(user.id, { name: 'Hallstatt' });
     clientStub.findVisitsNear.mockResolvedValue([
       {
         timestamp: 1757000000,
@@ -1020,7 +1002,7 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
 
   it('DAWARICH-SUG-052: with no duration reported the two timestamps decide, and a stay with no details is skipped', async () => {
     const { user } = createUser(testDb);
-    seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedBucketItem(user.id, { name: 'Hallstatt' });
     clientStub.findVisitsNear.mockResolvedValue([
       // Nothing to measure at all: no duration, no times. It cannot clear the
       // dwell threshold, so it is not a visit.
@@ -1048,7 +1030,7 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
     // for a 250 m radius: treating the answer as "at most the radius" keeps the
     // stay rather than dropping a real match over a missing field.
     const { user } = createUser(testDb);
-    seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedBucketItem(user.id, { name: 'Hallstatt' });
     clientStub.findVisitsNear.mockResolvedValue([
       {
         timestamp: 1_757_000_000,
@@ -1069,7 +1051,7 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
 
   it('DAWARICH-SUG-054: a stay that cannot be dated at all is skipped, not ticked off on 1970-01-01', async () => {
     const { user } = createUser(testDb);
-    seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedBucketItem(user.id, { name: 'Hallstatt' });
     clientStub.findVisitsNear.mockResolvedValue([
       { timestamp: null, distance_meters: 10, points_count: 8, visit_details: { duration_minutes: 60 } },
     ]);
@@ -1081,7 +1063,7 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
 
   it('DAWARICH-SUG-055: the longest qualifying stay wins, and a later shorter one does not displace it', async () => {
     const { user } = createUser(testDb);
-    seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedBucketItem(user.id, { name: 'Hallstatt' });
     clientStub.findVisitsNear.mockResolvedValue([
       {
         timestamp: 1757000000,
@@ -1112,7 +1094,7 @@ describe('DawarichSuggestionsService — scanning for stays', () => {
 
   it('DAWARICH-SUG-027: a wish whose lookup fails reads as "no match", not as a failed scan', async () => {
     const { user } = createUser(testDb);
-    seedBucketItem(user.id, { name: 'Hallstatt' });
+    await seedBucketItem(user.id, { name: 'Hallstatt' });
     clientStub.findVisitsNear.mockRejectedValue(new Error('upstream is down'));
 
     const scan = await svc.scanBucketList(user.id);
@@ -1204,7 +1186,7 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
       ['FR', false],
       ['AT', false],
     ]);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM visited_countries WHERE user_id = ?').get(user.id)).toEqual({ n: 0 });
+    expect(await countRows(t, VisitedCountries, { user: user.id })).toBe(0);
   });
 
   it('DAWARICH-SUG-064: the shape the Atlas answers for a user without trips carries no status and reads as visited', async () => {
@@ -1278,7 +1260,7 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
   it('DAWARICH-SUG-031: accepting as a place broadcasts it like any other place, socket id and all', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id, name: 'Museum Ludwig' });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id, name: 'Museum Ludwig' });
 
     const result = await svc.accept(user.id, id, { target: 'place', tripId: trip.id }, 'socket-7');
 
@@ -1299,7 +1281,7 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
     // next full load, which is the state this re-read exists to avoid.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id, name: 'Museum Ludwig' });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id, name: 'Museum Ludwig' });
 
     const result = await svc.accept(user.id, id, { target: 'place', tripId: trip.id });
 
@@ -1314,7 +1296,7 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
     // the trip never receives is a place that needs a page reload to appear.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
     // Plan 3h Task 3: the re-read is `PlacesRepository.findWithTagsAndRatings`
     // now, injected directly (no more `DatabaseService.getPlaceWithTags`
     // indirection) — spied directly on the real repository instance.
@@ -1336,13 +1318,13 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
-    const id = seedSuggestion({ userId: member.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: member.id, tripId: trip.id });
     permissionsStub.checkPermission.mockImplementation((action: string) => action !== 'place_edit');
 
     await expect(svc.accept(member.id, id, { target: 'place', tripId: trip.id })).rejects.toThrow(AcceptError);
     // Nothing written, and the stay is still waiting rather than marked handled.
     expect(placesStub.create).not.toHaveBeenCalled();
-    expect(rowOf(id).state).toBe('new');
+    expect((await rowOf(id)).state).toBe('new');
   });
 
   it('DAWARICH-SUG-040: pinning to a day asks day_edit as well, and writes nothing without it', async () => {
@@ -1351,12 +1333,12 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
     const day = createDay(testDb, trip.id, { date: '2026-09-01' });
-    const id = seedSuggestion({ userId: member.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: member.id, tripId: trip.id });
     permissionsStub.checkPermission.mockImplementation((action: string) => action !== 'day_edit');
 
     await expect(svc.accept(member.id, id, { target: 'place', tripId: trip.id, dayId: day.id })).rejects.toThrow(AcceptError);
     expect(placesStub.create).not.toHaveBeenCalled();
-    expect(rowOf(id).state).toBe('new');
+    expect((await rowOf(id)).state).toBe('new');
   });
 
   it('DAWARICH-SUG-041: the permission is asked about the trip owner, not about the caller', async () => {
@@ -1364,7 +1346,7 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
-    const id = seedSuggestion({ userId: member.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: member.id, tripId: trip.id });
 
     await svc.accept(member.id, id, { target: 'place', tripId: trip.id });
 
@@ -1374,21 +1356,19 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
   it('DAWARICH-SUG-038: a place made from a recording says where it came from', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
 
     const result = await svc.accept(user.id, id, { target: 'place', tripId: trip.id });
 
-    const place = testDb
-      .prepare('SELECT source FROM places WHERE id = ?')
-      .get(result.createdPlaceId) as { source: string | null };
-    expect(place.source).toBe('dawarich');
+    const place = await findRow(t, Places, { id: result.createdPlaceId });
+    expect(place?.source).toBe('dawarich');
   });
 
   it('DAWARICH-SUG-032: a stay accepted onto a day broadcasts the assignment too', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id, { date: '2026-09-01' });
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
     assignmentsStub.createAssignment.mockReturnValue({ id: 4242, day_id: day.id });
 
     await svc.accept(user.id, id, { target: 'place', tripId: trip.id, dayId: day.id }, 'socket-9');
@@ -1405,7 +1385,7 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id, { date: '2026-09-01' });
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
     assignmentsStub.createAssignment.mockReturnValue(undefined);
 
     await svc.accept(user.id, id, { target: 'place', tripId: trip.id, dayId: day.id });
@@ -1424,11 +1404,11 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
   it('DAWARICH-SUG-034: deleting the place an acceptance created puts the stay back into review', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
     const result = await svc.accept(user.id, id, { target: 'place', tripId: trip.id });
-    expect(rowOf(id).state).toBe('accepted');
+    expect((await rowOf(id)).state).toBe('accepted');
 
-    testDb.prepare('DELETE FROM places WHERE id = ?').run(result.createdPlaceId);
+    await deleteRows(t, Places, { id: result.createdPlaceId });
 
     const listed = (await svc.list(user.id, {})).suggestions.find((s) => s.id === id)!;
     expect(listed.state).toBe('new');
@@ -1441,7 +1421,7 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
   it('DAWARICH-SUG-035: an acceptance whose place still exists is left alone', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const id = seedSuggestion({ userId: user.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: user.id, tripId: trip.id });
     await svc.accept(user.id, id, { target: 'place', tripId: trip.id });
 
     const listed = (await svc.list(user.id, {})).suggestions.find((s) => s.id === id)!;
@@ -1451,27 +1431,23 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
 
   it('DAWARICH-SUG-036: a journal acceptance reopens once its entry is gone', async () => {
     const { user } = createUser(testDb);
-    const id = seedSuggestion({ userId: user.id, tripId: null });
-    const journeyId = Number(
-      testDb
-        .prepare(
-          "INSERT INTO journeys (user_id, title, status, created_at, updated_at) VALUES (?, 'Trip diary', 'active', 0, 0)",
-        )
-        .run(user.id).lastInsertRowid,
-    );
-    const entryId = Number(
-      testDb
-        .prepare(
-          "INSERT INTO journey_entries (journey_id, author_id, type, title, entry_date, created_at, updated_at) VALUES (?, ?, 'entry', 'Cafe', '2026-09-01', 0, 0)",
-        )
-        .run(journeyId, user.id).lastInsertRowid,
-    );
+    const id = await seedSuggestion({ userId: user.id, tripId: null });
+    const journeyId = await insertRow(t, Journeys, { user: user.id, title: 'Trip diary', status: 'active', created_at: 0, updated_at: 0 });
+    const entryId = await insertRow(t, JourneyEntries, {
+      journey: journeyId,
+      author: user.id,
+      type: 'entry',
+      title: 'Cafe',
+      entry_date: '2026-09-01',
+      created_at: 0,
+      updated_at: 0,
+    });
     journeyStub.createEntry.mockReturnValue({ id: entryId });
 
     await svc.accept(user.id, id, { target: 'journal', journalId: journeyId });
     expect((await svc.list(user.id, {})).suggestions.find((s) => s.id === id)!.state).toBe('accepted');
 
-    testDb.prepare('DELETE FROM journey_entries WHERE id = ?').run(entryId);
+    await deleteRows(t, JourneyEntries, { id: entryId });
 
     expect((await svc.list(user.id, {})).suggestions.find((s) => s.id === id)!.state).toBe('new');
   });
@@ -1480,12 +1456,12 @@ describe('DawarichSuggestionsService — the Atlas hand-off', () => {
     const { user: mine } = createUser(testDb);
     const { user: theirs } = createUser(testDb);
     const trip = createTrip(testDb, theirs.id);
-    const id = seedSuggestion({ userId: theirs.id, tripId: trip.id });
+    const id = await seedSuggestion({ userId: theirs.id, tripId: trip.id });
     const result = await svc.accept(theirs.id, id, { target: 'place', tripId: trip.id });
-    testDb.prepare('DELETE FROM places WHERE id = ?').run(result.createdPlaceId);
+    await deleteRows(t, Places, { id: result.createdPlaceId });
 
     await svc.list(mine.id, {});
 
-    expect(rowOf(id).state).toBe('accepted');
+    expect((await rowOf(id)).state).toBe('accepted');
   });
 });

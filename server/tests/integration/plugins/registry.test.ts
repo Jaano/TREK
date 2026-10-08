@@ -20,13 +20,15 @@ vi.mock('../../../src/nest/plugins/install/safe-fetch', async (orig) => ({
 // `discoverPlugins`/`setUpdateBlock`/`clearUpdateBlock` calls are all
 // repository-backed now — no more raw `DatabaseService`/`db/database` mock.
 // A real MikroORM over the full migrated schema (`createSnapshotTestDb` +
-// `createTestOrm`) replaces the old hand-rolled `:memory:` table set; every
-// `testDb.prepare(...)` fixture/assertion below still works unchanged since
-// the real schema is a strict superset of the old one's columns.
+// `createTestOrm`) replaces the old hand-rolled `:memory:` table set; the
+// fixtures and read-backs below go through the same ORM (the factories in
+// tests/helpers/factories), since the real schema is a strict superset of
+// the old one's columns.
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
+import { findRow, insertRow, updateRows } from '../../helpers/factories/rows';
 import { PluginActions } from '../../../src/db/entities/PluginActions.entity';
 import { PluginSettingsFields } from '../../../src/db/entities/PluginSettingsFields.entity';
 import { PluginErrorLog } from '../../../src/db/entities/PluginErrorLog.entity';
@@ -79,6 +81,13 @@ const REGISTRY = {
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
+
+/** The plugin's stored row; fails the case when there is none. */
+async function pluginRow(id: string) {
+  const row = await findRow(t, Plugins, { id });
+  if (!row) throw new Error(`no plugins row for ${id}`);
+  return row;
+}
 
 let dataRoot: string;
 let codeRoot: string;
@@ -287,9 +296,8 @@ describe('PluginRegistryService', () => {
       ],
     };
     const seedRow = (hold = 0) =>
-      testDb.prepare("INSERT INTO plugins (id, name, status, enabled, update_hold) VALUES ('flight-tracker','Flight','inactive',0,?)").run(hold);
-    const holdInDb = () =>
-      (testDb.prepare("SELECT update_hold FROM plugins WHERE id='flight-tracker'").get() as { update_hold: number }).update_hold;
+      insertRow(t, Plugins, { id: 'flight-tracker', name: 'Flight', status: 'inactive', enabled: 0, update_hold: hold });
+    const holdInDb = async () => (await pluginRow('flight-tracker')).update_hold;
 
     beforeEach(() => {
       vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => twoVersions }) as unknown as Response));
@@ -297,15 +305,15 @@ describe('PluginRegistryService', () => {
     });
 
     it('holds when the admin explicitly picked an older version', async () => {
-      seedRow();
+      await seedRow();
       await expect(svc.recomputeUpdateHold('flight-tracker', '1.0.0', true)).resolves.toBe(true);
-      expect(holdInDb()).toBe(1);
+      expect(await holdInDb()).toBe(1);
     });
 
     it('does not hold when the explicit pick IS the newest compatible version', async () => {
-      seedRow(1);
+      await seedRow(1);
       await expect(svc.recomputeUpdateHold('flight-tracker', '2.0.0', true)).resolves.toBe(false);
-      expect(holdInDb()).toBe(0);
+      expect(await holdInDb()).toBe(0);
     });
 
     // The comparison is against the newest version THIS TREK can run, not the newest
@@ -330,26 +338,26 @@ describe('PluginRegistryService', () => {
       vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => withIncompatibleNewest }) as unknown as Response));
       __clearRegistryCacheForTests();
       try {
-        seedRow(1);
+        await seedRow(1);
         await expect(svc.recomputeUpdateHold('flight-tracker', '2.0.0', true)).resolves.toBe(false);
-        expect(holdInDb()).toBe(0);
+        expect(await holdInDb()).toBe(0);
       } finally {
         delete process.env.APP_VERSION;
       }
     });
 
     it('a non-deliberate update clears a stale hold', async () => {
-      seedRow(1);
+      await seedRow(1);
       await expect(svc.recomputeUpdateHold('flight-tracker', '2.0.0', false)).resolves.toBe(false);
-      expect(holdInDb()).toBe(0);
+      expect(await holdInDb()).toBe(0);
     });
 
     it('an unresolvable registry never sets a hold', async () => {
-      seedRow();
+      await seedRow();
       vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
       __clearRegistryCacheForTests();
       await expect(svc.recomputeUpdateHold('flight-tracker', '1.0.0', true)).resolves.toBe(false);
-      expect(holdInDb()).toBe(0);
+      expect(await holdInDb()).toBe(0);
     });
   });
 
@@ -403,7 +411,7 @@ describe('PluginRegistryService', () => {
 
     // moved into place + registered inactive with provenance
     expect(fs.existsSync(path.join(codeRoot, 'flight-tracker', 'trek-plugin.json'))).toBe(true);
-    const row = testDb.prepare("SELECT status, source_repo, source_commit FROM plugins WHERE id='flight-tracker'").get() as { status: string; source_repo: string; source_commit: string };
+    const row = await pluginRow('flight-tracker');
     expect(row).toMatchObject({ status: 'inactive', source_repo: 'acme/trek-flight', source_commit: 'a'.repeat(40) });
     // no staging left behind
     const staging = path.join(dataRoot, '.staging');
@@ -451,8 +459,7 @@ describe('PluginRegistryService', () => {
 
     await svc.commitUpload(staged);
 
-    const row = testDb.prepare('SELECT status, source_repo, reviewed_at, version FROM plugins WHERE id = ?').get('my-upload') as
-      { status: string; source_repo: string | null; reviewed_at: string | null; version: string } | undefined;
+    const row = await findRow(t, Plugins, { id: 'my-upload' });
     expect(row?.status).toBe('inactive');       // never auto-activates
     expect(row?.source_repo).toBe('local:upload');
     expect(row?.reviewed_at).toBeNull();        // unsigned + unreviewed → flagged in the UI
@@ -473,9 +480,9 @@ describe('PluginRegistryService', () => {
   it('sideload: forces INACTIVE even when replacing a plugin that was active', async () => {
     const zip = () => makeArtifact({ id: 'my-upload', name: 'Uploaded', version: '2.0.0', type: 'widget', permissions: ['db:own'] });
     await svc.commitUpload(svc.stageUpload(zip()));                                      // first install
-    testDb.prepare("UPDATE plugins SET status = 'active', enabled = 1 WHERE id = 'my-upload'").run(); // admin activated it
+    await updateRows(t, Plugins, { id: 'my-upload' }, { status: 'active', enabled: 1 }); // admin activated it
     await svc.commitUpload(svc.stageUpload(zip()));                                      // re-upload replaces the code
-    const row = testDb.prepare('SELECT status, enabled FROM plugins WHERE id = ?').get('my-upload') as { status: string; enabled: number };
+    const row = await pluginRow('my-upload');
     expect(row.status).toBe('inactive');   // discoverPlugins keeps the old status; commitUpload floors it back to inactive
     expect(row.enabled).toBe(0);
   });
@@ -509,7 +516,7 @@ describe('PluginRegistryService', () => {
     const k = signingKey();
     stageSignedArtifact(k.pubB64, k.sign);
     await expect(svc.install('flight-tracker')).resolves.toEqual({ id: 'flight-tracker', version: '1.0.0', trekRangeBypassed: null });
-    const row = testDb.prepare("SELECT author_pubkey FROM plugins WHERE id='flight-tracker'").get() as { author_pubkey: string };
+    const row = await pluginRow('flight-tracker');
     expect(row.author_pubkey).toBe(k.pubB64);
   });
 
@@ -637,7 +644,7 @@ describe('signature failure codes', () => {
     stageSignedArtifact(b.pubB64, b.sign);
     await expect(svc.install('flight-tracker')).rejects.toThrow();
 
-    const blocked = testDb.prepare("SELECT * FROM plugins WHERE id='flight-tracker'").get() as Record<string, unknown>;
+    const blocked = await pluginRow('flight-tracker');
     expect(blocked.update_block_code).toBe('SIGNATURE_KEY_CHANGED');
     expect(blocked.update_block_version).toBe('1.0.0');
     // The plugin still RUNS fine on its old code — a blocked update is not a broken
@@ -649,7 +656,7 @@ describe('signature failure codes', () => {
     // The author reverts to the original key: the install succeeds and the block goes.
     stageSignedArtifact(a.pubB64, a.sign);
     await svc.install('flight-tracker');
-    const after = testDb.prepare("SELECT * FROM plugins WHERE id='flight-tracker'").get() as Record<string, unknown>;
+    const after = await pluginRow('flight-tracker');
     expect(after.update_block_code).toBeNull();
     expect(after.update_block_version).toBeNull();
   });
@@ -688,7 +695,7 @@ describe('re-trust (assertRetrustable)', () => {
   async function rotateTo(b: { pubB64: string; sign: (x: Buffer) => string }, a = signingKey()) {
     stageSignedArtifact(a.pubB64, a.sign);
     await svc.install('flight-tracker');
-    testDb.prepare("UPDATE plugins SET source_repo='acme/trek-flight' WHERE id='flight-tracker'").run();
+    await updateRows(t, Plugins, { id: 'flight-tracker' }, { source_repo: 'acme/trek-flight' });
     stageSignedArtifact(b.pubB64, b.sign);
     return a;
   }
@@ -716,7 +723,7 @@ describe('re-trust (assertRetrustable)', () => {
     const a = signingKey();
     stageSignedArtifact(a.pubB64, a.sign);
     await svc.install('flight-tracker');
-    testDb.prepare("UPDATE plugins SET source_repo='acme/trek-flight' WHERE id='flight-tracker'").run();
+    await updateRows(t, Plugins, { id: 'flight-tracker' }, { source_repo: 'acme/trek-flight' });
 
     await expect(svc.assertRetrustable('flight-tracker', a.pubB64)).rejects.toMatchObject({ code: 'RETRUST_NOT_APPLICABLE' });
   });
@@ -724,7 +731,7 @@ describe('re-trust (assertRetrustable)', () => {
   it('refuses a sideloaded plugin (it sits outside the registry trust model entirely)', async () => {
     const b = signingKey();
     await rotateTo(b);
-    testDb.prepare("UPDATE plugins SET source_repo='local:upload' WHERE id='flight-tracker'").run();
+    await updateRows(t, Plugins, { id: 'flight-tracker' }, { source_repo: 'local:upload' });
 
     await expect(svc.assertRetrustable('flight-tracker', b.pubB64)).rejects.toMatchObject({ code: 'RETRUST_NOT_APPLICABLE' });
   });
@@ -742,7 +749,7 @@ describe('re-trust (assertRetrustable)', () => {
       code: 'SIGNATURE_INVALID',
     });
     // The old key is STILL pinned — a refused re-trust changes nothing.
-    const row = testDb.prepare("SELECT author_pubkey FROM plugins WHERE id='flight-tracker'").get() as { author_pubkey: string };
+    const row = await pluginRow('flight-tracker');
     expect(row.author_pubkey).toBe(a.pubB64);
   });
 
@@ -752,10 +759,7 @@ describe('re-trust (assertRetrustable)', () => {
     __clearRegistryCacheForTests();
 
     await expect(svc.install('flight-tracker', { version: '1.0.0', retrustKey: b.pubB64 })).resolves.toMatchObject({ version: '1.0.0' });
-    const row = testDb.prepare("SELECT author_pubkey, update_block_code FROM plugins WHERE id='flight-tracker'").get() as {
-      author_pubkey: string | null;
-      update_block_code: string | null;
-    };
+    const row = await pluginRow('flight-tracker');
     expect(row.author_pubkey).toBe(b.pubB64);
     expect(row.author_pubkey).not.toBeNull();
     expect(row.update_block_code).toBeNull();
@@ -778,7 +782,7 @@ describe('re-trust (assertRetrustable)', () => {
     await expect(svc.install('flight-tracker', { version: '1.0.0', retrustKey: 'anything' })).rejects.toMatchObject({
       code: 'SIGNATURE_MISSING',
     });
-    const row = testDb.prepare("SELECT author_pubkey FROM plugins WHERE id='flight-tracker'").get() as { author_pubkey: string | null };
+    const row = await pluginRow('flight-tracker');
     expect(row.author_pubkey).toBe(a.pubB64); // still pinned, never NULL
   });
 });
@@ -1081,16 +1085,13 @@ describe('an update block does not outlive the registry relationship', () => {
     const b = signingKey();
     stageSignedArtifact(b.pubB64, b.sign);
     await expect(svc.install('flight-tracker')).rejects.toThrow(); // rotated key → blocked
-    expect(
-      (testDb.prepare("SELECT update_block_code FROM plugins WHERE id='flight-tracker'").get() as { update_block_code: string })
-        .update_block_code,
-    ).toBe('SIGNATURE_KEY_CHANGED');
+    expect((await pluginRow('flight-tracker')).update_block_code).toBe('SIGNATURE_KEY_CHANGED');
 
     // The admin now uploads the plugin by hand.
     const upload = makeArtifact({ id: 'flight-tracker', name: 'Flight', version: '9.9.9', type: 'widget', permissions: ['db:own'] });
     await svc.commitUpload(svc.stageUpload(upload));
 
-    const row = testDb.prepare("SELECT source_repo, author_pubkey, update_block_code, update_block_version FROM plugins WHERE id='flight-tracker'").get() as Record<string, unknown>;
+    const row = await pluginRow('flight-tracker');
     expect(row.source_repo).toBe('local:upload');
     expect(row.author_pubkey).toBeNull(); // out of the trust model — deliberate, and badged
     expect(row.update_block_code).toBeNull();

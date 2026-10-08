@@ -23,20 +23,8 @@ const { broadcast, notifySend } = vi.hoisted(() => ({
 vi.mock('../../../src/db/database', async () => {
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  return {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
+  // Trip access reads through TripsRepository now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
 import { db as testDb } from '../../../src/db/database';
@@ -62,6 +50,23 @@ import type { User } from '../../../src/types';
 import { notificationsStub } from '../../helpers/notifications';
 import { createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo, createTestTripsRepo, createTestTripMembersRepo, sharedTestOrm } from '../../helpers/test-uow';
 import { budgetRepoArgs } from '../../helpers/budget-repos';
+import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { readUser } from '../../helpers/factories/users';
+import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
+
+const orm = () => sharedTestOrm(testDb);
+
+/** The trip_members row for the pair, or null. */
+async function memberRow(tripId: number, userId: number) {
+  return findRow(await orm(), TripMembers, { trip: tripId, user: userId });
+}
+
+/** The trip's owner as stored. */
+async function ownerOf(tripId: number): Promise<number | undefined> {
+  return (await findRow(await orm(), Trips, { id: tripId }))?.user_id;
+}
 import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
 import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourneyContributorsRepo } from '../../helpers/journey-repos';
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
@@ -221,7 +226,7 @@ describe('addMember fallbacks', () => {
       spy.mockRestore();
     }
     expect(result.tripTitle).toBe('Untitled');
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, invitee.id)).toBeDefined();
+    expect(await memberRow(trip.id, invitee.id)).not.toBeNull();
   });
 
   it('MEMBERS-SVC-008: addMember resolves a padded identifier and matches on username as well as email', async () => {
@@ -257,7 +262,7 @@ describe('transferOwnership guard rails', () => {
     // its owner either way.
     await expect(roster.transferOwnership(trip.id, 999999, owner.id)).rejects.toThrow(NotFoundError);
     await expect(roster.transferOwnership(trip.id, 999999, owner.id)).rejects.toThrow('User not found');
-    expect((testDb.prepare('SELECT user_id FROM trips WHERE id = ?').get(trip.id) as { user_id: number }).user_id).toBe(owner.id);
+    expect(await ownerOf(trip.id)).toBe(owner.id);
   });
 
   // R8: the same rewrite as MEMBERS-SVC-007 above, on `UsersRepository.getEmail`
@@ -281,7 +286,7 @@ describe('transferOwnership guard rails', () => {
     }
     expect(result.fromEmail).toBe('');
     expect(result.toEmail).toBe(member.email);
-    expect((testDb.prepare('SELECT user_id FROM trips WHERE id = ?').get(trip.id) as { user_id: number }).user_id).toBe(member.id);
+    expect(await ownerOf(trip.id)).toBe(member.id);
   });
 });
 
@@ -298,7 +303,7 @@ describe('guest name validation', () => {
 
     // The guards run ahead of the transaction, so a rejected name can never leave
     // a credential-less users row behind with no trip to belong to.
-    expect((testDb.prepare('SELECT COUNT(*) AS n FROM users WHERE is_guest = 1').get() as { n: number }).n).toBe(0);
+    expect(await countRows(await orm(), Users, { is_guest: 1 })).toBe(0);
 
     // 50 is the accepted boundary the DTO shares — off by one here and the API
     // starts refusing names the client believes are valid.
@@ -317,11 +322,11 @@ describe('guest name validation', () => {
     // Order matters for the status code: an unusable name throws (400) even for an
     // id that is not a guest of this trip, where the scope check returns false (404).
     await expect(roster.renameGuest(trip.id, owner.id, '')).rejects.toThrow('Guest name is required');
-    expect((testDb.prepare('SELECT display_name FROM users WHERE id = ?').get(guest.id) as { display_name: string }).display_name).toBe('Ida');
+    expect((await readUser(await orm(), guest.id)).display_name).toBe('Ida');
 
     // A padded name is stored trimmed, so the roster does not render the spaces.
     expect(await roster.renameGuest(trip.id, guest.id, '  Ida M.  ')).toBe(true);
-    expect((testDb.prepare('SELECT display_name FROM users WHERE id = ?').get(guest.id) as { display_name: string }).display_name).toBe('Ida M.');
+    expect((await readUser(await orm(), guest.id)).display_name).toBe('Ida M.');
   });
 
   it("MEMBERS-SVC-014: deleteGuest is trip-scoped — another trip's owner cannot erase this trip's guest", async () => {
@@ -335,7 +340,7 @@ describe('guest name validation', () => {
     // only thing between it and a foreign guest's users row — and the delete
     // cascades every assignment that guest is on.
     expect(await roster.deleteGuest(otherTrip.id, guest.id)).toBe(false);
-    expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(guest.id)).toBeDefined();
+    expect(await findRow(await orm(), Users, { id: guest.id })).not.toBeNull();
   });
 });
 
@@ -348,11 +353,11 @@ describe('listMembers shaping', () => {
     const { user: sso } = createUser(testDb);
     const { user: bare } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('UPDATE users SET avatar = ?, display_name = ? WHERE id = ?').run('me.png', 'Owner Displayed', owner.id);
-    testDb.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('a.png', uploaded.id);
-    testDb.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('https://idp.example.test/p.jpg', sso.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(trip.id, uploaded.id, owner.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(trip.id, sso.id, owner.id);
+    await updateRows(await orm(), Users, { id: owner.id }, { avatar: 'me.png', display_name: 'Owner Displayed' });
+    await updateRows(await orm(), Users, { id: uploaded.id }, { avatar: 'a.png' });
+    await updateRows(await orm(), Users, { id: sso.id }, { avatar: 'https://idp.example.test/p.jpg' });
+    await insertRow(await orm(), TripMembers, { trip: trip.id, user: uploaded.id, invitedByRef: owner.id });
+    await insertRow(await orm(), TripMembers, { trip: trip.id, user: sso.id, invitedByRef: owner.id });
     addTripMember(testDb, trip.id, bare.id);
 
     const { owner: ownerRow, members } = await roster.listMembers(trip.id, owner.id);
@@ -407,15 +412,14 @@ describe('Task 6 review items — rollback and concurrency', () => {
     // setOwner (TM13) ran, then remove (TM14) ran, then addIgnoringConflict (TM15)
     // rejected — a fix that moved TM15 outside the transaction would leave TM13/TM14
     // committed while this assertion still expects them rolled back.
-    const tripRow = testDb.prepare('SELECT user_id FROM trips WHERE id = ?').get(trip.id) as { user_id: number };
-    expect(tripRow.user_id).toBe(owner.id);
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, member.id)).toBeDefined();
+    expect(await ownerOf(trip.id)).toBe(owner.id);
+    expect(await memberRow(trip.id, member.id)).not.toBeNull();
   });
 
   it('MEMBERS-SVC-017 (mutation-proved): createGuest rolls back when the membership INSERT rejects — no orphan guest user row', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+    const before = await countRows(await orm(), Users);
 
     const spy = vi.spyOn(tripMembersRepo, 'addMember').mockRejectedValueOnce(new Error('boom'));
     try {
@@ -426,7 +430,7 @@ describe('Task 6 review items — rollback and concurrency', () => {
 
     // insertGuest (TM16) ran, then addMember (TM17) rejected — a fix that moved
     // TM17 outside the transaction would leave the guest's `users` row behind.
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM users').get() as { n: number }).n;
+    const after = await countRows(await orm(), Users);
     expect(after).toBe(before);
   });
 
@@ -490,7 +494,6 @@ describe('Task 6 review items — rollback and concurrency', () => {
     // Without this the test stayed green against a mutation that serializes
     // `addMember` (forcing the TM5-catch branch instead) — not load-bearing.
     expect((rejected[0] as PromiseRejectedResult).reason.message).toMatch(/UNIQUE constraint failed: trip_members/);
-    const count = testDb.prepare('SELECT COUNT(*) as n FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, invitee.id) as { n: number };
-    expect(count.n).toBe(1);
+    expect(await countRows(await orm(), TripMembers, { trip: trip.id, user: invitee.id })).toBe(1);
   });
 });
