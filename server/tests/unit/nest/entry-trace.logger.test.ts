@@ -1,7 +1,7 @@
 /**
  * traceEntry (nest/audit/entry-trace.logger.ts): one correlation id and one
  * log line per call of a non-HTTP entry point, without changing what the call
- * returns or when it runs. TRACE-001 through TRACE-009.
+ * returns or when it runs. TRACE-001 through TRACE-010.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -111,5 +111,15 @@ describe('traceEntry', () => {
     expect(log.logDebug.mock.calls[0][0]).toMatch(/^cron auto-backup skipped \d+ms: lease held by another process$/);
     expect(log.logDebug.mock.calls[1][0]).toMatch(/^cron auto-backup ok \d+ms$/);
     expect(log.logWarn).not.toHaveBeenCalled();
+  });
+  it('TRACE-010: a rejection with a primitive is logged by its string form and cannot be marked as reported', async () => {
+    const call = Promise.reject(404);
+    const traced = traceEntry('rpc', 'plugin demo trips.get', () => call);
+    await expect(traced).rejects.toBe(404);
+    await vi.waitFor(() => expect(log.logWarn).toHaveBeenCalledTimes(1));
+    expect(log.logWarn.mock.calls[0][0]).toMatch(/^rpc plugin demo trips\.get failed \d+ms: 404$/);
+    // An outer handler cannot tell it was logged, so it may log it once more;
+    // that is the price of a primitive, and the line it writes is still there.
+    expect(wasTraced(404)).toBe(false);
   });
 });

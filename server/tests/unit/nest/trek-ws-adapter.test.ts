@@ -12,11 +12,12 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 // The origin allowlist is env-driven and empty in the test environment, so the
 // branch that builds verifyClient would never run. Driving readEnv lets both
 // sides of it be asserted rather than assumed.
-const { wsOrigins, logError } = vi.hoisted(() => ({
+const { wsOrigins, logError, logWarn } = vi.hoisted(() => ({
   wsOrigins: { value: null as string[] | null },
   logError: vi.fn(),
+  logWarn: vi.fn(),
 }));
-vi.mock('../../../src/nest/audit/audit-log.logger', () => ({ logError, logInfo: vi.fn(), logDebug: vi.fn(), logWarn: vi.fn() }));
+vi.mock('../../../src/nest/audit/audit-log.logger', () => ({ logError, logInfo: vi.fn(), logDebug: vi.fn(), logWarn }));
 vi.mock('../../../src/app-config', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
   return {
@@ -31,6 +32,7 @@ vi.mock('../../../src/app-config', async (importOriginal) => {
   };
 });
 
+import { from, of } from 'rxjs';
 import { TrekWsAdapter } from '../../../src/nest/realtime/trek-ws.adapter';
 import { getServer } from '../../../src/nest/realtime/ws-state';
 import type { Server as HttpServer } from 'node:http';
@@ -188,6 +190,22 @@ describe('TrekWsAdapter D6 request context (task-2-review.md C3 ruling)', () => 
 });
 
 describe('TrekWsAdapter correlation', () => {
+  it('WSAD-055: a handler that rejects is logged once by the trace, answers nothing, and does not escape as an unhandled error', async () => {
+    logWarn.mockClear();
+    const socket = fakeSocket();
+    // Nest's own transform: a promise becomes an observable that errors when it rejects.
+    const nestTransform = ((v: unknown) => (v instanceof Promise ? from(v) : of(v))) as never;
+    adapter.bindMessageHandlers(
+      socket as never,
+      [{ message: 'join', callback: () => Promise.reject(new Error('trip 9 is gone')) }] as never,
+      nestTransform,
+    );
+    socket.emit('message', frame({ type: 'join', tripId: 9 }));
+    await vi.waitFor(() => expect(logWarn).toHaveBeenCalledTimes(1));
+    expect(String(logWarn.mock.calls[0][0])).toMatch(/^ws join failed \d+ms: trip 9 is gone$/);
+    expect(socket.sent).toEqual([]);
+  });
+
   it('WSAD-050: every message runs under its own ws correlation, and a plain answer still goes out at once', () => {
     const socket = fakeSocket();
     const seen: Array<Correlation | undefined> = [];

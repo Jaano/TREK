@@ -96,6 +96,15 @@ describe('checkPermission — everybody level', () => {
   });
 });
 
+describe('checkPermission: admin level', () => {
+  it('PERM-SVC-026: trip_create narrowed to admin refuses every non-admin, the trip owner included', async () => {
+    await svc.savePermissions({ trip_create: 'admin' });
+    expect(await svc.checkPermission('trip_create', 'user', 42, 42, false)).toBe(false);
+    expect(await svc.checkPermission('trip_create', 'user', null, 42, true)).toBe(false);
+    expect(await svc.checkPermission('trip_create', 'admin', null, 42, false)).toBe(true);
+  });
+});
+
 describe('checkPermission — trip_owner level', () => {
   const ownerId = 10;
   const memberId = 20;

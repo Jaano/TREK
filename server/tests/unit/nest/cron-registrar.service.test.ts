@@ -387,6 +387,92 @@ describe('CronRegistrarService', () => {
       finish();
       await tick;
     });
+
+    it('CRONREG-022: a failed heartbeat is logged and the tick keeps running to completion', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      logErrorMock.mockClear();
+      const name = 'lease-heartbeat-fails';
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      let finish!: () => void;
+      let started!: () => void;
+      const running = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      let completed = false;
+      registrar.register(name, '* * * * *', async () => {
+        started();
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        completed = true;
+      });
+      const extend = vi.spyOn(SchedulerLeasesRepository.prototype, 'extend').mockRejectedValueOnce(new Error('database is locked'));
+      try {
+        const tick = h.jobs[0].onTick();
+        await running;
+        vi.advanceTimersByTime(LEASE_HEARTBEAT_MS);
+        await vi.waitFor(() =>
+          expect(logErrorMock).toHaveBeenCalledWith(`Cron job "${name}": lease update failed: database is locked`),
+        );
+        finish();
+        await tick;
+        expect(completed).toBe(true);
+        // The settle extend after the tick still went through.
+        expect((await holder(name))!.owner).toBe(LEASE_OWNER);
+      } finally {
+        extend.mockRestore();
+      }
+    });
+
+    it('CRONREG-023: a failed settle extend is logged but never replaces the tick outcome', async () => {
+      logErrorMock.mockClear();
+      const name = 'lease-settle-fails';
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      let ran = false;
+      registrar.register(name, '* * * * *', () => {
+        ran = true;
+      });
+      const extend = vi.spyOn(SchedulerLeasesRepository.prototype, 'extend').mockRejectedValueOnce('busy');
+      try {
+        await expect(h.jobs[0].onTick()).resolves.toBeUndefined();
+        expect(ran).toBe(true);
+        // A non-Error rejection is stringified rather than dropped.
+        expect(logErrorMock).toHaveBeenCalledWith(`Cron job "${name}": lease update failed: busy`);
+        expect(logErrorMock).not.toHaveBeenCalledWith(expect.stringContaining(`Cron job "${name}" failed`));
+      } finally {
+        extend.mockRestore();
+      }
+    });
+
+    it('CRONREG-024: a tick that throws keeps its own error when the settle extend also fails', async () => {
+      logErrorMock.mockClear();
+      const name = 'lease-settle-fails-after-throw';
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      const boom = new Error('backup target unreachable');
+      registrar.register(name, '* * * * *', () => {
+        throw boom;
+      });
+      const extend = vi.spyOn(SchedulerLeasesRepository.prototype, 'extend').mockRejectedValueOnce(new Error('disk I/O error'));
+      try {
+        await expect(h.jobs[0].onTick()).rejects.toBe(boom);
+        await vi.waitFor(() =>
+          expect(logErrorMock).toHaveBeenCalledWith(`Cron job "${name}" failed: backup target unreachable`),
+        );
+        expect(logErrorMock).toHaveBeenCalledWith(`Cron job "${name}": lease update failed: disk I/O error`);
+      } finally {
+        extend.mockRestore();
+      }
+    });
+
+    it('CRONREG-025: a non-Error failure that reaches the cron error handler is logged with its string form', () => {
+      logErrorMock.mockClear();
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      registrar.register('lease-string-failure', '* * * * *', () => undefined);
+      // A primitive can never be marked as traced, so the handler always logs it.
+      h.jobs[0].errorHandler!('quota exceeded');
+      expect(logErrorMock).toHaveBeenCalledTimes(1);
+      expect(logErrorMock).toHaveBeenCalledWith('Cron job "lease-string-failure" failed: quota exceeded');
+    });
   });
 
   describe('runOnBoot (task-6-fix-brief.md item 7 — the boot-sweep choke point)', () => {

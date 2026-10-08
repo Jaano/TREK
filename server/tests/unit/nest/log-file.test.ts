@@ -1,6 +1,6 @@
 /**
  * BufferedLogFile (nest/audit/log-file.ts), the file half of the server log,
- * against a real temporary directory: LOGFILE-001 through LOGFILE-009.
+ * against a real temporary directory: LOGFILE-001 through LOGFILE-015.
  *
  * What it promises: a write never touches the disk on the caller's turn,
  * queued lines reach the file in order through one append per batch, the file
@@ -151,5 +151,90 @@ describe('BufferedLogFile', () => {
     expect(lines).not.toContain('ccccc');
     expect(lines.some((line) => line.includes('1 log line(s) dropped'))).toBe(true);
     expect(lines.at(-1)).toBe('d');
+  });
+
+  it('LOGFILE-011: a rotation that cannot rename is reported, and the batch still lands in the live file', async () => {
+    const dir = tmpDir();
+    const file = path.join(dir, 'trek.log');
+    fs.writeFileSync(file, 'x'.repeat(20));
+    const onError = vi.fn();
+    const sink = new BufferedLogFile({ dir, maxBytes: 10, onError });
+    vi.spyOn(fs.promises, 'rename').mockRejectedValue(Object.assign(new Error('permission denied'), { code: 'EACCES' }));
+    sink.write('kept');
+    await sink.flush();
+    expect(onError).toHaveBeenCalledWith('log rotation failed: permission denied');
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(read(file)).toBe(`${'x'.repeat(20)}kept\n`);
+    expect(fs.existsSync(`${file}.1`)).toBe(false);
+  });
+
+  it('LOGFILE-012: when the size cannot be read again after a failed rotation, appending still goes on', async () => {
+    const dir = tmpDir();
+    const file = path.join(dir, 'trek.log');
+    fs.writeFileSync(file, 'x'.repeat(20));
+    const onError = vi.fn();
+    const sink = new BufferedLogFile({ dir, maxBytes: 10, onError });
+    const realStat = fs.promises.stat.bind(fs.promises);
+    let stats = 0;
+    // The first two reads (before the append and inside the rotation) see the
+    // full file; the read after the failed rename fails as well.
+    vi.spyOn(fs.promises, 'stat').mockImplementation(((target: fs.PathLike) => {
+      stats++;
+      if (stats > 2) return Promise.reject(Object.assign(new Error('stale handle'), { code: 'ESTALE' }));
+      return realStat(target);
+    }) as typeof fs.promises.stat);
+    vi.spyOn(fs.promises, 'rename').mockRejectedValue(Object.assign(new Error('busy'), { code: 'EBUSY' }));
+    sink.write('first');
+    await sink.flush();
+    expect(onError).toHaveBeenCalledWith('log rotation failed: busy');
+    expect(read(file)).toBe(`${'x'.repeat(20)}first\n`);
+    // The size fell back to 0, so the next small batch is appended without another rotation attempt.
+    onError.mockClear();
+    sink.write('second');
+    await sink.flush();
+    expect(onError).not.toHaveBeenCalled();
+    expect(read(file)).toBe(`${'x'.repeat(20)}first\nsecond\n`);
+  });
+
+  it('LOGFILE-013: a size read that fails for a reason other than a missing file is reported as a failed write', async () => {
+    const dir = tmpDir();
+    const onError = vi.fn();
+    const sink = new BufferedLogFile({ dir, onError });
+    vi.spyOn(fs.promises, 'stat').mockRejectedValueOnce('io error');
+    sink.write('lost');
+    await sink.flush();
+    // A non-Error rejection is still named, not swallowed.
+    expect(onError).toHaveBeenCalledWith('log file write failed: io error');
+    sink.write('kept');
+    await sink.flush();
+    expect(read(sink.path)).toBe('kept\n');
+  });
+
+  it('LOGFILE-014: flushSync reports a failing disk instead of throwing out of the exit handler, and a flush with nothing queued writes nothing', async () => {
+    const dir = tmpDir();
+    const onError = vi.fn();
+    const sink = new BufferedLogFile({ dir, onError });
+    const append = vi.spyOn(fs.promises, 'appendFile');
+    await sink.flush();
+    expect(append).not.toHaveBeenCalled();
+    vi.spyOn(fs, 'appendFileSync').mockImplementation(() => {
+      throw new Error('read-only file system');
+    });
+    sink.write('last words');
+    expect(() => sink.flushSync()).not.toThrow();
+    expect(onError).toHaveBeenCalledWith('log file write failed: read-only file system');
+  });
+  it('LOGFILE-015: a long line that does not fit is dropped, and the drop is noted where it happened', async () => {
+    const dir = tmpDir();
+    const sink = new BufferedLogFile({ dir, maxBufferedBytes: 12, onError: vi.fn() });
+    sink.write('aaaaa'); // 6 bytes queued
+    sink.write('a line too long to fit'); // dropped
+    sink.write('b'); // fits, so the note goes in before it
+    await sink.flush();
+    const lines = read(sink.path).trim().split('\n');
+    expect(lines).toHaveLength(3);
+    expect(lines[0]).toBe('aaaaa');
+    expect(lines[1]).toContain('1 log line(s) dropped');
+    expect(lines[2]).toBe('b');
   });
 });

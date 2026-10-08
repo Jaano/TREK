@@ -1,6 +1,6 @@
 /**
  * Unit tests for nest/audit/audit-log.logger: AUDIT-LOG-001 through
- * AUDIT-LOG-007. The logger ranks error < warn < info < debug against the
+ * AUDIT-LOG-009. The logger ranks error < warn < info < debug against the
  * import-frozen LOG_LEVEL, prints every line to the console at once and hands
  * the same line, without colour codes, to the buffered file sink. The sink is
  * replaced here by a recorder; its own disk behaviour (batching, rotation,
@@ -10,14 +10,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const sink = vi.hoisted(() => ({
   lines: [] as string[],
-  options: [] as Array<{ dir: string; file?: string; maxBytes?: number; maxFiles?: number }>,
+  options: [] as Array<{ dir: string; file?: string; maxBytes?: number; maxFiles?: number; onError: (message: string) => void }>,
   flush: vi.fn(async () => {}),
   flushSync: vi.fn(),
 }));
 
 vi.mock('../../../src/nest/audit/log-file', () => ({
   BufferedLogFile: class {
-    constructor(options: { dir: string; file?: string; maxBytes?: number; maxFiles?: number }) {
+    constructor(options: { dir: string; file?: string; maxBytes?: number; maxFiles?: number; onError: (message: string) => void }) {
       sink.options.push(options);
     }
     write(line: string): void {
@@ -118,6 +118,21 @@ describe('severity threshold (frozen at import)', () => {
     }
   });
 
+  it('AUDIT-LOG-008: an unknown LOG_LEVEL falls back to info rather than silencing or flooding the log', async () => {
+    const fresh = await freshLogger('verbose');
+    try {
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      fresh.logInfo('kept');
+      fresh.logDebug('dropped');
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(sink.lines).toHaveLength(1);
+      expect(sink.lines[0]).toMatch(/^\[INFO\] .*kept$/);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
+  });
+
   it('AUDIT-LOG-004: the freeze happens at first import, so LOG_LEVEL reflects the env then', async () => {
     const fresh = await freshLogger('debug');
     try {
@@ -152,5 +167,13 @@ describe('the file sink', () => {
     flushLogFileSync();
     expect(sink.flush).toHaveBeenCalledTimes(1);
     expect(sink.flushSync).toHaveBeenCalledTimes(1);
+  });
+
+  it('AUDIT-LOG-009: a failing sink reports to the console with a [logger] prefix, never back into the file', () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    sink.options[0]!.onError('log file write failed: disk full');
+    expect(err).toHaveBeenCalledWith('[logger] log file write failed: disk full');
+    // Writing the failure into the failing file would only queue more of the same.
+    expect(sink.lines).toEqual([]);
   });
 });

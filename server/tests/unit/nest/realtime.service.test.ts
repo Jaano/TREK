@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { TrekWsPayload, TrekWsUserEventName } from '@trek/shared';
 
-const { broadcast, broadcastToUser } = vi.hoisted(() => ({
+const { broadcast, broadcastToUser, getOnlineUserIds } = vi.hoisted(() => ({
   broadcast: vi.fn(),
   broadcastToUser: vi.fn(),
+  getOnlineUserIds: vi.fn(),
 }));
-vi.mock('../../../src/websocket', () => ({ broadcast, broadcastToUser }));
+vi.mock('../../../src/websocket', () => ({ broadcast, broadcastToUser, getOnlineUserIds }));
 
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
@@ -62,5 +63,21 @@ describe('RealtimeService', () => {
     late.broadcastToUser(2, partialUserPayload({ type: 'notification:new' }));
     expect(broadcast).toHaveBeenCalledWith('1', 'todo:created', { item: {} }, undefined);
     expect(broadcastToUser).toHaveBeenCalledWith(2, { type: 'notification:new' });
+  });
+
+  it('RTSVC-005: getOnlineUserIds hands back the live set from the websocket module, read at call time', () => {
+    const online = new Set([3, 8]);
+    getOnlineUserIds.mockReturnValueOnce(online);
+    expect(svc.getOnlineUserIds()).toBe(online);
+    getOnlineUserIds.mockReturnValueOnce(new Set());
+    expect(svc.getOnlineUserIds().size).toBe(0);
+    expect(getOnlineUserIds).toHaveBeenCalledTimes(2);
+  });
+
+  it('RTSVC-006: getOnlineUserIds is not guarded, so a failure reaches the caller instead of reading as nobody online', () => {
+    getOnlineUserIds.mockImplementationOnce(() => {
+      throw new Error('socket server not ready');
+    });
+    expect(() => svc.getOnlineUserIds()).toThrow('socket server not ready');
   });
 });
