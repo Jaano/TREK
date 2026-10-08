@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-memory DB — schema applied in beforeAll after mocks register
@@ -30,9 +31,32 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, addTripMember, createDayAccommodation, createReservation } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../helpers/factories/rows';
+import { setAppSetting } from '../helpers/factories/settings';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { DayAccommodations } from '../../src/db/entities/DayAccommodations.entity';
+import { Days } from '../../src/db/entities/Days.entity';
+import { Reservations } from '../../src/db/entities/Reservations.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+/** The app's own ORM, which the factories seed and read through. */
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
+
+const dayCount = (tripId: number) => countRows(orm(), Days, { trip: tripId });
+
+/** The trip's days in day order: id, number and date, as the reorder cases compare them. */
+const dayList = async (tripId: number) =>
+  (await findRows(orm(), Days, { trip: tripId }, { day_number: 'asc' })).map((d) => ({ id: d.id, day_number: d.day_number, date: d.date }));
+
+/** The stay's check-in and check-out days. */
+const stayDays = async (id: number) => {
+  const stay = await findRow(orm(), DayAccommodations, { id });
+  return { start_day_id: stay?.start_day_id, end_day_id: stay?.end_day_id };
+};
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
@@ -181,7 +205,7 @@ describe('Create day', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'This trip has no dates. Add a day without a date instead.' });
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id)).toEqual({ n: 1 });
+    expect(await dayCount(trip.id)).toBe(1);
   });
 
   it('DAY-013: dated next to a position is refused by the contract with 400 and adds nothing', async () => {
@@ -195,8 +219,8 @@ describe('Create day', () => {
 
     expect(res.status).toBe(400);
     expect(JSON.stringify(res.body)).toContain('dated cannot be combined with date or position');
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id)).toEqual({ n: 2 });
-    expect(testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(trip.id)).toEqual({ end_date: '2026-08-02' });
+    expect(await dayCount(trip.id)).toBe(2);
+    expect((await findRow(orm(), Trips, { id: trip.id }))?.end_date).toBe('2026-08-02');
   });
 });
 
@@ -307,8 +331,7 @@ describe('Delete day', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-    const deleted = testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id);
-    expect(deleted).toBeUndefined();
+    expect(await findRow(orm(), Days, { id: day.id })).toBeNull();
   });
 
   it('DELETE /api/trips/:tripId/days/:dayId returns 404 for unknown day', async () => {
@@ -341,7 +364,7 @@ describe('Delete day', () => {
   it('DAY-008: deleting a dated day with no day left to take the last date ends the trip a day earlier', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-08-01', end_date: '2026-08-03' });
-    const first = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number LIMIT 1').get(trip.id) as { id: number };
+    const [first] = await dayList(trip.id);
 
     const res = await request(app)
       .delete(`/api/trips/${trip.id}/days/${first.id}`)
@@ -366,7 +389,7 @@ describe('Delete day', () => {
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'A trip needs at least one day.' });
-    expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id)).toBeDefined();
+    expect(await findRow(orm(), Days, { id: day.id })).not.toBeNull();
   });
 
   it('DAY-010: a member without day_edit gets 403 and the day stays', async () => {
@@ -376,7 +399,7 @@ describe('Delete day', () => {
     addTripMember(testDb, trip.id, member.id);
     const day = createDay(testDb, trip.id);
     createDay(testDb, trip.id);
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_day_edit', 'trip_owner')").run();
+    await setAppSetting(orm(), 'perm_day_edit', 'trip_owner');
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     await invalidatePermissionsCache();
     try {
@@ -384,9 +407,9 @@ describe('Delete day', () => {
         .delete(`/api/trips/${trip.id}/days/${day.id}`)
         .set('Cookie', authCookie(member.id));
       expect(res.status).toBe(403);
-      expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id)).toBeDefined();
+      expect(await findRow(orm(), Days, { id: day.id })).not.toBeNull();
     } finally {
-      testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_day_edit'").run();
+      await deleteRows(orm(), AppSettings, { key: 'perm_day_edit' });
       await invalidatePermissionsCache();
     }
   });
@@ -459,9 +482,7 @@ describe('Accommodations', () => {
     const place = createPlace(testDb, trip.id, { name: 'Boutique Inn' });
 
     // Seed accommodation directly
-    testDb.prepare(
-      'INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id) VALUES (?, ?, ?, ?)'
-    ).run(trip.id, place.id, day1.id, day2.id);
+    await insertRow(orm(), DayAccommodations, { trip: trip.id, place: place.id, startDay: day1.id, endDay: day2.id });
 
     const res = await request(app)
       .get(`/api/trips/${trip.id}/accommodations`)
@@ -509,8 +530,7 @@ describe('Accommodations', () => {
     expect(deleteRes.body.success).toBe(true);
 
     // Verify removed from DB
-    const row = testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(accommodationId);
-    expect(row).toBeUndefined();
+    expect(await findRow(orm(), DayAccommodations, { id: accommodationId })).toBeNull();
   });
 
   it('ACCOM-003 — DELETE non-existent accommodation returns 404', async () => {
@@ -540,12 +560,10 @@ describe('Accommodations', () => {
     expect(res.status).toBe(201);
 
     // Linked reservation should exist
-    const reservation = testDb.prepare(
-      'SELECT * FROM reservations WHERE accommodation_id = ?'
-    ).get(res.body.accommodation.id) as any;
-    expect(reservation).toBeDefined();
-    expect(reservation.type).toBe('hotel');
-    expect(reservation.confirmation_number).toBe('CONF-XYZ');
+    const reservation = await findRow(orm(), Reservations, { accommodation_id: String(res.body.accommodation.id) });
+    expect(reservation).not.toBeNull();
+    expect(reservation!.type).toBe('hotel');
+    expect(reservation!.confirmation_number).toBe('CONF-XYZ');
   });
 
   it('ACCOM-004 — PUT /api/trips/:tripId/accommodations/:id updates the accommodation', async () => {
@@ -601,20 +619,15 @@ describe('Accommodations', () => {
       .send({ place_id: place.id, start_day_id: day1.id, end_day_id: day2.id });
 
     const accommodationId = createRes.body.accommodation.id;
-    const reservationBefore = testDb.prepare(
-      'SELECT id FROM reservations WHERE accommodation_id = ?'
-    ).get(accommodationId) as any;
-    expect(reservationBefore).toBeDefined();
+    const reservationBefore = await findRow(orm(), Reservations, { accommodation_id: String(accommodationId) });
+    expect(reservationBefore).not.toBeNull();
 
     const deleteRes = await request(app)
       .delete(`/api/trips/${trip.id}/accommodations/${accommodationId}`)
       .set('Cookie', authCookie(user.id));
     expect(deleteRes.status).toBe(200);
 
-    const reservationAfter = testDb.prepare(
-      'SELECT id FROM reservations WHERE id = ?'
-    ).get(reservationBefore.id);
-    expect(reservationAfter).toBeUndefined();
+    expect(await findRow(orm(), Reservations, { id: reservationBefore!.id })).toBeNull();
   });
 
   it('ACCOM-006 — DELETE accommodation also removes its linked budget item (issue #933)', async () => {
@@ -637,26 +650,19 @@ describe('Accommodations', () => {
       });
     expect(createRes.status).toBe(201);
 
-    const accommodationId = testDb.prepare(
-      'SELECT id FROM day_accommodations WHERE trip_id = ?'
-    ).get(trip.id) as any;
-    expect(accommodationId).toBeDefined();
+    const accommodationId = await findRow(orm(), DayAccommodations, { trip: trip.id });
+    expect(accommodationId).not.toBeNull();
 
-    const budgetBefore = testDb.prepare(
-      'SELECT id FROM budget_items WHERE trip_id = ?'
-    ).get(trip.id);
-    expect(budgetBefore).toBeDefined();
+    const budgetBefore = await findRow(orm(), BudgetItems, { trip: trip.id });
+    expect(budgetBefore).not.toBeNull();
 
     // Delete via the accommodation endpoint (the primary bug path)
     const delRes = await request(app)
-      .delete(`/api/trips/${trip.id}/accommodations/${accommodationId.id}`)
+      .delete(`/api/trips/${trip.id}/accommodations/${accommodationId!.id}`)
       .set('Cookie', authCookie(user.id));
     expect(delRes.status).toBe(200);
 
-    const budgetAfter = testDb.prepare(
-      'SELECT id FROM budget_items WHERE trip_id = ?'
-    ).get(trip.id);
-    expect(budgetAfter).toBeUndefined();
+    expect(await findRow(orm(), BudgetItems, { trip: trip.id })).toBeNull();
   });
 });
 
@@ -702,15 +708,15 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({ title: 'Renamed' });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Day not found' });
-    const row = testDb.prepare('SELECT title FROM days WHERE id = ?').get(day.id) as { title: string };
-    expect(row.title).toBe('Original');
+    const row = await findRow(orm(), Days, { id: day.id });
+    expect(row?.title).toBe('Original');
   });
 
   it('POST /days by the hex-spelled trip id (append, no position) answers the guard\'s own 404 "Trip not found" and writes no day (M-1 narrowing, Task 9 fix round 2 — was a manufactured 500)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
     const hexTripId = '0x' + trip.id.toString(16);
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${hexTripId}/days`)
@@ -718,7 +724,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({});
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -726,7 +732,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-09-01', end_date: '2026-09-02' });
     const hexTripId = '0x' + trip.id.toString(16);
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${hexTripId}/days`)
@@ -734,7 +740,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({ position: 1 });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -742,7 +748,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
     const shapedTripId = `${trip.id}.0`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -750,7 +756,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({});
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -758,7 +764,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-09-01', end_date: '2026-09-02' });
     const shapedTripId = `${trip.id}.0`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -766,7 +772,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({ position: 1 });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -774,7 +780,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
     const shapedTripId = `${trip.id}%20`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -782,7 +788,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({});
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -790,7 +796,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-09-01', end_date: '2026-09-02' });
     const shapedTripId = `${trip.id}%20`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -798,7 +804,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({ position: 1 });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -806,7 +812,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
     const shapedTripId = `%2B${trip.id}`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -814,7 +820,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({});
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -822,7 +828,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-09-01', end_date: '2026-09-02' });
     const shapedTripId = `%2B${trip.id}`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -830,7 +836,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({ position: 1 });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -838,7 +844,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
     const shapedTripId = `${trip.id}e0`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -846,7 +852,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({});
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
@@ -854,7 +860,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-09-01', end_date: '2026-09-02' });
     const shapedTripId = `${trip.id}e0`;
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const before = await dayCount(trip.id);
 
     const res = await request(app)
       .post(`/api/trips/${shapedTripId}/days`)
@@ -862,14 +868,14 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({ position: 1 });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(trip.id) as { n: number }).n;
+    const after = await dayCount(trip.id);
     expect(after).toBe(before);
   });
 
   it('PUT /days/reorder by the hex-spelled trip id 400s "orderedIds must be a permutation…" and writes NOTHING — the live H2 bug: it used to 200 and invert a real accommodation', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-06-01', end_date: '2026-06-03' });
-    const days = testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { id: number; day_number: number; date: string }[];
+    const days = await dayList(trip.id);
     expect(days).toHaveLength(3);
     const [d1, d2, d3] = days;
     const place = createPlace(testDb, trip.id, { name: 'Hotel' });
@@ -877,7 +883,7 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     // the shape the compiled-boot evidence used to catch reorder inverting.
     const stay = createDayAccommodation(testDb, trip.id, place.id, d1.id, d2.id);
     const reservation = createReservation(testDb, trip.id, { day_id: d1.id, title: 'Dinner' });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2026-06-01T19:00:00', reservation.id);
+    await updateRows(orm(), Reservations, { id: reservation.id }, { reservation_time: '2026-06-01T19:00:00' });
     const hexTripId = '0x' + trip.id.toString(16);
 
     const res = await request(app)
@@ -888,20 +894,20 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
     expect(res.body).toEqual({ error: 'orderedIds must be a permutation of the trip day ids.' });
 
     // Nothing renumbered.
-    const after = testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { id: number; day_number: number; date: string }[];
+    const after = await dayList(trip.id);
     expect(after).toEqual(days);
     // The stay is still d1 -> d2, never inverted.
-    const stayAfter = testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(stay.id) as { start_day_id: number; end_day_id: number };
+    const stayAfter = await stayDays(stay.id);
     expect(stayAfter).toEqual({ start_day_id: d1.id, end_day_id: d2.id });
     // The reservation's stamped time is untouched.
-    const resAfter = testDb.prepare('SELECT reservation_time FROM reservations WHERE id = ?').get(reservation.id) as { reservation_time: string };
-    expect(resAfter.reservation_time).toBe('2026-06-01T19:00:00');
+    const resAfter = await findRow(orm(), Reservations, { id: reservation.id });
+    expect(resAfter?.reservation_time).toBe('2026-06-01T19:00:00');
   });
 
   it('PUT /days/reorder with the REAL numeric trip id still works and can still be legitimately rejected for inverting a stay (unchanged, base 400) — L-5: zero days rows changed, not only the stay', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip', start_date: '2026-06-01', end_date: '2026-06-03' });
-    const days = testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { id: number; day_number: number; date: string }[];
+    const days = await dayList(trip.id);
     const [d1, d2, d3] = days;
     const place = createPlace(testDb, trip.id, { name: 'Hotel' });
     const stay = createDayAccommodation(testDb, trip.id, place.id, d1.id, d3.id);
@@ -912,10 +918,10 @@ describe('A-H2 — DaysService trip id parsed once, threaded to every survivor (
       .send({ orderedIds: [d3.id, d2.id, d1.id] });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'This move would make an accommodation end before it starts.' });
-    const stayAfter = testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(stay.id) as { start_day_id: number; end_day_id: number };
+    const stayAfter = await stayDays(stay.id);
     expect(stayAfter).toEqual({ start_day_id: d1.id, end_day_id: d3.id });
     // L-5: the rollback holds on every day row, not only the stay — zero rows changed.
-    const daysAfter = testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { id: number; day_number: number; date: string }[];
+    const daysAfter = await dayList(trip.id);
     expect(daysAfter).toEqual(days);
   });
 });
