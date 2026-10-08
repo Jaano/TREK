@@ -84,6 +84,42 @@ describe('DatabaseLifecycle', () => {
     expect(calls).toEqual(['connection.close:true', 'connection.connect', 'runSchemaBootstrap:{"snapshot":false}']);
   });
 
+  it('DBLIFE-007: listeners registered with onReopened run after the schema bootstrap of a reopen, in order', async () => {
+    const { orm } = ormStub();
+    const lifecycle = new DatabaseLifecycle(orm);
+    lifecycle.onReopened(async () => {
+      calls.push('listener:first');
+    });
+    lifecycle.onReopened(async () => {
+      calls.push('listener:second');
+    });
+    await lifecycle.open();
+    const hook = dbMock.registerReinitializeHook.mock.calls[0][0];
+    calls.length = 0;
+
+    await hook();
+
+    expect(calls).toEqual([
+      'connection.close:true',
+      'connection.connect',
+      'runSchemaBootstrap:{"snapshot":false}',
+      'listener:first',
+      'listener:second',
+    ]);
+  });
+
+  it('DBLIFE-008: a listener that throws fails the reopen, so a listener must contain its own failures', async () => {
+    const { orm } = ormStub();
+    const lifecycle = new DatabaseLifecycle(orm);
+    lifecycle.onReopened(async () => {
+      throw new Error('listener broke');
+    });
+    await lifecycle.open();
+    const hook = dbMock.registerReinitializeHook.mock.calls[0][0];
+
+    await expect(hook()).rejects.toThrow('listener broke');
+  });
+
   it('DBLIFE-003: close() and reopen() go through the connection module', async () => {
     const lifecycle = new DatabaseLifecycle(ormStub().orm);
 

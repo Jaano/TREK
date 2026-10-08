@@ -4,6 +4,7 @@ import { logInfo, logError } from '../audit/audit-log.logger';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import { CronRegistrarService } from '../scheduling/cron-registrar.service';
 import { DATABASE_BACKUP, type DatabaseBackupStrategy } from '../database/database-backup.interface';
+import { DatabaseLifecycle } from '../database/database-lifecycle.service';
 import { withRequestContext } from '../database/request-context';
 import { hasBaseline, resetDemoUser, saveBaseline, takeExampleTripsSeeded } from '../../demo/demo-reset';
 
@@ -15,12 +16,16 @@ import { hasBaseline, resetDemoUser, saveBaseline, takeExampleTripsSeeded } from
  * side-effect-free, and the close/swap/reopen sequence runs inside
  * resetDemoUser at tick time, through the injected backup port.
  *
- * It also saves the first baseline, on the boot whose seed has just put the
- * example trips in and only when no baseline exists yet: the same trigger the
- * save had inside the boot-time demo seed, which runs before the container can
- * hand the port in. A demo database that already holds data without a baseline
- * is left alone, so its hourly reset stays a logged no-op as before. Like the
- * old save, it does not depend on the cron registrar being enabled.
+ * It also saves the first baseline, whenever the demo seed has just put the
+ * example trips in and no baseline exists yet: the same trigger the save had
+ * inside the demo seed, which runs before the container can hand the port in.
+ * That seed runs at boot and again in the schema bootstrap after every reopen
+ * (an admin restore, the hourly swap), so the job checks once the app is up
+ * and again after each reopen, through `DatabaseLifecycle.onReopened`. Each
+ * check clears the seed's mark, so none is left behind. A demo database that
+ * already holds data without a baseline is left alone, so its hourly reset
+ * stays a logged no-op as before. Like the old save, it does not depend on the
+ * cron registrar being enabled.
  */
 @Injectable()
 export class DemoResetJob implements OnApplicationBootstrap {
@@ -29,6 +34,7 @@ export class DemoResetJob implements OnApplicationBootstrap {
     private readonly registrar: CronRegistrarService,
     @Inject(DATABASE_BACKUP) private readonly database: DatabaseBackupStrategy,
     private readonly em: EntityManager,
+    private readonly lifecycle: DatabaseLifecycle,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -39,7 +45,8 @@ export class DemoResetJob implements OnApplicationBootstrap {
       this.registrar.register('demo-reset', '0 * * * *', () => void this.tick(), { timezone: 'none' });
       logInfo('Demo hourly reset scheduled');
     }
-    if (takeExampleTripsSeeded() && !hasBaseline()) await this.saveFirstBaseline();
+    this.lifecycle.onReopened(() => this.saveFirstBaselineIfSeeded());
+    await this.saveFirstBaselineIfSeeded();
   }
 
   async tick(): Promise<void> {
@@ -50,8 +57,14 @@ export class DemoResetJob implements OnApplicationBootstrap {
     }
   }
 
-  /** Boot runs outside any request, so the snapshot gets its own context. */
-  private async saveFirstBaseline(): Promise<void> {
+  /**
+   * Saves the first baseline when the demo seed has just seeded and none exists.
+   * At boot it runs outside any request, so the snapshot gets its own context. Never
+   * throws: at boot a failure must not stop the app, and after a reopen it must
+   * not read as the reopen failing.
+   */
+  private async saveFirstBaselineIfSeeded(): Promise<void> {
+    if (!takeExampleTripsSeeded() || hasBaseline()) return;
     try {
       await withRequestContext({ em: this.em }, () => saveBaseline(this.database));
     } catch (err: unknown) {

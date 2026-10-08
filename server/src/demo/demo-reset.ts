@@ -157,13 +157,16 @@ function hasBaseline(): boolean {
 }
 
 /**
- * Whether the boot-time seed put the example trips in during this process.
+ * Whether the demo seed put the example trips in since this mark was last read.
  *
  * The first baseline is saved only after a real seed, as it always was: a demo
  * database that already holds data but has no baseline keeps it that way, and
  * the hourly reset stays a logged no-op until the admin saves one. The seed
- * runs before the container exists, so it leaves this mark and DemoResetJob,
- * which has the backup port, saves the baseline once the app is up.
+ * runs inside the schema bootstrap, at boot before the container exists and
+ * again after every reopen (a restore, the hourly swap), where it has no backup
+ * port either. So it leaves this mark, and DemoResetJob, which has the port,
+ * reads it once the app is up and again after each reopen
+ * (`DatabaseLifecycle.onReopened`), saving the baseline when it is set.
  */
 let seededExampleTrips = false;
 

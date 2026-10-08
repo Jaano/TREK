@@ -64,8 +64,8 @@ async function seedDemoData(): Promise<{ adminId: number; demoId: number }> {
   await seedExampleTrips(demo, adminId, demoId);
 
   // The first baseline follows this seed and only this seed. DemoResetJob saves
-  // it once the app is up, through the injected backup port this boot-time
-  // seed has no access to.
+  // it once the app is up, or right after the reopen this seed ran in, through
+  // the injected backup port this seed has no access to.
   markExampleTripsSeeded();
   return { adminId, demoId };
 }

@@ -28,6 +28,7 @@ import type { AdminService } from '../../../src/nest/admin/admin.service';
 import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
 import type { CronRegistrarService } from '../../../src/nest/scheduling/cron-registrar.service';
 import type { DatabaseBackupStrategy } from '../../../src/nest/database/database-backup.interface';
+import type { DatabaseLifecycle } from '../../../src/nest/database/database-lifecycle.service';
 import type { EntityManager } from '@mikro-orm/core';
 
 function registrarStub(enabled = true) {
@@ -80,7 +81,18 @@ describe('DemoResetJob', () => {
   function make(demo: boolean, enabled = true) {
     const registrar = registrarStub(enabled);
     const runtimeEnv = { isDemoMode: () => demo } as RuntimeEnvService;
-    return { job: new DemoResetJob(runtimeEnv, registrar as unknown as CronRegistrarService, database, em), registrar };
+    const reopenListeners: Array<() => Promise<void>> = [];
+    const lifecycle = {
+      onReopened: vi.fn((listener: () => Promise<void>) => {
+        reopenListeners.push(listener);
+      }),
+    };
+    const job = new DemoResetJob(runtimeEnv, registrar as unknown as CronRegistrarService, database, em, lifecycle as unknown as DatabaseLifecycle);
+    // What DatabaseLifecycle does after a reopen's schema bootstrap.
+    const reopen = async () => {
+      for (const listener of reopenListeners) await listener();
+    };
+    return { job, registrar, lifecycle, reopen };
   }
 
   it('AJOB-004 — registers the hourly server-local cron and logs the banner when demo mode is on', async () => {
@@ -142,5 +154,51 @@ describe('DemoResetJob', () => {
     hasBaselineMock.mockReturnValue(false);
     await make(true).job.onApplicationBootstrap();
     expect(saveBaselineMock).not.toHaveBeenCalled();
+  });
+
+  it('AJOB-011: a reopen whose re-bootstrap seeded the example trips saves the first baseline', async () => {
+    // A restore onto a demo instance with no baseline: the boot seeded nothing,
+    // the restored archive had no admin trips, so the reopen's demo seed did.
+    hasBaselineMock.mockReturnValue(false);
+    const { job, reopen } = make(true, false);
+    await job.onApplicationBootstrap();
+    expect(saveBaselineMock).not.toHaveBeenCalled();
+
+    takeExampleTripsSeededMock.mockReturnValueOnce(true);
+    await reopen();
+    expect(saveBaselineMock).toHaveBeenCalledTimes(1);
+    expect(saveBaselineMock).toHaveBeenCalledWith(database);
+  });
+
+  it('AJOB-012: a reopen that seeded nothing, or found a baseline, saves none, and each reopen clears the mark', async () => {
+    const { job, reopen } = make(true);
+    await job.onApplicationBootstrap();
+    takeExampleTripsSeededMock.mockClear();
+
+    hasBaselineMock.mockReturnValue(false);
+    await reopen();
+    takeExampleTripsSeededMock.mockReturnValueOnce(true);
+    hasBaselineMock.mockReturnValue(true);
+    await reopen();
+
+    expect(takeExampleTripsSeededMock).toHaveBeenCalledTimes(2);
+    expect(saveBaselineMock).not.toHaveBeenCalled();
+  });
+
+  it('AJOB-013: a baseline save that fails after a reopen is logged, not turned into a failed reopen', async () => {
+    hasBaselineMock.mockReturnValue(false);
+    const { job, reopen } = make(true);
+    await job.onApplicationBootstrap();
+
+    takeExampleTripsSeededMock.mockReturnValueOnce(true);
+    saveBaselineMock.mockRejectedValueOnce(new Error('database or disk is full'));
+    await expect(reopen()).resolves.toBeUndefined();
+    expect(logMock.logError).toHaveBeenCalledWith('Demo baseline: database or disk is full');
+  });
+
+  it('AJOB-014: a non-demo boot does not listen for reopens', async () => {
+    const { job, lifecycle } = make(false);
+    await job.onApplicationBootstrap();
+    expect(lifecycle.onReopened).not.toHaveBeenCalled();
   });
 });

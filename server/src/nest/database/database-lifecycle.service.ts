@@ -22,6 +22,8 @@ import { runSchemaBootstrap } from '../../db/orm';
  */
 @Injectable()
 export class DatabaseLifecycle {
+  private readonly reopenListeners: Array<() => Promise<void>> = [];
+
   constructor(private readonly orm: MikroORM) {}
 
   /**
@@ -62,6 +64,20 @@ export class DatabaseLifecycle {
   }
 
   /**
+   * Runs `listener` after every reopen, once the reopened file has been through
+   * the schema bootstrap (migrations, seeders, demo seed). For work that has to
+   * follow what that bootstrap did and needs the container, which the bootstrap
+   * itself has no access to: the demo reset job saves the first demo baseline
+   * here when a restore's re-bootstrap seeded the example trips.
+   *
+   * A listener contains its own failures. One that throws turns into the
+   * reopen's error, which a restore reports as "restart required".
+   */
+  onReopened(listener: () => Promise<void>): void {
+    this.reopenListeners.push(listener);
+  }
+
+  /**
    * Kysely caches whatever handle it was given, so without this the ORM would
    * keep talking to the closed one. Closing and reconnecting sends the driver
    * back through `createKyselyDialect()`, which picks up the new handle.
@@ -75,5 +91,6 @@ export class DatabaseLifecycle {
     // No pre-migrate snapshot: the file was just unpacked from an archive that
     // is still there to go back to.
     await runSchemaBootstrap(this.orm, { snapshot: false });
+    for (const listener of this.reopenListeners) await listener();
   }
 }

@@ -28,6 +28,10 @@ import { AppConfigModule } from '../app-config/app-config.module';
 // DatabaseBackupModule (nest/backup/) provides once BackupModule is in the
 // graph. It is not imported here on purpose: see that module for the cycle an
 // import would close.
+// DemoResetJob also listens for reopens on DatabaseLifecycle (the shared
+// database kernel, not a domain), to save the first demo baseline after a
+// restore's re-bootstrap seeded the example trips.
+import { DatabaseLifecycleModule } from '../database/database-lifecycle.module';
 import { Users } from '../../db/entities/Users.entity';
 import { AuditLog } from '../../db/entities/AuditLog.entity';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
@@ -58,7 +62,7 @@ import { PushSubscriptions } from '../../db/entities/PushSubscriptions.entity';
 @Module({
   imports: [
     MikroOrmModule.forFeature([Users, AuditLog, AppSettings, Addons, PhotoProviders, PhotoProviderFields, DocumentProviders, McpTokens, OauthTokens, Trips, Places, TripFiles, PushSubscriptions]),
-    AppConfigModule, PluginsRuntimeModule, SettingsModule, AuditModule, AddonsModule, AuthModule, NotificationsModule, PackingModule, PermissionsModule, TokensModule, OauthModule, SchedulingModule, KitineraryExtractorModule,
+    AppConfigModule, DatabaseLifecycleModule, PluginsRuntimeModule, SettingsModule, AuditModule, AddonsModule, AuthModule, NotificationsModule, PackingModule, PermissionsModule, TokensModule, OauthModule, SchedulingModule, KitineraryExtractorModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, VersionCheckJob, DemoResetJob],
