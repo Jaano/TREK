@@ -110,8 +110,8 @@ describe('PluginDataDb', () => {
     const db = new PluginDataDb('budget-query', { timeBudgetMs: 100, now: steppingClock(30) });
     db.exec('CREATE TABLE seq (n INTEGER)');
     db.exec('INSERT INTO seq (n) VALUES ' + Array.from({ length: 50 }, (_, i) => `(${i})`).join(','));
-    // The start reads 30 and each row reads again (60, 90, 120, 150): at the fourth
-    // row the call is 120 ms in, past the budget.
+    // The start reads the clock and each row reads it again, 30 ms later every time:
+    // at the fourth row the call is 120 ms in, past the budget.
     expect(() => db.query('SELECT n FROM seq')).toThrow('query exceeded its 100 ms time budget');
     // A query that finishes inside the budget is untouched.
     expect(db.query('SELECT n FROM seq WHERE n < 2 ORDER BY n')).toEqual([{ n: 0 }, { n: 1 }]);
@@ -135,6 +135,55 @@ describe('PluginDataDb', () => {
     expect(db.query('SELECT bal FROM acct WHERE id = 1')).toEqual([{ bal: 100 }]);
     // The rows a batch reads move the same clock: row, end of statement, row is 90 ms.
     expect(() => db.tx([{ sql: 'SELECT id FROM acct' }, { sql: 'SELECT bal FROM acct' }])).toThrow(/time budget/);
+    db.close();
+  });
+
+  it('holds an exec script to the time budget between its statements', () => {
+    const db = new PluginDataDb('budget-exec', { timeBudgetMs: 80, now: steppingClock(30) });
+    db.exec('CREATE TABLE log (n INTEGER)');
+    // Start, then one read after each statement: 30, 60, then 90 ms after the third
+    // insert. The script stops there and the fourth insert never runs. Each statement
+    // committed on its own, as Database#exec ran them, so the three stay.
+    expect(() =>
+      db.exec('INSERT INTO log VALUES (1); INSERT INTO log VALUES (2); INSERT INTO log VALUES (3); INSERT INTO log VALUES (4);'),
+    ).toThrow('exec exceeded its 80 ms time budget');
+    // One row back, so the check itself reads the clock once and stays in budget.
+    expect(db.query('SELECT group_concat(n) AS ns FROM (SELECT n FROM log ORDER BY n)')).toEqual([{ ns: '1,2,3' }]);
+    // A script that opened its own transaction and ran out of time inside it is rolled
+    // back, so the connection is not left in that transaction.
+    expect(() =>
+      db.exec('BEGIN; INSERT INTO log VALUES (5); INSERT INTO log VALUES (6); INSERT INTO log VALUES (7); COMMIT;'),
+    ).toThrow(/time budget/);
+    expect(db.query('SELECT count(*) AS c FROM log WHERE n > 4')).toEqual([{ c: 0 }]);
+    db.exec('INSERT INTO log VALUES (8)');
+    expect(db.query('SELECT count(*) AS c FROM log WHERE n > 4')).toEqual([{ c: 1 }]);
+    db.close();
+  });
+
+  it('runs an exec script statement by statement with the semantics Database#exec had', () => {
+    const db = new PluginDataDb('exec-script');
+    db.exec(`
+      -- a setup script: comments, a semicolon in a string, and a trigger body
+      CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT); /* one; two */
+      CREATE TABLE audit (note_id INTEGER, what TEXT);
+      CREATE TRIGGER notes_ai AFTER INSERT ON notes BEGIN
+        INSERT INTO audit (note_id, what) VALUES (new.id, 'added;');
+        INSERT INTO audit (note_id, what) VALUES (new.id, 'twice');
+      END;
+      INSERT INTO notes (body) VALUES ('it''s; fine');
+    `);
+    expect(db.query('SELECT body FROM notes')).toEqual([{ body: "it's; fine" }]);
+    expect(db.query('SELECT what FROM audit ORDER BY rowid')).toEqual([{ what: 'added;' }, { what: 'twice' }]);
+    // A script without a trailing semicolon, an empty one, and one of comments only.
+    db.exec("INSERT INTO notes (body) VALUES ('last')");
+    db.exec('');
+    db.exec('  -- nothing to run\n/* nor here */');
+    expect(db.query('SELECT count(*) AS n FROM notes')).toEqual([{ n: 2 }]);
+    // The statements before a failing one have run, and the failure is SQLite's own.
+    expect(() => db.exec("INSERT INTO notes (body) VALUES ('x'); INSERT INTO missing VALUES (1);")).toThrow(/no such table/);
+    expect(db.query('SELECT count(*) AS n FROM notes')).toEqual([{ n: 3 }]);
+    // A statement left open at the end reports what Database#exec reported.
+    expect(() => db.exec('CREATE TRIGGER t AFTER INSERT ON notes BEGIN SELECT 1;')).toThrow('incomplete input');
     db.close();
   });
 

@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Database as Db } from 'better-sqlite3';
+import type { Database as Db, Statement } from 'better-sqlite3';
 import { openDatabase } from '../../../db/connection';
 import { pluginDataDir, pluginDbFile, pluginsDataRoot } from '../paths';
+import { splitAfterSemicolons } from './sql-script';
 
 /**
  * A plugin's own sqlite database (#plugins, db:own). The HOST owns the handle;
@@ -13,7 +14,8 @@ import { pluginDataDir, pluginDbFile, pluginsDataRoot } from '../paths';
  *
  * A thin guard still rejects statements that would let a plugin escape its file
  * (ATTACH another db, VACUUM INTO elsewhere, PRAGMA fiddling) or DoS via
- * oversize SQL, and every read is held to a row cap and a time budget (below).
+ * oversize SQL, every read is held to a row cap, and query(), tx() and an exec()
+ * script are held to a time budget (below).
  */
 
 const MAX_SQL_LENGTH = 100_000;
@@ -41,15 +43,23 @@ const MAX_ROWS = 100_000;
 // Cap statements per atomic batch so a single tx() can't monopolise the synchronous
 // host — generous for real write batches, far below anything abusive.
 const MAX_TX_OPS = 100;
-// Wall-clock budget for one query() or one whole tx() batch. better-sqlite3 has no
-// interrupt or progress handler, so the budget is checked between the rows a statement
-// yields (and between the statements of a batch): a scan that keeps producing rows, or
-// a select whose every row is expensive, stops at the first row past the budget
-// instead of holding the host loop until the row cap. A statement that yields nothing
-// until it is done (an aggregate over a cartesian product) still runs to its first
-// row; only moving plugin SQL off the host thread can bound that, and the plugin-sdk
-// README says so.
+// Wall-clock budget for one query(), one whole tx() batch or one exec() script.
+// better-sqlite3 has no interrupt or progress handler, so the budget is checked
+// between the rows a statement yields and between the statements of a batch or a
+// script: a scan that keeps producing rows, a select whose every row is expensive, or
+// a script of many statements stops at the first row or statement past the budget
+// instead of holding the host loop. One statement on its own still runs to the end
+// (a write such as `INSERT … SELECT` over a cartesian product) or to its first row
+// (an aggregate over one); only moving plugin SQL off the host thread can bound that,
+// and the plugin-sdk README says so. migrate() is left unbudgeted on purpose: a
+// migration is stopped part of the way only to fail the same way on every later
+// start, which leaves a plugin that cannot update its schema at all.
 const TIME_BUDGET_MS = 2_000;
+// What better-sqlite3 throws from prepare() for a statement cut off before its end:
+// in an exec() script, a trigger body whose semicolon split it.
+const INCOMPLETE_INPUT = 'incomplete input';
+// And for a piece that holds no statement at all, only whitespace or comments.
+const NO_STATEMENT = 'The supplied SQL string contains no statements';
 
 /** The caps a PluginDataDb enforces. Overridable for tests; production uses the defaults. */
 export interface PluginDataLimits {
@@ -129,15 +139,60 @@ export class PluginDataDb {
     return rows;
   }
 
-  /** Write statement(s). exec() allows multiple statements (e.g. a small setup script). */
+  /**
+   * Write statement(s). With bound args, exec() runs one statement. Without, it runs a
+   * script of any number (e.g. a small setup script), one statement at a time and
+   * within the time budget, checked after each statement.
+   */
   exec(sql: string, args: unknown[] = []): { changes: number } {
     this.guard(sql);
     if (args.length > 0) {
       const info = this.db.prepare(sql).run(...(args as never[]));
       return { changes: info.changes };
     }
-    this.db.exec(sql);
+    this.runScript(sql, this.startBudget('exec'));
     return { changes: 0 };
+  }
+
+  /**
+   * Runs a script the way `Database#exec` did (statement after statement, each in
+   * autocommit unless the script opens a transaction), with `checkTime` read after
+   * every statement. A trigger body is gathered until SQLite stops calling it
+   * incomplete. A script that runs out of time inside a transaction it opened itself
+   * has that transaction rolled back, so the connection is not left holding it.
+   */
+  private runScript(sql: string, checkTime: () => void): void {
+    const openedNoTransaction = !this.db.inTransaction;
+    let pending = '';
+    for (const piece of splitAfterSemicolons(sql)) {
+      pending += piece;
+      const stmt = this.prepareComplete(pending);
+      if (stmt === 'incomplete') continue;
+      pending = '';
+      if (stmt === 'empty') continue;
+      stmt.run();
+      try {
+        checkTime();
+      } catch (e) {
+        if (openedNoTransaction && this.db.inTransaction) this.db.prepare('ROLLBACK').run();
+        throw e;
+      }
+    }
+    // A statement still open at the end of the script: prepare it once more for
+    // SQLite's own error, as Database#exec reports it.
+    if (pending !== '') this.db.prepare(pending);
+  }
+
+  /** `sql` prepared, or why it cannot be yet: cut off before its end, or no statement at all. */
+  private prepareComplete(sql: string): Statement | 'incomplete' | 'empty' {
+    try {
+      return this.db.prepare(sql);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '';
+      if (message === INCOMPLETE_INPUT) return 'incomplete';
+      if (message === NO_STATEMENT) return 'empty';
+      throw e;
+    }
   }
 
   /**
