@@ -49,18 +49,18 @@
  * variable (`t(item.labelKey)` with the table elsewhere, server-sent error
  * keys) look unused here.
  */
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
-import { dirname, join, relative } from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 // Plain paths rather than `new URL(..., import.meta.url)`: under the test runner's DOM environment URL is
 // jsdom's, which fileURLToPath refuses.
-const HERE = dirname(fileURLToPath(import.meta.url))
-const SRC = join(HERE, '..', 'src')
-const SHARED_SCRIPTS = join(HERE, '..', '..', 'shared', 'scripts')
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SRC = join(HERE, '..', 'src');
+const SHARED_SCRIPTS = join(HERE, '..', '..', 'shared', 'scripts');
 
 /** How many en keys a template may reach and still pass without an entry below. */
-export const MAX_IMPLICIT_MATCHES = 30
+export const MAX_IMPLICIT_MATCHES = 30;
 
 /**
  * Template keys the check cannot bound by itself: wider than
@@ -106,7 +106,7 @@ export const DYNAMIC_ALLOWED = [
       file,
       template: 'reservations.${s}',
       because: "s iterates the literal ['pending', 'confirmed'] as const; reservations.pending/confirmed exist",
-    }),
+    })
   ),
   ...['components/Admin/AdminPluginsPanel.tsx', 'mobile/screens/admin/MAdminPluginsPanel.tsx'].map((file) => ({
     file,
@@ -123,33 +123,33 @@ export const DYNAMIC_ALLOWED = [
         because:
           'field label and hint names come from the provider field rows PhotoProviderSeeder writes, each a ' +
           'memories.* key in en',
-      })),
+      }))
   ),
   {
     file: 'components/Tours/planner/TourPlannerPanels.tsx',
     template: 'tours.planner.${role}',
     because: "roleLabel takes role: 'start' | 'via' | 'end', and tours.planner.start/via/end exist",
   },
-]
+];
 
-const KEY_RE = /^[a-z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_:-]+)+$/
-const PREFIX_RE = /^[a-z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_:-]+)*\.$/
-const CALL_RE = /(?<![\w$.])(?:t|tHtml|tr)\(|(?<=[\w$]\.)(?:t|tHtml)\(/g
-const HTML_PROP_RE = /<TransHtml\b[^>]*?\bhtml=(["'])([^"'\n]+)\1/g
-const API_ERROR_RE = /\btranslateApiError\(\s*t\s*,[^,()]*(?:\([^()]*\))?[^,()]*,\s*(['"])([^'"\n]+)\1/g
-const KEY_BUILDER_RE = /\bconst\s+[a-zA-Z]*Key\s*=\s*\([^)]*\)\s*(?::\s*[^=]+?)?=>\s*`((?:\\.|\$\{[^}]*\}|[^`\\])*)`/g
-const KEY_PROP_RE = /\b[a-zA-Z]*Key\s*(?::|=\{?)\s*(['"])([a-z][a-zA-Z0-9_]*\.[^'"\s]+)\1/g
+const KEY_RE = /^[a-z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_:-]+)+$/;
+const PREFIX_RE = /^[a-z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_:-]+)*\.$/;
+const CALL_RE = /(?<![\w$.])(?:t|tHtml|tr)\(|(?<=[\w$]\.)(?:t|tHtml)\(/g;
+const HTML_PROP_RE = /<TransHtml\b[^>]*?\bhtml=(["'])([^"'\n]+)\1/g;
+const API_ERROR_RE = /\btranslateApiError\(\s*t\s*,[^,()]*(?:\([^()]*\))?[^,()]*,\s*(['"])([^'"\n]+)\1/g;
+const KEY_BUILDER_RE = /\bconst\s+[a-zA-Z]*Key\s*=\s*\([^)]*\)\s*(?::\s*[^=]+?)?=>\s*`((?:\\.|\$\{[^}]*\}|[^`\\])*)`/g;
+const KEY_PROP_RE = /\b[a-zA-Z]*Key\s*(?::|=\{?)\s*(['"])([a-z][a-zA-Z0-9_]*\.[^'"\s]+)\1/g;
 
 function walk(dir, files = []) {
   for (const name of readdirSync(dir)) {
-    const path = join(dir, name)
-    if (statSync(path).isDirectory()) walk(path, files)
-    else if (/\.tsx?$/.test(name) && !/\.(?:test|spec)\./.test(name) && !name.endsWith('.d.ts')) files.push(path)
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) walk(path, files);
+    else if (/\.tsx?$/.test(name) && !/\.(?:test|spec)\./.test(name) && !name.endsWith('.d.ts')) files.push(path);
   }
-  return files
+  return files;
 }
 
-const lineAt = (text, index) => text.slice(0, index).split('\n').length
+const lineAt = (text, index) => text.slice(0, index).split('\n').length;
 
 /**
  * The source of the first argument of the call whose `(` sits at `open`:
@@ -157,41 +157,41 @@ const lineAt = (text, index) => text.slice(0, index).split('\n').length
  * strings, template literals and nested brackets skipped as units.
  */
 export function firstArgument(text, open) {
-  let depth = 0
+  let depth = 0;
   for (let i = open + 1; i < text.length; i++) {
-    const c = text[i]
+    const c = text[i];
     if (c === "'" || c === '"' || c === '`') {
       for (i++; i < text.length && text[i] !== c; i++) {
-        if (text[i] === '\\') i++
+        if (text[i] === '\\') i++;
         else if (c === '`' && text[i] === '$' && text[i + 1] === '{') {
           // Skip the interpolation, counting its braces.
-          let braces = 0
+          let braces = 0;
           for (; i < text.length; i++) {
-            if (text[i] === '{') braces++
-            else if (text[i] === '}' && --braces === 0) break
+            if (text[i] === '{') braces++;
+            else if (text[i] === '}' && --braces === 0) break;
           }
         }
       }
-      continue
+      continue;
     }
-    if (c === '(' || c === '[' || c === '{') depth++
+    if (c === '(' || c === '[' || c === '{') depth++;
     else if (c === ')' || c === ']' || c === '}') {
-      if (depth === 0) return text.slice(open + 1, i)
-      depth--
-    } else if (c === ',' && depth === 0) return text.slice(open + 1, i)
+      if (depth === 0) return text.slice(open + 1, i);
+      depth--;
+    } else if (c === ',' && depth === 0) return text.slice(open + 1, i);
   }
-  return text.slice(open + 1)
+  return text.slice(open + 1);
 }
 
 /** The quoted literals and template literals of an argument's source. */
 export function literalsIn(arg) {
-  const quoted = []
-  const templates = []
+  const quoted = [];
+  const templates = [];
   for (const m of arg.matchAll(/(['"])((?:\\.|(?!\1)[^\\\n])*)\1|`((?:\\.|\$\{[^}]*\}|[^`\\])*)`/g)) {
-    if (m[3] !== undefined) templates.push(m[3])
-    else quoted.push(m[2])
+    if (m[3] !== undefined) templates.push(m[3]);
+    else quoted.push(m[2]);
   }
-  return { quoted, templates }
+  return { quoted, templates };
 }
 
 /**
@@ -199,10 +199,10 @@ export function literalsIn(arg) {
  * for each interpolation. Null when it has no fixed dotted prefix.
  */
 export function templatePattern(template) {
-  const parts = template.split(/\$\{[^}]*\}/)
-  if (!/^[a-z][a-zA-Z0-9_]*\./.test(parts[0] ?? '')) return null
-  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`^${parts.map(escape).join('[^.]+')}$`)
+  const parts = template.split(/\$\{[^}]*\}/);
+  if (!/^[a-z][a-zA-Z0-9_]*\./.test(parts[0] ?? '')) return null;
+  const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${parts.map(escape).join('[^.]+')}$`);
 }
 
 /**
@@ -211,36 +211,36 @@ export function templatePattern(template) {
  * `?.` is optional chaining.
  */
 function topLevelOperators(expr) {
-  const ops = []
-  let depth = 0
+  const ops = [];
+  let depth = 0;
   for (let i = 0; i < expr.length; i++) {
-    const c = expr[i]
+    const c = expr[i];
     if (c === "'" || c === '"' || c === '`') {
-      for (i++; i < expr.length && expr[i] !== c; i++) if (expr[i] === '\\') i++
-    } else if (c === '(' || c === '[' || c === '{') depth++
-    else if (c === ')' || c === ']' || c === '}') depth--
-    else if (depth > 0) continue
-    else if ((c === '?' && expr[i + 1] === '?') || (c === '|' && expr[i + 1] === '|')) ops.push({ op: c + c, at: i++ })
-    else if (c === '?' && expr[i + 1] !== '.') ops.push({ op: '?', at: i })
-    else if (c === ':') ops.push({ op: ':', at: i })
+      for (i++; i < expr.length && expr[i] !== c; i++) if (expr[i] === '\\') i++;
+    } else if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (depth > 0) continue;
+    else if ((c === '?' && expr[i + 1] === '?') || (c === '|' && expr[i + 1] === '|')) ops.push({ op: c + c, at: i++ });
+    else if (c === '?' && expr[i + 1] !== '.') ops.push({ op: '?', at: i });
+    else if (c === ':') ops.push({ op: ':', at: i });
   }
-  return ops
+  return ops;
 }
 
-const QUOTED_RE = /^(['"])((?:\\.|(?!\1)[^\\\n])*)\1$/
+const QUOTED_RE = /^(['"])((?:\\.|(?!\1)[^\\\n])*)\1$/;
 
 /** Whether `e` is one parenthesized expression, its first `(` closing at its last character. */
 function wrapsWhole(e) {
-  if (!e.startsWith('(') || !e.endsWith(')')) return false
-  let depth = 0
+  if (!e.startsWith('(') || !e.endsWith(')')) return false;
+  let depth = 0;
   for (let i = 0; i < e.length; i++) {
-    const c = e[i]
+    const c = e[i];
     if (c === "'" || c === '"' || c === '`') {
-      for (i++; i < e.length && e[i] !== c; i++) if (e[i] === '\\') i++
-    } else if (c === '(') depth++
-    else if (c === ')' && --depth === 0) return i === e.length - 1
+      for (i++; i < e.length && e[i] !== c; i++) if (e[i] === '\\') i++;
+    } else if (c === '(') depth++;
+    else if (c === ')' && --depth === 0) return i === e.length - 1;
   }
-  return false
+  return false;
 }
 
 /**
@@ -251,42 +251,42 @@ function wrapsWhole(e) {
  * never a result.
  */
 export function interpolationResults(expr) {
-  let e = expr.trim()
-  while (wrapsWhole(e)) e = e.slice(1, -1).trim()
-  const ops = topLevelOperators(e)
-  const q = ops.findIndex((o) => o.op === '?')
+  let e = expr.trim();
+  while (wrapsWhole(e)) e = e.slice(1, -1).trim();
+  const ops = topLevelOperators(e);
+  const q = ops.findIndex((o) => o.op === '?');
   if (q >= 0) {
     // The matching `:` of the first `?`: nested ternaries in the consequent raise the count.
-    let open = 0
+    let open = 0;
     for (const o of ops.slice(q + 1)) {
-      if (o.op === '?') open++
+      if (o.op === '?') open++;
       else if (o.op === ':' && open-- === 0) {
-        const a = interpolationResults(e.slice(ops[q].at + 1, o.at))
-        const b = interpolationResults(e.slice(o.at + 1))
-        return { literals: [...a.literals, ...b.literals], complete: a.complete && b.complete }
+        const a = interpolationResults(e.slice(ops[q].at + 1, o.at));
+        const b = interpolationResults(e.slice(o.at + 1));
+        return { literals: [...a.literals, ...b.literals], complete: a.complete && b.complete };
       }
     }
-    return { literals: [], complete: false }
+    return { literals: [], complete: false };
   }
-  const fallback = ops.filter((o) => o.op === '??' || o.op === '||')
+  const fallback = ops.filter((o) => o.op === '??' || o.op === '||');
   if (fallback.length) {
-    const operands = []
-    let from = 0
+    const operands = [];
+    let from = 0;
     for (const o of fallback) {
-      operands.push(e.slice(from, o.at))
-      from = o.at + 2
+      operands.push(e.slice(from, o.at));
+      from = o.at + 2;
     }
-    operands.push(e.slice(from))
+    operands.push(e.slice(from));
     // The left operands are tested values; only the literal ones among them could be produced.
-    const literals = operands.flatMap((x) => interpolationResults(x).literals)
-    return { literals, complete: false }
+    const literals = operands.flatMap((x) => interpolationResults(x).literals);
+    return { literals, complete: false };
   }
-  const m = QUOTED_RE.exec(e)
-  return m ? { literals: [m[2]], complete: true } : { literals: [], complete: false }
+  const m = QUOTED_RE.exec(e);
+  return m ? { literals: [m[2]], complete: true } : { literals: [], complete: false };
 }
 
 /** How many keys a template with only literal choices may expand to before it is read as a pattern instead. */
-const MAX_EXPANSION = 64
+const MAX_EXPANSION = 64;
 
 /**
  * The references one template literal makes. Interpolations that can only
@@ -297,91 +297,92 @@ const MAX_EXPANSION = 64
  * that interpolation fixed, under the original template's allow-list site.
  */
 function templateRefs(file, line, template) {
-  const parts = template.split(/\$\{([^}]*)\}/)
-  const fixed = parts.filter((_, i) => i % 2 === 0)
-  const results = parts.filter((_, i) => i % 2 === 1).map(interpolationResults)
-  const literal = []
-  const dynamic = []
-  const build = (choices) => fixed.map((f, i) => f + (i < choices.length ? choices[i] : '')).join('')
-  const size = results.reduce((n, r) => n * Math.max(r.literals.length, 1), 1)
+  const parts = template.split(/\$\{([^}]*)\}/);
+  const fixed = parts.filter((_, i) => i % 2 === 0);
+  const results = parts.filter((_, i) => i % 2 === 1).map(interpolationResults);
+  const literal = [];
+  const dynamic = [];
+  const build = (choices) => fixed.map((f, i) => f + (i < choices.length ? choices[i] : '')).join('');
+  const size = results.reduce((n, r) => n * Math.max(r.literals.length, 1), 1);
   if (results.every((r) => r.complete) && size <= MAX_EXPANSION) {
-    let keys = ['']
+    let keys = [''];
     results.forEach((r, i) => {
-      keys = keys.flatMap((k) => r.literals.map((lit) => k + fixed[i] + lit))
-    })
-    for (const k of keys) literal.push({ file, line, key: k + fixed[fixed.length - 1] })
-    return { literal, dynamic }
+      keys = keys.flatMap((k) => r.literals.map((lit) => k + fixed[i] + lit));
+    });
+    for (const k of keys) literal.push({ file, line, key: k + fixed[fixed.length - 1] });
+    return { literal, dynamic };
   }
-  dynamic.push({ file, line, template, pattern: templatePattern(template) })
-  const raw = parts.filter((_, i) => i % 2 === 1).map((x) => `\${${x}}`)
+  dynamic.push({ file, line, template, pattern: templatePattern(template) });
+  const raw = parts.filter((_, i) => i % 2 === 1).map((x) => `\${${x}}`);
   results.forEach((r, i) => {
     for (const lit of r.literals) {
-      const choices = raw.map((x, j) => (j === i ? lit : x))
-      const derived = build(choices)
-      if (!derived.includes('${')) literal.push({ file, line, key: derived })
-      else dynamic.push({ file, line, template: derived, pattern: templatePattern(derived), site: template })
+      const choices = raw.map((x, j) => (j === i ? lit : x));
+      const derived = build(choices);
+      if (!derived.includes('${')) literal.push({ file, line, key: derived });
+      else dynamic.push({ file, line, template: derived, pattern: templatePattern(derived), site: template });
     }
-  })
-  return { literal, dynamic }
+  });
+  return { literal, dynamic };
 }
 
 /** Every key reference in one file's source. */
 export function scanSource(text, file = '<source>') {
-  const literal = []
-  const dynamic = []
+  const literal = [];
+  const dynamic = [];
   for (const m of text.matchAll(CALL_RE)) {
-    const open = m.index + m[0].length - 1
-    const { quoted, templates } = literalsIn(firstArgument(text, open))
-    const line = lineAt(text, m.index)
+    const open = m.index + m[0].length - 1;
+    const { quoted, templates } = literalsIn(firstArgument(text, open));
+    const line = lineAt(text, m.index);
     for (const key of quoted) {
-      if (KEY_RE.test(key)) literal.push({ file, line, key })
+      if (KEY_RE.test(key)) literal.push({ file, line, key });
       // t('costs.filter.' + f): a prefix with the rest appended, read like a template.
-      else if (PREFIX_RE.test(key)) dynamic.push({ file, line, template: `${key}\${…}`, pattern: templatePattern(`${key}\${…}`) })
+      else if (PREFIX_RE.test(key))
+        dynamic.push({ file, line, template: `${key}\${…}`, pattern: templatePattern(`${key}\${…}`) });
     }
     for (const template of templates) {
       if (!template.includes('${')) {
-        if (KEY_RE.test(template)) literal.push({ file, line, key: template })
-        continue
+        if (KEY_RE.test(template)) literal.push({ file, line, key: template });
+        continue;
       }
-      const refs = templateRefs(file, line, template)
-      literal.push(...refs.literal)
-      dynamic.push(...refs.dynamic)
+      const refs = templateRefs(file, line, template);
+      literal.push(...refs.literal);
+      dynamic.push(...refs.dynamic);
     }
   }
   for (const m of text.matchAll(KEY_BUILDER_RE)) {
     // Builders of other strings (cache keys) have no fixed dotted prefix and are not translation keys.
-    const pattern = templatePattern(m[1])
-    if (pattern) dynamic.push({ file, line: lineAt(text, m.index), template: m[1], pattern })
+    const pattern = templatePattern(m[1]);
+    if (pattern) dynamic.push({ file, line: lineAt(text, m.index), template: m[1], pattern });
   }
   for (const re of [HTML_PROP_RE, API_ERROR_RE, KEY_PROP_RE]) {
     for (const m of text.matchAll(re)) {
-      if (KEY_RE.test(m[2])) literal.push({ file, line: lineAt(text, m.index), key: m[2] })
+      if (KEY_RE.test(m[2])) literal.push({ file, line: lineAt(text, m.index), key: m[2] });
     }
   }
-  return { literal, dynamic }
+  return { literal, dynamic };
 }
 
 /** en's keys, read from the locale sources with the shared parity tooling's reader. */
 export async function readEnKeys() {
-  const { listDomainFiles, readCatalog } = await import(pathToFileURL(join(SHARED_SCRIPTS, 'i18n-catalog.mjs')).href)
-  const keys = new Set()
-  for (const file of listDomainFiles('en')) for (const { key } of readCatalog('en', file)) keys.add(key)
-  if (keys.size === 0) throw new Error('shared/src/i18n/en holds no keys: the reader or the path is broken')
-  return keys
+  const { listDomainFiles, readCatalog } = await import(pathToFileURL(join(SHARED_SCRIPTS, 'i18n-catalog.mjs')).href);
+  const keys = new Set();
+  for (const file of listDomainFiles('en')) for (const { key } of readCatalog('en', file)) keys.add(key);
+  if (keys.size === 0) throw new Error('shared/src/i18n/en holds no keys: the reader or the path is broken');
+  return keys;
 }
 
-export const hasKey = (enKeys, key) => enKeys.has(key) || enKeys.has(`${key}.other`)
+export const hasKey = (enKeys, key) => enKeys.has(key) || enKeys.has(`${key}.other`);
 
-const base = (k) => k.replace(/\.(?:zero|one|two|few|many|other)$/, '')
+const base = (k) => k.replace(/\.(?:zero|one|two|few|many|other)$/, '');
 
 /** How many en keys a pattern reaches, a plural group counted once. */
 export function countMatches(pattern, enKeys) {
-  const reached = new Set()
+  const reached = new Set();
   for (const k of enKeys) {
-    if (pattern.test(k)) reached.add(k)
-    else if (pattern.test(base(k))) reached.add(base(k))
+    if (pattern.test(k)) reached.add(k);
+    else if (pattern.test(base(k))) reached.add(base(k));
   }
-  return reached.size
+  return reached.size;
 }
 
 /**
@@ -391,85 +392,87 @@ export function countMatches(pattern, enKeys) {
  * needs, and the en keys nothing reaches.
  */
 export function evaluate(scan, enKeys, allowed = DYNAMIC_ALLOWED) {
-  const missing = scan.literal.filter(({ key }) => !hasKey(enKeys, key))
-  const site = (file, template) => `${file}\n${template}`
-  const allowedSites = new Set(allowed.map((a) => site(a.file, a.template)))
-  const counts = new Map()
+  const missing = scan.literal.filter(({ key }) => !hasKey(enKeys, key));
+  const site = (file, template) => `${file}\n${template}`;
+  const allowedSites = new Set(allowed.map((a) => site(a.file, a.template)));
+  const counts = new Map();
   const reach = (template, pattern) => {
-    if (!counts.has(template)) counts.set(template, pattern ? countMatches(pattern, enKeys) : null)
-    return counts.get(template)
-  }
-  const unmatched = []
-  const broad = []
+    if (!counts.has(template)) counts.set(template, pattern ? countMatches(pattern, enKeys) : null);
+    return counts.get(template);
+  };
+  const unmatched = [];
+  const broad = [];
   for (const d of scan.dynamic) {
-    const n = reach(d.template, d.pattern)
-    const isAllowed = allowedSites.has(site(d.file, d.site ?? d.template))
-    if (n === 0 || (n === null && !isAllowed)) unmatched.push(d)
-    else if (n > MAX_IMPLICIT_MATCHES && !isAllowed) broad.push({ ...d, matches: n })
+    const n = reach(d.template, d.pattern);
+    const isAllowed = allowedSites.has(site(d.file, d.site ?? d.template));
+    if (n === 0 || (n === null && !isAllowed)) unmatched.push(d);
+    else if (n > MAX_IMPLICIT_MATCHES && !isAllowed) broad.push({ ...d, matches: n });
   }
-  const usedSites = new Set(scan.dynamic.map((d) => site(d.file, d.site ?? d.template)))
+  const usedSites = new Set(scan.dynamic.map((d) => site(d.file, d.site ?? d.template)));
   const stale = allowed.filter((a) => {
-    if (!usedSites.has(site(a.file, a.template))) return true
-    if ((a.resolves ?? []).some((k) => !hasKey(enKeys, k))) return true
+    if (!usedSites.has(site(a.file, a.template))) return true;
+    if ((a.resolves ?? []).some((k) => !hasKey(enKeys, k))) return true;
     // An entry for a template narrow enough to pass by itself only lengthens the list.
-    const n = reach(a.template, templatePattern(a.template))
-    return n !== null && n <= MAX_IMPLICIT_MATCHES
-  })
-  const reached = new Set([...scan.literal.map((l) => l.key), ...allowed.flatMap((a) => a.resolves ?? [])])
-  const patterns = scan.dynamic.map((d) => d.pattern).filter(Boolean)
+    const n = reach(a.template, templatePattern(a.template));
+    return n !== null && n <= MAX_IMPLICIT_MATCHES;
+  });
+  const reached = new Set([...scan.literal.map((l) => l.key), ...allowed.flatMap((a) => a.resolves ?? [])]);
+  const patterns = scan.dynamic.map((d) => d.pattern).filter(Boolean);
   const unused = [...enKeys].filter(
-    (k) => !reached.has(k) && !reached.has(base(k)) && !patterns.some((p) => p.test(k) || p.test(base(k))),
-  )
-  return { missing, unmatched, broad, stale, unused }
+    (k) => !reached.has(k) && !reached.has(base(k)) && !patterns.some((p) => p.test(k) || p.test(base(k)))
+  );
+  return { missing, unmatched, broad, stale, unused };
 }
 
 export function scanTree(root = SRC) {
-  if (!existsSync(root)) throw new Error(`${root} does not exist`)
-  const scan = { literal: [], dynamic: [] }
+  if (!existsSync(root)) throw new Error(`${root} does not exist`);
+  const scan = { literal: [], dynamic: [] };
   for (const path of walk(root)) {
-    const found = scanSource(readFileSync(path, 'utf8'), relative(root, path).split('\\').join('/'))
-    scan.literal.push(...found.literal)
-    scan.dynamic.push(...found.dynamic)
+    const found = scanSource(readFileSync(path, 'utf8'), relative(root, path).split('\\').join('/'));
+    scan.literal.push(...found.literal);
+    scan.dynamic.push(...found.dynamic);
   }
-  if (scan.literal.length === 0) throw new Error(`no translation key found under ${root}: the scanner is broken`)
-  return scan
+  if (scan.literal.length === 0) throw new Error(`no translation key found under ${root}: the scanner is broken`);
+  return scan;
 }
 
 // Compared by real path, so the check still runs when the script is started through a symlink.
 const isCli =
-  Boolean(process.argv[1]) && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)
+  Boolean(process.argv[1]) &&
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isCli) {
   try {
-    const scan = scanTree()
-    const enKeys = await readEnKeys()
-    const { missing, unmatched, broad, stale, unused } = evaluate(scan, enKeys)
+    const scan = scanTree();
+    const enKeys = await readEnKeys();
+    const { missing, unmatched, broad, stale, unused } = evaluate(scan, enKeys);
     for (const { file, line, key } of missing) {
-      console.error(`FAIL  ${file}:${line}: '${key}' is not a key in shared/src/i18n/en`)
+      console.error(`FAIL  ${file}:${line}: '${key}' is not a key in shared/src/i18n/en`);
     }
     for (const { file, line, template } of unmatched) {
-      console.error(`FAIL  ${file}:${line}: \`${template}\` matches no key in shared/src/i18n/en`)
+      console.error(`FAIL  ${file}:${line}: \`${template}\` matches no key in shared/src/i18n/en`);
     }
     for (const { file, line, template, matches } of broad) {
       console.error(
         `FAIL  ${file}:${line}: \`${template}\` reaches ${matches} en keys, more than ${MAX_IMPLICIT_MATCHES}: ` +
-          'narrow the prefix, or add a DYNAMIC_ALLOWED entry saying what bounds the value',
-      )
+          'narrow the prefix, or add a DYNAMIC_ALLOWED entry saying what bounds the value'
+      );
     }
     for (const { file, template } of stale) {
       console.error(
         `FAIL  DYNAMIC_ALLOWED lists \`${template}\` in ${file}, which that file no longer uses, whose keys en ` +
-          'lacks, or which is narrow enough to pass without it: remove or fix the entry',
-      )
+          'lacks, or which is narrow enough to pass without it: remove or fix the entry'
+      );
     }
-    if (process.argv.includes('--unused')) for (const key of unused.sort()) console.log(`unused  ${key}`)
+    if (process.argv.includes('--unused')) for (const key of unused.sort()) console.log(`unused  ${key}`);
     console.log(
       `i18n keys: ${new Set(scan.literal.map((l) => l.key)).size} literal and ${scan.dynamic.length} template ` +
         `reference(s) checked against ${enKeys.size} en keys; ${unused.length} en key(s) reached by neither ` +
-        '(information, --unused lists them)',
-    )
-    if (missing.length || unmatched.length || broad.length || stale.length) process.exit(1)
+        '(information, --unused lists them)'
+    );
+    if (missing.length || unmatched.length || broad.length || stale.length) process.exit(1);
   } catch (err) {
-    console.error(`FAIL  ${err.message}`)
-    process.exit(1)
+    console.error(`FAIL  ${err.message}`);
+    process.exit(1);
   }
 }
