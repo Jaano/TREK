@@ -84,7 +84,8 @@ SQLite is the engine today and Postgres is the planned second one. Code under `s
 
 **Never read `process.env` in `src/**`** — ESLint errors on it. All env access goes through `src/app-config/`:
 
-- Nest classes inject a boot-stable namespace token from `src/nest/app-config/` for values frozen per app build, or use `RuntimeEnvService` / `readEnv()` for runtime-toggled values (DEMO_MODE, NODE_ENV, OIDC_*, …) that tests mutate mid-lifetime.
+- Every variable has exactly one owner. Nest classes inject a boot-stable namespace token from `src/nest/app-config/` (`httpConfig`, `storageConfig`) for values frozen per app build, or use `RuntimeEnvService` / `readEnv()` for everything else (DEMO_MODE, NODE_ENV, OIDC_*, ...). A token-owned variable is derived in `boot-derive.ts` and never by `readEnv()`; `tests/unit/app-config/config-ownership.test.ts` fails on a variable read through both, and on a token nothing injects.
+- `server/.env.example` documents every variable `env.schema.ts` validates; `env-reference.test.ts` fails on drift either way.
 - Everything else calls `readEnv()` — live, uncached, per call.
 - Validation is fail-fast at boot only (`boot-validate.ts`, imported by `index.ts` right after dotenv): malformed values abort startup; unset/blank defaults. Never wire validation into `buildApp()` or `ConfigModule.forRoot`, and never `cache`/snapshot a runtime-toggled value (it breaks the env-mutating tests).
 - Booleans go through `parseBool` (true/1/on/yes vs false/0/off/no). Everything else pins its exact legacy coercion — quirks and the ESLint exemption list are in `src/app-config/README.md`.

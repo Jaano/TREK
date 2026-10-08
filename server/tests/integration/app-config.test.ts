@@ -30,47 +30,47 @@ import type { ConfigType } from '@nestjs/config';
 
 describe('AppConfigModule in the real buildApp()', () => {
   let app: INestApplication | undefined;
-  let prevForceHttps: string | undefined;
+  let prevHsts: string | undefined;
   let prevDemo: string | undefined;
 
   beforeAll(() => {
     resetTestDb(testDb);
-    prevForceHttps = process.env.FORCE_HTTPS;
+    prevHsts = process.env.HSTS_INCLUDE_SUBDOMAINS;
     prevDemo = process.env.DEMO_MODE;
   });
 
   afterEach(async () => {
     await app?.close();
     app = undefined;
-    if (prevForceHttps === undefined) delete process.env.FORCE_HTTPS;
-    else process.env.FORCE_HTTPS = prevForceHttps;
+    if (prevHsts === undefined) delete process.env.HSTS_INCLUDE_SUBDOMAINS;
+    else process.env.HSTS_INCLUDE_SUBDOMAINS = prevHsts;
     if (prevDemo === undefined) delete process.env.DEMO_MODE;
     else process.env.DEMO_MODE = prevDemo;
   });
 
   it('boot-stable snapshots re-derive per app build (mutate → rebuild → new value)', async () => {
-    process.env.FORCE_HTTPS = 'true';
+    process.env.HSTS_INCLUDE_SUBDOMAINS = 'true';
     app = await buildApp();
     let http = app.get<ConfigType<typeof httpConfig>>(httpConfig.KEY);
-    expect(http.forceHttps).toBe(true);
+    expect(http.hstsIncludeSubdomains).toBe(true);
     await app.close();
 
-    process.env.FORCE_HTTPS = 'off';
+    process.env.HSTS_INCLUDE_SUBDOMAINS = 'off';
     app = await buildApp();
     http = app.get<ConfigType<typeof httpConfig>>(httpConfig.KEY);
-    expect(http.forceHttps).toBe(false);
+    expect(http.hstsIncludeSubdomains).toBe(false);
   });
 
   it('a snapshot does NOT move within one app lifetime, RuntimeEnvService does', async () => {
-    delete process.env.FORCE_HTTPS;
+    delete process.env.HSTS_INCLUDE_SUBDOMAINS;
     delete process.env.DEMO_MODE;
     app = await buildApp();
     const http = app.get<ConfigType<typeof httpConfig>>(httpConfig.KEY);
     const runtime = app.get(RuntimeEnvService);
 
-    process.env.FORCE_HTTPS = 'true';
+    process.env.HSTS_INCLUDE_SUBDOMAINS = 'true';
     process.env.DEMO_MODE = 'true';
-    expect(http.forceHttps).toBe(false); // frozen at build — by design
+    expect(http.hstsIncludeSubdomains).toBe(false); // frozen at build, by design
     expect(runtime.isDemoMode()).toBe(true); // live — by design
   });
 });

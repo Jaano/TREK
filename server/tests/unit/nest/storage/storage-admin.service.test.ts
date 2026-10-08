@@ -15,7 +15,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { Logger } from '@nestjs/common';
 import { MASKED_SETTING_VALUE, type StorageConfig } from '@trek/shared';
-import type { RuntimeEnvService } from '../../../../src/nest/app-config/runtime-env.service';
 import { encrypt_api_key } from '../../../../src/nest/common/crypto/apiKeyCrypto';
 import { StorageAdminService } from '../../../../src/nest/storage/storage-admin.service';
 import { StorageEventsService } from '../../../../src/nest/storage/storage-events.service';
@@ -55,7 +54,7 @@ const S3_OPTIONS = {
 async function makeService(opts: { uploadsRoot?: string } = {}) {
   const uploadsRoot = opts.uploadsRoot ?? makeTmpDir();
   setSetting(BACKENDS_KEY, JSON.stringify([{ name: 'uploads-local', type: 'local', options: { root: uploadsRoot } }]));
-  const env = { env: () => ({ paths: {} }) } as unknown as RuntimeEnvService;
+  const env = { placePhotoDir: undefined };
   const uow = await createTestUnitOfWork(testDb);
   const appSettings = await createTestAppSettingsRepo(testDb);
   const registry = new StorageRegistryService(

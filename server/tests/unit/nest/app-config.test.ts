@@ -6,7 +6,8 @@ import { ConfigService, ConfigType } from '@nestjs/config';
 
 import { AppConfigModule } from '../../../src/nest/app-config/app-config.module';
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
-import { httpConfig, mcpConfig, BOOT_STABLE_TOKENS } from '../../../src/nest/app-config/tokens';
+import { httpConfig, storageConfig, BOOT_STABLE_TOKENS } from '../../../src/nest/app-config/tokens';
+import { DataPathsService } from '../../../src/nest/app-config/data-paths.service';
 
 describe('RuntimeEnvService', () => {
   const service = new RuntimeEnvService();
@@ -38,15 +39,15 @@ describe('RuntimeEnvService', () => {
 
 describe('boot-stable tokens', () => {
   it('factories re-derive from the current env on each invocation', () => {
-    const prev = process.env.FORCE_HTTPS;
+    const prev = process.env.HSTS_INCLUDE_SUBDOMAINS;
     try {
-      process.env.FORCE_HTTPS = 'on';
-      expect(httpConfig().forceHttps).toBe(true);
-      process.env.FORCE_HTTPS = 'off';
-      expect(httpConfig().forceHttps).toBe(false);
+      process.env.HSTS_INCLUDE_SUBDOMAINS = 'on';
+      expect(httpConfig().hstsIncludeSubdomains).toBe(true);
+      process.env.HSTS_INCLUDE_SUBDOMAINS = 'off';
+      expect(httpConfig().hstsIncludeSubdomains).toBe(false);
     } finally {
-      if (prev === undefined) delete process.env.FORCE_HTTPS;
-      else process.env.FORCE_HTTPS = prev;
+      if (prev === undefined) delete process.env.HSTS_INCLUDE_SUBDOMAINS;
+      else process.env.HSTS_INCLUDE_SUBDOMAINS = prev;
     }
   });
 
@@ -58,14 +59,20 @@ describe('boot-stable tokens', () => {
 });
 
 describe('AppConfigModule', () => {
-  it('provides ConfigService, RuntimeEnvService and the loaded namespaces', async () => {
+  it('provides ConfigService, RuntimeEnvService, DataPathsService and the loaded namespaces', async () => {
+    const prev = process.env.TREK_PLACE_PHOTO_DIR;
+    process.env.TREK_PLACE_PHOTO_DIR = '/srv/place-photos';
     const moduleRef = await Test.createTestingModule({ imports: [AppConfigModule] }).compile();
+    if (prev === undefined) delete process.env.TREK_PLACE_PHOTO_DIR;
+    else process.env.TREK_PLACE_PHOTO_DIR = prev;
     try {
       const config = moduleRef.get(ConfigService);
       const runtime = moduleRef.get(RuntimeEnvService);
-      const mcp = moduleRef.get<ConfigType<typeof mcpConfig>>(mcpConfig.KEY);
+      const storage = moduleRef.get<ConfigType<typeof storageConfig>>(storageConfig.KEY);
       expect(runtime).toBeInstanceOf(RuntimeEnvService);
-      expect(mcp.rateLimitMax).toBe(300);
+      expect(moduleRef.get(DataPathsService)).toBeInstanceOf(DataPathsService);
+      // A snapshot taken when the module was built, not a live read.
+      expect(storage.placePhotoDir).toBe('/srv/place-photos');
       // Plain get() falls through to live process.env (cache: false).
       expect(config.get('NODE_ENV')).toBe('test');
     } finally {

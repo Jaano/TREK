@@ -69,20 +69,19 @@ function resolveDefaultLanguage(raw: string | undefined): string {
   return canonical ?? 'en';
 }
 
+/**
+ * The live half of the HTTP settings. TRUST_PROXY and HSTS_INCLUDE_SUBDOMAINS
+ * are not here: they are boot-stable and owned by the `httpConfig` token
+ * (boot-derive.ts), so they cannot be read through two doors.
+ */
 export function deriveHttp(raw: RawEnv) {
-  // env.schema.ts accepts 0 as a valid hop count, so `|| 1` would quietly turn
-  // "trust nothing" into "trust one hop" and let a forged X-Forwarded-For through.
-  const trustProxyHops = Number.parseInt(raw.TRUST_PROXY ?? '', 10);
   return {
     allowedOriginsRaw: raw.ALLOWED_ORIGINS,
     /** globalMiddleware CORS variant: trim + drop empty entries. */
     corsOrigins: csvListFiltered(raw.ALLOWED_ORIGINS),
     /** websocket variant: trim only — an empty entry stays (and can never match an Origin header). */
     wsOrigins: csvList(raw.ALLOWED_ORIGINS),
-    trustProxyRaw: raw.TRUST_PROXY,
-    trustProxy: Number.isFinite(trustProxyHops) ? trustProxyHops : 1,
     forceHttps: parseBool(raw.FORCE_HTTPS) === true,
-    hstsIncludeSubdomains: parseBool(raw.HSTS_INCLUDE_SUBDOMAINS) === true,
     /** COOKIE_SECURE is tri-state: an explicit falsy value disables secure cookies; anything else means auto-detect. */
     cookieSecureDisabled: parseBool(raw.COOKIE_SECURE) === false,
     apiDocsEnabled: parseBool(raw.TREK_API_DOCS_ENABLED) === true,
@@ -346,10 +345,10 @@ export function deriveDb(raw: RawEnv) {
   };
 }
 
+/** TREK_PLACE_PHOTO_DIR is boot-stable and owned by the `storageConfig` token (boot-derive.ts). */
 export function derivePaths(raw: RawEnv) {
   return {
     wikiDir: raw.TREK_WIKI_DIR,
-    placePhotoDir: raw.TREK_PLACE_PHOTO_DIR,
   };
 }
 

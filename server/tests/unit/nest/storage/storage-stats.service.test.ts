@@ -14,7 +14,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import type { RuntimeEnvService } from '../../../../src/nest/app-config/runtime-env.service';
 import { StorageEventsService } from '../../../../src/nest/storage/storage-events.service';
 import { StorageRegistryService } from '../../../../src/nest/storage/storage-registry.service';
 import { StorageService } from '../../../../src/nest/storage/storage.service';
@@ -48,7 +47,7 @@ async function makeWorld() {
       { name: 'backups-local', type: 'local', options: { root: backupsRoot } },
     ]),
   );
-  const env = { env: () => ({ paths: {} }) } as unknown as RuntimeEnvService;
+  const env = { placePhotoDir: undefined };
   const appSettings = await createTestAppSettingsRepo(testDb);
   const registry = new StorageRegistryService(
     appSettings,

@@ -15,7 +15,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { Logger } from '@nestjs/common';
-import type { RuntimeEnvService } from '../../../../src/nest/app-config/runtime-env.service';
 import { MirrorDriver } from '../../../../src/nest/storage/drivers/mirror.driver';
 import { StorageEventsService } from '../../../../src/nest/storage/storage-events.service';
 import { CATEGORIES_KEY, StorageRegistryService } from '../../../../src/nest/storage/storage-registry.service';
@@ -61,7 +60,7 @@ async function makeWorld() {
     ]),
   );
   setSetting('storage.categories', JSON.stringify({ backups: 'm' }));
-  const env = { env: () => ({ paths: {} }) } as unknown as RuntimeEnvService;
+  const env = { placePhotoDir: undefined };
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
     env,
@@ -97,7 +96,7 @@ async function makeMigrationWorld() {
     ]),
   );
   setSetting('storage.categories', JSON.stringify({ files: 'uploads-local' }));
-  const env = { env: () => ({ paths: {} }) } as unknown as RuntimeEnvService;
+  const env = { placePhotoDir: undefined };
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
     env,
@@ -130,7 +129,7 @@ async function makePhotosGoogleMigrationWorld() {
       { name: 'dest-local', type: 'local', options: { root: destRoot } },
     ]),
   );
-  const env = { env: () => ({ paths: { placePhotoDir: placePhotoRoot } }) } as unknown as RuntimeEnvService;
+  const env = { placePhotoDir: placePhotoRoot };
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
     env,
@@ -161,7 +160,7 @@ async function makeMigrationBackfillWorld() {
     ]),
   );
   setSetting('storage.categories', JSON.stringify({ backups: 'm', files: 'uploads-local' }));
-  const env = { env: () => ({ paths: {} }) } as unknown as RuntimeEnvService;
+  const env = { placePhotoDir: undefined };
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
     env,
@@ -543,7 +542,7 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
       ]),
     );
     setSetting('storage.categories', JSON.stringify({ files: 'nas' }));
-    const env = { env: () => ({ paths: {} }) } as unknown as RuntimeEnvService;
+    const env = { placePhotoDir: undefined };
     const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
     env,

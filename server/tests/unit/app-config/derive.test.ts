@@ -21,6 +21,7 @@ import {
   derivePush,
   deriveAll,
 } from '../../../src/app-config/derive';
+import { deriveHttpBoot, deriveStorage } from '../../../src/app-config/boot-derive';
 
 // These tests PIN the exact legacy coercions each derived field replaced.
 // If one fails after an edit, the edit changed runtime behavior — fix the
@@ -67,20 +68,20 @@ describe('deriveHttp', () => {
     expect(deriveHttp({}).wsOrigins).toBeNull();
   });
 
-  it('TRUST_PROXY: numeric hop count wins, 1 only as fallback (globalMiddleware)', () => {
-    expect(deriveHttp({ TRUST_PROXY: '2' }).trustProxy).toBe(2);
+  it('TRUST_PROXY: numeric hop count wins, 1 only as fallback (globalMiddleware, httpConfig token)', () => {
+    expect(deriveHttpBoot({ TRUST_PROXY: '2' }).trustProxy).toBe(2);
     // 0 is a valid hop count ("trust no proxy"), not a missing value.
-    expect(deriveHttp({ TRUST_PROXY: '0' }).trustProxy).toBe(0);
-    expect(deriveHttp({ TRUST_PROXY: 'abc' }).trustProxy).toBe(1);
-    expect(deriveHttp({}).trustProxy).toBe(1);
+    expect(deriveHttpBoot({ TRUST_PROXY: '0' }).trustProxy).toBe(0);
+    expect(deriveHttpBoot({ TRUST_PROXY: 'abc' }).trustProxy).toBe(1);
+    expect(deriveHttpBoot({}).trustProxy).toBe(1);
   });
 
   it('boolean switches accept the whole boolean-like family (unified semantics)', () => {
     expect(deriveHttp({ FORCE_HTTPS: 'TRUE' }).forceHttps).toBe(true);
     expect(deriveHttp({ FORCE_HTTPS: 'on' }).forceHttps).toBe(true);
-    expect(deriveHttp({ HSTS_INCLUDE_SUBDOMAINS: 'TRUE' }).hstsIncludeSubdomains).toBe(true);
-    expect(deriveHttp({ HSTS_INCLUDE_SUBDOMAINS: '1' }).hstsIncludeSubdomains).toBe(true);
-    expect(deriveHttp({ HSTS_INCLUDE_SUBDOMAINS: 'off' }).hstsIncludeSubdomains).toBe(false);
+    expect(deriveHttpBoot({ HSTS_INCLUDE_SUBDOMAINS: 'TRUE' }).hstsIncludeSubdomains).toBe(true);
+    expect(deriveHttpBoot({ HSTS_INCLUDE_SUBDOMAINS: '1' }).hstsIncludeSubdomains).toBe(true);
+    expect(deriveHttpBoot({ HSTS_INCLUDE_SUBDOMAINS: 'off' }).hstsIncludeSubdomains).toBe(false);
   });
 
   it('COOKIE_SECURE is tri-state: explicit falsy disables, anything else auto-detects', () => {
@@ -301,9 +302,9 @@ describe('deriveNet', () => {
 describe('derivePaths', () => {
   it('passes the path vars through raw — defaulting stays at the consumer', () => {
     expect(derivePaths({ TREK_WIKI_DIR: '/w' }).wikiDir).toBe('/w');
-    expect(derivePaths({ TREK_PLACE_PHOTO_DIR: '/p' }).placePhotoDir).toBe('/p');
+    expect(deriveStorage({ TREK_PLACE_PHOTO_DIR: '/p' }).placePhotoDir).toBe('/p');
     expect(derivePaths({}).wikiDir).toBeUndefined();
-    expect(derivePaths({}).placePhotoDir).toBeUndefined();
+    expect(deriveStorage({}).placePhotoDir).toBeUndefined();
   });
 });
 

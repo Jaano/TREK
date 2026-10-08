@@ -10,10 +10,10 @@ import type { UsersRepository } from '../../db/repositories/Users.repository';
  * photo-serving route and the global MFA policy — so the secret, the
  * password_version gate and the loaded user cannot drift between them.
  *
- * Free functions rather than a provider: the MFA policy in
- * middleware/mfaPolicy.ts and the platform routes run outside the container and
- * would have no way to inject one. Note JWT_SECRET is deliberately a live
- * binding from src/config, not an app-config value: the admin panel rotates it
+ * Free functions rather than a provider: the platform routes run outside the
+ * container and would have no way to inject one, and the guards that call this
+ * (the MFA policy is nest/auth/mfa-policy.guard.ts now) share the one copy.
+ * Note JWT_SECRET is deliberately a live binding from src/config, not an app-config value: the admin panel rotates it
  * at runtime and `export let` is what makes a rotation take effect in-process.
  *
  * `verifyJwtAndLoadUser` stays a free function (Plan 3b Task 1 RULING) and

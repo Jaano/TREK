@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import request from 'supertest';
 import { applyGlobalMiddleware } from '../../../src/middleware/globalMiddleware';
-import { readEnv } from '../../../src/app-config';
+import { httpConfig } from '../../../src/nest/app-config/tokens';
 import { isSameHostOrigin } from '../../../src/nest/common/same-origin';
 
 /**
@@ -11,7 +11,16 @@ import { isSameHostOrigin } from '../../../src/nest/common/same-origin';
  */
 function appWithAllowlist(corsOrigins: string[] | null) {
   const app = express();
-  applyGlobalMiddleware(app, { http: { ...readEnv().http, corsOrigins } });
+  // The middleware reads ALLOWED_ORIGINS once, when it is applied.
+  const before = process.env.ALLOWED_ORIGINS;
+  if (corsOrigins) process.env.ALLOWED_ORIGINS = corsOrigins.join(',');
+  else delete process.env.ALLOWED_ORIGINS;
+  try {
+    applyGlobalMiddleware(app, { http: httpConfig() });
+  } finally {
+    if (before === undefined) delete process.env.ALLOWED_ORIGINS;
+    else process.env.ALLOWED_ORIGINS = before;
+  }
   app.post('/api/auth/login', (_req, res) => res.json({ ok: true }));
   app.use((err: { statusCode?: number; message?: string }, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.statusCode || 500;

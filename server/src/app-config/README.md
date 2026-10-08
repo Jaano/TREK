@@ -76,11 +76,37 @@ invariant 1: `readEnv()` per call, live, never cached. The invalid-URL silent
 fallthrough and the strip-ALL-slashes quirk (see `parsers.ts`
 `stripTrailingSlashes`) are parity-pinned — do not "fix" them here.
 
+## Ownership: one door per variable
+
+Every variable has exactly one owner, and the owner decides how it is read:
+
+- **A registerAs token** (`src/nest/app-config/tokens.ts`, derived by
+  `boot-derive.ts`): boot-stable values that only Nest classes need. The token
+  is snapshotted per built app and injected (`@Inject(storageConfig.KEY)`, or
+  `app.get(httpConfig.KEY)` for the pre-init Express layer). Today:
+  `httpConfig` (TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS) and `storageConfig`
+  (TREK_PLACE_PHOTO_DIR).
+- **`readEnv()` / `RuntimeEnvService`** (`derive.ts`): everything else, both
+  the runtime-toggled values and the boot-stable ones that code outside the
+  container needs (config.ts, the database, src/mcp, the SSRF guard), which
+  freeze them in module-top consts.
+
+`deriveAll()` never reads a variable a token owns, and a token is dropped once
+nothing injects it. `tests/unit/app-config/config-ownership.test.ts` records
+the keys each side reads through a Proxy and fails on an overlap, on a token
+without a consumer and on a variable the schema does not validate. Moving a
+variable to a token means moving its field from `derive.ts` to
+`boot-derive.ts` and converting every reader in the same change.
+
+`server/.env.example` names every variable the schema validates except the
+few in `env-reference.test.ts`'s `NOT_OPERATOR_SETTINGS`; that test fails on
+drift in either direction.
+
 ## Classification: boot-stable vs runtime-toggled
 
-**Boot-stable** (frozen at app/module creation; snapshot `registerAs`/`ConfigType`
-DI in Nest, module-top `readEnv()` consts elsewhere):
-PORT, HOST, TRUST_PROXY, SESSION_DURATION(_REMEMBER), MCP_SESSION_TTL,
+**Boot-stable** (frozen at app/module creation; a `registerAs` token where the
+variable is token-owned, module-top `readEnv()` consts elsewhere):
+PORT, HOST, TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS, SESSION_DURATION(_REMEMBER), MCP_SESSION_TTL,
 MCP_MAX_SESSION_PER_USER, MCP_SSE_KEEPALIVE, TREK_PLUGIN_RPC_*/LOG_*/MAX_RSS_MB,
 TREK_PLUGIN_REGISTRY_URL, TREK_WIKI_DIR*, TREK_PLACE_PHOTO_DIR, BACKUP_*,
 TRANSIT_API_URL, LOG_LEVEL*, ALLOW_INTERNAL_NETWORK*, ALLOW_LINK_LOCAL_IPS*, DEFAULT_LANGUAGE,
@@ -95,7 +121,7 @@ below.)
 `RuntimeEnvService`; tests mutate these mid-lifetime):
 TREK_MANAGED, PLACES_API_BASE, PLACES_API_KEY, AMAP_API_BASE, AMAP_API_KEY, AMAP_API_SECRET, MAPBOX_ACCESS_TOKEN, CARTO_API_KEY, DEMO_MODE, NODE_ENV, APP_VERSION, APP_URL, TREK_API_DOCS_ENABLED,
 TREK_PLUGINS_ENABLED / _DEV_LINK / _IGNORE_TREK_RANGE / _DIR / _DATA_DIR / TREK_PLUGIN_PERMISSIONS,
-OIDC_*, SMTP_*, FORCE_HTTPS, COOKIE_SECURE, HSTS_INCLUDE_SUBDOMAINS,
+OIDC_*, SMTP_*, FORCE_HTTPS, COOKIE_SECURE,
 ALLOWED_ORIGINS, UNSPLASH_ACCESS_KEY, WEBAUTHN_*, TZ, ADMIN_EMAIL,
 TREK_DB_PRE_MIGRATE_SNAPSHOT(_KEEP) (read when a migration run starts; the
 legacy-upgrade suites set it per file),

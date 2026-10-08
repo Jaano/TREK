@@ -1,11 +1,12 @@
 import fs from 'node:fs';
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { MikroORM } from '@mikro-orm/core';
 import { STORAGE_BACKEND_TYPES, storageConfigSchema } from '@trek/shared';
 import { UnitOfWork } from '../database/unit-of-work';
 import { withRequestContext } from '../database/request-context';
-import { RuntimeEnvService } from '../app-config/runtime-env.service';
+import { storageConfig } from '../app-config/tokens';
 import { decrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
@@ -136,7 +137,7 @@ export class StorageRegistryService implements OnModuleInit {
 
   constructor(
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
-    private readonly env: RuntimeEnvService,
+    @Inject(storageConfig.KEY) private readonly storageEnv: ConfigType<typeof storageConfig>,
     private readonly events: StorageEventsService,
     private readonly uow: UnitOfWork,
     private readonly orm: MikroORM,
@@ -400,8 +401,9 @@ export class StorageRegistryService implements OnModuleInit {
     categoryBackends: Map<ServedCategory, string>;
     categorySources: Map<ServedCategory, 'default' | 'settings'>;
   } {
-    // 1. Env is read fresh on every load (never snapshotted — RuntimeEnvService rule).
-    const placePhotoDir = this.env.env().paths.placePhotoDir;
+    // 1. TREK_PLACE_PHOTO_DIR is boot-stable: the storageConfig token owns it and
+    //    every load of one built app sees the same value.
+    const placePhotoDir = this.storageEnv.placePhotoDir;
 
     // 2. Built-in defaults; settings entries with the same name/category override.
     //    uploads-local's root is the computed default; relocation is a settings

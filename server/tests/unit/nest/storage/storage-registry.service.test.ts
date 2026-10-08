@@ -19,7 +19,6 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
-import type { RuntimeEnvService } from '../../../../src/nest/app-config/runtime-env.service';
 import { encrypt_api_key } from '../../../../src/nest/common/crypto/apiKeyCrypto';
 import { StorageEventsService } from '../../../../src/nest/storage/storage-events.service';
 import { StorageRegistryService } from '../../../../src/nest/storage/storage-registry.service';
@@ -49,11 +48,8 @@ interface EnvPaths {
   placePhotoDir?: string;
 }
 
-function makeEnvStub(initial: EnvPaths): { env: RuntimeEnvService } {
-  const paths = initial;
-  return {
-    env: { env: () => ({ paths }) } as unknown as RuntimeEnvService,
-  };
+function makeEnvStub(initial: EnvPaths): { env: { placePhotoDir: string | undefined } } {
+  return { env: { placePhotoDir: initial.placePhotoDir } };
 }
 
 function setSetting(key: string, value: string): void {

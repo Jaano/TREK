@@ -3,7 +3,9 @@ import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { readEnv, type AppEnv } from '../app-config';
+import type { ConfigType } from '@nestjs/config';
+import { readEnv } from '../app-config';
+import { httpConfig } from '../nest/app-config/tokens';
 import { logDebug, logWarn, logError } from '../nest/audit/audit-log.logger';
 import { isSameHostOrigin } from '../nest/common/same-origin';
 
@@ -124,7 +126,8 @@ export function routingCspOrigins(baseUrls: (string | null | undefined)[]): stri
 export function applyGlobalMiddleware(
   app: express.Application,
   opts: {
-    http?: AppEnv['http'];
+    /** The boot-stable half (trust proxy, HSTS subdomains), from the `httpConfig` token. */
+    http?: ConfigType<typeof httpConfig>;
     /**
      * Extra origins the browser may talk to, from the instance's own settings — today the
      * self-hosted routing engine (#1797). Read once at apply time like everything else
@@ -136,9 +139,11 @@ export function applyGlobalMiddleware(
 ): void {
   // The whole pipeline is configured at APPLY time (the per-request closures
   // capture these values), so a snapshot is the correct semantic. bootstrap
-  // threads in the DI-loaded httpConfig; direct callers fall back to an
-  // apply-time readEnv() — same values, same freeze point.
-  const { http = readEnv().http, extraConnectSrc = [] } = opts;
+  // threads in the DI-loaded httpConfig; a direct caller gets the same token
+  // factory evaluated now. The live half (origins, forced HTTPS) is read here
+  // too, once, so both halves freeze at the same point.
+  const { http = httpConfig(), extraConnectSrc = [] } = opts;
+  const liveHttp = readEnv().http;
   const { nodeEnv, isProduction } = readEnv().app;
 
   // Trust first proxy (nginx/Docker) for correct req.ip
@@ -161,7 +166,7 @@ export function applyGlobalMiddleware(
     }),
   );
 
-  const allowedOrigins = http.corsOrigins;
+  const allowedOrigins = liveHttp.corsOrigins;
 
   // With ALLOWED_ORIGINS set, a request from anywhere else is refused outright.
   // Two things keep that from hitting the instance's own pages (#2543): a request
@@ -186,7 +191,7 @@ export function applyGlobalMiddleware(
       }
     : { origin: isProduction ? false : true, credentials: true };
 
-  const shouldForceHttps = http.forceHttps;
+  const shouldForceHttps = liveHttp.forceHttps;
   // HSTS is worth enabling any time we're serving production traffic,
   // not only when FORCE_HTTPS is set. Self-hosters behind Traefik /
   // Caddy / Cloudflare Tunnel typically leave FORCE_HTTPS unset (the

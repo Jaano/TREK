@@ -27,7 +27,6 @@ import os from 'node:os';
 import path from 'node:path';
 
 import { createSnapshotTestDb } from '../helpers/db-mock';
-import type { RuntimeEnvService } from '../../src/nest/app-config/runtime-env.service';
 import { StorageEventsService } from '../../src/nest/storage/storage-events.service';
 import { BACKENDS_KEY, CATEGORIES_KEY, StorageRegistryService } from '../../src/nest/storage/storage-registry.service';
 import { StorageService } from '../../src/nest/storage/storage.service';
@@ -42,8 +41,8 @@ function makeTmpDir(): string {
   return dir;
 }
 
-function envStub(): RuntimeEnvService {
-  return { env: () => ({ paths: {} }) } as unknown as RuntimeEnvService;
+function envStub(): { placePhotoDir: string | undefined } {
+  return { placePhotoDir: undefined };
 }
 
 function setSetting(key: string, value: unknown): void {

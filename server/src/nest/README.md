@@ -374,10 +374,12 @@ no-Nest test harnesses still construct instances; CHOVR-015 pins the
 sharing).
 - `app-config/` — the `@nestjs/config` binding (`AppConfigModule`, global). Never
   read `process.env` in a module (ESLint enforces this): inject a boot-stable
-  namespace via its `registerAs` token (`@Inject(mcpConfig.KEY) … ConfigType<…>`)
+  namespace via its `registerAs` token (`@Inject(storageConfig.KEY) … ConfigType<…>`)
   or read runtime-toggled values live through `RuntimeEnvService` / `readEnv()`
-  from `src/app-config`. The classification and invariants live in
-  `src/app-config/README.md`.
+  from `src/app-config`. Every variable has exactly one owner, a token or
+  `readEnv()`, and `config-ownership.test.ts` fails on a variable read through
+  both. Data paths come from `DataPathsService`. The classification and
+  invariants live in `src/app-config/README.md`.
 
 ## Parity gotchas worth remembering
 
