@@ -11,6 +11,7 @@ import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
+import { insertRow } from '../../helpers/factories/rows';
 import type { PluginsRepository } from '../../../src/db/repositories/Plugins.repository';
 import { declaredProfiles } from '../../../src/nest/plugins/contributions/plugin-route-normalize';
 
@@ -25,18 +26,18 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function seedPlugin(id: string, capabilities: unknown): void {
-  testDb.prepare('INSERT INTO plugins (id, name, capabilities) VALUES (?, ?, ?)').run(id, id, JSON.stringify(capabilities));
+async function seedPlugin(id: string, capabilities: unknown): Promise<void> {
+  await insertRow(t, Plugins, { id, name: id, capabilities: JSON.stringify(capabilities) });
 }
 
 describe('declaredProfiles', () => {
   it('RN-001: returns the declared routeProfiles ids, filtered to the safe id pattern', async () => {
-    seedPlugin('roadtrip-plugin', { routeProfiles: [{ id: 'eco' }, { id: 'fast-ev' }, { id: 'BAD ID' }, { id: '' }] });
+    await seedPlugin('roadtrip-plugin', { routeProfiles: [{ id: 'eco' }, { id: 'fast-ev' }, { id: 'BAD ID' }, { id: '' }] });
     expect(await declaredProfiles(plugins, 'roadtrip-plugin')).toEqual(['eco', 'fast-ev']);
   });
 
   it('RN-002: no routeProfiles capability → empty list', async () => {
-    seedPlugin('no-routes', { widget: { slot: 'sidebar' } });
+    await seedPlugin('no-routes', { widget: { slot: 'sidebar' } });
     expect(await declaredProfiles(plugins, 'no-routes')).toEqual([]);
   });
 
@@ -45,7 +46,7 @@ describe('declaredProfiles', () => {
   });
 
   it('RN-004: malformed capabilities JSON → empty list, never throws', async () => {
-    testDb.prepare('INSERT INTO plugins (id, name, capabilities) VALUES (?, ?, ?)').run('bad-json', 'bad-json', 'not json');
+    await insertRow(t, Plugins, { id: 'bad-json', name: 'bad-json', capabilities: 'not json' });
     expect(await declaredProfiles(plugins, 'bad-json')).toEqual([]);
   });
 });

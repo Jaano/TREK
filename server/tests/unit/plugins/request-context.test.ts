@@ -39,6 +39,7 @@ import { PluginSupervisor } from '../../../src/nest/plugins/supervisor/plugin-su
 import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { RpcRateLimiter, DEFAULT_RPC_LIMIT } from '../../../src/nest/plugins/host/rate-limit';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { setAppSetting } from '../../helpers/factories/settings';
 import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { Trips } from '../../../src/db/entities/Trips.entity';
@@ -80,7 +81,7 @@ beforeAll(async () => {
   guards = new PluginGuards(t.repo(Trips), permissions, await createTestAddonsService(testDb), t.repo(Users));
   userId = createUser(testDb, { role: 'user' }).user.id;
   // An admin has tightened trip_create from its 'everybody' default.
-  testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_trip_create', 'admin')").run();
+  await setAppSetting(t, 'perm_trip_create', 'admin');
 });
 
 afterAll(async () => {

@@ -29,6 +29,7 @@ import { PluginSettingsFields } from '../../../src/db/entities/PluginSettingsFie
 import { PluginActions } from '../../../src/db/entities/PluginActions.entity';
 import { PluginUserConfig } from '../../../src/db/entities/PluginUserConfig.entity';
 import { PluginCapabilityAudit } from '../../../src/db/entities/PluginCapabilityAudit.entity';
+import { insertRow, insertRows } from '../../helpers/factories/rows';
 
 /** Plan 3j Task 2 — PluginsService's own six repositories, over whichever fresh `getDb.current` the caller just set. */
 async function makePluginsService(): Promise<PluginsService> {
@@ -54,14 +55,20 @@ async function userSettings(): Promise<PluginUserSettingsService> {
   return new PluginUserSettingsService(orm.repo(PluginSettingsFields), orm.repo(PluginUserConfig));
 }
 
-function freshDb() {
+async function freshDb() {
   const d = createSnapshotTestDb();
   // p: a user-scope api key (secret) + a user-scope pref (not secret) + an INSTANCE field.
-  const ins = d.prepare('INSERT INTO plugin_settings_fields (plugin_id, field_key, input_type, required, secret, scope, sort_order) VALUES (?,?,?,?,?,?,?)');
-  ins.run('p', 'apiKey', 'text', 1, 1, 'user', 0);
-  ins.run('p', 'units', 'select', 0, 0, 'user', 1);
-  ins.run('p', 'adminOnly', 'text', 0, 1, 'instance', 2);
+  await insertRows(await sharedTestOrm(d), PluginSettingsFields, [
+    { plugin_id: 'p', field_key: 'apiKey', input_type: 'text', required: 1, secret: 1, scope: 'user', sort_order: 0 },
+    { plugin_id: 'p', field_key: 'units', input_type: 'select', required: 0, secret: 0, scope: 'user', sort_order: 1 },
+    { plugin_id: 'p', field_key: 'adminOnly', input_type: 'text', required: 0, secret: 1, scope: 'instance', sort_order: 2 },
+  ]);
   return d;
+}
+
+/** The ORM over whichever fresh db the current case set (memoised per handle). */
+function currentOrm() {
+  return sharedTestOrm(getDb.current as Database.Database);
 }
 
 describe('per-user plugin settings', () => {
@@ -69,7 +76,7 @@ describe('per-user plugin settings', () => {
   // AddonsService only feeds PluginsService.list(), which no case here calls, but it is a
   // real collaborator on the same connection rather than a stand-in.
   beforeEach(async () => {
-    getDb.current = freshDb();
+    getDb.current = await freshDb();
     svc = await makePluginsService();
   });
 
@@ -120,14 +127,13 @@ describe('manifest defaults reach the runtime reads', () => {
   // that ships a sensible default serves nobody until every user opens the form.
   let svc: PluginsService;
   beforeEach(async () => {
-    getDb.current = freshDb();
+    getDb.current = await freshDb();
     svc = await makePluginsService();
-    const ins = (getDb.current as import('better-sqlite3').Database).prepare(
-      'INSERT INTO plugin_settings_fields (plugin_id, field_key, input_type, required, secret, scope, sort_order, default_value) VALUES (?,?,?,?,?,?,?,?)',
-    );
-    ins.run('p', 'region', 'select', 0, 0, 'user', 3, JSON.stringify('eu'));
-    ins.run('p', 'retries', 'number', 0, 0, 'user', 4, JSON.stringify(3));
-    ins.run('p', 'endpoint', 'text', 1, 0, 'user', 5, JSON.stringify('https://api.example'));
+    await insertRows(await currentOrm(), PluginSettingsFields, [
+      { plugin_id: 'p', field_key: 'region', input_type: 'select', required: 0, secret: 0, scope: 'user', sort_order: 3, default_value: JSON.stringify('eu') },
+      { plugin_id: 'p', field_key: 'retries', input_type: 'number', required: 0, secret: 0, scope: 'user', sort_order: 4, default_value: JSON.stringify(3) },
+      { plugin_id: 'p', field_key: 'endpoint', input_type: 'text', required: 1, secret: 0, scope: 'user', sort_order: 5, default_value: JSON.stringify('https://api.example') },
+    ]);
   });
 
   it('readOne falls back to the declared default when nothing is stored', async () => {
@@ -162,11 +168,11 @@ describe('hasRequired applies the same "filled" rule as the save gate', () => {
   // the user "not configured" (or the reverse).
   let svc: PluginsService;
   beforeEach(async () => {
-    getDb.current = freshDb();
+    getDb.current = await freshDb();
     svc = await makePluginsService();
-    (getDb.current as import('better-sqlite3').Database)
-      .prepare('INSERT INTO plugin_settings_fields (plugin_id, field_key, input_type, required, secret, scope, sort_order) VALUES (?,?,?,?,?,?,?)')
-      .run('p', 'consent', 'checkbox', 1, 0, 'user', 9);
+    await insertRow(await currentOrm(), PluginSettingsFields, {
+      plugin_id: 'p', field_key: 'consent', input_type: 'checkbox', required: 1, secret: 0, scope: 'user', sort_order: 9,
+    });
   });
 
   it('exempts a required checkbox (consent, not a settings field)', async () => {
@@ -175,9 +181,9 @@ describe('hasRequired applies the same "filled" rule as the save gate', () => {
   });
 
   it('treats a whitespace-only value as empty', async () => {
-    (getDb.current as import('better-sqlite3').Database)
-      .prepare("INSERT INTO plugin_user_config (plugin_id, user_id, config, updated_at) VALUES ('p', 42, ?, '')")
-      .run(JSON.stringify({ apiKey: '   ', consent: true }));
+    await insertRow(await currentOrm(), PluginUserConfig, {
+      plugin_id: 'p', user_id: 42, config: JSON.stringify({ apiKey: '   ', consent: true }), updated_at: '',
+    });
     expect(await (await userSettings()).hasRequired('p', 42)).toBe(false);
   });
 });

@@ -40,6 +40,7 @@ import { Plugins } from '../../../src/db/entities/Plugins.entity';
 import { PluginOauthTokens } from '../../../src/db/entities/PluginOauthTokens.entity';
 import { PluginOauthState } from '../../../src/db/entities/PluginOauthState.entity';
 import { PluginSettingsFields } from '../../../src/db/entities/PluginSettingsFields.entity';
+import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
 
 const CFG = {
   oauth_authorize_url: 'https://provider.example/authorize',
@@ -49,10 +50,20 @@ const CFG = {
   oauth_client_secret: 'enc:secret-abc',
 };
 
-function freshDb(cfg: Record<string, unknown> = CFG) {
+async function freshDb(cfg: Record<string, unknown> = CFG) {
   const d = createSnapshotTestDb();
-  d.prepare("INSERT INTO plugins (id, name, config, status) VALUES ('p', 'p', ?, 'active')").run(JSON.stringify(cfg));
+  await insertRow(await sharedTestOrm(d), Plugins, { id: 'p', name: 'p', config: JSON.stringify(cfg), status: 'active' });
   return d;
+}
+
+/** The ORM over whichever fresh db the current case set (memoised per handle). */
+function currentOrm() {
+  return sharedTestOrm(getDb.current as Database.Database);
+}
+
+/** The pending OAuth state row, or null once it has been consumed. */
+async function stateRow(state: string) {
+  return findRow(await currentOrm(), PluginOauthState, { state });
 }
 
 const NOW = 1_700_000_000_000;
@@ -70,11 +81,11 @@ async function makeOauthService(): Promise<PluginOAuthService> {
 
 describe('PluginOAuthService', () => {
   let svc: PluginOAuthService;
-  beforeEach(async () => { getDb.current = freshDb(); svc = await makeOauthService(); vi.restoreAllMocks(); dnsState.address = '93.184.216.34'; dnsState.family = 4; });
+  beforeEach(async () => { getDb.current = await freshDb(); svc = await makeOauthService(); vi.restoreAllMocks(); dnsState.address = '93.184.216.34'; dnsState.family = 4; });
 
   it('providerConfig returns null unless every piece is present, decrypting the secrets', async () => {
     expect(await svc.providerConfig('p')).toMatchObject({ clientId: 'client-123', clientSecret: 'secret-abc', scopes: 'read write' });
-    getDb.current = freshDb({ ...CFG, oauth_client_secret: '' });
+    getDb.current = await freshDb({ ...CFG, oauth_client_secret: '' });
     expect(await (await makeOauthService()).providerConfig('p')).toBeNull();
   });
 
@@ -82,12 +93,13 @@ describe('PluginOAuthService', () => {
     // A provider plugin ships its authorize/token URLs as defaults; the admin only ever
     // types the client id/secret. Those two are secrets and can never carry a default.
     const { oauth_authorize_url: _a, oauth_token_url: _t, oauth_scopes: _s, ...stored } = CFG;
-    getDb.current = freshDb(stored);
-    const d = getDb.current as import('better-sqlite3').Database;
-    const ins = d.prepare("INSERT INTO plugin_settings_fields (plugin_id, field_key, scope, secret, default_value) VALUES ('p', ?, 'instance', 0, ?)");
-    ins.run('oauth_authorize_url', JSON.stringify('https://provider.example/authorize'));
-    ins.run('oauth_token_url', JSON.stringify('https://provider.example/token'));
-    ins.run('oauth_scopes', JSON.stringify('read'));
+    getDb.current = await freshDb(stored);
+    const orm = await currentOrm();
+    const declareDefault = (key: string, value: string) =>
+      insertRow(orm, PluginSettingsFields, { plugin_id: 'p', field_key: key, scope: 'instance', secret: 0, default_value: JSON.stringify(value) });
+    await declareDefault('oauth_authorize_url', 'https://provider.example/authorize');
+    await declareDefault('oauth_token_url', 'https://provider.example/token');
+    await declareDefault('oauth_scopes', 'read');
     svc = (await makeOauthService());
     expect(await svc.providerConfig('p')).toEqual({
       authorizeUrl: 'https://provider.example/authorize',
@@ -106,12 +118,11 @@ describe('PluginOAuthService', () => {
     expect(url.searchParams.get('redirect_uri')).toBe('https://trek.example/api/plugin-oauth/p/callback');
     expect(url.searchParams.get('code_challenge')).toBeTruthy();
     const state = url.searchParams.get('state')!;
-    const rows = getDb.current as unknown as InstanceType<typeof Database>;
-    const stored = rows.prepare('SELECT verifier, user_id FROM plugin_oauth_state WHERE state = ?').get(state) as { verifier: string; user_id: number };
+    const stored = (await stateRow(state))!;
     expect(stored.user_id).toBe(42);
     // a second connect replaces the first (one live state per user)
     await svc.startConnect('p', 42, NOW);
-    expect((rows.prepare('SELECT COUNT(*) c FROM plugin_oauth_state WHERE user_id = 42').get() as { c: number }).c).toBe(1);
+    expect(await countRows(await currentOrm(), PluginOauthState, { user_id: 42 })).toBe(1);
   });
 
   it('startConnect drops the old state and stores the new one together: a failed store keeps the old one', async () => {
@@ -124,18 +135,18 @@ describe('PluginOAuthService', () => {
   });
 
   it('rejects a non-https / loopback / metadata / internal authorize endpoint', async () => {
-    getDb.current = freshDb({ ...CFG, oauth_authorize_url: 'http://provider.example/authorize' });
+    getDb.current = await freshDb({ ...CFG, oauth_authorize_url: 'http://provider.example/authorize' });
     await expect((await makeOauthService()).startConnect('p', 42, NOW)).rejects.toThrow(/https/);
-    getDb.current = freshDb({ ...CFG, oauth_token_url: 'https://127.0.0.1/token' });
+    getDb.current = await freshDb({ ...CFG, oauth_token_url: 'https://127.0.0.1/token' });
     await expect((await makeOauthService()).startConnect('p', 42, NOW)).rejects.toThrow(/loopback|private/);
     // IPv6-literal loopback must not slip past the fast-fail
-    getDb.current = freshDb({ ...CFG, oauth_token_url: 'https://[::1]/token' });
+    getDb.current = await freshDb({ ...CFG, oauth_token_url: 'https://[::1]/token' });
     await expect((await makeOauthService()).startConnect('p', 42, NOW)).rejects.toThrow(/loopback/);
     // cloud-metadata by literal is refused too
-    getDb.current = freshDb({ ...CFG, oauth_token_url: 'https://169.254.169.254/token' });
+    getDb.current = await freshDb({ ...CFG, oauth_token_url: 'https://169.254.169.254/token' });
     await expect((await makeOauthService()).startConnect('p', 42, NOW)).rejects.toThrow(/loopback|metadata/);
     // an internal name suffix is refused
-    getDb.current = freshDb({ ...CFG, oauth_token_url: 'https://idp.internal/token' });
+    getDb.current = await freshDb({ ...CFG, oauth_token_url: 'https://idp.internal/token' });
     await expect((await makeOauthService()).startConnect('p', 42, NOW)).rejects.toThrow(/local/);
   });
 
@@ -153,8 +164,7 @@ describe('PluginOAuthService', () => {
     expect(body).toContain('code_verifier=');
     expect(body).toContain('client_secret=secret-abc');
 
-    const rows = getDb.current as unknown as InstanceType<typeof Database>;
-    const tok = rows.prepare('SELECT access_token, refresh_token FROM plugin_oauth_tokens WHERE plugin_id = ? AND user_id = 42').get('p') as { access_token: string; refresh_token: string };
+    const tok = (await findRow(await currentOrm(), PluginOauthTokens, { plugin_id: 'p', user_id: 42 }))!;
     expect(tok.access_token).toBe('enc:AT');   // encrypted at rest
     expect(tok.refresh_token).toBe('enc:RT');
     expect(await svc.status('p', 42)).toMatchObject({ configured: true, connected: true });
@@ -170,18 +180,18 @@ describe('PluginOAuthService', () => {
   });
 
   it('getAccessToken returns the token, refreshes an expiring one, and hands the plugin only the access token', async () => {
-    const rows = getDb.current as unknown as InstanceType<typeof Database>;
+    const orm = await currentOrm();
     // a live token → returned decrypted, no network
-    rows.prepare('INSERT INTO plugin_oauth_tokens (plugin_id, user_id, access_token, refresh_token, expires_at) VALUES (?,?,?,?,?)').run('p', 42, 'enc:LIVE', 'enc:RT', NOW + 3600_000);
+    await insertRow(orm, PluginOauthTokens, { plugin_id: 'p', user_id: 42, access_token: 'enc:LIVE', refresh_token: 'enc:RT', expires_at: NOW + 3600_000 });
     expect(await svc.getAccessToken('p', 42, NOW)).toBe('LIVE');
 
     // an expired token → refreshed via the refresh_token grant
-    rows.prepare('UPDATE plugin_oauth_tokens SET access_token = ?, expires_at = ? WHERE user_id = 42').run('enc:OLD', NOW - 1000);
+    await updateRows(orm, PluginOauthTokens, { user_id: 42 }, { access_token: 'enc:OLD', expires_at: NOW - 1000 });
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ access_token: 'NEW', expires_in: 3600 }) } as Response);
     expect(await svc.getAccessToken('p', 42, NOW)).toBe('NEW');
     expect((fetchMock.mock.calls[0][1] as { body: string }).body).toContain('grant_type=refresh_token');
     // the provider omitted a new refresh_token → the old one is kept
-    const tok = rows.prepare('SELECT refresh_token FROM plugin_oauth_tokens WHERE user_id = 42').get() as { refresh_token: string };
+    const tok = (await findRow(orm, PluginOauthTokens, { user_id: 42 }))!;
     expect(tok.refresh_token).toBe('enc:RT');
 
     // a user who never connected → null
@@ -198,8 +208,7 @@ describe('PluginOAuthService', () => {
   });
 
   it('disconnect drops the user\'s tokens', async () => {
-    const rows = getDb.current as unknown as InstanceType<typeof Database>;
-    rows.prepare('INSERT INTO plugin_oauth_tokens (plugin_id, user_id, access_token) VALUES (?,?,?)').run('p', 42, 'enc:X');
+    await insertRow(await currentOrm(), PluginOauthTokens, { plugin_id: 'p', user_id: 42, access_token: 'enc:X' });
     await svc.disconnect('p', 42);
     expect((await svc.status('p', 42)).connected).toBe(false);
   });
@@ -211,19 +220,17 @@ describe('PluginOAuthService', () => {
    * success one.
    */
   it('single-use: the state row is gone after EITHER the refused path or the success path', async () => {
-    const rows = getDb.current as unknown as InstanceType<typeof Database>;
-
     // Refused path: wrong user — the row is still consumed.
     const stateA = new URL(await svc.startConnect('p', 42, NOW)).searchParams.get('state')!;
-    expect(rows.prepare('SELECT 1 FROM plugin_oauth_state WHERE state = ?').get(stateA)).toBeTruthy();
+    expect(await stateRow(stateA)).toBeTruthy();
     await expect(svc.completeCallback('p', 99, 'code', stateA, NOW + 1000)).rejects.toThrow(/state/);
-    expect(rows.prepare('SELECT 1 FROM plugin_oauth_state WHERE state = ?').get(stateA)).toBeUndefined();
+    expect(await stateRow(stateA)).toBeNull();
 
     // Success path.
     const stateB = new URL(await svc.startConnect('p', 42, NOW)).searchParams.get('state')!;
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({ ok: true, json: async () => ({ access_token: 'AT' }) } as Response);
     await svc.completeCallback('p', 42, 'code', stateB, NOW + 1000);
-    expect(rows.prepare('SELECT 1 FROM plugin_oauth_state WHERE state = ?').get(stateB)).toBeUndefined();
+    expect(await stateRow(stateB)).toBeNull();
   });
 
   /**
@@ -251,7 +258,6 @@ describe('PluginOAuthService', () => {
     expect((rejected[0] as PromiseRejectedResult).reason as Error).toMatchObject({ message: expect.stringMatching(/state/) });
     // The token exchange fired exactly once — the loser never reached it.
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    const rows = getDb.current as unknown as InstanceType<typeof Database>;
-    expect(rows.prepare('SELECT 1 FROM plugin_oauth_state WHERE state = ?').get(state)).toBeUndefined();
+    expect(await stateRow(state)).toBeNull();
   });
 });

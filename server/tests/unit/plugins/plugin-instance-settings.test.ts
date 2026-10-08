@@ -45,23 +45,37 @@ import type { PluginActionsRepository } from '../../../src/db/repositories/Plugi
 import type { PluginUserConfigRepository } from '../../../src/db/repositories/PluginUserConfig.repository';
 import type { PluginErrorLogRepository } from '../../../src/db/repositories/PluginErrorLog.repository';
 import type { PluginCapabilityAuditRepository } from '../../../src/db/repositories/PluginCapabilityAudit.repository';
+import type { TestOrm } from '../../helpers/test-orm';
+import { deleteRows, findRow, insertRow, updateRows, upsertRow } from '../../helpers/factories/rows';
 
-function install(id: string) {
-  testDb
-    .prepare(
-      `INSERT OR REPLACE INTO plugins (id, name, status, enabled, version, permissions, granted_permissions, capabilities, config)
-       VALUES (?, ?, 'inactive', 0, '1.0.0', '[]', '[]', '{}', '{}')`,
-    )
-    .run(id, id);
+let orm: TestOrm;
+
+/** Plugins the test has switched to active, read by the stubbed runtime's synchronous isActive. */
+const activeIds = new Set<string>();
+
+/** Flips the installed plugin to active and enabled, the way an activation leaves the row. */
+async function markActive(id: string) {
+  await updateRows(orm, Plugins, { id }, { status: 'active', enabled: 1 });
+  activeIds.add(id);
 }
 
-function declareField(pluginId: string, key: string, scope: 'instance' | 'user', opts: { secret?: boolean; required?: boolean; sortOrder?: number; options?: string } = {}) {
-  testDb
-    .prepare(
-      `INSERT INTO plugin_settings_fields (plugin_id, field_key, label, input_type, placeholder, hint, required, secret, scope, options, sort_order)
-       VALUES (?, ?, ?, 'text', NULL, NULL, ?, ?, ?, ?, ?)`,
-    )
-    .run(pluginId, key, key, opts.required ? 1 : 0, opts.secret ? 1 : 0, scope, opts.options ?? null, opts.sortOrder ?? 0);
+async function install(id: string) {
+  await upsertRow(orm, Plugins, {
+    id, name: id, status: 'inactive', enabled: 0, version: '1.0.0', permissions: '[]', granted_permissions: '[]',
+    capabilities: '{}', config: '{}',
+  });
+  activeIds.delete(id);
+}
+
+async function declareField(pluginId: string, key: string, scope: 'instance' | 'user', opts: { secret?: boolean; required?: boolean; sortOrder?: number; options?: string } = {}) {
+  await insertRow(orm, PluginSettingsFields, {
+    plugin_id: pluginId, field_key: key, label: key, input_type: 'text', placeholder: null, hint: null,
+    required: opts.required ? 1 : 0, secret: opts.secret ? 1 : 0, scope, options: opts.options ?? null, sort_order: opts.sortOrder ?? 0,
+  });
+}
+
+function declareActionRow(pluginId: string, key: string, label: string, scope: 'user' | 'instance') {
+  return insertRow(orm, PluginActions, { plugin_id: pluginId, action_key: key, label, hint: null, danger: 0, scope, sort_order: 0 });
 }
 
 let addonsService: AddonsService;
@@ -109,7 +123,7 @@ async function installFixturePlugin(opts: { settings: Array<Record<string, unkno
 
 beforeAll(async () => {
   addonsService = await createTestAddonsService(testDb);
-  const orm = await sharedTestOrm(testDb);
+  orm = await sharedTestOrm(testDb);
   pluginsRepo = orm.repo(Plugins);
   pluginEgressHostsRepo = orm.repo(PluginEgressHosts);
   pluginSettingsFieldsRepo = orm.repo(PluginSettingsFields);
@@ -118,9 +132,10 @@ beforeAll(async () => {
   pluginErrorLogRepo = orm.repo(PluginErrorLog);
   pluginCapabilityAuditRepo = orm.repo(PluginCapabilityAudit);
 });
-beforeEach(() => {
-  testDb.prepare('DELETE FROM plugins').run();
-  testDb.prepare('DELETE FROM plugin_settings_fields').run();
+beforeEach(async () => {
+  await deleteRows(orm, Plugins);
+  await deleteRows(orm, PluginSettingsFields);
+  activeIds.clear();
   process.env.TREK_PLUGINS_ENABLED = 'true';
   codeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ins-settings-'));
   process.env.TREK_PLUGINS_DIR = codeRoot;
@@ -132,10 +147,10 @@ afterEach(() => {
 
 describe('instance settings fields', () => {
   it('INS-001 — lists only the instance-scope fields, in declared order, with form metadata', async () => {
-    install('p');
-    declareField('p', 'apiUrl', 'instance', { required: true, sortOrder: 1 });
-    declareField('p', 'apiKey', 'instance', { secret: true, sortOrder: 0 });
-    declareField('p', 'units', 'user', { sortOrder: 2 }); // must never leak into the admin form
+    await install('p');
+    await declareField('p', 'apiUrl', 'instance', { required: true, sortOrder: 1 });
+    await declareField('p', 'apiKey', 'instance', { secret: true, sortOrder: 0 });
+    await declareField('p', 'units', 'user', { sortOrder: 2 }); // must never leak into the admin form
 
     const fields = await svc().instanceSettingsFields('p');
     expect(fields.map((f) => f.key)).toEqual(['apiKey', 'apiUrl']);
@@ -144,17 +159,17 @@ describe('instance settings fields', () => {
   });
 
   it('INS-002 — parses select options like the user form does', async () => {
-    install('p');
-    declareField('p', 'mode', 'instance', { options: '["fast","slow"]' });
+    await install('p');
+    await declareField('p', 'mode', 'instance', { options: '["fast","slow"]' });
     expect((await svc().instanceSettingsFields('p'))[0].options).toEqual(['fast', 'slow']);
   });
 
   it('INS-003 — the admin list carries the instance-field count (gates the menu item)', async () => {
-    install('with-fields');
-    install('plain');
-    declareField('with-fields', 'apiKey', 'instance', { secret: true });
-    declareField('with-fields', 'apiUrl', 'instance');
-    declareField('with-fields', 'units', 'user'); // user fields must not count
+    await install('with-fields');
+    await install('plain');
+    await declareField('with-fields', 'apiKey', 'instance', { secret: true });
+    await declareField('with-fields', 'apiUrl', 'instance');
+    await declareField('with-fields', 'units', 'user'); // user fields must not count
 
     const plugins = (await svc().list()).plugins;
     expect(plugins.find((p) => p.id === 'with-fields')).toMatchObject({ instanceSettingsCount: 2 });
@@ -162,19 +177,15 @@ describe('instance settings fields', () => {
   });
 
   it('INS-004 — the admin list carries the instance-action count (gates the menu item even with no settings fields)', async () => {
-    install('with-action');
-    install('plain');
-    testDb
-      .prepare('INSERT INTO plugin_actions (plugin_id, action_key, label, hint, danger, scope, sort_order) VALUES (?, ?, ?, NULL, 0, ?, 0)')
-      .run('with-action', 'purge', 'Purge', 'instance');
-    testDb
-      .prepare('INSERT INTO plugin_actions (plugin_id, action_key, label, hint, danger, scope, sort_order) VALUES (?, ?, ?, NULL, 0, ?, 0)')
-      .run('with-action', 'notify', 'Notify', 'user'); // user-scope actions must not count
+    await install('with-action');
+    await install('plain');
+    await declareActionRow('with-action', 'purge', 'Purge', 'instance');
+    await declareActionRow('with-action', 'notify', 'Notify', 'user'); // user-scope actions must not count
 
     const plugins = (await svc().list()).plugins;
     expect(plugins.find((p) => p.id === 'with-action')).toMatchObject({ instanceSettingsCount: 0, instanceActionsCount: 1 });
     expect(plugins.find((p) => p.id === 'plain')).toMatchObject({ instanceSettingsCount: 0, instanceActionsCount: 0 });
-    testDb.prepare("DELETE FROM plugin_actions WHERE plugin_id = 'with-action'").run();
+    await deleteRows(orm, PluginActions, { plugin_id: 'with-action' });
   });
 
   it('INS-010 — persists a settings-field default and serves it on the fields list', async () => {
@@ -251,13 +262,13 @@ describe('required settings are enforced on save', () => {
 
 describe('respawn on save (runtime)', () => {
   it('INS-004 — an inactive plugin is left alone (no respawn, reports false)', async () => {
-    install('p');
+    await install('p');
     const rt = await createPluginRuntime(testDb);
     await expect(rt.respawnIfActive('p')).resolves.toBe(false);
   });
 
   it('INS-005 — an active plugin is stopped and re-activated so the child re-reads config', async () => {
-    install('p');
+    await install('p');
     const rt = await createPluginRuntime(testDb);
     const calls: string[] = [];
     vi.spyOn(rt, 'isActive').mockReturnValue(true);
@@ -280,9 +291,9 @@ describe('admin config endpoints (controller)', () => {
     );
 
   it('INS-006 — GET :id/config returns the fields alongside the (masked) values', async () => {
-    install('p');
-    declareField('p', 'apiUrl', 'instance');
-    testDb.prepare("UPDATE plugins SET config = '{\"apiUrl\":\"https://x.example\"}' WHERE id = 'p'").run();
+    await install('p');
+    await declareField('p', 'apiUrl', 'instance');
+    await updateRows(orm, Plugins, { id: 'p' }, { config: '{"apiUrl":"https://x.example"}' });
 
     const out = await controllerWith({ actionsOf: async () => [] }).getConfig('p');
     expect(out.config).toEqual({ apiUrl: 'https://x.example' });
@@ -290,8 +301,8 @@ describe('admin config endpoints (controller)', () => {
   });
 
   it('INS-007 — PUT :id/config saves, respawns an active plugin, and reports it', async () => {
-    install('p');
-    declareField('p', 'apiUrl', 'instance');
+    await install('p');
+    await declareField('p', 'apiUrl', 'instance');
     const respawnIfActive = vi.fn(async () => true);
 
     const out = await controllerWith({ respawnIfActive }).updateConfig('p', { apiUrl: 'https://y.example' });
@@ -301,8 +312,8 @@ describe('admin config endpoints (controller)', () => {
   });
 
   it('INS-008 — PUT :id/config on an inactive plugin saves without a restart', async () => {
-    install('p');
-    declareField('p', 'apiUrl', 'instance');
+    await install('p');
+    await declareField('p', 'apiUrl', 'instance');
     const respawnIfActive = vi.fn(async () => false);
 
     const out = await controllerWith({ respawnIfActive }).updateConfig('p', { apiUrl: 'https://y.example' });
@@ -310,8 +321,8 @@ describe('admin config endpoints (controller)', () => {
   });
 
   it('INS-009 — PUT :id/config with no body is an empty patch, not a crash', async () => {
-    install('p');
-    declareField('p', 'apiUrl', 'instance');
+    await install('p');
+    await declareField('p', 'apiUrl', 'instance');
     const respawnIfActive = vi.fn(async () => false);
 
     const out = await controllerWith({ respawnIfActive }).updateConfig('p', undefined as never);
@@ -320,8 +331,8 @@ describe('admin config endpoints (controller)', () => {
   });
 
   it('INS-010: with the kill switch off the save is refused before anything is written', async () => {
-    install('p');
-    declareField('p', 'apiUrl', 'instance');
+    await install('p');
+    await declareField('p', 'apiUrl', 'instance');
     process.env.TREK_PLUGINS_ENABLED = 'false';
     const respawnIfActive = vi.fn(async () => false);
 
@@ -336,8 +347,8 @@ describe('admin config endpoints (controller)', () => {
   });
 
   it('INS-011: a respawn that fails reports the save that DID happen, and stops claiming the plugin runs', async () => {
-    install('p');
-    declareField('p', 'apiUrl', 'instance');
+    await install('p');
+    await declareField('p', 'apiUrl', 'instance');
     const deactivate = vi.fn(async () => {});
     const respawnIfActive = vi.fn(async () => {
       throw new PluginConsentRequired('plugin p requires consent for db:read:trips', ['db:read:trips']);
@@ -387,60 +398,62 @@ describe('defaults reach the child at spawn', () => {
 });
 
 describe('plugin_actions.scope migration', () => {
-  it('MIG-ACT-001 — the column exists on a migrated DB and defaults to user', () => {
+  it('MIG-ACT-001 — the column exists on a migrated DB and defaults to user', async () => {
+    // test-sql-allow: the column list comes from PRAGMA table_info, which no entity or repository maps.
     const cols = testDb.prepare("SELECT name FROM pragma_table_info('plugin_actions')").all() as Array<{ name: string }>;
     expect(cols.some((c) => c.name === 'scope')).toBe(true);
-    testDb.prepare("INSERT INTO plugin_actions (plugin_id, action_key, label, hint, danger, sort_order) VALUES ('m', 'k', 'K', NULL, 0, 0)").run();
-    expect((testDb.prepare("SELECT scope FROM plugin_actions WHERE plugin_id='m'").get() as { scope: string }).scope).toBe('user');
-    testDb.prepare("DELETE FROM plugin_actions WHERE plugin_id='m'").run();
+    await insertRow(orm, PluginActions, { plugin_id: 'm', action_key: 'k', label: 'K', hint: null, danger: 0, sort_order: 0 });
+    expect((await findRow(orm, PluginActions, { plugin_id: 'm' }))!.scope).toBe('user');
+    await deleteRows(orm, PluginActions, { plugin_id: 'm' });
   });
 });
 
 describe('instance-scope actions (admin)', () => {
   function declareAction(pluginId: string, key: string, scope: 'user' | 'instance') {
-    testDb.prepare('INSERT INTO plugin_actions (plugin_id, action_key, label, hint, danger, scope, sort_order) VALUES (?, ?, ?, NULL, 0, ?, 0)')
-      .run(pluginId, key, key, scope);
+    return declareActionRow(pluginId, key, key, scope);
   }
   const adminReq = { user: { id: 42 } } as unknown as Request;
   async function controller(invoke = vi.fn(async () => ({ ok: true, message: 'pong' }))) {
     const rt = await createPluginRuntime(testDb);
     // isActive normally reflects the supervisor's live child map, which nothing here
-    // spawns — so it's stubbed to read the same DB status the test itself flips,
-    // mirroring what an actually-activated plugin would report.
-    const isActive = (id: string) => !!testDb.prepare("SELECT 1 FROM plugins WHERE id = ? AND status = 'active'").get(id);
+    // spawns — so it's stubbed to follow the status the test itself flips
+    // (markActive), mirroring what an actually-activated plugin would report.
+    const isActive = (id: string) => activeIds.has(id);
     const runtime = Object.assign(rt, { invokeAction: invoke, isActive }) as unknown as PluginRuntimeService;
     const c = new PluginsController(svc(), runtime, {} as unknown as PluginRegistryService, { isManaged: () => false } as unknown as RuntimeEnvService);
     return { c, invoke };
   }
 
-  beforeEach(() => { testDb.prepare('DELETE FROM plugin_actions').run(); });
+  beforeEach(async () => {
+    await deleteRows(orm, PluginActions);
+  });
 
   it('ACT-ADM-001 — GET config lists the instance actions and none of the user ones', async () => {
-    install('p');
-    declareAction('p', 'purge', 'instance');
-    declareAction('p', 'testConnection', 'user');
+    await install('p');
+    await declareAction('p', 'purge', 'instance');
+    await declareAction('p', 'testConnection', 'user');
     const { c } = await controller();
     expect((await c.getConfig('p')).actions).toEqual([{ key: 'purge', label: 'purge', hint: undefined, danger: false, scope: 'instance' }]);
   });
 
   it('ACT-ADM-002 — POST runs the action as the clicking admin in the instance scope', async () => {
-    install('p');
-    testDb.prepare("UPDATE plugins SET status = 'active', enabled = 1 WHERE id = 'p'").run();
+    await install('p');
+    await markActive('p');
     const { c, invoke } = await controller();
     expect(await c.runAction('p', 'purge', adminReq)).toEqual({ ok: true, message: 'pong' });
     expect(invoke).toHaveBeenCalledWith('p', 'purge', 42, 'instance');
   });
 
   it('ACT-ADM-003 — an inactive plugin answers 404 like the user route', async () => {
-    install('p');
+    await install('p');
     const { c, invoke } = await controller();
     await expect(c.runAction('p', 'purge', adminReq)).rejects.toMatchObject({ status: 404, response: { error: 'Plugin is not active' } });
     expect(invoke).not.toHaveBeenCalled();
   });
 
   it('ACT-ADM-004 — a refused key is a failed RESULT, not a server error', async () => {
-    install('p');
-    testDb.prepare("UPDATE plugins SET status = 'active', enabled = 1 WHERE id = 'p'").run();
+    await install('p');
+    await markActive('p');
     const { c } = await controller(vi.fn(async () => { throw new Error('plugin p did not declare action "x" in scope instance'); }));
     expect(await c.runAction('p', 'x', adminReq)).toEqual({ ok: false, message: 'plugin p did not declare action "x" in scope instance' });
   });

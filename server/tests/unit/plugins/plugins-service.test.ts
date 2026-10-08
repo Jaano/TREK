@@ -14,6 +14,8 @@ import { db as testDb } from '../../../src/db/database';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import { createTestAddonsService } from '../../helpers/test-addons';
 import { sharedTestOrm } from '../../helpers/test-uow';
+import type { TestOrm } from '../../helpers/test-orm';
+import { deleteRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
 import { PluginErrorLog } from '../../../src/db/entities/PluginErrorLog.entity';
 import { PluginEgressHosts } from '../../../src/db/entities/PluginEgressHosts.entity';
@@ -30,9 +32,16 @@ import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env
 // resolution; none of the fixtures below declare any, so it is built once
 // (over the same connection) rather than reconstructed at every call site.
 let addonsService: AddonsService;
+let orm: TestOrm;
 beforeAll(async () => {
   addonsService = await createTestAddonsService(testDb);
+  orm = await sharedTestOrm(testDb);
 });
+
+/** The plugin's stored instance config, parsed. */
+async function storedConfig(id: string): Promise<Record<string, unknown>> {
+  return JSON.parse((await findRow(orm, Plugins, { id }))!.config ?? '');
+}
 
 /**
  * Plan 3j Task 2 — PluginsService's own repository-backed constructor. One
@@ -65,9 +74,9 @@ async function makeFeedController(): Promise<PluginsFeedController> {
   return new PluginsFeedController(orm.repo(Plugins));
 }
 
-beforeEach(() => {
-  testDb.exec('DELETE FROM plugins');
-  testDb.exec('DELETE FROM plugin_settings_fields');
+beforeEach(async () => {
+  await deleteRows(orm, Plugins);
+  await deleteRows(orm, PluginSettingsFields);
   delete process.env.TREK_PLUGINS_ENABLED;
 });
 afterEach(() => {
@@ -76,9 +85,7 @@ afterEach(() => {
 
 describe('PluginsService.list', () => {
   it('returns the installed plugins and the runtime-enabled flag', async () => {
-    testDb
-      .prepare('INSERT INTO plugins (id, name, description, type, status, version) VALUES (?,?,?,?,?,?)')
-      .run('flight', 'Flight', 'desc', 'widget', 'inactive', '1.0.0');
+    await insertRow(orm, Plugins, { id: 'flight', name: 'Flight', description: 'desc', type: 'widget', status: 'inactive', version: '1.0.0' });
     process.env.TREK_PLUGINS_ENABLED = 'true';
 
     const out = await (await makeService()).list();
@@ -95,13 +102,11 @@ describe('PluginsService.list', () => {
       else process.env.APP_VERSION = APP_VERSION;
     });
     const seed = () =>
-      testDb
-        .prepare("INSERT INTO plugins (id, name, type, status, version, trek_range) VALUES ('old','Old','widget','inactive','1.0.0','>=3.0.0 <4.0.0')")
-        .run();
+      insertRow(orm, Plugins, { id: 'old', name: 'Old', type: 'widget', status: 'inactive', version: '1.0.0', trek_range: '>=3.0.0 <4.0.0' });
 
     it('reports the switch off and an outgrown plugin as hostIncompatible by default', async () => {
       process.env.APP_VERSION = '4.1.0';
-      seed();
+      await seed();
       const out = await (await makeService()).list();
       expect(out.ignoreTrekRange).toBe(false);
       expect(out.plugins[0]).toMatchObject({ dependencyStatus: 'hostIncompatible', trekRangeBypassed: null });
@@ -110,7 +115,7 @@ describe('PluginsService.list', () => {
     it('with the switch on, the plugin may activate but the row still says it is outside its range', async () => {
       process.env.APP_VERSION = '4.1.0';
       process.env.TREK_PLUGINS_IGNORE_TREK_RANGE = '1';
-      seed();
+      await seed();
       const out = await (await makeService()).list();
       expect(out.ignoreTrekRange).toBe(true);
       expect(out.plugins[0]).toMatchObject({
@@ -122,19 +127,15 @@ describe('PluginsService.list', () => {
     it('a plugin inside its range carries no marker even with the switch on', async () => {
       process.env.APP_VERSION = '3.5.0';
       process.env.TREK_PLUGINS_IGNORE_TREK_RANGE = '1';
-      seed();
+      await seed();
       const out = await (await makeService()).list();
       expect(out.plugins[0]).toMatchObject({ dependencyStatus: 'ok', trekRangeBypassed: null });
     });
   });
 
   it('surfaces updateHold as a boolean (held plugins leave the update banner)', async () => {
-    testDb
-      .prepare("INSERT INTO plugins (id, name, type, status, version, update_hold) VALUES ('held','Held','widget','inactive','1.0.0',1)")
-      .run();
-    testDb
-      .prepare("INSERT INTO plugins (id, name, type, status, version) VALUES ('free','Free','widget','inactive','1.0.0')")
-      .run();
+    await insertRow(orm, Plugins, { id: 'held', name: 'Held', type: 'widget', status: 'inactive', version: '1.0.0', update_hold: 1 });
+    await insertRow(orm, Plugins, { id: 'free', name: 'Free', type: 'widget', status: 'inactive', version: '1.0.0' });
 
     const out = await (await makeService()).list();
     expect(out.plugins.find((p) => p.id === 'held')).toMatchObject({ updateHold: true });
@@ -142,20 +143,16 @@ describe('PluginsService.list', () => {
   });
 
   it('resumeUpdates clears the hold and reports whether the plugin existed', async () => {
-    testDb
-      .prepare("INSERT INTO plugins (id, name, type, status, version, update_hold) VALUES ('held','Held','widget','inactive','1.0.0',1)")
-      .run();
+    await insertRow(orm, Plugins, { id: 'held', name: 'Held', type: 'widget', status: 'inactive', version: '1.0.0', update_hold: 1 });
     const svc = await makeService();
 
     expect(await svc.resumeUpdates('held')).toBe(true);
-    expect(testDb.prepare("SELECT update_hold FROM plugins WHERE id='held'").get()).toMatchObject({ update_hold: 0 });
+    expect(await findRow(orm, Plugins, { id: 'held' })).toMatchObject({ update_hold: 0 });
     expect(await svc.resumeUpdates('ghost')).toBe(false);
   });
 
   it('reports enabled by default (no kill switch set)', async () => {
-    testDb
-      .prepare('INSERT INTO plugins (id, name, description, type, status, version) VALUES (?,?,?,?,?,?)')
-      .run('flight', 'Flight', 'desc', 'widget', 'inactive', '1.0.0');
+    await insertRow(orm, Plugins, { id: 'flight', name: 'Flight', description: 'desc', type: 'widget', status: 'inactive', version: '1.0.0' });
 
     const out = await (await makeService()).list();
     expect(out.enabled).toBe(true);
@@ -176,13 +173,13 @@ describe('PluginsService.list', () => {
   // reported honestly rather than papered over here.
   describe('signature status', () => {
     const insert = (id: string, sourceRepo: string | null, pubkey: string | null) =>
-      testDb
-        .prepare('INSERT INTO plugins (id, name, type, status, version, source_repo, author_pubkey) VALUES (?,?,?,?,?,?,?)')
-        .run(id, id, 'widget', 'inactive', '1.0.0', sourceRepo, pubkey);
+      insertRow(orm, Plugins, {
+        id, name: id, type: 'widget', status: 'inactive', version: '1.0.0', source_repo: sourceRepo, author_pubkey: pubkey,
+      });
 
     it('reports signed + a display fingerprint for a registry plugin with a pinned key', async () => {
       const key = 'RWTvBn0aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcd';
-      insert('signed-one', 'acme/signed-one', key);
+      await insert('signed-one', 'acme/signed-one', key);
 
       const p = (await (await makeService()).list()).plugins[0];
       expect(p.signed).toBe(true);
@@ -193,15 +190,15 @@ describe('PluginsService.list', () => {
     });
 
     it('reports unsigned for a registry plugin with no pinned key', async () => {
-      insert('plain', 'acme/plain', null);
+      await insert('plain', 'acme/plain', null);
       const p = (await (await makeService()).list()).plugins[0];
       expect(p.signed).toBe(false);
       expect(p.keyFingerprint).toBeNull();
     });
 
     it('reports unsigned for a sideloaded and a dev-linked plugin (they carry no key)', async () => {
-      insert('uploaded', 'local:upload', null);
-      insert('linked', 'local:link', null);
+      await insert('uploaded', 'local:upload', null);
+      await insert('linked', 'local:link', null);
       const plugins = (await (await makeService()).list()).plugins;
       expect(plugins.map((p) => [p.id, p.signed, p.source_repo])).toEqual([
         ['linked', false, 'local:link'],
@@ -210,11 +207,11 @@ describe('PluginsService.list', () => {
     });
 
     it('surfaces a recorded update block, and reports none when there is none', async () => {
-      insert('blocked', 'acme/blocked', 'RWTvBn0aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcd');
-      insert('fine', 'acme/fine', null);
-      testDb
-        .prepare('UPDATE plugins SET update_block_code = ?, update_block_detail = ?, update_block_version = ? WHERE id = ?')
-        .run('SIGNATURE_KEY_CHANGED', 'the key changed', '2.0.0', 'blocked');
+      await insert('blocked', 'acme/blocked', 'RWTvBn0aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcd');
+      await insert('fine', 'acme/fine', null);
+      await updateRows(orm, Plugins, { id: 'blocked' }, {
+        update_block_code: 'SIGNATURE_KEY_CHANGED', update_block_detail: 'the key changed', update_block_version: '2.0.0',
+      });
 
       const byId = Object.fromEntries((await (await makeService()).list()).plugins.map((p) => [p.id, p]));
       expect(byId.blocked.updateBlock).toEqual({ code: 'SIGNATURE_KEY_CHANGED', detail: 'the key changed', version: '2.0.0' });
@@ -222,7 +219,7 @@ describe('PluginsService.list', () => {
     });
 
     it('never leaks the raw pinned key into the list response (only the fingerprint)', async () => {
-      insert('signed-one', 'acme/signed-one', 'RWTvBn0aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcd');
+      await insert('signed-one', 'acme/signed-one', 'RWTvBn0aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789abcd');
       // PluginListItem is an interface, so it has no implicit index signature and cannot
       // be narrowed to a record directly. Widening through unknown is what lets this case
       // probe for a key the contract deliberately does not declare.
@@ -243,8 +240,8 @@ describe('PluginsService.list', () => {
 
 describe('PluginsFeedController (client feed)', () => {
   it('returns active plugins when enabled, nothing when disabled', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status) VALUES ('w','W','widget','Box','active')").run();
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status) VALUES ('i','I','integration','Plug','inactive')").run();
+    await insertRow(orm, Plugins, { id: 'w', name: 'W', type: 'widget', icon: 'Box', status: 'active' });
+    await insertRow(orm, Plugins, { id: 'i', name: 'I', type: 'integration', icon: 'Plug', status: 'inactive' });
     const feed = await makeFeedController();
 
     process.env.TREK_PLUGINS_ENABLED = 'true';
@@ -256,8 +253,8 @@ describe('PluginsFeedController (client feed)', () => {
   });
 
   it('exposes the widget slot from capabilities (hero) and defaults on bad JSON', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('h','H','widget','Box','active','{\"widget\":{\"slot\":\"hero\"}}')").run();
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('b','B','widget','Box','active','not-json')").run();
+    await insertRow(orm, Plugins, { id: 'h', name: 'H', type: 'widget', icon: 'Box', status: 'active', capabilities: '{"widget":{"slot":"hero"}}' });
+    await insertRow(orm, Plugins, { id: 'b', name: 'B', type: 'widget', icon: 'Box', status: 'active', capabilities: 'not-json' });
     process.env.TREK_PLUGINS_ENABLED = 'true';
     const out = await (await makeFeedController()).list();
     expect(out.plugins.find((p) => p.id === 'h')?.slot).toBe('hero');
@@ -265,14 +262,14 @@ describe('PluginsFeedController (client feed)', () => {
   });
 
   it('exposes the day-detail slot (a day-panel widget must not fall back to the dashboard)', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('d','D','widget','Box','active','{\"widget\":{\"slot\":\"day-detail\"}}')").run();
+    await insertRow(orm, Plugins, { id: 'd', name: 'D', type: 'widget', icon: 'Box', status: 'active', capabilities: '{"widget":{"slot":"day-detail"}}' });
     process.env.TREK_PLUGINS_ENABLED = 'true';
     expect((await (await makeFeedController()).list()).plugins.find((p) => p.id === 'd')?.slot).toBe('day-detail');
   });
 
   it('exposes settingsUi only when the capability is exactly true', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('su','S','widget','Box','active','{\"settingsUi\":true}')").run();
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('no','N','widget','Box','active','{\"settingsUi\":\"yes\"}')").run();
+    await insertRow(orm, Plugins, { id: 'su', name: 'S', type: 'widget', icon: 'Box', status: 'active', capabilities: '{"settingsUi":true}' });
+    await insertRow(orm, Plugins, { id: 'no', name: 'N', type: 'widget', icon: 'Box', status: 'active', capabilities: '{"settingsUi":"yes"}' });
     process.env.TREK_PLUGINS_ENABLED = 'true';
     const out = await (await makeFeedController()).list();
     expect(out.plugins.find((p) => p.id === 'su')?.settingsUi).toBe(true);
@@ -280,17 +277,17 @@ describe('PluginsFeedController (client feed)', () => {
   });
 
   it('exposes the reservation-detail slot (a booking-card widget must not fall back to the dashboard)', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('r','R','widget','Box','active','{\"widget\":{\"slot\":\"reservation-detail\"}}')").run();
+    await insertRow(orm, Plugins, { id: 'r', name: 'R', type: 'widget', icon: 'Box', status: 'active', capabilities: '{"widget":{"slot":"reservation-detail"}}' });
     process.env.TREK_PLUGINS_ENABLED = 'true';
     expect((await (await makeFeedController()).list()).plugins.find((p) => p.id === 'r')?.slot).toBe('reservation-detail');
   });
 
   it('exposes tripPage for trip-page plugins, re-validated against the replaceable-tab whitelist', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('t','T','trip-page','Box','active','{\"tripPage\":{\"replaces\":[\"transports\",\"buchungen\"],\"position\":1}}')").run();
+    await insertRow(orm, Plugins, { id: 't', name: 'T', type: 'trip-page', icon: 'Box', status: 'active', capabilities: '{"tripPage":{"replaces":["transports","buchungen"],"position":1}}' });
     // a hand-edited row trying to hide 'plan' (or junk) is filtered here, not just at install
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('evil','E','trip-page','Box','active','{\"tripPage\":{\"replaces\":[\"plan\",\"nope\"],\"position\":-3}}')").run();
+    await insertRow(orm, Plugins, { id: 'evil', name: 'E', type: 'trip-page', icon: 'Box', status: 'active', capabilities: '{"tripPage":{"replaces":["plan","nope"],"position":-3}}' });
     // the capability is meaningless off a trip-page and must not leak onto widgets
-    testDb.prepare("INSERT INTO plugins (id, name, type, icon, status, capabilities) VALUES ('w2','W2','widget','Box','active','{\"tripPage\":{\"replaces\":[\"transports\"]}}')").run();
+    await insertRow(orm, Plugins, { id: 'w2', name: 'W2', type: 'widget', icon: 'Box', status: 'active', capabilities: '{"tripPage":{"replaces":["transports"]}}' });
     process.env.TREK_PLUGINS_ENABLED = 'true';
     const out = await (await makeFeedController()).list();
     expect(out.plugins.find((p) => p.id === 't')?.tripPage).toEqual({ replaces: ['transports', 'buchungen'], position: 1 });
@@ -349,9 +346,9 @@ describe('PluginsController M2 endpoints', () => {
 
 describe('PluginsService instance config', () => {
   it('encrypts secret fields on write and masks them on read; keeps plaintext for non-secrets', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, status, config) VALUES ('x','X','inactive','{}')").run();
-    testDb.prepare("INSERT INTO plugin_settings_fields (plugin_id, field_key, scope, secret) VALUES ('x','api_key','instance',1)").run();
-    testDb.prepare("INSERT INTO plugin_settings_fields (plugin_id, field_key, scope, secret) VALUES ('x','server','instance',0)").run();
+    await insertRow(orm, Plugins, { id: 'x', name: 'X', status: 'inactive', config: '{}' });
+    await insertRow(orm, PluginSettingsFields, { plugin_id: 'x', field_key: 'api_key', scope: 'instance', secret: 1 });
+    await insertRow(orm, PluginSettingsFields, { plugin_id: 'x', field_key: 'server', scope: 'instance', secret: 0 });
 
     const svc = await makeService();
     const masked = await svc.updateInstanceConfig('x', { api_key: 'super-secret', server: 'https://h' });
@@ -360,29 +357,29 @@ describe('PluginsService instance config', () => {
     expect(masked.server).toBe('https://h');
 
     // stored value is encrypted, not plaintext
-    const stored = JSON.parse((testDb.prepare("SELECT config FROM plugins WHERE id='x'").get() as { config: string }).config);
+    const stored = await storedConfig('x');
     expect(stored.api_key).not.toBe('super-secret');
     expect(String(stored.api_key)).toMatch(/^enc:/);
     expect(stored.server).toBe('https://h');
 
     // an unchanged mask does not overwrite the stored secret
     await svc.updateInstanceConfig('x', { api_key: '••••••••' });
-    const still = JSON.parse((testDb.prepare("SELECT config FROM plugins WHERE id='x'").get() as { config: string }).config);
+    const still = await storedConfig('x');
     expect(still.api_key).toBe(stored.api_key);
 
     expect((await svc.getInstanceConfig('x')).api_key).toBe('••••••••');
   });
 
   it('drops a key the plugin never declared, like the user-scope sibling does', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, status, config) VALUES ('y','Y','inactive','{}')").run();
-    testDb.prepare("INSERT INTO plugin_settings_fields (plugin_id, field_key, scope, secret) VALUES ('y','server','instance',0)").run();
+    await insertRow(orm, Plugins, { id: 'y', name: 'Y', status: 'inactive', config: '{}' });
+    await insertRow(orm, PluginSettingsFields, { plugin_id: 'y', field_key: 'server', scope: 'instance', secret: 0 });
 
     const svc = await makeService();
     const masked = await svc.updateInstanceConfig('y', { server: 'https://h', smuggled: 'nope' });
 
     expect(masked.server).toBe('https://h');
     expect(masked.smuggled).toBeUndefined();
-    const stored = JSON.parse((testDb.prepare("SELECT config FROM plugins WHERE id='y'").get() as { config: string }).config);
+    const stored = await storedConfig('y');
     expect(stored).toEqual({ server: 'https://h' });
   });
 
@@ -393,9 +390,11 @@ describe('PluginsService instance config', () => {
 });
 
 describe('PluginsService error log', () => {
-  beforeEach(() => testDb.exec('DELETE FROM plugin_error_log'));
+  beforeEach(async () => {
+    await deleteRows(orm, PluginErrorLog);
+  });
   it('lists and clears a plugin error log', async () => {
-    testDb.prepare("INSERT INTO plugin_error_log (plugin_id, level, message, ts) VALUES ('p','error','boom','2026-01-01')").run();
+    await insertRow(orm, PluginErrorLog, { plugin_id: 'p', level: 'error', message: 'boom', ts: '2026-01-01' });
     const svc = await makeService();
     expect(await svc.errors('p')).toEqual([{ ts: '2026-01-01', level: 'error', message: 'boom' }]);
     await svc.clearErrors('p');

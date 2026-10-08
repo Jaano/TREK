@@ -10,6 +10,7 @@ import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { PluginCapabilityAudit } from '../../../src/db/entities/PluginCapabilityAudit.entity';
+import { updateRows } from '../../helpers/factories/rows';
 import type { PluginCapabilityAuditRepository } from '../../../src/db/repositories/PluginCapabilityAudit.repository';
 import { appendAudit } from '../../../src/nest/plugins/host/plugin-audit';
 import { budgetFor, pluginBudgetUsage } from '../../../src/nest/plugins/host/plugin-host-state';
@@ -61,7 +62,7 @@ describe('budgetFor / pluginBudgetUsage seed read', () => {
     // Backdate the row to yesterday, bypassing the repository (simulating a
     // real prior day's audit history already on disk).
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    testDb.prepare("UPDATE plugin_capability_audit SET ts = ? WHERE plugin_id = 'hs3'").run(yesterday);
+    await updateRows(t, PluginCapabilityAudit, { plugin_id: 'hs3' }, { ts: yesterday });
 
     const usage = await pluginBudgetUsage('hs3', audit);
     expect(usage.ai).toBe(0);
