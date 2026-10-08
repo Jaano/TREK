@@ -30,6 +30,10 @@ import { db as testDb } from '../../../../src/db/database';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createUser } from '../../../helpers/factories';
 import { makePushSubscriptionsService } from '../../../helpers/notifications';
+import { sharedTestOrm } from '../../../helpers/test-uow';
+import { countRows, deleteRows, updateRows } from '../../../helpers/factories/rows';
+import { PushSubscriptions } from '../../../../src/db/entities/PushSubscriptions.entity';
+import { Users } from '../../../../src/db/entities/Users.entity';
 import {
   MAX_PUSH_DEVICES_PER_USER,
   PushSubscriptionsService,
@@ -215,7 +219,7 @@ describe('PushSubscriptionsService', () => {
     }
     // Same second for every row; the id breaks the tie, so d0 is the oldest.
     // d0 subscribing again renews it, which leaves d1 as the oldest.
-    testDb.prepare("UPDATE push_subscriptions SET created_at = '2026-01-01 00:00:00'").run();
+    await updateRows(await sharedTestOrm(testDb), PushSubscriptions, {}, { created_at: '2026-01-01 00:00:00' });
     await subs.upsert(user.id, checked('https://fcm.googleapis.com/fcm/send/d0'), 'k');
     expect(await subs.upsert(user.id, checked('https://fcm.googleapis.com/fcm/send/new'), 'k')).toBe(
       MAX_PUSH_DEVICES_PER_USER,
@@ -258,12 +262,13 @@ describe('PushSubscriptionsService', () => {
     const { user } = createUser(testDb);
     await subs.upsert(user.id, checked(FCM), 'k', 'x'.repeat(1000));
     expect((await subs.listForUser(user.id))[0].user_agent).toHaveLength(256);
-    testDb.prepare('DELETE FROM users WHERE id = ?').run(user.id);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM push_subscriptions').get()).toEqual({ n: 0 });
+    await deleteRows(await sharedTestOrm(testDb), Users, { id: user.id });
+    expect(await countRows(await sharedTestOrm(testDb), PushSubscriptions)).toBe(0);
   });
 
   it('PUSHSUB-008: migration 245 created the table with its user index', async () => {
     const index = testDb
+      // test-sql-allow: the index list comes from sqlite_master, which no entity or repository maps.
       .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'push_subscriptions'")
       .all() as { name: string }[];
     expect(index.map((i) => i.name)).toContain('idx_push_subscriptions_user');

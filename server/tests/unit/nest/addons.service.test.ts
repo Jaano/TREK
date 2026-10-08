@@ -2,7 +2,7 @@
  * Unit tests for AddonsService — rebuilt on real rows (Plan 3a Task 4).
  *
  * The legacy version of this file fully stubbed DatabaseService at the
- * `db.prepare(sql).{get,all,run}` level: a single shared fake `stmt` fed
+ * `db.prepare` level (its `get`, `all` and `run`): a single shared fake `stmt` fed
  * canned rows *in call order* (three `.all()` reads for addons/providers/
  * fields, a `.get()` for the journey gate, and so on). That coupling cannot
  * survive AddonsService now calling four different repositories instead of
@@ -26,6 +26,7 @@ import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { deleteRows, findRow, insertRow, updateRows, upsertRow } from '../../helpers/factories/rows';
 import { AddonsService } from '../../../src/nest/addons/addons.service';
 import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { PlaceShadowService } from '../../../src/nest/place-shadow/place-shadow.service';
@@ -77,10 +78,11 @@ function providerFields(addon: ListAddon): PhotoProviderField[] {
   return (addon as ListAddon & { fields: PhotoProviderField[] }).fields;
 }
 
-function insertAddon(row: { id: string; name: string; type?: string; icon?: string | null; enabled: 0 | 1; sort_order?: number }): void {
-  testDb
-    .prepare('INSERT INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, NULL, ?, ?, ?, ?)')
-    .run(row.id, row.name, row.type ?? 'global', row.icon ?? null, row.enabled, row.sort_order ?? 0);
+async function insertAddon(row: { id: string; name: string; type?: string; icon?: string | null; enabled: 0 | 1; sort_order?: number }): Promise<void> {
+  await insertRow(t, Addons, {
+    id: row.id, name: row.name, description: null, type: row.type ?? 'global', icon: row.icon ?? null,
+    enabled: row.enabled === 1, sort_order: row.sort_order ?? 0,
+  });
 }
 
 /**
@@ -100,13 +102,13 @@ function stubJourneyEnabled(): ReturnType<typeof vi.spyOn> {
   return vi.spyOn(addonsRepo, 'isEnabled').mockImplementation(async (id: string) => id === 'journey');
 }
 
-function insertProvider(row: { id: string; name: string; icon?: string | null; enabled: 0 | 1; sort_order?: number }): void {
-  testDb
-    .prepare('INSERT INTO photo_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, NULL, ?, ?, ?)')
-    .run(row.id, row.name, row.icon ?? null, row.enabled, row.sort_order ?? 0);
+async function insertProvider(row: { id: string; name: string; icon?: string | null; enabled: 0 | 1; sort_order?: number }): Promise<void> {
+  await insertRow(t, PhotoProviders, {
+    id: row.id, name: row.name, description: null, icon: row.icon ?? null, enabled: row.enabled, sort_order: row.sort_order ?? 0,
+  });
 }
 
-function insertField(row: {
+async function insertField(row: {
   provider_id: string;
   field_key: string;
   label: string;
@@ -118,36 +120,29 @@ function insertField(row: {
   settings_key?: string | null;
   payload_key?: string | null;
   sort_order?: number;
-}): void {
-  testDb
-    .prepare(
-      `INSERT INTO photo_provider_fields
-         (provider_id, field_key, label, input_type, placeholder, hint, required, secret, settings_key, payload_key, sort_order)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-    .run(
-      row.provider_id,
-      row.field_key,
-      row.label,
-      row.input_type ?? 'text',
-      row.placeholder ?? null,
-      row.hint ?? null,
-      row.required ?? 0,
-      row.secret ?? 0,
-      row.settings_key ?? null,
-      row.payload_key ?? null,
-      row.sort_order ?? 0,
-    );
+}): Promise<void> {
+  await insertRow(t, PhotoProviderFields, {
+    provider: row.provider_id,
+    field_key: row.field_key,
+    label: row.label,
+    input_type: row.input_type ?? 'text',
+    placeholder: row.placeholder ?? null,
+    hint: row.hint ?? null,
+    required: row.required ?? 0,
+    secret: row.secret ?? 0,
+    settings_key: row.settings_key ?? null,
+    payload_key: row.payload_key ?? null,
+    sort_order: row.sort_order ?? 0,
+  });
 }
 
-function setAppSetting(key: string, value: string | null): void {
-  testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+async function setAppSetting(key: string, value: string | null): Promise<void> {
+  await upsertRow(t, AppSettings, { key, value });
 }
 
-function rawAppSetting(key: string): { key: string; value: string | null } | undefined {
-  return testDb.prepare('SELECT key, value FROM app_settings WHERE key = ?').get(key) as
-    | { key: string; value: string | null }
-    | undefined;
+async function storedAppSetting(key: string): Promise<{ key: string; value: string | null } | undefined> {
+  const row = await findRow(t, AppSettings, { key });
+  return row ? { key: row.key!, value: row.value ?? null } : undefined;
 }
 
 beforeAll(async () => {
@@ -187,8 +182,8 @@ afterAll(async () => {
 
 describe('AddonsService.list', () => {
   it('returns the collab features and the bag-tracking flag from app_settings', async () => {
-    setAppSetting('collab_chat_enabled', 'false');
-    setAppSetting('bag_tracking_enabled', 'true');
+    await setAppSetting('collab_chat_enabled', 'false');
+    await setAppSetting('bag_tracking_enabled', 'true');
 
     const res = await svc.list();
     expect(res.collabFeatures).toEqual({ chat: false, notes: true, links: true, polls: true, whatsnext: true });
@@ -202,8 +197,8 @@ describe('AddonsService.list', () => {
   // enabled row that does (the entity's `enabled` is p.boolean(), so the
   // stored int comes back as a real JS boolean, not just truthy).
   it('only returns enabled addons, with the stored int coerced to a JS boolean', async () => {
-    insertAddon({ id: 'atlas', name: 'Atlas', type: 'page', icon: 'globe', enabled: 1 });
-    insertAddon({ id: 'vacay', name: 'Vacay', type: 'page', icon: 'sun', enabled: 0 });
+    await insertAddon({ id: 'atlas', name: 'Atlas', type: 'page', icon: 'globe', enabled: 1 });
+    await insertAddon({ id: 'vacay', name: 'Vacay', type: 'page', icon: 'sun', enabled: 0 });
 
     const res = await svc.list();
     expect(res.addons).toEqual([{ id: 'atlas', name: 'Atlas', type: 'page', icon: 'globe', enabled: true }]);
@@ -211,7 +206,7 @@ describe('AddonsService.list', () => {
 
   it('maps a photo provider with no fields to an empty fields array (the || [] fallback)', async () => {
     stubJourneyEnabled();
-    insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
+    await insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
     getPhotoProviderConfig.mockReturnValue({ baseUrl: 'http://x' });
 
     const res = await svc.list();
@@ -236,8 +231,8 @@ describe('AddonsService.list', () => {
   // AddonsService does the `!!` itself, unlike the Addons entity above).
   it('only returns enabled photo providers, with the stored integer coerced to a JS boolean', async () => {
     stubJourneyEnabled();
-    insertProvider({ id: 'synology', name: 'Synology', icon: 'image', enabled: 1, sort_order: 1 });
-    insertProvider({ id: 'off-provider', name: 'Off', icon: 'image', enabled: 0, sort_order: 2 });
+    await insertProvider({ id: 'synology', name: 'Synology', icon: 'image', enabled: 1, sort_order: 1 });
+    await insertProvider({ id: 'off-provider', name: 'Off', icon: 'image', enabled: 0, sort_order: 2 });
 
     const res = await svc.list();
     expect(res.addons.map((a) => (a as { id: string }).id)).toEqual(['synology']);
@@ -246,8 +241,8 @@ describe('AddonsService.list', () => {
 
   it('groups multiple fields under their provider and keeps insertion order', async () => {
     stubJourneyEnabled();
-    insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
-    insertField({
+    await insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
+    await insertField({
       provider_id: 'immich',
       field_key: 'url',
       label: 'URL',
@@ -261,7 +256,7 @@ describe('AddonsService.list', () => {
       sort_order: 0,
     });
     // Second field for the SAME provider exercises the `get(...) || []` truthy branch.
-    insertField({
+    await insertField({
       provider_id: 'immich',
       field_key: 'token',
       label: 'Token',
@@ -302,8 +297,8 @@ describe('AddonsService.list', () => {
 
   it('falls back placeholder→"", hint→null, settings/payload keys→null when columns are missing/empty', async () => {
     stubJourneyEnabled();
-    insertProvider({ id: 'p', name: 'P', icon: 'i', enabled: 1 });
-    insertField({ provider_id: 'p', field_key: 'k', label: 'L' }); // placeholder/hint/settings_key/payload_key all null
+    await insertProvider({ id: 'p', name: 'P', icon: 'i', enabled: 1 });
+    await insertField({ provider_id: 'p', field_key: 'k', label: 'L' }); // placeholder/hint/settings_key/payload_key all null
 
     const res = await svc.list();
     const field = providerFields(res.addons[0])[0];
@@ -319,9 +314,9 @@ describe('AddonsService.list', () => {
     stubJourneyEnabled();
     // A field exists, but for a DIFFERENT provider than the one returned — exercises
     // the `fieldsByProvider.get(p.id) || []` fallback while the map is non-empty.
-    insertProvider({ id: 'has-none', name: 'X', icon: 'i', enabled: 1 });
-    insertProvider({ id: 'other', name: 'Other', icon: 'i', enabled: 0 }); // FK target for the field below
-    insertField({ provider_id: 'other', field_key: 'k', label: 'L' });
+    await insertProvider({ id: 'has-none', name: 'X', icon: 'i', enabled: 1 });
+    await insertProvider({ id: 'other', name: 'Other', icon: 'i', enabled: 0 }); // FK target for the field below
+    await insertField({ provider_id: 'other', field_key: 'k', label: 'L' });
 
     const res = await svc.list();
     expect(providerFields(res.addons[0])).toEqual([]);
@@ -329,8 +324,8 @@ describe('AddonsService.list', () => {
 
   it('concatenates regular addons before the photo providers', async () => {
     stubJourneyEnabled();
-    insertAddon({ id: 'atlas', name: 'Atlas', type: 'page', icon: 'globe', enabled: 1 });
-    insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
+    await insertAddon({ id: 'atlas', name: 'Atlas', type: 'page', icon: 'globe', enabled: 1 });
+    await insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
 
     const res = await svc.list();
     expect(res.addons.map((a) => (a as { id: string }).id)).toEqual(['atlas', 'immich']);
@@ -340,8 +335,8 @@ describe('AddonsService.list', () => {
   it('drops the photo providers while the journey addon is off, whatever their rows say', async () => {
     // No 'journey' row at all — isAddonEnabled('journey') reads false, same as
     // the legacy `!!undefined`.
-    insertAddon({ id: 'atlas', name: 'Atlas', type: 'page', icon: 'globe', enabled: 1 });
-    insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
+    await insertAddon({ id: 'atlas', name: 'Atlas', type: 'page', icon: 'globe', enabled: 1 });
+    await insertProvider({ id: 'immich', name: 'Immich', icon: 'image', enabled: 1 });
     const listSpy = vi.spyOn(photoProvidersRepo, 'listEnabled');
 
     const res = await svc.list();
@@ -356,37 +351,37 @@ describe('AddonsService.list', () => {
 // purpose: bag tracking is opt-in (=== 'true'), collab flags opt-out (!== 'false').
 describe('AddonsService addon/feature flags', () => {
   it('isAddonEnabled coerces the enabled column (1/0/missing row)', async () => {
-    insertAddon({ id: 'budget', name: 'Budget', enabled: 1 });
+    await insertAddon({ id: 'budget', name: 'Budget', enabled: 1 });
     expect(await svc.isAddonEnabled('budget')).toBe(true);
 
-    testDb.prepare('UPDATE addons SET enabled = 0 WHERE id = ?').run('budget');
+    await updateRows(t, Addons, { id: 'budget' }, { enabled: false });
     expect(await svc.isAddonEnabled('budget')).toBe(false);
 
     expect(await svc.isAddonEnabled('nope')).toBe(false);
   });
 
   it('getBagTracking is opt-in: only the literal string true enables it', async () => {
-    setAppSetting('bag_tracking_enabled', 'true');
+    await setAppSetting('bag_tracking_enabled', 'true');
     expect(await svc.getBagTracking()).toEqual({ enabled: true });
 
-    setAppSetting('bag_tracking_enabled', 'false');
+    await setAppSetting('bag_tracking_enabled', 'false');
     expect(await svc.getBagTracking()).toEqual({ enabled: false });
 
-    testDb.prepare("DELETE FROM app_settings WHERE key = 'bag_tracking_enabled'").run();
+    await deleteRows(t, AppSettings, { key: 'bag_tracking_enabled' });
     expect(await svc.getBagTracking()).toEqual({ enabled: false }); // absent row → OFF
   });
 
   it('updateBagTracking persists true/false strings and echoes the flag (ADMIN-SVC-030)', async () => {
     expect(await svc.updateBagTracking(true)).toEqual({ enabled: true });
-    expect(rawAppSetting('bag_tracking_enabled')).toEqual({ key: 'bag_tracking_enabled', value: 'true' });
+    expect(await storedAppSetting('bag_tracking_enabled')).toEqual({ key: 'bag_tracking_enabled', value: 'true' });
 
     expect(await svc.updateBagTracking(false)).toEqual({ enabled: false });
-    expect(rawAppSetting('bag_tracking_enabled')).toEqual({ key: 'bag_tracking_enabled', value: 'false' });
+    expect(await storedAppSetting('bag_tracking_enabled')).toEqual({ key: 'bag_tracking_enabled', value: 'false' });
   });
 
   it('getCollabFeatures is opt-out: absent rows default ON, only false disables', async () => {
-    setAppSetting('collab_chat_enabled', 'false');
-    setAppSetting('collab_polls_enabled', 'true');
+    await setAppSetting('collab_chat_enabled', 'false');
+    await setAppSetting('collab_polls_enabled', 'true');
 
     expect(await svc.getCollabFeatures()).toEqual({ chat: false, notes: true, links: true, polls: true, whatsnext: true });
   });
@@ -400,7 +395,7 @@ describe('AddonsService addon/feature flags', () => {
     expect(first.features.chat).toBe(false);
     expect(setValueSpy).toHaveBeenCalledTimes(1);
     expect(setValueSpy).toHaveBeenCalledWith('collab_chat_enabled', 'false');
-    expect(rawAppSetting('collab_chat_enabled')).toEqual({ key: 'collab_chat_enabled', value: 'false' });
+    expect(await storedAppSetting('collab_chat_enabled')).toEqual({ key: 'collab_chat_enabled', value: 'false' });
 
     // identical save → before and after read the same → no change, MCP sessions must survive
     setValueSpy.mockClear();
@@ -447,17 +442,17 @@ describe('AddonsService places flags', () => {
 
   it('ADDONS-SVC-080 an unset flag reads as OFF, and anything but the literal true does too', async () => {
     for (const [getter, , key] of cases) {
-      testDb.prepare('DELETE FROM app_settings WHERE key = ?').run(key);
+      await deleteRows(t, AppSettings, { key });
       expect(await svc[getter]()).toEqual({ enabled: false });
 
-      setAppSetting(key, 'garbage');
+      await setAppSetting(key, 'garbage');
       expect(await svc[getter]()).toEqual({ enabled: false });
     }
   });
 
   it('ADDONS-SVC-081 a stored "true" reads as ON', async () => {
     for (const [getter, , key] of cases) {
-      setAppSetting(key, 'true');
+      await setAppSetting(key, 'true');
       expect(await svc[getter]()).toEqual({ enabled: true });
     }
   });
@@ -465,10 +460,10 @@ describe('AddonsService places flags', () => {
   it('ADDONS-SVC-082 the setters persist the literal string and echo the boolean back', async () => {
     for (const [, setter, key] of cases) {
       expect(await svc[setter](true)).toEqual({ enabled: true });
-      expect(rawAppSetting(key)).toEqual({ key, value: 'true' });
+      expect(await storedAppSetting(key)).toEqual({ key, value: 'true' });
 
       expect(await svc[setter](false)).toEqual({ enabled: false });
-      expect(rawAppSetting(key)).toEqual({ key, value: 'false' });
+      expect(await storedAppSetting(key)).toEqual({ key, value: 'false' });
     }
   });
 });
@@ -489,21 +484,21 @@ describe('AddonsService places enrichment flag', () => {
   });
 
   it('ADDONS-SVC-084 only the literal "false" switches it off', async () => {
-    setAppSetting('places_enrich_enabled', 'false');
+    await setAppSetting('places_enrich_enabled', 'false');
     expect(await svc.getPlacesEnrich()).toEqual({ enabled: false });
 
     for (const value of ['true', 'garbage', '']) {
-      setAppSetting('places_enrich_enabled', value);
+      await setAppSetting('places_enrich_enabled', value);
       expect(await svc.getPlacesEnrich()).toEqual({ enabled: true });
     }
   });
 
   it('ADDONS-SVC-085 the setter persists the literal string and echoes the boolean back', async () => {
     expect(await svc.updatePlacesEnrich(false)).toEqual({ enabled: false });
-    expect(rawAppSetting('places_enrich_enabled')).toEqual({ key: 'places_enrich_enabled', value: 'false' });
+    expect(await storedAppSetting('places_enrich_enabled')).toEqual({ key: 'places_enrich_enabled', value: 'false' });
 
     expect(await svc.updatePlacesEnrich(true)).toEqual({ enabled: true });
-    expect(rawAppSetting('places_enrich_enabled')).toEqual({ key: 'places_enrich_enabled', value: 'true' });
+    expect(await storedAppSetting('places_enrich_enabled')).toEqual({ key: 'places_enrich_enabled', value: 'true' });
   });
 });
 
@@ -524,21 +519,21 @@ describe('AddonsService transit provider', () => {
   });
 
   it('ADDONS-SVC-087 only a known provider name is honoured', async () => {
-    setAppSetting('transit_provider', 'google');
+    await setAppSetting('transit_provider', 'google');
     expect((await svc.getTransitProvider()).provider).toBe('google');
 
     for (const value of ['someday-maps', '', 'GOOGLE']) {
-      setAppSetting('transit_provider', value);
+      await setAppSetting('transit_provider', value);
       expect((await svc.getTransitProvider()).provider).toBe('transitous');
     }
   });
 
   it('ADDONS-SVC-088 the setter persists the name and echoes it back', async () => {
     expect((await svc.updateTransitProvider('google')).provider).toBe('google');
-    expect(rawAppSetting('transit_provider')).toEqual({ key: 'transit_provider', value: 'google' });
+    expect(await storedAppSetting('transit_provider')).toEqual({ key: 'transit_provider', value: 'google' });
 
     expect((await svc.updateTransitProvider('transitous')).provider).toBe('transitous');
-    expect(rawAppSetting('transit_provider')).toEqual({ key: 'transit_provider', value: 'transitous' });
+    expect(await storedAppSetting('transit_provider')).toEqual({ key: 'transit_provider', value: 'transitous' });
   });
 
   /**
@@ -547,14 +542,14 @@ describe('AddonsService transit provider', () => {
    * means "works for this admin, Transitous for everybody else".
    */
   it('ADDONS-SVC-089 reports where the Google key resolved from', async () => {
-    setAppSetting('transit_provider', 'google');
-    setAppSetting('maps_api_key', 'instance-key');
+    await setAppSetting('transit_provider', 'google');
+    await setAppSetting('maps_api_key', 'instance-key');
     expect((await svc.getTransitProvider(7)).googleKeySource).toBe('instance');
 
     // No instance row, but the caller's own users column has one.
-    testDb.prepare("DELETE FROM app_settings WHERE key = 'maps_api_key'").run();
+    await deleteRows(t, AppSettings, { key: 'maps_api_key' });
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('personal-key', user.id);
+    await updateRows(t, Users, { id: user.id }, { maps_api_key: 'personal-key' });
     expect((await svc.getTransitProvider(user.id)).googleKeySource).toBe('user-row');
 
     // Nothing anywhere.
@@ -570,21 +565,21 @@ describe('AddonsService transit provider', () => {
  */
 describe('AddonsService places Google-only flag', () => {
   it('ADDONS-SVC-095 an unset flag reads as OFF, only the literal "true" switches it on', async () => {
-    expect(rawAppSetting('places_google_only')).toBeUndefined();
+    expect(await storedAppSetting('places_google_only')).toBeUndefined();
     expect(await svc.getPlacesGoogleOnly()).toEqual({ enabled: false });
     for (const value of ['false', 'TRUE', '1', '']) {
-      setAppSetting('places_google_only', value);
+      await setAppSetting('places_google_only', value);
       expect(await svc.getPlacesGoogleOnly()).toEqual({ enabled: false });
     }
-    setAppSetting('places_google_only', 'true');
+    await setAppSetting('places_google_only', 'true');
     expect(await svc.getPlacesGoogleOnly()).toEqual({ enabled: true });
   });
 
   it('ADDONS-SVC-096 the setter persists the literal string under its own key', async () => {
     expect(await svc.updatePlacesGoogleOnly(true)).toEqual({ enabled: true });
-    expect(rawAppSetting('places_google_only')).toEqual({ key: 'places_google_only', value: 'true' });
+    expect(await storedAppSetting('places_google_only')).toEqual({ key: 'places_google_only', value: 'true' });
     expect(await svc.updatePlacesGoogleOnly(false)).toEqual({ enabled: false });
-    expect(rawAppSetting('places_google_only')).toEqual({ key: 'places_google_only', value: 'false' });
+    expect(await storedAppSetting('places_google_only')).toEqual({ key: 'places_google_only', value: 'false' });
   });
 });
 
@@ -601,28 +596,28 @@ describe('AddonsService place shadow flag', () => {
     expect(await svc.getPlaceShadow()).toEqual({ enabled: false });
 
     for (const value of ['false', 'TRUE', '1', '']) {
-      setAppSetting('place_shadow_enabled', value);
+      await setAppSetting('place_shadow_enabled', value);
       expect(await svc.getPlaceShadow()).toEqual({ enabled: false });
     }
   });
 
   it('ADDONS-SVC-091 a stored "true" reads as ON', async () => {
-    setAppSetting('place_shadow_enabled', 'true');
+    await setAppSetting('place_shadow_enabled', 'true');
     expect(await svc.getPlaceShadow()).toEqual({ enabled: true });
   });
 
   it('ADDONS-SVC-092 the setter round-trips through the getter under its own key', async () => {
     expect(await svc.updatePlaceShadow(true)).toEqual({ enabled: true });
-    expect(rawAppSetting('place_shadow_enabled')).toEqual({ key: 'place_shadow_enabled', value: 'true' });
+    expect(await storedAppSetting('place_shadow_enabled')).toEqual({ key: 'place_shadow_enabled', value: 'true' });
     expect(await svc.getPlaceShadow()).toEqual({ enabled: true });
     // a sibling switch must not ride along
     expect(await svc.getPlacesDetails()).toEqual({ enabled: false });
 
     expect(await svc.updatePlaceShadow(false)).toEqual({ enabled: false });
-    expect(rawAppSetting('place_shadow_enabled')).toEqual({ key: 'place_shadow_enabled', value: 'false' });
+    expect(await storedAppSetting('place_shadow_enabled')).toEqual({ key: 'place_shadow_enabled', value: 'false' });
     expect(await svc.getPlaceShadow()).toEqual({ enabled: false });
     // no sibling key was ever written
-    expect(rawAppSetting('places_details_enabled')).toBeUndefined();
+    expect(await storedAppSetting('places_details_enabled')).toBeUndefined();
   });
 
   it('ADDONS-SVC-093 answers the same as PlaceShadowService.enabled() for every stored value', async () => {
@@ -635,8 +630,8 @@ describe('AddonsService place shadow flag', () => {
     ];
 
     for (const [value, expected] of cases) {
-      if (value === undefined) testDb.prepare("DELETE FROM app_settings WHERE key = 'place_shadow_enabled'").run();
-      else setAppSetting('place_shadow_enabled', value);
+      if (value === undefined) await deleteRows(t, AppSettings, { key: 'place_shadow_enabled' });
+      else await setAppSetting('place_shadow_enabled', value);
 
       expect(await svc.getPlaceShadow()).toEqual({ enabled: expected });
       expect(await shadow.enabled()).toBe(expected);

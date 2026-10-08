@@ -12,6 +12,9 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, findRows, updateRows } from '../../helpers/factories/rows';
+import { setAppSetting } from '../../helpers/factories/settings';
+import { dbNow } from '../../../src/db/types';
 import { PlaceShadowService, RETENTION_DAYS } from '../../../src/nest/place-shadow/place-shadow.service';
 import { PlaceShadowPicks } from '../../../src/db/entities/PlaceShadowPicks.entity';
 import type { PlaceShadowPicksRepository } from '../../../src/db/repositories/PlaceShadowPicks.repository';
@@ -38,8 +41,12 @@ const PICK: PlaceShadowPickRequest = {
 };
 
 function enable(on = true) {
-  testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)')
-    .run('place_shadow_enabled', on ? 'true' : 'false');
+  return setAppSetting(t, 'place_shadow_enabled', on ? 'true' : 'false');
+}
+
+/** A timestamp in the stored datetime('now') format, `days` days back. */
+function daysAgo(days: number): string {
+  return dbNow(new Date(Date.now() - days * 86_400_000));
 }
 
 beforeAll(async () => {
@@ -56,19 +63,18 @@ describe('PlaceShadowService', () => {
     it('is off when the setting row is absent', async () => {
       expect(await svc.enabled()).toBe(false);
       expect(await svc.record(PICK)).toBe(false);
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM place_shadow_picks').get()).toEqual({ n: 0 });
+      expect(await countRows(t, PlaceShadowPicks)).toBe(0);
     });
 
     it('is off for any value that is not exactly "true"', async () => {
       for (const value of ['false', '1', 'yes', 'TRUE', '']) {
-        testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)')
-          .run('place_shadow_enabled', value);
+        await setAppSetting(t, 'place_shadow_enabled', value);
         expect(await svc.enabled(), `value ${JSON.stringify(value)}`).toBe(false);
       }
     });
 
     it('writes once switched on', async () => {
-      enable();
+      await enable();
       expect(await svc.record(PICK)).toBe(true);
       expect((await svc.summary()).total).toBe(1);
     });
@@ -79,7 +85,7 @@ describe('PlaceShadowService', () => {
 
     it('rounds every coordinate to three decimals', async () => {
       await svc.record({ ...PICK, pickedLat: 54.0891234, pickedLng: 12.1372987, biasLat: 54.08871, biasLng: 12.14049 });
-      const row = testDb.prepare('SELECT * FROM place_shadow_picks').get() as Record<string, number>;
+      const row = (await findRow(t, PlaceShadowPicks, {}))!;
       expect(row.picked_lat).toBe(54.089);
       expect(row.picked_lng).toBe(12.137);
       expect(row.bias_lat).toBe(54.089);
@@ -88,7 +94,7 @@ describe('PlaceShadowService', () => {
 
     it('stores an absent bias and place id as NULL rather than inventing zeroes', async () => {
       await svc.record({ ...PICK, biasLat: undefined, biasLng: undefined, pickedPlaceId: undefined });
-      const row = testDb.prepare('SELECT * FROM place_shadow_picks').get() as Record<string, unknown>;
+      const row = (await findRow(t, PlaceShadowPicks, {}))!;
       expect(row.bias_lat).toBeNull();
       expect(row.bias_lng).toBeNull();
       expect(row.picked_place_id).toBeNull();
@@ -105,7 +111,7 @@ describe('PlaceShadowService', () => {
 
   describe('summary', () => {
     beforeEach(async () => {
-      enable();
+      await enable();
       const ranks = [0, 0, 0, 1, 4, 5, 9, 10, 42];
       // Sequential, not Promise.all: the rows are inserted in rank order and the
       // export/paging assertions below read that order back.
@@ -146,14 +152,14 @@ describe('PlaceShadowService', () => {
 
     it('reports the switch state it was asked about', async () => {
       expect((await svc.summary()).enabled).toBe(true);
-      enable(false);
+      await enable(false);
       expect((await svc.summary()).enabled).toBe(false);
     });
   });
 
   describe('export', () => {
     beforeEach(async () => {
-      enable();
+      await enable();
       for (let i = 0; i < 7; i++) await svc.record({ ...PICK, query: `q${i}` });
     });
 
@@ -199,23 +205,22 @@ describe('PlaceShadowService', () => {
       // `resetTestDb` never resets `sqlite_sequence` (ids keep growing across
       // tests in this file, by design — see its own docstring), so the
       // "first" row's id is read back rather than hardcoded as `1`.
-      const [first] = testDb.prepare('SELECT id FROM place_shadow_picks ORDER BY id ASC').all() as { id: number }[];
-      testDb.prepare("UPDATE place_shadow_picks SET created_at = datetime('now', '-200 days') WHERE id = ?").run(first.id);
+      const [first] = await findRows(t, PlaceShadowPicks, {}, { id: 'asc' });
+      await updateRows(t, PlaceShadowPicks, { id: first.id }, { created_at: daysAgo(200) });
       expect(await svc.purgeExpired()).toBe(1);
       expect((await svc.summary()).total).toBe(1);
     });
 
     it('keeps a row that is one day short of the window', async () => {
       await svc.record(PICK);
-      testDb.prepare("UPDATE place_shadow_picks SET created_at = datetime('now', ?)")
-        .run(`-${RETENTION_DAYS - 1} days`);
+      await updateRows(t, PlaceShadowPicks, {}, { created_at: daysAgo(RETENTION_DAYS - 1) });
       expect(await svc.purgeExpired()).toBe(0);
     });
 
     it('runs even while the log is switched off, so old rows still age out', async () => {
       await svc.record(PICK);
-      testDb.prepare("UPDATE place_shadow_picks SET created_at = datetime('now', '-200 days')").run();
-      enable(false);
+      await updateRows(t, PlaceShadowPicks, {}, { created_at: daysAgo(200) });
+      await enable(false);
       expect(await svc.purgeExpired()).toBe(1);
     });
 

@@ -38,6 +38,14 @@ import type { BudgetItem, BudgetItemMember, BudgetItemPayer } from '../../../src
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { createTestUnitOfWork } from '../../helpers/test-uow';
 import { budgetRepoArgs } from '../../helpers/budget-repos';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { deleteRows, findRow, insertRow } from '../../helpers/factories/rows';
+import { BudgetItemMembers } from '../../../src/db/entities/BudgetItemMembers.entity';
+import { BudgetItemPayers } from '../../../src/db/entities/BudgetItemPayers.entity';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { BudgetSettlements } from '../../../src/db/entities/BudgetSettlements.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 const mockRates = { getRates: vi.fn() };
 
@@ -98,22 +106,19 @@ const centSum = (values: number[]) => values.reduce((a, v) => a + Math.round(v *
 /** Every trip in this suite is id 1, owned by a user no test ever names or asserts on. */
 const GHOST_OWNER_ID = 999999;
 
-function seedBaseline() {
-  testDb.prepare(
-    'INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-  ).run(GHOST_OWNER_ID, 'ghost_owner', 'ghost_owner@test.example.com', 'x', 'user');
-  testDb.prepare(
-    "INSERT INTO trips (id, user_id, title, currency) VALUES (1, ?, 'Trip', 'EUR')",
-  ).run(GHOST_OWNER_ID);
+async function seedBaseline() {
+  const orm = await sharedTestOrm(testDb);
+  await insertRow(orm, Users, { id: GHOST_OWNER_ID, username: 'ghost_owner', email: 'ghost_owner@test.example.com', password_hash: 'x', role: 'user' });
+  await insertRow(orm, Trips, { id: 1, user: GHOST_OWNER_ID, title: 'Trip', currency: 'EUR' });
 }
 
-function seedUser(id: number, username: string) {
-  testDb.prepare(
-    'INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-  ).run(id, username, `${username}.${id}@test.example.com`, 'x', 'user');
+async function seedUser(id: number, username: string) {
+  await insertRow(await sharedTestOrm(testDb), Users, {
+    id, username, email: `${username}.${id}@test.example.com`, password_hash: 'x', role: 'user',
+  });
 }
 
-function setupDb(
+async function setupDb(
   items: BudgetItem[],
   members: (BudgetItemMember & { budget_item_id: number })[],
   payers: (BudgetItemPayer & { budget_item_id: number })[] = [],
@@ -123,11 +128,12 @@ function setupDb(
   // after booking its own offered flows), so a second call must not collide with
   // the first's rows. Children before parents; users last since settlements and
   // items/members/payers all reference them.
-  testDb.exec('DELETE FROM budget_settlements');
-  testDb.exec('DELETE FROM budget_item_payers');
-  testDb.exec('DELETE FROM budget_item_members');
-  testDb.exec('DELETE FROM budget_items');
-  testDb.prepare('DELETE FROM users WHERE id != ?').run(GHOST_OWNER_ID);
+  const orm = await sharedTestOrm(testDb);
+  await deleteRows(orm, BudgetSettlements);
+  await deleteRows(orm, BudgetItemPayers);
+  await deleteRows(orm, BudgetItemMembers);
+  await deleteRows(orm, BudgetItems);
+  await deleteRows(orm, Users, { id: { $ne: GHOST_OWNER_ID } });
 
   // Every user id these rows reference, with the username the fixture gave it —
   // members/payers carry one explicitly; a settlement-only party (no expense
@@ -139,55 +145,52 @@ function setupDb(
     if (!usernames.has(s.from_user_id)) usernames.set(s.from_user_id, s.from_username);
     if (!usernames.has(s.to_user_id)) usernames.set(s.to_user_id, s.to_username);
   }
-  for (const [id, username] of usernames) seedUser(id, username);
+  for (const [id, username] of usernames) await seedUser(id, username);
 
   for (const item of items) {
-    testDb.prepare(
-      'INSERT INTO budget_items (id, trip_id, name, total_price, currency, exchange_rate) VALUES (?, ?, ?, ?, ?, ?)',
-    ).run(item.id, item.trip_id, item.name, item.total_price, item.currency ?? null, item.exchange_rate ?? 1);
+    await insertRow(orm, BudgetItems, {
+      id: item.id, trip: item.trip_id, name: item.name, total_price: item.total_price,
+      currency: item.currency ?? null, exchange_rate: item.exchange_rate ?? 1,
+    });
   }
   for (const m of members) {
-    testDb.prepare(
-      'INSERT INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, ?, ?)',
-    ).run(m.budget_item_id, m.user_id, m.paid ?? 0, m.amount ?? null);
+    await insertRow(orm, BudgetItemMembers, { budgetItem: m.budget_item_id, user: m.user_id, paid: m.paid ?? 0, amount: m.amount ?? null });
   }
   for (const p of payers) {
-    testDb.prepare(
-      'INSERT INTO budget_item_payers (budget_item_id, user_id, amount) VALUES (?, ?, ?)',
-    ).run(p.budget_item_id, p.user_id, p.amount);
+    await insertRow(orm, BudgetItemPayers, { budgetItem: p.budget_item_id, user: p.user_id, amount: p.amount });
   }
   for (const s of settlements) {
-    testDb.prepare(
-      'INSERT INTO budget_settlements (id, trip_id, from_user_id, to_user_id, amount, currency, exchange_rate) VALUES (?, 1, ?, ?, ?, ?, ?)',
-    ).run(s.id, s.from_user_id, s.to_user_id, s.amount, s.currency, s.exchange_rate);
+    await insertRow(orm, BudgetSettlements, {
+      id: s.id, trip: 1, fromUser: s.from_user_id, toUser: s.to_user_id, amount: s.amount, currency: s.currency, exchange_rate: s.exchange_rate,
+    });
   }
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   resetTestDb(testDb);
-  seedBaseline();
-  setupDb([], [], []);
+  await seedBaseline();
+  await setupDb([], [], []);
 });
 
 // ── calculateSettlement ──────────────────────────────────────────────────────
 
 describe('calculateSettlement', () => {
   it('returns empty balances and flows when trip has no items', async () => {
-    setupDb([], [], []);
+    await setupDb([], [], []);
     const result = await budget.calculateSettlement(1);
     expect(result.balances).toEqual([]);
     expect(result.flows).toEqual([]);
   });
 
   it('returns no flows when there are items but no members', async () => {
-    setupDb([makeItem(1, 100)], [], [makePayer(1, 1, 100, 'alice')]);
+    await setupDb([makeItem(1, 100)], [], [makePayer(1, 1, 100, 'alice')]);
     const result = await budget.calculateSettlement(1);
     expect(result.flows).toEqual([]);
   });
 
   it('returns no flows when no one has paid', async () => {
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [],
@@ -201,7 +204,7 @@ describe('calculateSettlement', () => {
 
   it('2 members, 1 payer: payer is owed half, non-payer owes half', async () => {
     // Item: $100. Alice paid all, [Alice, Bob] split. Each owes $50. Alice net: +$50. Bob: -$50.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -219,7 +222,7 @@ describe('calculateSettlement', () => {
 
   it('3 members, 1 payer: correct 3-way split', async () => {
     // Item: $90. Alice paid. Each of 3 owes $30. Alice net: +$60. Bob: -$30. Carol: -$30.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 90, 'alice')],
@@ -236,7 +239,7 @@ describe('calculateSettlement', () => {
 
   it('all paid equally: all balances are zero, no flows', async () => {
     // Item: $60. 3 members, each paid $20 and owes $20. Net: 0 for everyone.
-    setupDb(
+    await setupDb(
       [makeItem(1, 60)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 20, 'alice'), makePayer(1, 2, 20, 'bob'), makePayer(1, 3, 20, 'carol')],
@@ -252,7 +255,7 @@ describe('calculateSettlement', () => {
 
   it('flow direction: from is debtor (owes), to is creditor (is owed)', async () => {
     // Alice paid $100 for 2 people. Bob owes Alice $50.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -265,7 +268,7 @@ describe('calculateSettlement', () => {
 
   it('amounts are rounded to 2 decimal places', async () => {
     // Item: $10. 3 members, 1 payer. Share = 3.333... Each rounded to 3.33.
-    setupDb(
+    await setupDb(
       [makeItem(1, 10)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 10, 'alice')],
@@ -287,7 +290,7 @@ describe('calculateSettlement', () => {
     // Item 1: $100, Alice paid, [Alice, Bob] (Alice net: +50, Bob: -50)
     // Item 2: $60, Bob paid, [Alice, Bob] (Bob net: +30, Alice: -30)
     // Final: Alice: +50 - 30 = +20, Bob: -50 + 30 = -20
-    setupDb(
+    await setupDb(
       [makeItem(1, 100), makeItem(2, 60)],
       [
         makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'),
@@ -306,7 +309,7 @@ describe('calculateSettlement', () => {
 
   it('counts a settlement with no matching expense as an amount still to square up', async () => {
     // bob paid alice 30 but every expense behind it was deleted: alice now owes bob.
-    setupDb([], [], [], [makeSettlementRow(1, 2, 1, 30)]);
+    await setupDb([], [], [], [makeSettlementRow(1, 2, 1, 30)]);
     const result = await budget.calculateSettlement(1);
     const alice = result.balances.find(b => b.user_id === 1)!;
     const bob = result.balances.find(b => b.user_id === 2)!;
@@ -321,7 +324,7 @@ describe('calculateSettlement', () => {
     // $110 booked at a frozen rate of 1.1 (USD per 1 EUR) = 100 EUR. Live rates have since
     // drifted to 1.2, but the converted amount must stay on the frozen rate so an already
     // settled position isn't re-opened with a residual.
-    setupDb(
+    await setupDb(
       [{ ...makeItem(1, 110), currency: 'USD', exchange_rate: 1.1 } as BudgetItem],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 110, 'alice')],
@@ -333,7 +336,7 @@ describe('calculateSettlement', () => {
   });
 
   it('#1335 a legacy row (exchange_rate = 1) still converts with live rates', async () => {
-    setupDb(
+    await setupDb(
       [{ ...makeItem(1, 120), currency: 'USD', exchange_rate: 1 } as BudgetItem],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 120, 'alice')],
@@ -349,7 +352,7 @@ describe('calculateSettlement', () => {
     // at the settle-time rate of 1.25 USD/EUR. He records that 62.50 USD transfer, which
     // freezes currency=USD, exchange_rate=1.25. Live rates have since drifted (now the
     // recompute passes EUR=0.5 per 1 USD), but the frozen transfer still nets to -50+50=0.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)], // trip-currency expense (currency NULL)
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -364,7 +367,7 @@ describe('calculateSettlement', () => {
     // Same shape, but the transfer predates the fix (currency NULL). It is re-converted
     // to trip currency with live rates, so a drift re-opens the position — unchanged
     // legacy behaviour that normalises once the row is re-edited.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -383,7 +386,7 @@ describe('calculateSettlement', () => {
   it('2 payers, 3 members: each payer is credited what they actually paid', async () => {
     // $90 bill split 3 ways ($30 each). Alice and Bob each fronted $45.
     // Alice: +45 - 30 = +15. Bob: +45 - 30 = +15. Carol: -30.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 45, 'alice'), makePayer(1, 2, 45, 'bob')],
@@ -399,7 +402,7 @@ describe('calculateSettlement', () => {
   it('2 payers with unequal amounts: credits follow the actual amounts paid', async () => {
     // $100 bill split 2 ways ($50 each). Alice fronted $70, Bob fronted $30.
     // Alice: +70 - 50 = +20. Bob: +30 - 50 = -20. Bob owes Alice $20.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 70, 'alice'), makePayer(1, 2, 30, 'bob')],
@@ -417,7 +420,7 @@ describe('calculateSettlement', () => {
 
   it('multi-payer balances sum to zero (no money invented or destroyed)', async () => {
     // The invariant that makes settle-up trustworthy: credits == debits.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90), makeItem(2, 55)],
       [
         makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol'),
@@ -436,7 +439,7 @@ describe('calculateSettlement', () => {
   it('3 payers on one bill: an odd total still splits to the cent', async () => {
     // $100.01 split 3 ways. splitEqualShares distributes the remainder cent,
     // so debits must still exactly cancel the $100.01 of credits.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100.01)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 33.34, 'alice'), makePayer(1, 2, 33.34, 'bob'), makePayer(1, 3, 33.33, 'carol')],
@@ -453,7 +456,7 @@ describe('calculateSettlement — negative amounts (#2176)', () => {
   it('a refund credits the members and debits its recipient', async () => {
     // A 30 € refund lands with Alice; all three had shared the original cost.
     // Alice received 30 but only 10 of it was hers, so she owes 20.
-    setupDb(
+    await setupDb(
       [makeItem(1, -30)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, -30, 'alice')],
@@ -470,7 +473,7 @@ describe('calculateSettlement — negative amounts (#2176)', () => {
   it('a refund reduces the debt its expense created', async () => {
     // 90 € dinner fronted by Alice, then a 30 € partial reimbursement she keeps —
     // both split three ways. Bob's debt drops from 30 to 20.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90), makeItem(2, -30)],
       [
         makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol'),
@@ -490,7 +493,7 @@ describe('calculateSettlement — negative amounts (#2176)', () => {
   });
 
   it('an odd negative total still nets to exactly zero', async () => {
-    setupDb(
+    await setupDb(
       [makeItem(1, -100.01)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, -100.01, 'alice')],
@@ -502,7 +505,7 @@ describe('calculateSettlement — negative amounts (#2176)', () => {
 
   it('a negative custom split settles by the custom amounts', async () => {
     // 100 € refund to Alice; by agreement Bob is owed 70 of it, Carol 30.
-    setupDb(
+    await setupDb(
       [makeItem(1, -100)],
       [
         { ...makeMember(1, 2, 'bob'), amount: -70 },
@@ -523,7 +526,7 @@ describe('calculateSettlement — negative amounts (#2176)', () => {
     // Nobody is recorded as having received the refund, so there is no credit to
     // hand back: the row is outstanding, not a debt the trip owes its members.
     // It used to credit all three 30 € out of thin air.
-    setupDb(
+    await setupDb(
       [makeItem(1, -90)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [],
@@ -572,7 +575,7 @@ describe('calculateSettlement — finalBudgets', () => {
     // Alice fronts 100 for the two of them. Nothing has been paid back yet, so the
     // trip costs each of them 50: Alice is out 100 with 50 still coming, Bob is out
     // nothing with 50 still to pay.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -589,7 +592,7 @@ describe('calculateSettlement — finalBudgets', () => {
   it('a recorded transfer moves out of pending and into reimbursed, leaving the final alone', async () => {
     // Bob pays his 50 back. What the trip costs either of them cannot change — only
     // which of the two lines under it the 50 now sits on.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -607,7 +610,7 @@ describe('calculateSettlement — finalBudgets', () => {
   it('sums the finals to what the trip actually spent', async () => {
     // 90 + 60 across three people, fronted by two of them. However the debts are
     // arranged, the trip cost the group exactly what it spent.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90), makeItem(2, 60)],
       [
         makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol'),
@@ -626,7 +629,7 @@ describe('calculateSettlement — finalBudgets', () => {
 
   it('follows a custom split rather than an equal one', async () => {
     // Alice fronts 100 but only owes 20 of it — the split says so.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [
         { ...makeMember(1, 1, 'alice'), amount: 20 },
@@ -643,7 +646,7 @@ describe('calculateSettlement — finalBudgets', () => {
 
   it('leaves an expense nobody paid out of the final budget (#2225)', async () => {
     // The unpaid row stays out of the ledger, so it cannot charge anybody either.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [],
@@ -656,7 +659,7 @@ describe('calculateSettlement — finalBudgets', () => {
   it('gives a refund back to whoever was charged for it (#2176)', async () => {
     // A 30 refund Alice received, split between the two of them: each is 15 better
     // off, so the trip costs them -15 on this row alone.
-    setupDb(
+    await setupDb(
       [makeItem(1, -30)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, -30, 'alice')],
@@ -672,7 +675,7 @@ describe('calculateSettlement — finalBudgets', () => {
     // The three lines are converted as their own sets, like the balances are, and
     // the final is subtracted afterwards — so what the breakdown prints adds up in
     // whatever currency the viewer picked, at whatever the live rate happens to be.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 100, 'alice')],
@@ -693,7 +696,7 @@ describe('calculateSettlement — finalBudgets', () => {
     // Bob handed Alice 40 with no expense on the trip to justify it. Alice has the
     // 40 but owes it straight back, so the trip has cost neither of them anything —
     // the transfer shows up as reimbursed on one line and outstanding on the next.
-    setupDb([], [], [], [makeSettlementRow(1, 2, 1, 40)]);
+    await setupDb([], [], [], [makeSettlementRow(1, 2, 1, 40)]);
     const result = await budget.calculateSettlement(1);
 
     expect(result.finalBudgets.find(f => f.user_id === 1)!).toMatchObject({ expenses: 0, reimbursed: 40, pending: -40, final: 0 });
@@ -705,7 +708,7 @@ describe('calculateSettlement — finalBudgets', () => {
     // The first case read row by row, with 20 of Bob's 50 already sent: Alice
     // fronted the one expense, received the 20, and the open flow is the 30 coming
     // to her; on Bob's side the same transfer and flow are going out.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -728,7 +731,7 @@ describe('calculateSettlement — finalBudgets', () => {
   it('keeps an expense with no split members out of the rows, as it is out of the ledger', async () => {
     // Item 1 has a payer but nobody to split it with: a planning-only entry that
     // charges nobody, so it cannot be listed as something Alice fronted either.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100), makeItem(2, 40)],
       [makeMember(2, 1, 'alice'), makeMember(2, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice'), makePayer(2, 1, 40, 'alice')],
@@ -745,7 +748,7 @@ describe('calculateSettlement — finalBudgets', () => {
     // viewed in pounds: every row goes through the conversion its figure went
     // through, and the cents lost to rounding land on rows instead of between them.
     const sum = (rows: { cents: number }[]) => rows.reduce((a, r) => a + r.cents, 0);
-    setupDb(
+    await setupDb(
       [
         { ...makeItem(1, 100), currency: 'USD', exchange_rate: 1.08 },
         { ...makeItem(2, 33.33), currency: 'USD', exchange_rate: 1.1 },
@@ -809,7 +812,7 @@ describe('calculateSettlement — cent-exact settle-up (#1382)', () => {
     // 10.00 and Carol pays exactly, so one cent is still open. The reporter's
     // symptom was that the balances showed that cent while "Settle up" offered
     // nothing to clear it: below 0.01 the old filter dropped the person entirely.
-    setupDb(
+    await setupDb(
       [makeItem(1, 30)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 30, 'alice')],
@@ -833,13 +836,13 @@ describe('calculateSettlement — cent-exact settle-up (#1382)', () => {
     const items = [makeItem(1, 10)];
     const members = [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')];
     const payers = [makePayer(1, 1, 10, 'alice')];
-    setupDb(items, members, payers);
+    await setupDb(items, members, payers);
 
     const first = await budget.calculateSettlement(1);
     expect(first.flows.length).toBeGreaterThan(0);
 
     const booked = first.flows.map((f, i) => makeSettlementRow(i + 1, f.from.user_id, f.to.user_id, f.amount));
-    setupDb(items, members, payers, booked);
+    await setupDb(items, members, payers, booked);
 
     const after = await budget.calculateSettlement(1);
     expect(after.balances.map(b => b.balance)).toEqual([0, 0, 0]);
@@ -850,7 +853,7 @@ describe('calculateSettlement — cent-exact settle-up (#1382)', () => {
     // 100 USD frozen at 1.1 is 90.909090… EUR: no split of it lands on whole cents.
     // The equal split divides the credited cents rather than the foreign total, so
     // the debits cancel the credits exactly instead of leaving dust behind.
-    setupDb(
+    await setupDb(
       [{ ...makeItem(1, 100), currency: 'USD', exchange_rate: 1.1 } as BudgetItem],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 100, 'alice')],
@@ -867,7 +870,7 @@ describe('calculateSettlement — cent-exact settle-up (#1382)', () => {
     // is USD. Rounding each balance into that currency on its own used to leave the
     // set adding up to a cent that no flow could ever clear, and the drift moved
     // with the live rate — money appearing without a single expense being touched.
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [makePayer(1, 1, 100, 'alice')],
@@ -889,7 +892,7 @@ describe('calculateSettlement — cent-exact settle-up (#1382)', () => {
     // Nobody is down as a payer, so nobody is out of pocket and there is nothing
     // to pay back. It used to debit all three 30 € against no credit at all,
     // leaving Σ(balances) at -90 with no flow able to clear it.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol')],
       [],
@@ -910,7 +913,7 @@ describe('calculateSettlement: unpaid expenses (#2225)', () => {
     // be debited with no credit behind it, and the simplifier (which knows
     // nothing about which expense made which debt) handed the extra 60 € to
     // Alice, who was never owed it.
-    setupDb(
+    await setupDb(
       [makeItem(1, 300), makeItem(2, 60)],
       [
         makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol'), makeMember(1, 4, 'dave'),
@@ -933,7 +936,7 @@ describe('calculateSettlement: unpaid expenses (#2225)', () => {
   it('an unpaid expense with a custom split is skipped too', async () => {
     // The custom branch had the same hole and no coverage: 100 € split 70/30 by
     // agreement, with nobody recorded as having paid it.
-    setupDb(
+    await setupDb(
       [makeItem(1, 90), makeItem(2, 100)],
       [
         makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(1, 3, 'carol'),
@@ -956,7 +959,7 @@ describe('calculateSettlement: unpaid expenses (#2225)', () => {
     // way, and both panels synthesise a missing member's 0.00 row from the trip
     // roster (CostsPanel.tsx:853, MCostsTab.tsx:273), so dropping the row costs
     // the UI nothing.
-    setupDb(
+    await setupDb(
       [makeItem(1, 0)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [],
@@ -973,7 +976,7 @@ describe('calculateSettlement: unpaid expenses (#2225)', () => {
     // row survives as custom per-member amounts with no credit behind them. A
     // guard that also required a non-zero total would let exactly this shape
     // through and rebuild the #2225 phantom debt from a first-party endpoint.
-    setupDb(
+    await setupDb(
       [makeItem(1, 0)],
       [
         { ...makeMember(1, 2, 'bob'), amount: 40 },
@@ -998,7 +1001,7 @@ describe('calculateSettlement: unconverted rows', () => {
   const none = { item_ids: [], settlement_ids: [], currencies: [] };
 
   it('VND/AUD regression: an unfrozen 8,920,000 VND bill on an AUD trip with no rates is left out whole, Σ balances 0, no VND-scale balance', async () => {
-    setupDb(
+    await setupDb(
       [vndBill(1), makeItem(2, 40)],
       [...four(), makeMember(2, 2, 'bob'), makeMember(2, 3, 'carol')],
       [makePayer(1, 1, 8920000, 'alice'), makePayer(2, 2, 40, 'bob')],
@@ -1014,7 +1017,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('VND/AUD regression: frozen at 18241.3 it books 489.00 AUD, split 4 ways +366.75 / -122.25 x3', async () => {
-    setupDb([vndBill(18241.3)], four(), [makePayer(1, 1, 8920000, 'alice')]);
+    await setupDb([vndBill(18241.3)], four(), [makePayer(1, 1, 8920000, 'alice')]);
     const result = await budget.calculateSettlement(1, { base: 'AUD', tripCurrency: 'AUD', rates: null });
     expect(result.unconverted).toEqual(none);
     expect(result.balances.map(b => b.balance)).toEqual([366.75, -122.25, -122.25, -122.25]);
@@ -1022,7 +1025,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('a foreign row the rates do not quote is left out and listed while others convert live', async () => {
-    setupDb(
+    await setupDb(
       [vndBill(1), { ...makeItem(2, 65), currency: 'USD', exchange_rate: 1 } as BudgetItem],
       [...four(), makeMember(2, 1, 'alice'), makeMember(2, 2, 'bob')],
       [makePayer(1, 1, 8920000, 'alice'), makePayer(2, 1, 65, 'alice')],
@@ -1034,7 +1037,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('a frozen row converts without any rates (unchanged)', async () => {
-    setupDb(
+    await setupDb(
       [{ ...makeItem(1, 110), currency: 'USD', exchange_rate: 1.1 } as BudgetItem],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 110, 'alice')],
@@ -1045,7 +1048,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('trip-currency and NULL-currency rows with rate 1 count as they are', async () => {
-    setupDb(
+    await setupDb(
       [{ ...makeItem(1, 100), currency: 'aud', exchange_rate: 1 } as BudgetItem, { ...makeItem(2, 60), currency: null, exchange_rate: 1 } as BudgetItem],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob'), makeMember(2, 1, 'alice'), makeMember(2, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice'), makePayer(2, 1, 60, 'alice')],
@@ -1056,7 +1059,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('planning-only and unpaid unconvertible rows are listed but never touch balances', async () => {
-    setupDb(
+    await setupDb(
       [
         { ...makeItem(1, 500000), currency: 'VND', exchange_rate: 1 } as BudgetItem, // planning-only
         { ...makeItem(2, 700000), currency: 'VND', exchange_rate: 1 } as BudgetItem, // nobody paid yet
@@ -1071,7 +1074,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('an unfrozen foreign transfer without a quote is left out and listed in settlement_ids', async () => {
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -1087,7 +1090,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('a NULL-currency transfer still reads in the display currency', async () => {
-    setupDb(
+    await setupDb(
       [makeItem(1, 100)],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -1100,7 +1103,7 @@ describe('calculateSettlement: unconverted rows', () => {
   });
 
   it('base EUR on an AUD trip without quote or baseRate answers in AUD with currency \'AUD\'', async () => {
-    setupDb([makeItem(1, 100)], [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')], [makePayer(1, 1, 100, 'alice')]);
+    await setupDb([makeItem(1, 100)], [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')], [makePayer(1, 1, 100, 'alice')]);
     for (const rates of [null, { AUD: 1, USD: 0.65 }]) {
       const result = await budget.calculateSettlement(1, { base: 'EUR', tripCurrency: 'AUD', rates });
       // Trip cents, labelled as what they are rather than printed as euros.
@@ -1113,28 +1116,28 @@ describe('calculateSettlement: unconverted rows', () => {
     const bill = () => [makeItem(1, 123.45)];
     const pair = () => [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')];
     const paid = () => [makePayer(1, 1, 123.45, 'alice')];
-    setupDb(bill(), pair(), paid());
+    await setupDb(bill(), pair(), paid());
     const before = await budget.calculateSettlement(1, { base: 'USD', tripCurrency: 'EUR', rates: null, baseRate: 1.1429 });
     expect(before.currency).toBe('USD');
     // Bob's 61.73 EUR at the browser's 1.1429 dollars per euro.
     expect(before.flows.map(f => f.amount)).toEqual([70.55]);
 
     // Bob pays what settle-up offers, frozen at the same browser quote (fallback_fx).
-    setupDb(bill(), pair(), paid(), [makeSettlementRow(9, 2, 1, 70.55, 'USD', 1.1429)]);
+    await setupDb(bill(), pair(), paid(), [makeSettlementRow(9, 2, 1, 70.55, 'USD', 1.1429)]);
     const after = await budget.calculateSettlement(1, { base: 'USD', tripCurrency: 'EUR', rates: null, baseRate: 1.1429 });
     expect(after.balances.map(b => b.balance)).toEqual([0, 0]);
     expect(after.flows).toEqual([]);
   });
 
   it('a server quote wins over baseRate', async () => {
-    setupDb([makeItem(1, 123.45)], [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')], [makePayer(1, 1, 123.45, 'alice')]);
+    await setupDb([makeItem(1, 123.45)], [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')], [makePayer(1, 1, 123.45, 'alice')]);
     const result = await budget.calculateSettlement(1, { base: 'USD', tripCurrency: 'EUR', rates: { EUR: 1, USD: 1.1429 }, baseRate: 2 });
     expect(result.currency).toBe('USD');
     expect(result.flows.map(f => f.amount)).toEqual([70.55]);
   });
 
   it('baseRate never converts a row', async () => {
-    setupDb(
+    await setupDb(
       [{ ...makeItem(1, 100), currency: 'EUR', exchange_rate: 1 } as BudgetItem],
       [makeMember(1, 1, 'alice'), makeMember(1, 2, 'bob')],
       [makePayer(1, 1, 100, 'alice')],
@@ -1182,9 +1185,7 @@ describe('freezeForeignRate', () => {
   });
 
   it('does not re-freeze on update when the currency is unchanged', async () => {
-    testDb.prepare(
-      'INSERT INTO budget_items (id, trip_id, name, total_price, currency) VALUES (9, 1, ?, ?, ?)',
-    ).run('Existing', 1, 'USD');
+    await insertRow(await sharedTestOrm(testDb), BudgetItems, { id: 9, trip: 1, name: 'Existing', total_price: 1, currency: 'USD' });
     const data: { currency?: string | null; exchange_rate?: number } = { currency: 'USD' };
     await budget.freezeForeignRate(1, data, 9);
     expect(mockRates.getRates).not.toHaveBeenCalled();
@@ -1215,20 +1216,22 @@ describe('applySettlementUpdate', () => {
   });
 
   it('updates the row (rounded to cents) and returns the refreshed settlement', async () => {
-    seedUser(1, 'alice');
-    seedUser(2, 'bob');
-    testDb.prepare(
-      'INSERT INTO budget_settlements (id, trip_id, from_user_id, to_user_id, amount, currency, exchange_rate, settled_at) VALUES (7, 1, 1, 2, 5, NULL, 1, NULL)',
-    ).run();
+    await seedUser(1, 'alice');
+    await seedUser(2, 'bob');
+    await insertRow(await sharedTestOrm(testDb), BudgetSettlements, {
+      id: 7, trip: 1, fromUser: 1, toUser: 2, amount: 5, currency: null, exchange_rate: 1, settled_at: null,
+    });
 
     const res = await budget.applySettlementUpdate(7, 1, { from_user_id: 2, to_user_id: 1, amount: 10.126 });
     // Quirk fix: currency/exchange_rate/settled_at/note are presence-gated CASE guards —
     // omitted from this update, so the row keeps what it already had (NULL/1/NULL/NULL,
     // the note since #2340) while from/to/amount (rounded) take the new values. Checked
     // against the persisted row rather than a mocked `run` call, now that there is a real one.
-    const row = testDb.prepare(
-      'SELECT from_user_id, to_user_id, amount, currency, exchange_rate, settled_at, note FROM budget_settlements WHERE id = ?',
-    ).get(7);
+    const stored = (await findRow(await sharedTestOrm(testDb), BudgetSettlements, { id: 7 }))!;
+    const row = {
+      from_user_id: stored.from_user_id, to_user_id: stored.to_user_id, amount: stored.amount, currency: stored.currency,
+      exchange_rate: stored.exchange_rate, settled_at: stored.settled_at, note: stored.note,
+    };
     expect(row).toEqual({ from_user_id: 2, to_user_id: 1, amount: 10.13, currency: null, exchange_rate: 1, settled_at: null, note: null });
     expect(res).toMatchObject({ id: 7, from_user_id: 2, to_user_id: 1, amount: 10.13 });
   });

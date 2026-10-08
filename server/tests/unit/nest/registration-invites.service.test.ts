@@ -20,6 +20,9 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, createTrip, createInviteToken } from '../../helpers/factories';
 import { RegistrationInvitesService } from '../../../src/nest/auth/registration-invites.service';
 import { createTestInviteTokensRepo, createTestTripsRepo } from '../../helpers/test-uow';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { countRows, findRow, insertRow } from '../../helpers/factories/rows';
+import { InviteTokens } from '../../../src/db/entities/InviteTokens.entity';
 
 let svc: RegistrationInvitesService;
 
@@ -57,8 +60,8 @@ describe('Invites', () => {
     const invite = createInviteToken(testDb, { created_by: admin.id }) as any;
     const result = await svc.deleteInvite(String(invite.id)) as any;
     expect(result.error).toBeUndefined();
-    const check = testDb.prepare('SELECT id FROM invite_tokens WHERE id = ?').get(invite.id);
-    expect(check).toBeUndefined();
+    const check = await findRow(await sharedTestOrm(testDb), InviteTokens, { id: invite.id });
+    expect(check).toBeNull();
   });
 
   it('ADMIN-SVC-028 — deleteInvite returns 404 for non-existent invite', async () => {
@@ -68,12 +71,12 @@ describe('Invites', () => {
 
   it('ADMIN-SVC-029 — deleteInvite(\'0x10\') is the legacy 404, not a hex-literal delete of invite id 16 (Plan 3b Task 3 review, F2)', async () => {
     const { user: admin } = createAdmin(testDb);
-    testDb.prepare('INSERT INTO invite_tokens (id, token, max_uses, used_count, expires_at, created_by) VALUES (16, ?, 1, 0, NULL, ?)').run('hex-survivor', admin.id);
+    await insertRow(await sharedTestOrm(testDb), InviteTokens, { id: 16, token: 'hex-survivor', max_uses: 1, used_count: 0, expires_at: null, createdByRef: admin.id });
 
     const result = await svc.deleteInvite('0x10');
 
     expect(result).toEqual({ error: 'Invite not found', status: 404 });
-    expect(testDb.prepare('SELECT id FROM invite_tokens WHERE id = 16').get()).toBeDefined();
+    expect(await findRow(await sharedTestOrm(testDb), InviteTokens, { id: 16 })).not.toBeNull();
   });
 });
 
@@ -82,7 +85,7 @@ describe('Invites — trip binding', () => {
     const { user: admin } = createAdmin(testDb);
     expect(await svc.createInvite(admin.id, { trip_id: 99999 }) as any).toMatchObject({ status: 404, error: 'Trip not found' });
     expect(await svc.createInvite(admin.id, { trip_id: 'not-a-number' }) as any).toMatchObject({ status: 404 });
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM invite_tokens').get()).toEqual({ c: 0 });
+    expect(await countRows(await sharedTestOrm(testDb), InviteTokens)).toBe(0);
     // An absent/blank binding is still a plain registration invite.
     expect((await svc.createInvite(admin.id, {}) as any).tripId).toBeNull();
   });

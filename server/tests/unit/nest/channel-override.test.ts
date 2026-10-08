@@ -67,7 +67,8 @@ import { WebhookService } from '../../../src/nest/notifications/transports/webho
 import { createPluginRuntime } from '../../helpers/plugin-host';
 import { MailerService } from '../../../src/nest/notifications/mailer/mailer.service';
 import { NotificationPreferencesService } from '../../../src/nest/notifications/notification-preferences.service';
-import { createTestUnitOfWork, createTestAppSettingsRepo, createTestSettingsRepo, createTestUsersRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestSettingsRepo, createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { makePlugin } from '../../helpers/factories/plugins';
 import { createTestNotificationChannelPreferencesRepo } from '../../helpers/notifications-repos';
 
 import {
@@ -284,7 +285,7 @@ describe('the plugin channel source reaches the outside-container instance', () 
       delivered.push({ userId: user.id, title: msg.title });
       return true;
     };
-    testDb.prepare("INSERT INTO plugins (id, name, version, status, enabled) VALUES ('gotify', 'Gotify', '1.0.0', 'active', 1)").run();
+    await makePlugin(await sharedTestOrm(testDb), 'gotify', { name: 'Gotify', version: '1.0.0', status: 'active', enabled: 1 });
 
     // The exact line plugin-runtime.service.ts runs in onModuleInit.
     setPluginChannelSource(() => runtime.notificationChannels());

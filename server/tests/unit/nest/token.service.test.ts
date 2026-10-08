@@ -44,6 +44,14 @@ import { revokeUserSessions } from '../../../src/mcp/sessionManager';
 import { expectRegisteredProvider } from '../../helpers/module-providers';
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 import { createTestMcpTokensRepo, createTestUsersRepo } from '../../helpers/test-uow';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { McpTokens } from '../../../src/db/entities/McpTokens.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
+/** The token row, or null once it is gone. */
+async function tokenRow(id: number | string) {
+  return findRow(await sharedTestOrm(testDb), McpTokens, { id: Number(id) });
+}
 
 // Schema first, then the ORM-backed repositories `TokenService` now takes
 // (Plan 3b Task 2) — `sharedTestOrm` (behind `createTestMcpTokensRepo`/
@@ -91,9 +99,7 @@ describe('MCP token service', () => {
   it('AUTH-DB-044: createMcpToken returns 400 when user has 10 tokens already', async () => {
     const { user } = createUser(testDb);
     for (let i = 0; i < 10; i++) {
-      testDb.prepare(
-        'INSERT INTO mcp_tokens (user_id, name, token_hash, token_prefix) VALUES (?, ?, ?, ?)'
-      ).run(user.id, `Token ${i}`, `hash${i}`, `trek_prefix${i}`);
+      await insertRow(await sharedTestOrm(testDb), McpTokens, { user: user.id, name: `Token ${i}`, token_hash: `hash${i}`, token_prefix: `trek_prefix${i}` });
     }
     const result = await svc.createMcpToken(user.id, 'One More');
     expect(result.status).toBe(400);
@@ -113,8 +119,8 @@ describe('MCP token service', () => {
     const result = await svc.deleteMcpToken(user.id, tokenId);
     expect(result).toEqual({ success: true });
 
-    const row = testDb.prepare('SELECT id FROM mcp_tokens WHERE id = ?').get(tokenId);
-    expect(row).toBeUndefined();
+    const row = await tokenRow(tokenId);
+    expect(row).toBeNull();
   });
 
   it('AUTH-DB-092: deleteMcpToken succeeds even when the session sweep throws (best-effort)', async () => {
@@ -124,7 +130,7 @@ describe('MCP token service', () => {
     vi.mocked(revokeUserSessions).mockImplementationOnce(() => { throw new Error('sweep down'); });
 
     expect(await svc.deleteMcpToken(user.id, tokenId)).toEqual({ success: true });
-    expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE id = ?').get(tokenId)).toBeUndefined();
+    expect(await tokenRow(tokenId)).toBeNull();
   });
 
   it('TOKEN-001: listMcpTokens is scoped to the caller and never exposes the hash', async () => {
@@ -146,7 +152,7 @@ describe('MCP token service', () => {
     const tokenId = String((created.token as { id: number }).id);
 
     expect(await svc.deleteMcpToken(user.id, tokenId)).toEqual({ error: 'Token not found', status: 404 });
-    expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE id = ?').get(tokenId)).toBeDefined();
+    expect(await tokenRow(tokenId)).not.toBeNull();
   });
 
   it('TOKEN-017: deleteMcpToken 404s (not 500) on a non-numeric id — Plan 3b Task 2 review, F1', async () => {
@@ -207,8 +213,8 @@ describe('API key service', () => {
     expect(await svc.deleteMcpToken(user.id, apiId)).toEqual({ error: 'Token not found', status: 404 });
     // Neither row was touched: a wrong-kind delete must not be a way to revoke
     // someone's assistant access from the API-key screen.
-    expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE id = ?').get(mcpId)).toBeDefined();
-    expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE id = ?').get(apiId)).toBeDefined();
+    expect(await tokenRow(mcpId)).not.toBeNull();
+    expect(await tokenRow(apiId)).not.toBeNull();
   });
 
   it('TOKEN-014: the ten-token ceiling counts each kind on its own', async () => {
@@ -225,9 +231,7 @@ describe('API key service', () => {
     const created = await svc.createApiToken(user.id, 'dawarich');
     const raw = (created.token as { raw_token: string }).raw_token;
 
-    const row = testDb
-      .prepare('SELECT token_hash, token_prefix, kind FROM mcp_tokens WHERE user_id = ?')
-      .get(user.id) as { token_hash: string; token_prefix: string; kind: string };
+    const row = (await findRow(await sharedTestOrm(testDb), McpTokens, { user: user.id }))!;
     expect(row.kind).toBe('api');
     expect(row.token_hash).not.toBe(raw);
     expect(raw.startsWith(row.token_prefix)).toBe(true);
@@ -289,7 +293,7 @@ describe('MCP token service (admin view)', () => {
     const tokenId = String((created.token as { id: number }).id);
 
     expect(await svc.adminDeleteMcpToken(tokenId)).toEqual({});
-    expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE id = ?').get(tokenId)).toBeUndefined();
+    expect(await tokenRow(tokenId)).toBeNull();
     expect(revokeUserSessions).toHaveBeenCalledWith(user.id);
   });
 
@@ -330,7 +334,7 @@ describe('ephemeral tokens', () => {
 
   it('TOKEN-006: createWsToken binds the caller password_version, so a pre-reset token is rejected on connect', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET password_version = 7 WHERE id = ?').run(user.id);
+    await updateRows(await sharedTestOrm(testDb), Users, { id: user.id }, { password_version: 7 });
     vi.mocked(createEphemeralToken).mockReturnValueOnce('ws-tok');
 
     await svc.createWsToken(user.id);
@@ -370,13 +374,13 @@ describe('verifyMcpToken', () => {
     const created = await svc.createMcpToken(user.id, 'stamped');
     const raw = (created.token as { raw_token: string }).raw_token;
     const id = (created.token as { id: number }).id;
-    expect((testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(id) as { last_used_at: string | null }).last_used_at).toBeNull();
+    expect((await tokenRow(id))!.last_used_at).toBeNull();
 
     await svc.verifyMcpToken(raw);
-    expect((testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(id) as { last_used_at: string | null }).last_used_at).not.toBeNull();
+    expect((await tokenRow(id))!.last_used_at).not.toBeNull();
 
     await svc.verifyMcpToken('trek_wrong');
-    expect(testDb.prepare('SELECT COUNT(*) c FROM mcp_tokens').get()).toEqual({ c: 1 });
+    expect(await countRows(await sharedTestOrm(testDb), McpTokens)).toBe(1);
   });
 
   it('TOKEN-010: verifyMcpToken returns identity columns only, never the password hash', async () => {

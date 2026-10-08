@@ -19,14 +19,6 @@ vi.mock('../../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: number | string, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: number | string, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
 });
 vi.mock('../../../src/config', () => ({
@@ -44,6 +36,9 @@ import { DayNotesService } from '../../../src/nest/day-notes/day-notes.service';
 import type { DayNote } from '../../../src/types';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { createTestUnitOfWork, createTestAppSettingsRepo, createTestDayNotesRepo, createTestDaysRepo, createTestTripsRepo } from '../../helpers/test-uow';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { findRow } from '../../helpers/factories/rows';
+import { DayNotes } from '../../../src/db/entities/DayNotes.entity';
 
 let svc: DayNotesService;
 beforeAll(async () => {
@@ -121,6 +116,7 @@ describe('create', () => {
     const note = await svc.create(day.id, trip.id, 'Lunch', '12:00', '🍜', 2) as DayNote;
     expect(note).toMatchObject({ day_id: day.id, trip_id: trip.id, text: 'Lunch', time: '12:00', icon: '🍜', sort_order: 2 });
     expect(note.id).toBeGreaterThan(0);
+    // test-sql-allow: the raw full row is the oracle the service's return value is compared against.
     const row = testDb.prepare('SELECT * FROM day_notes WHERE id = ?').get(note.id);
     expect(row).toEqual(note);
   });
@@ -269,7 +265,7 @@ describe('remove', () => {
     const { trip, day } = seedTripAndDay();
     const note = await svc.create(day.id, trip.id, 'Lunch') as DayNote;
     await svc.remove(note.id);
-    expect(testDb.prepare('SELECT * FROM day_notes WHERE id = ?').get(note.id)).toBeUndefined();
+    expect(await findRow(await sharedTestOrm(testDb), DayNotes, { id: note.id })).toBeNull();
   });
 });
 

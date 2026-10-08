@@ -27,6 +27,9 @@ import {
   StorageJobsService,
 } from '../../../../src/nest/storage/storage-jobs.service';
 import { createTestUnitOfWork, createTestAppSettingsRepo, sharedTestOrm } from '../../../helpers/test-uow';
+import { deleteRows } from '../../../helpers/factories/rows';
+import { readAppSetting, setAppSetting } from '../../../helpers/factories/settings';
+import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
 
 const tmpDirs: string[] = [];
 function makeTmpDir(): string {
@@ -34,11 +37,11 @@ function makeTmpDir(): string {
   tmpDirs.push(dir);
   return dir;
 }
-function setSetting(key: string, value: string): void {
-  testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+async function setSetting(key: string, value: string): Promise<void> {
+  await setAppSetting(await sharedTestOrm(testDb), key, value);
 }
-beforeEach(() => {
-  testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'storage.%'").run();
+beforeEach(async () => {
+  await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: { $like: 'storage.%' } });
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -50,7 +53,7 @@ async function makeWorld() {
   const uploadsRoot = makeTmpDir();
   const backupsRoot = makeTmpDir();
   const nasRoot = makeTmpDir();
-  setSetting(
+  await setSetting(
     'storage.backends',
     JSON.stringify([
       { name: 'uploads-local', type: 'local', options: { root: uploadsRoot } },
@@ -59,7 +62,7 @@ async function makeWorld() {
       { name: 'm', type: 'mirror', options: { primary: 'backups-local', replicas: ['nas'] } },
     ]),
   );
-  setSetting('storage.categories', JSON.stringify({ backups: 'm' }));
+  await setSetting('storage.categories', JSON.stringify({ backups: 'm' }));
   const env = { placePhotoDir: undefined };
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
@@ -87,7 +90,7 @@ async function makeMigrationWorld() {
   const uploadsRoot = makeTmpDir();
   const backupsRoot = makeTmpDir();
   const destRoot = makeTmpDir();
-  setSetting(
+  await setSetting(
     'storage.backends',
     JSON.stringify([
       { name: 'uploads-local', type: 'local', options: { root: uploadsRoot } },
@@ -95,7 +98,7 @@ async function makeMigrationWorld() {
       { name: 'dest-local', type: 'local', options: { root: destRoot } },
     ]),
   );
-  setSetting('storage.categories', JSON.stringify({ files: 'uploads-local' }));
+  await setSetting('storage.categories', JSON.stringify({ files: 'uploads-local' }));
   const env = { placePhotoDir: undefined };
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
@@ -121,7 +124,7 @@ async function makePhotosGoogleMigrationWorld() {
   const backupsRoot = makeTmpDir();
   const placePhotoRoot = makeTmpDir();
   const destRoot = makeTmpDir();
-  setSetting(
+  await setSetting(
     'storage.backends',
     JSON.stringify([
       { name: 'uploads-local', type: 'local', options: { root: uploadsRoot } },
@@ -149,7 +152,7 @@ async function makeMigrationBackfillWorld() {
   const backupsRoot = makeTmpDir();
   const nasRoot = makeTmpDir();
   const destRoot = makeTmpDir();
-  setSetting(
+  await setSetting(
     'storage.backends',
     JSON.stringify([
       { name: 'uploads-local', type: 'local', options: { root: uploadsRoot } },
@@ -159,7 +162,7 @@ async function makeMigrationBackfillWorld() {
       { name: 'm', type: 'mirror', options: { primary: 'backups-local', replicas: ['nas'] } },
     ]),
   );
-  setSetting('storage.categories', JSON.stringify({ backups: 'm', files: 'uploads-local' }));
+  await setSetting('storage.categories', JSON.stringify({ backups: 'm', files: 'uploads-local' }));
   const env = { placePhotoDir: undefined };
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
@@ -174,12 +177,10 @@ async function makeMigrationBackfillWorld() {
   return { registry, storage, jobs, uploadsRoot, backupsRoot, nasRoot, destRoot };
 }
 
-/** Reads the raw 'storage.categories' app_settings row (undefined key ⇒ {}). */
-function registryCategoriesRow(): Record<string, string> {
-  const row = testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(CATEGORIES_KEY) as
-    | { value: string }
-    | undefined;
-  return row ? (JSON.parse(row.value) as Record<string, string>) : {};
+/** Reads the stored 'storage.categories' app_settings row (undefined key ⇒ {}). */
+async function registryCategoriesRow(): Promise<Record<string, string>> {
+  const value = await readAppSetting(await sharedTestOrm(testDb), CATEGORIES_KEY);
+  return value !== null ? (JSON.parse(value) as Record<string, string>) : {};
 }
 
 /** Polls migrationStatuses() for the named category to leave 'running', bounded ~5s. */
@@ -307,7 +308,7 @@ describe('StorageJobsService migrations', () => {
     // copy phase's own (re-run) list(), so assert combined coverage, not
     // which phase caught it.
     expect(final.copied + final.skipped).toBeGreaterThanOrEqual(3);
-    expect(registryCategoriesRow().files).toBe('dest-local'); // flip persisted
+    expect((await registryCategoriesRow()).files).toBe('dest-local'); // flip persisted
     expect(fs.existsSync(path.join(destRoot, 'files', 'a.txt'))).toBe(true);
     expect(fs.existsSync(path.join(destRoot, 'files', 'b.txt'))).toBe(true);
     expect(fs.existsSync(path.join(destRoot, 'files', 'c.txt'))).toBe(true);
@@ -325,7 +326,7 @@ describe('StorageJobsService migrations', () => {
     const final = await waitTerminal(jobs, 'files');
     expect(final.status).toBe('failed');
     expect(final.failed).toBeGreaterThan(0);
-    expect(registryCategoriesRow().files).toBe('uploads-local'); // NOT flipped
+    expect((await registryCategoriesRow()).files).toBe('uploads-local'); // NOT flipped
   });
 
   it('MIG-003 cancel before the flip leaves everything untouched', async () => {
@@ -340,7 +341,7 @@ describe('StorageJobsService migrations', () => {
 
     const final = await waitTerminal(jobs, 'files');
     expect(final.status).toBe('cancelled');
-    expect(registryCategoriesRow().files).toBe('uploads-local');
+    expect((await registryCategoriesRow()).files).toBe('uploads-local');
   });
 
   it('MIG-007 a cancel landing after the copy loop but before the flip ends cancelled, categories row untouched', async () => {
@@ -361,7 +362,7 @@ describe('StorageJobsService migrations', () => {
 
     const final = await waitTerminal(jobs, 'files');
     expect(final.status).toBe('cancelled');
-    expect(registryCategoriesRow().files).toBe('uploads-local'); // never flipped
+    expect((await registryCategoriesRow()).files).toBe('uploads-local'); // never flipped
   });
 
   it('MIG-004 validations: 400s, 404, and 409 against a running backfill (and vice versa)', async () => {
@@ -396,7 +397,7 @@ describe('StorageJobsService migrations', () => {
     expect(final.status).toBe('done');
     expect(final.skipped).toBeGreaterThanOrEqual(1);
     expect(final.copied).toBe(0);
-    expect(registryCategoriesRow().files).toBe('dest-local');
+    expect((await registryCategoriesRow()).files).toBe('dest-local');
   });
 
   it('MIG-006 a sweep-phase copy failure is reported without undoing the already-flipped category', async () => {
@@ -426,7 +427,7 @@ describe('StorageJobsService migrations', () => {
     const final = await waitTerminal(jobs, 'files');
     expect(final.status).toBe('done'); // sweep failures don't undo a completed flip
     expect(final.failed).toBeGreaterThanOrEqual(1);
-    expect(registryCategoriesRow().files).toBe('dest-local');
+    expect((await registryCategoriesRow()).files).toBe('dest-local');
   });
 
   it('MIG-008 photos-google mode-A (bare "" prefix) migrating to a prefixed backend rewrites destination keys (audit #8)', async () => {
@@ -448,7 +449,7 @@ describe('StorageJobsService migrations', () => {
     expect(fs.existsSync(path.join(destRoot, 'photos', 'google', 'abc.jpg'))).toBe(true);
     expect(fs.existsSync(path.join(destRoot, 'photos', 'google', 'sub', 'def.jpg'))).toBe(true);
     expect(fs.existsSync(path.join(destRoot, 'abc.jpg'))).toBe(false); // not left at the bare source key
-    expect(registryCategoriesRow()['photos-google']).toBe('dest-local');
+    expect((await registryCategoriesRow())['photos-google']).toBe('dest-local');
   });
 
   it('MIG-009 the skip-check on a rewritten-prefix migration stats the DESTINATION key, not the source key', async () => {
@@ -466,7 +467,7 @@ describe('StorageJobsService migrations', () => {
     expect(final.status).toBe('done');
     expect(final.skipped).toBeGreaterThanOrEqual(1);
     expect(final.copied).toBe(0);
-    expect(registryCategoriesRow()['photos-google']).toBe('dest-local');
+    expect((await registryCategoriesRow())['photos-google']).toBe('dest-local');
   });
 
   it('MIG-010 the delta sweep rewrites a raced object\'s destination key too', async () => {
@@ -488,7 +489,7 @@ describe('StorageJobsService migrations', () => {
     expect(final.status).toBe('done');
     expect(fs.existsSync(path.join(destRoot, 'photos', 'google', 'a.jpg'))).toBe(true);
     expect(fs.existsSync(path.join(destRoot, 'photos', 'google', 'raced.jpg'))).toBe(true);
-    expect(registryCategoriesRow()['photos-google']).toBe('dest-local');
+    expect((await registryCategoriesRow())['photos-google']).toBe('dest-local');
   });
 
   it('MIG-011 equal-prefix migrations (files -> dest-local) stay byte-identical: destination key equals the source key', async () => {
@@ -503,7 +504,7 @@ describe('StorageJobsService migrations', () => {
     // Both source and destination use the same 'files/' prefix — the key is
     // unchanged, exactly today's pre-fix behavior.
     expect(fs.existsSync(path.join(destRoot, 'files', 'a.txt'))).toBe(true);
-    expect(registryCategoriesRow().files).toBe('dest-local');
+    expect((await registryCategoriesRow()).files).toBe('dest-local');
   });
 });
 
@@ -516,8 +517,8 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
 
     // Simulate a config save that drops mirror 'm' entirely — 'backups' reverts
     // to the built-in default ('backups-local'), a self-consistent config.
-    setSetting('storage.backends', JSON.stringify([]));
-    setSetting('storage.categories', JSON.stringify({}));
+    await setSetting('storage.backends', JSON.stringify([]));
+    await setSetting('storage.categories', JSON.stringify({}));
     await registry.reload();
 
     jobs.cancelJobsForMissingBackends();
@@ -533,7 +534,7 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
     const uploadsRoot = makeTmpDir();
     const nasRoot = makeTmpDir();
     const destRoot = makeTmpDir();
-    setSetting(
+    await setSetting(
       'storage.backends',
       JSON.stringify([
         { name: 'uploads-local', type: 'local', options: { root: uploadsRoot } },
@@ -541,7 +542,7 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
         { name: 'dest-local', type: 'local', options: { root: destRoot } },
       ]),
     );
-    setSetting('storage.categories', JSON.stringify({ files: 'nas' }));
+    await setSetting('storage.categories', JSON.stringify({ files: 'nas' }));
     const env = { placePhotoDir: undefined };
     const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
@@ -562,14 +563,14 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
     // migration's in-flight FROM backend ('nas') is dropped from the config
     // entirely — self-consistent (validateConfig only checks the new
     // category map), but the running migration's `from` no longer resolves.
-    setSetting(
+    await setSetting(
       'storage.backends',
       JSON.stringify([
         { name: 'uploads-local', type: 'local', options: { root: uploadsRoot } },
         { name: 'dest-local', type: 'local', options: { root: destRoot } },
       ]),
     );
-    setSetting('storage.categories', JSON.stringify({ files: 'uploads-local' }));
+    await setSetting('storage.categories', JSON.stringify({ files: 'uploads-local' }));
     await registry.reload();
 
     jobs.cancelJobsForMissingBackends();
@@ -588,7 +589,7 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
     // still exist (the migration's already-resolved source driver instance
     // is unaffected by the roots below — the in-flight guarantee), so the
     // existing missing-backend check wouldn't catch this.
-    setSetting(
+    await setSetting(
       'storage.backends',
       JSON.stringify([
         { name: 'uploads-local', type: 'local', options: { root: makeTmpDir() } },
@@ -597,13 +598,13 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
         { name: 'third-local', type: 'local', options: { root: makeTmpDir() } },
       ]),
     );
-    setSetting('storage.categories', JSON.stringify({ files: 'third-local' }));
+    await setSetting('storage.categories', JSON.stringify({ files: 'third-local' }));
     await registry.reload();
 
     jobs.cancelJobsForMissingBackends();
     const final = await waitTerminal(jobs, 'files');
     expect(final.status).toBe('cancelled');
-    expect(registryCategoriesRow().files).toBe('third-local'); // the save's reroute stands — no flip
+    expect((await registryCategoriesRow()).files).toBe('third-local'); // the save's reroute stands — no flip
   });
 
   it('JOBS-023 a save that does not touch the migrating category leaves it running', async () => {
@@ -613,7 +614,7 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
     await waitFor(() => jobs.migrationStatuses().some((m) => m.category === 'files' && m.done >= 1), 5000, 1);
 
     // A save that touches an unrelated category only — 'files' route is untouched.
-    setSetting(
+    await setSetting(
       'storage.backends',
       JSON.stringify([
         { name: 'uploads-local', type: 'local', options: { root: makeTmpDir() } },
@@ -622,7 +623,7 @@ describe('StorageJobsService.cancelJobsForMissingBackends', () => {
       ]),
     );
     // Re-declare the original mapping unchanged (files still on uploads-local).
-    setSetting('storage.categories', JSON.stringify({ files: 'uploads-local' }));
+    await setSetting('storage.categories', JSON.stringify({ files: 'uploads-local' }));
 
     jobs.cancelJobsForMissingBackends();
     expect(jobs.migrationStatuses().find((m) => m.category === 'files')!.status).toBe('running');

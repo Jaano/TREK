@@ -74,6 +74,9 @@ import {
   createTestPlacesRepo,
   sharedTestOrm,
 } from '../../helpers/test-uow';
+import { countRows, findRow, findRows } from '../../helpers/factories/rows';
+import { readAppSetting, setAppSetting } from '../../helpers/factories/settings';
+import { Notifications } from '../../../src/db/entities/Notifications.entity';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import { Addons } from '../../../src/db/entities/Addons.entity';
 import { PhotoProviders } from '../../../src/db/entities/PhotoProviders.entity';
@@ -165,16 +168,12 @@ function mockGitHubFetchFailure(): void {
   vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 }
 
-function getLastNotifiedVersion(): string | undefined {
-  return (
-    testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get('last_notified_version') as
-      | { value: string }
-      | undefined
-  )?.value;
+async function getLastNotifiedVersion(): Promise<string | undefined> {
+  return (await readAppSetting(await sharedTestOrm(testDb), 'last_notified_version')) ?? undefined;
 }
 
-function getNotificationCount(): number {
-  return (testDb.prepare('SELECT COUNT(*) as c FROM notifications').get() as { c: number }).c;
+async function getNotificationCount(): Promise<number> {
+  return countRows(await sharedTestOrm(testDb), Notifications);
 }
 
 beforeEach(() => {
@@ -201,8 +200,8 @@ describe('checkAndNotifyVersion', () => {
 
     await checkAndNotifyVersion();
 
-    expect(getNotificationCount()).toBe(0);
-    expect(getLastNotifiedVersion()).toBeUndefined();
+    expect(await getNotificationCount()).toBe(0);
+    expect(await getLastNotifiedVersion()).toBeUndefined();
   });
 
   it('VNOTIF-002 — creates a navigate notification for all admins when update available', async () => {
@@ -212,11 +211,7 @@ describe('checkAndNotifyVersion', () => {
 
     await checkAndNotifyVersion();
 
-    const notifications = testDb.prepare('SELECT * FROM notifications ORDER BY id').all() as Array<{
-      recipient_id: number;
-      type: string;
-      scope: string;
-    }>;
+    const notifications = await findRows(await sharedTestOrm(testDb), Notifications, {}, { id: 'asc' });
     expect(notifications.length).toBe(2);
     const recipientIds = notifications.map((n) => n.recipient_id);
     expect(recipientIds).toContain(admin1.id);
@@ -231,7 +226,7 @@ describe('checkAndNotifyVersion', () => {
 
     await checkAndNotifyVersion();
 
-    expect(getLastNotifiedVersion()).toBe('99.1.0');
+    expect(await getLastNotifiedVersion()).toBe('99.1.0');
   });
 
   it('VNOTIF-004 — does NOT create duplicate notification if last_notified_version matches', async () => {
@@ -240,26 +235,24 @@ describe('checkAndNotifyVersion', () => {
 
     // First call notifies
     await checkAndNotifyVersion();
-    const countAfterFirst = getNotificationCount();
+    const countAfterFirst = await getNotificationCount();
     expect(countAfterFirst).toBe(1);
 
     // Second call with same version — should not create another
     await checkAndNotifyVersion();
-    expect(getNotificationCount()).toBe(countAfterFirst);
+    expect(await getNotificationCount()).toBe(countAfterFirst);
   });
 
   it('VNOTIF-005 — creates new notification when last_notified_version is an older version', async () => {
     createAdmin(testDb);
     // Simulate having been notified about an older version
-    testDb
-      .prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)')
-      .run('last_notified_version', '98.0.0');
+    await setAppSetting(await sharedTestOrm(testDb), 'last_notified_version', '98.0.0');
     mockGitHubLatest('v99.3.0');
 
     await checkAndNotifyVersion();
 
-    expect(getNotificationCount()).toBe(1);
-    expect(getLastNotifiedVersion()).toBe('99.3.0');
+    expect(await getNotificationCount()).toBe(1);
+    expect(await getLastNotifiedVersion()).toBe('99.3.0');
   });
 
   it('VNOTIF-006 — notification has correct type, scope, and navigate_target', async () => {
@@ -268,14 +261,7 @@ describe('checkAndNotifyVersion', () => {
 
     await checkAndNotifyVersion();
 
-    const notif = testDb.prepare('SELECT * FROM notifications LIMIT 1').get() as {
-      type: string;
-      scope: string;
-      navigate_target: string;
-      title_key: string;
-      text_key: string;
-      navigate_text_key: string;
-    };
+    const notif = (await findRow(await sharedTestOrm(testDb), Notifications, {}))!;
     expect(notif.type).toBe('navigate');
     expect(notif.scope).toBe('admin');
     expect(notif.navigate_target).toBe('/admin');
@@ -290,7 +276,7 @@ describe('checkAndNotifyVersion', () => {
 
     // Should not throw
     await expect(checkAndNotifyVersion()).resolves.toBeUndefined();
-    expect(getNotificationCount()).toBe(0);
-    expect(getLastNotifiedVersion()).toBeUndefined();
+    expect(await getNotificationCount()).toBe(0);
+    expect(await getLastNotifiedVersion()).toBeUndefined();
   });
 });

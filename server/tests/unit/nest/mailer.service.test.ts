@@ -50,16 +50,17 @@ import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { Settings } from '../../../src/db/entities/Settings.entity';
 import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
+import { setAppSetting as storeAppSetting } from '../../helpers/factories/settings';
 
-function setAppSetting(key: string, value: string): void {
-  testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+function setAppSetting(key: string, value: string): Promise<void> {
+  return storeAppSetting(testOrm, key, value);
 }
 
 /** The minimum that makes getSmtpConfig() return a config instead of null. */
-function configureSmtp(): void {
-  setAppSetting('smtp_host', 'mail.internal.example');
-  setAppSetting('smtp_port', '587');
-  setAppSetting('smtp_from', 'trek@example.com');
+async function configureSmtp(): Promise<void> {
+  await setAppSetting('smtp_host', 'mail.internal.example');
+  await setAppSetting('smtp_port', '587');
+  await setAppSetting('smtp_from', 'trek@example.com');
 }
 
 let testOrm: TestOrm;
@@ -89,7 +90,7 @@ afterAll(() => {
 
 describe('MailerService TLS options', () => {
   it('MAILER-001: leaves certificate verification on by default', async () => {
-    configureSmtp();
+    await configureSmtp();
 
     expect(await newMailer().sendEmail('someone@example.com', 'Subject', 'Body')).toBe(true);
 
@@ -98,8 +99,8 @@ describe('MailerService TLS options', () => {
   });
 
   it('MAILER-002: the smtp_skip_tls_verify setting turns verification off', async () => {
-    configureSmtp();
-    setAppSetting('smtp_skip_tls_verify', 'true');
+    await configureSmtp();
+    await setAppSetting('smtp_skip_tls_verify', 'true');
 
     await newMailer().sendEmail('someone@example.com', 'Subject', 'Body');
 
@@ -107,8 +108,8 @@ describe('MailerService TLS options', () => {
   });
 
   it('MAILER-003: anything other than "true" leaves verification on', async () => {
-    configureSmtp();
-    setAppSetting('smtp_skip_tls_verify', 'false');
+    await configureSmtp();
+    await setAppSetting('smtp_skip_tls_verify', 'false');
 
     await newMailer().sendEmail('someone@example.com', 'Subject', 'Body');
 
@@ -117,8 +118,8 @@ describe('MailerService TLS options', () => {
   });
 
   it('MAILER-004: skipping verification is announced, and names the host it applies to', async () => {
-    configureSmtp();
-    setAppSetting('smtp_skip_tls_verify', 'true');
+    await configureSmtp();
+    await setAppSetting('smtp_skip_tls_verify', 'true');
 
     await newMailer().sendEmail('someone@example.com', 'Subject', 'Body');
 
@@ -129,8 +130,8 @@ describe('MailerService TLS options', () => {
   });
 
   it('MAILER-005: the warning is logged once per process, not once per mail', async () => {
-    configureSmtp();
-    setAppSetting('smtp_skip_tls_verify', 'true');
+    await configureSmtp();
+    await setAppSetting('smtp_skip_tls_verify', 'true');
     const mailer = newMailer();
 
     await mailer.sendEmail('first@example.com', 'One', 'Body');
@@ -149,7 +150,7 @@ describe('MailerService TLS options', () => {
   });
 
   it('MAILER-007: connecting and greeting are bounded hard, the transfer is not', async () => {
-    configureSmtp();
+    await configureSmtp();
 
     await newMailer().sendEmail('someone@example.com', 'Subject', 'Body');
 
@@ -166,7 +167,7 @@ describe('MailerService TLS options', () => {
   });
 
   it('MAILER-007b: the admin test send bounds the transfer too, because somebody is waiting', async () => {
-    configureSmtp();
+    await configureSmtp();
 
     await newMailer().testSmtp('someone@example.com');
 
@@ -187,8 +188,8 @@ describe('MailerService test send', () => {
   }
 
   it('MAILER-008: an incomplete configuration names the fields that are missing', async () => {
-    setAppSetting('smtp_host', 'mail.internal.example');
-    setAppSetting('smtp_port', '587');
+    await setAppSetting('smtp_host', 'mail.internal.example');
+    await setAppSetting('smtp_port', '587');
 
     const result = await newMailer().testSmtp('admin@example.com');
 
@@ -198,9 +199,9 @@ describe('MailerService test send', () => {
   });
 
   it('MAILER-009: an unusable port is refused before anything reaches a socket', async () => {
-    setAppSetting('smtp_host', 'mail.internal.example');
-    setAppSetting('smtp_port', 'smtp.example.com');
-    setAppSetting('smtp_from', 'trek@example.com');
+    await setAppSetting('smtp_host', 'mail.internal.example');
+    await setAppSetting('smtp_port', 'smtp.example.com');
+    await setAppSetting('smtp_from', 'trek@example.com');
 
     const result = await newMailer().testSmtp('admin@example.com');
 
@@ -211,7 +212,7 @@ describe('MailerService test send', () => {
   });
 
   it('MAILER-010: a rejected login comes back as a reason, not as a bare failure', async () => {
-    configureSmtp();
+    await configureSmtp();
     sendMail.mockRejectedValueOnce(smtpError('Invalid login: 535 5.7.8 Username and Password not accepted', 'EAUTH'));
 
     const result = await newMailer().testSmtp('admin@example.com');
@@ -222,7 +223,7 @@ describe('MailerService test send', () => {
   });
 
   it('MAILER-011: a refused connection is classified and reaches the log with its code', async () => {
-    configureSmtp();
+    await configureSmtp();
     sendMail.mockRejectedValueOnce(smtpError('connect ECONNREFUSED 10.0.0.5:587', 'ESOCKET'));
 
     const result = await newMailer().testSmtp('admin@example.com');
@@ -236,9 +237,9 @@ describe('MailerService test send', () => {
   });
 
   it('MAILER-012: a stalled relay is named as a timeout and points at the 465/587 split', async () => {
-    setAppSetting('smtp_host', 'mail.internal.example');
-    setAppSetting('smtp_port', '465');
-    setAppSetting('smtp_from', 'trek@example.com');
+    await setAppSetting('smtp_host', 'mail.internal.example');
+    await setAppSetting('smtp_port', '465');
+    await setAppSetting('smtp_from', 'trek@example.com');
     sendMail.mockRejectedValueOnce(smtpError('Greeting never received', 'ETIMEDOUT'));
 
     const result = await newMailer().testSmtp('admin@example.com');
@@ -248,9 +249,9 @@ describe('MailerService test send', () => {
   });
 
   it('MAILER-013: the password appears in neither the response nor the log', async () => {
-    configureSmtp();
-    setAppSetting('smtp_user', 'trek@example.com');
-    setAppSetting('smtp_pass', 'correct-horse-battery');
+    await configureSmtp();
+    await setAppSetting('smtp_user', 'trek@example.com');
+    await setAppSetting('smtp_pass', 'correct-horse-battery');
     sendMail.mockRejectedValueOnce(smtpError('Invalid login for correct-horse-battery', 'EAUTH'));
 
     const result = await newMailer().testSmtp('admin@example.com');
@@ -260,7 +261,7 @@ describe('MailerService test send', () => {
   });
 
   it('MAILER-014: a successful test leaves a line in the log naming the relay', async () => {
-    configureSmtp();
+    await configureSmtp();
 
     expect(await newMailer().testSmtp('admin@example.com')).toEqual({ success: true });
 
@@ -302,7 +303,7 @@ describe('MailerService header logo (#2507)', () => {
   }
 
   it('MAILER-015: a notification mail carries the logo its HTML points to', async () => {
-    configureSmtp();
+    await configureSmtp();
 
     expect(await newMailer().sendEmail('someone@example.com', 'Subject', 'Body')).toBe(true);
 
@@ -310,7 +311,7 @@ describe('MailerService header logo (#2507)', () => {
   });
 
   it('MAILER-016: the password-reset mail carries it too', async () => {
-    configureSmtp();
+    await configureSmtp();
 
     expect((await newMailer().sendPasswordResetEmail('someone@example.com', 'https://trek.example/reset', null)).delivered).toBe('email');
 
@@ -318,7 +319,7 @@ describe('MailerService header logo (#2507)', () => {
   });
 
   it('MAILER-017: the plain-text test mail has no HTML, so it carries no logo either', async () => {
-    configureSmtp();
+    await configureSmtp();
 
     await newMailer().testSmtp('admin@example.com');
 

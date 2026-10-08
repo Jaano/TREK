@@ -40,6 +40,7 @@ afterEach(() => {
 function trekDb(file: string, tables = ['users', 'trips', 'trip_members', 'places', 'days']) {
   const db = new Database(file);
   for (const t of tables) db.exec(`CREATE TABLE ${t} (id INTEGER PRIMARY KEY, name TEXT)`);
+  // test-sql-allow: a hand-made backup database, before any boot; no ORM is bound to it.
   if (tables.includes('users')) db.prepare('INSERT INTO users (name) VALUES (?)').run('from-backup');
   db.close();
 }
@@ -80,6 +81,7 @@ describe('restoreOnFirstBoot', () => {
 
     expect(out.restored).toBe(true);
     const db = new Database(dbFile, { readonly: true });
+    // test-sql-allow: the restored file is read before any boot; no ORM is bound to it.
     expect(db.prepare('SELECT name FROM users').get()).toEqual({ name: 'from-backup' });
     db.close();
     expect(fs.readFileSync(path.join(dataDir, '.encryption_key'), 'utf8')).toBe('a'.repeat(64));

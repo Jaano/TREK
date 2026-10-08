@@ -9,6 +9,7 @@ import { createUser } from '../../helpers/factories';
 import { IdempotencyKeys } from '../../../src/db/entities/IdempotencyKeys.entity';
 import type { IdempotencyKeysRepository } from '../../../src/db/repositories/IdempotencyKeys.repository';
 import { IdempotencyInterceptor } from '../../../src/nest/common/idempotency.interceptor';
+import { findRow as findStoredRow, insertRow } from '../../helpers/factories/rows';
 
 type ReqShape = {
   method: string;
@@ -56,8 +57,10 @@ beforeEach(() => {
 });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-const findRow = (key: string, user: number, method: string, path: string) =>
-  testDb.prepare('SELECT status_code, response_body FROM idempotency_keys WHERE key = ? AND user_id = ? AND method = ? AND path = ?').get(key, user, method, path);
+const findRow = async (key: string, user: number, method: string, path: string) => {
+  const row = await findStoredRow(t, IdempotencyKeys, { key, user, method, path });
+  return row ? { status_code: row.status_code, response_body: row.response_body } : undefined;
+};
 
 // A few `await Promise.resolve()` hops give the repository's async write
 // chain (and its `.finally(release)`) the same room it gets under a real
@@ -116,8 +119,7 @@ describe('IdempotencyInterceptor (parity with the legacy applyIdempotency middle
   });
 
   it('replays a cached response and skips the handler', async () => {
-    testDb.prepare('INSERT INTO idempotency_keys (key, user_id, method, path, status_code, response_body) VALUES (?, ?, ?, ?, ?, ?)')
-      .run('k', userId, 'POST', '/api/categories', 201, '{"id":5}');
+    await insertRow(t, IdempotencyKeys, { key: 'k', user: userId, method: 'POST', path: '/api/categories', status_code: 201, response_body: '{"id":5}' });
     const res = makeRes();
     const h = handler('should-not-run');
     const out = await lastValueFrom(
@@ -145,7 +147,7 @@ describe('IdempotencyInterceptor (parity with the legacy applyIdempotency middle
     res.json({ created: true });
     await settle();
 
-    expect(findRow('k', userId, 'POST', '/api/categories')).toEqual({ status_code: 201, response_body: '{"created":true}' });
+    expect(await findRow('k', userId, 'POST', '/api/categories')).toEqual({ status_code: 201, response_body: '{"created":true}' });
   });
 
   it('does not cache a non-2xx response', async () => {
@@ -161,7 +163,7 @@ describe('IdempotencyInterceptor (parity with the legacy applyIdempotency middle
     res.json({ error: 'bad' });
     await settle();
 
-    expect(findRow('k', userId, 'POST', '/api/categories')).toBeUndefined();
+    expect(await findRow('k', userId, 'POST', '/api/categories')).toBeUndefined();
   });
 
   it('does not cache a body that exceeds the 256 KiB cap', async () => {
@@ -178,7 +180,7 @@ describe('IdempotencyInterceptor (parity with the legacy applyIdempotency middle
     res.json(big);
     await settle();
 
-    expect(findRow('k', userId, 'POST', '/api/categories')).toBeUndefined();
+    expect(await findRow('k', userId, 'POST', '/api/categories')).toBeUndefined();
   });
 
   it('swallows a storage failure so the response still succeeds', async () => {

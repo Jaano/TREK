@@ -62,6 +62,11 @@ import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
 import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.service';
 import { db as dbConn } from '../../../src/db/database';
 import { createTestUnitOfWork, sharedTestOrm, createTestTripsRepo, createTestPlacesRepo } from '../../helpers/test-uow';
+import { insertRow, updateRows } from '../../helpers/factories/rows';
+import { JourneyContributors } from '../../../src/db/entities/JourneyContributors.entity';
+import { JourneyEntries } from '../../../src/db/entities/JourneyEntries.entity';
+import { JourneyPhotos } from '../../../src/db/entities/JourneyPhotos.entity';
+import { PlaceRegions } from '../../../src/db/entities/PlaceRegions.entity';
 import {
   createTestJourneysRepo, createTestJourneyContributorsRepo, createTestJourneyTripsRepo, createTestJourneyEntriesRepo,
   createTestJourneyPhotosRepo, createTestJourneyEntryPhotosRepo,
@@ -70,7 +75,7 @@ import {
 let svc: JourneyDomainService;
 
 /** The factory has no coordinate fields, and a route is made of coordinates. */
-function placeEntry(
+async function placeEntry(
   journeyId: number,
   authorId: number,
   lat: number,
@@ -78,9 +83,7 @@ function placeEntry(
   overrides: { title?: string; entry_date?: string; stats_excluded?: number } = {},
 ) {
   const entry = createJourneyEntry(testDb, journeyId, authorId, overrides);
-  testDb
-    .prepare('UPDATE journey_entries SET location_lat = ?, location_lng = ? WHERE id = ?')
-    .run(lat, lng, entry.id);
+  await updateRows(await sharedTestOrm(testDb), JourneyEntries, { id: entry.id }, { location_lat: lat, location_lng: lng });
   return entry;
 }
 
@@ -147,8 +150,8 @@ describe('journeyStats route', () => {
   it('builds the route from the entries when they carry coordinates', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'Reykjavík', entry_date: '2026-06-02' });
-    placeEntry(journey.id, user.id, 65.68, -18.12, { title: 'Akureyri', entry_date: '2026-06-06' });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'Reykjavík', entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 65.68, -18.12, { title: 'Akureyri', entry_date: '2026-06-06' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -161,8 +164,8 @@ describe('journeyStats route', () => {
   it('orders the route by entry date, not by insertion', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    placeEntry(journey.id, user.id, 65.68, -18.12, { title: 'second', entry_date: '2026-06-06' });
-    placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'first', entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 65.68, -18.12, { title: 'second', entry_date: '2026-06-06' });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'first', entry_date: '2026-06-02' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -172,7 +175,7 @@ describe('journeyStats route', () => {
   it('skips entries without coordinates but still counts them as steps', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
     createJourneyEntry(testDb, journey.id, user.id, { title: 'no place', entry_date: '2026-06-03' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
@@ -210,7 +213,7 @@ describe('journeyStats route', () => {
     const trip = createTrip(testDb, user.id);
     linkTripToJourney(testDb, journey.id, trip.id);
     createPlace(testDb, trip.id, { name: 'a place', lat: 48.85, lng: 2.35 });
-    placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'an entry', entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'an entry', entry_date: '2026-06-02' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -275,8 +278,8 @@ describe('journeyStats countries', () => {
   it('resolves each stop to a country and names it', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
-    placeEntry(journey.id, user.id, 52.52, 13.4, { entry_date: '2026-06-20' });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 52.52, 13.4, { entry_date: '2026-06-20' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -296,9 +299,7 @@ describe('journeyStats countries', () => {
     const trip = createTrip(testDb, user.id);
     linkTripToJourney(testDb, journey.id, trip.id);
     const place = createPlace(testDb, trip.id, { name: 'somewhere', lat: 64.14, lng: -21.94 });
-    testDb
-      .prepare('INSERT INTO place_regions (place_id, country_code, region_code, region_name) VALUES (?, ?, ?, ?)')
-      .run(place.id, 'fr', 'FR-75', 'Paris');
+    await insertRow(await sharedTestOrm(testDb), PlaceRegions, { place: place.id, country_code: 'fr', region_code: 'FR-75', region_name: 'Paris' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -311,7 +312,7 @@ describe('journeyStats countries', () => {
   it('leaves a stop with no country out of the list rather than inventing one', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    placeEntry(journey.id, user.id, -33.86, 151.2, { entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, -33.86, 151.2, { entry_date: '2026-06-02' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -325,12 +326,8 @@ describe('journeyStats totals', () => {
   it('counts the gallery photographs', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    const photo = testDb
-      .prepare("INSERT INTO trek_photos (provider, file_path, owner_id) VALUES ('local', 'x.jpg', ?)")
-      .run(user.id);
-    testDb
-      .prepare('INSERT INTO journey_photos (journey_id, photo_id, sort_order, created_at) VALUES (?, ?, 0, ?)')
-      .run(journey.id, photo.lastInsertRowid, Date.now());
+    const photoId = await insertRow(await sharedTestOrm(testDb), TrekPhotos, { provider: 'local', file_path: 'x.jpg', owner: user.id });
+    await insertRow(await sharedTestOrm(testDb), JourneyPhotos, { journey: journey.id, photo: photoId, sort_order: 0, created_at: Date.now() });
 
     expect((await svc.journeyStats(journey.id, user.id))!.photos).toBe(1);
   });
@@ -368,9 +365,7 @@ describe('journeyStats totals', () => {
     const { user: owner } = createUser(testDb);
     const { user: helper } = createUser(testDb);
     const journey = createJourney(testDb, owner.id);
-    testDb
-      .prepare('INSERT INTO journey_contributors (journey_id, user_id, role, added_at) VALUES (?, ?, ?, ?)')
-      .run(journey.id, helper.id, 'editor', Date.now());
+    await insertRow(await sharedTestOrm(testDb), JourneyContributors, { journey: journey.id, user: helper.id, role: 'editor', added_at: Date.now() });
 
     expect(await svc.journeyStats(journey.id, helper.id)).not.toBeNull();
   });
@@ -386,9 +381,9 @@ describe('journeyStats excluded stops', () => {
   it('leaves a switched-off entry out of the route, the distance and the countries', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    placeEntry(journey.id, user.id, 52.52, 13.4, { title: 'Berlin, the airport', entry_date: '2026-06-01', stats_excluded: 1 });
-    placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'Reykjavík', entry_date: '2026-06-02' });
-    placeEntry(journey.id, user.id, 65.68, -18.12, { title: 'Akureyri', entry_date: '2026-06-06' });
+    await placeEntry(journey.id, user.id, 52.52, 13.4, { title: 'Berlin, the airport', entry_date: '2026-06-01', stats_excluded: 1 });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'Reykjavík', entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 65.68, -18.12, { title: 'Akureyri', entry_date: '2026-06-06' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -403,8 +398,8 @@ describe('journeyStats excluded stops', () => {
   it('names the switched-off stop under excluded so it can be switched back on', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    const airport = placeEntry(journey.id, user.id, 63.98, -22.62, { title: 'Keflavík', entry_date: '2026-06-01', stats_excluded: 1 });
-    placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'Reykjavík', entry_date: '2026-06-02' });
+    const airport = await placeEntry(journey.id, user.id, 63.98, -22.62, { title: 'Keflavík', entry_date: '2026-06-01', stats_excluded: 1 });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { title: 'Reykjavík', entry_date: '2026-06-02' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -414,8 +409,8 @@ describe('journeyStats excluded stops', () => {
   it('does not count a switched-off entry as a step', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    placeEntry(journey.id, user.id, 63.98, -22.62, { entry_date: '2026-06-01', stats_excluded: 1 });
-    placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 63.98, -22.62, { entry_date: '2026-06-01', stats_excluded: 1 });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
 
     expect((await svc.journeyStats(journey.id, user.id))!.steps).toBe(1);
   });
@@ -425,7 +420,7 @@ describe('journeyStats excluded stops', () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
     createJourneyEntry(testDb, journey.id, user.id, { title: 'a thought', entry_date: '2026-06-03', stats_excluded: 1 });
-    placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
+    await placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -436,8 +431,8 @@ describe('journeyStats excluded stops', () => {
   it('carries the entry on every stop read from the entries', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    const a = placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
-    const b = placeEntry(journey.id, user.id, 65.68, -18.12, { entry_date: '2026-06-06' });
+    const a = await placeEntry(journey.id, user.id, 64.14, -21.94, { entry_date: '2026-06-02' });
+    const b = await placeEntry(journey.id, user.id, 65.68, -18.12, { entry_date: '2026-06-06' });
 
     expect((await svc.journeyStats(journey.id, user.id))!.points.map(p => p.entryId)).toEqual([a.id, b.id]);
   });
@@ -452,9 +447,7 @@ describe('journeyStats excluded stops', () => {
     createDayAssignment(testDb, createDay(testDb, trip.id, { date: '2026-06-01' }).id, airport.id);
     createDayAssignment(testDb, createDay(testDb, trip.id, { date: '2026-06-02' }).id, town.id);
     await svc.syncTripPlaces(journey.id, trip.id, user.id);
-    testDb
-      .prepare('UPDATE journey_entries SET stats_excluded = 1 WHERE journey_id = ? AND source_place_id = ?')
-      .run(journey.id, airport.id);
+    await updateRows(await sharedTestOrm(testDb), JourneyEntries, { journey: journey.id, sourcePlace: airport.id }, { stats_excluded: 1 });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -483,13 +476,9 @@ describe('journeyStats excluded stops', () => {
     // Switched off, and its point cleared by hand afterwards, which is what
     // sends the journey down the fallback while the skeleton still names the
     // place it came from.
-    testDb
-      .prepare(`
-        UPDATE journey_entries
-           SET stats_excluded = 1, location_lat = NULL, location_lng = NULL
-         WHERE journey_id = ? AND source_place_id = ?
-      `)
-      .run(journey.id, airport.id);
+    await updateRows(await sharedTestOrm(testDb), JourneyEntries, { journey: journey.id, sourcePlace: airport.id }, {
+      stats_excluded: 1, location_lat: null, location_lng: null,
+    });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 
@@ -509,7 +498,7 @@ describe('journeyStats excluded stops', () => {
     const trip = createTrip(testDb, user.id);
     linkTripToJourney(testDb, journey.id, trip.id);
     createPlace(testDb, trip.id, { name: 'a trip place', lat: 48.85, lng: 2.35 });
-    placeEntry(journey.id, user.id, 52.52, 13.4, { title: 'Berlin, the airport', entry_date: '2026-06-01', stats_excluded: 1 });
+    await placeEntry(journey.id, user.id, 52.52, 13.4, { title: 'Berlin, the airport', entry_date: '2026-06-01', stats_excluded: 1 });
 
     const stats = (await svc.journeyStats(journey.id, user.id))!;
 

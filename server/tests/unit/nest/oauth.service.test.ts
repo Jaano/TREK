@@ -20,10 +20,6 @@ vi.mock('../../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
     return mock;
 });
@@ -68,6 +64,8 @@ import {
   sweepPendingCodes,
 } from '../../../src/nest/oauth/oauth.pending-codes';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { insertRow, updateRows } from '../../helpers/factories/rows';
+import { dbNow } from '../../../src/db/types';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import type { AuditLogRepository } from '../../../src/db/repositories/AuditLog.repository';
 import { Users } from '../../../src/db/entities/Users.entity';
@@ -920,10 +918,10 @@ describe('getUserByAccessToken — includes clientId (C2)', () => {
  * replay cases below still describe theft — a token used minutes later — rather
  * than two clients racing.
  */
-function agePastGrace(rawRefreshToken: string) {
+async function agePastGrace(rawRefreshToken: string) {
   const hash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
   const old = new Date(Date.now() - 5 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-  testDb.prepare('UPDATE oauth_tokens SET revoked_at = ? WHERE refresh_token_hash = ?').run(old, hash);
+  await updateRows(t, OauthTokens, { refresh_token_hash: hash }, { revoked_at: old });
 }
 
 describe('refreshTokens — replay detection (C3)', () => {
@@ -941,7 +939,7 @@ describe('refreshTokens — replay detection (C3)', () => {
 
     // Replay the FIRST (now revoked) refresh token, long enough after the
     // rotation that it cannot be a concurrent refresh.
-    agePastGrace(firstRefresh);
+    await agePastGrace(firstRefresh);
     const callsBefore = vi.mocked(revokeUserSessionsForClient).mock.calls.length;
     const replayResult = await refreshTokens(firstRefresh, clientId, rawSecret);
     expect(replayResult.error).toBe('invalid_grant');
@@ -963,7 +961,7 @@ describe('refreshTokens — replay detection (C3)', () => {
     const { access_token: access2, refresh_token: second } = r1.tokens!;
 
     // Replay first (revoked) refresh token → chain revoke
-    agePastGrace(first);
+    await agePastGrace(first);
     await refreshTokens(first, clientId, rawSecret);
 
     // The rotated access token should also be dead now
@@ -990,7 +988,7 @@ describe('refreshTokens — replay detection (C3)', () => {
     const { refresh_token: third } = r2.tokens!;
 
     // Replay the first revoked token → revokes chain containing first+second+third
-    agePastGrace(first);
+    await agePastGrace(first);
     await refreshTokens(first, clientId, rawSecret);
 
     // third should now be revoked too (it's in the same chain)
@@ -1046,7 +1044,7 @@ describe('refreshTokens — concurrent rotation grace (#1007)', () => {
     const { refresh_token: shared } = await issueTokens(clientId, user.id, ['trips:read']);
     const rotated = (await refreshTokens(shared, clientId, rawSecret)).tokens!;
 
-    agePastGrace(shared);
+    await agePastGrace(shared);
     const replay = await refreshTokens(shared, clientId, rawSecret);
 
     expect(replay.error).toBe('invalid_grant');
@@ -1071,7 +1069,7 @@ describe('refreshTokens — concurrent rotation grace (#1007)', () => {
     const second = (await refreshTokens(first, clientId, rawSecret)).tokens!;
 
     // Real theft: the first token turns up again once the window has passed.
-    agePastGrace(first);
+    await agePastGrace(first);
     expect((await refreshTokens(first, clientId, rawSecret)).error).toBe('invalid_grant');
 
     // The successor was revoked with the chain, so presenting it now must not
@@ -1235,7 +1233,7 @@ describe('branches the legacy suite could not reach', () => {
     const created = await makeClient(user.id);
     const clientId = (created.client as { client_id: string }).client_id;
     const tokens = await issueTokens(clientId, user.id, ['trips:read']);
-    testDb.prepare("UPDATE oauth_tokens SET access_token_expires_at = '2000-01-01T00:00:00.000Z'").run();
+    await updateRows(t, OauthTokens, {}, { access_token_expires_at: '2000-01-01T00:00:00.000Z' });
 
     expect(await getUserByAccessToken(tokens.access_token)).toBeNull();
   });
@@ -1363,12 +1361,11 @@ describe('OauthModule', () => {
 describe('admin OAuth sessions', () => {
   it('ADMIN-SVC-074 — listAllOAuthSessions survives a row with malformed scopes JSON', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("INSERT INTO oauth_clients (client_id, client_secret_hash, name) VALUES ('c1', 'hash', 'Client')").run();
-    testDb.prepare(`
-      INSERT INTO oauth_tokens (client_id, user_id, access_token_hash, refresh_token_hash, scopes,
-                                access_token_expires_at, refresh_token_expires_at)
-      VALUES ('c1', ?, 'ahash', 'rhash', 'not-json{', datetime('now', '+1 hour'), datetime('now', '+1 day'))
-    `).run(user.id);
+    await insertRow(t, OauthClients, { client_id: 'c1', client_secret_hash: 'hash', name: 'Client' });
+    await insertRow(t, OauthTokens, {
+      client: 'c1', user: user.id, access_token_hash: 'ahash', refresh_token_hash: 'rhash', scopes: 'not-json{',
+      access_token_expires_at: dbNow(new Date(Date.now() + 3600_000)), refresh_token_expires_at: dbNow(new Date(Date.now() + 86_400_000)),
+    });
 
     const sessions = (await svc.listAllOAuthSessions()) as any[];
     expect(sessions).toHaveLength(1);

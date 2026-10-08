@@ -47,6 +47,11 @@ import {
   createTestAssignmentParticipantsRepo, createTestPlacesRepo, createTestTripMembersRepo, createTestDayAssignmentsRepo,
   createTestCategoriesRepo, createTestTripsRepo, createTestCollectionPlacesRepo, sharedTestOrm,
 } from '../../helpers/test-uow';
+import type { EntityClass } from '@mikro-orm/core';
+import { countRows, findRows } from '../../helpers/factories/rows';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { TourWaypoints } from '../../../src/db/entities/TourWaypoints.entity';
+import { Tours } from '../../../src/db/entities/Tours.entity';
 import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
 import {
   createTestJourneysRepo, createTestJourneyContributorsRepo, createTestJourneyTripsRepo, createTestJourneyEntriesRepo,
@@ -105,7 +110,18 @@ let tours: ToursService;
 let tripId: string;
 let broadcast: MockInstance<PlacesService['broadcast']>;
 
-const count = (table: string) => (testDb.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+const countedTables = { places: Places, tours: Tours, tour_waypoints: TourWaypoints } as const;
+const count = async (table: keyof typeof countedTables) =>
+  countRows(await sharedTestOrm(testDb), countedTables[table] as EntityClass<object>);
+/**
+ * The broadcast probe reads mid-request, while the import may still hold the
+ * connection inside its transaction: it has to see the handle's own state
+ * synchronously, past the ORM's connection queue, which a raw read on the
+ * shared handle does.
+ */
+const countNow = (table: keyof typeof countedTables) =>
+  // test-sql-allow: a synchronous read on the shared handle mid-transaction is what this probe measures.
+  (testDb.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
 
 beforeAll(async () => {
   uow = await createTestUnitOfWork(testDb);
@@ -131,15 +147,15 @@ afterEach(() => {
 afterAll(() => { testDb.close(); });
 
 describe('Tours GPX atomic persistence and postcommit publication', () => {
-  function expectEmpty() {
-    for (const table of ['places', 'tours', 'tour_waypoints']) expect(count(table)).toBe(0);
+  async function expectEmpty() {
+    for (const table of ['places', 'tours', 'tour_waypoints'] as const) expect(await count(table)).toBe(0);
     expect(broadcast).not.toHaveBeenCalled();
   }
 
   it('commits routes, tracks, colors and facets once before publishing, without Planner waypoints', async () => {
     const transactional = vi.spyOn(uow, 'transactional');
     const seen: { inTransaction: boolean; tours: number }[] = [];
-    broadcast.mockImplementation(() => { seen.push({ inTransaction: testDb.inTransaction, tours: count('tours') }); });
+    broadcast.mockImplementation(() => { seen.push({ inTransaction: testDb.inTransaction, tours: countNow('tours') }); });
 
     const result = (await tours.importGpxAsTour(tripId, mixedGpx, 'walk.gpx', 'socket'))!;
 
@@ -151,15 +167,15 @@ describe('Tours GPX atomic persistence and postcommit publication', () => {
     expect(result.tours[0]).toMatchObject({ name: 'walk', tour_type: 'hike', max_hiking_difficulty: 2, planned: false, has_waypoints: false, caution: true, match_confidence: 0.3 });
     expect(result.tours[1]).toMatchObject({ name: 'Ridge', elevation_gain: 50, elevation_loss: 30, caution: false, match_confidence: 1 });
 
-    const rows = testDb.prepare('SELECT * FROM places ORDER BY id').all() as { id: number; trip_id: number; description: string; route_geometry: string; route_color: string }[];
+    const rows = (await findRows(await sharedTestOrm(testDb), Places, {}, { id: 'asc' })) as Array<{ id: number; trip_id: number; description: string; route_geometry: string; route_color: string }>;
     expect(rows.map(row => row.trip_id)).toEqual([Number(tripId), Number(tripId)]);
     expect(rows.map(row => row.description)).toEqual(['Route description', 'Track description']);
     expect(JSON.parse(rows[0].route_geometry)).toEqual([[48, 11], [48.01, 11.01]]);
     expect(JSON.parse(rows[1].route_geometry)).toEqual([[49, 12, 100], [49.01, 12.01, 150], [49.02, 12.02, 120]]);
     expect(new Set(rows.map(row => row.route_color)).size).toBe(2);
-    expect(testDb.prepare('SELECT place_id, tour_type FROM tours ORDER BY place_id').all())
+    expect((await findRows(await sharedTestOrm(testDb), Tours, {}, { place: 'asc' })).map(tour => ({ place_id: tour.place_id, tour_type: tour.tour_type })))
       .toEqual(rows.map(row => ({ place_id: row.id, tour_type: 'hike' })));
-    expect(count('tour_waypoints')).toBe(0);
+    expect(await count('tour_waypoints')).toBe(0);
 
     expect(seen).toEqual([
       { inTransaction: false, tours: 2 }, { inTransaction: false, tours: 2 }, { inTransaction: false, tours: 2 },
@@ -179,28 +195,28 @@ describe('Tours GPX atomic persistence and postcommit publication', () => {
       WHEN (SELECT COUNT(*) FROM tours) = ${ordinal - 1}
       BEGIN SELECT RAISE(ABORT, 'facet failure'); END;`);
     await expect(tours.importGpxAsTour(tripId, mixedGpx)).rejects.toThrow('facet failure');
-    expectEmpty();
+    await expectEmpty();
   });
 
   it('rolls back earlier carriers when the later Place insert fails', async () => {
     testDb.exec(`CREATE TRIGGER fail_place BEFORE INSERT ON places WHEN NEW.name = 'Ridge'
       BEGIN SELECT RAISE(ABORT, 'place failure'); END;`);
     await expect(tours.importGpxAsTour(tripId, mixedGpx)).rejects.toThrow('place failure');
-    expectEmpty();
+    await expectEmpty();
   });
 
   it('rolls back carriers and earlier colors when later coloring fails', async () => {
     testDb.exec(`CREATE TRIGGER fail_color BEFORE UPDATE OF route_color ON places WHEN NEW.name = 'Ridge'
       BEGIN SELECT RAISE(ABORT, 'color failure'); END;`);
     await expect(tours.importGpxAsTour(tripId, mixedGpx)).rejects.toThrow('color failure');
-    expectEmpty();
+    await expectEmpty();
   });
 
   it.each(['<not-gpx/>', '<gpx/>', '<gpx><wpt lat="1" lon="2"/></gpx>', '<gpx><trk><trkseg><trkpt/></trkseg></trk></gpx>'])('does not write or publish unusable input %s', async (xml) => {
     const transactional = vi.spyOn(uow, 'transactional');
     expect(await tours.importGpxAsTour(tripId, Buffer.from(xml))).toBeNull();
     expect(transactional).not.toHaveBeenCalled();
-    expectEmpty();
+    await expectEmpty();
   });
 
   it('propagates parser failures before entering the transaction', async () => {
@@ -208,14 +224,14 @@ describe('Tours GPX atomic persistence and postcommit publication', () => {
     vi.spyOn(gpxParser, 'parse').mockImplementationOnce(() => { throw new Error('parser failure'); });
     await expect(tours.importGpxAsTour(tripId, mixedGpx)).rejects.toThrow('parser failure');
     expect(transactional).not.toHaveBeenCalled();
-    expectEmpty();
+    await expectEmpty();
   });
 
   it('keeps a committed response and attempts remaining events if publication throws', async () => {
     const warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     broadcast.mockImplementationOnce(() => { throw new Error('transport unavailable'); });
     expect((await tours.importGpxAsTour(tripId, mixedGpx))?.tours).toHaveLength(2);
-    expect(count('tours')).toBe(2);
+    expect(await count('tours')).toBe(2);
     expect(broadcast).toHaveBeenCalledTimes(3);
     expect(warn).toHaveBeenCalledOnce();
   });
@@ -227,7 +243,7 @@ describe('Tours GPX atomic persistence and postcommit publication', () => {
     });
 
     expect((await tours.importGpxAsTour(tripId, mixedGpx))?.tours).toHaveLength(2);
-    expect(count('places')).toBe(2);
+    expect(await count('places')).toBe(2);
     expect(warn).toHaveBeenCalledTimes(2);
   });
 
@@ -240,21 +256,25 @@ describe('Tours GPX atomic persistence and postcommit publication', () => {
     const result = await tours.importGpxAsTour(tripId, mixedGpx);
 
     expect(result?.tours).toHaveLength(2);
-    expect(count('places')).toBe(2);
-    expect(count('tours')).toBe(2);
+    expect(await count('places')).toBe(2);
+    expect(await count('tours')).toBe(2);
     expect(broadcast.mock.calls.map(call => call[1])).toEqual(['tours:changed', 'place:created', 'place:created']);
     expect(warn).toHaveBeenCalledOnce();
   });
 
   it('returns a successful skipped result for duplicate-only imports without publishing events', async () => {
     expect((await tours.importGpxAsTour(tripId, mixedGpx))?.tours).toHaveLength(2);
-    const rowsBefore = testDb.prepare('SELECT id, trip_id, name FROM places ORDER BY id').all();
-    const facetsBefore = testDb.prepare('SELECT place_id FROM tours ORDER BY place_id').all();
+    const placeRows = async () =>
+      (await findRows(await sharedTestOrm(testDb), Places, {}, { id: 'asc' })).map(row => ({ id: row.id, trip_id: row.trip_id, name: row.name }));
+    const tourFacets = async () =>
+      (await findRows(await sharedTestOrm(testDb), Tours, {}, { place: 'asc' })).map(tour => ({ place_id: tour.place_id }));
+    const rowsBefore = await placeRows();
+    const facetsBefore = await tourFacets();
     broadcast.mockClear();
 
     expect(await tours.importGpxAsTour(tripId, mixedGpx)).toEqual({ tours: [], caution: false, skipped: 2 });
-    expect(testDb.prepare('SELECT id, trip_id, name FROM places ORDER BY id').all()).toEqual(rowsBefore);
-    expect(testDb.prepare('SELECT place_id FROM tours ORDER BY place_id').all()).toEqual(facetsBefore);
+    expect(await placeRows()).toEqual(rowsBefore);
+    expect(await tourFacets()).toEqual(facetsBefore);
     expect(broadcast).not.toHaveBeenCalled();
   });
 
@@ -270,8 +290,8 @@ describe('Tours GPX atomic persistence and postcommit publication', () => {
     expect(result?.tours).toHaveLength(1);
     expect(result?.tours[0].name).toBe('walk');
     expect(result?.skipped).toBe(1);
-    expect(count('places')).toBe(2);
-    expect(count('tours')).toBe(2);
+    expect(await count('places')).toBe(2);
+    expect(await count('tours')).toBe(2);
     const walkId = result!.tours[0].place_id;
     expect(broadcast.mock.calls.map(call => [call[1], call[2]])).toEqual([
       ['tours:changed', { placeIds: [walkId] }],
@@ -289,7 +309,7 @@ describe('Tours GPX atomic persistence and postcommit publication', () => {
     expect(result.tours).toHaveLength(1);
     expect(result.tours[0].name).toBe('single');
     expect(result.caution).toBe(true);
-    expect(testDb.prepare('SELECT trip_id FROM places').all()).toEqual([{ trip_id: Number(otherTripId) }]);
+    expect((await findRows(await sharedTestOrm(testDb), Places, {}, { id: 'asc' })).map(row => ({ trip_id: row.trip_id }))).toEqual([{ trip_id: Number(otherTripId) }]);
     expect((await tours.listTours(otherTripId)).map(t => t.place_id)).toEqual([result.tours[0].place_id]);
     expect(await tours.listTours(tripId)).toEqual([]);
     expect(broadcast.mock.calls.map(call => call[1])).toEqual(['tours:changed', 'place:created']);

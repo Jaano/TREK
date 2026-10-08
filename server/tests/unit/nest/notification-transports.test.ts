@@ -53,6 +53,9 @@ import { buildBuiltinChannels } from '../../../src/nest/notifications/channels/b
 import { checkSsrf } from '../../../src/utils/ssrfGuard';
 import { logError } from '../../../src/nest/audit/audit-log.logger';
 import { createTestSettingsRepo, createTestAppSettingsRepo } from '../../helpers/test-uow';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { makeAdmin, makeUser } from '../../helpers/factories/users';
+import { setAppSetting, setUserSetting } from '../../helpers/factories/settings';
 
 // The transports are providers now, taking SettingsRepository/
 // AppSettingsRepository instead of DatabaseService — a real, throwaway
@@ -476,19 +479,15 @@ describe('GHSA-7pqc-fj3c-9346: ntfy token is only attached when the target is th
 describe('GHSA-7pqc-fj3c-9346 (live path): buildBuiltinChannels sendToUser resolves configs through the repositories', () => {
   it('operator-server user gets the admin token; foreign-server user does not', async () => {
     const liveDb = createSnapshotTestDb();
-    liveDb
-      .prepare("INSERT INTO users (id, username, email, password_hash, role) VALUES (1,'op','op@x','x','admin'),(2,'u2','u2@x','x','user')")
-      .run();
-    liveDb
-      .prepare(
-        "INSERT INTO app_settings (key, value) VALUES ('admin_ntfy_server','https://ntfy.operator.example'),('admin_ntfy_topic','ops'),('admin_ntfy_token','operator-secret')",
-      )
-      .run();
-    liveDb
-      .prepare(
-        "INSERT INTO settings (user_id, key, value) VALUES (1,'ntfy_topic','t1'),(2,'ntfy_topic','t2'),(2,'ntfy_server','https://ntfy.attacker.example')",
-      )
-      .run();
+    const liveOrm = await sharedTestOrm(liveDb);
+    await makeAdmin(liveOrm, { id: 1, username: 'op', email: 'op@x' });
+    await makeUser(liveOrm, { id: 2, username: 'u2', email: 'u2@x' });
+    await setAppSetting(liveOrm, 'admin_ntfy_server', 'https://ntfy.operator.example');
+    await setAppSetting(liveOrm, 'admin_ntfy_topic', 'ops');
+    await setAppSetting(liveOrm, 'admin_ntfy_token', 'operator-secret');
+    await setUserSetting(liveOrm, 1, 'ntfy_topic', 't1');
+    await setUserSetting(liveOrm, 2, 'ntfy_topic', 't2');
+    await setUserSetting(liveOrm, 2, 'ntfy_server', 'https://ntfy.attacker.example');
     const liveNtfy = new NtfyService(await createTestSettingsRepo(liveDb), await createTestAppSettingsRepo(liveDb));
     const ntfyChannel = buildBuiltinChannels({ mailer: {} as never, webhook: {} as never, ntfy: liveNtfy, push: {} as never }).find((c) => c.id === 'ntfy')!;
 
