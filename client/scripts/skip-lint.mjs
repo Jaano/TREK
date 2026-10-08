@@ -8,8 +8,9 @@
  * skipped blocks since April); the files that hold some are listed in
  * scripts/skip-baseline.json with their count, and a file may hold no more.
  * Playwright's test.fixme counts as a skip. Only a skip that decides at run
- * time is left out: skipIf, runIf, and in a Playwright spec
- * test.skip(condition, 'why') unless the condition is the literal true.
+ * time is left out: skipIf and runIf, and in a Playwright spec
+ * test.skip(condition, 'why'), unless the condition is a literal that always
+ * skips (skipIf(true), runIf(false), test.skip(true, 'why')).
  * Covers the vitest tests under src/ and tests/ and the Playwright specs
  * under e2e/.
  *

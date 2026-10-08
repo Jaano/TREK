@@ -142,6 +142,22 @@ describe('lint:skips', () => {
     expect(run({}, { 'e2e/c.spec.ts': conditional })).toBe(0);
   });
 
+  it('SKIPS-012: counts skipIf(true) and runIf(false), whose condition can never change', () => {
+    const source = [
+      "it.skipIf(true)('a', () => {})",
+      "describe.runIf(false)('b', () => {})",
+      "test.skipIf(true).each([1])('c %s', () => {})",
+      "it.skipIf(false)('d', () => {})",
+      "describe.runIf(true)('e', () => {})",
+      "it.skipIf(isCI)('f', () => {})",
+    ].join('\n');
+    expect(modifiers(source, 'tests/a.test.ts').skipped.map((s: string) => s.split(':')[0])).toEqual(['1', '2', '3']);
+    expect(
+      run({}, { 'tests/b.test.ts': "it.skipIf(true)('a', () => {});\ndescribe.runIf(false)('b', () => {});\n" })
+    ).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/tests\/b\.test\.ts: 2 skipped or todo test\(s\), baseline 0/);
+  });
+
   it('SKIPS-008: a missing baseline or test directory stops the check', () => {
     tree = ratchetTree({ 'src/a.test.ts': PASSING, 'tests/b.test.ts': PASSING, 'e2e/c.spec.ts': PASSING });
     expect(() => check({ root: tree.root, baselinePath: tree.path(BASELINE), ...tree.out })).toThrow(RatchetError);

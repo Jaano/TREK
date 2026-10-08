@@ -16,7 +16,7 @@ npm run lint:size         # no source file or stylesheet past 1000 lines, no tes
 npm run lint:format       # Prettier: every .ts/.tsx/.mjs/.css file under src/, tests/, e2e/ and scripts/ outside scripts/format-baseline.json must be formatted, the list only shrinks (CI gate; npx prettier --write <file>, then --update)
 npm run lint:layers       # imports go downwards: components never import pages/ or mobile/, nothing under the views imports a view; per-file counts may only shrink (CI gate; --list, --update)
 npm run lint:offline      # no view file (components/mobile/pages/hooks) imports src/api/ beyond scripts/offline-baseline.json, which only shrinks (CI gate; --list, --update)
-npm run lint:skips        # no .only anywhere; skipped/todo/fixme tests per file may only shrink against scripts/skip-baseline.json (CI gate; skipIf/runIf and Playwright's test.skip(condition, 'why') are fine)
+npm run lint:skips        # no .only anywhere; skipped/todo/fixme tests per file may only shrink against scripts/skip-baseline.json (CI gate; skipIf/runIf and Playwright's test.skip(condition, 'why') are fine, but skipIf(true) and runIf(false) count as skips)
 npm run test              # vitest run (tests/** + co-located src/**/*.test.{ts,tsx}); also test:unit / test:integration / test:coverage
 npm run e2e               # Playwright (CI runs --project=public --project=app; e2e:report opens the last report)
 npm run shots             # Playwright screenshot project (shots:promote to accept)

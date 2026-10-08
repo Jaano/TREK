@@ -56,7 +56,8 @@ function switchesOff(call, file) {
  * skipped: it.skip / describe.skip / test.todo / test.fixme and the
  * x-shorthands, each switching off a test that never runs. Playwright's
  * test.skip(!seed.id, 'why') decides at run time and does not count (see
- * switchesOff); neither do skipIf and runIf.
+ * switchesOff); neither do skipIf and runIf, unless their condition is the
+ * literal that always skips: skipIf(true), runIf(false).
  *
  * only: .only anywhere, which silently drops every other test in the file.
  *
@@ -78,6 +79,11 @@ export function modifiers(source, file) {
         const call = ts.isCallExpression(node.parent) && node.parent.expression === node ? node.parent : null;
         // test.skip.each(table)(...) declares skipped tests without being called directly.
         if (!call || switchesOff(call, file)) skipped.push(at(node));
+      } else if (name === 'skipIf' || name === 'runIf') {
+        // skipIf(true) and runIf(false) are a skip in disguise: the condition can never change.
+        const call = ts.isCallExpression(node.parent) && node.parent.expression === node ? node.parent : null;
+        const never = name === 'skipIf' ? ts.SyntaxKind.TrueKeyword : ts.SyntaxKind.FalseKeyword;
+        if (call?.arguments[0]?.kind === never) skipped.push(at(node));
       }
     } else if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && SHORTHAND.has(node.expression.text)) {
       skipped.push(at(node.expression));
