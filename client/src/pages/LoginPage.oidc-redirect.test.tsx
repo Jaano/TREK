@@ -63,7 +63,7 @@ describe('LoginPage — OIDC redirect preservation', () => {
     beforeEach(() => {
       server.use(
           http.get('/api/auth/oidc/exchange', () =>
-              HttpResponse.json({ token: 'mock-oidc-token' })
+              HttpResponse.json({ success: true, token: 'mock-oidc-token' })
           ),
       );
     });

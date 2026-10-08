@@ -27,10 +27,11 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * forgot response, the audit writes and the JWT httpOnly cookie set/clear via
  * the shared cookie service.
  *
- * The `token` in the login, register, demo-login and MFA bodies is deprecated:
- * the httpOnly cookie is the session, and the web app has never read the field.
- * It stays for API clients that took it as a bearer token, and the API docs
- * mark it; nothing here or in the client relies on it.
+ * The `token` in the login, register, demo-login, MFA and passkey bodies (and
+ * in the SSO exchange, oidc.controller.ts) is deprecated: the httpOnly cookie
+ * is the session, and the web app does not read the field. It stays for API
+ * clients that took it as a bearer token, and the API docs mark it; nothing
+ * here or in the client relies on it.
  */
 @Controller('api/auth')
 export class AuthPublicController {

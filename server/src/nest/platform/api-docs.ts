@@ -27,8 +27,9 @@ export function setupApiDocs(app: INestApplication): void {
       + '`GET /api/auth/sessions` lists the signed-in sessions, `DELETE /api/auth/sessions/{id}` ends one and '
       + '`POST /api/auth/sessions/revoke-others` ends all but the current one.\n\n'
       + '**Deprecated:** the `token` field in the bodies of `POST /api/auth/login`, `/register`, `/demo-login`, '
-      + '`/mfa/verify-login` and `/passkey/login/verify`. It is still sent, for clients that read it, but will be '
-      + 'removed in a future major version. Use the `trek_session` cookie the same response sets.',
+      + '`/mfa/verify-login`, `/passkey/login/verify` and `GET /api/auth/oidc/exchange`. It is still sent, for '
+      + 'clients that read it, but will be removed in a future major version. Use the `trek_session` cookie the '
+      + 'same response sets; the SSO exchange also answers `success: true`.',
     )
     .setVersion(version)
     .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'session')

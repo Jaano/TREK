@@ -332,7 +332,7 @@ describe('GET /api/auth/oidc/exchange', () => {
       .set('Cookie', `trek_oidc_exchange=${binding}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.token).toBe(fakeToken);
+    expect(res.body).toEqual({ success: true, token: fakeToken });
     expect(res.headers['set-cookie']).toBeDefined();
     const cookieHeader = Array.isArray(res.headers['set-cookie'])
       ? res.headers['set-cookie'].join(';')

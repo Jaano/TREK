@@ -236,7 +236,9 @@ export class OidcController {
       return;
     }
     this.oidc.setAuthCookie(res, result.token, req, result.remember);
-    res.json({ token: result.token });
+    // `success` is what the web app reads. `token` is deprecated like the one
+    // in the login bodies: kept for API clients, the cookie is the session.
+    res.json({ success: true, token: result.token });
   }
 }
 

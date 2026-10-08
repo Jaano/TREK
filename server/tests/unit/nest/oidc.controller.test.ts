@@ -488,7 +488,7 @@ describe('OidcController /exchange', () => {
     const req3 = reqEx();
     await ctl(svc({ consumeAuthCode: vi.fn().mockResolvedValue({ token: 'jwt' }), setAuthCookie })).exchange('x', req3, r3);
     expect(setAuthCookie).toHaveBeenCalledWith(r3, 'jwt', req3, undefined);
-    expect(r3.body).toEqual({ token: 'jwt' });
+    expect(r3.body).toEqual({ success: true, token: 'jwt' });
   });
 
   it('forwards the stored remember flag to setAuthCookie', async () => {
@@ -498,7 +498,7 @@ describe('OidcController /exchange', () => {
       const r = reqEx();
       await ctl(svc({ consumeAuthCode: vi.fn().mockResolvedValue({ token: 'jwt', remember }), setAuthCookie })).exchange('x', r, res);
       expect(setAuthCookie).toHaveBeenCalledWith(res, 'jwt', r, remember);
-      expect(res.body).toEqual({ token: 'jwt' });
+      expect(res.body).toEqual({ success: true, token: 'jwt' });
     }
   });
 

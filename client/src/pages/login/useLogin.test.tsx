@@ -299,7 +299,7 @@ describe('useLogin — OIDC callback', () => {
   it('FE-LOGIN-HOOK-016: navigates to the stashed redirect after a successful code exchange', async () => {
     sessionStorage.setItem('oidc_redirect', '/oauth/consent?client_id=foo');
     setSearch('?oidc_code=code-1');
-    server.use(http.get('/api/auth/oidc/exchange', () => HttpResponse.json({ token: 'tok' })));
+    server.use(http.get('/api/auth/oidc/exchange', () => HttpResponse.json({ success: true, token: 'tok' })));
 
     const { result } = renderLogin();
 
@@ -316,7 +316,7 @@ describe('useLogin — OIDC callback', () => {
     server.use(
       http.get('/api/auth/oidc/exchange', () => {
         exchanges += 1;
-        return HttpResponse.json({ token: 'tok' });
+        return HttpResponse.json({ success: true, token: 'tok' });
       }),
     );
 
@@ -331,6 +331,28 @@ describe('useLogin — OIDC callback', () => {
 
     expect(exchanges).toBe(1);
     expect(mockNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it('FE-LOGIN-HOOK-211: signs in on the success flag alone, never reading the deprecated token', async () => {
+    setSearch('?oidc_code=code-flag');
+    server.use(http.get('/api/auth/oidc/exchange', () => HttpResponse.json({ success: true })));
+
+    const { result } = renderLogin();
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith(START_DESTINATION_ROUTE, { replace: true }));
+    expect(auth.loadUser).toHaveBeenCalled();
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+  });
+
+  it('FE-LOGIN-HOOK-212: a refused exchange is a failure whatever its body holds', async () => {
+    setSearch('?oidc_code=code-refused');
+    server.use(
+      http.get('/api/auth/oidc/exchange', () => HttpResponse.json({ success: true, error: 'Invalid or expired code' }, { status: 400 })),
+    );
+
+    const { result } = renderLogin();
+    await waitFor(() => expect(result.current.error).toBe('Invalid or expired code'));
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(auth.loadUser).not.toHaveBeenCalled();
   });
 
   it('FE-LOGIN-HOOK-017: surfaces the error the exchange endpoint reports', async () => {
@@ -994,7 +1016,7 @@ describe('OIDC-only auto-redirect suppression', () => {
     server.use(
       http.get('/api/auth/oidc/exchange', async () => {
         await new Promise(r => { release = r; });
-        return HttpResponse.json({ token: 'tok' });
+        return HttpResponse.json({ success: true, token: 'tok' });
       }),
     );
     setSearch('?oidc_code=CODE-1');

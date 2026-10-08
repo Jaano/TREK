@@ -207,10 +207,12 @@ export function useLogin() {
       exchangeInitiated.current = true
       setIsLoading(true)
       fetch('/api/auth/oidc/exchange?code=' + encodeURIComponent(oidcCode), { credentials: 'include' })
-        .then(r => r.json())
-        .then(async data => {
+        .then(async r => ({ ok: r.ok, data: (await r.json()) as { success?: boolean; error?: string } }))
+        .then(async ({ ok, data }) => {
           window.history.replaceState({}, '', '/login')
-          if (data.token) {
+          // The exchange set the session cookie; the deprecated `token` in the
+          // body is never read, so it can go without breaking SSO sign-in.
+          if (ok && data.success === true) {
             await loadUser()
             const savedRedirect = sessionStorage.getItem('oidc_redirect') || START_DESTINATION_ROUTE
             sessionStorage.removeItem('oidc_redirect')

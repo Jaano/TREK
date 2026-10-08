@@ -103,11 +103,11 @@ describe('OIDC e2e (real cookie service)', () => {
     expect(res.body).toEqual({ error: 'Code required' });
   });
 
-  it('GET /exchange sets the httpOnly trek_session cookie + returns the token', async () => {
+  it('GET /exchange sets the httpOnly trek_session cookie + answers success (and the deprecated token)', async () => {
     consumeAuthCode.mockResolvedValue({ token: 'jwt.value' });
     const res = await request(server).get('/api/auth/oidc/exchange').query({ code: 'good' });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ token: 'jwt.value' });
+    expect(res.body).toEqual({ success: true, token: 'jwt.value' });
     const setCookie = res.headers['set-cookie'] as unknown as string[];
     expect(setCookie.some((c) => c.startsWith('trek_session=') && /HttpOnly/i.test(c))).toBe(true);
   });

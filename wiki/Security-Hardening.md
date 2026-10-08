@@ -56,7 +56,7 @@ Sessions issued before this was introduced carry no session id. They keep workin
 
 A backup restore and the hourly demo reset replace the whole database file. Both carry the sessions that are active at that moment into the new file, for every account it holds under the same id and email, so neither signs anybody out by itself.
 
-> **Deprecated:** the login, registration, demo-login, MFA and passkey sign-in responses still carry the session JWT as `token` in the JSON body, for API clients that read it. The web app does not use it; the session is the httpOnly cookie the same response sets. The field will be removed in a future major version.
+> **Deprecated:** the login, registration, demo-login, MFA and passkey sign-in responses and the SSO code exchange (`GET /api/auth/oidc/exchange`) still carry the session JWT as `token` in the JSON body, for API clients that read it. The web app does not use it; the session is the httpOnly cookie the same response sets, and the SSO exchange also answers `success: true`, which is what the web app checks. The field will be removed in a future major version.
 
 ## Password Policy
 

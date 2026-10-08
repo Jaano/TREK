@@ -12,7 +12,7 @@ OpenID Connect (OIDC) lets users log in with an existing identity provider — G
 2. You are redirected to your identity provider's login page.
 3. Authenticate and grant consent.
 4. The provider redirects back to TREK at `GET /api/auth/oidc/callback`. If this is your first login, an account is created automatically (subject to registration settings).
-5. The server issues a short-lived one-time code and redirects your browser to `/login?oidc_code=<code>`. The frontend immediately exchanges that code at `GET /api/auth/oidc/exchange?code=<code>` to obtain the session.
+5. The server issues a short-lived one-time code and redirects your browser to `/login?oidc_code=<code>`. The frontend immediately exchanges that code at `GET /api/auth/oidc/exchange?code=<code>` to obtain the session: the exchange sets the `trek_session` cookie and answers `{ "success": true }`. The same body still carries the session JWT as `token` for API clients; that field is deprecated and will be removed in a future major version.
    The code is only half of what the exchange needs: the callback also sets a one-minute `HttpOnly` cookie (`trek_oidc_exchange`) holding a secret that never appears in a URL, and the exchange requires both. A code copied out of the address bar, out of history, or out of a proxy log is therefore worthless in any other browser, and it is spent by the first attempt to redeem it whether that attempt succeeds or not. If your reverse proxy strips cookies on the way back from the identity provider, SSO login will fail here with `Invalid or expired code`.
 6. Your `trek_session` cookie is set and you land on the dashboard.
 
