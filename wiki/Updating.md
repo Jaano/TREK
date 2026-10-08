@@ -12,7 +12,7 @@ Back up your data first. Go to Admin Panel → **Backup** and create a manual ba
 |---|---|---|
 | `latest` | `mauriceboe/trek:latest` | Always the newest release across all major versions |
 | Major version | `mauriceboe/trek:4` | Latest release pinned to that major version |
-| Minor version | `mauriceboe/trek:4.3` | Latest patch of that minor version; never moves to the next minor (published for releases after 4.3.3) |
+| Minor version | `mauriceboe/trek:5.0` | Latest patch of that minor version; never moves to the next minor. Published from 5.0.0 on: 4.x releases have no minor tag, so pin those by major or full version |
 | Full version | `mauriceboe/trek:4.0.0` | Exact release; never changes |
 | Prerelease | `mauriceboe/trek:latest-pre` | The newest test build of the next version. For trying it out on a copy of your data, not for the instance you rely on |
 
