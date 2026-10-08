@@ -59,7 +59,16 @@ import type { DocumentProviderRegistry } from '../../../../src/nest/doc-sync/doc
 // off, so the boolean discriminant stops discriminating. The domain's own
 // predicate is what every call site uses instead.
 import { docFailed } from '../../../../src/nest/doc-sync/document-provider';
-import { createTestUnitOfWork, createTestTripsRepo } from '../../../helpers/test-uow';
+import { createTestUnitOfWork, createTestTripsRepo, sharedTestOrm } from '../../../helpers/test-uow';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { addTripMember } from '../../../helpers/factories/trips';
+import { DocumentConnections } from '../../../../src/db/entities/DocumentConnections.entity';
+import { DocumentProviders } from '../../../../src/db/entities/DocumentProviders.entity';
+import { DocumentSyncItems } from '../../../../src/db/entities/DocumentSyncItems.entity';
+import { TripDocumentLinks } from '../../../../src/db/entities/TripDocumentLinks.entity';
+import { TripMembers } from '../../../../src/db/entities/TripMembers.entity';
+
+const orm = () => sharedTestOrm(testDb);
 import {
   createTestDocumentConnectionsRepo,
   createTestDocumentProviderFieldsRepo,
@@ -129,17 +138,19 @@ beforeAll(async () => {
   );
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   // The document_* tables are not in resetTestDb's list, and they reference
   // trips and users, so they go first, before the rows they hang off vanish.
-  testDb.exec('DELETE FROM document_sync_items; DELETE FROM trip_document_links; DELETE FROM document_connections;');
+  await deleteRows(await orm(), DocumentSyncItems);
+  await deleteRows(await orm(), TripDocumentLinks);
+  await deleteRows(await orm(), DocumentConnections);
   resetTestDb(testDb);
   vi.clearAllMocks();
   checkSsrf.mockResolvedValue({ allowed: true, isPrivate: false, resolvedIp: '203.0.113.10' });
   OWNER = createUser(testDb, { username: 'owner', email: 'owner@test.local' }).user.id;
   MEMBER = createUser(testDb, { username: 'member', email: 'member@test.local' }).user.id;
   TRIP = createTrip(testDb, OWNER, { title: 'Japan' }).id;
-  testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(TRIP, MEMBER);
+  await addTripMember(await orm(), TRIP, MEMBER);
 });
 
 afterAll(() => {
@@ -177,10 +188,7 @@ describe('upsertConnection secrets', () => {
     const first = await connect();
     const second = await connect({ baseUrl: 'https://paperless.example.com/', credentials: {} });
     expect(second.id).toBe(first.id);
-    const count = testDb
-      .prepare('SELECT COUNT(*) AS n FROM document_connections WHERE trip_id = ?')
-      .get(TRIP) as { n: number };
-    expect(count.n).toBe(1);
+    expect(await countRows(await orm(), DocumentConnections, { trip: TRIP })).toBe(1);
   });
 
   /**
@@ -324,7 +332,7 @@ describe('publicConnection', () => {
 
   it('reads a capabilities blob left behind by another build as unknown, not as a crash', async () => {
     const created = await connect();
-    testDb.prepare('UPDATE document_connections SET capabilities = ? WHERE id = ?').run('{not json', created.id);
+    await updateRows(await orm(), DocumentConnections, { id: created.id }, { capabilities: '{not json' });
     const view = await svc.publicConnection((await svc.getConnection(created.id)) as ConnectionRow);
     expect(view.capabilities).toBeNull();
   });
@@ -359,7 +367,7 @@ describe('a secret the provider earned itself', () => {
   it('DOCSYNC-ENC-001: the raw document_connections.secrets column is enc:v1:-prefixed ciphertext, never plaintext, and round-trips', async () => {
     const conn = await nas();
 
-    const raw = (testDb.prepare('SELECT secrets FROM document_connections WHERE id = ?').get(conn.id) as { secrets: string | null }).secrets;
+    const raw = (await findRow(await orm(), DocumentConnections, { id: conn.id }))?.secrets;
 
     expect(raw).toMatch(/^enc:v1:/);
     expect(raw).not.toContain('nas-pw');
@@ -491,7 +499,7 @@ describe('enabledProviderIds', () => {
     // Every document provider ships OFF, so an empty answer on a fresh install
     // is the correct one and a non-empty one would be a policy change.
     expect(await svc.enabledProviderIds()).toEqual([]);
-    testDb.prepare("UPDATE document_providers SET enabled = 1 WHERE id IN ('nextcloud', 'paperless')").run();
+    await updateRows(await orm(), DocumentProviders, { id: { $in: ['nextcloud', 'paperless'] } }, { enabled: 1 });
     expect(await svc.enabledProviderIds()).toEqual(['paperless', 'nextcloud']);
   });
 });
@@ -524,27 +532,26 @@ describe('deleteConnection', () => {
     });
     const doomedLink = await link(doomed.id, { scopeKey: 'tag:1' });
     const keptLink = await link(kept.id, { scopeKey: 'folder:1' });
-    testDb
-      .prepare('INSERT INTO document_sync_items (link_id, trip_id, trek_doc_uid) VALUES (?, ?, ?)')
-      .run(doomedLink.id, TRIP, 'uid-a');
+    await insertRow(await orm(), DocumentSyncItems, { link: doomedLink.id, trip: TRIP, trek_doc_uid: 'uid-a' });
 
     await svc.deleteConnection(doomed.id);
 
     expect(await svc.getConnection(doomed.id)).toBeUndefined();
     expect((await svc.listLinks(TRIP)).map((l) => l.id)).toEqual([keptLink.id]);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM document_sync_items').get()).toEqual({ n: 0 });
+    expect(await countRows(await orm(), DocumentSyncItems)).toBe(0);
   });
 });
 
 describe('toRef', () => {
   it('names the row and not only its id, which a backup restored in place hands out again', async () => {
     const first = await connect();
-    testDb.prepare("UPDATE document_connections SET created_at = '2026-09-01 08:00:00' WHERE id = ?").run(first.id);
+    await updateRows(await orm(), DocumentConnections, { id: first.id }, { created_at: '2026-09-01 08:00:00' });
     const before = svc.toRef(await svc.getConnection(first.id) as ConnectionRow);
 
     // What the restore of an older backup does to this table: the row is gone
     // and the id sequence is back where it stood before the row was made.
-    testDb.prepare('DELETE FROM document_connections WHERE id = ?').run(first.id);
+    await deleteRows(await orm(), DocumentConnections, { id: first.id });
+    // test-sql-allow: sqlite_sequence is the engine's own autoincrement table, which no entity maps.
     testDb.prepare("UPDATE sqlite_sequence SET seq = ? WHERE name = 'document_connections'").run(first.id - 1);
     const after = svc.toRef(await connect());
 
@@ -586,7 +593,7 @@ describe('toScopeRef', () => {
     );
     expect(created.success).toBe(true);
     const row = created.success ? created.data : ({} as LinkRow);
-    testDb.prepare('UPDATE trip_document_links SET remote_cursor = ? WHERE id = ?').run('etag-9', row.id);
+    await updateRows(await orm(), TripDocumentLinks, { id: row.id }, { remote_cursor: 'etag-9' });
 
     expect(svc.toScopeRef(await svc.getLink(row.id) as LinkRow)).toEqual({
       linkId: row.id,
@@ -679,7 +686,7 @@ describe('createLink', () => {
     const conn = await connect();
     const bound = await link(conn.id);
 
-    const raw = (testDb.prepare('SELECT webhook_secret FROM trip_document_links WHERE id = ?').get(bound.id) as { webhook_secret: string | null }).webhook_secret;
+    const raw = (await findRow(await orm(), TripDocumentLinks, { id: bound.id }))?.webhook_secret;
 
     expect(raw).toMatch(/^enc:v1:/);
     const secret = svc.webhookSecret(bound);
@@ -694,7 +701,7 @@ describe('publicLink', () => {
     // the one place a binding left behind can still get its name from.
     const conn = await connect();
     const bound = await link(conn.id);
-    testDb.prepare("UPDATE document_providers SET enabled = 0 WHERE id = 'paperless'").run();
+    await updateRows(await orm(), DocumentProviders, { id: 'paperless' }, { enabled: 0 });
 
     expect(await svc.publicLink(bound, null)).toMatchObject({ providerId: 'paperless', providerName: 'Paperless-ngx' });
   });
@@ -711,18 +718,17 @@ describe('deleteLink', () => {
     const conn = await connect();
     const doomed = await link(conn.id, { scopeKey: 'tag:1' });
     const kept = await link(conn.id, { scopeKey: 'tag:2' });
-    const insert = testDb.prepare(
-      'INSERT INTO document_sync_items (link_id, trip_id, trek_doc_uid) VALUES (?, ?, ?)',
-    );
-    insert.run(doomed.id, TRIP, 'uid-a');
-    insert.run(doomed.id, TRIP, 'uid-b');
-    insert.run(kept.id, TRIP, 'uid-c');
+    const insert = async (linkId: number, trekDocUid: string) =>
+      insertRow(await orm(), DocumentSyncItems, { link: linkId, trip: TRIP, trek_doc_uid: trekDocUid });
+    await insert(doomed.id, 'uid-a');
+    await insert(doomed.id, 'uid-b');
+    await insert(kept.id, 'uid-c');
 
     await svc.deleteLink(doomed.id);
 
     expect(await svc.getLink(doomed.id)).toBeUndefined();
     expect(await svc.getLink(kept.id)).toBeDefined();
-    const rows = testDb.prepare('SELECT link_id FROM document_sync_items').all() as { link_id: number }[];
+    const rows = await findRows(await orm(), DocumentSyncItems);
     expect(rows.map((r) => r.link_id)).toEqual([kept.id]);
   });
 
@@ -743,7 +749,7 @@ describe('markOrphanedLinks', () => {
 
   it('disables the binding whose credential owner left the trip', async () => {
     const orphan = await bind(MEMBER, 'paperless');
-    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(TRIP, MEMBER);
+    await deleteRows(await orm(), TripMembers, { trip: TRIP, user: MEMBER });
 
     expect(await svc.markOrphanedLinks()).toBe(1);
     expect(await svc.getLink(orphan.id)).toMatchObject({ last_sync_state: 'orphaned', sync_enabled: 0 });
@@ -761,7 +767,7 @@ describe('markOrphanedLinks', () => {
   it('leaves a still-valid binding alone while orphaning the one beside it', async () => {
     const orphan = await bind(MEMBER, 'paperless');
     const kept = await bind(OWNER, 'nextcloud');
-    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(TRIP, MEMBER);
+    await deleteRows(await orm(), TripMembers, { trip: TRIP, user: MEMBER });
 
     expect(await svc.markOrphanedLinks()).toBe(1);
     expect((await svc.getLink(orphan.id))?.last_sync_state).toBe('orphaned');
@@ -808,7 +814,7 @@ describe('markOrphanedLinks', () => {
 
   it('counts nothing on a second sweep, so the job stays quiet after the first one', async () => {
     await bind(MEMBER, 'paperless');
-    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(TRIP, MEMBER);
+    await deleteRows(await orm(), TripMembers, { trip: TRIP, user: MEMBER });
     expect(await svc.markOrphanedLinks()).toBe(1);
     expect(await svc.markOrphanedLinks()).toBe(0);
   });
@@ -816,7 +822,7 @@ describe('markOrphanedLinks', () => {
   it('does not touch a binding the user had already switched off', async () => {
     const paused = await bind(MEMBER, 'paperless');
     await svc.updateLink(paused.id, { syncEnabled: false });
-    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(TRIP, MEMBER);
+    await deleteRows(await orm(), TripMembers, { trip: TRIP, user: MEMBER });
 
     expect(await svc.markOrphanedLinks()).toBe(0);
     expect((await svc.getLink(paused.id))?.last_sync_state).toBe('never');
@@ -831,7 +837,7 @@ describe('isOrphaned', () => {
   it('answers yes for a paused binding whose owner left, which the sweep never marks', async () => {
     const paused = await bind(MEMBER);
     await svc.updateLink(paused.id, { syncEnabled: false });
-    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(TRIP, MEMBER);
+    await deleteRows(await orm(), TripMembers, { trip: TRIP, user: MEMBER });
 
     expect(await svc.markOrphanedLinks()).toBe(0);
     expect(await svc.isOrphaned((await svc.getLink(paused.id))!)).toBe(true);
@@ -841,7 +847,7 @@ describe('isOrphaned', () => {
     const kept = await bind(OWNER);
     expect(await svc.isOrphaned(kept)).toBe(false);
 
-    testDb.prepare("UPDATE trip_document_links SET last_sync_state = 'orphaned' WHERE id = ?").run(kept.id);
+    await updateRows(await orm(), TripDocumentLinks, { id: kept.id }, { last_sync_state: 'orphaned' });
     expect(await svc.isOrphaned((await svc.getLink(kept.id))!)).toBe(true);
   });
 
@@ -854,7 +860,7 @@ describe('isOrphaned', () => {
 describe('switching an orphaned binding back on', () => {
   async function orphan(): Promise<LinkRow> {
     const bound = await link((await connect({}, MEMBER)).id);
-    testDb.prepare('DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?').run(TRIP, MEMBER);
+    await deleteRows(await orm(), TripMembers, { trip: TRIP, user: MEMBER });
     await svc.markOrphanedLinks();
     return bound;
   }
@@ -869,7 +875,7 @@ describe('switching an orphaned binding back on', () => {
 
   it('lets it run again once its owner is back on the trip', async () => {
     const bound = await orphan();
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(TRIP, MEMBER);
+    await addTripMember(await orm(), TRIP, MEMBER);
 
     const res = await svc.updateLink(bound.id, { syncEnabled: true });
 

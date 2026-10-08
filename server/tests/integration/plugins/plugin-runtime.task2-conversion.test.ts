@@ -28,6 +28,7 @@ import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { createTestAddonsService } from '../../helpers/test-addons';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
@@ -97,22 +98,28 @@ function buildPluginsService(): PluginsService {
   );
 }
 
-function seedPlugin(id: string, overrides: Partial<{ enabled: number; granted_permissions: string; permissions: string; trek_range: string; api_version: number; version: string; author_pubkey: string }> = {}) {
-  testDb
-    .prepare(
-      `INSERT INTO plugins (id, name, status, enabled, version, trek_range, api_version, permissions, granted_permissions, capabilities, config, author_pubkey)
-       VALUES (?, ?, 'inactive', ?, ?, ?, ?, ?, ?, '{}', '{}', ?)`,
-    )
-    .run(
-      id, id,
-      overrides.enabled ?? 0,
-      overrides.version ?? '1.0.0',
-      overrides.trek_range ?? '>=3.0.0',
-      overrides.api_version ?? 1,
-      overrides.permissions ?? '["db:own"]',
-      overrides.granted_permissions ?? '["db:own"]',
-      overrides.author_pubkey ?? null,
-    );
+async function seedPlugin(id: string, overrides: Partial<{ enabled: number; granted_permissions: string; permissions: string; trek_range: string; api_version: number; version: string; author_pubkey: string }> = {}): Promise<void> {
+  await insertRow(t, Plugins, {
+    id,
+    name: id,
+    status: 'inactive',
+    enabled: overrides.enabled ?? 0,
+    version: overrides.version ?? '1.0.0',
+    trek_range: overrides.trek_range ?? '>=3.0.0',
+    api_version: overrides.api_version ?? 1,
+    permissions: overrides.permissions ?? '["db:own"]',
+    granted_permissions: overrides.granted_permissions ?? '["db:own"]',
+    capabilities: '{}',
+    config: '{}',
+    author_pubkey: overrides.author_pubkey ?? null,
+  });
+}
+
+/** The plugin's stored row; fails the case when there is none. */
+async function pluginRow(id: string) {
+  const row = await findRow(t, Plugins, { id });
+  if (!row) throw new Error(`no plugins row for ${id}`);
+  return row;
 }
 
 describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR26/PR28)', () => {
@@ -121,7 +128,7 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
 
   describe('PR17 — version-range + permission-grant gate (assertActivatable)', () => {
     it('INSTALL-GATE-PR17-ACCEPT: a plugin whose declared range admits this host, with no permission widening, passes the gate (activate resolves, never PluginDependencyError)', async () => {
-      seedPlugin('pr17-accept', { trek_range: '>=3.0.0 <99.0.0' });
+      await seedPlugin('pr17-accept', { trek_range: '>=3.0.0 <99.0.0' });
       // The gate itself (assertActivatable, reading PR17's row through
       // PluginsRepository.findActivationGate) is the thing under test — the actual
       // child spawn is stubbed out (already covered end to end by
@@ -134,7 +141,7 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
     });
 
     it('INSTALL-GATE-PR17-REFUSE: a plugin whose declared range excludes this host is refused, never spawned', async () => {
-      seedPlugin('pr17-refuse', { trek_range: '>=99.0.0' });
+      await seedPlugin('pr17-refuse', { trek_range: '>=99.0.0' });
       const err = await rt.activate('pr17-refuse').catch((e) => e);
       expect(err).toBeInstanceOf(PluginDependencyError);
       expect(err).toMatchObject({ code: 'TREK_VERSION_INCOMPATIBLE' });
@@ -147,13 +154,13 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
       ({
         resolveVersion: vi.fn(async () => ({ version: '2.0.0' })),
         install: vi.fn(async (id: string) => {
-          testDb.prepare('UPDATE plugins SET permissions = ? WHERE id = ?').run(JSON.stringify(perms), id);
+          await updateRows(t, Plugins, { id }, { permissions: JSON.stringify(perms) });
           return { id, version: '2.0.0' };
         }),
       }) as unknown as import('../../../src/nest/plugins/registry/registry.service').PluginRegistryService;
 
     it('INSTALL-GATE-PR26-ACCEPT: no new permissions on update -> activated: true, PR26 snapshot read via the repository', async () => {
-      seedPlugin('pr26-accept2', { enabled: 1, permissions: '["db:own"]', granted_permissions: '["db:own"]' });
+      await seedPlugin('pr26-accept2', { enabled: 1, permissions: '["db:own"]', granted_permissions: '["db:own"]' });
       const audit = new AuditService(t.repo(AuditLog), t.repo(Users));
       const addons = await createTestAddonsService(testDb);
       const userSettings = new PluginUserSettingsService(t.repo(PluginSettingsFields), t.repo(PluginUserConfig));
@@ -175,7 +182,7 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
     });
 
     it('INSTALL-GATE-PR26-REFUSE: a widened permission set on update leaves the plugin inactive with the delta reported', async () => {
-      seedPlugin('pr26-refuse', { enabled: 1, permissions: '["db:own"]', granted_permissions: '["db:own"]' });
+      await seedPlugin('pr26-refuse', { enabled: 1, permissions: '["db:own"]', granted_permissions: '["db:own"]' });
       const audit = new AuditService(t.repo(AuditLog), t.repo(Users));
       const addons = await createTestAddonsService(testDb);
       const userSettings = new PluginUserSettingsService(t.repo(PluginSettingsFields), t.repo(PluginUserConfig));
@@ -203,13 +210,13 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
       ({
         assertRetrustable: vi.fn(async (_id: string, key: string) => ({ authorPublicKey: key })),
         install: vi.fn(async (_id: string, opts?: { retrustKey?: string }) => {
-          testDb.prepare("UPDATE plugins SET author_pubkey = ?, version = '2.0.0' WHERE id = ?").run(opts?.retrustKey, id);
+          await updateRows(t, Plugins, { id }, { author_pubkey: opts?.retrustKey, version: '2.0.0' });
           return { id, version: '2.0.0' };
         }),
       }) as unknown as import('../../../src/nest/plugins/registry/registry.service').PluginRegistryService;
 
     it('INSTALL-GATE-PR28-ACCEPT: a genuinely rotated key is pinned, read through PluginsRepository.findAuthorPubkey', async () => {
-      seedPlugin('pr28-accept', { enabled: 1, author_pubkey: 'OLDKEY' });
+      await seedPlugin('pr28-accept', { enabled: 1, author_pubkey: 'OLDKEY' });
       const audit = new AuditService(t.repo(AuditLog), t.repo(Users));
       const addons = await createTestAddonsService(testDb);
       const userSettings = new PluginUserSettingsService(t.repo(PluginSettingsFields), t.repo(PluginUserConfig));
@@ -228,12 +235,12 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
       vi.spyOn((rtR as any).supervisor, 'disable').mockResolvedValue(undefined);
       await rtR.retrust('pr28-accept', '2.0.0', 'NEWKEY', { userId: 1 });
       expect(registry.assertRetrustable).toHaveBeenCalledWith('pr28-accept', 'NEWKEY');
-      const row = testDb.prepare("SELECT author_pubkey FROM plugins WHERE id='pr28-accept'").get() as { author_pubkey: string };
+      const row = await pluginRow('pr28-accept');
       expect(row.author_pubkey).toBe('NEWKEY');
     });
 
     it('INSTALL-GATE-PR28-REFUSE: an invalid signature is not re-trustable — the pinned key is untouched', async () => {
-      seedPlugin('pr28-refuse', { enabled: 1, author_pubkey: 'OLDKEY' });
+      await seedPlugin('pr28-refuse', { enabled: 1, author_pubkey: 'OLDKEY' });
       const audit = new AuditService(t.repo(AuditLog), t.repo(Users));
       const addons = await createTestAddonsService(testDb);
       const userSettings = new PluginUserSettingsService(t.repo(PluginSettingsFields), t.repo(PluginUserConfig));
@@ -249,7 +256,7 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
       );
       await expect(rtR.retrust('pr28-refuse', '2.0.0', 'NEWKEY', { userId: 1 })).rejects.toThrow(/nothing to re-trust/);
       expect(registry.install).not.toHaveBeenCalled();
-      const row = testDb.prepare("SELECT author_pubkey FROM plugins WHERE id='pr28-refuse'").get() as { author_pubkey: string };
+      const row = await pluginRow('pr28-refuse');
       expect(row.author_pubkey).toBe('OLDKEY');
     });
   });
@@ -259,11 +266,11 @@ describe('R-uninstall: the cascade is one transaction', () => {
   it('CASCADE-PARTIAL-001: a failure partway through the cascade rolls every earlier delete back, and the data directory stays', async () => {
     const rt = await buildRuntime();
     const id = 'cascade-partial';
-    seedPlugin(id);
-    testDb.prepare("INSERT INTO plugin_settings_fields (plugin_id, field_key, scope) VALUES (?, 'k', 'instance')").run(id);
-    testDb.prepare("INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at) VALUES (?, 'poll', 0)").run(id);
-    testDb.prepare("INSERT INTO plugin_error_log (plugin_id, level, message) VALUES (?, 'error', 'x')").run(id);
-    testDb.prepare("INSERT INTO plugin_entity_metadata (plugin_id, entity_type, entity_id, key, value) VALUES (?, 'place', 1, 'k', 'v')").run(id);
+    await seedPlugin(id);
+    await insertRow(t, PluginSettingsFields, { plugin_id: id, field_key: 'k', scope: 'instance' });
+    await insertRow(t, PluginScheduledTasks, { plugin_id: id, name: 'poll', due_at: 0 });
+    await insertRow(t, PluginErrorLog, { plugin_id: id, level: 'error', message: 'x' });
+    await insertRow(t, PluginEntityMetadata, { plugin_id: id, entity_type: 'place', entity_id: 1, key: 'k', value: 'v' });
 
     // Simulate a crash INSIDE the cascade, between plugin_scheduled_tasks (deletes
     // cleanly, unconditional, no try/catch) and plugin_error_log (the next
@@ -278,15 +285,16 @@ describe('R-uninstall: the cascade is one transaction', () => {
     await expect(rt.uninstall(id, true)).rejects.toThrow(/simulated mid-cascade crash/);
     spy.mockRestore();
 
-    // Everything before the simulated crash point was rolled back with it: a half
-    // uninstall used to leave settings, tasks and metadata for a later plugin that
-    // reuses the id to inherit.
-    for (const table of ['plugin_settings_fields', 'plugin_scheduled_tasks', 'plugin_error_log', 'plugin_entity_metadata']) {
-      expect(testDb.prepare(`SELECT COUNT(*) c FROM ${table} WHERE plugin_id=?`).get(id)).toMatchObject({ c: 1 });
-    }
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugins WHERE id=?").get(id)).toMatchObject({ c: 1 });
-    // The data directory goes only after the rows commit.
-    expect(fs.existsSync(dataDir)).toBe(true);
+      // Everything before the simulated crash point was rolled back with it: a half
+      // uninstall used to leave settings, tasks and metadata for a later plugin that
+      // reuses the id to inherit.
+      expect(await countRows(t, PluginSettingsFields, { plugin_id: id })).toBe(1);
+      expect(await countRows(t, PluginScheduledTasks, { plugin_id: id })).toBe(1);
+      expect(await countRows(t, PluginErrorLog, { plugin_id: id })).toBe(1);
+      expect(await countRows(t, PluginEntityMetadata, { plugin_id: id })).toBe(1);
+      expect(await countRows(t, Plugins, { id })).toBe(1);
+      // The data directory goes only after the rows commit.
+      expect(fs.existsSync(dataDir)).toBe(true);
   });
 });
 
@@ -294,8 +302,8 @@ describe('Plan 3j Task 2 — R-uninstall\'s ONE named transaction: PR22/PR23 egr
   it('EGRESS-TX-ROLLBACK-001: a simulated failure mid-write leaves the OLD egress-host set intact, not partially cleared', async () => {
     const rt = await buildRuntime();
     const id = 'egress-tx';
-    seedPlugin(id, { permissions: '["http:outbound"]', granted_permissions: '["http:outbound"]' });
-    testDb.prepare("UPDATE plugins SET operator_egress = 1 WHERE id = ?").run(id);
+    await seedPlugin(id, { permissions: '["http:outbound"]', granted_permissions: '["http:outbound"]' });
+    await updateRows(t, Plugins, { id }, { operator_egress: 1 });
     await rt.setOperatorEgressHosts(id, ['old-a.example.com', 'old-b.example.com']);
     expect((await rt.operatorEgressHosts(id)).sort()).toEqual(['old-a.example.com', 'old-b.example.com']);
 
@@ -329,9 +337,9 @@ describe('Plan 3j Task 2 — PS7/PS9/PS11: the triple-duplicate SELECT collapses
   it('PS-USERCONFIG-PARITY-001: getUserConfig, setUserConfig\'s pre-write check and getUserConfigDecrypted all read the SAME stored row identically', async () => {
     const svc = buildPluginsService();
     const id = 'ps-parity';
-    seedPlugin(id);
-    testDb.prepare("INSERT INTO plugin_settings_fields (plugin_id, field_key, scope, secret) VALUES (?, 'apiKey', 'user', 1)").run(id);
-    testDb.prepare("INSERT INTO plugin_settings_fields (plugin_id, field_key, scope, secret) VALUES (?, 'units', 'user', 0)").run(id);
+    await seedPlugin(id);
+    await insertRow(t, PluginSettingsFields, { plugin_id: id, field_key: 'apiKey', scope: 'user', secret: 1 });
+    await insertRow(t, PluginSettingsFields, { plugin_id: id, field_key: 'units', scope: 'user', secret: 0 });
 
     await svc.updateUserConfig(id, 7, { apiKey: 'sk-live', units: 'metric' });
 
@@ -362,8 +370,8 @@ describe('Plan 3j Task 2 — two racing ticks (scheduler claim/re-arm + erasure 
 
   it('RACE-SCHED-001: two concurrent fireDueScheduled passes deliver a due one-shot task exactly once', async () => {
     const pluginId = 'race-sched';
-    seedPlugin(pluginId, { enabled: 1 });
-    testDb.prepare('INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at) VALUES (?, ?, ?)').run(pluginId, 'once', Date.now() - 1000);
+    await seedPlugin(pluginId, { enabled: 1 });
+    await insertRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'once', due_at: Date.now() - 1000 });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supervisor = (rt as any).supervisor;
@@ -381,8 +389,8 @@ describe('Plan 3j Task 2 — two racing ticks (scheduler claim/re-arm + erasure 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await Promise.all([(rt as any).fireDueScheduled(), (rt as any).fireDueScheduled()]);
       expect(delivered).toBe(1); // claimed (re-armed/deleted) by exactly one pass
-      const row = testDb.prepare('SELECT id FROM plugin_scheduled_tasks WHERE plugin_id=? AND name=?').get(pluginId, 'once');
-      expect(row).toBeUndefined(); // deleted, not left dangling or double-inserted
+      const row = await findRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'once' });
+      expect(row).toBeNull(); // deleted, not left dangling or double-inserted
     } finally {
       invokeSpy.mockRestore();
       supervisor.running.delete(pluginId);
@@ -395,9 +403,9 @@ describe('Plan 3j Task 2 — two racing ticks (scheduler claim/re-arm + erasure 
     // (`rearm`'s claim guard) went untested, and both mutations dropping IT survived
     // (M6/M6b). Same shape as RACE-SCHED-001, on a task with `every_ms` set instead.
     const pluginId = 'race-sched-recur';
-    seedPlugin(pluginId, { enabled: 1 });
+    await seedPlugin(pluginId, { enabled: 1 });
     const everyMs = 60_000;
-    testDb.prepare('INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at, every_ms) VALUES (?, ?, ?, ?)').run(pluginId, 'recurring', Date.now() - 1000, everyMs);
+    await insertRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'recurring', due_at: Date.now() - 1000, every_ms: everyMs });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supervisor = (rt as any).supervisor;
@@ -419,8 +427,8 @@ describe('Plan 3j Task 2 — two racing ticks (scheduler claim/re-arm + erasure 
       // `claimed = true` and both invoke — this is the assertion RACE-SCHED-001's own
       // shape proves for the one-shot branch, now proven for the recurring one.
       expect(delivered).toBe(1);
-      const row = testDb.prepare('SELECT due_at FROM plugin_scheduled_tasks WHERE plugin_id=? AND name=?').get(pluginId, 'recurring') as { due_at: number } | undefined;
-      expect(row).toBeDefined(); // a recurring task is re-armed, never deleted
+      const row = await findRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'recurring' });
+      expect(row).not.toBeNull(); // a recurring task is re-armed, never deleted
       expect(row?.due_at).toBeGreaterThanOrEqual(before + everyMs); // moved forward, not left due in the past
     } finally {
       invokeSpy.mockRestore();
@@ -430,8 +438,8 @@ describe('Plan 3j Task 2 — two racing ticks (scheduler claim/re-arm + erasure 
 
   it('RACE-ERASURE-001: two concurrent drains coalesce onto the SAME in-flight pass (drainUserErasures\' own promise-sharing) — one ACK, one drop', async () => {
     const pluginId = 'race-erasure';
-    seedPlugin(pluginId, { enabled: 1 });
-    testDb.prepare('INSERT INTO plugin_user_erasure_queue (plugin_id, user_id) VALUES (?, ?)').run(pluginId, 99);
+    await seedPlugin(pluginId, { enabled: 1 });
+    await insertRow(t, PluginUserErasureQueue, { plugin_id: pluginId, user_id: 99 });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supervisor = (rt as any).supervisor;
@@ -447,8 +455,7 @@ describe('Plan 3j Task 2 — two racing ticks (scheduler claim/re-arm + erasure 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await Promise.all([(rt as any).drainUserErasures(), (rt as any).drainUserErasures()]);
       expect(delivered).toBe(1); // drainUserErasures' own in-flight coalescing, unchanged by this task's conversion
-      const row = testDb.prepare('SELECT id FROM plugin_user_erasure_queue WHERE plugin_id=? AND user_id=?').get(pluginId, 99);
-      expect(row).toBeUndefined();
+      expect(await findRow(t, PluginUserErasureQueue, { plugin_id: pluginId, user_id: 99 })).toBeNull();
     } finally {
       deliverSpy.mockRestore();
       supervisor.running.delete(pluginId);

@@ -32,6 +32,12 @@ vi.mock('fs', async (importOriginal) => {
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createDayNote, createCollabNote } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, updateRows } from '../../helpers/factories/rows';
+import { makeTripFile } from '../../helpers/factories/files';
+import { CollabNotes } from '../../../src/db/entities/CollabNotes.entity';
+import { DayNotes } from '../../../src/db/entities/DayNotes.entity';
+import { TripFiles } from '../../../src/db/entities/TripFiles.entity';
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -40,9 +46,30 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
+
+/** The stored day note; fails the case when it is gone. */
+async function dayNote(id: number) {
+  const row = await findRow(orm, DayNotes, { id });
+  if (!row) throw new Error(`no day note ${id}`);
+  return row;
+}
+
+/** The stored collab note; fails the case when it is gone. */
+async function collabNote(id: number) {
+  const row = await findRow(orm, CollabNotes, { id });
+  if (!row) throw new Error(`no collab note ${id}`);
+  return row;
+}
 
 async function withHarness(userId: number, fn: (h: McpHarness) => Promise<void>) {
   const h = await createMcpHarness({ userId, withResources: false });
@@ -104,7 +131,7 @@ describe('Tool: create_day_note', () => {
         arguments: { tripId: trip.id, dayId: day.id, text: 'Ferry leaves early', color: '#dc2626', sort_order: 2 },
       });
       const data = parseToolResult(result) as any;
-      const row = testDb.prepare('SELECT color, sort_order FROM day_notes WHERE id = ?').get(data.note.id) as any;
+      const row = await dayNote(data.note.id);
       expect(row.color).toBe('#dc2626');
       expect(row.sort_order).toBe(2);
     });
@@ -120,7 +147,7 @@ describe('Tool: create_day_note', () => {
         arguments: { tripId: trip.id, dayId: day.id, text: 'A note' },
       });
       const data = parseToolResult(result) as any;
-      const row = testDb.prepare('SELECT color, sort_order FROM day_notes WHERE id = ?').get(data.note.id) as any;
+      const row = await dayNote(data.note.id);
       expect(row.color).toBeNull();
       expect(row.sort_order).toBe(9999);
     });
@@ -136,7 +163,7 @@ describe('Tool: create_day_note', () => {
         arguments: { tripId: trip.id, dayId: day.id, text: 'A note', color: '#ff0000' },
       });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_notes WHERE day_id = ?').get(day.id)).toEqual({ n: 0 });
+      expect(await countRows(orm, DayNotes, { day: day.id })).toBe(0);
     });
   });
 
@@ -210,7 +237,7 @@ describe('Tool: update_day_note', () => {
         name: 'update_day_note',
         arguments: { tripId: trip.id, dayId: day.id, noteId: note.id, color: '#16a34a', sort_order: 1.5 },
       });
-      const row = testDb.prepare('SELECT color, sort_order FROM day_notes WHERE id = ?').get(note.id) as any;
+      const row = await dayNote(note.id);
       expect(row.color).toBe('#16a34a');
       expect(row.sort_order).toBe(1.5);
     });
@@ -221,13 +248,13 @@ describe('Tool: update_day_note', () => {
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
     const note = createDayNote(testDb, day.id, trip.id);
-    testDb.prepare('UPDATE day_notes SET color = ? WHERE id = ?').run('#2563eb', note.id);
+    await updateRows(orm, DayNotes, { id: note.id }, { color: '#2563eb' });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'update_day_note',
         arguments: { tripId: trip.id, dayId: day.id, noteId: note.id, color: null },
       });
-      expect((testDb.prepare('SELECT color FROM day_notes WHERE id = ?').get(note.id) as any).color).toBeNull();
+      expect((await dayNote(note.id)).color).toBeNull();
     });
   });
 
@@ -236,13 +263,13 @@ describe('Tool: update_day_note', () => {
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
     const note = createDayNote(testDb, day.id, trip.id, { sort_order: 3 });
-    testDb.prepare('UPDATE day_notes SET color = ? WHERE id = ?').run('#9333ea', note.id);
+    await updateRows(orm, DayNotes, { id: note.id }, { color: '#9333ea' });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
         name: 'update_day_note',
         arguments: { tripId: trip.id, dayId: day.id, noteId: note.id, text: 'Only the text changed' },
       });
-      const row = testDb.prepare('SELECT color, sort_order FROM day_notes WHERE id = ?').get(note.id) as any;
+      const row = await dayNote(note.id);
       expect(row.color).toBe('#9333ea');
       expect(row.sort_order).toBe(3);
     });
@@ -259,7 +286,7 @@ describe('Tool: update_day_note', () => {
         arguments: { tripId: trip.id, dayId: day.id, noteId: note.id, color: 'red' },
       });
       expect(result.isError).toBe(true);
-      expect((testDb.prepare('SELECT color FROM day_notes WHERE id = ?').get(note.id) as any).color).toBeNull();
+      expect((await dayNote(note.id)).color).toBeNull();
     });
   });
 
@@ -311,7 +338,7 @@ describe('Tool: delete_day_note', () => {
       const result = await h.client.callTool({ name: 'delete_day_note', arguments: { tripId: trip.id, dayId: day.id, noteId: note.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM day_notes WHERE id = ?').get(note.id)).toBeUndefined();
+      expect(await findRow(orm, DayNotes, { id: note.id })).toBeNull();
     });
   });
 
@@ -469,7 +496,7 @@ describe('Tool: create_collab_note', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.note.website).toBe('https://example.com/tour');
-      expect((testDb.prepare('SELECT website FROM collab_notes WHERE id = ?').get(data.note.id) as any).website)
+      expect((await collabNote(data.note.id)).website)
         .toBe('https://example.com/tour');
     });
   });
@@ -480,7 +507,7 @@ describe('Tool: create_collab_note', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'create_collab_note', arguments: { tripId: trip.id, title: 'Plain note' } });
       const data = parseToolResult(result) as any;
-      expect((testDb.prepare('SELECT website FROM collab_notes WHERE id = ?').get(data.note.id) as any).website).toBeNull();
+      expect((await collabNote(data.note.id)).website).toBeNull();
     });
   });
 
@@ -534,7 +561,7 @@ describe('Tool: update_collab_note', () => {
         name: 'update_collab_note',
         arguments: { tripId: trip.id, noteId: note.id, website: 'https://example.com/museum' },
       });
-      expect((testDb.prepare('SELECT website FROM collab_notes WHERE id = ?').get(note.id) as any).website)
+      expect((await collabNote(note.id)).website)
         .toBe('https://example.com/museum');
     });
   });
@@ -543,10 +570,10 @@ describe('Tool: update_collab_note', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const note = createCollabNote(testDb, trip.id, user.id);
-    testDb.prepare('UPDATE collab_notes SET website = ? WHERE id = ?').run('https://example.com/old', note.id);
+    await updateRows(orm, CollabNotes, { id: note.id }, { website: 'https://example.com/old' });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'update_collab_note', arguments: { tripId: trip.id, noteId: note.id, website: null } });
-      expect((testDb.prepare('SELECT website FROM collab_notes WHERE id = ?').get(note.id) as any).website).toBeNull();
+      expect((await collabNote(note.id)).website).toBeNull();
     });
   });
 
@@ -554,10 +581,10 @@ describe('Tool: update_collab_note', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const note = createCollabNote(testDb, trip.id, user.id);
-    testDb.prepare('UPDATE collab_notes SET website = ? WHERE id = ?').run('https://example.com/keep', note.id);
+    await updateRows(orm, CollabNotes, { id: note.id }, { website: 'https://example.com/keep' });
     await withHarness(user.id, async (h) => {
       await h.client.callTool({ name: 'update_collab_note', arguments: { tripId: trip.id, noteId: note.id, title: 'Renamed' } });
-      expect((testDb.prepare('SELECT website FROM collab_notes WHERE id = ?').get(note.id) as any).website)
+      expect((await collabNote(note.id)).website)
         .toBe('https://example.com/keep');
     });
   });
@@ -572,7 +599,7 @@ describe('Tool: update_collab_note', () => {
         arguments: { tripId: trip.id, noteId: note.id, website: `https://example.com/${'x'.repeat(600)}` },
       });
       expect(result.isError).toBe(true);
-      expect((testDb.prepare('SELECT website FROM collab_notes WHERE id = ?').get(note.id) as any).website).toBeNull();
+      expect((await collabNote(note.id)).website).toBeNull();
     });
   });
 
@@ -620,7 +647,7 @@ describe('Tool: delete_collab_note', () => {
       const result = await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: note.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM collab_notes WHERE id = ?').get(note.id)).toBeUndefined();
+      expect(await findRow(orm, CollabNotes, { id: note.id })).toBeNull();
     });
   });
 
@@ -629,9 +656,13 @@ describe('Tool: delete_collab_note', () => {
     const trip = createTrip(testDb, user.id);
     const note = createCollabNote(testDb, trip.id, user.id);
     // Insert a trip_file linked to this note
-    testDb.prepare(
-      `INSERT INTO trip_files (trip_id, note_id, filename, original_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(trip.id, note.id, 'test-file.pdf', 'document.pdf', 'application/pdf', 1024);
+    await makeTripFile(orm, trip.id, {
+      note: note.id,
+      filename: 'test-file.pdf',
+      original_name: 'document.pdf',
+      mime_type: 'application/pdf',
+      file_size: 1024,
+    });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: note.id } });
@@ -639,9 +670,9 @@ describe('Tool: delete_collab_note', () => {
     });
 
     // trip_files rows are deleted as part of the transaction
-    expect(testDb.prepare('SELECT id FROM trip_files WHERE note_id = ?').all(note.id)).toHaveLength(0);
+    expect(await countRows(orm, TripFiles, { note: note.id })).toBe(0);
     // note itself is deleted
-    expect(testDb.prepare('SELECT id FROM collab_notes WHERE id = ?').get(note.id)).toBeUndefined();
+    expect(await findRow(orm, CollabNotes, { id: note.id })).toBeNull();
   });
 
   it('broadcasts collab:note:deleted event', async () => {
