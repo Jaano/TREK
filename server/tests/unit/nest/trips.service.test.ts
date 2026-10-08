@@ -50,7 +50,7 @@ vi.mock('../../../src/websocket', () => ({ broadcast }));
 
 import { db as testDb } from '../../../src/db/database';
 import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createTrip, createReservation, createPlace, createDay, createDayAssignment, createDayNote, addTripMember } from '../../helpers/factories';
+import { createUser, createTrip, createReservation, createPlace, createDay, createDayAssignment, createDayNote, addTripMember, createBudgetItem } from '../../helpers/factories';
 import { createTestTourWaypointsRepo, createTour } from '../../helpers/tours-repos';
 import { MAX_TRIP_DAYS, resolveDayGridRange, tripSpanDays } from '@trek/shared';
 import { DaysService } from '../../../src/nest/days/days.service';
@@ -1397,33 +1397,73 @@ describe('TripsService wrapper helpers', () => {
   it('re-anchors the budget before the trip row leaves its old currency (#1543)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const order: string[] = [];
-    const rebaseSpy = vi.spyOn(budgetSvc, 'rebaseTripCurrency').mockImplementation(async () => { order.push('rebase'); });
-    const updateSpy = vi.spyOn(svc, 'updateTrip').mockImplementation(() => { order.push('update'); return {} as never; });
+    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    const plan = { next: 'RUB', rates: null };
+    const seen: string[] = [];
+    const prepareSpy = vi.spyOn(budgetSvc, 'prepareCurrencyRebase').mockResolvedValue(plan);
+    const applySpy = vi.spyOn(budgetSvc, 'applyCurrencyRebase').mockImplementation(async () => {
+      seen.push((testDb.prepare('SELECT currency FROM trips WHERE id = ?').get(trip.id) as { currency: string }).currency);
+    });
     try {
       await svc.update(trip.id, user.id, { currency: 'RUB' } as never, 'user');
-      // The rebase reads the outgoing currency off the trip row, so it has to run first.
-      expect(rebaseSpy).toHaveBeenCalledWith(trip.id, 'RUB');
-      expect(order).toEqual(['rebase', 'update']);
+      expect(prepareSpy).toHaveBeenCalledWith(trip.id, 'RUB');
+      // The rebase reads the outgoing currency off the trip row, so it runs before the row moves.
+      expect(applySpy).toHaveBeenCalledWith(trip.id, plan);
+      expect(seen).toEqual(['EUR']);
+      expect(testDb.prepare('SELECT currency FROM trips WHERE id = ?').get(trip.id)).toEqual({ currency: 'RUB' });
     } finally {
-      rebaseSpy.mockRestore();
-      updateSpy.mockRestore();
+      prepareSpy.mockRestore();
+      applySpy.mockRestore();
+    }
+  });
+
+  it('TRIP-SVC-092: a failing day rebuild leaves the budget on the old currency with the trip (#1543)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { start_date: '2026-07-01', end_date: '2026-07-03' });
+    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    const item = createBudgetItem(testDb, trip.id, { total_price: 100 });
+    testDb.prepare("UPDATE budget_items SET currency = 'USD', exchange_rate = 1.1 WHERE id = ?").run(item.id);
+    // Rates come from the network in production; the plan is handed in so the real write runs.
+    const prepareSpy = vi.spyOn(budgetSvc, 'prepareCurrencyRebase').mockResolvedValue({ next: 'JPY', rates: { USD: 0.0067, EUR: 0.0062 } });
+    const daysSpy = vi.spyOn(svc, 'generateDays').mockRejectedValue(new Error('boom'));
+    try {
+      await expect(svc.update(trip.id, user.id, { currency: 'JPY', end_date: '2026-07-05' }, 'user')).rejects.toThrow('boom');
+      expect(testDb.prepare('SELECT currency, end_date FROM trips WHERE id = ?').get(trip.id)).toEqual({ currency: 'EUR', end_date: '2026-07-03' });
+      expect(testDb.prepare('SELECT currency, exchange_rate FROM budget_items WHERE id = ?').get(item.id)).toEqual({ currency: 'USD', exchange_rate: 1.1 });
+    } finally {
+      prepareSpy.mockRestore();
+      daysSpy.mockRestore();
+    }
+  });
+
+  it('TRIP-SVC-093: updateTrip, the plugin host path, never rebases the budget', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const prepareSpy = vi.spyOn(budgetSvc, 'prepareCurrencyRebase');
+    const applySpy = vi.spyOn(budgetSvc, 'applyCurrencyRebase');
+    try {
+      await svc.updateTrip(trip.id, user.id, { currency: 'USD' }, 'user');
+      expect(prepareSpy).not.toHaveBeenCalled();
+      expect(applySpy).not.toHaveBeenCalled();
+    } finally {
+      prepareSpy.mockRestore();
+      applySpy.mockRestore();
     }
   });
 
   it('TRIP-SVC-068: update refuses a bad range before the budget is rebased (#2403)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-07-01', end_date: '2026-07-07' });
-    const rebaseSpy = vi.spyOn(budgetSvc, 'rebaseTripCurrency').mockResolvedValue();
+    const prepareSpy = vi.spyOn(budgetSvc, 'prepareCurrencyRebase').mockResolvedValue(null);
     try {
       await expect(svc.update(trip.id, user.id, { currency: 'USD', end_date: '2036-07-01' }, 'user'))
         .rejects.toThrow(`A trip can span at most ${MAX_TRIP_DAYS} days`);
       await expect(svc.update(trip.id, user.id, { currency: 'USD', start_date: '2026-07-10' }, 'user'))
         .rejects.toThrow('End date must be after start date');
-      expect(rebaseSpy).not.toHaveBeenCalled();
+      expect(prepareSpy).not.toHaveBeenCalled();
       await expect(svc.update(99999, user.id, { currency: 'USD' }, 'user')).rejects.toThrow('Trip not found');
     } finally {
-      rebaseSpy.mockRestore();
+      prepareSpy.mockRestore();
     }
   });
 

@@ -83,7 +83,7 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     vi.spyOn(app.get(BudgetService), 'listBudgetItems').mockResolvedValue([]);
-    vi.spyOn(app.get(BudgetService), 'rebaseTripCurrency').mockResolvedValue();
+    vi.spyOn(app.get(BudgetService), 'prepareCurrencyRebase').mockResolvedValue(null);
     server = app.getHttpServer();
   });
 

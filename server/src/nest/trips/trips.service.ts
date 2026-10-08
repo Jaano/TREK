@@ -42,7 +42,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { Trip, User } from '../../types';
 import { DaysService } from '../days/days.service';
-import { BudgetService } from '../budget/budget.service';
+import { BudgetService, type CurrencyRebase } from '../budget/budget.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { VacayService } from '../vacay/vacay.service';
 import { UnsplashService } from '../unsplash/unsplash.service';
@@ -496,17 +496,12 @@ export class TripsService {
   }
 
   /**
-   * The folded legacy updateTrip core — no currency rebase. The REST path goes
-   * through update() below; the plugin RPC host calls this directly (parity:
-   * the legacy host path never rebased).
+   * The folded legacy updateTrip core. The plugin RPC host calls it without `rebase` (the legacy
+   * host path never rebased); update() below passes one. TP24 to TP29 (inventory §11c): the budget
+   * rebase, the trip row (TP25), the leave entries that follow its dates and the rebuilt day grid
+   * are one transaction, so a failing `generateDays` or booking resync leaves all of them as they were.
    */
-  /**
-   * TP24–TP29 (inventory §11c) — TP25's `UPDATE trips` write stays BEFORE
-   * the `:423` days-regeneration transaction (R5/§18.6, unchanged): if
-   * `generateDays` throws, the transaction rolls back the day rows but the
-   * trip keeps its new dates. Flagged, not fixed, per the ruling.
-   */
-  async updateTrip(tripId: string | number, userId: number, data: UpdateTripData, userRole: string): Promise<UpdateTripResult> {
+  async updateTrip(tripId: string | number, userId: number, data: UpdateTripData, userRole: string, rebase: CurrencyRebase | null = null): Promise<UpdateTripResult> {
     const trip = await this.tripsRepo.findRaw(tripId) as (Trip & { reminder_days?: number }) | null; // TP24
     if (!trip) throw new NotFoundError('Trip not found');
 
@@ -528,6 +523,8 @@ export class TripsService {
     // one write: a failure halfway used to leave a trip whose days missed its dates.
     let removedDays: DayGridRemoval[] = [];
     await this.uow.transactional(async () => {
+      // Before the row: the rebase reads the outgoing currency off it (#1543).
+      if (rebase) await this.budget.applyCurrencyRebase(tripId, rebase);
       await this.tripsRepo.updateTripRow(tripIdNum, { // TP25
         title: newTitle,
         description: newDesc ?? null,
@@ -613,11 +610,10 @@ export class TripsService {
     const trip = await this.getRaw(tripId);
     if (!trip) throw new NotFoundError('Trip not found');
     this.resolveRange(trip, body);
-    // Re-anchor the budget while the outgoing currency is still on the trip row,
-    // otherwise the frozen FX rates and the currency-less expenses that inherit the
-    // trip's base are left pointing at a currency that no longer exists (#1543).
-    await this.budget.rebaseTripCurrency(tripId, body.currency);
-    return await this.updateTrip(tripId, userId, body, role);
+    // Re-anchor the budget so frozen rates and currency-less expenses do not point at a currency
+    // the trip left (#1543). The rates are fetched here, the rebase is written with the trip row.
+    const rebase = await this.budget.prepareCurrencyRebase(tripId, body.currency);
+    return await this.updateTrip(tripId, userId, body, role, rebase);
   }
 
   // ── Delete ─────────────────────────────────────────────────────────────────

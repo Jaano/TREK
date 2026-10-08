@@ -29,6 +29,9 @@ import type { TripMembersRepository } from '../../db/repositories/TripMembers.re
 
 type Trip = TripAccess;
 
+/** A trip currency switch whose rates are already fetched, ready to write (#1543). */
+export type CurrencyRebase = { next: string; rates: Record<string, number> | null };
+
 type SettlementRow = {
   id: number; trip_id: number; from_user_id: number; to_user_id: number;
   amount: number; currency: string | null; exchange_rate: number | null;
@@ -538,18 +541,22 @@ export class BudgetService {
    *
    * Runs before the trip update, while the old currency is still in `trips`; a no-op without a change.
    */
-  async rebaseTripCurrency(
-    tripId: string | number,
-    newCurrency: string | null | undefined,
-  ): Promise<void> {
-    const next = (newCurrency || '').toUpperCase();
-    if (!next) return;
-    const tripCurrency = await this.tripsRepo.getCurrency(tripId);
-    if (tripCurrency === undefined) return;
-    const prev = (tripCurrency || 'EUR').toUpperCase();
-    if (prev === next) return;
+  async rebaseTripCurrency(tripId: string | number, newCurrency?: string | null): Promise<void> {
+    const plan = await this.prepareCurrencyRebase(tripId, newCurrency);
+    if (plan) await this.applyCurrencyRebase(tripId, plan);
+  }
 
-    const rates = await this.exchangeRates.getRates(next);
+  /** rebaseTripCurrency's network half: the rates, fetched outside any transaction. Null when nothing changes. */
+  async prepareCurrencyRebase(tripId: string | number, newCurrency?: string | null): Promise<CurrencyRebase | null> {
+    const next = (newCurrency || '').toUpperCase();
+    if (!next) return null;
+    const tripCurrency = await this.tripsRepo.getCurrency(tripId);
+    if (tripCurrency === undefined || (tripCurrency || 'EUR').toUpperCase() === next) return null;
+    return { next, rates: await this.exchangeRates.getRates(next) };
+  }
+
+  /** rebaseTripCurrency's writes. The outgoing currency is read inside them, so the trip update can share the transaction. */
+  async applyCurrencyRebase(tripId: string | number, { next, rates }: CurrencyRebase): Promise<void> {
     // A row already denominated in the new base needs no conversion (rate 1). When no
     // live rate is available we also store 1 rather than a stale one: rate 1 means "not
     // frozen", so the settlement falls back to live rates instead of trusting a figure
@@ -560,32 +567,23 @@ export class BudgetService {
       return r && r > 0 ? r : 1;
     };
 
-    // D4 (rule 23) — one repository method per table, not a dynamic identifier:
-    // `budgetItemsRepo`'s and `budgetSettlementsRepo`'s own `pinCurrency`/
-    // `listDistinctCurrencies`/`setExchangeRateForCurrency` trios.
-    const rebaseBudgetItems = async () => {
+    await this.uow.transactional(async () => {
+      const current = await this.tripsRepo.getCurrency(tripId);
+      const prev = (current || 'EUR').toUpperCase();
+      if (current === undefined || prev === next) return;
+      // D4 (rule 23): each table's own pinCurrency/listDistinctCurrencies/setExchangeRateForCurrency, no dynamic identifier.
       await this.budgetItemsRepo.pinCurrency(tripId, prev);
-      const currencies = await this.budgetItemsRepo.listDistinctCurrencies(tripId);
-      for (const cur of currencies) {
+      for (const cur of await this.budgetItemsRepo.listDistinctCurrencies(tripId)) {
         await this.budgetItemsRepo.setExchangeRateForCurrency(tripId, cur, rateFor(cur.toUpperCase()));
       }
-    };
-    const rebaseBudgetSettlements = async () => {
       await this.budgetSettlementsRepo.pinCurrency(tripId, prev);
-      const currencies = await this.budgetSettlementsRepo.listDistinctCurrencies(tripId);
-      for (const cur of currencies) {
+      for (const cur of await this.budgetSettlementsRepo.listDistinctCurrencies(tripId)) {
         await this.budgetSettlementsRepo.setExchangeRateForCurrency(tripId, cur, rateFor(cur.toUpperCase()));
       }
-    };
-
-    // Only priced places have anything to denominate; a currency on a free place would
-    // just be noise. `updated_at` doubles as the optimistic-concurrency token (#1135),
-    // so bumping it stops a client holding the pre-switch row from writing the pin away.
-    const pinPlaces = async () => {
+      // Only priced places are pinned. Their `updated_at` bump (the #1135 concurrency token)
+      // stops a client holding the pre-switch row from writing the pin away.
       await this.placesRepo.pinCurrencyForTrip(tripId, prev);
-    };
-
-    await this.uow.transactional(async () => { await rebaseBudgetItems(); await rebaseBudgetSettlements(); await pinPlaces(); });
+    });
   }
 
   async createBudgetItem(

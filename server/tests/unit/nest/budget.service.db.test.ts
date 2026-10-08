@@ -584,6 +584,31 @@ describe('composite service paths (ex budget.bridge delegation)', () => {
     expect(row).toEqual({ currency: 'EUR', exchange_rate: RATES.RUB.EUR });
   });
 
+  it('BUDGET-SVC-DB-086: prepareCurrencyRebase writes nothing and applyCurrencyRebase reads the outgoing currency inside its write', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    const item = await budget.createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members: [{ user_id: user.id }] });
+    const row = () => testDb.prepare('SELECT currency, exchange_rate FROM budget_items WHERE id = ?').get(item.id);
+    const before = row();
+
+    expect(await budget.prepareCurrencyRebase(trip.id, 'eur')).toBeNull();
+    expect(await budget.prepareCurrencyRebase(trip.id, '')).toBeNull();
+    expect(await budget.prepareCurrencyRebase(999999, 'RUB')).toBeNull();
+    const plan = await budget.prepareCurrencyRebase(trip.id, 'rub');
+    expect(plan).toEqual({ next: 'RUB', rates: RATES.RUB });
+    expect(row()).toEqual(before);
+
+    // The trip took the new currency in the meantime: nothing is left to rebase.
+    testDb.prepare("UPDATE trips SET currency = 'RUB' WHERE id = ?").run(trip.id);
+    await budget.applyCurrencyRebase(trip.id, plan!);
+    expect(row()).toEqual(before);
+
+    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await budget.applyCurrencyRebase(trip.id, plan!);
+    expect(row()).toEqual({ currency: 'EUR', exchange_rate: RATES.RUB.EUR });
+  });
+
   it('BUDGET-SVC-DB-018: linkBudgetItemToReservation stamps the reservation id', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
