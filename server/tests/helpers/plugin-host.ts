@@ -284,7 +284,7 @@ export async function createPluginRpcHostParts(
   // moved off DatabaseService onto AddonsRepository.
   const llmConfig = new LlmConfigResolver(new SettingsService(await createTestUnitOfWork(db), appSettings, await createTestSettingsRepo(db)), (await sharedTestOrm(db)).repo(Addons), addons);
   const pluginOrm = await sharedTestOrm(db);
-  const oauth = new PluginOAuthService(pluginOrm.repo(Plugins), pluginOrm.repo(PluginOauthTokens), pluginOrm.repo(PluginOauthState), pluginOrm.repo(PluginSettingsFields));
+  const oauth = new PluginOAuthService(pluginOrm.repo(Plugins), pluginOrm.repo(PluginOauthTokens), pluginOrm.repo(PluginOauthState), pluginOrm.repo(PluginSettingsFields), await createTestUnitOfWork(db));
   const accommodations = new AccommodationsService(
     permissions, realtime, assignments, await createTestUnitOfWork(db),
     await createTestTripsRepo(db),

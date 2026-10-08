@@ -243,18 +243,9 @@ export class PluginRuntimeService implements OnApplicationBootstrap, OnModuleDes
     // registry reads a recipient's own settings on every dispatch, so an absent one
     // would be a TypeError at send time rather than a missing-provider error at boot.
     private readonly userSettings: PluginUserSettingsService,
-    // Plan 3j Task 2 — every table this file's own statements (PR1-PR53) touch, now
-    // injected as repositories instead of raw prepared-statement calls on `this.db`. All 14 are
-    // REQUIRED (not `@Optional()`): virtually every method on this class reaches
-    // `plugins` or one of its satellite tables, so a hand-built test instance needs
-    // real ones regardless (`sharedTestOrm(...).repo(Entity)`, the same shape
-    // `PluginGuards`' `UsersRepository` injection (Task 1) already established for
-    // this plan). `PluginOauthTokens`/`PluginOauthState`/`PluginMetaMigrations`/
-    // `PluginCapabilityAudit` are used ONLY by this file's own uninstall cascade and
-    // GDPR export — Task 3/Task 4 add their own, disjoint methods to the same four
-    // repositories for their own files. `Settings`/`NotificationChannelPreferences`
-    // are cross-domain (3f) — additive methods only (`deleteByKeyPrefix`/
-    // `deleteAllForChannel`), never their own per-user CRUD surface.
+    // Every table this class touches, all required: a hand-built test instance needs
+    // real ones (`sharedTestOrm(...).repo(Entity)`). `Settings` and
+    // `NotificationChannelPreferences` are cross-domain and used for deletes only.
     @InjectRepository(Plugins) private readonly plugins: PluginsRepository,
     @InjectRepository(PluginErrorLog) private readonly pluginErrorLog: PluginErrorLogRepository,
     @InjectRepository(PluginScheduledTasks) private readonly pluginScheduledTasks: PluginScheduledTasksRepository,
@@ -453,7 +444,8 @@ export class PluginRuntimeService implements OnApplicationBootstrap, OnModuleDes
   /** Fire every scheduled task that is due on an ACTIVE plugin; re-arm recurring
    * ones, delete one-shots. The row is re-armed/deleted BEFORE the fire so a crash
    * mid-callback can't double-fire; an inactive plugin's tasks are left untouched so
-   * they run on the next sweep after it reactivates. Never throws. */
+   * they run on the next sweep after it reactivates. Never throws.
+   * @txIndependent each task's claim is its own atomic statement, followed by its delivery. */
   private async fireDueScheduled(): Promise<void> {
     if (!pluginsEnabled()) return;
     try {
@@ -465,10 +457,8 @@ export class PluginRuntimeService implements OnApplicationBootstrap, OnModuleDes
       const due = await this.pluginScheduledTasks.findDueForPlugins(now, active);
       for (const t of due) {
         if (!this.supervisor.isActive(t.plugin_id)) continue; // leave for a later sweep
-        // Plan 3j Task 2 deviation (named, task-2-report.md — same spirit as R-uninstall's
-        // egress-host transaction): the claim is now atomic (`due_at <= now` guarded in
-        // the repository) — a second, overlapping tick's own claim on the SAME row loses
-        // and skips delivery entirely, rather than double-firing (RACE-SCHED-001).
+        // The claim is atomic (`due_at <= now` guarded in the repository): an overlapping
+        // tick's claim on the same row loses and skips delivery (RACE-SCHED-001).
         const claimed = t.every_ms
           ? await this.pluginScheduledTasks.rearm(t.id, now + t.every_ms, now)
           : await this.pluginScheduledTasks.deleteById(t.id, now);
@@ -1088,16 +1078,10 @@ export class PluginRuntimeService implements OnApplicationBootstrap, OnModuleDes
     }
   }
 
-  /** Stop the plugin, remove its code, and optionally delete all its data. */
   /**
-   * R-uninstall: the 9-table cascade converts with the SAME statement order and the SAME
-   * (non-)transactional scope the legacy code had — NOT wrapped in `uow.transactional`.
-   * Nine independent best-effort deletes, several inside their own try/catch tolerating an
-   * absent table on a slimmed test schema (`plugin_actions`, `plugin_egress_hosts`) —
-   * `plugins`/`plugin_settings_fields`/`plugin_scheduled_tasks`/`plugin_error_log`/
-   * `plugin_entity_metadata`/`plugin_user_config`/`plugin_oauth_tokens`/`plugin_oauth_state`/
-   * `plugin_meta_migrations`/`plugin_capability_audit`/`plugin_user_erasure_queue` do NOT
-   * tolerate an absent table, unchanged from the legacy statement order and shape.
+   * Stop the plugin, remove its code, and optionally delete all its data. The row
+   * deletes keep the legacy order; `plugin_actions` and `plugin_egress_hosts` still
+   * tolerate an absent table (a slimmed test schema), the others do not.
    */
   async uninstall(id: string, deleteData: boolean): Promise<void> {
     await this.supervisor.disable(id);
@@ -1106,6 +1090,14 @@ export class PluginRuntimeService implements OnApplicationBootstrap, OnModuleDes
     // Code always goes; the DB metadata + fields go so it disappears from the UI.
     // Link-safe: a dev-linked plugin only drops the symlink, never the author's source.
     removePluginCodeEntry(pluginCodeDir(id));
+    // Every row about the plugin goes in one transaction: a failure halfway used to
+    // leave a plugin without its row but with its settings, grants or tasks, which a
+    // later plugin reusing the id would inherit. The data dir goes after the commit.
+    await this.uow.transactional(() => this.dropPluginRows(id, deleteData));
+    if (deleteData) removePluginData(id);
+  }
+
+  private async dropPluginRows(id: string, deleteData: boolean): Promise<void> {
     await this.plugins.deleteById(id);
     await this.pluginSettingsFields.deleteAllForPlugin(id);
     try { await this.pluginActions.deleteAllForPlugin(id); } catch { /* table absent */ }
@@ -1122,7 +1114,6 @@ export class PluginRuntimeService implements OnApplicationBootstrap, OnModuleDes
     // user's opt-outs and the admin's enablement.
     await this.retireNotificationChannel(id);
     if (deleteData) {
-      removePluginData(id);
       await this.pluginErrorLog.deleteAllForPlugin(id);
       await this.settingsRepo.deleteByKeyPrefix(`plugin:${id}:`);
       await this.pluginEntityMetadata.deleteAllForPlugin(id);

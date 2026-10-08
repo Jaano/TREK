@@ -2,8 +2,8 @@
  * Plan 3j Task 2 — mutation/parity proofs the brief names explicitly, on top of the
  * pre-existing (and still-green) `plugin-runtime.test.ts`/`plugins-service.test.ts`
  * suites: R-install-gates' three named accept+refuse pairs (PR17/PR26/PR28), the
- * 9-table uninstall cascade's preserved NON-transactional partial-failure shape
- * (R-uninstall), the egress-host DELETE+loop-INSERT's new transaction rollback proof
+ * uninstall cascade's all-or-nothing rollback (R-uninstall, one transaction since
+ * the transaction sweep), the egress-host DELETE+loop-INSERT's transaction rollback proof
  * (R-uninstall's ONE named exception), PS7/PS9/PS11's triple-duplicate SELECT
  * collapsing onto one `PluginUserConfigRepository.findConfig` method, and a two-tick
  * race for the scheduler sweep + the GDPR erasure drain.
@@ -255,8 +255,8 @@ describe('Plan 3j Task 2 — R-install-gates named accept+refuse pairs (PR17/PR2
   });
 });
 
-describe('Plan 3j Task 2 — R-uninstall: the 9-table cascade stays non-transactional (concurrency-pin)', () => {
-  it('CASCADE-PARTIAL-001: a failure partway through the cascade leaves EARLIER deletes committed and LATER ones never attempted — the CURRENT legacy shape, not hardened to all-or-nothing', async () => {
+describe('R-uninstall: the cascade is one transaction', () => {
+  it('CASCADE-PARTIAL-001: a failure partway through the cascade rolls every earlier delete back, and the data directory stays', async () => {
     const rt = await buildRuntime();
     const id = 'cascade-partial';
     seedPlugin(id);
@@ -272,18 +272,21 @@ describe('Plan 3j Task 2 — R-uninstall: the 9-table cascade stays non-transact
     const errorLogRepo = (rt as any).pluginErrorLog;
     const spy = vi.spyOn(errorLogRepo, 'deleteAllForPlugin').mockRejectedValueOnce(new Error('simulated mid-cascade crash'));
 
+    const dataDir = path.join(dataRoot, id);
+    fs.mkdirSync(dataDir, { recursive: true });
+
     await expect(rt.uninstall(id, true)).rejects.toThrow(/simulated mid-cascade crash/);
     spy.mockRestore();
 
-    // EVERYTHING before the simulated crash point is already gone — no transaction
-    // rolled it back, exactly matching the legacy sequential-statement shape.
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugins WHERE id=?").get(id)).toMatchObject({ c: 0 });
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugin_settings_fields WHERE plugin_id=?").get(id)).toMatchObject({ c: 0 });
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugin_scheduled_tasks WHERE plugin_id=?").get(id)).toMatchObject({ c: 0 });
-    // The row the mock made deleteAllForPlugin THROW for is untouched (never committed)...
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugin_error_log WHERE plugin_id=?").get(id)).toMatchObject({ c: 1 });
-    // ...and everything AFTER it in cascade order never even ran.
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugin_entity_metadata WHERE plugin_id=?").get(id)).toMatchObject({ c: 1 });
+    // Everything before the simulated crash point was rolled back with it: a half
+    // uninstall used to leave settings, tasks and metadata for a later plugin that
+    // reuses the id to inherit.
+    for (const table of ['plugin_settings_fields', 'plugin_scheduled_tasks', 'plugin_error_log', 'plugin_entity_metadata']) {
+      expect(testDb.prepare(`SELECT COUNT(*) c FROM ${table} WHERE plugin_id=?`).get(id)).toMatchObject({ c: 1 });
+    }
+    expect(testDb.prepare("SELECT COUNT(*) c FROM plugins WHERE id=?").get(id)).toMatchObject({ c: 1 });
+    // The data directory goes only after the rows commit.
+    expect(fs.existsSync(dataDir)).toBe(true);
   });
 });
 

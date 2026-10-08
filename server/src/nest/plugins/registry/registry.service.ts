@@ -512,19 +512,23 @@ export class PluginRegistryService {
       fs.rmSync(dest, { recursive: true, force: true });
       fs.renameSync(pluginRoot, dest);
 
-      // 7. register INACTIVE (record provenance)
-      await discoverPlugins(this.discoveryRepos);
-      await this.plugins.setInstallProvenance(id, entry.repo, ver.commitSha, ver.sha256, entry.reviewedAt ?? null);
-      // Pin the author key on first successful install of a signed plugin (TOFU) —
-      // and, after a re-trust, re-pin to the new key the admin blessed. Only ever set
-      // to a key the artifact just verified under; NEVER cleared to NULL, because a
-      // NULL pin re-opens the "was never signed" path that accepts an unsigned update.
-      if (entry.authorPublicKey) {
-        await this.plugins.setAuthorPubkey(id, entry.authorPublicKey);
-      }
-      // The plugin is now on new code that passed every check — whatever refusal was
-      // recorded before no longer describes reality.
-      await clearUpdateBlock(this.plugins, id);
+      // 7. register INACTIVE (record provenance), the row and its provenance in one
+      // write, so a failure never leaves a registered plugin without its pinned key.
+      const repos = this.discoveryRepos;
+      await repos.uow.transactional(async () => {
+        await discoverPlugins(repos);
+        await this.plugins.setInstallProvenance(id, entry.repo, ver.commitSha, ver.sha256, entry.reviewedAt ?? null);
+        // Pin the author key on first successful install of a signed plugin (TOFU) —
+        // and, after a re-trust, re-pin to the new key the admin blessed. Only ever set
+        // to a key the artifact just verified under; NEVER cleared to NULL, because a
+        // NULL pin re-opens the "was never signed" path that accepts an unsigned update.
+        if (entry.authorPublicKey) {
+          await this.plugins.setAuthorPubkey(id, entry.authorPublicKey);
+        }
+        // The plugin is now on new code that passed every check — whatever refusal was
+        // recorded before no longer describes reality.
+        await clearUpdateBlock(this.plugins, id);
+      });
       return { id, version: ver.version, trekRangeBypassed };
     } finally {
       fs.rmSync(staging, { recursive: true, force: true });

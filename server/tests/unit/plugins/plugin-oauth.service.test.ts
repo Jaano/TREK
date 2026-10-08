@@ -35,6 +35,7 @@ import Database from 'better-sqlite3';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { PluginOAuthService } from '../../../src/nest/plugins/oauth/plugin-oauth.service';
 import { sharedTestOrm } from '../../helpers/test-uow';
+import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
 import { PluginOauthTokens } from '../../../src/db/entities/PluginOauthTokens.entity';
 import { PluginOauthState } from '../../../src/db/entities/PluginOauthState.entity';
@@ -64,7 +65,7 @@ const NOW = 1_700_000_000_000;
  */
 async function makeOauthService(): Promise<PluginOAuthService> {
   const orm = await sharedTestOrm(getDb.current as Database.Database);
-  return new PluginOAuthService(orm.repo(Plugins), orm.repo(PluginOauthTokens), orm.repo(PluginOauthState), orm.repo(PluginSettingsFields));
+  return new PluginOAuthService(orm.repo(Plugins), orm.repo(PluginOauthTokens), orm.repo(PluginOauthState), orm.repo(PluginSettingsFields), new UnitOfWork(orm.em));
 }
 
 describe('PluginOAuthService', () => {
@@ -111,6 +112,15 @@ describe('PluginOAuthService', () => {
     // a second connect replaces the first (one live state per user)
     await svc.startConnect('p', 42, NOW);
     expect((rows.prepare('SELECT COUNT(*) c FROM plugin_oauth_state WHERE user_id = 42').get() as { c: number }).c).toBe(1);
+  });
+
+  it('startConnect drops the old state and stores the new one together: a failed store keeps the old one', async () => {
+    const first = new URL(await svc.startConnect('p', 42, NOW)).searchParams.get('state')!;
+    const orm = await sharedTestOrm(getDb.current as Database.Database);
+    vi.spyOn(orm.repo(PluginOauthState), 'insertState').mockRejectedValueOnce(new Error('disk full'));
+    await expect(svc.startConnect('p', 42, NOW)).rejects.toThrow('disk full');
+    const rows = getDb.current as unknown as InstanceType<typeof Database>;
+    expect(rows.prepare('SELECT state FROM plugin_oauth_state WHERE user_id = 42').all()).toEqual([{ state: first }]);
   });
 
   it('rejects a non-https / loopback / metadata / internal authorize endpoint', async () => {

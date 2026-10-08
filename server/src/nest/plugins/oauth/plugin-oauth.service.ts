@@ -14,6 +14,7 @@ import { PluginOauthState } from '../../../db/entities/PluginOauthState.entity';
 import type { PluginOauthStateRepository } from '../../../db/repositories/PluginOauthState.repository';
 import { PluginSettingsFields } from '../../../db/entities/PluginSettingsFields.entity';
 import type { PluginSettingsFieldsRepository } from '../../../db/repositories/PluginSettingsFields.repository';
+import { UnitOfWork } from '../../database/unit-of-work';
 
 /**
  * Host-brokered outbound OAuth (#plugins). A plugin becomes an OAuth *client* of a
@@ -79,6 +80,7 @@ export class PluginOAuthService {
     @InjectRepository(PluginOauthTokens) private readonly tokensRepo: PluginOauthTokensRepository,
     @InjectRepository(PluginOauthState) private readonly stateRepo: PluginOauthStateRepository,
     @InjectRepository(PluginSettingsFields) private readonly settingsFieldsRepo: PluginSettingsFieldsRepository,
+    private readonly uow: UnitOfWork,
   ) {}
 
   /** The plugin's decrypted OAuth provider config from its INSTANCE settings, or null
@@ -127,9 +129,11 @@ export class PluginOAuthService {
     const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
     const state = b64url(crypto.randomBytes(24));
 
-    // Drop this user's stale states for the plugin, then store the fresh one.
-    await this.stateRepo.deleteForUser(pluginId, userId); // PO3
-    await this.stateRepo.insertState(state, pluginId, userId, verifier, nowMs); // PO4
+    // Drop this user's stale states for the plugin and store the fresh one, together.
+    await this.uow.transactional(async () => {
+      await this.stateRepo.deleteForUser(pluginId, userId); // PO3
+      await this.stateRepo.insertState(state, pluginId, userId, verifier, nowMs); // PO4
+    });
 
     authorize.searchParams.set('response_type', 'code');
     authorize.searchParams.set('client_id', cfg.clientId);
@@ -141,7 +145,11 @@ export class PluginOAuthService {
     return authorize.toString();
   }
 
-  /** Complete the callback: verify state, exchange the code, store the tokens. */
+  /**
+   * Complete the callback: verify state, exchange the code, store the tokens.
+   * @txIndependent the state is consumed before the token exchange (network I/O),
+   * and the tokens are stored after it.
+   */
   async completeCallback(pluginId: string, userId: number, code: string, state: string, nowMs: number): Promise<void> {
     // PO5+PO6+PO7, atomically — the state is consumed (deleted) by this ONE call
     // regardless of outcome, same as the legacy SELECT-then-unconditional-DELETE
@@ -191,8 +199,10 @@ export class PluginOAuthService {
   }
 
   async disconnect(pluginId: string, userId: number): Promise<void> {
-    await this.tokensRepo.deleteForUser(pluginId, userId); // PO9
-    await this.stateRepo.deleteForUser(pluginId, userId); // PO10
+    await this.uow.transactional(async () => {
+      await this.tokensRepo.deleteForUser(pluginId, userId); // PO9
+      await this.stateRepo.deleteForUser(pluginId, userId); // PO10
+    });
   }
 
   // --- internals ---
