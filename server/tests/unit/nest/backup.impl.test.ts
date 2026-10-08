@@ -1385,6 +1385,63 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
     expect(dbMock.closeDb).toHaveBeenCalled();
   });
 
+  it('BACKUP-045i: the sessions signed in before the restore are put back after the reopen', async () => {
+    setupSuccessfulExtraction();
+    setupAllTablesPresent();
+    const callOrder: string[] = [];
+    const carried = [{ id: 'sess-1', user_id: 1, email: 'admin@example.test', created_at: 'a', last_seen_at: 'b', expires_at: 'c', user_agent: null }];
+    const sessionsRepo = {
+      listActiveToCarry: vi.fn(async () => { callOrder.push('read'); return carried; }),
+      restoreCarried: vi.fn(async () => { callOrder.push('restore'); return 1; }),
+    };
+    const { RequestContext } = await import('@mikro-orm/core');
+    const em = vi.spyOn(RequestContext, 'getEntityManager').mockReturnValue({ getRepository: () => sessionsRepo } as never);
+    const fork = vi.spyOn(RequestContext, 'create').mockImplementation(((_em: unknown, next: () => unknown) => next()) as never);
+    onTestFinished(() => { em.mockRestore(); fork.mockRestore(); });
+    dbMock.closeDb.mockImplementation(() => { callOrder.push('closeDb'); });
+    dbMock.reinitialize.mockImplementation(() => { callOrder.push('reinitialize'); });
+    fsMock.unlinkSync.mockReturnValue(undefined);
+    fsMock.copyFileSync.mockReturnValue(undefined);
+    fsMock.rmSync.mockReturnValue(undefined);
+    fsMock.existsSync.mockImplementation((p: string) => !String(p).includes('uploads') && !String(p).endsWith('.encryption_key'));
+
+    const result = await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+
+    expect(result).toEqual({ success: true });
+    expect(callOrder).toEqual(['read', 'closeDb', 'reinitialize', 'restore']);
+    expect(sessionsRepo.restoreCarried).toHaveBeenCalledWith(carried);
+    // Put back in a fresh fork, not through the one that read the replaced file.
+    expect(fork).toHaveBeenCalledTimes(1);
+  });
+
+  it('BACKUP-045j: sessions that cannot be read or put back do not fail the restore', async () => {
+    setupSuccessfulExtraction();
+    setupAllTablesPresent();
+    const sessionsRepo = {
+      listActiveToCarry: vi.fn().mockRejectedValueOnce(new Error('no such table: user_sessions')).mockResolvedValueOnce([{ id: 's' }]),
+      restoreCarried: vi.fn().mockRejectedValue(new Error('database is locked')),
+    };
+    const { RequestContext } = await import('@mikro-orm/core');
+    const em = vi.spyOn(RequestContext, 'getEntityManager').mockReturnValue({ getRepository: () => sessionsRepo } as never);
+    const fork = vi.spyOn(RequestContext, 'create').mockImplementation(((_em: unknown, next: () => unknown) => next()) as never);
+    onTestFinished(() => { em.mockRestore(); fork.mockRestore(); });
+    fsMock.unlinkSync.mockReturnValue(undefined);
+    fsMock.copyFileSync.mockReturnValue(undefined);
+    fsMock.rmSync.mockReturnValue(undefined);
+    fsMock.existsSync.mockImplementation((p: string) => !String(p).includes('uploads') && !String(p).endsWith('.encryption_key'));
+
+    const unreadable = await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+    expect(unreadable).toEqual({ success: true });
+    expect(logMock.logWarn).toHaveBeenCalledWith(expect.stringContaining('could not read the active sessions (no such table: user_sessions)'));
+    expect(sessionsRepo.restoreCarried).not.toHaveBeenCalled();
+
+    setupSuccessfulExtraction();
+    setupAllTablesPresent();
+    const unwritable = await restoreFromZip(stubStorage(), '/data/tmp/upload.zip');
+    expect(unwritable).toEqual({ success: true });
+    expect(logMock.logWarn).toHaveBeenCalledWith(expect.stringContaining('could not keep the active sessions (database is locked)'));
+  });
+
   it('BACKUP-045c — reinitialize is called even when copyFileSync throws', async () => {
     setupSuccessfulExtraction();
     setupAllTablesPresent();

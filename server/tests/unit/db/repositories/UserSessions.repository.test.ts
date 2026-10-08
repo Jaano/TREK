@@ -146,4 +146,61 @@ describe('UserSessionsRepository', () => {
     testDb.prepare('DELETE FROM users WHERE id = ?').run(user.id);
     expect(row('s1')).toBeUndefined();
   });
+
+  it('SESSREPO-010: listActiveToCarry reads every active session with the email of its owner', async () => {
+    const { user } = createUser(testDb, { email: 'carry-a@example.test' });
+    const { user: other } = createUser(testDb, { email: 'carry-b@example.test' });
+    await add('a1', user.id, { user_agent: 'A' });
+    await add('b1', other.id);
+    await add('expired', user.id, { expires_at: NOW });
+    await add('revoked', other.id);
+    testDb.prepare("UPDATE user_sessions SET revoked_at = ? WHERE id = 'revoked'").run(EARLIER);
+
+    expect(await sessions.listActiveToCarry(NOW)).toEqual([
+      { id: 'a1', user_id: user.id, email: 'carry-a@example.test', created_at: EARLIER, last_seen_at: EARLIER, expires_at: LATER, user_agent: 'A' },
+      { id: 'b1', user_id: other.id, email: 'carry-b@example.test', created_at: EARLIER, last_seen_at: EARLIER, expires_at: LATER, user_agent: null },
+    ]);
+    expect(await sessions.listActiveToCarry(LATER)).toEqual([]);
+  });
+
+  it('SESSREPO-011: restoreCarried puts the rows back for the same account only, and keeps a row already there', async () => {
+    const { user } = createUser(testDb, { email: 'kept@example.test' });
+    const { user: renamed } = createUser(testDb, { email: 'renamed@example.test' });
+    await add('kept', user.id, { user_agent: 'Kept' });
+    await add('present', user.id);
+    await add('elsewhere', renamed.id);
+    const carried = await sessions.listActiveToCarry(NOW);
+
+    // What a swap does: the rows are gone (or ended), and one id now names somebody else.
+    testDb.prepare("DELETE FROM user_sessions WHERE id IN ('kept', 'elsewhere')").run();
+    testDb.prepare("UPDATE user_sessions SET revoked_at = ? WHERE id = 'present'").run(EARLIER);
+    testDb.prepare("UPDATE users SET email = 'someone-else@example.test' WHERE id = ?").run(renamed.id);
+    t.clear();
+
+    expect(await sessions.restoreCarried(carried)).toBe(2);
+    expect(row('kept')).toStrictEqual({
+      id: 'kept',
+      user_id: user.id,
+      created_at: EARLIER,
+      last_seen_at: EARLIER,
+      expires_at: LATER,
+      revoked_at: null,
+      user_agent: 'Kept',
+    });
+    // The swapped-in file's own row wins, ended or not.
+    expect(row('present')).toEqual(expect.objectContaining({ revoked_at: EARLIER }));
+    expect(row('elsewhere')).toBeUndefined();
+  });
+
+  it('SESSREPO-012: restoreCarried drops a session whose user is gone, and does nothing for none', async () => {
+    const { user } = createUser(testDb, { email: 'gone@example.test' });
+    await add('orphan', user.id);
+    const carried = await sessions.listActiveToCarry(NOW);
+    testDb.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+    t.clear();
+
+    expect(await sessions.restoreCarried(carried)).toBe(0);
+    expect(row('orphan')).toBeUndefined();
+    expect(await sessions.restoreCarried([])).toBe(0);
+  });
 });

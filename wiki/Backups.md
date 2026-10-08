@@ -46,6 +46,8 @@ Before restoring, TREK runs integrity checks on the uploaded database:
 
 The database being replaced is kept as `pre-restore-<time>.db` next to it (in `data/` on a standard install), so a restore of the wrong archive can be undone by hand. Delete these copies once you no longer need them.
 
+The sessions signed in when the restore starts stay signed in, yours included: they are carried into the restored database for every account it holds under the same id and email. An account whose password differs in the backup still has to sign in again, and a session for an account the backup does not have ends with the restore.
+
 Either way, TREK asks first in a **Restore Backup?** dialog that names the file, warns that all current data (trips, places, users, uploads) will be permanently replaced, and suggests creating a backup of the current state first. **Yes, restore** starts it; when it is done the page reloads.
 
 > **Warning:** Restoring replaces all current data. Back up your current state first if you want to keep it.

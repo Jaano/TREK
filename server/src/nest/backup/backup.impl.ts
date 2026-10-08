@@ -4,6 +4,10 @@ import { pipeline } from 'node:stream/promises';
 import { readEnv } from '../../app-config';
 import { resolveDataPaths } from '../../app-config/data-paths';
 import fs from 'fs';
+import { RequestContext } from '@mikro-orm/core';
+import type { CarriedUserSessionRow } from '../../db/repositories/UserSessions.repository';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
+import { dbNow } from '../../db/types';
 import { logError, logWarn } from '../audit/audit-log.logger';
 import type { DatabaseBackupStrategy } from '../database/database-backup.interface';
 import { VALID_INTERVALS } from './auto-backup.settings';
@@ -410,6 +414,44 @@ export async function rehydrateUploads(storage: StorageService, extractedUploads
   }
 }
 
+/**
+ * The sessions signed in right now, read before the swap. The restored file
+ * brings the backup's own `user_sessions` rows (none at all for a backup from
+ * before sessions were tracked), and a session token whose row is missing is
+ * refused, so without carrying these across the admin who ran the restore and
+ * everybody else would be signed out by it. Best effort, like the snapshot:
+ * a missing request context or an unreadable table carries nothing.
+ */
+async function readSessionsToCarry(): Promise<CarriedUserSessionRow[]> {
+  try {
+    const em = RequestContext.getEntityManager();
+    if (!em) return [];
+    return await em.getRepository(UserSessions).listActiveToCarry(dbNow());
+  } catch (err) {
+    logWarn(`Restore: could not read the active sessions (${err instanceof Error ? err.message : String(err)})`);
+    return [];
+  }
+}
+
+/**
+ * Put the carried sessions into the restored database, in a fresh fork so no
+ * entity read from the replaced file is flushed into it. Only a session whose
+ * user is still there under the same id and email comes back; the password
+ * version check still refuses a token the restored account no longer matches.
+ */
+async function restoreCarriedSessions(rows: readonly CarriedUserSessionRow[]): Promise<void> {
+  const em = RequestContext.getEntityManager();
+  if (!em || rows.length === 0) return;
+  try {
+    await RequestContext.create(em, async () => {
+      const fresh = RequestContext.getEntityManager() ?? em;
+      await fresh.getRepository(UserSessions).restoreCarried(rows);
+    });
+  } catch (err) {
+    logWarn(`Restore: could not keep the active sessions (${err instanceof Error ? err.message : String(err)})`);
+  }
+}
+
 export async function restoreFromZip({ storage, database }: BackupDeps, zipPath: string): Promise<RestoreResult> {
   const extractDir = path.join(dataDir, `restore-${Date.now()}`);
   let reinitFailed: unknown;
@@ -424,6 +466,7 @@ export async function restoreFromZip({ storage, database }: BackupDeps, zipPath:
     }
 
     await database.keepCopyBeforeRestore();
+    const liveSessions = await readSessionsToCarry();
 
     try {
       // Closes the connection, swaps the database in and reopens it, migrating
@@ -465,6 +508,7 @@ export async function restoreFromZip({ storage, database }: BackupDeps, zipPath:
       // nothing to read, and the restore is already reported as "restart
       // required" below — rehydrating into a stale/guessed config would be worse.
       await storage.reloadConfig();
+      await restoreCarriedSessions(liveSessions);
 
       const extractedUploads = path.join(extractDir, 'uploads');
       if (fs.existsSync(extractedUploads)) {

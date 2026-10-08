@@ -5,6 +5,9 @@ import { readEnv } from '../app-config';
 import { resolveDataPaths } from '../app-config/data-paths';
 import { DemoRepository, type DemoAdminCredentialsRow, type DemoInstanceKeyRow } from '../db/repositories/DemoRepository';
 import { DatabaseConnectionLostError, type DatabaseBackupStrategy } from '../nest/database/database-backup.interface';
+import type { CarriedUserSessionRow } from '../db/repositories/UserSessions.repository';
+import { UserSessions } from '../db/entities/UserSessions.entity';
+import { dbNow } from '../db/types';
 
 const baselinePath = path.join(resolveDataPaths().dataDir, 'travel-baseline.db');
 
@@ -76,6 +79,17 @@ async function resetDemoUser(database: DatabaseBackupStrategy): Promise<void> {
     console.error('[Demo Reset] Failed to read instance API keys:', e instanceof Error ? e.message : e);
   }
 
+  // Everyone signed in stays signed in. The baseline was saved at first seed,
+  // before anybody logged in, so it holds no session rows, and a session
+  // token whose row is gone is refused: without this every demo visitor and
+  // the demo admin would be signed out on the hour.
+  let liveSessions: CarriedUserSessionRow[] = [];
+  try {
+    liveSessions = await preSwapEm.getRepository(UserSessions).listActiveToCarry(dbNow());
+  } catch (e: unknown) {
+    console.error('[Demo Reset] Failed to read the active sessions:', e instanceof Error ? e.message : e);
+  }
+
   // Flush the WAL into the main file before the connection closes. Best effort.
   try {
     await database.checkpoint();
@@ -126,6 +140,14 @@ async function resetDemoUser(database: DatabaseBackupStrategy): Promise<void> {
         await demoFresh.restoreInstanceApiKeys(instanceKeys);
       } catch (e: unknown) {
         console.error('[Demo Reset] Failed to restore instance API keys:', e instanceof Error ? e.message : e);
+      }
+    }
+
+    if (liveSessions.length) {
+      try {
+        await freshEm.getRepository(UserSessions).restoreCarried(liveSessions);
+      } catch (e: unknown) {
+        console.error('[Demo Reset] Failed to restore the active sessions:', e instanceof Error ? e.message : e);
       }
     }
   });

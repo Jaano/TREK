@@ -46,6 +46,8 @@ The seeder defaults the admin address to `admin@trek.app` while the reset defaul
 
 The instance-wide Maps and Unsplash keys stored in `app_settings` are carried across either way, so map and photo search keep working after a reset.
 
+Everybody signed in stays signed in. The baseline holds no sign-in sessions of its own, so the sessions that are active when the reset runs are carried across as well, for every account the baseline still holds under the same email. A visitor or admin mid-session is not sent back to the login screen on the hour.
+
 ## Saving a baseline
 
 The baseline is the snapshot the hourly reset restores to. The admin can update it at any time:

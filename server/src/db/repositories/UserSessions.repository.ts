@@ -1,4 +1,5 @@
 import type { UserSessions } from '../entities/UserSessions.entity';
+import { Users } from '../entities/Users.entity';
 import type { AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 
@@ -17,6 +18,14 @@ const _userSessionRowKeys: AssertRowKeys<UserSessionRow, UserSessions> = true;
 
 /** What a session list shows: the row without its owner, who is the caller. */
 export type UserSessionListRow = Omit<UserSessionRow, 'user_id' | 'revoked_at'>;
+
+/**
+ * An active session read before a database file swap, with the email its
+ * owner had then, so it is put back only for that same account.
+ */
+export interface CarriedUserSessionRow extends Omit<UserSessionRow, 'revoked_at'> {
+  email: string;
+}
 
 /** The columns a new sign-in writes; `last_seen_at` starts at `created_at`. */
 export interface NewUserSessionRow {
@@ -122,6 +131,70 @@ export class UserSessionsRepository extends TrekRepository<UserSessions> {
         : { user: userId, revoked_at: null, id: { $ne: exceptId } },
       { revoked_at: now },
     );
+  }
+
+  /**
+   * Every active session with its owner's email, read before the database
+   * file is swapped (a demo reset, a backup restore):
+   * `SELECT s.* FROM user_sessions s WHERE s.revoked_at IS NULL AND s.expires_at > ?`,
+   * then `SELECT id, email FROM users WHERE id IN (...)`.
+   */
+  async listActiveToCarry(now: string): Promise<CarriedUserSessionRow[]> {
+    const rows = await this.find({ revoked_at: null, expires_at: { $gt: now } }, { orderBy: { id: 'asc' } });
+    if (rows.length === 0) return [];
+    const emails = await this.ownerEmails(rows.map((row) => row.user.id));
+    const carried: CarriedUserSessionRow[] = [];
+    for (const row of rows) {
+      const email = emails.get(row.user.id);
+      if (email === undefined) continue;
+      carried.push({
+        id: row.id,
+        user_id: row.user.id,
+        email,
+        created_at: row.created_at,
+        last_seen_at: row.last_seen_at,
+        expires_at: row.expires_at,
+        user_agent: row.user_agent ?? null,
+      });
+    }
+    return carried;
+  }
+
+  /**
+   * Put the sessions `listActiveToCarry` read back after the swap:
+   * `INSERT INTO user_sessions (...) VALUES (...) ON CONFLICT (id) DO NOTHING`
+   * for each one whose user is still there under the same id and the same
+   * email. A row the swapped-in file already holds is left as it is, revoked
+   * or not, and a session whose id now belongs to somebody else (a backup
+   * from another install) is dropped rather than handed to them. Answers how
+   * many were offered for insert.
+   */
+  async restoreCarried(rows: readonly CarriedUserSessionRow[]): Promise<number> {
+    if (rows.length === 0) return 0;
+    const emails = await this.ownerEmails(rows.map((row) => row.user_id));
+    const kept = rows.filter((row) => emails.get(row.user_id) === row.email);
+    if (kept.length === 0) return 0;
+    await this.upsertMany(
+      kept.map((row) => ({
+        id: row.id,
+        user: row.user_id,
+        created_at: row.created_at,
+        last_seen_at: row.last_seen_at,
+        expires_at: row.expires_at,
+        revoked_at: null,
+        user_agent: row.user_agent,
+      })),
+      { onConflictFields: ['id'], onConflictAction: 'ignore' },
+    );
+    return kept.length;
+  }
+
+  /** `SELECT id, email FROM users WHERE id IN (...)`, as a map. */
+  private async ownerEmails(userIds: readonly number[]): Promise<Map<number, string>> {
+    const owners = await this.getEntityManager()
+      .getRepository(Users)
+      .find({ id: { $in: [...new Set(userIds)] } }, { fields: ['id', 'email'] });
+    return new Map(owners.map((owner) => [owner.id, owner.email]));
   }
 
   /**
