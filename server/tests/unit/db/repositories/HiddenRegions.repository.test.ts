@@ -10,6 +10,7 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { HiddenRegions } from '../../../../src/db/entities/HiddenRegions.entity';
 import type { HiddenRegionsRepository } from '../../../../src/db/repositories/HiddenRegions.repository';
+import { insertRow } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -26,10 +27,11 @@ describe('HiddenRegionsRepository.listForUser (AT22)', () => {
   it('HIDDENREGREPO-001: matches SELECT region_code FROM hidden_regions WHERE user_id = ? run raw, scoped to the user', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
-    testDb.prepare('INSERT INTO hidden_regions (user_id, region_code, country_code) VALUES (?, ?, ?)').run(user.id, 'DE-BY', 'DE');
-    testDb.prepare('INSERT INTO hidden_regions (user_id, region_code, country_code) VALUES (?, ?, ?)').run(user.id, 'DE-BE', 'DE');
-    testDb.prepare('INSERT INTO hidden_regions (user_id, region_code, country_code) VALUES (?, ?, ?)').run(other.id, 'FR-IDF', 'FR');
+    await insertRow(t, HiddenRegions, { user: user.id, region_code: 'DE-BY', country_code: 'DE' });
+    await insertRow(t, HiddenRegions, { user: user.id, region_code: 'DE-BE', country_code: 'DE' });
+    await insertRow(t, HiddenRegions, { user: other.id, region_code: 'FR-IDF', country_code: 'FR' });
 
+    // test-sql-allow: the legacy AT22 statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare('SELECT region_code FROM hidden_regions WHERE user_id = ?').all(user.id);
     const codes = await repo.listForUser(user.id);
 

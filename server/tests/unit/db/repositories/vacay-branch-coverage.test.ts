@@ -18,11 +18,20 @@ import {
   createTestVacayCompanyHolidaysRepo,
   createTestVacaySharesRepo,
 } from '../../../helpers/vacay-repos';
+import { sharedTestOrm } from '../../../helpers/test-uow';
+import { insertRow, updateRows } from '../../../helpers/factories/rows';
+import { addVacayPlanMember, makeVacayPlan } from '../../../helpers/factories/vacay';
+import { VacayCompanyHolidays } from '../../../../src/db/entities/VacayCompanyHolidays.entity';
+import { VacayHolidayCalendars } from '../../../../src/db/entities/VacayHolidayCalendars.entity';
+import { VacayPlanMembers } from '../../../../src/db/entities/VacayPlanMembers.entity';
+import { VacayPlans } from '../../../../src/db/entities/VacayPlans.entity';
+import { VacayUserColors } from '../../../../src/db/entities/VacayUserColors.entity';
 
 const testDb = createSnapshotTestDb();
+const orm = () => sharedTestOrm(testDb);
 
-function makePlan(ownerId: number): number {
-  return Number(testDb.prepare('INSERT INTO vacay_plans (owner_id) VALUES (?)').run(ownerId).lastInsertRowid);
+async function makePlan(ownerId: number): Promise<number> {
+  return (await makeVacayPlan(await orm(), ownerId)).id;
 }
 
 beforeEach(() => resetTestDb(testDb));
@@ -32,8 +41,8 @@ describe('VacayCompanyHolidaysRepository — note ?? null (VC29/VC67/VC112)', ()
   it('listForPlan/listForRange return note: null for a row whose note column is genuinely NULL', async () => {
     const repo = await createTestVacayCompanyHolidaysRepo(testDb);
     const { user } = createUser(testDb);
-    const planId = makePlan(user.id);
-    testDb.prepare('INSERT INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, NULL)').run(planId, '2026-12-25');
+    const planId = await makePlan(user.id);
+    await insertRow(await orm(), VacayCompanyHolidays, { plan: planId, date: '2026-12-25', note: null });
 
     expect(await repo.listForPlan(planId)).toEqual([{ date: '2026-12-25', note: null, fraction: 1 }]);
     expect(await repo.listForRange(planId, '2026-12-01', '2027-01-01')).toMatchObject([{ date: '2026-12-25', note: null }]);
@@ -45,9 +54,9 @@ describe('VacayUserColorsRepository — color ?? null (VC79/VC57.../VC59)', () =
     const repo = await createTestVacayUserColorsRepo(testDb);
     const { user: u1 } = createUser(testDb);
     const { user: u2 } = createUser(testDb);
-    const planId = makePlan(u1.id);
-    testDb.prepare('INSERT INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, NULL)').run(u1.id, planId);
-    testDb.prepare('INSERT INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)').run(u2.id, planId, '#111111');
+    const planId = await makePlan(u1.id);
+    await insertRow(await orm(), VacayUserColors, { user: u1.id, plan: planId, color: null });
+    await insertRow(await orm(), VacayUserColors, { user: u2.id, plan: planId, color: '#111111' });
 
     expect(await repo.listForPlan(planId)).toEqual(expect.arrayContaining([{ color: null }, { color: '#111111' }]));
     expect(await repo.findColor(u1.id, planId)).toEqual({ color: null });
@@ -65,13 +74,11 @@ describe('VacayHolidayCalendarsRepository — findById/findScopedForPlan not-fou
   it('findScopedForPlan returns the row for the correct plan, null under a DIFFERENT plan', async () => {
     const repo = await createTestVacayHolidayCalendarsRepo(testDb);
     const { user } = createUser(testDb);
-    const planId = makePlan(user.id);
-    const otherPlanId = makePlan(createUser(testDb).user.id);
-    const id = Number(
-      testDb
-        .prepare("INSERT INTO vacay_holiday_calendars (plan_id, type, region, color, sort_order) VALUES (?, 'public_holiday', 'US', '#fecaca', 0)")
-        .run(planId).lastInsertRowid,
-    );
+    const planId = await makePlan(user.id);
+    const otherPlanId = await makePlan(createUser(testDb).user.id);
+    const id = await insertRow(await orm(), VacayHolidayCalendars, {
+      plan: planId, type: 'public_holiday', region: 'US', color: '#fecaca', sort_order: 0,
+    });
     expect((await repo.findScopedForPlan(id, planId))?.id).toBe(id);
     expect(await repo.findScopedForPlan(id, otherPlanId)).toBeNull();
     expect((await repo.findById(id))?.id).toBe(id);
@@ -83,15 +90,15 @@ describe('VacayPlanMembersRepository — findMembership/findAcceptedForUser (VC4
     const repo = await createTestVacayPlanMembersRepo(testDb);
     const { user: owner } = createUser(testDb);
     const { user: target } = createUser(testDb);
-    const planId = makePlan(owner.id);
+    const planId = await makePlan(owner.id);
 
     expect(await repo.findMembership(planId, target.id)).toBeNull();
 
-    testDb.prepare("INSERT INTO vacay_plan_members (plan_id, user_id, status) VALUES (?, ?, 'pending')").run(planId, target.id);
+    await addVacayPlanMember(await orm(), planId, target.id, 'pending');
     const pending = await repo.findMembership(planId, target.id);
     expect(pending).toMatchObject({ status: 'pending' });
 
-    testDb.prepare('UPDATE vacay_plan_members SET status = NULL WHERE plan_id = ? AND user_id = ?').run(planId, target.id);
+    await updateRows(await orm(), VacayPlanMembers, { plan: planId, user: target.id }, { status: null });
     expect(await repo.findMembership(planId, target.id)).toEqual({ id: pending!.id, status: null });
   });
 
@@ -99,13 +106,11 @@ describe('VacayPlanMembersRepository — findMembership/findAcceptedForUser (VC4
     const repo = await createTestVacayPlanMembersRepo(testDb);
     const { user: owner } = createUser(testDb);
     const { user: target } = createUser(testDb);
-    const planId = makePlan(owner.id);
+    const planId = await makePlan(owner.id);
 
     expect(await repo.findAcceptedForUser(target.id)).toBeNull();
 
-    const id = Number(
-      testDb.prepare("INSERT INTO vacay_plan_members (plan_id, user_id, status) VALUES (?, ?, 'accepted')").run(planId, target.id).lastInsertRowid,
-    );
+    const { id } = await addVacayPlanMember(await orm(), planId, target.id, 'accepted');
     expect(await repo.findAcceptedForUser(target.id)).toEqual({ id });
   });
 });
@@ -114,7 +119,7 @@ describe('VacayPlansRepository — findOwnerId/getHolidaysEnabled/findVacayUser 
   it('findOwnerId returns null for a plan id that does not exist, the owner id for one that does', async () => {
     const repo = await createTestVacayPlansRepo(testDb);
     const { user } = createUser(testDb);
-    const planId = makePlan(user.id);
+    const planId = await makePlan(user.id);
     expect(await repo.findOwnerId(999999)).toBeNull();
     expect(await repo.findOwnerId(planId)).toEqual({ owner_id: user.id });
   });
@@ -122,13 +127,13 @@ describe('VacayPlansRepository — findOwnerId/getHolidaysEnabled/findVacayUser 
   it('getHolidaysEnabled returns null for a missing plan, null for a genuinely NULL column, and the value when set', async () => {
     const repo = await createTestVacayPlansRepo(testDb);
     const { user } = createUser(testDb);
-    const planId = makePlan(user.id);
+    const planId = await makePlan(user.id);
     expect(await repo.getHolidaysEnabled(999999)).toBeNull();
 
-    testDb.prepare('UPDATE vacay_plans SET holidays_enabled = NULL WHERE id = ?').run(planId);
+    await updateRows(await orm(), VacayPlans, { id: planId }, { holidays_enabled: null });
     expect(await repo.getHolidaysEnabled(planId)).toBeNull();
 
-    testDb.prepare('UPDATE vacay_plans SET holidays_enabled = 1 WHERE id = ?').run(planId);
+    await updateRows(await orm(), VacayPlans, { id: planId }, { holidays_enabled: 1 });
     expect(await repo.getHolidaysEnabled(planId)).toBe(1);
   });
 

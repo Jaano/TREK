@@ -10,6 +10,7 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { VacayUserSettings } from '../../../../src/db/entities/VacayUserSettings.entity';
 import type { VacayUserSettingsRepository } from '../../../../src/db/repositories/VacayUserSettings.repository';
+import { insertRow } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -25,17 +26,18 @@ afterAll(async () => { await t.close(); testDb.close(); });
 describe('VacayUserSettingsRepository.findForUser (VC3, getUserYearSettings)', () => {
   it('VACAYUSETREPO-001: matches SELECT * FROM vacay_user_settings WHERE user_id = ? run raw, hire_date both NULL and SET', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO vacay_user_settings (user_id, year_type, year_start_month, year_start_day, hire_date) VALUES (?, ?, ?, ?, ?)')
-      .run(user.id, 'fiscal', 4, 1, '2020-06-15');
+    await insertRow(t, VacayUserSettings, { user: user.id, year_type: 'fiscal', year_start_month: 4, year_start_day: 1, hire_date: '2020-06-15' });
 
+    // test-sql-allow: the legacy full-row SELECT is the parity oracle the repository is compared against.
     const legacy = testDb.prepare('SELECT * FROM vacay_user_settings WHERE user_id = ?').get(user.id);
     expect(await repo.findForUser(user.id)).toEqual(legacy);
   });
 
   it('VACAYUSETREPO-002: hire_date NULL matches the legacy row too', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO vacay_user_settings (user_id) VALUES (?)').run(user.id);
+    await insertRow(t, VacayUserSettings, { user: user.id });
 
+    // test-sql-allow: the legacy full-row SELECT is the parity oracle the repository is compared against.
     const legacy = testDb.prepare('SELECT * FROM vacay_user_settings WHERE user_id = ?').get(user.id);
     expect(await repo.findForUser(user.id)).toEqual(legacy);
   });

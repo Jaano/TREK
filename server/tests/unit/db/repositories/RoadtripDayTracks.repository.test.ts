@@ -23,6 +23,7 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createDay, createPlace, createTrip, createUser } from '../../../helpers/factories';
 import { RoadtripDayTracks } from '../../../../src/db/entities/RoadtripDayTracks.entity';
 import type { RoadtripDayTracksRepository } from '../../../../src/db/repositories/RoadtripDayTracks.repository';
+import { findRows } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -44,39 +45,40 @@ function fixture() {
   return { trip, dayA, placeA, placeB };
 }
 
-function rawRows(): { day_id: number; place_id: number; stray_km: number | null; created_at: string | null }[] {
-  return testDb.prepare('SELECT day_id, place_id, stray_km, created_at FROM roadtrip_day_tracks ORDER BY day_id').all() as never[];
+async function storedRows(): Promise<{ day_id: number | null | undefined; place_id: number; stray_km: number | null | undefined; created_at: string | null | undefined }[]> {
+  return (await findRows(t, RoadtripDayTracks, {}, { day: 'asc' }))
+    .map((r) => ({ day_id: r.day_id, place_id: r.place_id, stray_km: r.stray_km, created_at: r.created_at }));
 }
 
 describe('RoadtripDayTracksRepository', () => {
   it('RT7REPO-001: deleteForDay removes the one row for that day', async () => {
     const { dayA, placeA } = fixture();
     await tracks.upsertTrack(dayA.id, placeA.id, null);
-    expect(rawRows()).toHaveLength(1);
+    expect(await storedRows()).toHaveLength(1);
     await tracks.deleteForDay(dayA.id);
-    expect(rawRows()).toHaveLength(0);
+    expect(await storedRows()).toHaveLength(0);
   });
 
   it('RT7REPO-002: deleteForDay on a day with no track is a silent no-op', async () => {
     const { dayA } = fixture();
     await expect(tracks.deleteForDay(dayA.id)).resolves.toBeUndefined();
-    expect(rawRows()).toHaveLength(0);
+    expect(await storedRows()).toHaveLength(0);
   });
 
   it('UPSERTTRACKREPO-001: a fresh day_id inserts one row', async () => {
     const { dayA, placeA } = fixture();
     await tracks.upsertTrack(dayA.id, placeA.id, 1.5);
-    const rows = rawRows();
+    const rows = await storedRows();
     expect(rows).toEqual([{ day_id: dayA.id, place_id: placeA.id, stray_km: 1.5, created_at: expect.any(String) }]);
   });
 
   it('UPSERTTRACKREPO-002: re-upserting the SAME day_id updates in place — one row, the second call\'s place_id/stray_km, created_at untouched', async () => {
     const { dayA, placeA, placeB } = fixture();
     await tracks.upsertTrack(dayA.id, placeA.id, 1.5);
-    const before = rawRows()[0]!;
+    const before = (await storedRows())[0]!;
 
     await tracks.upsertTrack(dayA.id, placeB.id, 9.25);
-    const after = rawRows();
+    const after = await storedRows();
 
     // Exactly one row — if `onConflictFields: ['day']` resolved to anything
     // other than the physical `day_id` PK, the second call would either
@@ -93,7 +95,7 @@ describe('RoadtripDayTracksRepository', () => {
     const dayB = createDay(testDb, trip.id);
     await tracks.upsertTrack(dayA.id, placeA.id, null);
     await tracks.upsertTrack(dayB.id, placeA.id, null);
-    expect(rawRows()).toHaveLength(2);
+    expect(await storedRows()).toHaveLength(2);
   });
 
   it('UPSERTTRACKREPO-004: the rendered upsert SQL names the physical day_id column as its conflict target', async () => {

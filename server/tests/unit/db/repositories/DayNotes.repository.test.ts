@@ -6,6 +6,7 @@ import { createDay, createDayNote, createTrip, createUser } from '../../../helpe
 import { DayNotes } from '../../../../src/db/entities/DayNotes.entity';
 import type { DayNotesRepository } from '../../../../src/db/repositories/DayNotes.repository';
 import { DB_TIMESTAMP_RE } from '../../../../src/db/types';
+import { findRow, insertRow } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -24,6 +25,7 @@ describe('DayNotesRepository timestamps', () => {
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
     const row = await notes.createNote({ day_id: day.id, trip_id: trip.id, text: 'Lunch', time: null, icon: '📝', sort_order: 0, color: null });
+    // test-sql-allow: typeof() reports the SQLite storage class of the stored value, which no entity maps.
     const stored = testDb.prepare('SELECT created_at, typeof(created_at) AS kind FROM day_notes WHERE id = ?').get(row.id) as { created_at: string; kind: string };
     expect(stored.kind).toBe('text');
     expect(stored.created_at).toMatch(DB_TIMESTAMP_RE);
@@ -35,6 +37,7 @@ describe('DayNotesRepository timestamps', () => {
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
     const row = await notes.createNote({ day_id: day.id, trip_id: trip.id, text: 'Lunch', time: null, icon: '📝', sort_order: 0, color: null });
+    // test-sql-allow: the raw full row is the parity oracle the repository's return value is compared against.
     expect(row).toStrictEqual(testDb.prepare('SELECT * FROM day_notes WHERE id = ?').get(row.id));
     expect(row.icon).toBe('📝');
     expect(row.sort_order).toBe(0);
@@ -45,6 +48,7 @@ describe('DayNotesRepository timestamps', () => {
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
     const row = await notes.createNote({ day_id: day.id, trip_id: trip.id, text: 'Lunch', time: null, icon: '📝', sort_order: 0, color: null });
+    // test-sql-allow: the point is that SQLite's own date() parses the stored value, so the read has to be SQL.
     const d = testDb.prepare('SELECT date(created_at) AS d FROM day_notes WHERE id = ?').get(row.id) as { d: string };
     expect(d.d).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
@@ -115,6 +119,7 @@ describe('DayNotesRepository.listByDayIds (DY4)', () => {
     const day = createDay(testDb, trip.id);
     const note = createDayNote(testDb, day.id, trip.id, { text: 'Old text' });
     await t.repo(DayNotes).find({}, { disableIdentityMap: false }); // populate the identity map with the managed note entity
+    // test-sql-allow: the out-of-band write this case is about has to bypass every EntityManager, the one under test included.
     testDb.prepare('UPDATE day_notes SET text = ? WHERE id = ?').run('Fresh text', note.id);
 
     const rows = await notes.listByDayIds([day.id]);
@@ -137,17 +142,21 @@ describe('DayNotesRepository.listByTrip (TP70)', () => {
     const other = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
 
-    const insert = testDb.prepare('INSERT INTO day_notes (day_id, trip_id, text, time, icon, sort_order, color) VALUES (?, ?, ?, ?, ?, ?, ?)');
     // Row A: every nullable column non-null, a unicode string and a
     // '007'-style digit string among the values.
-    const n1 = insert.run(day.id, trip.id, 'Keep — 日本 ☕️ 007', '09:00', '🗒️', 1, '#00ff00').lastInsertRowid as number;
+    const n1 = await insertRow(t, DayNotes, {
+      day: day.id, trip: trip.id, text: 'Keep — 日本 ☕️ 007', time: '09:00', icon: '🗒️', sort_order: 1, color: '#00ff00',
+    });
     // Row B: every nullable column NULL.
-    const n2 = insert.run(day.id, trip.id, 'Bare note', null, null, null, null).lastInsertRowid as number;
+    const n2 = await insertRow(t, DayNotes, {
+      day: day.id, trip: trip.id, text: 'Bare note', time: null, icon: null, sort_order: null, color: null,
+    });
 
     const otherDay = createDay(testDb, other.id);
     createDayNote(testDb, otherDay.id, other.id, { text: 'Not this trip' });
 
     const rows = await notes.listByTrip(trip.id);
+    // test-sql-allow: the legacy statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare('SELECT * FROM day_notes WHERE trip_id = ?').all(trip.id);
     expect(rows).toEqual(legacy);
     expect(rows.map((r) => r.id)).toEqual([n1, n2]);
@@ -170,8 +179,9 @@ describe('DayNotesRepository.insertNoteCopy (TP71)', () => {
       day_id: day.id, trip_id: trip.id, text: 'Copied note', time: '09:00', icon: '🎒', sort_order: 5,
     });
 
-    const row = testDb.prepare('SELECT day_id, trip_id, text, time, icon, sort_order, color FROM day_notes WHERE id = ?').get(newId);
-    expect(row).toEqual({ day_id: day.id, trip_id: trip.id, text: 'Copied note', time: '09:00', icon: '🎒', sort_order: 5, color: null });
+    const { day_id, trip_id, text, time, icon, sort_order, color } = (await findRow(t, DayNotes, { id: newId }))!;
+    expect({ day_id, trip_id, text, time, icon, sort_order, color })
+      .toEqual({ day_id: day.id, trip_id: trip.id, text: 'Copied note', time: '09:00', icon: '🎒', sort_order: 5, color: null });
   });
 });
 
@@ -185,6 +195,7 @@ describe('DayNotesRepository.listByDayAndTrip (Plan 4 Task 1, day-notes.service.
     const first = createDayNote(testDb, day.id, trip.id, { sort_order: 1 });
     createDayNote(testDb, otherDay.id, trip.id);
 
+    // test-sql-allow: the legacy statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare('SELECT * FROM day_notes WHERE day_id = ? AND trip_id = ? ORDER BY sort_order ASC, created_at ASC').all(day.id, trip.id);
     const rows = await notes.listByDayAndTrip(day.id, trip.id);
     expect(rows).toEqual(legacy);
@@ -223,7 +234,8 @@ describe('DayNotesRepository.updateNote (Plan 4 Task 1, day-notes.service.ts::up
     const updated = await notes.updateNote(note.id, { text: 'Dinner', time: '19:00', icon: '🍣', sort_order: 3, color: '#2563eb' });
 
     expect(updated).toMatchObject({ id: note.id, text: 'Dinner', time: '19:00', icon: '🍣', sort_order: 3, color: '#2563eb' });
-    expect(testDb.prepare('SELECT text, time, icon, sort_order, color FROM day_notes WHERE id = ?').get(note.id))
+    const stored = (await findRow(t, DayNotes, { id: note.id }))!;
+    expect({ text: stored.text, time: stored.time, icon: stored.icon, sort_order: stored.sort_order, color: stored.color })
       .toEqual({ text: 'Dinner', time: '19:00', icon: '🍣', sort_order: 3, color: '#2563eb' });
   });
 
@@ -241,7 +253,7 @@ describe('DayNotesRepository.deleteById (Plan 4 Task 1, day-notes.service.ts::re
 
     await notes.deleteById(note.id);
 
-    expect(testDb.prepare('SELECT id FROM day_notes WHERE id = ?').get(note.id)).toBeUndefined();
+    expect(await findRow(t, DayNotes, { id: note.id })).toBeNull();
   });
 
   it('NOTEREPO-018: deleting an id that does not exist is a no-op, not an error', async () => {

@@ -6,6 +6,7 @@ import { createUser } from '../../../../helpers/factories';
 import { Collections } from '../../../../../src/db/entities/Collections.entity';
 import { CollectionMembers } from '../../../../../src/db/entities/CollectionMembers.entity';
 import { resolveCollectionRole, type CollectionRole } from '../../../../../src/db/repositories/_shared/collection-role';
+import { addCollectionMember, makeCollection } from '../../../../helpers/factories/collections';
 
 /**
  * Plan 3h Task 1, R6 — the collections cluster's shared collection-role
@@ -48,7 +49,7 @@ afterAll(async () => { await t.close(); testDb.close(); });
 
 type Actor = 'owner' | 'admin' | 'editor' | 'viewer' | 'pending' | 'stranger';
 
-function seedFixture() {
+async function seedFixture() {
   const { user: owner } = createUser(testDb);
   const { user: admin } = createUser(testDb);
   const { user: editor } = createUser(testDb);
@@ -56,16 +57,14 @@ function seedFixture() {
   const { user: pending } = createUser(testDb);
   const { user: stranger } = createUser(testDb);
 
-  const collectionId = testDb
-    .prepare("INSERT INTO collections (owner_id, name) VALUES (?, 'Fixture')")
-    .run(owner.id).lastInsertRowid as number;
+  const { id: collectionId } = await makeCollection(t, owner.id, { name: 'Fixture' });
 
   const addMember = (userId: number, role: string, status: string) =>
-    testDb.prepare('INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, ?, ?)').run(collectionId, userId, status, role);
-  addMember(admin.id, 'admin', 'accepted');
-  addMember(editor.id, 'editor', 'accepted');
-  addMember(viewer.id, 'viewer', 'accepted');
-  addMember(pending.id, 'editor', 'pending');
+    addCollectionMember(t, collectionId, userId, { status, role });
+  await addMember(admin.id, 'admin', 'accepted');
+  await addMember(editor.id, 'editor', 'accepted');
+  await addMember(viewer.id, 'viewer', 'accepted');
+  await addMember(pending.id, 'editor', 'pending');
 
   return {
     collectionId: collectionId as number,
@@ -104,7 +103,7 @@ const EXPECTED: Record<Actor, { role: CollectionRole; access: 'ok' | 404; edit: 
 describe('_shared/collection-role — R6 parity harness (owner/admin/editor/viewer/pending/stranger)', () => {
   (Object.keys(EXPECTED) as Actor[]).forEach((actor) => {
     it(`resolves the ${actor} case to role=${String(EXPECTED[actor].role)} and the matching refusal shapes`, async () => {
-      const { collectionId, userIds } = seedFixture();
+      const { collectionId, userIds } = await seedFixture();
       const collections = t.repo(Collections);
       const members = t.repo(CollectionMembers);
 
@@ -119,7 +118,7 @@ describe('_shared/collection-role — R6 parity harness (owner/admin/editor/view
   });
 
   it('a stranger and a pending invite are indistinguishable to the predicate (both resolve to null, no access)', async () => {
-    const { collectionId, userIds } = seedFixture();
+    const { collectionId, userIds } = await seedFixture();
     const collections = t.repo(Collections);
     const members = t.repo(CollectionMembers);
 

@@ -11,6 +11,9 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createReservation, createTrip, createUser } from '../../../helpers/factories';
 import { ReservationTravelers } from '../../../../src/db/entities/ReservationTravelers.entity';
 import type { ReservationTravelersRepository } from '../../../../src/db/repositories/ReservationTravelers.repository';
+import { updateRows } from '../../../helpers/factories/rows';
+import { addReservationTraveler } from '../../../helpers/factories/reservations';
+import { Users } from '../../../../src/db/entities/Users.entity';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -23,33 +26,35 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
+// test-sql-allow: the legacy statement is the parity oracle the repository is compared against.
 const legacyListForTrip = (trip_id: number) => testDb.prepare(`
   SELECT rt.reservation_id, rt.user_id, COALESCE(u.display_name, u.username) AS username, u.avatar, u.is_guest
   FROM reservation_travelers rt JOIN reservations r ON rt.reservation_id = r.id JOIN users u ON rt.user_id = u.id
   WHERE r.trip_id = ? ORDER BY rt.reservation_id`).all(trip_id);
 
+// test-sql-allow: the legacy statement is the parity oracle the repository is compared against.
 const legacyListForReservation = (reservation_id: number) => testDb.prepare(`
   SELECT rt.user_id, COALESCE(u.display_name, u.username) AS username, u.avatar, u.is_guest
   FROM reservation_travelers rt JOIN users u ON rt.user_id = u.id WHERE rt.reservation_id = ?`).all(reservation_id);
 
 describe('ReservationTravelersRepository — fully seeded world', () => {
-  const seed = () => {
+  const seed = async () => {
     const { user: owner } = createUser(testDb);
     const { user: named } = createUser(testDb);
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Named Traveler', named.id);
+    await updateRows(t, Users, { id: named.id }, { display_name: 'Named Traveler' });
     const { user: guest } = createUser(testDb);
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(t, Users, { id: guest.id }, { is_guest: 1 });
     const trip = createTrip(testDb, owner.id);
     const flight = createReservation(testDb, trip.id, { title: 'Flight', type: 'flight' });
     const hotel = createReservation(testDb, trip.id, { title: 'Hotel', type: 'hotel' });
-    testDb.prepare('INSERT INTO reservation_travelers (reservation_id, user_id) VALUES (?, ?)').run(flight.id, owner.id);
-    testDb.prepare('INSERT INTO reservation_travelers (reservation_id, user_id) VALUES (?, ?)').run(flight.id, named.id);
-    testDb.prepare('INSERT INTO reservation_travelers (reservation_id, user_id) VALUES (?, ?)').run(hotel.id, guest.id);
+    await addReservationTraveler(t, flight.id, owner.id);
+    await addReservationTraveler(t, flight.id, named.id);
+    await addReservationTraveler(t, hotel.id, guest.id);
     return { owner, named, guest, trip, flight, hotel };
   };
 
   it('RS6 listForTrip — matches the legacy JOIN statement, COALESCE(display_name, username), ordered by reservation', async () => {
-    const { trip, flight, hotel } = seed();
+    const { trip, flight, hotel } = await seed();
     const legacy = legacyListForTrip(trip.id);
     const typed = await repo.listForTrip(trip.id);
     expect(typed).toEqual(legacy);
@@ -59,7 +64,7 @@ describe('ReservationTravelersRepository — fully seeded world', () => {
   });
 
   it('RR3 listForReservation — matches the legacy statement (no ORDER BY, no reservation_id column)', async () => {
-    const { flight, owner, named } = seed();
+    const { flight, owner, named } = await seed();
     const legacy = legacyListForReservation(flight.id);
     const typed = await repo.listForReservation(flight.id);
     expect(typed).toEqual(legacy);

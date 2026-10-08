@@ -7,6 +7,8 @@ import { Tags } from '../../../../src/db/entities/Tags.entity';
 import type { TagsRepository } from '../../../../src/db/repositories/Tags.repository';
 import { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
 import { withRequestContext } from '../../../../src/nest/database/request-context';
+import { findRows } from '../../../helpers/factories/rows';
+import { tagPlace } from '../../../helpers/factories/places';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -22,7 +24,13 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 function rawTag(id: number): unknown {
+  // test-sql-allow: the raw full row is the parity oracle the repository's reads are compared against.
   return testDb.prepare('SELECT * FROM tags WHERE id = ?').get(id);
+}
+
+/** The ids of the tags on the place, through the place_tags pivot, in tag id order. */
+async function placeTagIds(placeId: number): Promise<number[]> {
+  return (await findRows(t, Tags, { place_tags_inverse: placeId }, { id: 'asc' })).map((tag) => tag.id);
 }
 
 async function withQueryCount<T>(fn: () => Promise<T>): Promise<{ value: T; queries: number }> {
@@ -109,6 +117,7 @@ describe('TagsRepository', () => {
       const { user } = createUser(testDb);
       const created = createTag(testDb, user.id, { name: 'Stale', color: '#111111' });
       expect((await tags.findByIdAndUser(created.id, user.id))?.color).toBe('#111111'); // populate the identity map
+      // test-sql-allow: the out-of-band write this case is about has to bypass every EntityManager, the one under test included.
       testDb.prepare('UPDATE tags SET color = ? WHERE id = ?').run('#222222', created.id);
       const { value, queries } = await withQueryCount(() => tags.findByIdAndUser(created.id, user.id));
       expect(value?.color).toBe('#222222');
@@ -201,6 +210,7 @@ describe('TagsRepository', () => {
       const { user } = createUser(testDb);
       const created = createTag(testDb, user.id, { name: 'OLD', color: '#aaaaaa' });
       await tags.listByUser(user.id); // populate the identity map with name: 'OLD'
+      // test-sql-allow: the out-of-band write this case is about has to bypass every EntityManager, the one under test included.
       testDb.prepare('UPDATE tags SET name = ? WHERE id = ?').run('NEW', created.id);
       const updated = await tags.patch(created.id, { color: '#bbbbbb' });
       expect(updated?.name).toBe('NEW');
@@ -217,6 +227,7 @@ describe('TagsRepository', () => {
       const { user } = createUser(testDb);
       const created = createTag(testDb, user.id, { name: 'RaceColor', color: '#111111' });
       await tags.findByIdAndUser(created.id, user.id); // populate the identity map with '#111111'
+      // test-sql-allow: the out-of-band write this case is about has to bypass every EntityManager, the one under test included.
       testDb.prepare('UPDATE tags SET color = ? WHERE id = ?').run('#333333', created.id);
       const updated = await tags.patch(created.id, { color: '#111111' });
       expect(updated?.color).toBe('#111111');
@@ -262,8 +273,8 @@ describe('TagsRepository', () => {
   // Plan 3c Task 1 (QH1): the batch tag-by-place loader behind
   // `QueryHelpersService.loadTagsByPlaceIds`, moved off `query-helpers.service.ts`.
   describe('listForPlaces', () => {
-    function attach(tagId: number, placeId: number): void {
-      testDb.prepare('INSERT INTO place_tags (tag_id, place_id) VALUES (?, ?)').run(tagId, placeId);
+    function attach(tagId: number, placeId: number): Promise<void> {
+      return tagPlace(t, placeId, [tagId]);
     }
 
     it('LISTFORPLACESREPO-001: an empty placeIds array short-circuits to [] without querying', async () => {
@@ -277,7 +288,7 @@ describe('TagsRepository', () => {
       const trip = createTrip(testDb, user.id);
       const place = createPlace(testDb, trip.id);
       const tag = createTag(testDb, user.id, { name: 'Beach', color: '#ff0000' });
-      attach(tag.id, place.id);
+      await attach(tag.id, place.id);
 
       const rows = await tags.listForPlaces([place.id]);
       expect(rows).toEqual([
@@ -290,7 +301,7 @@ describe('TagsRepository', () => {
       const trip = createTrip(testDb, user.id);
       const place = createPlace(testDb, trip.id);
       const tag = createTag(testDb, user.id, { name: 'Compact', color: '#00ff00' });
-      attach(tag.id, place.id);
+      await attach(tag.id, place.id);
 
       const rows = await tags.listForPlaces([place.id], { compact: true });
       expect(rows).toEqual([{ id: tag.id, name: 'Compact', color: '#00ff00', created_at: (rawTag(tag.id) as { created_at: string }).created_at, place_id: place.id }]);
@@ -303,8 +314,8 @@ describe('TagsRepository', () => {
       const placeA = createPlace(testDb, trip.id, { name: 'A' });
       const placeB = createPlace(testDb, trip.id, { name: 'B' });
       const tag = createTag(testDb, user.id);
-      attach(tag.id, placeA.id);
-      attach(tag.id, placeB.id);
+      await attach(tag.id, placeA.id);
+      await attach(tag.id, placeB.id);
 
       const rows = await tags.listForPlaces([placeA.id, placeB.id]);
       expect(rows.map((r) => r.place_id).sort()).toEqual([placeA.id, placeB.id].sort());
@@ -332,7 +343,8 @@ describe('TagsRepository', () => {
       // (`name`) — `find({})` with the base default merged in populates
       // nothing.
       await t.repo(Tags).find({}, { disableIdentityMap: false });
-      attach(tag.id, place.id);
+      await attach(tag.id, place.id);
+      // test-sql-allow: the out-of-band write this case is about has to bypass every EntityManager, the one under test included.
       testDb.prepare('UPDATE tags SET name = ? WHERE id = ?').run('Renamed', tag.id);
       const rows = await tags.listForPlaces([place.id]);
       expect(rows[0]?.name).toBe('Renamed');
@@ -368,8 +380,8 @@ describe('TagsRepository.insertIgnore / deleteForPlace (PL5/PL12/PL13 — place_
     await tags.insertIgnore(place.id, [tagA.id, tagB.id]);
     // Re-run with an overlapping id — the pre-existing pair must not error or duplicate.
     await tags.insertIgnore(place.id, [tagA.id]);
-    const rows = testDb.prepare('SELECT tag_id FROM place_tags WHERE place_id = ? ORDER BY tag_id').all(place.id) as { tag_id: number }[];
-    expect(rows.map((r) => r.tag_id).sort((a, b) => a - b)).toEqual([tagA.id, tagB.id].sort((a, b) => a - b));
+    const rows = await placeTagIds(place.id);
+    expect([...rows].sort((a, b) => a - b)).toEqual([tagA.id, tagB.id].sort((a, b) => a - b));
   });
 
   it('PLACETAGSREPO-002: insertIgnore with an empty array is a no-op', async () => {
@@ -377,7 +389,7 @@ describe('TagsRepository.insertIgnore / deleteForPlace (PL5/PL12/PL13 — place_
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
     await tags.insertIgnore(place.id, []);
-    const rows = testDb.prepare('SELECT tag_id FROM place_tags WHERE place_id = ?').all(place.id);
+    const rows = await placeTagIds(place.id);
     expect(rows).toEqual([]);
   });
 
@@ -390,8 +402,8 @@ describe('TagsRepository.insertIgnore / deleteForPlace (PL5/PL12/PL13 — place_
     await tags.insertIgnore(place.id, [tag.id]);
     await tags.insertIgnore(other.id, [tag.id]);
     await tags.deleteForPlace(place.id);
-    expect(testDb.prepare('SELECT * FROM place_tags WHERE place_id = ?').all(place.id)).toEqual([]);
-    expect(testDb.prepare('SELECT * FROM place_tags WHERE place_id = ?').all(other.id)).toHaveLength(1);
+    expect(await placeTagIds(place.id)).toEqual([]);
+    expect(await placeTagIds(other.id)).toHaveLength(1);
   });
 
   // Task 9 fix wave (B-M5, the OAUTHTOKREPO-012/REANCHORDAY-003 rollback
@@ -416,7 +428,7 @@ describe('TagsRepository.insertIgnore / deleteForPlace (PL5/PL12/PL13 — place_
     } catch (e) { caught = e; }
     expect((caught as Error).message).toBe('force rollback');
 
-    expect(testDb.prepare('SELECT * FROM place_tags WHERE place_id = ?').all(place.id)).toEqual([]);
+    expect(await placeTagIds(place.id)).toEqual([]);
   });
 
   it('PLACETAGSREPO-007: deleteForPlace inside a uow.transactional that then ROLLS BACK leaves the pairs in place', async () => {
@@ -437,7 +449,7 @@ describe('TagsRepository.insertIgnore / deleteForPlace (PL5/PL12/PL13 — place_
     } catch (e) { caught = e; }
     expect((caught as Error).message).toBe('force rollback');
 
-    expect(testDb.prepare('SELECT * FROM place_tags WHERE place_id = ?').all(place.id)).toHaveLength(1);
+    expect(await placeTagIds(place.id)).toHaveLength(1);
   });
 });
 
@@ -492,6 +504,6 @@ describe('TagsRepository.listPlaceTagsForTrip (TP46)', () => {
     expect((caught as Error).message).toBe('force rollback');
 
     expect(await tags.listPlaceTagsForTrip(trip.id)).toEqual([]);
-    expect(testDb.prepare('SELECT * FROM place_tags WHERE place_id = ?').all(place.id)).toEqual([]);
+    expect(await placeTagIds(place.id)).toEqual([]);
   });
 });

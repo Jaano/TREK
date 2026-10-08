@@ -39,6 +39,7 @@ import { Users } from '../../../../src/db/entities/Users.entity';
 import type { UsersRepository } from '../../../../src/db/repositories/Users.repository';
 import { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
 import { withRequestContext } from '../../../../src/nest/database/request-context';
+import { readUser } from '../../../helpers/factories/users';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -56,7 +57,7 @@ afterAll(async () => { await t.close(); testDb.close(); });
 describe('identity-map write-back (task-1-review.md B1)', () => {
   it('IMWB-001: findByIdWithPasswordVersion then getApiKeyColumns then patchProfile — the profile write survives the request', async () => {
     const { user } = createUser(testDb, { username: 'before', email: 'before@example.test' });
-    const originalPasswordVersion = (testDb.prepare('SELECT password_version FROM users WHERE id = ?').get(user.id) as { password_version: number }).password_version;
+    const originalPasswordVersion = (await readUser(t, user.id)).password_version;
 
     await withRequestContext(t.orm, async () => {
       // Projection A — the JwtAuthGuard/GlobalAuthGuard shape.
@@ -71,9 +72,7 @@ describe('identity-map write-back (task-1-review.md B1)', () => {
       });
     });
 
-    const row = testDb
-      .prepare('SELECT username, email, password_version FROM users WHERE id = ?')
-      .get(user.id) as { username: string; email: string; password_version: number };
+    const row = await readUser(t, user.id);
     expect(row.username).toBe('newname'); // the nativeUpdate must stick
     expect(row.email).toBe('before@example.test'); // untouched by either read
     expect(row.password_version).toBe(originalPasswordVersion); // untouched by either read
@@ -90,9 +89,7 @@ describe('identity-map write-back (task-1-review.md B1)', () => {
       });
     });
 
-    const row = testDb
-      .prepare('SELECT password_hash, password_version, username FROM users WHERE id = ?')
-      .get(user.id) as { password_hash: string; password_version: number; username: string };
+    const row = await readUser(t, user.id);
     expect(row.password_hash).toBe('NEWHASH');
     expect(row.password_version).toBe(5); // the session-invalidation gate — must NOT revert to the pre-change value
     expect(row.username).toBe('someone'); // untouched by either read

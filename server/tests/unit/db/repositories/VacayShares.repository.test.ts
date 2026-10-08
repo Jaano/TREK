@@ -10,12 +10,20 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createUser } from '../../../helpers/factories';
 import { createTestVacaySharesRepo } from '../../../helpers/vacay-repos';
 import type { VacaySharesRepository } from '../../../../src/db/repositories/VacayShares.repository';
+import { sharedTestOrm } from '../../../helpers/test-uow';
+import type { TestOrm } from '../../../helpers/test-orm';
+import { insertRow, updateRows } from '../../../helpers/factories/rows';
+import { addVacayPlanMember, makeVacayPlan } from '../../../helpers/factories/vacay';
+import { Users } from '../../../../src/db/entities/Users.entity';
+import { VacayShares } from '../../../../src/db/entities/VacayShares.entity';
 
 const testDb = createSnapshotTestDb();
 let repo: VacaySharesRepository;
+let orm: TestOrm;
 
 beforeAll(async () => {
   repo = await createTestVacaySharesRepo(testDb);
+  orm = await sharedTestOrm(testDb);
 });
 beforeEach(() => {
   resetTestDb(testDb);
@@ -25,10 +33,8 @@ afterAll(() => testDb.close());
 const LEGACY_LIST_OUTGOING = `SELECT s.id, s.user_id, u.username FROM vacay_shares s JOIN users u ON s.user_id = u.id WHERE s.owner_id = ? ORDER BY s.id`;
 const LEGACY_LIST_INCOMING = `SELECT s.id, s.owner_id, s.hidden, u.username FROM vacay_shares s JOIN users u ON s.owner_id = u.id WHERE s.user_id = ? ORDER BY s.id`;
 
-function insertShare(ownerId: number, userId: number, hidden = 0): number {
-  return Number(
-    testDb.prepare('INSERT INTO vacay_shares (owner_id, user_id, hidden) VALUES (?, ?, ?)').run(ownerId, userId, hidden).lastInsertRowid,
-  );
+function insertShare(ownerId: number, userId: number, hidden = 0): Promise<number> {
+  return insertRow(orm, VacayShares, { owner: ownerId, user: userId, hidden });
 }
 
 describe('VacaySharesRepository — VC81/VC82 parity with the legacy statements', () => {
@@ -37,10 +43,11 @@ describe('VacaySharesRepository — VC81/VC82 parity with the legacy statements'
     const { user: recipient1 } = createUser(testDb, { username: 'recipient-1' });
     const { user: recipient2 } = createUser(testDb, { username: 'recipient-2' });
     const { user: ownerB } = createUser(testDb, { username: 'owner-b' });
-    insertShare(ownerA.id, recipient2.id);
-    insertShare(ownerA.id, recipient1.id);
-    insertShare(ownerB.id, recipient1.id); // a different owner — must not appear for ownerA
+    await insertShare(ownerA.id, recipient2.id);
+    await insertShare(ownerA.id, recipient1.id);
+    await insertShare(ownerB.id, recipient1.id); // a different owner — must not appear for ownerA
 
+    // test-sql-allow: the legacy VC81 statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare(LEGACY_LIST_OUTGOING).all(ownerA.id);
     const rows = await repo.listOutgoing(ownerA.id);
 
@@ -50,6 +57,7 @@ describe('VacaySharesRepository — VC81/VC82 parity with the legacy statements'
 
   it('VC81 listOutgoing: an owner with no outgoing shares returns [], matching the legacy statement', async () => {
     const { user: owner } = createUser(testDb);
+    // test-sql-allow: the legacy VC81 statement is the parity oracle the repository is compared against.
     expect(await repo.listOutgoing(owner.id)).toEqual(testDb.prepare(LEGACY_LIST_OUTGOING).all(owner.id));
   });
 
@@ -58,10 +66,11 @@ describe('VacaySharesRepository — VC81/VC82 parity with the legacy statements'
     const { user: ownerA } = createUser(testDb, { username: 'owner-a' });
     const { user: ownerB } = createUser(testDb, { username: 'owner-b' });
     const { user: elsewhere } = createUser(testDb, { username: 'elsewhere' });
-    insertShare(ownerB.id, recipient.id, 1); // hidden
-    insertShare(ownerA.id, recipient.id, 0);
-    insertShare(ownerA.id, elsewhere.id, 0); // a different recipient — must not appear for `recipient`
+    await insertShare(ownerB.id, recipient.id, 1); // hidden
+    await insertShare(ownerA.id, recipient.id, 0);
+    await insertShare(ownerA.id, elsewhere.id, 0); // a different recipient — must not appear for `recipient`
 
+    // test-sql-allow: the legacy VC82 statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare(LEGACY_LIST_INCOMING).all(recipient.id);
     const rows = await repo.listIncoming(recipient.id);
 
@@ -74,6 +83,7 @@ describe('VacaySharesRepository — VC81/VC82 parity with the legacy statements'
 
   it('VC82/VC91 listIncoming: a recipient with no incoming shares returns [], matching the legacy statement', async () => {
     const { user: recipient } = createUser(testDb);
+    // test-sql-allow: the legacy VC82 statement is the parity oracle the repository is compared against.
     expect(await repo.listIncoming(recipient.id)).toEqual(testDb.prepare(LEGACY_LIST_INCOMING).all(recipient.id));
   });
 });
@@ -96,13 +106,14 @@ describe('VacaySharesRepository — VC90 listAvailableForShare parity with the l
     const { user: guest } = createUser(testDb, { username: 'a-guest' });
     const { user: sharedByOther } = createUser(testDb, { username: 'shared-by-someone-else' });
     createUser(testDb, { username: 'bystander' });
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
-    const planId = Number(testDb.prepare('INSERT INTO vacay_plans (owner_id) VALUES (?)').run(planOwner.id).lastInsertRowid);
-    testDb.prepare("INSERT INTO vacay_plan_members (plan_id, user_id, status) VALUES (?, ?, 'accepted')").run(planId, accepted.id);
-    testDb.prepare("INSERT INTO vacay_plan_members (plan_id, user_id, status) VALUES (?, ?, 'pending')").run(planId, pending.id);
-    insertShare(caller.id, alreadyShared.id);
-    insertShare(planOwner.id, sharedByOther.id); // another owner's share — must not exclude
+    await updateRows(orm, Users, { id: guest.id }, { is_guest: 1 });
+    const { id: planId } = await makeVacayPlan(orm, planOwner.id);
+    await addVacayPlanMember(orm, planId, accepted.id, 'accepted');
+    await addVacayPlanMember(orm, planId, pending.id, 'pending');
+    await insertShare(caller.id, alreadyShared.id);
+    await insertShare(planOwner.id, sharedByOther.id); // another owner's share — must not exclude
 
+    // test-sql-allow: the legacy statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare(LEGACY_LIST_AVAILABLE).all(caller.id, caller.id, planId, planId);
     const rows = await repo.listAvailableForShare(caller.id, planId);
 
@@ -113,6 +124,7 @@ describe('VacaySharesRepository — VC90 listAvailableForShare parity with the l
   it('VC90 listAvailableForShare: a plan id with no plan excludes only the caller, guests and shares, matching the legacy statement', async () => {
     const { user: caller } = createUser(testDb, { username: 'caller' });
     createUser(testDb, { username: 'someone' });
+    // test-sql-allow: the legacy statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare(LEGACY_LIST_AVAILABLE).all(caller.id, caller.id, 999999, 999999);
     const rows = await repo.listAvailableForShare(caller.id, 999999);
     expect(rows).toEqual(legacy);

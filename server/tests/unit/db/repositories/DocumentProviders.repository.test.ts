@@ -4,6 +4,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { DocumentProviders } from '../../../../src/db/entities/DocumentProviders.entity';
 import type { DocumentProvidersRepository } from '../../../../src/db/repositories/DocumentProviders.repository';
+import { insertRow } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -26,17 +27,17 @@ afterAll(async () => {
   testDb.close();
 });
 
-function insertProvider(row: {
+async function insertProvider(row: {
   id: string;
   name: string;
   description?: string | null;
   icon?: string | null;
   enabled: 0 | 1;
   sort_order?: number;
-}): void {
-  testDb
-    .prepare('INSERT INTO document_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(row.id, row.name, row.description ?? null, row.icon ?? null, row.enabled, row.sort_order ?? 0);
+}): Promise<void> {
+  await insertRow(t, DocumentProviders, {
+    id: row.id, name: row.name, description: row.description ?? null, icon: row.icon ?? null, enabled: row.enabled, sort_order: row.sort_order ?? 0,
+  });
 }
 
 // Plan 3i Task 4 fix wave (should-land 5): AD29 (listAllOrdered) and AD32
@@ -47,9 +48,10 @@ function insertProvider(row: {
 // docstring names.
 describe('DocumentProvidersRepository — admin (AD29/AD32) read methods, full-key parity', () => {
   it('DOCPROVREPO-001 (AD29): listAllOrdered matches SELECT * FROM document_providers ORDER BY sort_order, id — unfiltered, including a disabled provider', async () => {
-    insertProvider({ id: 'paperless', name: 'Paperless', description: 'Self-hosted document management', icon: 'FileText', enabled: 0, sort_order: 1 });
-    insertProvider({ id: 'papra', name: 'Papra', enabled: 1, sort_order: 0 });
+    await insertProvider({ id: 'paperless', name: 'Paperless', description: 'Self-hosted document management', icon: 'FileText', enabled: 0, sort_order: 1 });
+    await insertProvider({ id: 'papra', name: 'Papra', enabled: 1, sort_order: 0 });
 
+    // test-sql-allow: the legacy AD29 statement is the parity oracle the repository is compared against.
     const legacy = testDb.prepare('SELECT * FROM document_providers ORDER BY sort_order, id').all();
     const rows = await documentProviders.listAllOrdered();
     expect(rows.map((r) => r.id)).toEqual(['papra', 'paperless']); // includes the disabled one, unlike listEnabledCatalog
@@ -64,10 +66,11 @@ describe('DocumentProvidersRepository — admin (AD29/AD32) read methods, full-k
   });
 
   it('DOCPROVREPO-003 (AD32): findById matches SELECT * FROM document_providers WHERE id = ?, on both a pre-write read and a post-write re-select', async () => {
-    insertProvider({ id: 'paperless', name: 'Paperless', description: 'Self-hosted document management', icon: 'FileText', enabled: 0, sort_order: 3 });
+    await insertProvider({ id: 'paperless', name: 'Paperless', description: 'Self-hosted document management', icon: 'FileText', enabled: 0, sort_order: 3 });
     const preWrite = await documentProviders.findById('paperless');
     expect(preWrite).toEqual({ id: 'paperless', name: 'Paperless', description: 'Self-hosted document management', icon: 'FileText', enabled: 0, sort_order: 3 });
 
+    // test-sql-allow: the out-of-band write this case is about has to bypass every EntityManager, the one under test included.
     testDb.prepare('UPDATE document_providers SET enabled = 1 WHERE id = ?').run('paperless');
     const postWrite = await documentProviders.findById('paperless');
     expect(postWrite?.enabled).toBe(1);

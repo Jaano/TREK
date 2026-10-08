@@ -5,6 +5,7 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser, type TestUser } from '../../../helpers/factories';
 import { UserNoticeDismissals } from '../../../../src/db/entities/UserNoticeDismissals.entity';
 import type { UserNoticeDismissalsRepository } from '../../../../src/db/repositories/UserNoticeDismissals.repository';
+import { countRows, findRow, insertRow } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -27,12 +28,19 @@ afterAll(async () => {
   testDb.close();
 });
 
-function insertRaw(userId: number, noticeId: string, dismissedAt: number, dismissedAppVersion: string | null): void {
-  testDb.prepare('INSERT INTO user_notice_dismissals (user_id, notice_id, dismissed_at, dismissed_app_version) VALUES (?, ?, ?, ?)').run(userId, noticeId, dismissedAt, dismissedAppVersion);
+async function insertDismissal(userId: number, noticeId: string, dismissedAt: number, dismissedAppVersion: string | null): Promise<void> {
+  await insertRow(t, UserNoticeDismissals, { user: userId, notice_id: noticeId, dismissed_at: dismissedAt, dismissed_app_version: dismissedAppVersion });
+}
+
+/** The dismissal's stored columns, or undefined when there is none. */
+async function storedDismissal(userId: number, noticeId: string) {
+  const row = await findRow(t, UserNoticeDismissals, { user: userId, notice_id: noticeId });
+  return row ? { dismissed_at: row.dismissed_at, dismissed_app_version: row.dismissed_app_version } : undefined;
 }
 
 describe('user_notice_dismissals — the (user_id, notice_id) composite PK the ON CONFLICT target relies on (Plan 3f Task 0 R5/§14, Task 6)', () => {
   it("UNDREPO-SCHEMA-001: PRAGMA table_info('user_notice_dismissals') reports a 2-column PRIMARY KEY over exactly (user_id, notice_id), matching the migration DDL", () => {
+    // test-sql-allow: the primary key comes from PRAGMA table_info, which no entity or repository maps.
     const cols = testDb.prepare("PRAGMA table_info('user_notice_dismissals')").all() as { name: string; pk: number }[];
     const pkCols = cols.filter((c) => c.pk > 0).sort((a, b) => a.pk - b.pk).map((c) => c.name);
     expect(pkCols).toEqual(['user_id', 'notice_id']);
@@ -46,11 +54,12 @@ describe('user_notice_dismissals — the (user_id, notice_id) composite PK the O
 
 describe('UserNoticeDismissalsRepository — reads (SN4 parity)', () => {
   it('UNDREPO-001 — listForUser matches `SELECT notice_id, dismissed_app_version FROM user_notice_dismissals WHERE user_id = ?`, fully seeded across several notices/versions, and never leaks another user', async () => {
-    insertRaw(user.id, 'welcome-v1', 1_700_000_000_000, null);
-    insertRaw(user.id, 'release-notes', 1_700_000_001_000, '4.2.1');
-    insertRaw(user.id, 'v3014-whitespace-collision', 1_700_000_002_000, '3.0.14');
-    insertRaw(otherUser.id, 'welcome-v1', 1_700_000_003_000, '4.3.0'); // a different user's row — must not leak in
+    await insertDismissal(user.id, 'welcome-v1', 1_700_000_000_000, null);
+    await insertDismissal(user.id, 'release-notes', 1_700_000_001_000, '4.2.1');
+    await insertDismissal(user.id, 'v3014-whitespace-collision', 1_700_000_002_000, '3.0.14');
+    await insertDismissal(otherUser.id, 'welcome-v1', 1_700_000_003_000, '4.3.0'); // a different user's row — must not leak in
 
+    // test-sql-allow: the legacy statement is the parity oracle the repository is compared against.
     const legacy = (testDb.prepare('SELECT notice_id, dismissed_app_version FROM user_notice_dismissals WHERE user_id = ?').all(user.id) as { notice_id: string; dismissed_app_version: string | null }[])
       .sort((a, b) => a.notice_id.localeCompare(b.notice_id));
     const converted = (await repo.listForUser(user.id))
@@ -77,7 +86,7 @@ describe('UserNoticeDismissalsRepository — writes (SN5, R5)', () => {
       try {
         // Insert branch: no existing row.
         await repo.upsertDismissal(user.id, 'release-notes', 1_700_000_000_000, '4.2.1');
-        expect(testDb.prepare('SELECT dismissed_at, dismissed_app_version FROM user_notice_dismissals WHERE user_id = ? AND notice_id = ?').get(user.id, 'release-notes'))
+        expect(await storedDismissal(user.id, 'release-notes'))
           .toEqual({ dismissed_at: 1_700_000_000_000, dismissed_app_version: '4.2.1' });
 
         const insertSql = spy.mock.calls.map(([sql]) => sql).find((sql): sql is string => typeof sql === 'string' && /insert into/i.test(sql));
@@ -88,9 +97,9 @@ describe('UserNoticeDismissalsRepository — writes (SN5, R5)', () => {
         // the existing row in place rather than inserting a second one (the composite PK
         // is what makes this an UPDATE, not an INSERT, on the second call).
         await repo.upsertDismissal(user.id, 'release-notes', 1_700_000_050_000, '4.3.0');
-        expect(testDb.prepare('SELECT dismissed_at, dismissed_app_version FROM user_notice_dismissals WHERE user_id = ? AND notice_id = ?').get(user.id, 'release-notes'))
+        expect(await storedDismissal(user.id, 'release-notes'))
           .toEqual({ dismissed_at: 1_700_000_050_000, dismissed_app_version: '4.3.0' });
-        expect((testDb.prepare('SELECT COUNT(*) as c FROM user_notice_dismissals WHERE user_id = ? AND notice_id = ?').get(user.id, 'release-notes') as { c: number }).c).toBe(1);
+        expect(await countRows(t, UserNoticeDismissals, { user: user.id, notice_id: 'release-notes' })).toBe(1);
 
         const mergeSql = spy.mock.calls.map(([sql]) => sql).find((sql): sql is string => typeof sql === 'string' && /insert into/i.test(sql));
         expect(mergeSql).toContain('on conflict (`user_id`, `notice_id`)');
@@ -105,10 +114,8 @@ describe('UserNoticeDismissalsRepository — writes (SN5, R5)', () => {
     await repo.upsertDismissal(user.id, 'welcome-v1', 1_700_000_001_000, '4.0.0');
     await repo.upsertDismissal(otherUser.id, 'release-notes', 1_700_000_002_000, '4.1.0');
 
-    expect((testDb.prepare('SELECT COUNT(*) as c FROM user_notice_dismissals').get() as { c: number }).c).toBe(3);
-    expect(testDb.prepare('SELECT dismissed_app_version FROM user_notice_dismissals WHERE user_id = ? AND notice_id = ?').get(user.id, 'release-notes'))
-      .toEqual({ dismissed_app_version: '4.2.1' });
-    expect(testDb.prepare('SELECT dismissed_app_version FROM user_notice_dismissals WHERE user_id = ? AND notice_id = ?').get(otherUser.id, 'release-notes'))
-      .toEqual({ dismissed_app_version: '4.1.0' });
+    expect(await countRows(t, UserNoticeDismissals)).toBe(3);
+    expect((await storedDismissal(user.id, 'release-notes'))?.dismissed_app_version).toBe('4.2.1');
+    expect((await storedDismissal(otherUser.id, 'release-notes'))?.dismissed_app_version).toBe('4.1.0');
   });
 });

@@ -5,6 +5,8 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser, createTrip, addTripMember, type TestUser, type TestTrip } from '../../../helpers/factories';
 import { Notifications } from '../../../../src/db/entities/Notifications.entity';
 import type { NotificationsRepository } from '../../../../src/db/repositories/Notifications.repository';
+import { findRow, findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { Users } from '../../../../src/db/entities/Users.entity';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -28,41 +30,44 @@ afterAll(async () => {
 });
 
 /** Inserts one of each NT-inventory notification type, with every optional field set, for `recipientId`. Returns the three ids in insertion order (simple, boolean, navigate). */
-function seedThreeTypes(recipientId: number, senderId: number | null): { simpleId: number; booleanId: number; navigateId: number } {
-  const simpleId = testDb.prepare(`
-    INSERT INTO notifications (type, scope, target, sender_id, recipient_id, title_key, title_params, text_key, text_params)
-    VALUES ('simple', 'trip', ?, ?, ?, 'notif.trip_invite.title', '{"trip":"Rome"}', 'notif.trip_invite.text', '{"actor":"Alice"}')
-  `).run(trip.id, senderId, recipientId).lastInsertRowid as number;
+async function seedThreeTypes(recipientId: number, senderId: number | null): Promise<{ simpleId: number; booleanId: number; navigateId: number }> {
+  const simpleId = await insertRow(t, Notifications, {
+    type: 'simple', scope: 'trip', target: trip.id, sender: senderId, recipient: recipientId,
+    title_key: 'notif.trip_invite.title', title_params: '{"trip":"Rome"}', text_key: 'notif.trip_invite.text', text_params: '{"actor":"Alice"}',
+  });
 
-  const booleanId = testDb.prepare(`
-    INSERT INTO notifications (
-      type, scope, target, sender_id, recipient_id, title_key, title_params, text_key, text_params,
-      positive_text_key, negative_text_key, positive_callback, negative_callback
-    ) VALUES ('boolean', 'trip', ?, ?, ?, 'notif.vacay_invite.title', '{"trip":"Rome"}', 'notif.vacay_invite.text', '{"actor":"Bob"}',
-      'notif.action.accept', 'notif.action.decline', '{"action":"noop","payload":{"x":1}}', '{"action":"noop","payload":{"x":2}}')
-  `).run(trip.id, senderId, recipientId).lastInsertRowid as number;
+  const booleanId = await insertRow(t, Notifications, {
+    type: 'boolean', scope: 'trip', target: trip.id, sender: senderId, recipient: recipientId,
+    title_key: 'notif.vacay_invite.title', title_params: '{"trip":"Rome"}', text_key: 'notif.vacay_invite.text', text_params: '{"actor":"Bob"}',
+    positive_text_key: 'notif.action.accept', negative_text_key: 'notif.action.decline',
+    positive_callback: '{"action":"noop","payload":{"x":1}}', negative_callback: '{"action":"noop","payload":{"x":2}}',
+  });
 
-  const navigateId = testDb.prepare(`
-    INSERT INTO notifications (
-      type, scope, target, sender_id, recipient_id, title_key, title_params, text_key, text_params,
-      navigate_text_key, navigate_target
-    ) VALUES ('navigate', 'trip', ?, ?, ?, 'notif.booking_change.title', '{"trip":"Rome"}', 'notif.booking_change.text', '{"actor":"Carl"}',
-      'notif.action.view_trip', '/trips/1')
-  `).run(trip.id, senderId, recipientId).lastInsertRowid as number;
+  const navigateId = await insertRow(t, Notifications, {
+    type: 'navigate', scope: 'trip', target: trip.id, sender: senderId, recipient: recipientId,
+    title_key: 'notif.booking_change.title', title_params: '{"trip":"Rome"}', text_key: 'notif.booking_change.text', text_params: '{"actor":"Carl"}',
+    navigate_text_key: 'notif.action.view_trip', navigate_target: '/trips/1',
+  });
 
   return { simpleId, booleanId, navigateId };
 }
 
 /** The legacy `SELECT * FROM notifications WHERE id = ?`, run raw, for a full-key parity comparison. */
 function legacyFindById(id: number): unknown {
+  // test-sql-allow: the legacy full-row SELECT is the parity oracle the repository is compared against.
   return testDb.prepare('SELECT * FROM notifications WHERE id = ?').get(id);
+}
+
+/** The notification row as it is now; fails the test when it is gone. */
+async function notificationRow(id: number) {
+  return (await findRow(t, Notifications, { id }))!;
 }
 
 describe('NotificationsRepository — findById/findByIdForRecipient parity (fully seeded: simple/boolean/navigate, every optional field set)', () => {
   it('NOTREPO-001 — findById matches the legacy full-row SELECT, byte for byte, for all three notification types', async () => {
     const { user: recipient } = createUser(testDb);
     const { user: sender } = createUser(testDb);
-    const { simpleId, booleanId, navigateId } = seedThreeTypes(recipient.id, sender.id);
+    const { simpleId, booleanId, navigateId } = await seedThreeTypes(recipient.id, sender.id);
 
     for (const id of [simpleId, booleanId, navigateId]) {
       const legacy = legacyFindById(id);
@@ -74,8 +79,9 @@ describe('NotificationsRepository — findById/findByIdForRecipient parity (full
   it('NOTREPO-002 — findByIdForRecipient matches the legacy recipient-scoped SELECT, and returns undefined for the wrong recipient', async () => {
     const { user: recipient } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const { booleanId } = seedThreeTypes(recipient.id, null);
+    const { booleanId } = await seedThreeTypes(recipient.id, null);
 
+    // test-sql-allow: the legacy recipient-scoped SELECT is the parity oracle the repository is compared against.
     const legacy = testDb.prepare('SELECT * FROM notifications WHERE id = ? AND recipient_id = ?').get(booleanId, recipient.id);
     expect(await repo.findByIdForRecipient(booleanId, recipient.id)).toEqual(legacy);
     expect(await repo.findByIdForRecipient(booleanId, stranger.id)).toBeUndefined();
@@ -84,8 +90,9 @@ describe('NotificationsRepository — findById/findByIdForRecipient parity (full
   it('NOTREPO-003 — findWithSenderById matches the legacy LEFT JOIN users projection (sender_username/sender_avatar), including a NULL sender', async () => {
     const { user: recipient } = createUser(testDb);
     const { user: sender } = createUser(testDb, { username: 'Alice', email: 'alice@test.example.com' });
-    const { simpleId } = seedThreeTypes(recipient.id, sender.id);
+    const { simpleId } = await seedThreeTypes(recipient.id, sender.id);
 
+    // test-sql-allow: the legacy LEFT JOIN projection is the parity oracle the repository is compared against.
     const legacy = testDb.prepare(`
       SELECT n.*, u.username AS sender_username, u.avatar AS sender_avatar
       FROM notifications n LEFT JOIN users u ON n.sender_id = u.id
@@ -94,10 +101,11 @@ describe('NotificationsRepository — findById/findByIdForRecipient parity (full
     expect(await repo.findWithSenderById(simpleId)).toEqual(legacy);
 
     // A system notification (no sender) — the LEFT JOIN's NULL side.
-    const systemId = testDb.prepare(`
-      INSERT INTO notifications (type, scope, target, sender_id, recipient_id, title_key, title_params, text_key, text_params)
-      VALUES ('simple', 'admin', 0, NULL, ?, 'notif.version_available.title', '{}', 'notif.version_available.text', '{}')
-    `).run(recipient.id).lastInsertRowid as number;
+    const systemId = await insertRow(t, Notifications, {
+      type: 'simple', scope: 'admin', target: 0, sender: null, recipient: recipient.id,
+      title_key: 'notif.version_available.title', title_params: '{}', text_key: 'notif.version_available.text', text_params: '{}',
+    });
+    // test-sql-allow: the legacy LEFT JOIN projection is the parity oracle the repository is compared against.
     const legacySystem = testDb.prepare(`
       SELECT n.*, u.username AS sender_username, u.avatar AS sender_avatar
       FROM notifications n LEFT JOIN users u ON n.sender_id = u.id
@@ -109,14 +117,14 @@ describe('NotificationsRepository — findById/findByIdForRecipient parity (full
   it('NOTREPO-004 — listForRecipient matches the legacy joined page read, for both unreadOnly variants', async () => {
     const { user: recipient } = createUser(testDb);
     const { user: sender } = createUser(testDb);
-    seedThreeTypes(recipient.id, sender.id);
-    testDb.prepare('UPDATE notifications SET is_read = 1 WHERE recipient_id = ? LIMIT 1').run(recipient.id);
-    // SQLite compiled without LIMIT-on-UPDATE support in better-sqlite3 by default — fall back to an id-scoped update.
-    const firstId = (testDb.prepare('SELECT id FROM notifications WHERE recipient_id = ? ORDER BY id LIMIT 1').get(recipient.id) as { id: number }).id;
-    testDb.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(firstId);
+    await seedThreeTypes(recipient.id, sender.id);
+    // The recipient's first notification is read, the other two are not.
+    const [first] = await findRows(t, Notifications, { recipient: recipient.id }, { id: 'asc' });
+    await updateRows(t, Notifications, { id: first.id }, { is_read: 1 });
 
     for (const unreadOnly of [false, true]) {
       const whereAliased = unreadOnly ? 'WHERE n.recipient_id = ? AND n.is_read = 0' : 'WHERE n.recipient_id = ?';
+      // test-sql-allow: the legacy joined page read is the parity oracle the repository is compared against.
       const legacy = testDb.prepare(`
         SELECT n.*, u.username AS sender_username, u.avatar AS sender_avatar
         FROM notifications n LEFT JOIN users u ON n.sender_id = u.id
@@ -132,6 +140,7 @@ describe('NotificationsRepository — findById/findByIdForRecipient parity (full
 
 describe('NotificationsRepository — recipient resolution (NT1-NT4)', () => {
   it('NOTREPO-005 — getTripOwnerId matches `SELECT user_id FROM trips WHERE id = ?`', async () => {
+    // test-sql-allow: the legacy statement named in the case title is the parity oracle.
     const legacy = (testDb.prepare('SELECT user_id FROM trips WHERE id = ?').get(trip.id) as { user_id: number }).user_id;
     expect(await repo.getTripOwnerId(trip.id)).toBe(legacy);
     expect(await repo.getTripOwnerId(999999)).toBeNull();
@@ -140,11 +149,10 @@ describe('NotificationsRepository — recipient resolution (NT1-NT4)', () => {
   it('NOTREPO-006 — listNonGuestTripMemberIds (NT2, the guest-exclusion chokepoint, #1362): a guest member never appears, a real member always does', async () => {
     const { user: member } = createUser(testDb);
     addTripMember(testDb, trip.id, member.id);
-    const guestId = (testDb.prepare(
-      "INSERT INTO users (username, email, password_hash, role, is_guest) VALUES ('Guest', 'guest-repo@guests.invalid', '', 'user', 1)",
-    ).run()).lastInsertRowid as number;
+    const guestId = await insertRow(t, Users, { username: 'Guest', email: 'guest-repo@guests.invalid', password_hash: '', role: 'user', is_guest: 1 });
     addTripMember(testDb, trip.id, guestId);
 
+    // test-sql-allow: the legacy statement named in the case title is the parity oracle.
     const legacy = (testDb.prepare(
       'SELECT m.user_id FROM trip_members m JOIN users u ON u.id = m.user_id WHERE m.trip_id = ? AND COALESCE(u.is_guest, 0) = 0',
     ).all(trip.id) as { user_id: number }[]).map((r) => r.user_id);
@@ -165,10 +173,9 @@ describe('NotificationsRepository — recipient resolution (NT1-NT4)', () => {
     const { user: admin1 } = createUser(testDb, { role: 'admin' });
     const { user: admin2 } = createUser(testDb, { role: 'admin' });
     createUser(testDb); // a regular user — must not appear
-    const guestAdminId = (testDb.prepare(
-      "INSERT INTO users (username, email, password_hash, role, is_guest) VALUES ('GuestAdmin', 'guest-admin@guests.invalid', '', 'admin', 1)",
-    ).run()).lastInsertRowid as number;
+    const guestAdminId = await insertRow(t, Users, { username: 'GuestAdmin', email: 'guest-admin@guests.invalid', password_hash: '', role: 'admin', is_guest: 1 });
 
+    // test-sql-allow: the legacy statement named in the case title is the parity oracle.
     const legacy = (testDb.prepare(
       'SELECT id FROM users WHERE role = ? AND COALESCE(is_guest, 0) = 0',
     ).all('admin') as { id: number }[]).map((r) => r.id);
@@ -182,7 +189,8 @@ describe('NotificationsRepository — recipient resolution (NT1-NT4)', () => {
 
   it('NOTREPO-009 — findUserBasic matches `SELECT username, avatar FROM users WHERE id = ?`', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET avatar = ? WHERE id = ?').run('avatar.png', user.id);
+    await updateRows(t, Users, { id: user.id }, { avatar: 'avatar.png' });
+    // test-sql-allow: the legacy statement named in the case title is the parity oracle.
     const legacy = testDb.prepare('SELECT username, avatar FROM users WHERE id = ?').get(user.id);
     expect(await repo.findUserBasic(user.id)).toEqual(legacy);
     expect(await repo.findUserBasic(999999)).toBeUndefined();
@@ -202,7 +210,7 @@ describe('NotificationsRepository — writes', () => {
       navigate_text_key: null, navigate_target: null,
     });
 
-    const row = testDb.prepare('SELECT * FROM notifications WHERE id = ?').get(id) as Record<string, unknown>;
+    const row = await notificationRow(id);
     expect(row.type).toBe('boolean');
     expect(row.scope).toBe('trip');
     expect(row.target).toBe(trip.id);
@@ -216,11 +224,11 @@ describe('NotificationsRepository — writes', () => {
   it('NOTREPO-011 — setRead/markAllRead/deleteForRecipient/deleteAllForRecipient are recipient-scoped and return the affected-row count', async () => {
     const { user: recipient } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
-    const { simpleId, booleanId } = seedThreeTypes(recipient.id, null);
+    const { simpleId, booleanId } = await seedThreeTypes(recipient.id, null);
 
     expect(await repo.setRead(simpleId, stranger.id, 1)).toBe(0); // wrong recipient — no-op
     expect(await repo.setRead(simpleId, recipient.id, 1)).toBe(1);
-    expect((testDb.prepare('SELECT is_read FROM notifications WHERE id = ?').get(simpleId) as { is_read: number }).is_read).toBe(1);
+    expect((await notificationRow(simpleId)).is_read).toBe(1);
 
     expect(await repo.setRead(simpleId, recipient.id, 0)).toBe(1);
 
@@ -235,22 +243,22 @@ describe('NotificationsRepository — writes', () => {
 
   it('NOTREPO-012 — claimResponse (NT20) only succeeds once: the atomic double-submit claim', async () => {
     const { user: recipient } = createUser(testDb);
-    const { booleanId } = seedThreeTypes(recipient.id, null);
+    const { booleanId } = await seedThreeTypes(recipient.id, null);
 
     expect(await repo.claimResponse(booleanId, recipient.id, 'positive')).toBe(1);
     // A second claim on the same, now-claimed notification affects 0 rows —
     // the `response IS NULL` guard is the load-bearing part of this statement.
     expect(await repo.claimResponse(booleanId, recipient.id, 'negative')).toBe(0);
-    expect((testDb.prepare('SELECT response FROM notifications WHERE id = ?').get(booleanId) as { response: string }).response).toBe('positive');
+    expect((await notificationRow(booleanId)).response).toBe('positive');
   });
 
   it('NOTREPO-013 — releaseResponse (NT21) restores the claim so a retry can succeed', async () => {
     const { user: recipient } = createUser(testDb);
-    const { booleanId } = seedThreeTypes(recipient.id, null);
+    const { booleanId } = await seedThreeTypes(recipient.id, null);
 
     await repo.claimResponse(booleanId, recipient.id, 'positive');
     await repo.releaseResponse(booleanId, recipient.id, 0);
-    const row = testDb.prepare('SELECT response, is_read FROM notifications WHERE id = ?').get(booleanId) as { response: string | null; is_read: number };
+    const row = await notificationRow(booleanId);
     expect(row.response).toBeNull();
     expect(row.is_read).toBe(0);
     expect(await repo.claimResponse(booleanId, recipient.id, 'negative')).toBe(1);

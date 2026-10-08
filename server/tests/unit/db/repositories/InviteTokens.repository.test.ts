@@ -7,6 +7,7 @@ import { InviteTokens } from '../../../../src/db/entities/InviteTokens.entity';
 import type { InviteTokensRepository } from '../../../../src/db/repositories/InviteTokens.repository';
 import { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
 import { withRequestContext } from '../../../../src/nest/database/request-context';
+import { updateRows } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -20,6 +21,7 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 function rawInvite(id: number): unknown {
+  // test-sql-allow: the raw full row is the parity oracle the repository's reads are compared against.
   return testDb.prepare('SELECT * FROM invite_tokens WHERE id = ?').get(id);
 }
 
@@ -99,7 +101,7 @@ describe('InviteTokensRepository', () => {
 
     it('INVREPO-006: at capacity — no row matches, returns null, used_count unchanged', async () => {
       const created = createInviteToken(testDb, { token: 'at-cap', max_uses: 1 });
-      testDb.prepare('UPDATE invite_tokens SET used_count = 1 WHERE id = ?').run(created.id);
+      await updateRows(t, InviteTokens, { id: created.id }, { used_count: 1 });
       const row = await invites.incrementUsedCount('at-cap');
       expect(row).toBeNull();
       expect((rawInvite(created.id) as { used_count: number }).used_count).toBe(1);
@@ -107,7 +109,7 @@ describe('InviteTokensRepository', () => {
 
     it('INVREPO-007: max_uses = 0 means unlimited — always increments', async () => {
       createInviteToken(testDb, { token: 'unlimited', max_uses: 0 });
-      testDb.prepare("UPDATE invite_tokens SET used_count = 500 WHERE token = 'unlimited'").run();
+      await updateRows(t, InviteTokens, { token: 'unlimited' }, { used_count: 500 });
       const row = await invites.incrementUsedCount('unlimited');
       expect(row?.used_count).toBe(501);
     });
@@ -138,9 +140,9 @@ describe('InviteTokensRepository', () => {
       const { user: admin } = createUser(testDb, { username: 'inviter-1' });
       const trip = createTrip(testDb, admin.id, { title: 'Bound Trip' });
       const older = createInviteToken(testDb, { token: 'older', created_by: admin.id });
-      testDb.prepare('UPDATE invite_tokens SET created_at = ? WHERE id = ?').run('2026-01-01 00:00:00', older.id);
+      await updateRows(t, InviteTokens, { id: older.id }, { created_at: '2026-01-01 00:00:00' });
       const newer = createInviteToken(testDb, { token: 'newer', created_by: admin.id });
-      testDb.prepare('UPDATE invite_tokens SET created_at = ?, trip_id = ? WHERE id = ?').run('2026-02-01 00:00:00', trip.id, newer.id);
+      await updateRows(t, InviteTokens, { id: newer.id }, { created_at: '2026-02-01 00:00:00', trip: trip.id });
 
       const rows = await invites.listWithCreatorAndTrip();
 
