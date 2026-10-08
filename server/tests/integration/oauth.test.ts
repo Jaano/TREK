@@ -42,6 +42,8 @@ import { UnitOfWork } from '../../src/nest/database/unit-of-work';
 import { createTestAddonsService } from '../helpers/test-addons';
 import { AuditService } from '../../src/nest/audit/audit.service';
 import { createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { updateRows, upsertRow } from '../helpers/factories/rows';
+import { Addons } from '../../src/db/entities/Addons.entity';
 import { AuditLog } from '../../src/db/entities/AuditLog.entity';
 import { Users } from '../../src/db/entities/Users.entity';
 import { OauthClients } from '../../src/db/entities/OauthClients.entity';
@@ -75,10 +77,10 @@ function makePkce() {
 // the legacy oauthService (addons.bridge) resolve the MCP addon from the real
 // addons row, so driving the DB row keeps mcpEnabled() AND
 // validateAuthorizeRequest()/token/revoke consistent from one source.
-function setMcpEnabled(enabled: boolean) {
-    testDb.prepare(
-        "INSERT OR REPLACE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('mcp', 'MCP', 'AI assistant integration', 'integration', 'Terminal', ?, 12)"
-    ).run(enabled ? 1 : 0);
+async function setMcpEnabled(enabled: boolean) {
+    await upsertRow(t, Addons, {
+        id: 'mcp', name: 'MCP', description: 'AI assistant integration', type: 'integration', icon: 'Terminal', enabled, sort_order: 12,
+    });
 }
 
 beforeAll(async () => {
@@ -91,7 +93,7 @@ beforeAll(async () => {
 beforeEach(async () => {
     resetTestDb(testDb);
     await resetRateLimits(nestApp);
-    setMcpEnabled(true);
+    await setMcpEnabled(true);
 });
 
 afterAll(async () => {
@@ -234,7 +236,7 @@ describe('platform/discovery parity pins', () => {
     });
 
     it('PLAT-PIN-004 — every /.well-known/* path 404s with an EMPTY body when MCP is disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         for (const path of [
             '/.well-known/openid-configuration',
             '/.well-known/oauth-protected-resource',
@@ -284,7 +286,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
     });
 
     it('OAUTH-003 — MCP addon disabled returns 404', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const res = await request(app)
             .post('/oauth/token')
             .send({ grant_type: 'authorization_code', client_id: 'x', client_secret: 'y', code: 'z', redirect_uri: 'https://r.example.com/cb', code_verifier: 'v' });
@@ -646,7 +648,7 @@ describe('POST /oauth/revoke', () => {
 
 describe('GET /api/oauth/authorize/validate', () => {
     it('OAUTH-019 — returns 404 when MCP addon disabled (M2: prevents feature fingerprinting)', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const res = await request(app)
             .get('/api/oauth/authorize/validate')
             .query({ response_type: 'code', client_id: 'x', redirect_uri: 'https://r.example.com/cb', scope: 'trips:read', code_challenge: 'c', code_challenge_method: 'S256' });
@@ -886,7 +888,7 @@ describe('POST /api/oauth/authorize', () => {
     });
 
     it('OAUTH-029 — 403 when MCP disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const { user } = createUser(testDb);
 
         const res = await request(app)
@@ -983,7 +985,7 @@ describe('POST /api/oauth/authorize', () => {
 
 describe('Client CRUD — /api/oauth/clients', () => {
     it('OAUTH-033 — GET returns 403 when addon disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const { user } = createUser(testDb);
 
         const res = await request(app)
@@ -1020,7 +1022,7 @@ describe('Client CRUD — /api/oauth/clients', () => {
     });
 
     it('OAUTH-036 — POST returns 403 when addon disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const { user } = createUser(testDb);
 
         const res = await request(app)
@@ -1070,7 +1072,7 @@ describe('Client CRUD — /api/oauth/clients', () => {
 
 describe('Sessions — /api/oauth/sessions', () => {
     it('OAUTH-040 — GET returns 403 when addon disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const { user } = createUser(testDb);
 
         const res = await request(app)
@@ -1148,7 +1150,7 @@ describe('Sessions — /api/oauth/sessions', () => {
     });
 
     it('OAUTH-044 — DELETE /sessions/:id returns 403 when addon disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const { user } = createUser(testDb);
 
         const res = await request(app)
@@ -1173,13 +1175,13 @@ describe('M1 — Cache-Control headers on /oauth/token', () => {
 
 describe('M2 — 404 when MCP disabled on discovery + revoke endpoints', () => {
     it('OAUTH-SEC-002 — /.well-known/oauth-authorization-server returns 404 when disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const res = await request(app).get('/.well-known/oauth-authorization-server');
         expect(res.status).toBe(404);
     });
 
     it('OAUTH-SEC-003 — /oauth/revoke returns 404 when disabled', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const res = await request(app)
             .post('/oauth/revoke')
             .send({ token: 'x', client_id: 'y', client_secret: 'z' });
@@ -1417,10 +1419,10 @@ describe('C3 — Refresh token replay detection', () => {
      * below still describes theft — a token used minutes later — rather than two
      * clients refreshing at the same moment.
      */
-    function agePastGrace(rawRefreshToken: string) {
+    async function agePastGrace(rawRefreshToken: string) {
         const hash = crypto.createHash('sha256').update(rawRefreshToken).digest('hex');
         const old = new Date(Date.now() - 5 * 60 * 1000).toISOString().replace('T', ' ').slice(0, 19);
-        testDb.prepare('UPDATE oauth_tokens SET revoked_at = ? WHERE refresh_token_hash = ?').run(old, hash);
+        await updateRows(t, OauthTokens, { refresh_token_hash: hash }, { revoked_at: old });
     }
 
     it('OAUTH-SEC-012 — replaying a rotated (old) refresh token returns invalid_grant', async () => {
@@ -1460,7 +1462,7 @@ describe('C3 — Refresh token replay detection', () => {
         expect(t2.status).toBe(200);
 
         // Replay the original (now rotated/revoked) refresh token — must be rejected
-        agePastGrace(originalRefreshToken);
+        await agePastGrace(originalRefreshToken);
         const t3 = await request(app).post('/oauth/token').send({
             grant_type: 'refresh_token',
             client_id: r.client!.client_id,
@@ -1546,7 +1548,7 @@ describe('C3 — Refresh token replay detection', () => {
         const newRefreshToken = t2.body.refresh_token;
 
         // Replay original — triggers chain revocation
-        agePastGrace(originalRefreshToken);
+        await agePastGrace(originalRefreshToken);
         await request(app).post('/oauth/token').send({
             grant_type: 'refresh_token',
             client_id: r.client!.client_id,

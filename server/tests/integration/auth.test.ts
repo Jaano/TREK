@@ -33,14 +33,61 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, createUserWithMfa, createInviteToken, createTrip, createBudgetItem, createJourney, createJourneyEntry, addJourneyContributor, addTripPhoto, createCategory, createTag, createTodoItem, createMcpToken, createBucketListItem, createVisitedCountry, createCollabNote, addTripMember } from '../helpers/factories';
 import { authCookie, authHeader } from '../helpers/auth';
+import type { EntityClass, FilterQuery } from '@mikro-orm/core';
+import { MikroORM } from '@mikro-orm/core';
+import { dbNow } from '../../src/db/types';
+import { findRow, insertRow, insertRowIgnoringConflict, updateRows } from '../helpers/factories/rows';
+import { setAppSetting, setUserSetting } from '../helpers/factories/settings';
+import { makeShareToken } from '../helpers/factories/trips';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { BucketList } from '../../src/db/entities/BucketList.entity';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { Categories } from '../../src/db/entities/Categories.entity';
+import { CollabNotes } from '../../src/db/entities/CollabNotes.entity';
+import { InviteTokens } from '../../src/db/entities/InviteTokens.entity';
+import { JourneyContributors } from '../../src/db/entities/JourneyContributors.entity';
+import { JourneyEntries } from '../../src/db/entities/JourneyEntries.entity';
+import { JourneyShareTokens } from '../../src/db/entities/JourneyShareTokens.entity';
+import { Journeys } from '../../src/db/entities/Journeys.entity';
+import { McpTokens } from '../../src/db/entities/McpTokens.entity';
+import { NotificationChannelPreferences } from '../../src/db/entities/NotificationChannelPreferences.entity';
+import { Notifications } from '../../src/db/entities/Notifications.entity';
+import { OauthClients } from '../../src/db/entities/OauthClients.entity';
+import { OauthConsents } from '../../src/db/entities/OauthConsents.entity';
+import { OauthTokens } from '../../src/db/entities/OauthTokens.entity';
+import { PackingBags } from '../../src/db/entities/PackingBags.entity';
+import { PackingTemplates } from '../../src/db/entities/PackingTemplates.entity';
+import { PasswordResetTokens } from '../../src/db/entities/PasswordResetTokens.entity';
+import { Settings } from '../../src/db/entities/Settings.entity';
+import { ShareTokens } from '../../src/db/entities/ShareTokens.entity';
+import { Tags } from '../../src/db/entities/Tags.entity';
+import { TodoItems } from '../../src/db/entities/TodoItems.entity';
+import { TrekPhotos } from '../../src/db/entities/TrekPhotos.entity';
+import { TripFiles } from '../../src/db/entities/TripFiles.entity';
+import { TripMembers } from '../../src/db/entities/TripMembers.entity';
+import { TripPhotos } from '../../src/db/entities/TripPhotos.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
+import { UserNoticeDismissals } from '../../src/db/entities/UserNoticeDismissals.entity';
+import { Users } from '../../src/db/entities/Users.entity';
+import { VacayPlanMembers } from '../../src/db/entities/VacayPlanMembers.entity';
+import { VacayPlans } from '../../src/db/entities/VacayPlans.entity';
+import { VisitedCountries } from '../../src/db/entities/VisitedCountries.entity';
+import { VisitedRegions } from '../../src/db/entities/VisitedRegions.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: MikroORM;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
+
+/** The row matching `where`, or null once it is gone. */
+function rowOf<T extends object>(entity: EntityClass<T>, where: FilterQuery<T>) {
+  return findRow(orm, entity, where);
+}
 
 beforeEach(async () => {
   resetTestDb(testDb);
@@ -148,7 +195,7 @@ describe('Registration', () => {
 
   it('AUTH-009 — registration disabled by admin returns 403', async () => {
     createUser(testDb);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('allow_registration', 'false')").run();
+    await setAppSetting(orm, 'allow_registration', 'false');
     const res = await request(app).post('/api/auth/register').send({
       username: 'blocked',
       email: 'blocked@example.com',
@@ -160,7 +207,7 @@ describe('Registration', () => {
 
   it('AUTH-010 — registration with valid invite token succeeds even when registration disabled', async () => {
     const { user: admin } = createAdmin(testDb);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('allow_registration', 'false')").run();
+    await setAppSetting(orm, 'allow_registration', 'false');
     const invite = createInviteToken(testDb, { max_uses: 1, created_by: admin.id });
 
     const res = await request(app).post('/api/auth/register').send({
@@ -171,7 +218,7 @@ describe('Registration', () => {
     });
     expect(res.status).toBe(201);
 
-    const row = testDb.prepare('SELECT used_count FROM invite_tokens WHERE id = ?').get(invite.id) as { used_count: number };
+    const row = (await rowOf(InviteTokens, { id: invite.id }))!;
     expect(row.used_count).toBe(1);
   });
 
@@ -189,7 +236,7 @@ describe('Registration', () => {
     const { user: admin } = createAdmin(testDb);
     const invite = createInviteToken(testDb, { max_uses: 1, created_by: admin.id });
     // Mark as exhausted
-    testDb.prepare('UPDATE invite_tokens SET used_count = 1 WHERE id = ?').run(invite.id);
+    await updateRows(orm, InviteTokens, { id: invite.id }, { used_count: 1 });
 
     const res = await request(app).get(`/api/auth/invite/${invite.token}`);
     expect(res.status).toBe(410);
@@ -199,7 +246,7 @@ describe('Registration', () => {
   it('AUTH-013 — GET /api/auth/invite/:token for a never-expiring invite keeps expires_at present and null on the wire (rule 16, task-5-review F1/T1)', async () => {
     const { user: admin } = createAdmin(testDb);
     const invite = createInviteToken(testDb, { max_uses: 3, created_by: admin.id });
-    testDb.prepare('UPDATE invite_tokens SET used_count = 1 WHERE id = ?').run(invite.id);
+    await updateRows(orm, InviteTokens, { id: invite.id }, { used_count: 1 });
 
     const res = await request(app).get(`/api/auth/invite/${invite.token}`);
     expect(res.status).toBe(200);
@@ -221,7 +268,7 @@ describe('Registration — whitespace normalization', () => {
       password: 'Str0ng!Pass',
     });
     expect(res.status).toBe(201);
-    const row = testDb.prepare('SELECT username FROM users WHERE email = ?').get('trimmed@example.com') as { username: string };
+    const row = (await rowOf(Users, { email: 'trimmed@example.com' }))!;
     expect(row.username).toBe('trimmeduser');
   });
 
@@ -232,7 +279,7 @@ describe('Registration — whitespace normalization', () => {
       password: 'Str0ng!Pass',
     });
     expect(res.status).toBe(201);
-    const row = testDb.prepare('SELECT email FROM users WHERE username = ?').get('emailtrimuser') as { email: string };
+    const row = (await rowOf(Users, { username: 'emailtrimuser' }))!;
     expect(row.email).toBe('emailtrim@example.com');
   });
 
@@ -326,7 +373,7 @@ describe('Session', () => {
 
   it('AUTH-021 — user with must_change_password=1 sees the flag in their profile', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET must_change_password = 1 WHERE id = ?').run(user.id);
+    await updateRows(orm, Users, { id: user.id }, { must_change_password: 1 });
 
     const res = await request(app).get('/api/auth/me').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
@@ -351,7 +398,7 @@ describe('App config', () => {
 
   it('AUTH-028 — allow_registration is false after admin disables it', async () => {
     createUser(testDb);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('allow_registration', 'false')").run();
+    await setAppSetting(orm, 'allow_registration', 'false');
     const res = await request(app).get('/api/auth/app-config');
     expect(res.status).toBe(200);
     expect(res.body.allow_registration).toBe(false);
@@ -370,9 +417,7 @@ describe('Demo login', () => {
   });
 
   it('AUTH-022 — POST /api/auth/demo-login with DEMO_MODE and demo user returns 200 + cookie', async () => {
-    testDb.prepare(
-      "INSERT INTO users (username, email, password_hash, role) VALUES ('demo', 'demo@trek.app', 'x', 'user')"
-    ).run();
+    await insertRow(orm, Users, { username: 'demo', email: 'demo@trek.app', password_hash: 'x', role: 'user' });
     process.env.DEMO_MODE = 'true';
     try {
       const res = await request(app).post('/api/auth/demo-login');
@@ -478,7 +523,7 @@ describe('MFA', () => {
 describe('Forced MFA policy', () => {
   it('AUTH-020 — non-MFA user is blocked (403 MFA_REQUIRED) when require_mfa is true', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('require_mfa', 'true')").run();
+    await setAppSetting(orm, 'require_mfa', 'true');
 
     // mfaPolicy checks Authorization: Bearer header
     const res = await request(app).get('/api/trips').set(authHeader(user.id));
@@ -488,7 +533,7 @@ describe('Forced MFA policy', () => {
 
   it('AUTH-020 — /api/auth/me and MFA setup endpoints are exempt from require_mfa', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('require_mfa', 'true')").run();
+    await setAppSetting(orm, 'require_mfa', 'true');
 
     const meRes = await request(app).get('/api/auth/me').set(authHeader(user.id));
     expect(meRes.status).toBe(200);
@@ -499,7 +544,7 @@ describe('Forced MFA policy', () => {
 
   it('AUTH-020 — MFA-enabled user passes through require_mfa policy', async () => {
     const { user } = createUserWithMfa(testDb);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('require_mfa', 'true')").run();
+    await setAppSetting(orm, 'require_mfa', 'true');
 
     const res = await request(app).get('/api/trips').set(authHeader(user.id));
     expect(res.status).toBe(200);
@@ -512,7 +557,7 @@ describe('Forced MFA policy', () => {
     // leave every addon endpoint reachable without MFA.
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('require_mfa', 'true')").run();
+    await setAppSetting(orm, 'require_mfa', 'true');
 
     for (const path of [`/api/trips/${trip.id}/budget`, `/api/trips/${trip.id}/packing`, `/api/trips/${trip.id}/todo`]) {
       const res = await request(app).get(path).set(authHeader(user.id));
@@ -524,7 +569,7 @@ describe('Forced MFA policy', () => {
   it('AUTH-020 — MFA-enabled user reaches nested Nest addon controllers under require_mfa', async () => {
     const { user } = createUserWithMfa(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('require_mfa', 'true')").run();
+    await setAppSetting(orm, 'require_mfa', 'true');
 
     const res = await request(app).get(`/api/trips/${trip.id}/budget`).set(authHeader(user.id));
     expect(res.status).toBe(200);
@@ -589,8 +634,7 @@ describe('Extended auth scenarios', () => {
     // Generate and store backup codes on the MFA-enabled user
     const backupCodes = generateBackupCodes();
     const backupHashes = backupCodes.map(hashBackupCode);
-    testDb.prepare('UPDATE users SET mfa_backup_codes = ? WHERE id = ?')
-      .run(JSON.stringify(backupHashes), user.id);
+    await updateRows(orm, Users, { id: user.id }, { mfa_backup_codes: JSON.stringify(backupHashes) });
 
     // Step 1: login to get mfa_token
     const loginRes = await request(app)
@@ -633,14 +677,14 @@ describe('Account deletion', () => {
     // trip_members.invited_by: target invited thirdUser to otherUser's trip
     // (trip survives deletion; only invited_by should become NULL)
     const otherTrip = createTrip(testDb, otherUser.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)').run(otherTrip.id, thirdUser.id, target.id);
+    await insertRow(orm, TripMembers, { trip: otherTrip.id, user: thirdUser.id, invitedByRef: target.id });
 
     // share_tokens.created_by: target created a share token for otherUser's trip
-    testDb.prepare("INSERT INTO share_tokens (trip_id, token, created_by) VALUES (?, 'tok-auth-test', ?)").run(otherTrip.id, target.id);
+    await makeShareToken(orm, otherTrip.id, target.id, { token: 'tok-auth-test' });
 
     // budget_items.paid_by_user_id: target paid for an expense on otherUser's trip
     const budgetItem = createBudgetItem(testDb, otherTrip.id);
-    testDb.prepare('UPDATE budget_items SET paid_by_user_id = ? WHERE id = ?').run(target.id, budgetItem.id);
+    await updateRows(orm, BudgetItems, { id: budgetItem.id }, { paidByUser: target.id });
 
     // journey_contributors: target is a contributor on otherUser's journey
     const otherJourney = createJourney(testDb, otherUser.id);
@@ -650,35 +694,31 @@ describe('Account deletion', () => {
     createJourneyEntry(testDb, otherJourney.id, target.id);
 
     // journey_share_tokens: target created a share token for otherUser's journey
-    testDb.prepare("INSERT INTO journey_share_tokens (journey_id, token, created_by) VALUES (?, 'jst-auth-test', ?)").run(otherJourney.id, target.id);
+    await insertRow(orm, JourneyShareTokens, { journey: otherJourney.id, token: 'jst-auth-test', createdByRef: target.id });
 
     // notifications.sender_id (SET NULL): target sent a notification to otherUser
-    const sentNotif = testDb.prepare(
-      "INSERT INTO notifications (type, scope, target, sender_id, recipient_id, title_key, text_key) VALUES ('simple', 'trip', ?, ?, ?, 'k', 'k')"
-    ).run(otherTrip.id, target.id, otherUser.id);
+    const sentNotifId = await insertRow(orm, Notifications, {
+      type: 'simple', scope: 'trip', target: otherTrip.id, sender: target.id, recipient: otherUser.id, title_key: 'k', text_key: 'k',
+    });
     // notifications.recipient_id (CASCADE): otherUser sent a notification to target
-    testDb.prepare(
-      "INSERT INTO notifications (type, scope, target, sender_id, recipient_id, title_key, text_key) VALUES ('simple', 'trip', ?, ?, ?, 'k', 'k')"
-    ).run(otherTrip.id, otherUser.id, target.id);
+    await insertRow(orm, Notifications, {
+      type: 'simple', scope: 'trip', target: otherTrip.id, sender: otherUser.id, recipient: target.id, title_key: 'k', text_key: 'k',
+    });
 
     // user_notice_dismissals (CASCADE): target dismissed a notice
-    testDb.prepare(
-      "INSERT INTO user_notice_dismissals (user_id, notice_id, dismissed_at) VALUES (?, 'test-notice', ?)"
-    ).run(target.id, Date.now());
+    await insertRow(orm, UserNoticeDismissals, { user: target.id, notice_id: 'test-notice', dismissed_at: Date.now() });
 
     // owned journey: target owns a journey with an entry (cascade-deletes on journey deletion)
     const ownedJourney = createJourney(testDb, target.id);
     createJourneyEntry(testDb, ownedJourney.id, target.id);
 
     // trip_files.uploaded_by (SET NULL): target uploaded a file to otherUser's trip
-    const fileRow = testDb.prepare(
-      "INSERT INTO trip_files (trip_id, filename, original_name, uploaded_by) VALUES (?, 'f.pdf', 'file.pdf', ?)"
-    ).run(otherTrip.id, target.id);
+    const fileId = await insertRow(orm, TripFiles, {
+      trip: otherTrip.id, filename: 'f.pdf', original_name: 'file.pdf', uploadedByRef: target.id,
+    });
 
     // trek_photos.owner_id (SET NULL): target owns a photo in the central registry
-    const trekPhotoRow = testDb.prepare(
-      "INSERT INTO trek_photos (provider, asset_id, owner_id) VALUES ('immich', 'asset-auth-test', ?)"
-    ).run(target.id);
+    const trekPhotoId = await insertRow(orm, TrekPhotos, { provider: 'immich', asset_id: 'asset-auth-test', owner: target.id });
 
     // trip_photos.user_id (CASCADE): target added a photo to otherUser's trip
     addTripPhoto(testDb, otherTrip.id, target.id, 'asset-tp-auth', 'immich');
@@ -697,33 +737,31 @@ describe('Account deletion', () => {
 
     // todo_items.assigned_user_id (SET NULL): target is assigned to a todo on otherUser's trip
     const todoItem = createTodoItem(testDb, otherTrip.id);
-    testDb.prepare('UPDATE todo_items SET assigned_user_id = ? WHERE id = ?').run(target.id, todoItem.id);
+    await updateRows(orm, TodoItems, { id: todoItem.id }, { assignedUser: target.id });
 
     // packing_bags.user_id (SET NULL): target owns a packing bag on otherUser's trip
-    const packBagRow = testDb.prepare(
-      "INSERT INTO packing_bags (trip_id, name, color, user_id) VALUES (?, 'Bag', '#ff0000', ?)"
-    ).run(otherTrip.id, target.id);
+    const packBagId = await insertRow(orm, PackingBags, { trip: otherTrip.id, name: 'Bag', color: '#ff0000', user: target.id });
 
     // mcp_tokens.user_id (CASCADE): target has an MCP API token
     createMcpToken(testDb, target.id);
 
     // oauth_tokens/consents.user_id (CASCADE): target has tokens from otherUser's OAuth client
-    testDb.prepare(
-      "INSERT INTO oauth_clients (id, user_id, name, client_id, client_secret_hash) VALUES ('cl-auth-test', ?, 'App', 'cid-auth-test', 'h')"
-    ).run(otherUser.id);
-    testDb.prepare(
-      "INSERT INTO oauth_tokens (client_id, user_id, access_token_hash, refresh_token_hash, access_token_expires_at, refresh_token_expires_at) VALUES ('cid-auth-test', ?, 'ath-auth', 'rth-auth', datetime('now','+1 hour'), datetime('now','+30 days'))"
-    ).run(target.id);
-    testDb.prepare(
-      "INSERT INTO oauth_consents (client_id, user_id) VALUES ('cid-auth-test', ?)"
-    ).run(target.id);
+    await insertRow(orm, OauthClients, {
+      id: 'cl-auth-test', user: otherUser.id, name: 'App', client_id: 'cid-auth-test', client_secret_hash: 'h',
+    });
+    await insertRow(orm, OauthTokens, {
+      client: 'cid-auth-test', user: target.id, access_token_hash: 'ath-auth', refresh_token_hash: 'rth-auth',
+      access_token_expires_at: dbNow(new Date(Date.now() + 3600_000)),
+      refresh_token_expires_at: dbNow(new Date(Date.now() + 30 * 86_400_000)),
+    });
+    await insertRow(orm, OauthConsents, { client: 'cid-auth-test', user: target.id });
 
     // vacay_plans.owner_id (CASCADE): target owns a vacation plan
-    const vacayPlanRow = testDb.prepare("INSERT INTO vacay_plans (owner_id) VALUES (?)").run(target.id);
+    const vacayPlanId = await insertRow(orm, VacayPlans, { owner: target.id });
 
     // vacay_plan_members.user_id (CASCADE): target is a member of otherUser's vacay plan
-    const otherVacayPlanRow = testDb.prepare("INSERT INTO vacay_plans (owner_id) VALUES (?)").run(otherUser.id);
-    testDb.prepare("INSERT INTO vacay_plan_members (plan_id, user_id) VALUES (?, ?)").run(otherVacayPlanRow.lastInsertRowid, target.id);
+    const otherVacayPlanId = await insertRow(orm, VacayPlans, { owner: otherUser.id });
+    await insertRow(orm, VacayPlanMembers, { plan: otherVacayPlanId, user: target.id });
 
     // bucket_list.user_id (CASCADE): target has a bucket list item
     createBucketListItem(testDb, target.id);
@@ -732,14 +770,10 @@ describe('Account deletion', () => {
     createVisitedCountry(testDb, target.id, 'JP');
 
     // visited_regions.user_id (CASCADE): target has visited a region
-    testDb.prepare(
-      "INSERT INTO visited_regions (user_id, region_code, region_name, country_code) VALUES (?, 'JP-13', 'Tokyo', 'JP')"
-    ).run(target.id);
+    await insertRow(orm, VisitedRegions, { user: target.id, region_code: 'JP-13', region_name: 'Tokyo', country_code: 'JP' });
 
     // packing_templates.created_by (CASCADE): target created a packing template
-    const packTemplateRow = testDb.prepare(
-      "INSERT INTO packing_templates (name, created_by) VALUES ('My Template', ?)"
-    ).run(target.id);
+    const packTemplateId = await insertRow(orm, PackingTemplates, { name: 'My Template', createdByRef: target.id });
 
     // invite_tokens.created_by (CASCADE): target created an invite token
     createInviteToken(testDb, { created_by: target.id });
@@ -748,20 +782,18 @@ describe('Account deletion', () => {
     createCollabNote(testDb, otherTrip.id, target.id);
 
     // settings.user_id (CASCADE): target has a user setting
-    testDb.prepare("INSERT INTO settings (user_id, key, value) VALUES (?, 'theme', 'dark')").run(target.id);
+    await setUserSetting(orm, target.id, 'theme', 'dark');
 
     // password_reset_tokens.user_id (CASCADE): target has a pending password reset
-    testDb.prepare(
-      "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, 'prt-hash-auth', datetime('now','+1 hour'))"
-    ).run(target.id);
+    await insertRow(orm, PasswordResetTokens, {
+      user: target.id, token_hash: 'prt-hash-auth', expires_at: dbNow(new Date(Date.now() + 3600_000)),
+    });
 
     // audit_log.user_id (SET NULL): target performed an audited action
-    const auditRow = testDb.prepare(
-      "INSERT INTO audit_log (user_id, action, ip) VALUES (?, 'test.action', '127.0.0.1')"
-    ).run(target.id);
+    const auditId = await insertRow(orm, AuditLog, { user: target.id, action: 'test.action', ip: '127.0.0.1' });
 
     // notification_channel_preferences.user_id (CASCADE): target has notification preferences
-    testDb.prepare("INSERT OR IGNORE INTO notification_channel_preferences (user_id, event_type, channel) VALUES (?, 'trip_invite', 'email')").run(target.id);
+    await insertRowIgnoringConflict(orm, NotificationChannelPreferences, { user: target.id, event_type: 'trip_invite', channel: 'email' });
 
     // admin exists to ensure target (non-admin user) passes the last-admin guard
     void admin;
@@ -772,69 +804,69 @@ describe('Account deletion', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-    expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(Users, { id: target.id })).toBeNull();
     // trip_members row survives but invited_by is now NULL
-    expect((testDb.prepare('SELECT invited_by FROM trip_members WHERE trip_id = ? AND user_id = ?').get(otherTrip.id, thirdUser.id) as any).invited_by).toBeNull();
-    expect(testDb.prepare('SELECT id FROM share_tokens WHERE created_by = ?').get(target.id)).toBeUndefined();
-    expect((testDb.prepare('SELECT paid_by_user_id FROM budget_items WHERE id = ?').get(budgetItem.id) as any).paid_by_user_id).toBeNull();
-    expect(testDb.prepare('SELECT user_id FROM journey_contributors WHERE journey_id = ? AND user_id = ?').get(otherJourney.id, target.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM journey_entries WHERE author_id = ?').get(target.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM journey_share_tokens WHERE created_by = ?').get(target.id)).toBeUndefined();
+    expect((await rowOf(TripMembers, { trip: otherTrip.id, user: thirdUser.id }))!.invited_by).toBeNull();
+    expect(await rowOf(ShareTokens, { createdByRef: target.id })).toBeNull();
+    expect((await rowOf(BudgetItems, { id: budgetItem.id }))!.paid_by_user_id).toBeNull();
+    expect(await rowOf(JourneyContributors, { journey: otherJourney.id, user: target.id })).toBeNull();
+    expect(await rowOf(JourneyEntries, { author: target.id })).toBeNull();
+    expect(await rowOf(JourneyShareTokens, { createdByRef: target.id })).toBeNull();
     // sent notification survives but sender_id becomes NULL
-    expect((testDb.prepare('SELECT sender_id FROM notifications WHERE id = ?').get(sentNotif.lastInsertRowid) as any).sender_id).toBeNull();
+    expect((await rowOf(Notifications, { id: sentNotifId }))!.sender_id).toBeNull();
     // received notification is cascade-deleted
-    expect(testDb.prepare('SELECT id FROM notifications WHERE recipient_id = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(Notifications, { recipient: target.id })).toBeNull();
     // notice dismissals are cascade-deleted
-    expect(testDb.prepare("SELECT user_id FROM user_notice_dismissals WHERE user_id = ? AND notice_id = 'test-notice'").get(target.id)).toBeUndefined();
+    expect(await rowOf(UserNoticeDismissals, { user: target.id, notice_id: 'test-notice' })).toBeNull();
     // owned journey and its entries are cascade-deleted
-    expect(testDb.prepare('SELECT id FROM journeys WHERE user_id = ?').get(target.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM journey_entries WHERE journey_id = ?').get(ownedJourney.id)).toBeUndefined();
+    expect(await rowOf(Journeys, { user: target.id })).toBeNull();
+    expect(await rowOf(JourneyEntries, { journey: ownedJourney.id })).toBeNull();
     // uploaded file survives but uploaded_by is now NULL
-    expect((testDb.prepare('SELECT uploaded_by FROM trip_files WHERE id = ?').get(fileRow.lastInsertRowid) as any).uploaded_by).toBeNull();
+    expect((await rowOf(TripFiles, { id: fileId }))!.uploaded_by).toBeNull();
     // trek_photos row survives but owner_id is now NULL
-    expect((testDb.prepare('SELECT owner_id FROM trek_photos WHERE id = ?').get(trekPhotoRow.lastInsertRowid) as any).owner_id).toBeNull();
+    expect((await rowOf(TrekPhotos, { id: trekPhotoId }))!.owner_id).toBeNull();
     // trip_photos row for target is cascade-deleted
-    expect(testDb.prepare("SELECT id FROM trip_photos WHERE trip_id = ? AND user_id = ?").get(otherTrip.id, target.id)).toBeUndefined();
+    expect(await rowOf(TripPhotos, { trip: otherTrip.id, user: target.id })).toBeNull();
     // owned trip is cascade-deleted
-    expect(testDb.prepare('SELECT id FROM trips WHERE id = ?').get(ownedTrip.id)).toBeUndefined();
+    expect(await rowOf(Trips, { id: ownedTrip.id })).toBeNull();
     // trip membership on others' trips is removed
-    expect(testDb.prepare('SELECT id FROM trip_members WHERE trip_id = ? AND user_id = ?').get(otherTrip.id, target.id)).toBeUndefined();
+    expect(await rowOf(TripMembers, { trip: otherTrip.id, user: target.id })).toBeNull();
     // category survives but user_id is NULL
-    expect((testDb.prepare('SELECT user_id FROM categories WHERE id = ?').get(userCategory.id) as any).user_id).toBeNull();
+    expect((await rowOf(Categories, { id: userCategory.id }))!.user_id).toBeNull();
     // tag is deleted
-    expect(testDb.prepare('SELECT id FROM tags WHERE id = ?').get(userTag.id)).toBeUndefined();
+    expect(await rowOf(Tags, { id: userTag.id })).toBeNull();
     // todo assigned_user_id is NULL
-    expect((testDb.prepare('SELECT assigned_user_id FROM todo_items WHERE id = ?').get(todoItem.id) as any).assigned_user_id).toBeNull();
+    expect((await rowOf(TodoItems, { id: todoItem.id }))!.assigned_user_id).toBeNull();
     // packing bag survives but user_id is NULL
-    expect((testDb.prepare('SELECT user_id FROM packing_bags WHERE id = ?').get(packBagRow.lastInsertRowid) as any).user_id).toBeNull();
+    expect((await rowOf(PackingBags, { id: packBagId }))!.user_id).toBeNull();
     // MCP tokens are deleted
-    expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE user_id = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(McpTokens, { user: target.id })).toBeNull();
     // OAuth tokens and consents are deleted
-    expect(testDb.prepare('SELECT id FROM oauth_tokens WHERE user_id = ?').get(target.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM oauth_consents WHERE user_id = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(OauthTokens, { user: target.id })).toBeNull();
+    expect(await rowOf(OauthConsents, { user: target.id })).toBeNull();
     // owned vacay plan is deleted
-    expect(testDb.prepare('SELECT id FROM vacay_plans WHERE id = ?').get(vacayPlanRow.lastInsertRowid)).toBeUndefined();
+    expect(await rowOf(VacayPlans, { id: vacayPlanId })).toBeNull();
     // vacay plan membership on others' plans is removed
-    expect(testDb.prepare('SELECT id FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?').get(otherVacayPlanRow.lastInsertRowid, target.id)).toBeUndefined();
+    expect(await rowOf(VacayPlanMembers, { plan: otherVacayPlanId, user: target.id })).toBeNull();
     // bucket list items are deleted
-    expect(testDb.prepare('SELECT id FROM bucket_list WHERE user_id = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(BucketList, { user: target.id })).toBeNull();
     // travel history is deleted
-    expect(testDb.prepare('SELECT user_id FROM visited_countries WHERE user_id = ? AND country_code = ?').get(target.id, 'JP')).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM visited_regions WHERE user_id = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(VisitedCountries, { user: target.id, country_code: 'JP' })).toBeNull();
+    expect(await rowOf(VisitedRegions, { user: target.id })).toBeNull();
     // packing template is deleted
-    expect(testDb.prepare('SELECT id FROM packing_templates WHERE id = ?').get(packTemplateRow.lastInsertRowid)).toBeUndefined();
+    expect(await rowOf(PackingTemplates, { id: packTemplateId })).toBeNull();
     // invite tokens created by target are deleted
-    expect(testDb.prepare('SELECT id FROM invite_tokens WHERE created_by = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(InviteTokens, { createdByRef: target.id })).toBeNull();
     // collab content is deleted
-    expect(testDb.prepare('SELECT id FROM collab_notes WHERE user_id = ? AND trip_id = ?').get(target.id, otherTrip.id)).toBeUndefined();
+    expect(await rowOf(CollabNotes, { user: target.id, trip: otherTrip.id })).toBeNull();
     // user settings are deleted
-    expect(testDb.prepare("SELECT id FROM settings WHERE user_id = ?").get(target.id)).toBeUndefined();
+    expect(await rowOf(Settings, { user: target.id })).toBeNull();
     // password reset tokens are deleted
-    expect(testDb.prepare('SELECT id FROM password_reset_tokens WHERE user_id = ?').get(target.id)).toBeUndefined();
+    expect(await rowOf(PasswordResetTokens, { user: target.id })).toBeNull();
     // audit log entry survives but user_id is NULL
-    expect((testDb.prepare('SELECT user_id FROM audit_log WHERE id = ?').get(auditRow.lastInsertRowid) as any).user_id).toBeNull();
+    expect((await rowOf(AuditLog, { id: auditId }))!.user_id).toBeNull();
     // notification channel preferences are deleted
-    expect(testDb.prepare("SELECT user_id FROM notification_channel_preferences WHERE user_id = ? AND event_type = 'trip_invite'").get(target.id)).toBeUndefined();
+    expect(await rowOf(NotificationChannelPreferences, { user: target.id, event_type: 'trip_invite' })).toBeNull();
   });
 });
 

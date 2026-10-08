@@ -43,13 +43,19 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { MikroORM } from '@mikro-orm/core';
+import { findRow, insertRow } from '../helpers/factories/rows';
+import { InviteTokens } from '../../src/db/entities/InviteTokens.entity';
+import { WebauthnCredentials } from '../../src/db/entities/WebauthnCredentials.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: MikroORM;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -98,10 +104,9 @@ describe('Passkey management — non-numeric id parity (Plan 3b Task 3 review, F
   // 16 instead of 404ing — verified by hand, recorded in the task report.
   it('PASSKEY-INT-003 — PATCH /auth/passkey/credentials/0x10 (hex-literal id) is refused by the toRowId narrowing, even though credential 16 exists', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare(
-      `INSERT INTO webauthn_credentials (id, user_id, credential_id, public_key, name)
-       VALUES (16, ?, 'cred-16', X'00', 'Original16')`,
-    ).run(user.id);
+    await insertRow(orm, WebauthnCredentials, {
+      id: 16, user: user.id, credential_id: 'cred-16', public_key: Buffer.from([0]), name: 'Original16',
+    });
 
     const res = await request(app)
       .patch('/api/auth/passkey/credentials/0x10')
@@ -110,7 +115,7 @@ describe('Passkey management — non-numeric id parity (Plan 3b Task 3 review, F
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Passkey not found' });
-    const row = testDb.prepare('SELECT name FROM webauthn_credentials WHERE id = 16').get() as { name: string };
+    const row = (await findRow(orm, WebauthnCredentials, { id: 16 }))!;
     expect(row.name).toBe('Original16'); // untouched — not renamed to 'Ghost'
   });
 
@@ -141,9 +146,9 @@ describe('Passkey management — non-numeric id parity (Plan 3b Task 3 review, F
 describe('Registration invite deletion — prefixed numeric literal parity (Plan 3b Task 3 review, F2)', () => {
   it('INVITE-INT-001 — DELETE /admin/invites/0x10 (hex literal) returns the legacy 404 and leaves invite id 16 untouched', async () => {
     const { user: admin } = createAdmin(testDb);
-    testDb
-      .prepare('INSERT INTO invite_tokens (id, token, max_uses, used_count, expires_at, created_by) VALUES (16, ?, 1, 0, NULL, ?)')
-      .run('hex-literal-survivor', admin.id);
+    await insertRow(orm, InviteTokens, {
+      id: 16, token: 'hex-literal-survivor', max_uses: 1, used_count: 0, expires_at: null, createdByRef: admin.id,
+    });
 
     const res = await request(app)
       .delete('/api/admin/invites/0x10')
@@ -151,6 +156,6 @@ describe('Registration invite deletion — prefixed numeric literal parity (Plan
 
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Invite not found' });
-    expect(testDb.prepare('SELECT id FROM invite_tokens WHERE id = 16').get()).toBeDefined();
+    expect(await findRow(orm, InviteTokens, { id: 16 })).not.toBeNull();
   });
 });

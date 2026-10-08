@@ -63,13 +63,23 @@ import { PluginMetaMigrations } from '../../../src/db/entities/PluginMetaMigrati
 import { PluginCapabilityAudit } from '../../../src/db/entities/PluginCapabilityAudit.entity';
 import { Settings } from '../../../src/db/entities/Settings.entity';
 import { NotificationChannelPreferences } from '../../../src/db/entities/NotificationChannelPreferences.entity';
+import { findRow, insertRow } from '../../helpers/factories/rows';
 
 let codeRoot: string;
 let dataRoot: string;
 let mod: TestingModule;
 let t: TestOrm | undefined;
+/** Seeds and reads the plugin rows; separate from the ORMs the cases hand their services. */
+let seedOrm: TestOrm;
 
-beforeAll(() => {
+/** The plugin's status and last error as the supervisor left them. */
+async function pluginState(id: string): Promise<{ status: string; last_error: string | null }> {
+  const plugin = (await findRow(seedOrm, Plugins, { id }))!;
+  return { status: plugin.status, last_error: plugin.last_error ?? null };
+}
+
+beforeAll(async () => {
+  seedOrm = await createTestOrm(testDb);
   codeRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'trekplug-boot-code-'));
   dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'trekplug-boot-data-'));
   process.env.TREK_PLUGINS_DIR = codeRoot;
@@ -87,14 +97,16 @@ beforeAll(() => {
   // The row a container recreate leaves behind: enabled, already consented to
   // db:own. Seeded 'inactive' (not the 'active' a real shutdown leaves) so the
   // poll below only terminates on a status the THIS-boot supervisor wrote.
-  testDb
-    .prepare("INSERT INTO plugins (id, name, status, enabled, permissions, granted_permissions, config, trek_range) VALUES ('migrator','migrator','inactive',1,'[\"db:own\"]','[\"db:own\"]','{}','>=3.0.0')")
-    .run();
+  await insertRow(seedOrm, Plugins, {
+    id: 'migrator', name: 'migrator', status: 'inactive', enabled: 1, permissions: '["db:own"]',
+    granted_permissions: '["db:own"]', config: '{}', trek_range: '>=3.0.0',
+  });
 });
 
 afterAll(async () => {
   await mod?.close();
   await t?.close();
+  await seedOrm?.close();
   delete process.env.TREK_PLUGINS_DIR;
   delete process.env.TREK_PLUGINS_DATA_DIR;
   delete process.env.TREK_PLUGINS_ENABLED;
@@ -172,7 +184,7 @@ describe('plugin boot vs registry scan ordering', () => {
     const runtime = mod.get(PluginRuntimeService);
     let row = { status: 'starting', last_error: null as string | null };
     for (let i = 0; i < 100; i++) {
-      row = testDb.prepare("SELECT status, last_error FROM plugins WHERE id='migrator'").get() as typeof row;
+      row = await pluginState('migrator');
       if (row.status === 'active' || row.status === 'error') break;
       await new Promise((r) => setTimeout(r, 50));
     }
@@ -198,12 +210,11 @@ describe('plugin boot vs registry scan ordering', () => {
     const dir = path.join(codeRoot, 'addongated', 'server');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'index.js'), `module.exports = { async onLoad(ctx) {} };`);
-    testDb.prepare("INSERT INTO addons (id, name, enabled) VALUES ('needsaddon_addon', 'needsaddon_addon', 1)").run();
-    testDb
-      .prepare(
-        "INSERT INTO plugins (id, name, status, enabled, permissions, granted_permissions, config, trek_range, dependencies) VALUES ('addongated','addongated','inactive',1,'[]','[]','{}','>=3.0.0', ?)",
-      )
-      .run(JSON.stringify({ requiredAddons: ['needsaddon_addon'] }));
+    await insertRow(seedOrm, Addons, { id: 'needsaddon_addon', name: 'needsaddon_addon', enabled: true });
+    await insertRow(seedOrm, Plugins, {
+      id: 'addongated', name: 'addongated', status: 'inactive', enabled: 1, permissions: '[]', granted_permissions: '[]',
+      config: '{}', trek_range: '>=3.0.0', dependencies: JSON.stringify({ requiredAddons: ['needsaddon_addon'] }),
+    });
 
     // Self-contained ORM/collaborators — independent of test 1's `t`, which is
     // assigned inside ITS `it` body rather than a shared beforeAll. Global
@@ -274,7 +285,7 @@ describe('plugin boot vs registry scan ordering', () => {
       const runtime2 = mod2.get(PluginRuntimeService);
       let row = { status: 'starting', last_error: null as string | null };
       for (let i = 0; i < 100; i++) {
-        row = testDb.prepare("SELECT status, last_error FROM plugins WHERE id='addongated'").get() as typeof row;
+        row = await pluginState('addongated');
         if (row.status === 'active' || row.status === 'error') break;
         await new Promise((r) => setTimeout(r, 50));
       }

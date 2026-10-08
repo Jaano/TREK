@@ -31,6 +31,9 @@ import { StorageEventsService } from '../../src/nest/storage/storage-events.serv
 import { BACKENDS_KEY, CATEGORIES_KEY, StorageRegistryService } from '../../src/nest/storage/storage-registry.service';
 import { StorageService } from '../../src/nest/storage/storage.service';
 import { createTestUnitOfWork, createTestAppSettingsRepo, sharedTestOrm } from '../helpers/test-uow';
+import { deleteRows } from '../helpers/factories/rows';
+import { setAppSetting } from '../helpers/factories/settings';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
 
 const testDb = createSnapshotTestDb();
 
@@ -45,15 +48,13 @@ function envStub(): { placePhotoDir: string | undefined } {
   return { placePhotoDir: undefined };
 }
 
-function setSetting(key: string, value: unknown): void {
-  testDb
-    .prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)')
-    .run(key, JSON.stringify(value));
+async function setSetting(key: string, value: unknown): Promise<void> {
+  await setAppSetting(await sharedTestOrm(testDb), key, JSON.stringify(value));
 }
 
-afterEach(() => {
+afterEach(async () => {
   while (tmpDirs.length) fs.rmSync(tmpDirs.pop()!, { recursive: true, force: true });
-  testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'storage.%'").run();
+  await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: { $like: 'storage.%' } });
 });
 
 describe('C6 — restore reloads the storage registry (audit #4)', () => {
@@ -62,11 +63,11 @@ describe('C6 — restore reloads the storage registry (audit #4)', () => {
     const rootB = makeTmpDir();
 
     // Pre-restore world: 'files' resolves to backend nas-a.
-    setSetting(BACKENDS_KEY, [
+    await setSetting(BACKENDS_KEY, [
       { name: 'nas-a', type: 'local', options: { root: rootA } },
       { name: 'nas-b', type: 'local', options: { root: rootB } },
     ]);
-    setSetting(CATEGORIES_KEY, { files: 'nas-a' });
+    await setSetting(CATEGORIES_KEY, { files: 'nas-a' });
 
     const registry = new StorageRegistryService(
       await createTestAppSettingsRepo(testDb),
@@ -90,7 +91,7 @@ describe('C6 — restore reloads the storage registry (audit #4)', () => {
     // production: the restored archive's travel.db is now live, and IT names a
     // different backend for 'files' (an admin on the source install pointed
     // 'files' at a different backend before taking that backup).
-    setSetting(CATEGORIES_KEY, { files: 'nas-b' });
+    await setSetting(CATEGORIES_KEY, { files: 'nas-b' });
 
     // Audit #4, pre-fix: the registry is still holding the pre-restore driver
     // map at this point — resolve() is stale until something calls reload().

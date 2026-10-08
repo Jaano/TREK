@@ -43,22 +43,29 @@ import {
 import { authCookie } from '../helpers/auth';
 import { jpegWithExif } from '../helpers/exif-jpeg';
 import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions-cache';
+import { MikroORM } from '@mikro-orm/core';
+import { findRow, upsertRow } from '../helpers/factories/rows';
+import { setAppSetting } from '../helpers/factories/settings';
+import { Addons } from '../../src/db/entities/Addons.entity';
+import { TrekPhotos } from '../../src/db/entities/TrekPhotos.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: MikroORM;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 beforeEach(async () => {
   resetTestDb(testDb);
   await resetRateLimits(nestApp);
   await invalidatePermissionsCache();
   // Enable the journey addon
-  testDb.prepare(
-    "INSERT OR REPLACE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('journey', 'Journey', 'Travel journal', 'global', 'Compass', 1, 35)"
-  ).run();
+  await upsertRow(orm, Addons, {
+    id: 'journey', name: 'Journey', description: 'Travel journal', type: 'global', icon: 'Compass', enabled: true, sort_order: 35,
+  });
 });
 afterAll(async () => {
   await nestApp.close();
@@ -995,8 +1002,7 @@ describe('Provider photos — passphrase persistence', () => {
 
     expect(res.status).toBe(201);
 
-    const row = testDb.prepare('SELECT passphrase FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?')
-      .get('synologyphotos', 'shared-asset-1', user.id) as { passphrase: string | null } | undefined;
+    const row = await findRow(orm, TrekPhotos, { provider: 'synologyphotos', asset_id: 'shared-asset-1', owner: user.id });
     expect(row?.passphrase).not.toBeNull();
     expect(typeof row?.passphrase).toBe('string');
   });
@@ -1015,8 +1021,7 @@ describe('Provider photos — passphrase persistence', () => {
     expect(res.body.added).toBe(2);
 
     for (const assetId of ['batch-asset-1', 'batch-asset-2']) {
-      const row = testDb.prepare('SELECT passphrase FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?')
-        .get('synologyphotos', assetId, user.id) as { passphrase: string | null } | undefined;
+      const row = await findRow(orm, TrekPhotos, { provider: 'synologyphotos', asset_id: assetId, owner: user.id });
       expect(row?.passphrase).not.toBeNull();
     }
   });
@@ -1078,7 +1083,7 @@ describe('Journey upload parity', () => {
     // The admin allowlist rejects the empty extension before the filename
     // fallback can run; the wildcard makes the fallback reachable so it is
     // actually pinned here.
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allowed_file_types', '*')").run();
+    await setAppSetting(orm, 'allowed_file_types', '*');
 
     const res = await request(app)
       .post(`/api/journeys/entries/${entry.id}/photos`)
@@ -1218,8 +1223,9 @@ describe('Journey upload parity', () => {
     // The backfill runs detached after the response, so wait for it to land.
     async function captureOf(filePath: string): Promise<CaptureRow> {
       let row: CaptureRow | undefined;
-      await vi.waitFor(() => {
-        row = testDb.prepare('SELECT taken_at, lat, lng FROM trek_photos WHERE file_path = ?').get(filePath) as CaptureRow;
+      await vi.waitFor(async () => {
+        const photo = await findRow(orm, TrekPhotos, { file_path: filePath });
+        row = photo ? { taken_at: photo.taken_at ?? null, lat: photo.lat ?? null, lng: photo.lng ?? null } : undefined;
         expect(row?.taken_at).toBeTruthy();
       });
       return row!;

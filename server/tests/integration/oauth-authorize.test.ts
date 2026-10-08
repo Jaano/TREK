@@ -45,6 +45,8 @@ import { UnitOfWork } from '../../src/nest/database/unit-of-work';
 import { createTestAddonsService } from '../helpers/test-addons';
 import { AuditService } from '../../src/nest/audit/audit.service';
 import { createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { upsertRow } from '../helpers/factories/rows';
+import { Addons } from '../../src/db/entities/Addons.entity';
 import { AuditLog } from '../../src/db/entities/AuditLog.entity';
 import { Users } from '../../src/db/entities/Users.entity';
 import { OauthClients } from '../../src/db/entities/OauthClients.entity';
@@ -67,10 +69,10 @@ function makePkce() {
     return { verifier, challenge };
 }
 
-function setMcpEnabled(enabled: boolean) {
-    testDb.prepare(
-        "INSERT OR REPLACE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('mcp', 'MCP', 'AI assistant integration', 'integration', 'Terminal', ?, 12)"
-    ).run(enabled ? 1 : 0);
+async function setMcpEnabled(enabled: boolean) {
+    await upsertRow(t, Addons, {
+        id: 'mcp', name: 'MCP', description: 'AI assistant integration', type: 'integration', icon: 'Terminal', enabled, sort_order: 12,
+    });
 }
 
 /** DCR-register a public client and return its client_id. */
@@ -93,7 +95,7 @@ beforeAll(async () => {
 beforeEach(async () => {
     resetTestDb(testDb);
     await resetRateLimits(nestApp);
-    setMcpEnabled(true);
+    await setMcpEnabled(true);
 });
 
 afterAll(async () => {
@@ -241,7 +243,7 @@ describe('GET /oauth/authorize — SDK authorizationHandler over trekOAuthProvid
     });
 
     it('AUTHZ-007 — MCP addon off: authorize and register both 404 with empty bodies', async () => {
-        setMcpEnabled(false);
+        await setMcpEnabled(false);
         const authz = await request(app).get('/oauth/authorize').query({ client_id: 'x' });
         expect(authz.status).toBe(404);
         expect(authz.text).toBe('');

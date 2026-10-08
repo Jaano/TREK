@@ -53,6 +53,8 @@ import { AirtrailClient, type AirtrailFlightRaw } from '../../src/nest/integrati
 import { ReservationsService } from '../../src/nest/reservations/reservations.service';
 import { Users } from '../../src/db/entities/Users.entity';
 import { createTrip, createUser } from '../helpers/factories';
+import { deleteRows, insertRow } from '../helpers/factories/rows';
+import { Reservations } from '../../src/db/entities/Reservations.entity';
 
 describe('airtrail-sync cron tick runs inside a request context', () => {
   let app: INestApplication;
@@ -72,13 +74,10 @@ describe('airtrail-sync cron tick runs inside a request context', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const result = testDb
-      .prepare(
-        `INSERT INTO reservations (trip_id, title, type, status, external_source, external_id, external_owner_user_id, sync_enabled, external_hash)
-         VALUES (?, 'AirTrail Flight', 'flight', 'confirmed', 'airtrail', '999', ?, 1, 'stale-hash')`,
-      )
-      .run(trip.id, user.id);
-    const reservationId = result.lastInsertRowid as number;
+    const reservationId = await insertRow(orm, Reservations, {
+      trip: trip.id, title: 'AirTrail Flight', type: 'flight', status: 'confirmed', external_source: 'airtrail',
+      external_id: '999', external_owner_user_id: user.id, sync_enabled: 1, external_hash: 'stale-hash',
+    });
 
     const flight: AirtrailFlightRaw = {
       id: 999,
@@ -165,7 +164,7 @@ describe('airtrail-sync cron tick runs inside a request context', () => {
       flightsSpy.mockRestore();
       credsSpy.mockRestore();
       syncEnabledSpy.mockRestore();
-      testDb.prepare('DELETE FROM reservations WHERE id = ?').run(reservationId);
+      await deleteRows(orm, Reservations, { id: reservationId });
     }
   });
 });

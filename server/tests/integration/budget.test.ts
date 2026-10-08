@@ -27,14 +27,29 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip, createBudgetItem, addTripMember, createReservation } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { MikroORM } from '@mikro-orm/core';
+import { deleteRows, findRow, insertRow } from '../helpers/factories/rows';
+import { setAppSetting } from '../helpers/factories/settings';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { Reservations } from '../../src/db/entities/Reservations.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: MikroORM;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
+
+/** A hotel expense linked to the booking. */
+function seedBookedExpense(tripId: number, reservationId: number, totalPrice: number): Promise<number> {
+  return insertRow(orm, BudgetItems, {
+    trip: tripId, name: 'Hotel Cost', category: 'Accommodation', total_price: totalPrice, reservation: reservationId,
+  });
+}
 
 beforeEach(async () => {
   resetTestDb(testDb);
@@ -187,18 +202,15 @@ describe('Delete budget item', () => {
     const trip = createTrip(testDb, user.id);
     const reservation = createReservation(testDb, trip.id, { title: 'Hotel Booking', type: 'hotel' });
 
-    const result = testDb.prepare(
-      'INSERT INTO budget_items (trip_id, name, category, total_price, reservation_id) VALUES (?, ?, ?, ?, ?)'
-    ).run(trip.id, 'Hotel Cost', 'Accommodation', 250, reservation.id);
-    const itemId = result.lastInsertRowid as number;
+    const itemId = await seedBookedExpense(trip.id, reservation.id, 250);
 
     const del = await request(app)
       .delete(`/api/trips/${trip.id}/budget/${itemId}`)
       .set('Cookie', authCookie(user.id));
     expect(del.status).toBe(200);
 
-    const reservationAfter = testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(reservation.id);
-    expect(reservationAfter).toBeDefined();
+    const reservationAfter = await findRow(orm, Reservations, { id: reservation.id });
+    expect(reservationAfter).not.toBeNull();
   });
 });
 
@@ -402,7 +414,7 @@ describe('Reorder budget items', () => {
     const item = createBudgetItem(testDb, trip.id);
 
     // Restrict budget_edit to trip_owner only
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
+    await setAppSetting(orm, 'perm_budget_edit', 'trip_owner');
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     await invalidatePermissionsCache();
 
@@ -413,7 +425,7 @@ describe('Reorder budget items', () => {
     expect(res.status).toBe(403);
 
     // Restore default
-    testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
+    await deleteRows(orm, AppSettings, { key: 'perm_budget_edit' });
     await invalidatePermissionsCache();
   });
 
@@ -475,10 +487,7 @@ describe('Reservation price sync on budget item update', () => {
     const reservation = createReservation(testDb, trip.id, { title: 'Hotel Booking', type: 'hotel' });
 
     // Create a budget item linked to the reservation
-    const result = testDb.prepare(
-      'INSERT INTO budget_items (trip_id, name, category, total_price, reservation_id) VALUES (?, ?, ?, ?, ?)'
-    ).run(trip.id, 'Hotel Cost', 'Accommodation', 200, reservation.id);
-    const itemId = result.lastInsertRowid as number;
+    const itemId = await seedBookedExpense(trip.id, reservation.id, 200);
 
     const res = await request(app)
       .put(`/api/trips/${trip.id}/budget/${itemId}`)
@@ -488,8 +497,8 @@ describe('Reservation price sync on budget item update', () => {
     expect(res.body.item.total_price).toBe(350);
 
     // Verify reservation metadata was synced
-    const updatedReservation = testDb.prepare('SELECT metadata FROM reservations WHERE id = ?').get(reservation.id) as { metadata: string | null } | undefined;
-    expect(updatedReservation).toBeDefined();
+    const updatedReservation = await findRow(orm, Reservations, { id: reservation.id });
+    expect(updatedReservation).not.toBeNull();
     const meta = JSON.parse(updatedReservation!.metadata || '{}');
     expect(meta.price).toBe('350');
   });
@@ -507,7 +516,7 @@ describe('Budget edit permission enforcement', () => {
     addTripMember(testDb, trip.id, member.id);
 
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
+    await setAppSetting(orm, 'perm_budget_edit', 'trip_owner');
     await invalidatePermissionsCache();
 
     const res = await request(app)
@@ -516,7 +525,7 @@ describe('Budget edit permission enforcement', () => {
       .send({ name: 'Sneaky Expense', total_price: 100 });
     expect(res.status).toBe(403);
 
-    testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
+    await deleteRows(orm, AppSettings, { key: 'perm_budget_edit' });
     await invalidatePermissionsCache();
   });
 
@@ -528,7 +537,7 @@ describe('Budget edit permission enforcement', () => {
     createBudgetItem(testDb, trip.id, { name: 'Item', category: 'Transport' });
 
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
+    await setAppSetting(orm, 'perm_budget_edit', 'trip_owner');
     await invalidatePermissionsCache();
 
     const res = await request(app)
@@ -537,7 +546,7 @@ describe('Budget edit permission enforcement', () => {
       .send({ orderedCategories: ['Transport'] });
     expect(res.status).toBe(403);
 
-    testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
+    await deleteRows(orm, AppSettings, { key: 'perm_budget_edit' });
     await invalidatePermissionsCache();
   });
 });

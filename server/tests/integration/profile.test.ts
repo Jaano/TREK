@@ -28,15 +28,21 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, createTrip } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { MikroORM } from '@mikro-orm/core';
+import { readUser } from '../helpers/factories/users';
+import { insertRow } from '../helpers/factories/rows';
+import { Users } from '../../src/db/entities/Users.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: MikroORM;
 const FIXTURE_JPEG = path.join(__dirname, '../fixtures/small-image.jpg');
 const FIXTURE_PDF = path.join(__dirname, '../fixtures/test.pdf');
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -96,7 +102,7 @@ describe('PUT /api/auth/me/settings (F3)', () => {
     expect(get.status).toBe(200);
     expect(get.body.user).toMatchObject({ username: 'after-name', email: 'after@example.test' });
 
-    const row = testDb.prepare('SELECT username, email FROM users WHERE id = ?').get(user.id) as { username: string; email: string };
+    const row = await readUser(orm, user.id);
     expect(row.username).toBe('after-name');
     expect(row.email).toBe('after@example.test');
   });
@@ -321,10 +327,7 @@ describe('Travel stats', () => {
 describe('Demo mode protections', () => {
   it('PROFILE-015 — demo user cannot upload avatar (demoUploadBlock)', async () => {
     // demoUploadBlock checks for email === 'demo@nomad.app'
-    testDb.prepare(
-      "INSERT INTO users (username, email, password_hash, role) VALUES ('demo', 'demo@nomad.app', 'x', 'user')"
-    ).run();
-    const demoUser = testDb.prepare('SELECT id FROM users WHERE email = ?').get('demo@nomad.app') as { id: number };
+    const demoUser = { id: await insertRow(orm, Users, { username: 'demo', email: 'demo@nomad.app', password_hash: 'x', role: 'user' }) };
     process.env.DEMO_MODE = 'true';
 
     try {

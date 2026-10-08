@@ -46,22 +46,29 @@ import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip, createPlace, createJourney, linkTripToJourney } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions-cache';
+import { MikroORM } from '@mikro-orm/core';
+import { findRow, insertRow, upsertRow } from '../helpers/factories/rows';
+import { Addons } from '../../src/db/entities/Addons.entity';
+import { JourneyEntries } from '../../src/db/entities/JourneyEntries.entity';
+import { Places } from '../../src/db/entities/Places.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: MikroORM;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 beforeEach(async () => {
   resetTestDb(testDb);
   await resetRateLimits(nestApp);
   await invalidatePermissionsCache();
   // Enable the journey addon.
-  testDb.prepare(
-    "INSERT OR REPLACE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('journey', 'Journey', 'Travel journal', 'global', 'Compass', 1, 35)"
-  ).run();
+  await upsertRow(orm, Addons, {
+    id: 'journey', name: 'Journey', description: 'Travel journal', type: 'global', icon: 'Compass', enabled: true, sort_order: 35,
+  });
 });
 afterAll(async () => {
   await nestApp.close();
@@ -81,10 +88,10 @@ describe('deleting a place detaches its journey entry ahead of the FK cascade', 
     // annotated, rather than deleted outright (that path is for content-less
     // skeletons) or left dangling with a stale source_place_id.
     const now = Date.now();
-    const entryId = testDb.prepare(`
-      INSERT INTO journey_entries (journey_id, source_trip_id, source_place_id, author_id, type, title, story, entry_date, visibility, sort_order, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'entry', ?, ?, '2026-01-15', 'private', 0, ?, ?)
-    `).run(journey.id, trip.id, place.id, user.id, 'A café', 'Lovely coffee.', now, now).lastInsertRowid;
+    const entryId = await insertRow(orm, JourneyEntries, {
+      journey: journey.id, sourceTrip: trip.id, sourcePlace: place.id, author: user.id, type: 'entry', title: 'A café',
+      story: 'Lovely coffee.', entry_date: '2026-01-15', visibility: 'private', sort_order: 0, created_at: now, updated_at: now,
+    });
 
     const res = await request(app)
       .delete(`/api/trips/${trip.id}/places/${place.id}`)
@@ -93,17 +100,12 @@ describe('deleting a place detaches its journey entry ahead of the FK cascade', 
     expect(res.body).toEqual({ success: true, tourPlaceIds: [] });
 
     // The place is gone.
-    expect(testDb.prepare('SELECT 1 FROM places WHERE id = ?').get(place.id)).toBeUndefined();
+    expect(await findRow(orm, Places, { id: place.id })).toBeNull();
 
     // The entry survives, detached and annotated — the FK's ON DELETE SET
     // NULL alone would null source_place_id but would never touch story or
     // type; only onPlaceDeleted having actually run produces the note.
-    const entry = testDb.prepare('SELECT * FROM journey_entries WHERE id = ?').get(entryId) as {
-      source_place_id: number | null;
-      source_trip_id: number | null;
-      type: string;
-      story: string;
-    };
+    const entry = (await findRow(orm, JourneyEntries, { id: entryId }))!;
     expect(entry.source_place_id).toBeNull();
     expect(entry.source_trip_id).toBeNull();
     expect(entry.type).toBe('entry');
@@ -118,10 +120,10 @@ describe('deleting a place detaches its journey entry ahead of the FK cascade', 
     linkTripToJourney(testDb, journey.id, trip.id);
 
     const now = Date.now();
-    const entryId = testDb.prepare(`
-      INSERT INTO journey_entries (journey_id, source_trip_id, source_place_id, author_id, type, title, entry_date, visibility, sort_order, created_at, updated_at)
-      VALUES (?, ?, ?, ?, 'skeleton', ?, '2026-01-16', 'private', 0, ?, ?)
-    `).run(journey.id, trip.id, place.id, user.id, place.name, now, now).lastInsertRowid;
+    const entryId = await insertRow(orm, JourneyEntries, {
+      journey: journey.id, sourceTrip: trip.id, sourcePlace: place.id, author: user.id, type: 'skeleton', title: place.name,
+      entry_date: '2026-01-16', visibility: 'private', sort_order: 0, created_at: now, updated_at: now,
+    });
 
     const res = await request(app)
       .delete(`/api/trips/${trip.id}/places/${place.id}`)
@@ -130,6 +132,6 @@ describe('deleting a place detaches its journey entry ahead of the FK cascade', 
 
     // onPlaceDeleted ran (and completed) as part of the request: the
     // content-less skeleton is gone, not merely detached.
-    expect(testDb.prepare('SELECT 1 FROM journey_entries WHERE id = ?').get(entryId)).toBeUndefined();
+    expect(await findRow(orm, JourneyEntries, { id: entryId })).toBeNull();
   });
 });

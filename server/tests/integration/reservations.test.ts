@@ -27,6 +27,20 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, createReservation, createDayAssignment, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { MikroORM } from '@mikro-orm/core';
+import { findRow, findRows, updateRows } from '../helpers/factories/rows';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { DayAccommodations } from '../../src/db/entities/DayAccommodations.entity';
+import { Days } from '../../src/db/entities/Days.entity';
+import { ReservationDayPositions } from '../../src/db/entities/ReservationDayPositions.entity';
+import { Reservations } from '../../src/db/entities/Reservations.entity';
+
+let orm: MikroORM;
+
+/** The expense linked to the booking on the trip, or null. */
+function linkedExpense(tripId: number, reservationId: number) {
+  return findRow(orm, BudgetItems, { trip: tripId, reservation: reservationId });
+}
 
 let nestApp: INestApplication;
 let app: Application;
@@ -34,6 +48,7 @@ let app: Application;
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -260,7 +275,7 @@ describe('Update reservation', () => {
     expect(updateRes.status).toBe(200);
 
     // Verify accommodation was updated with check-in/out
-    const accom = testDb.prepare('SELECT * FROM day_accommodations WHERE trip_id = ?').get(trip.id) as any;
+    const accom = (await findRow(orm, DayAccommodations, { trip: trip.id }))!;
     expect(accom.check_in).toBe('15:00');
     expect(accom.check_out).toBe('11:00');
     expect(accom.confirmation).toBe('HTL-XYZ-999');
@@ -291,7 +306,7 @@ describe('Update reservation', () => {
       .send({ accommodation_id: hexAccId });
     expect(res.status).toBe(200);
 
-    const row = testDb.prepare('SELECT accommodation_id FROM reservations WHERE id = ?').get(resv.id) as { accommodation_id: string | null };
+    const row = (await findRow(orm, Reservations, { id: resv.id }))!;
     expect(row.accommodation_id).toBeNull();
   });
 });
@@ -312,8 +327,8 @@ describe('H1 — a booking on a stay is restamped when the trip\'s dates change 
   it('the accommodation_id RS28 stores is the legacy REAL-bound TEXT shape, and a later date change restamps the linked booking', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-12-01', end_date: '2026-12-03' });
-    const day1 = testDb.prepare('SELECT id FROM days WHERE trip_id = ? AND date = ?').get(trip.id, '2026-12-01') as { id: number };
-    const day2 = testDb.prepare('SELECT id FROM days WHERE trip_id = ? AND date = ?').get(trip.id, '2026-12-02') as { id: number };
+    const day1 = (await findRow(orm, Days, { trip: trip.id, date: '2026-12-01' }))!;
+    const day2 = (await findRow(orm, Days, { trip: trip.id, date: '2026-12-02' }))!;
     const place = createPlace(testDb, trip.id, { name: 'Lighthouse Inn' });
 
     const createRes = await request(app)
@@ -331,7 +346,7 @@ describe('H1 — a booking on a stay is restamped when the trip\'s dates change 
 
     // Stored-shape assert: the legacy REAL-bound TEXT shape (`'<id>.0'`), not
     // the SQL-literal-inlined shape (`'<id>'`) `String(n)` used to store.
-    const stored = testDb.prepare('SELECT accommodation_id FROM reservations WHERE id = ?').get(resvId) as { accommodation_id: string };
+    const stored = (await findRow(orm, Reservations, { id: resvId }))!;
     expect(stored.accommodation_id).toMatch(/^\d+\.0$/);
 
     // Move the whole trip a day later (default date_shift_mode, i.e. NOT
@@ -344,8 +359,7 @@ describe('H1 — a booking on a stay is restamped when the trip\'s dates change 
       .send({ start_date: '2026-12-02', end_date: '2026-12-04' });
     expect(updateRes.status).toBe(200);
 
-    const resvAfter = testDb.prepare('SELECT day_id, reservation_time FROM reservations WHERE id = ?').get(resvId) as
-      { day_id: number; reservation_time: string | null };
+    const resvAfter = (await findRow(orm, Reservations, { id: resvId }))!;
     expect(resvAfter.day_id).toBe(day1.id);
     // Restamped onto day1's NEW date — red without the fix, where DY23's
     // REAL-bound compare misses a `String(n)`-shaped accommodation_id and
@@ -453,8 +467,8 @@ describe('Delete reservation', () => {
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(404);
 
-    const row = testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(resv.id);
-    expect(row).toBeDefined();
+    const row = await findRow(orm, Reservations, { id: resv.id });
+    expect(row).not.toBeNull();
   });
 });
 
@@ -498,8 +512,8 @@ describe('Batch update positions', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-    const row = testDb.prepare('SELECT * FROM reservation_day_positions WHERE reservation_id = ?').get(resv.id);
-    expect(row).toBeUndefined();
+    const row = await findRow(orm, ReservationDayPositions, { reservation: resv.id });
+    expect(row).toBeNull();
   });
 });
 
@@ -522,11 +536,9 @@ describe('Reservation budget entry integration', () => {
       });
     expect(res.status).toBe(201);
 
-    const budgetItem = testDb
-      .prepare('SELECT * FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .get(trip.id, res.body.reservation.id) as any;
-    expect(budgetItem).toBeDefined();
-    expect(budgetItem.total_price).toBe(250);
+    const budgetItem = await linkedExpense(trip.id, res.body.reservation.id);
+    expect(budgetItem).not.toBeNull();
+    expect(budgetItem!.total_price).toBe(250);
     expect(budgetItem.name).toBe('Flight to Paris');
   });
 
@@ -544,9 +556,7 @@ describe('Reservation budget entry integration', () => {
       });
     expect(res.status).toBe(201);
 
-    const budgetItems = testDb
-      .prepare('SELECT * FROM budget_items WHERE trip_id = ?')
-      .all(trip.id) as any[];
+    const budgetItems = await findRows(orm, BudgetItems, { trip: trip.id });
     expect(budgetItems).toHaveLength(0);
   });
 
@@ -561,11 +571,9 @@ describe('Reservation budget entry integration', () => {
       .send({ create_budget_entry: { total_price: 300, category: 'Accommodation' } });
     expect(res.status).toBe(200);
 
-    const budgetItem = testDb
-      .prepare('SELECT * FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .get(trip.id, resv.id) as any;
-    expect(budgetItem).toBeDefined();
-    expect(budgetItem.total_price).toBe(300);
+    const budgetItem = await linkedExpense(trip.id, resv.id);
+    expect(budgetItem).not.toBeNull();
+    expect(budgetItem!.total_price).toBe(300);
   });
 
   it('RESV-013 — PUT with create_budget_entry updates existing linked budget item', async () => {
@@ -591,9 +599,7 @@ describe('Reservation budget entry integration', () => {
       .send({ create_budget_entry: { total_price: 150, category: 'Transport' } });
     expect(updateRes.status).toBe(200);
 
-    const items = testDb
-      .prepare('SELECT * FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .all(trip.id, resvId) as any[];
+    const items = await findRows(orm, BudgetItems, { trip: trip.id, reservation: resvId });
     expect(items).toHaveLength(1);
     expect(items[0].total_price).toBe(150);
   });
@@ -614,10 +620,8 @@ describe('Reservation budget entry integration', () => {
     expect(createRes.status).toBe(201);
     const resvId = createRes.body.reservation.id;
 
-    const before = testDb
-      .prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .get(trip.id, resvId);
-    expect(before).toBeDefined();
+    const before = await linkedExpense(trip.id, resvId);
+    expect(before).not.toBeNull();
 
     // Update WITHOUT create_budget_entry — the booking edit must NOT touch its
     // linked expense (expenses are managed from the Costs section now).
@@ -627,10 +631,8 @@ describe('Reservation budget entry integration', () => {
       .send({ title: 'Taxi Updated' });
     expect(updateRes.status).toBe(200);
 
-    const after = testDb
-      .prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .get(trip.id, resvId);
-    expect(after).toBeDefined();
+    const after = await linkedExpense(trip.id, resvId);
+    expect(after).not.toBeNull();
   });
 
   it('RESV-014b — PUT with create_budget_entry total_price 0 removes the linked budget item', async () => {
@@ -655,10 +657,8 @@ describe('Reservation budget entry integration', () => {
       .send({ title: 'Taxi', create_budget_entry: { total_price: 0 } });
     expect(updateRes.status).toBe(200);
 
-    const after = testDb
-      .prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .get(trip.id, resvId);
-    expect(after).toBeUndefined();
+    const after = await linkedExpense(trip.id, resvId);
+    expect(after).toBeNull();
   });
 
   it('RESV-014c — changing the booking type updates the linked expense category', async () => {
@@ -677,9 +677,7 @@ describe('Reservation budget entry integration', () => {
       .set('Cookie', authCookie(user.id))
       .send({ title: 'Booking', type: 'hotel' });
 
-    const item = testDb
-      .prepare('SELECT category FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .get(trip.id, resvId) as { category: string };
+    const item = (await linkedExpense(trip.id, resvId))!;
     expect(item.category).toBe('accommodation');
   });
 
@@ -694,16 +692,14 @@ describe('Reservation budget entry integration', () => {
     const resvId = createRes.body.reservation.id;
 
     // Simulate a manual category pick in the Costs editor.
-    testDb.prepare('UPDATE budget_items SET category = ? WHERE trip_id = ? AND reservation_id = ?').run('fees', trip.id, resvId);
+    await updateRows(orm, BudgetItems, { trip: trip.id, reservation: resvId }, { category: 'fees' });
 
     await request(app)
       .put(`/api/trips/${trip.id}/reservations/${resvId}`)
       .set('Cookie', authCookie(user.id))
       .send({ title: 'Booking', type: 'hotel' });
 
-    const item = testDb
-      .prepare('SELECT category FROM budget_items WHERE trip_id = ? AND reservation_id = ?')
-      .get(trip.id, resvId) as { category: string };
+    const item = (await linkedExpense(trip.id, resvId))!;
     expect(item.category).toBe('fees');
   });
 });
@@ -734,10 +730,8 @@ describe('Reservation accommodation delete', () => {
     const reservationId = createRes.body.reservation.id;
 
     // Verify accommodation was created
-    const accom = testDb.prepare(
-      'SELECT id FROM day_accommodations WHERE trip_id = ?'
-    ).get(trip.id) as any;
-    expect(accom).toBeDefined();
+    const accom = (await findRow(orm, DayAccommodations, { trip: trip.id }))!;
+    expect(accom).not.toBeNull();
 
     // Delete reservation — should also remove the accommodation
     const delRes = await request(app)
@@ -745,10 +739,8 @@ describe('Reservation accommodation delete', () => {
       .set('Cookie', authCookie(user.id));
     expect(delRes.status).toBe(200);
 
-    const accomAfter = testDb.prepare(
-      'SELECT id FROM day_accommodations WHERE id = ?'
-    ).get(accom.id);
-    expect(accomAfter).toBeUndefined();
+    const accomAfter = await findRow(orm, DayAccommodations, { id: accom.id });
+    expect(accomAfter).toBeNull();
   });
 
   it('RESV-009b — DELETE reservation linked to accommodation also removes its linked budget item (issue #933)', async () => {
@@ -771,10 +763,8 @@ describe('Reservation accommodation delete', () => {
     expect(createRes.status).toBe(201);
     const reservationId = createRes.body.reservation.id;
 
-    const budgetBefore = testDb.prepare(
-      'SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?'
-    ).get(trip.id, reservationId);
-    expect(budgetBefore).toBeDefined();
+    const budgetBefore = await linkedExpense(trip.id, reservationId);
+    expect(budgetBefore).not.toBeNull();
 
     // Delete via the reservation endpoint
     const delRes = await request(app)
@@ -782,9 +772,7 @@ describe('Reservation accommodation delete', () => {
       .set('Cookie', authCookie(user.id));
     expect(delRes.status).toBe(200);
 
-    const budgetAfter = testDb.prepare(
-      'SELECT id FROM budget_items WHERE trip_id = ?'
-    ).get(trip.id);
-    expect(budgetAfter).toBeUndefined();
+    const budgetAfter = await findRow(orm, BudgetItems, { trip: trip.id });
+    expect(budgetAfter).toBeNull();
   });
 });
