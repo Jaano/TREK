@@ -14,7 +14,7 @@ const photos: TranslationStrings = {
   'photos.clickToSelect': '또는 클릭하여 선택',
   'photos.linkPlace': '장소 연결',
   'photos.noPlace': '장소 없음',
-  'photos.uploadN': '{n}장 사진 업로드',
+  'photos.uploadN': '사진 {n}장 업로드',
   'photos.linkDay': '날 연결',
   'photos.noDay': '날 없음',
   'photos.dayLabel': '{number}일차',
