@@ -5,6 +5,7 @@ import { assignmentsApi, reservationsApi, weatherApi } from '../../../../api/cli
 import { useRouteModeOptions } from '../../../../components/Planner/routeModes'
 import { getDayBookendHotels } from '../../../../utils/dayOrder'
 import { dayWeatherAnchor } from '../../../../utils/dayWeather'
+import { metadataWithLegPositions, planMergedOrder, withTransportPositions } from '../../../../utils/mergedOrder'
 import { getDisplayTimeForDay, getMergedItems, getTransportForDay, hasCarrierEndpointOnDay, isCarrierTransport } from '../../../../utils/dayMerge'
 import { dayCoMapsUrl, dayExportStops, dayGoogleMapsUrl, optimizeDayOrder, type DayCarrier } from '../../../../components/Planner/dayRoute'
 import { buildTransitLeg, buildTransitNameIndex, type TransitLeg } from '../../../../components/Planner/transitLeg'
@@ -140,63 +141,21 @@ export function useMPlanTimeline(planner: TripPlanner) {
   // ── Reorder via buttons (#1432) — port of the desktop applyMergedOrder ──
   const applyMergedOrder = useCallback(async (dayId: number, newOrder: MergedItem[]) => {
     const prevAssignmentIds = dayAssignments.map(a => a.id)
-    const assignmentIds: number[] = []
-    const noteUpdates: { id: number; sort_order: number }[] = []
-    const transportUpdates: { id: number; day_plan_position: number }[] = []
-    const legPosUpdates: Record<number, Record<number, number>> = {}
-
-    let placeCount = 0
-    let i = 0
-    while (i < newOrder.length) {
-      if (newOrder[i].type === 'place') {
-        assignmentIds.push((newOrder[i].data as Assignment).id)
-        placeCount++
-        i++
-        continue
-      }
-      const group: MergedItem[] = []
-      while (i < newOrder.length && newOrder[i].type !== 'place') { group.push(newOrder[i]); i++ }
-      const base = placeCount > 0 ? placeCount - 1 : -1
-      group.forEach((g, idx) => {
-        const pos = base + (idx + 1) / (group.length + 1)
-        if (g.type === 'note') noteUpdates.push({ id: g.data.id, sort_order: pos })
-        else if (g.type === 'transport') {
-          const res = g.data as TransportEntry
-          if (res.__leg) (legPosUpdates[res.id] ??= {})[res.__leg.index] = pos
-          else transportUpdates.push({ id: res.id, day_plan_position: pos })
-        }
-      })
-    }
+    const { assignmentIds, noteUpdates, transportUpdates, legPosUpdates } = planMergedOrder(newOrder)
 
     try {
       // Optimistic transport positions first, so the recomputed merge is stable
       // before the reorder round-trips (same order of operations as the desktop).
       if (transportUpdates.length) {
-        useTripStore.setState(state => ({
-          reservations: state.reservations.map(r => {
-            const tu = transportUpdates.find(u => u.id === r.id)
-            if (!tu) return r
-            return {
-              ...r,
-              day_plan_position: tu.day_plan_position,
-              day_positions: { ...(r.day_positions || {}), [dayId]: tu.day_plan_position },
-            }
-          }),
-        }))
+        useTripStore.setState(state => ({ reservations: withTransportPositions(state.reservations, transportUpdates, dayId) }))
       }
       // Per-leg positions of a multi-leg flight/train live in metadata.legs[i].
       for (const ridStr of Object.keys(legPosUpdates)) {
         const rid = Number(ridStr)
         const r = useTripStore.getState().reservations.find(x => x.id === rid)
         if (!r) continue
-        let parsed: Record<string, unknown> = {}
-        try { parsed = typeof r.metadata === 'string' ? JSON.parse(r.metadata || '{}') : ((r.metadata as never) || {}) } catch { parsed = {} }
-        if (!Array.isArray(parsed.legs)) continue
-        const legs = (parsed.legs as Record<string, unknown>[]).map((leg, li) => {
-          const pos = legPosUpdates[rid][li]
-          return pos == null ? leg : { ...leg, day_positions: { ...((leg.day_positions as object) || {}), [dayId]: pos } }
-        })
-        const newMeta = { ...parsed, legs }
+        const newMeta = metadataWithLegPositions(r.metadata, legPosUpdates[rid], dayId)
+        if (!newMeta) continue
         useTripStore.setState(state => ({
           reservations: state.reservations.map(x => (x.id === rid ? { ...x, metadata: newMeta as never } : x)),
         }))

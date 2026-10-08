@@ -52,6 +52,7 @@ import { formatDate, formatTime, formatMoneySum, splitReservationDateTime } from
 import { dayHeadingParts } from '../../utils/dayLabel'
 import { pendingStayIds } from '../../utils/pendingStays'
 import { dayWeatherAnchor } from '../../utils/dayWeather'
+import { metadataWithLegPositions, planMergedOrder, withTransportPositions } from '../../utils/mergedOrder'
 import { planCosts } from './planCosts'
 import { useDayNotes } from '../../hooks/useDayNotes'
 import { useExchangeRates } from '../../hooks/useExchangeRates'
@@ -913,39 +914,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
 
     // Places get sequential integer positions (0, 1, 2, ...)
     // Non-place items between place N-1 and place N get fractional positions
-    const assignmentIds: number[] = []
-    const noteUpdates: { id: number; sort_order: number }[] = []
-    const transportUpdates: { id: number; day_plan_position: number }[] = []
-    // Multi-leg flight legs share a reservation id, so their positions can't live in
-    // the single per-booking slot — collect them per leg, keyed reservationId → legIndex → pos.
-    const legPosUpdates: Record<number, Record<number, number>> = {}
-
-    let placeCount = 0
-    let i = 0
-    while (i < newOrder.length) {
-      if (newOrder[i].type === 'place') {
-        assignmentIds.push(newOrder[i].data.id)
-        placeCount++
-        i++
-      } else {
-        // Collect consecutive non-place items
-        const group: { type: string; data: any }[] = []
-        while (i < newOrder.length && newOrder[i].type !== 'place') {
-          group.push(newOrder[i])
-          i++
-        }
-        // Fractional positions between (placeCount-1) and placeCount
-        const base = placeCount > 0 ? placeCount - 1 : -1
-        group.forEach((g, idx) => {
-          const pos = base + (idx + 1) / (group.length + 1)
-          if (g.type === 'note') noteUpdates.push({ id: g.data.id, sort_order: pos })
-          else if (g.type === 'transport') {
-            if (g.data.__leg) ((legPosUpdates[g.data.id] ??= {})[g.data.__leg.index] = pos)
-            else transportUpdates.push({ id: g.data.id, day_plan_position: pos })
-          }
-        })
-      }
-    }
+    const { assignmentIds, noteUpdates, transportUpdates, legPosUpdates } = planMergedOrder(newOrder)
 
     try {
       // Update transport positions in store FIRST so the useEffect triggered by
@@ -955,14 +924,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
           const r = useTripStore.getState().reservations.find(x => x.id === tu.id)
           if (r) pendingRollback.push({ id: r.id, day_plan_position: r.day_plan_position, day_positions: r.day_positions })
         }
-        useTripStore.setState(state => ({
-          reservations: state.reservations.map(r => {
-            const tu = transportUpdates.find(u => u.id === r.id)
-            if (!tu) return r
-            const day_positions = { ...(r.day_positions || {}), [dayId]: tu.day_plan_position }
-            return { ...r, day_plan_position: tu.day_plan_position, day_positions }
-          })
-        }))
+        useTripStore.setState(state => ({ reservations: withTransportPositions(state.reservations, transportUpdates, dayId) }))
         setTransportPosVersion(v => v + 1)
       }
       // Per-leg positions of multi-leg flights live in metadata.legs[i].day_positions
@@ -973,20 +935,14 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
           const rid = Number(ridStr)
           const r = useTripStore.getState().reservations.find(x => x.id === rid)
           if (!r) continue
-          let parsed: any = {}
-          try { parsed = typeof r.metadata === 'string' ? JSON.parse(r.metadata || '{}') : (r.metadata || {}) } catch { parsed = {} }
-          if (!Array.isArray(parsed.legs)) continue
-          const legs = parsed.legs.map((leg: any, i: number) => {
-            const pos = legPosUpdates[rid][i]
-            return pos == null ? leg : { ...leg, day_positions: { ...(leg.day_positions || {}), [dayId]: pos } }
-          })
+          const newMeta = metadataWithLegPositions(r.metadata, legPosUpdates[rid], dayId)
+          if (!newMeta) continue
           // Send metadata as an OBJECT (like the form does) — passing a JSON string
           // here double-encodes it on the server, which wipes metadata.legs on read
           // and collapses the flight back to a single span.
-          const newMeta = { ...parsed, legs }
           pendingRollback.push({ id: rid, metadata: r.metadata })
-          useTripStore.setState(state => ({ reservations: state.reservations.map(x => (x.id === rid ? { ...x, metadata: newMeta } : x)) }))
-          await tripActions.updateReservation(tripId, rid, { metadata: newMeta })
+          useTripStore.setState(state => ({ reservations: state.reservations.map(x => (x.id === rid ? { ...x, metadata: newMeta as never } : x)) }))
+          await tripActions.updateReservation(tripId, rid, { metadata: newMeta as unknown as string })
           // Stored, so a later step failing must not put the old legs back.
           dropRollback(rid)
         }
