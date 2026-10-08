@@ -246,6 +246,23 @@ jobs:
       - name: DB call-graph gate (no sync DB-touching methods, no raw transactions)
         run: cd server && npm run db:call-graph -- --sync --tx
 
+      - name: File size check
+        # A source file may hold no more lines than scripts/size-baseline.json
+        # allows (1000 for a file without an entry, long lines counted
+        # wrapped), so a big service is split by concern instead of growing.
+        run: cd server && npm run lint:size
+
+      - name: Import boundaries and cycles
+        # No new load-time cycle, no new reach into another domain's
+        # internals, src/db stays below src/nest. Today's violations sit in
+        # scripts/import-boundaries-baseline.json and may only shrink.
+        run: cd server && npm run lint:boundaries
+
+      - name: Open request schemas may only shrink
+        # Needs the shared build above. Counts open shapes (records of
+        # unknown, passthrough, any) in shared's request schemas.
+        run: cd shared && npm run contracts:open
+
   client-quality:
     name: Client Types & Lint
     needs: changes
@@ -272,7 +289,9 @@ jobs:
         run: cd client && npm run typecheck
 
       - name: Lint
-        run: cd client && npm run lint:check
+        # Fails on any ESLint error, like lint:check did, and on any rule
+        # whose warning count rises above scripts/eslint-baseline.json.
+        run: cd client && npm run lint:warnings
 
       - name: Page pattern check
         run: cd client && npm run lint:pages
@@ -284,10 +303,33 @@ jobs:
         run: cd client && npm run lint:rtl
 
       - name: File size check
-        # A source file may hold no more lines than scripts/size-baseline.json
-        # allows (1000 for a file without an entry), so a big file is split by
-        # concern instead of growing (scripts/size-lint.mjs).
+        # A source file or stylesheet may hold no more lines than
+        # scripts/size-baseline.json allows (1000 without an entry, 2000 for a
+        # test, long lines counted wrapped), so a big file is split by concern
+        # instead of growing (scripts/size-lint.mjs).
         run: cd client && npm run lint:size
+
+      - name: Formatting check
+        # Every file outside scripts/format-baseline.json must be Prettier
+        # formatted; the list only shrinks.
+        run: cd client && npm run lint:format
+
+      - name: Layering check
+        # Imports go downwards: components never import pages/ or mobile/.
+        run: cd client && npm run lint:layers
+
+      - name: Offline data path check
+        # No view file calls src/api/ directly beyond
+        # scripts/offline-baseline.json; writes go through repo/ and the
+        # mutation queue.
+        run: cd client && npm run lint:offline
+
+      - name: Skipped and focused tests check
+        run: cd client && npm run lint:skips
+
+      - name: i18n keys check
+        # Every translation key src/ names must exist in shared en.
+        run: cd client && npm run lint:i18n-keys
 
   plugin-sdk-quality:
     name: Plugin SDK Types
