@@ -13,7 +13,8 @@ import {
   type BookingsKind,
 } from './bookings/bookingsModel'
 import { bookingFacts, formatDay, type BookingFacts } from './bookings/bookingFacts'
-import { filesFor, SectionHead, fs } from './bookings/bookingParts'
+import { SectionHead, fs } from './bookings/bookingParts'
+import { filesFor } from '../../utils/reservationFiles'
 import { useBookingsView } from './bookings/useBookingsView'
 import BookingsHeader from './bookings/BookingsHeader'
 import BookingCard from './bookings/BookingCard'

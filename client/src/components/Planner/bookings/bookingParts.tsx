@@ -276,10 +276,6 @@ export function useOpenFile() {
   return (f: TripFile) => { openFile(f.url, f.original_name).catch(() => toast.error(t('files.openError'))) }
 }
 
-export function filesFor(r: Reservation, files: TripFile[]): TripFile[] {
-  return files.filter(f => !f.deleted_at && (f.reservation_id === r.id || (f.linked_reservation_ids || []).includes(r.id)))
-}
-
 /** The attached files, one framed row each, opening the file. */
 export function FileRows({ files }: { files: TripFile[] }) {
   const open = useOpenFile()

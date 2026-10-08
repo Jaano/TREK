@@ -9,6 +9,7 @@ import { splitReservationDateTime } from '../../../../utils/formatters'
 import { getFlightLegs, getTrainLegs, usesStationRoute } from '../../../../utils/flightLegs'
 import { openFile } from '../../../../utils/fileDownload'
 import { runsOnDay } from '../../../../utils/reservationRoutes'
+import { filesFor } from '../../../../utils/reservationFiles'
 import type { Reservation } from '../../../../types'
 import { Eyebrow, INNER_CLS, StatBox, TileHeader, displayTime } from './MTripSheetUi'
 
@@ -102,9 +103,7 @@ export default function MTransportSheet({ planner, shell }: MTripSheetsProps) {
   const routeLegs = res.type === 'flight' ? getFlightLegs(res) : usesStationRoute(res.type) ? getTrainLegs(res) : []
   const legCodes = routeLegs.length > 1 ? routeLegs.filter(l => l.confirmation_number) : []
 
-  const resFiles = (planner.files || []).filter(f =>
-    !f.deleted_at && (f.reservation_id === res.id || (f.linked_reservation_ids || []).includes(res.id)),
-  )
+  const resFiles = filesFor(res, planner.files || [])
 
   const confirmed = res.status === 'confirmed'
   const codeBlurred = blurCodes && !codeRevealed
