@@ -13,6 +13,18 @@ import LoginPage from './LoginPage';
 // made FE-PAGE-LOGIN-014 fail intermittently in CI while passing in isolation.
 vi.mock('./login/LoginWorld', () => ({ default: () => null }));
 
+// A successful sign-in registers the background sync triggers (a 30 s heartbeat
+// and window listeners that nothing here unregisters) and starts a full trip
+// sync it does not wait for. Left real, both outlive the test that started them
+// and can still be logging when the file's worker shuts down, which vitest
+// reports as an unhandled error although every test passed. Nothing here is
+// about sync.
+vi.mock('../sync/syncTriggers', () => ({ registerSyncTriggers: vi.fn(), unregisterSyncTriggers: vi.fn() }));
+vi.mock('../sync/tripSyncManager', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../sync/tripSyncManager')>()),
+  tripSyncManager: { syncAll: vi.fn(async () => {}) },
+}));
+
 // LoginPage uses inline styles for labels (no htmlFor/id pairing).
 // We find inputs by placeholder text.
 const EMAIL_PLACEHOLDER = 'your@email.com';

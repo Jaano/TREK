@@ -10,6 +10,12 @@ import { buildUser, buildSettings } from '../../../tests/helpers/factories';
 import AccountTab from './AccountTab';
 import { ToastContainer } from '../shared/Toast';
 
+// Enabling or disabling MFA reloads the user, and loadUser registers the
+// background sync triggers: a 30 s heartbeat and window listeners that nothing
+// here unregisters, so they outlive the test and can fire, and log, while the
+// file's worker shuts down. Nothing here is about sync.
+vi.mock('../../sync/syncTriggers', () => ({ registerSyncTriggers: vi.fn(), unregisterSyncTriggers: vi.fn() }));
+
 beforeEach(() => {
   resetAllStores();
   server.use(
