@@ -26,14 +26,6 @@ vi.mock('../../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: unknown, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: unknown, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
 });
 
@@ -60,6 +52,13 @@ import { createUser, createTrip, addTripMember, createPlace, createReservation, 
 import type { TripAccess } from '../../../src/db/repositories/Trips.repository';
 import { createTestUnitOfWork, createTestAppSettingsRepo, createTestReservationsRepo, createTestPlacesRepo, createTestDayAssignmentsRepo, createTestTripsRepo } from '../../helpers/test-uow';
 import { createTestTripFilesRepo, createTestFileLinksRepo, createTestBudgetItemsRepo } from '../../helpers/files-repos';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import type { TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, insertRow } from '../../helpers/factories/rows';
+import { makeCollabMessage } from '../../helpers/factories/collab';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { FileLinks } from '../../../src/db/entities/FileLinks.entity';
+import { TripFiles } from '../../../src/db/entities/TripFiles.entity';
 import type { TripFilesRepository } from '../../../src/db/repositories/TripFiles.repository';
 import type { FileLinksRepository } from '../../../src/db/repositories/FileLinks.repository';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
@@ -102,8 +101,15 @@ const emStub = { getRepository } as unknown as EntityManager;
 let svc: FilesService;
 let tripFilesRepo: TripFilesRepository;
 let fileLinksRepo: FileLinksRepository;
+let orm: TestOrm;
+
+/** An expense on the trip with only a name, the bare row a receipt hangs off. */
+function insertBudgetItem(tripId: number, name: string): Promise<number> {
+  return insertRow(orm, BudgetItems, { trip: tripId, name });
+}
 
 beforeAll(async () => {
+  orm = await sharedTestOrm(testDb);
   tripFilesRepo = await createTestTripFilesRepo(testDb);
   fileLinksRepo = await createTestFileLinksRepo(testDb);
   svc = new FilesService(
@@ -305,7 +311,7 @@ describe('listFiles', () => {
     expect(bareRow.linked_reservation_ids).toEqual([]);
     expect(bareRow.linked_place_ids).toEqual([]);
 
-    const item = Number(testDb.prepare('INSERT INTO budget_items (trip_id, name) VALUES (?, ?)').run(trip.id, 'Dinner').lastInsertRowid);
+    const item = await insertBudgetItem(trip.id, 'Dinner');
     await svc.createFileLink(linked.id, { budget_item_id: item });
     const withReceipt = (await svc.listFiles(trip.id, false) as Record<string, unknown>[]).find((f) => f.id === linked.id);
     expect(withReceipt.linked_budget_item_ids).toEqual([item]);
@@ -321,45 +327,45 @@ describe('listFiles', () => {
 
 describe('budget receipts', () => {
   function seedItem(tripId: number) {
-    return Number(testDb.prepare('INSERT INTO budget_items (trip_id, name) VALUES (?, ?)').run(tripId, 'Dinner').lastInsertRowid);
+    return insertBudgetItem(tripId, 'Dinner');
   }
 
   it('FILE-SVC-040: an upload naming an expense gets its link row straight away', async () => {
     const { user, trip } = seedTrip();
-    const item = seedItem(trip.id);
+    const item = await seedItem(trip.id);
     const file = await makeFile(trip.id, user.id, {}, { budget_item_id: item });
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ? AND budget_item_id = ?').get(file.id, item)).toEqual({ c: 1 });
+    expect(await countRows(orm, FileLinks, { file: file.id, budgetItem: item })).toBe(1);
   });
 
   it('FILE-SVC-041: an upload without one writes no link at all', async () => {
     const { user, trip } = seedTrip();
     const file = await makeFile(trip.id, user.id);
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ?').get(file.id)).toEqual({ c: 0 });
+    expect(await countRows(orm, FileLinks, { file: file.id })).toBe(0);
   });
 
   it('FILE-SVC-042: updateFile attaches to an expense and detaches on a falsy id', async () => {
     const { user, trip } = seedTrip();
-    const item = seedItem(trip.id);
+    const item = await seedItem(trip.id);
     const file = await makeFile(trip.id, user.id);
 
     await svc.updateFile(file.id, file, { budget_item_id: item });
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ? AND budget_item_id = ?').get(file.id, item)).toEqual({ c: 1 });
+    expect(await countRows(orm, FileLinks, { file: file.id, budgetItem: item })).toBe(1);
 
     // Sending it twice must not double the row.
     await svc.updateFile(file.id, file, { budget_item_id: item });
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ?').get(file.id)).toEqual({ c: 1 });
+    expect(await countRows(orm, FileLinks, { file: file.id })).toBe(1);
 
     await svc.updateFile(file.id, file, { budget_item_id: null });
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ? AND budget_item_id IS NOT NULL').get(file.id)).toEqual({ c: 0 });
+    expect(await countRows(orm, FileLinks, { file: file.id, budgetItem: { $ne: null } })).toBe(0);
   });
 
   it('FILE-SVC-043: leaving budget_item_id out touches no link', async () => {
     const { user, trip } = seedTrip();
-    const item = seedItem(trip.id);
+    const item = await seedItem(trip.id);
     const file = await makeFile(trip.id, user.id, {}, { budget_item_id: item });
 
     await svc.updateFile(file.id, file, { description: 'renamed' });
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ? AND budget_item_id = ?').get(file.id, item)).toEqual({ c: 1 });
+    expect(await countRows(orm, FileLinks, { file: file.id, budgetItem: item })).toBe(1);
   });
 });
 
@@ -369,10 +375,10 @@ describe('createFile', () => {
   it('FILE-SVC-015: coerces falsy opts to NULL (|| null) and re-selects the formatted row', async () => {
     const { user, trip } = seedTrip();
     const file = await makeFile(trip.id, user.id, {}, { place_id: '', reservation_id: undefined, description: '' });
-    const row = testDb.prepare('SELECT * FROM trip_files WHERE id = ?').get(file.id) as Record<string, unknown>;
-    expect(row.place_id).toBeNull();
-    expect(row.reservation_id).toBeNull();
-    expect(row.description).toBeNull();
+    const row = await findRow(orm, TripFiles, { id: file.id });
+    expect(row?.place_id).toBeNull();
+    expect(row?.reservation_id).toBeNull();
+    expect(row?.description).toBeNull();
     expect(file.url).toBe(`/api/trips/${trip.id}/files/${file.id}/download`);
     expect((file as unknown as Record<string, unknown>).uploaded_by_name).toBe(user.username);
   });
@@ -393,10 +399,10 @@ describe('createFile', () => {
 
   it('FILE-SVC-060 (R2): a failing file_links insert rolls back the trip_files row too', async () => {
     const { user, trip } = seedTrip();
-    const item = Number(testDb.prepare('INSERT INTO budget_items (trip_id, name) VALUES (?, ?)').run(trip.id, 'Dinner').lastInsertRowid);
+    const item = await insertBudgetItem(trip.id, 'Dinner');
     const spy = vi.spyOn(fileLinksRepo, 'insertIgnore').mockRejectedValueOnce(new Error('boom'));
     await expect(makeFile(trip.id, user.id, {}, { budget_item_id: item })).rejects.toThrow('boom');
-    expect(testDb.prepare('SELECT COUNT(*) c FROM trip_files WHERE trip_id = ?').get(trip.id)).toEqual({ c: 0 });
+    expect(await countRows(orm, TripFiles, { trip: trip.id })).toBe(0);
     spy.mockRestore();
   });
 });
@@ -426,15 +432,15 @@ describe('updateFile', () => {
 
   it('FILE-SVC-061 (R2): a failing file_links swap rolls back the description/place/reservation update too', async () => {
     const { user, trip } = seedTrip();
-    const item = Number(testDb.prepare('INSERT INTO budget_items (trip_id, name) VALUES (?, ?)').run(trip.id, 'Dinner').lastInsertRowid);
+    const item = await insertBudgetItem(trip.id, 'Dinner');
     const place = createPlace(testDb, trip.id);
     const file = await makeFile(trip.id, user.id, {}, { description: 'old' });
     const current = (await svc.getFileById(file.id, trip.id))!;
     const spy = vi.spyOn(fileLinksRepo, 'insertIgnore').mockRejectedValueOnce(new Error('boom'));
     await expect(svc.updateFile(file.id, current, { description: 'new', place_id: String(place.id), budget_item_id: item })).rejects.toThrow('boom');
-    const row = testDb.prepare('SELECT description, place_id FROM trip_files WHERE id = ?').get(file.id) as Record<string, unknown>;
-    expect(row.description).toBe('old');
-    expect(row.place_id).toBeNull();
+    const row = await findRow(orm, TripFiles, { id: file.id });
+    expect(row?.description).toBe('old');
+    expect(row?.place_id).toBeNull();
     spy.mockRestore();
   });
 });
@@ -453,8 +459,8 @@ describe('toggleStarred / softDeleteFile / restoreFile', () => {
     const { user, trip } = seedTrip();
     const file = await makeFile(trip.id, user.id);
     await svc.softDeleteFile(file.id);
-    const row = testDb.prepare('SELECT deleted_at FROM trip_files WHERE id = ?').get(file.id) as Record<string, unknown>;
-    expect(row.deleted_at).not.toBeNull();
+    const row = await findRow(orm, TripFiles, { id: file.id });
+    expect(row?.deleted_at).not.toBeNull();
   });
 
   it('FILE-SVC-021: restoreFile clears deleted_at and returns the formatted row', async () => {
@@ -546,7 +552,7 @@ describe('emptyTrash', () => {
     storageDelete.mockResolvedValue(undefined);
     const spy = vi.spyOn(tripFilesRepo, 'deleteMany').mockRejectedValueOnce(new Error('boom'));
     await expect(svc.emptyTrash(trip.id)).rejects.toThrow('boom');
-    expect(testDb.prepare('SELECT COUNT(*) c FROM trip_files WHERE id = ?').get(a.id)).toEqual({ c: 1 });
+    expect(await countRows(orm, TripFiles, { id: a.id })).toBe(1);
     spy.mockRestore();
   });
 });
@@ -575,8 +581,8 @@ describe('findForeignLinkTarget', () => {
     expect(await svc.findForeignLinkTarget(mine.id, { reservation_id: myRes.id })).toBeNull();
 
     // A receipt may only point at an expense on the same trip.
-    const foreignItem = Number(testDb.prepare('INSERT INTO budget_items (trip_id, name) VALUES (?, ?)').run(foreign.id, 'Foreign').lastInsertRowid);
-    const myItem = Number(testDb.prepare('INSERT INTO budget_items (trip_id, name) VALUES (?, ?)').run(mine.id, 'Mine').lastInsertRowid);
+    const foreignItem = await insertBudgetItem(foreign.id, 'Foreign');
+    const myItem = await insertBudgetItem(mine.id, 'Mine');
     expect(await svc.findForeignLinkTarget(mine.id, { budget_item_id: foreignItem })).toBe('budget_item_id');
     expect(await svc.findForeignLinkTarget(mine.id, { budget_item_id: myItem })).toBeNull();
   });
@@ -724,19 +730,17 @@ describe('read-model parity: raw SQL vs. the repository-backed reads', () => {
     const reservation = createReservation(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const note = createCollabNote(testDb, trip.id, user.id);
-    const messageId = Number(
-      testDb.prepare('INSERT INTO collab_messages (trip_id, user_id, text) VALUES (?, ?, ?)').run(trip.id, user.id, 'hi').lastInsertRowid,
-    );
-    // Raw insert, not svc.createFile: note_id/message_id are set by OTHER
+    const messageId = (await makeCollabMessage(orm, trip.id, user.id, { text: 'hi' })).id;
+    // Direct insert, not svc.createFile: note_id/message_id are set by OTHER
     // domains (collab), never by FilesService itself — this seeds every
     // persist(false) mirror at once to prove the Kysely `selectAll()` read
     // carries all six, the trap the class docstring names.
-    const inserted = testDb.prepare(`
-      INSERT INTO trip_files (trip_id, place_id, reservation_id, filename, original_name, file_size, mime_type, description, note_id, uploaded_by, starred, message_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(trip.id, place.id, reservation.id, 'a.pdf', 'A.pdf', 10, 'application/pdf', 'a note', note.id, user.id, 1, messageId);
-    const id = Number(inserted.lastInsertRowid);
+    const id = await insertRow(orm, TripFiles, {
+      trip: trip.id, place: place.id, reservation: reservation.id, filename: 'a.pdf', original_name: 'A.pdf', file_size: 10,
+      mime_type: 'application/pdf', description: 'a note', note: note.id, uploadedByRef: user.id, starred: 1, message: messageId,
+    });
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare('SELECT * FROM trip_files WHERE id = ? AND trip_id = ?').get(id, trip.id);
     expect(await svc.getFileById(id, trip.id)).toEqual(legacy);
   });
@@ -745,7 +749,7 @@ describe('read-model parity: raw SQL vs. the repository-backed reads', () => {
     const { user, trip } = seedTrip();
     const reservation = createReservation(testDb, trip.id, { title: 'Night train' });
     const place = createPlace(testDb, trip.id);
-    const item = Number(testDb.prepare('INSERT INTO budget_items (trip_id, name) VALUES (?, ?)').run(trip.id, 'Dinner').lastInsertRowid);
+    const item = await insertBudgetItem(trip.id, 'Dinner');
     // `linked_*_ids` come from `file_links` rows (FL8), a SEPARATE mechanism
     // from `trip_files.reservation_id`/`place_id` (FILE_SELECT's own join) —
     // one `createFileLink` call can attach several targets to the same file
@@ -761,7 +765,9 @@ describe('read-model parity: raw SQL vs. the repository-backed reads', () => {
       LEFT JOIN reservations r ON f.reservation_id = r.id
       LEFT JOIN users u ON f.uploaded_by = u.id
     `;
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyLive = testDb.prepare(`${FILE_SELECT} WHERE f.id = ?`).get(live.id) as Record<string, unknown>;
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyTrashed = testDb.prepare(`${FILE_SELECT} WHERE f.id = ?`).get(trashed.id) as Record<string, unknown>;
 
     const activeRow = (await svc.listFiles(trip.id, false) as Record<string, unknown>[]).find((f) => f.id === live.id)!;
@@ -782,6 +788,7 @@ describe('read-model parity: raw SQL vs. the repository-backed reads', () => {
     const file = await makeFile(trip.id, user.id);
     await svc.createFileLink(file.id, { reservation_id: String(reservation.id) });
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`
       SELECT fl.*, r.title as reservation_title
       FROM file_links fl
