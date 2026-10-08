@@ -96,6 +96,17 @@ export class ReminderJobsService implements OnApplicationBootstrap {
    * Each reminder is claimed before it is sent, so a second process running
    * the same tick skips it, and given back when the send fails, so the next
    * tick retries it until the trip starts.
+   *
+   * The upgrade backfill (`Migration20200101042100_…`) decides "already
+   * reminded" by UTC `date('now')` while this job counts days in the app TZ.
+   * That is deliberate, not a seam: the backfill stands in for the job before
+   * it, which matched `start_date = date('now', '+N days')` in UTC, so UTC is
+   * the clock those reminders went out by. Every UTC day had exactly one 9 AM
+   * run, so nothing the backfill marks was left unsent. Its strict `<` leaves
+   * the upgrade day's own reminders unmarked, because the boot may come before
+   * that day's run; when it comes after, such a trip is reminded once more on
+   * the first run after the upgrade. At most one extra reminder, never a lost
+   * one, which is why the migration stays as it shipped.
    */
   async tripTick(): Promise<void> {
     try {

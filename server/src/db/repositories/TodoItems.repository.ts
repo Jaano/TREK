@@ -245,7 +245,7 @@ export class TodoItemsRepository extends TrekRepository<TodoItems> {
   /**
    * RJ5 (`reminder-jobs.service.ts#todoTick`, looped): claims the reminder
    * before it is sent. `UPDATE todo_items SET reminded_at = CURRENT_TIMESTAMP
-   * WHERE id = ? AND (reminded_at IS NULL OR reminded_at <= now - 20 h)`, the
+   * WHERE id = ? AND (reminded_at IS NULL OR reminded_at <= datetime(now, -20 hours))`, the
    * same dedup bound {@link listDueForReminder} selects by, so of two
    * processes running the tick only the one whose update lands sends. True
    * when this caller holds the claim.
