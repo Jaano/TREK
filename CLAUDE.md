@@ -43,6 +43,7 @@ cd client && npm run lint:offline                  # views may not import src/ap
 cd client && npm run lint:skips                    # no .only; skipped tests may only shrink (CI gate)
 cd client && npm run lint:i18n-keys                # every key the client names exists in en (CI gate)
 cd server && npm run lint:boundaries               # no new import cycles or cross-domain reach-ins (CI gate)
+cd server && npm run lint:dialect                  # SQLite-only SQL spellings may only shrink (CI gate; rules in server/CLAUDE.md)
 cd client && npm run theme:lint                    # flag styling that bypasses appearance tokens (local only)
 npm run typecheck --workspace=server               # tsc --noEmit (also client/shared; server also has typecheck:tests)
 ```

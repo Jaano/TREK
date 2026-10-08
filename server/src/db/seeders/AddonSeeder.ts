@@ -1,5 +1,7 @@
 import type { EntityManager } from '@mikro-orm/core';
+import type { SqlEntityManager } from '@mikro-orm/sql';
 import { Seeder } from '@mikro-orm/seeder';
+import type { DB } from '../kysely/db';
 
 interface AddonRow {
   id: string;
@@ -154,18 +156,20 @@ const DEFAULT_ADDONS: AddonRow[] = [
 /**
  * Seeds the addon shelf.
  *
- * `INSERT OR IGNORE` per row, not a table-level emptiness check: an operator who
- * has toggled an addon keeps their choice, and a release that adds a new addon
- * still gets its tile on an existing install.
+ * One insert per row that does nothing when the id is already there, not a
+ * table-level emptiness check: an operator who has toggled an addon keeps their
+ * choice, and a release that adds a new addon still gets its tile on an
+ * existing install.
  */
 export class AddonSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
-    const connection = em.getConnection();
+    const db = (em as SqlEntityManager).getKysely<Pick<DB, 'addons'>>();
     for (const addon of DEFAULT_ADDONS) {
-      await connection.execute(
-        'INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [addon.id, addon.name, addon.description, addon.type, addon.icon, addon.enabled, addon.sort_order],
-      );
+      await db
+        .insertInto('addons')
+        .values({ ...addon })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
     }
     console.log('Default addons seeded');
   }

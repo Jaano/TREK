@@ -360,21 +360,17 @@ export default tseslint.config(
     // same and passed unseen, in the seeders too, which no repository rule
     // reached. The files below already hold such strings and are named one by
     // one, so the list can only shrink: MaintenanceRepository is the SQLite
-    // maintenance adapter (PRAGMA, VACUUM INTO), and every seeder but
-    // DatabaseSeeder writes its rows as SQL text (four of them with the
-    // SQLite-only INSERT OR IGNORE). A new seeder starts on the query builder.
+    // maintenance adapter (PRAGMA, VACUUM INTO), and AdminSeeder and
+    // CategorySeeder still write their rows as SQL text. A new seeder starts on
+    // the query builder.
     // tests/unit/eslint-rules/restricted-syntax-selectors.test.ts pins how many
     // SQL strings each of them holds, so new SQL text in an exempt file fails
     // there, and a file with none left has to leave this list.
     files: ['src/db/repositories/**/*.ts', 'src/db/seeders/**/*.ts'],
     ignores: [
       'src/db/repositories/MaintenanceRepository.ts',
-      'src/db/seeders/AddonSeeder.ts',
       'src/db/seeders/AdminSeeder.ts',
       'src/db/seeders/CategorySeeder.ts',
-      'src/db/seeders/DocumentProviderSeeder.ts',
-      'src/db/seeders/PhotoProviderSeeder.ts',
-      'src/db/seeders/SchemaVersionSeeder.ts',
     ],
     rules: {
       'no-restricted-syntax': [

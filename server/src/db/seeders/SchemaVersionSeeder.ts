@@ -1,5 +1,7 @@
 import type { EntityManager } from '@mikro-orm/core';
+import type { SqlEntityManager } from '@mikro-orm/sql';
 import { Seeder } from '@mikro-orm/seeder';
+import type { DB } from '../kysely/db';
 
 /**
  * The version the hand-written `db/migrations.ts` chain ended on — the highest
@@ -16,17 +18,17 @@ const LEGACY_SCHEMA_VERSION = 258;
  * `mikro_orm_migrations` now — but it is still an entity and still carries the
  * row an installation upgraded from the hand-written chain would have.
  *
- * `INSERT OR IGNORE`, like every other seeder here: seeding runs again whenever
+ * An insert that does nothing on conflict, like every other seeder here: seeding runs again whenever
  * the schema bootstrap does, and a backup restore re-runs it against a database
  * that already has this row.
  */
 export class SchemaVersionSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
-    const connection = em.getConnection();
-
-    await connection.execute('INSERT OR IGNORE INTO schema_version (id, version) VALUES (?, ?)', [
-      1,
-      LEGACY_SCHEMA_VERSION,
-    ]);
+    await (em as SqlEntityManager)
+      .getKysely<Pick<DB, 'schema_version'>>()
+      .insertInto('schema_version')
+      .values({ id: 1, version: LEGACY_SCHEMA_VERSION })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
   }
 }

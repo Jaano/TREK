@@ -1,5 +1,7 @@
 import type { EntityManager } from '@mikro-orm/core';
+import type { SqlEntityManager } from '@mikro-orm/sql';
 import { Seeder } from '@mikro-orm/seeder';
+import type { DB } from '../kysely/db';
 
 interface PhotoProviderRow {
   id: string;
@@ -157,37 +159,37 @@ const FIELDS: PhotoProviderFieldRow[] = [
   },
 ];
 
-/** Seeds the photo providers and the fields their connection form asks for. */
+/** Seeds the photo providers and the fields their connection form asks for, leaving a row that is already there alone. */
 export class PhotoProviderSeeder extends Seeder {
   async run(em: EntityManager): Promise<void> {
-    const connection = em.getConnection();
+    const db = (em as SqlEntityManager).getKysely<Pick<DB, 'photo_providers' | 'photo_provider_fields'>>();
 
     for (const p of PROVIDERS) {
-      await connection.execute(
-        'INSERT OR IGNORE INTO photo_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
-        [p.id, p.name, p.description, p.icon, p.enabled, p.sort_order],
-      );
+      await db
+        .insertInto('photo_providers')
+        .values({ id: p.id, name: p.name, description: p.description, icon: p.icon, enabled: p.enabled, sort_order: p.sort_order })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
     }
 
     for (const f of FIELDS) {
-      await connection.execute(
-        `INSERT OR IGNORE INTO photo_provider_fields
-           (provider_id, field_key, label, input_type, placeholder, hint, required, secret, settings_key, payload_key, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          f.provider_id,
-          f.field_key,
-          f.label,
-          f.input_type,
-          f.placeholder,
-          f.hint,
-          f.required,
-          f.secret,
-          f.settings_key,
-          f.payload_key,
-          f.sort_order,
-        ],
-      );
+      await db
+        .insertInto('photo_provider_fields')
+        .values({
+          provider_id: f.provider_id,
+          field_key: f.field_key,
+          label: f.label,
+          input_type: f.input_type,
+          placeholder: f.placeholder,
+          hint: f.hint,
+          required: f.required,
+          secret: f.secret,
+          settings_key: f.settings_key,
+          payload_key: f.payload_key,
+          sort_order: f.sort_order,
+        })
+        .onConflict((oc) => oc.doNothing())
+        .execute();
     }
   }
 }

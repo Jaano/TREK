@@ -141,12 +141,8 @@ declare const repo: { run(sql: string, params?: unknown[]): Promise<unknown>; ge
   // the ignores entry) has to follow.
   const EXEMPT_SQL_STRINGS: Record<string, number> = {
     'src/db/repositories/MaintenanceRepository.ts': 4,
-    'src/db/seeders/AddonSeeder.ts': 1,
     'src/db/seeders/AdminSeeder.ts': 2,
     'src/db/seeders/CategorySeeder.ts': 2,
-    'src/db/seeders/DocumentProviderSeeder.ts': 2,
-    'src/db/seeders/PhotoProviderSeeder.ts': 2,
-    'src/db/seeders/SchemaVersionSeeder.ts': 1,
   };
   const SQL_MESSAGE_PREFIX = 'A SQL string handed to the connection';
 
