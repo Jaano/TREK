@@ -205,6 +205,7 @@ The `@trek/shared` package is the single source of truth for code shared between
 | `npm run lint:format`      | Every file outside the shrinking baseline is Prettier-formatted (CI gate) |
 | `npm run lint:layers`      | Imports only go downwards through the layers (CI gate) |
 | `npm run lint:offline`     | Views reach `src/api/` only through the offline core; the baseline only shrinks (CI gate) |
+| `npm run lint:dup`         | Lines in copied code blocks may only shrink per file, at SonarCloud's thresholds (CI gate) |
 | `npm run lint:skips`       | No focused test, and skipped tests may only go away (CI gate) |
 | `npm run lint:i18n-keys`   | Every translation key the client names exists in `en` (CI gate) |
 | `npm run theme:lint`       | Flag styling that bypasses the appearance tokens (not run in CI) |
@@ -242,6 +243,6 @@ Then open a Pull Request from your fork to `liketrek/TREK` targeting the `dev` b
 - Run tests before pushing: `npm test` at the repo root runs all workspaces. That alone is not the full CI gate. With `shared` built, these are the checks CI runs before any test (`.github/workflows/test.yml` is the source of truth):
   - in `shared/`: `npm run typecheck && npm run contracts:open`
   - in `server/`: `npm run build && npm run typecheck && npm run typecheck:tests && npm run typecheck:scripts && npm run check:entities && npm run check:db-types && npm run lint:check && npm run db:call-graph -- --sync --tx && npm run lint:size && npm run lint:boundaries && npm run lint:tx && npm run lint:test-sql && npm run lint:dialect && npm run check:plugin-facts`
-  - in `client/`: `npm run typecheck && npm run lint:warnings && npm run lint:pages && npm run lint:rtl && npm run lint:size && npm run lint:format && npm run lint:layers && npm run lint:offline && npm run lint:skips && npm run lint:i18n-keys`
+  - in `client/`: `npm run typecheck && npm run lint:warnings && npm run lint:pages && npm run lint:rtl && npm run lint:size && npm run lint:format && npm run lint:layers && npm run lint:offline && npm run lint:dup && npm run lint:skips && npm run lint:i18n-keys`
   - at the root, if you touched translations: `npm run i18n:parity:strict --workspace=shared`
 - Follow the commit message conventions described in the [[Contributing]] guidelines.

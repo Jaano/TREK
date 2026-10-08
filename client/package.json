@@ -27,6 +27,7 @@
     "lint:format": "node scripts/format-lint.mjs",
     "lint:layers": "node scripts/layer-lint.mjs",
     "lint:offline": "node scripts/offline-lint.mjs",
+    "lint:dup": "node scripts/dup-lint.mjs",
     "lint:skips": "node scripts/skip-lint.mjs",
     "lint:i18n-keys": "node scripts/i18n-keys.mjs",
     "check:gl-split": "node scripts/check-gl-split.mjs",
@@ -82,6 +83,8 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@jscpd/core": "^4.2.5",
+    "@jscpd/tokenizer": "^4.2.6",
     "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^6.10.0",
     "@testing-library/react": "^16.3.3",

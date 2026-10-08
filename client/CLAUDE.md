@@ -16,6 +16,7 @@ npm run lint:size         # no source file or stylesheet past 1000 lines, no tes
 npm run lint:format       # Prettier: every .ts/.tsx/.mjs/.css file under src/, tests/, e2e/ and scripts/ outside scripts/format-baseline.json must be formatted, the list only shrinks (CI gate; npx prettier --write <file>, then --update)
 npm run lint:layers       # imports go downwards: components never import pages/ or mobile/, nothing under the views imports a view; per-file counts may only shrink (CI gate; --list, --update)
 npm run lint:offline      # no view file (components/mobile/pages/hooks) imports src/api/ beyond scripts/offline-baseline.json, which only shrinks (CI gate; --list, --update)
+npm run lint:dup          # copied code: the lines of a file inside a block that repeats elsewhere (100 tokens over 10 lines, SonarCloud's thresholds; .ts and .tsx read as one language) may only shrink against scripts/dup-baseline.json (CI gate; --list shows each block with its other side, --update lowers it)
 npm run lint:skips        # no .only anywhere; skipped/todo/fixme tests per file may only shrink against scripts/skip-baseline.json (CI gate; skipIf/runIf and Playwright's test.skip(condition, 'why') are fine, but skipIf(true) and runIf(false) count as skips)
 npm run lint:i18n-keys    # every translation key src/ names exists in shared en (CI gate; --unused lists en keys nothing reaches)
 npm run test              # vitest run (tests/** + co-located src/**/*.test.{ts,tsx}); also test:unit / test:integration / test:coverage
@@ -73,7 +74,7 @@ The offline core is flagship work surrounded by a periphery that ignores it. New
 
 ## Desktop ↔ mobile shells and the SonarQube duplication gate
 
-Every desktop component with a phone twin is a deliberate copy that is already heavily duplicated. CI's SonarCloud gate allows **≤ 3% duplicated lines on the PR's new code**, so adding the same lines to both shells fails the PR by itself. Put logic in one shared hook/module (`useInstanceSettings`, `useRangeBypass` under `components/Admin/` are the pattern) and keep only markup in each shell. Full gate rules in the root `CLAUDE.md`.
+Every desktop component with a phone twin is a deliberate copy that is already heavily duplicated. CI's SonarCloud gate allows **≤ 3% duplicated lines on the PR's new code**, so adding the same lines to both shells fails the PR by itself. Put logic in one shared hook/module (`useInstanceSettings`, `useRangeBypass` under `components/Admin/` are the pattern) and keep only markup in each shell. `npm run lint:dup` finds such copies before the push and holds every file to `scripts/dup-baseline.json`. Full gate rules in the root `CLAUDE.md`.
 
 ## Tests
 

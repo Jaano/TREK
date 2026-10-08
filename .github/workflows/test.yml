@@ -349,6 +349,13 @@ jobs:
         # mutation queue.
         run: cd client && npm run lint:offline
 
+      - name: Duplication check
+        # A file may hold no more lines inside a block of code that repeats
+        # elsewhere than scripts/dup-baseline.json allows, counted at the
+        # thresholds of the SonarCloud gate, so the logic a desktop view and
+        # its phone twin share stays in one hook (scripts/dup-lint.mjs).
+        run: cd client && npm run lint:dup
+
       - name: Skipped and focused tests check
         run: cd client && npm run lint:skips
 
