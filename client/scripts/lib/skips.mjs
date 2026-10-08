@@ -1,0 +1,113 @@
+/*
+ * The matching and the comparison behind lint:skips (scripts/skip-lint.mjs).
+ */
+import { join } from 'node:path'
+import ts from 'typescript'
+import { countMap, listFiles, lowerCounts, readBaseline, readText, TEST_FILE, toKey, writeBaseline } from './ratchet.mjs'
+
+/** The test functions of vitest and Playwright a modifier can hang off. */
+const RUNNERS = new Set(['it', 'test', 'describe', 'suite', 'bench'])
+/** The jasmine-style shorthands vitest also knows. */
+const SHORTHAND = new Set(['xit', 'xtest', 'xdescribe'])
+
+export const DIRS = ['src', 'tests', 'e2e']
+
+const accepts = (key) =>
+  /\.tsx?$/.test(key) && (key.startsWith('src/') ? TEST_FILE.test(key) : true)
+
+/** The identifier a chain like test.describe.skip.each starts from. */
+function rootOf(node) {
+  while (ts.isPropertyAccessExpression(node) || ts.isCallExpression(node)) node = node.expression
+  return ts.isIdentifier(node) ? node.text : null
+}
+
+const isTitle = (node) => Boolean(node) && (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node))
+
+/**
+ * The tests a file switches off or narrows down, as `line: code`.
+ *
+ * skipped: it.skip / describe.skip / test.todo and the x-shorthands, each
+ * declaring a test that never runs. A skip with a condition first
+ * (Playwright's test.skip(!seed.id, 'why'), or called bare inside a test)
+ * decides at run time and is no declaration; neither are skipIf and runIf.
+ *
+ * only: .only anywhere, which silently drops every other test in the file.
+ */
+export function modifiers(source, file) {
+  const kind = file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, kind)
+  const skipped = []
+  const only = []
+  const at = (node) => `${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}: ${node.getText(sf).slice(0, 60)}`
+  const visit = (node) => {
+    if (ts.isPropertyAccessExpression(node) && RUNNERS.has(rootOf(node.expression) ?? '')) {
+      const name = node.name.text
+      if (name === 'only') only.push(at(node))
+      else if (name === 'todo') skipped.push(at(node))
+      else if (name === 'skip') {
+        const call = ts.isCallExpression(node.parent) && node.parent.expression === node ? node.parent : null
+        // test.skip.each(table)(...) declares skipped tests; test.skip('title', fn) declares one.
+        if (!call || isTitle(call.arguments[0])) skipped.push(at(node))
+      }
+    } else if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && SHORTHAND.has(node.expression.text)) {
+      skipped.push(at(node.expression))
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return { skipped, only }
+}
+
+/** The skipped and focused tests per file under src/, tests/ and e2e/, keyed by the path from root. */
+export function scan(root) {
+  const skipped = {}
+  const only = {}
+  for (const path of listFiles(root, DIRS, accepts)) {
+    const found = modifiers(readText(path), path)
+    const key = toKey(root, path)
+    if (found.skipped.length) skipped[key] = found.skipped
+    if (found.only.length) only[key] = found.only
+  }
+  return { skipped, only }
+}
+
+/**
+ * Runs the check: no .only anywhere, and no file with more skipped tests than
+ * its entry in the baseline at baselinePath. Returns the exit code.
+ */
+export function check({
+  root,
+  baselinePath = join(root, 'scripts/skip-baseline.json'),
+  update = false,
+  log = console.log,
+  error = console.error,
+}) {
+  const { skipped, only } = scan(root)
+  const counts = Object.fromEntries(Object.entries(skipped).map(([key, list]) => [key, list.length]))
+  let baseline = readBaseline(baselinePath, countMap)
+
+  if (update) {
+    baseline = lowerCounts(baseline, counts)
+    writeBaseline(baselinePath, baseline)
+  }
+
+  for (const [key, list] of Object.entries(only)) {
+    error(`FAIL  ${key}: .only runs this test alone and drops every other one in the file:`)
+    for (const line of list) error(`        ${line}`)
+  }
+  const grown = Object.entries(counts).filter(([key, n]) => n > (baseline[key] ?? 0))
+  for (const [key, n] of grown) {
+    error(`FAIL  ${key}: ${n} skipped or todo test(s), baseline ${baseline[key] ?? 0}:`)
+    for (const line of skipped[key]) error(`        ${line}`)
+  }
+  if (grown.length) {
+    error(
+      'Fix the test, delete it if its feature is gone, or use skipIf/runIf when it depends on the environment.',
+    )
+  }
+  const lowerable = Object.entries(baseline).filter(([key, n]) => (counts[key] ?? 0) < n)
+  if (lowerable.length && !update) log(`${lowerable.length} file(s) skip fewer tests than the baseline: run with --update to lower it.`)
+  const sum = (map) => Object.values(map).reduce((a, b) => a + b, 0)
+  log(`skips: ${sum(counts)} skipped or todo test(s), baseline allows ${sum(baseline)}; ${Object.keys(only).length} file(s) with .only`)
+  return grown.length || Object.keys(only).length ? 1 : 0
+}

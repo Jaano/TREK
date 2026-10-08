@@ -24,6 +24,7 @@
     "lint:format": "node scripts/format-lint.mjs",
     "lint:layers": "node scripts/layer-lint.mjs",
     "lint:offline": "node scripts/offline-lint.mjs",
+    "lint:skips": "node scripts/skip-lint.mjs",
     "check:gl-split": "node scripts/check-gl-split.mjs",
     "theme:lint": "node scripts/theme-lint.mjs",
     "theme:lint:strict": "node scripts/theme-lint.mjs --strict",
