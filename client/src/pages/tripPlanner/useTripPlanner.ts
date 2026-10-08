@@ -12,7 +12,7 @@ import { useToast } from '../../components/shared/Toast'
 import { Map, Ticket, PackageCheck, Wallet, FolderOpen, Users, Train, Mountain, Route } from 'lucide-react'
 import { resolvePluginIcon } from '../../components/shared/PluginIcon'
 import { useTranslation, translateApiError } from '../../i18n'
-import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, healthApi, airtrailApi, mapsApi, placesApi } from '../../api/client'
+import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, healthApi, mapsApi, placesApi } from '../../api/client'
 import { getDayOrder } from '../../utils/dayOrder'
 import { TRANSPORT_TYPES, timedSlot } from '../../utils/dayMerge'
 import { isOvernightCategory } from '../../components/Roadtrip/stopKinds'
@@ -57,7 +57,6 @@ import {
   reanchorByStopOrder,
   isServiceStopType, refuelStopTypeFor, reanchorAfterReorder, type DryPoint } from '../../components/Roadtrip/roadtripModel'
 import type { ManualStopTarget, ServiceStopMode } from '../../components/Roadtrip/manualStop'
-import type { RoadtripStopDraft } from '../../components/Roadtrip/RoadtripStopPopup'
 import type { StayDraft } from '../../components/Roadtrip/RoadtripStayModal'
 import { inspectorStay } from '../../components/Roadtrip/stayReading'
 import { MAX_TRIP_DAYS, normalizePlaceWebsite, type RoadtripStopType } from '@trek/shared'
@@ -65,7 +64,6 @@ import { usePlaceSelection } from '../../hooks/usePlaceSelection'
 import { useTourPlaceIds } from '../../hooks/useTourPlaceIds'
 import { useAddonStore } from '../../store/addonStore'
 import { usePlannerHistory } from '../../hooks/usePlannerHistory'
-import { useAirtrailConnection } from '../../hooks/useAirtrailConnection'
 import { useIsTouch } from '../../hooks/useIsTouch'
 import { usePluginStore } from '../../store/pluginStore'
 import type { Accommodation, Assignment, TripMember, Day, Place, Reservation } from '../../types'
@@ -87,6 +85,7 @@ import { matchesPlacesFilter } from '../../utils/placesFilter'
 import { pendingStayPlaceIds } from '../../utils/pendingStays'
 import { useDayDelete } from './useDayDelete'
 import { useDayAdd } from './useDayAdd'
+import { usePlannerDialogs } from './usePlannerDialogs'
 import { useIsPhone } from '../../mobile/useIsPhone'
 
 /** Stable empty list so the road trip hook stays inert while its mode is off. */
@@ -94,12 +93,16 @@ const EMPTY_DAYS: Day[] = []
 const EMPTY_RESERVATIONS: Reservation[] = []
 
 /**
- * Trip planner page logic — the big one. Owns the trip store wiring, addon
+ * Trip planner page logic, the big one. Owns the trip store wiring, addon
  * gating, accommodations/members loading, the tab + resizable-panel + selection
  * state, every place/assignment/reservation/transport CRUD handler (with undo),
  * the map filters/derivations and the splash gate. TripPlannerPage stays a
  * wiring container that lays out the day/map/places panes and modals.
  * Behaviour is identical to the previous in-component logic.
+ *
+ * Self-contained parts live in the use* sub-hooks beside this file. Each one is
+ * called where its code used to sit, so React still runs every effect in the
+ * order it always did.
  */
 export function useTripPlanner() {
   const { id } = useParams<{ id: string }>()
@@ -335,159 +338,26 @@ export function useTripPlanner() {
   // The day's "+" can ask for a new stay: the details panel opens on that day and
   // takes the request once, then hands it back so a later opening stays plain.
   const [stayPickerDayId, setStayPickerDayId] = useState<number | null>(null)
-  const [showPlaceForm, setShowPlaceForm] = useState<boolean>(false)
-  const [editingPlace, setEditingPlace] = useState<Place | null>(null)
-  const [prefillCoords, setPrefillCoords] = useState<{ lat: number; lng: number; name?: string; address?: string; website?: string; phone?: string; osm_id?: string; stop_type?: RoadtripStopType | null; duration_minutes?: number; category?: string } | null>(null)
-  const [editingAssignmentId, setEditingAssignmentId] = useState<number | null>(null)
-  // Day context of the open form. Set only by the day-scoped entry points (the
-  // mobile day toolbar, a long-press on the mobile map); every other opener
-  // clears it, so a place added from the pool still lands in the pool (#1998).
-  const [placeFormDayId, setPlaceFormDayId] = useState<number | null>(null)
-  /**
-   * Where in the day the place being added belongs, when the caller knows.
-   * Null means the old behaviour: the server appends it at the end.
-   */
-  const [placeFormPosition, setPlaceFormPosition] = useState<number | null>(null)
-  // The position belongs to the form it was opened with and to nothing after it. The
-  // day-scoped openers set the day, the form's close clears the coordinates, but the
-  // position is written by one opener and read by every save, so a stop handed to the
-  // form from the corridor popup once left the next add from any day landing at that
-  // same index. Tied to the form being open, the only time it means anything.
-  useEffect(() => {
-    if (!showPlaceForm) setPlaceFormPosition(null)
-  }, [showPlaceForm])
-  /**
-   * Whether the open place form is asking for a service stop on the drive.
-   *
-   * Only the road trip's "add manually" sets it, and everything that opens the form for
-   * anything else clears it, so the ordinary add, the edit and the corridor hit are the
-   * form they have always been.
-   */
-  const [serviceStopForm, setServiceStopForm] = useState(false)
-  /**
-   * The kind that form opens on, taken from what the corridor panel was looking for.
-   *
-   * Beside the flag rather than inside it, because it is written by the same click and
-   * read by the same memo, and a second piece of state is cheaper to follow than a flag
-   * that is sometimes a boolean and sometimes an object.
-   */
-  const [serviceStopKind, setServiceStopKind] = useState<RoadtripStopType | null>(null)
-  /**
-   * The corridor hit waiting to become a stop, while the small popup is open.
-   *
-   * The full place form is the wrong question for a petrol station — category, price,
-   * photo, notes and files are all empty for one — so in road trip mode a hit opens this
-   * instead, and the form stays one click away behind "more details".
-   */
-  const [stopDraft, setStopDraft] = useState<RoadtripStopDraft | null>(null)
-  /**
-   * A booked night the popup was asked to turn into a pause, waiting for a yes.
-   *
-   * The switch in the popup reads like a change of stop kind, but the night is a
-   * booking row, and the server takes the reservation and the expense written against
-   * it down with that row. It is the one write the popup can make that nothing brings
-   * back, so it is the one that asks first. The name and the booking title are read
-   * once, here, so the dialog does not have to know where either lives.
-   */
-  const [stayRelease, setStayRelease] = useState<{
-    stop: { stopType: RoadtripStopType | null; dwellMinutes: number }
-    name: string
-    booking: string | null
-  } | null>(null)
-  const [reservationModalDayId, setReservationModalDayId] = useState<number | null>(null)
-
-  // The bottom-nav "+" opens the new-place form via ?create=place.
-  useEffect(() => {
-    if (searchParams.get('create') === 'place') {
-      setEditingPlace(null); setEditingAssignmentId(null); setPlaceFormDayId(null); setShowPlaceForm(true)
-      setSearchParams(p => { p.delete('create'); return p }, { replace: true })
-    }
-  }, [searchParams])
-
-  // ?tab= has done its job in the state initializer above — drop it so the URL
-  // stops claiming a tab the user may have since switched away from. The session
-  // memory keeps the choice across a reload.
-  useEffect(() => {
-    if (searchParams.get('tab') === null) return
-    setSearchParams(p => { p.delete('tab'); return p }, { replace: true })
-  }, [searchParams])
-  const [showTripForm, setShowTripForm] = useState<boolean>(false)
-  const [showMembersModal, setShowMembersModal] = useState<boolean>(false)
-  const [showReservationModal, setShowReservationModal] = useState<boolean>(false)
-  const [editingReservation, setEditingReservation] = useState<Reservation | null>(null)
-  const [showBookingImport, setShowBookingImport] = useState<boolean>(false)
-  // Which tab opened the importer. Only ever a tie-breaker — see openImportItem.
-  const [bookingImportKind, setBookingImportKind] = useState<'transports' | 'bookings'>('bookings')
-  const [bookingImportAvailable, setBookingImportAvailable] = useState<boolean>(false)
-  const { available: airTrailAvailable } = useAirtrailConnection()
-  const [showAirTrailImport, setShowAirTrailImport] = useState<boolean>(false)
-  // Pull this user's AirTrail edits as soon as they open the trip, so changes
-  // made in AirTrail show up without waiting for the background poll.
-  const airtrailSyncedRef = useRef<number | null>(null)
-  useEffect(() => {
-    if (!airTrailAvailable || !tripId || airtrailSyncedRef.current === tripId) return
-    airtrailSyncedRef.current = tripId
-    airtrailApi.sync()
-      .then(r => { if (r && r.changed > 0) tripActions.loadReservations(tripId) })
-      .catch(() => {})
-  }, [airTrailAvailable, tripId, tripActions])
-  const [bookingForAssignmentId, setBookingForAssignmentId] = useState<number | null>(null)
-  const [showTransportModal, setShowTransportModal] = useState<boolean>(false)
-  const [editingTransport, setEditingTransport] = useState<Reservation | null>(null)
-  const [transportModalDayId, setTransportModalDayId] = useState<number | null>(null)
-  // Public transit (#1065): open the TransportModal in its Automated mode, seed
-  // the search (change-route), and show the journey view for a saved entry.
-  const [transportModalAutomated, setTransportModalAutomated] = useState<boolean>(false)
-  const [transitPrefill, setTransitPrefill] = useState<{ from?: { name: string; lat: number; lng: number } | null; to?: { name: string; lat: number; lng: number } | null; time?: string | null } | null>(null)
-  const [transitJourney, setTransitJourney] = useState<Reservation | null>(null)
-  // The booking whose detail is open over the desktop plan: a day row, a rental pill,
-  // the inspector's booking card, a map endpoint or the road-trip rail opened it.
-  // Held by id, so the dialog shows the store's copy and goes away by itself once the
-  // booking is deleted. `fromDayList` remembers that a row of the day list opened it,
-  // whose editor also asks for day_edit.
-  const [bookingDetailOpen, setBookingDetailOpen] = useState<{ id: number; fromDayList: boolean } | null>(null)
-
-  // The full transport editor on a saved entry. For a transit journey that is where
-  // travellers, costs, files, code and status live; an unchanged-endpoints save keeps
-  // the stored itinerary (#2148).
-  const openTransportEditor = useCallback((r: Reservation) => {
-    setEditingTransport(r)
-    setTransportModalDayId(r.day_id ?? null)
-    setTransportModalAutomated(false)
-    setTransitPrefill(null)
-    setTransitJourney(null)
-    setShowTransportModal(true)
-  }, [])
-  // Re-enters the transit search seeded with a journey's route; the journey is
-  // REPLACED on save (editingTransport drives handleSaveTransport's update path).
-  const changeTransitRoute = useCallback((r: Reservation) => {
-    const eps = r.endpoints || []
-    const from = eps.find(e => e.role === 'from')
-    const to = eps.find(e => e.role === 'to')
-    setTransitPrefill({
-      from: from ? { name: from.name, lat: from.lat, lng: from.lng } : null,
-      to: to ? { name: to.name, lat: to.lat, lng: to.lng } : null,
-    })
-    setEditingTransport(r)
-    setTransportModalDayId(r.day_id ?? null)
-    setTransportModalAutomated(true)
-    setTransitJourney(null)
-    setShowTransportModal(true)
-  }, [])
-
-  // The bottom-nav "+" is context-aware per tab: on the Bookings / Transports tabs
-  // it opens the booking / transport modal via ?create=reservation|transport
-  // (place is handled above, expense in CostsPanel). #1349
-  useEffect(() => {
-    const intent = searchParams.get('create')
-    if (intent === 'reservation') {
-      setEditingReservation(null); setBookingForAssignmentId(null); setShowReservationModal(true)
-      setSearchParams(p => { p.delete('create'); return p }, { replace: true })
-    } else if (intent === 'transport') {
-      setEditingTransport(null); setTransportModalDayId(null); setShowTransportModal(true)
-      setSearchParams(p => { p.delete('create'); return p }, { replace: true })
-    }
-  }, [searchParams])
+  const plannerDialogs = usePlannerDialogs({ tripId, tripActions, searchParams, setSearchParams })
+  // The dialog state this hook reads further down as well as returning it.
+  const {
+    setShowPlaceForm, editingPlace, setEditingPlace, setPrefillCoords, editingAssignmentId, setEditingAssignmentId,
+    placeFormDayId, setPlaceFormDayId, placeFormPosition, setPlaceFormPosition,
+    serviceStopForm, setServiceStopForm, serviceStopKind, setServiceStopKind,
+    stopDraft, setStopDraft, stayRelease, setStayRelease, setBookingImportAvailable,
+    setShowReservationModal, editingReservation, setEditingReservation,
+    setShowTransportModal, editingTransport, setEditingTransport, setTransportModalDayId,
+    bookingDetailOpen, setBookingDetailOpen, openTransportEditor, changeTransitRoute,
+  } = plannerDialogs
+  // The dialog state that only passes through to the shells.
+  const {
+    showPlaceForm, prefillCoords, reservationModalDayId, setReservationModalDayId,
+    showTripForm, setShowTripForm, showMembersModal, setShowMembersModal, showReservationModal,
+    showBookingImport, setShowBookingImport, bookingImportKind, setBookingImportKind, bookingImportAvailable,
+    airTrailAvailable, showAirTrailImport, setShowAirTrailImport, bookingForAssignmentId, setBookingForAssignmentId,
+    showTransportModal, transportModalDayId, transportModalAutomated, setTransportModalAutomated,
+    transitPrefill, setTransitPrefill, transitJourney, setTransitJourney,
+  } = plannerDialogs
   // Review-before-save import: each parsed item pre-fills the normal edit modal so
   // the user checks/fixes it, then saves. A ref drives the queue (no stale closures).
   const [reservationPrefill, setReservationPrefill] = useState<BookingReviewDraft | null>(null)
@@ -642,7 +512,7 @@ export function useTripPlanner() {
     // there (booking-import.service.ts), so gating the entry point on kitinerary
     // alone hid a working feature on LLM-only instances (#2007).
     healthApi.features().then(f => setBookingImportAvailable(f.bookingImport || f.aiParsing)).catch(() => {})
-  }, [])
+  }, [setBookingImportAvailable])
 
   const connectionsStorageKey = tripId ? `trek:visible-connections:${tripId}` : null
   // Per-trip route-visibility preference — null means "never touched", which
@@ -958,7 +828,7 @@ export function useTripPlanner() {
         setPrefillCoords(prev => prev ? { ...prev, name: data.name || '', address: data.address || '' } : prev)
       }
     } catch { /* best effort */ }
-  }, [placeLang])
+  }, [placeLang, setEditingAssignmentId, setEditingPlace, setPlaceFormDayId, setPrefillCoords, setServiceStopForm, setShowPlaceForm])
 
   // Open the Add-Place form pre-filled from an OSM "explore" POI marker — all the
   // data already comes from the POI, so no reverse-geocode is needed.
@@ -998,7 +868,7 @@ export function useTripPlanner() {
     setPlaceFormPosition(position ?? null)
     setServiceStopForm(false)
     setShowPlaceForm(true)
-  }, [trip])
+  }, [trip, setEditingAssignmentId, setEditingPlace, setPlaceFormDayId, setPlaceFormPosition, setPrefillCoords, setServiceStopForm, setShowPlaceForm])
 
   /**
    * Adding a POI straight off the map, with the day it belongs to.
@@ -1062,7 +932,7 @@ export function useTripPlanner() {
     const selected = roadtripRoutes.days.find(d => d.dayId === roadtripDayId)
     const target = selected && roadtripInsertion(selected, selected.stops.length)
     openAddPlaceFromPoi(poi, roadtripFeedActive ? target?.dayId ?? roadtripDayId : undefined)
-  }, [openAddPlaceFromPoi, roadtripFeedActive, roadtripDayId, roadtripDayNumber, roadtripInsertIndexFor, roadtripRoutes.days, overnightOptions, can, trip])
+  }, [openAddPlaceFromPoi, roadtripFeedActive, roadtripDayId, roadtripDayNumber, roadtripInsertIndexFor, roadtripRoutes.days, overnightOptions, can, trip, setStopDraft])
 
   /**
    * The stops of a day as the road trip counts them, in the order it drives them.
@@ -1327,14 +1197,14 @@ export function useTripPlanner() {
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : t('common.unknownError'))
     }
-  }, [stopDraft, tripId, tripActions, updateRouteForDay, toast, t, roadtripVias, viaLiesBefore, loadAccommodations, tripAccommodations, reservations])
+  }, [stopDraft, tripId, tripActions, updateRouteForDay, toast, t, roadtripVias, viaLiesBefore, loadAccommodations, tripAccommodations, reservations, setStayRelease, setStopDraft])
 
   /** The yes to the question above: the same save, this time allowed to drop the night. */
   const confirmStayRelease = useCallback(async () => {
     const pending = stayRelease
     setStayRelease(null)
     if (pending) await saveStopDraft(pending.stop, { releaseStay: true })
-  }, [stayRelease, saveStopDraft])
+  }, [stayRelease, saveStopDraft, setStayRelease])
 
   const saveStopDraftAsNight = useCallback(async ({ endDayId, checkIn, checkOut }: {
     endDayId: number
@@ -1396,7 +1266,7 @@ export function useTripPlanner() {
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : t('common.unknownError'))
     }
-  }, [stopDraft, tripId, tripActions, updateRouteForDay, toast, t, roadtripVias, viaLiesBefore, loadAccommodations])
+  }, [stopDraft, tripId, tripActions, updateRouteForDay, toast, t, roadtripVias, viaLiesBefore, loadAccommodations, setStopDraft])
 
   /**
    * Turns a stop on the drive into a pause, or back into a destination.
@@ -2046,7 +1916,7 @@ export function useTripPlanner() {
     setServiceStopKind(kind)
     setServiceStopForm(true)
     setShowPlaceForm(true)
-  }, [can, trip])
+  }, [can, trip, setEditingAssignmentId, setEditingPlace, setPlaceFormDayId, setPlaceFormPosition, setPrefillCoords, setServiceStopForm, setServiceStopKind, setShowPlaceForm])
 
   /**
    * What the place form needs to ask for a service stop, or null for every other use.
@@ -2189,7 +2059,7 @@ export function useTripPlanner() {
     if (!anchor) return
     refuel.close()
     setStopDraft({ poi, ...roadtripInsertion(day, at)!, dayNumber: day.dayNumber })
-  }, [roadtripRoutes.days, refuel, can, trip])
+  }, [roadtripRoutes.days, refuel, can, trip, setStopDraft])
 
   /** Removing a via lets the drive take the direct road again. */
   const removeRoadtripVia = useCallback(async (dayId: number, id: number) => {
@@ -2228,7 +2098,7 @@ export function useTripPlanner() {
       ...insert,
       dayNumber: day.dayNumber,
     })
-  }, [roadtripCorridor, can, trip])
+  }, [roadtripCorridor, can, trip, setStopDraft])
 
   /** Hands the draft over to the full form, keeping the day and the position it worked out. */
   const stopDraftToForm = useCallback((stop?: { stopType: RoadtripStopType | null; dwellMinutes: number }) => {
@@ -2248,7 +2118,7 @@ export function useTripPlanner() {
     // behind is what turned a fuel stop into a numbered destination on the way to the
     // full form, silently and in every total.
     openAddPlaceFromPoi(poi, dayId, position, stop ?? null)
-  }, [stopDraft, openAddPlaceFromPoi, places, assignments])
+  }, [stopDraft, openAddPlaceFromPoi, places, assignments, setEditingAssignmentId, setEditingPlace, setShowPlaceForm, setStopDraft])
 
   /**
    * A place on this trip that came from the same OSM object.
@@ -2396,7 +2266,7 @@ export function useTripPlanner() {
     setPlaceFormDayId(null)
     setServiceStopForm(false)
     setShowPlaceForm(true)
-  }, [isMobile, isTourPlace, handlePlaceClick, can, trip, assignments, roadtripActive, tripAccommodations, days, overnightOptions, roadtripRoutes.days])
+  }, [isMobile, isTourPlace, handlePlaceClick, can, trip, assignments, roadtripActive, tripAccommodations, days, overnightOptions, roadtripRoutes.days, setEditingAssignmentId, setEditingPlace, setPlaceFormDayId, setServiceStopForm, setShowPlaceForm, setStopDraft])
 
   /**
    * How long the drive stands here, for every stop alike.
