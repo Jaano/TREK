@@ -34,22 +34,31 @@ export function insertRow<T extends object>(
   entity: EntityClass<T>,
   data: RequiredEntityData<T>,
 ): Promise<Primary<T>> {
-  return inContext(orm, (em) => {
+  // async, so a refused column rejects the returned promise rather than
+  // throwing before the caller has one to await.
+  return inContext(orm, async (em) => {
     assertWritable(em, entity, data);
     return em.insert(entity, data);
   });
 }
 
-/** Inserts several rows in one statement and returns their primary keys in order. */
+/**
+ * Inserts several rows and returns their primary keys in order. One INSERT per
+ * row: `em.insertMany` on plain data hands back only the last insert id (it
+ * returns `[insertId]` unless the driver reports `insertedIds`, which the SQL
+ * drivers never do), so a caller zipping ids with its rows would get one id.
+ */
 export function insertRows<T extends object>(
   orm: FactoryOrm,
   entity: EntityClass<T>,
   data: RequiredEntityData<T>[],
 ): Promise<Primary<T>[]> {
   if (data.length === 0) return Promise.resolve([]);
-  return inContext(orm, (em) => {
+  return inContext(orm, async (em) => {
     for (const row of data) assertWritable(em, entity, row);
-    return em.insertMany(entity, data);
+    const ids: Primary<T>[] = [];
+    for (const row of data) ids.push(await em.insert(entity, row));
+    return ids;
   });
 }
 
@@ -69,14 +78,20 @@ export async function createRow<T extends { id: number }>(
   return row;
 }
 
-/** The first row matching `where`, or null. */
+/**
+ * The first row matching `where`, or null. An empty `where` asks for any row,
+ * which MikroORM's findOne refuses, so that one reads the first row instead.
+ */
 export function findRow<T extends object>(
   orm: FactoryOrm,
   entity: EntityClass<T>,
   where: FilterQuery<T>,
 ): Promise<EntityDTO<T> | null> {
   return inContext(orm, async (em) => {
-    const found = await em.findOne(entity, where, { disableIdentityMap: true });
+    const anyRow = typeof where === 'object' && where !== null && Object.keys(where).length === 0;
+    const found = anyRow
+      ? (await em.find(entity, where, { limit: 1, disableIdentityMap: true }))[0]
+      : await em.findOne(entity, where, { disableIdentityMap: true });
     return found ? toRow<T>(found) : null;
   });
 }
@@ -110,7 +125,7 @@ export function updateRows<T extends object>(
   where: FilterQuery<T>,
   data: EntityData<T>,
 ): Promise<number> {
-  return inContext(orm, (em) => {
+  return inContext(orm, async (em) => {
     assertWritable(em, entity, data);
     return em.nativeUpdate(entity, where, data);
   });

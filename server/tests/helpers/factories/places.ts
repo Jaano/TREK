@@ -32,7 +32,7 @@ export function makeTag(orm: FactoryOrm, userId: number, overrides: EntityData<T
 /** The lowest-id category, the one a place gets when the test names none. */
 function firstCategoryId(orm: FactoryOrm): Promise<number | null> {
   return inContext(orm, async (em) => {
-    const first = await em.findOne(Categories, {}, { orderBy: { id: 'asc' }, disableIdentityMap: true });
+    const [first] = await em.find(Categories, {}, { orderBy: { id: 'asc' }, limit: 1, disableIdentityMap: true });
     return first?.id ?? null;
   });
 }
