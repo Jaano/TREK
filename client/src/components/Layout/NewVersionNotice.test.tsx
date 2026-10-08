@@ -18,8 +18,16 @@ const BUILT = __TREK_UI_VERSION__
 const NEXT = `${BUILT}-next`
 
 beforeEach(() => {
-  useServerVersionStore.setState({ reported: null })
+  useServerVersionStore.setState({ first: null, reported: null })
 })
+
+/** The page starts on this build's version; then the server reports `version`. */
+function deploy(version: string) {
+  act(() => {
+    useServerVersionStore.getState().note(BUILT)
+    useServerVersionStore.getState().note(version)
+  })
+}
 
 afterEach(() => {
   switchToServerVersion.mockClear()
@@ -38,7 +46,7 @@ describe('NewVersionNotice', () => {
 
   it('FE-LAYOUT-NEWVER-002: offers the reload once the server reports a newer build', async () => {
     render(<NewVersionNotice />)
-    act(() => useServerVersionStore.getState().note(NEXT))
+    deploy(NEXT)
 
     expect(screen.getByRole('status')).toHaveTextContent('A new version is available')
     await userEvent.click(screen.getByRole('button', { name: 'Reload page' }))
@@ -50,7 +58,7 @@ describe('NewVersionNotice', () => {
 
   it('FE-LAYOUT-NEWVER-003: closing it hides that version, and the next release asks again', async () => {
     render(<NewVersionNotice />)
-    act(() => useServerVersionStore.getState().note(NEXT))
+    deploy(NEXT)
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('status')).toBeNull()
 
@@ -62,12 +70,19 @@ describe('NewVersionNotice', () => {
   it('FE-LAYOUT-NEWVER-004: stays away offline, where a reload could not fetch the new build', () => {
     setForcedOffline(true)
     render(<NewVersionNotice />)
-    act(() => useServerVersionStore.getState().note(NEXT))
+    deploy(NEXT)
     expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('FE-LAYOUT-NEWVER-005: stays away once this session reloaded for that version without getting it', () => {
     sessionStorage.setItem('trek_app_version_reload', NEXT)
+    render(<NewVersionNotice />)
+    deploy(NEXT)
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
+  it('FE-LAYOUT-NEWVER-006: a different version from the start is the launch handover\'s, not the notice\'s', () => {
+    // Also an install whose server never reports the bundle's version: no notice every session.
     render(<NewVersionNotice />)
     act(() => useServerVersionStore.getState().note(NEXT))
     expect(screen.queryByRole('status')).toBeNull()

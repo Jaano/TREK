@@ -118,9 +118,13 @@ describe('WS wire envelope', () => {
     const frames = await connect(createEphemeralToken(user.id, 'ws')!);
     try {
       const msg = await frames.next();
-      expect(Object.keys(msg).sort()).toEqual(['socketId', 'type']);
+      expect(Object.keys(msg).sort()).toEqual(['socketId', 'type', 'version']);
       expect(msg.type).toBe('welcome');
       expect(typeof msg.socketId).toBe('number');
+      // Added beside the id, never instead of it: a client from before reads
+      // socketId as it always did, a current one compares the version with its
+      // own build (NewVersionNotice).
+      expect(typeof msg.version).toBe('string');
       // X-Socket-Id is read straight off this field (client/src/api/websocket.ts).
       // Nesting it under `data` would silently disable echo suppression.
       expect(msg).not.toHaveProperty('data');

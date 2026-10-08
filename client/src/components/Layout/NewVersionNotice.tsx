@@ -5,7 +5,8 @@
  * restarts it, so every open client hears of a new release within seconds. A
  * launch brings an outdated page onto the current build by itself
  * (versionHandover); a page in use is never reloaded under the user's hands, so
- * this offers the reload instead, and the reload goes through the same handover.
+ * this offers the reload instead, for a version that changed while the page was
+ * open, and the reload goes through the same handover.
  *
  * One notice for both shells, rendered once in App. Hidden offline, where a
  * reload could not fetch the new build, and once dismissed for that version.
@@ -22,11 +23,15 @@ import { useTranslation } from '../../i18n'
 export default function NewVersionNotice(): React.ReactElement | null {
   const { t } = useTranslation()
   const reported = useServerVersionStore(s => s.reported)
+  const first = useServerVersionStore(s => s.first)
   const { offline } = useNetworkMode()
   const [dismissed, setDismissed] = useState<string | null>(null)
   const [switching, setSwitching] = useState(false)
 
-  if (offline || !reported || reported === dismissed || !offersNewBuild(reported)) return null
+  // Only a version that changed while this page was open: a different build at
+  // launch is the launch handover's to fix, and an install whose server never
+  // reports the bundle's version would otherwise be asked every session.
+  if (offline || !reported || reported === first || reported === dismissed || !offersNewBuild(reported)) return null
 
   const reload = (): void => {
     setSwitching(true)

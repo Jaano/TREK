@@ -128,9 +128,14 @@ const SWITCH_WAIT_MS = 20_000
  * The user asked for the build the server runs now, from the notice a release
  * deployed during the session raises. The same handover as a launch, but the
  * reload is theirs to ask for, so it always comes: once the new worker has
- * taken over, or when there is none to wait for, or after SWITCH_WAIT_MS. The
- * marker only moves on a takeover; anything else is left to the next launch,
- * as there.
+ * taken over, or when there is none to wait for, or after SWITCH_WAIT_MS.
+ *
+ * Only a reload that should land on the new build spends the session's reload
+ * guard: after a takeover, without a worker, or with an unchanged sw.js. One
+ * that comes before the new worker could take over (a slow precache, a failed
+ * update) leaves it free, so the launch on the other side finishes the
+ * handover and reloads by itself, as any launch does. The marker only moves on
+ * a takeover.
  */
 export async function switchToServerVersion(version: string): Promise<void> {
   let reg: ServiceWorkerRegistration | undefined
@@ -139,34 +144,46 @@ export async function switchToServerVersion(version: string): Promise<void> {
   } catch {
     reg = undefined
   }
-  // Without a worker the reload goes to the network. A worker other than the
-  // one that served this page has taken over already, and answers it with the
-  // new build.
-  if (reg && currentController() === servedBy) await waitForTakeover(reg, version)
-  reloadOnce(version)
+  // Without a worker the reload goes to the network. A worker that replaced the
+  // one that served this page answers it with the new build already; one that
+  // only claimed a page served from the network holds this page's own build.
+  const replaced = servedBy !== null && currentController() !== servedBy
+  if (!reg || replaced) {
+    reloadOnce(version)
+    return
+  }
+  const outcome = await waitForTakeover(reg, version)
+  if (outcome === 'stalled') reloadFresh()
+  else reloadOnce(version)
 }
 
-function waitForTakeover(reg: ServiceWorkerRegistration, version: string): Promise<void> {
+/** How a requested handover ended: the new worker took over, there was none, or it did not get there. */
+type Takeover = 'took-over' | 'unchanged' | 'stalled'
+
+function waitForTakeover(reg: ServiceWorkerRegistration, version: string): Promise<Takeover> {
   return new Promise(resolve => {
-    const done = (): void => {
+    let settled = false
+    const done = (outcome: Takeover): void => {
+      if (settled) return
+      settled = true
       clearTimeout(timer)
-      resolve()
+      resolve(outcome)
     }
-    const timer = setTimeout(done, SWITCH_WAIT_MS)
+    const timer = setTimeout(() => done('stalled'), SWITCH_WAIT_MS)
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       markApplied(version)
-      done()
+      done('took-over')
     }, { once: true })
     reg.update().then(() => {
       const incoming = reg.installing ?? reg.waiting
       if (!incoming) {
-        done()
+        done('unchanged')
         return
       }
       incoming.addEventListener('statechange', () => {
-        if (incoming.state === 'redundant') done()
+        if (incoming.state === 'redundant') done('stalled')
       })
-    }, done)
+    }, () => done('stalled'))
   })
 }
 

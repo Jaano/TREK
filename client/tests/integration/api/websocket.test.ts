@@ -292,7 +292,7 @@ describe('handleMessage / listeners', () => {
   });
 
   it('FE-COMP-WS-012b: the welcome frame tells the store which version the server runs', async () => {
-    useServerVersionStore.setState({ reported: null });
+    useServerVersionStore.setState({ first: null, reported: null });
     const sock = await setupConnectedSocket();
 
     sock.onmessage!({ data: JSON.stringify({ type: 'welcome', socketId: 'server-sid-2', version: '4.3.4' }) });

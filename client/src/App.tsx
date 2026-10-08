@@ -18,6 +18,7 @@ import MRouteFallback from './mobile/components/MRouteFallback'
 import ErrorBoundary from './components/shared/ErrorBoundary'
 import { lazyWithRetry } from './utils/lazyWithRetry'
 import { reconcileAppVersion } from './utils/versionHandover'
+import { useServerVersionStore } from './store/serverVersionStore'
 import { useIsPhone } from './mobile/useIsPhone'
 import { TranslationProvider, useTranslation } from './i18n'
 import { authApi, isAuthPublicPath } from './api/client'
@@ -335,6 +336,8 @@ export default function App() {
       if (config?.place_shadow_enabled !== undefined) setPlaceShadowEnabled(config.place_shadow_enabled)
       if (typeof config?.max_upload_mb === 'number' && config.max_upload_mb > 0) useAuthStore.getState().setMaxUploadMb(config.max_upload_mb)
       if (config?.permissions) usePermissionsStore.getState().setPermissions(config.permissions)
+      // The version this page starts out with, before the realtime socket reports.
+      useServerVersionStore.getState().note(config?.version)
       // Last, since a new release reloads the page from here.
       await reconcileAppVersion(config?.version)
     }).catch(() => {})
