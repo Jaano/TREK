@@ -198,20 +198,41 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
 });
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits, setAddonEnabled } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createTrip, addTripMember, addTripPhoto, addAlbumLink, setImmichCredentials } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { safeFetch } from '../../src/utils/ssrfGuard';
+import { findRow, findRows, insertRow, updateRows } from '../helpers/factories/rows';
+import { readUser } from '../helpers/factories/users';
+import { PhotoProviders } from '../../src/db/entities/PhotoProviders.entity';
+import { TrekPhotos } from '../../src/db/entities/TrekPhotos.entity';
+import { TripPhotos } from '../../src/db/entities/TripPhotos.entity';
+import { Users } from '../../src/db/entities/Users.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 
 const IMMICH = '/api/integrations/memories/immich';
+
+/** The trip's photo rows, each with the provider and asset id of the photo it points at. */
+async function tripPhotoAssets(tripId: number, userId?: number) {
+  const links = await findRows(orm, TripPhotos, userId === undefined ? { trip: tripId } : { trip: tripId, user: userId });
+  const rows = [];
+  for (const link of links) {
+    const photo = await findRow(orm, TrekPhotos, { id: link.photo_id });
+    if (photo) rows.push({ ...link, provider: photo.provider, asset_id: photo.asset_id });
+  }
+  return rows;
+}
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -223,7 +244,7 @@ beforeEach(async () => {
   // configure it before it's usable in production); the legacy test helper always
   // seeded it enabled, which is what these tests assume. Same convention
   // memories-synology.test.ts already uses for its own provider.
-  testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'immich'").run();
+  await updateRows(orm, PhotoProviders, { id: 'immich' }, { enabled: 1 });
   immichState.albumAssets = DEFAULT_ALBUM_ASSETS.map((a) => ({ ...a }));
   immichState.albumAssetPages = null;
   immichState.searchCalls = [];
@@ -462,11 +483,9 @@ describe('Immich asset proxy', () => {
     const { user: member } = createUser(testDb);
     // Insert a shared photo referencing a trip that doesn't exist (FK disabled temporarily)
     testDb.exec('PRAGMA foreign_keys = OFF');
-    testDb.prepare('INSERT OR IGNORE INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)').run('immich', 'asset-notrip', owner.id);
-    const tkpNotrip = testDb.prepare('SELECT id FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?').get('immich', 'asset-notrip', owner.id) as any;
-    testDb.prepare(
-      'INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, ?)'
-    ).run(9999, owner.id, tkpNotrip.id, 1);
+    const known = await findRow(orm, TrekPhotos, { provider: 'immich', asset_id: 'asset-notrip', owner: owner.id });
+    const photoId = known?.id ?? (await insertRow(orm, TrekPhotos, { provider: 'immich', asset_id: 'asset-notrip', owner: owner.id }));
+    await insertRow(orm, TripPhotos, { trip: 9999, user: owner.id, photo: photoId, shared: 1 });
     testDb.exec('PRAGMA foreign_keys = ON');
 
     const res = await request(app)
@@ -768,11 +787,7 @@ describe('Immich syncAlbumAssets', () => {
     expect(res.body.added).toBe(1);
 
     // Verify photos were inserted into the DB
-    const photos = testDb.prepare(`
-      SELECT tp.*, tkp.provider FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ? AND tp.user_id = ?
-    `).all(trip.id, user.id) as any[];
+    const photos = await tripPhotoAssets(trip.id, user.id);
     expect(photos.length).toBeGreaterThan(0);
     expect(photos[0].provider).toBe('immich');
   });
@@ -799,11 +814,7 @@ describe('Immich syncAlbumAssets', () => {
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
 
-    const rows = testDb.prepare(`
-      SELECT tkp.asset_id FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ?
-    `).all(trip.id) as any[];
+    const rows = await tripPhotoAssets(trip.id);
     expect(rows.map((r) => r.asset_id)).toEqual(['visible-still']);
   });
 
@@ -1091,8 +1102,7 @@ describe('Immich saveImmichSettings clearing URL', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-    const row = testDb.prepare('SELECT immich_url FROM users WHERE id = ?').get(user.id) as any;
-    expect(row.immich_url).toBeNull();
+    expect((await readUser(orm, user.id)).immich_url).toBeNull();
   });
 
   it('IMMICH-096 — PUT /settings with empty string URL clears immich_url', async () => {
@@ -1107,8 +1117,7 @@ describe('Immich saveImmichSettings clearing URL', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
-    const row = testDb.prepare('SELECT immich_url FROM users WHERE id = ?').get(user.id) as any;
-    expect(row.immich_url).toBeNull();
+    expect((await readUser(orm, user.id)).immich_url).toBeNull();
   });
 });
 
@@ -1164,8 +1173,8 @@ describe('Immich self-signed certificate switch (#2475)', () => {
     return { ok: true, status: 200, url: '', headers: { get: () => null }, json: async () => json, body: null } as unknown as Response;
   }
 
-  function allowInsecureTls(userId: number): number {
-    return (testDb.prepare('SELECT immich_allow_insecure_tls AS v FROM users WHERE id = ?').get(userId) as { v: number }).v;
+  async function allowInsecureTls(userId: number): Promise<number> {
+    return (await readUser(orm, userId)).immich_allow_insecure_tls;
   }
 
   beforeEach(() => {
@@ -1196,20 +1205,20 @@ describe('Immich self-signed certificate switch (#2475)', () => {
       request(app).put(`${IMMICH}/settings`).set('Cookie', authCookie(user.id)).send(body);
 
     await put({ immich_url: 'https://immich.example.com', immich_api_key: 'k', allow_insecure_tls: true });
-    expect(allowInsecureTls(user.id)).toBe(1);
+    expect(await allowInsecureTls(user.id)).toBe(1);
 
     // What a client that predates the switch sends.
     await put({ immich_url: 'https://immich.example.com', immich_api_key: 'k' });
-    expect(allowInsecureTls(user.id)).toBe(1);
+    expect(await allowInsecureTls(user.id)).toBe(1);
 
     // A different server is a different trust decision: without the switch it starts off.
     await put({ immich_url: 'https://photos.example.com', immich_api_key: 'k' });
-    expect(allowInsecureTls(user.id)).toBe(0);
+    expect(await allowInsecureTls(user.id)).toBe(0);
     await put({ immich_url: 'https://photos.example.com', immich_api_key: 'k', allow_insecure_tls: true });
-    expect(allowInsecureTls(user.id)).toBe(1);
+    expect(await allowInsecureTls(user.id)).toBe(1);
 
     await put({ immich_url: '', immich_api_key: 'k', allow_insecure_tls: true });
-    expect(allowInsecureTls(user.id)).toBe(0);
+    expect(await allowInsecureTls(user.id)).toBe(0);
   });
 
   it('IMMICH-104: browse, search and the thumbnail proxy follow the stored switch', async () => {
@@ -1225,13 +1234,13 @@ describe('Immich self-signed certificate switch (#2475)', () => {
       expect((await request(app).get(`${IMMICH}/assets/${trip.id}/asset-tls/${user.id}/thumbnail`).set('Cookie', cookie)).status).toBe(200);
     };
 
-    testDb.prepare('UPDATE users SET immich_allow_insecure_tls = 1 WHERE id = ?').run(user.id);
+    await updateRows(orm, Users, { id: user.id }, { immich_allow_insecure_tls: 1 });
     await hitEveryPath();
     expect(vi.mocked(safeFetch).mock.calls).toHaveLength(3);
     for (const call of vi.mocked(safeFetch).mock.calls) expect(call[2]).toMatchObject(LAX);
 
     vi.mocked(safeFetch).mockClear();
-    testDb.prepare('UPDATE users SET immich_allow_insecure_tls = 0 WHERE id = ?').run(user.id);
+    await updateRows(orm, Users, { id: user.id }, { immich_allow_insecure_tls: 0 });
     await hitEveryPath();
     expect(vi.mocked(safeFetch).mock.calls).toHaveLength(3);
     for (const call of vi.mocked(safeFetch).mock.calls) expect(call[2]).toMatchObject(STRICT);

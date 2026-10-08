@@ -35,6 +35,9 @@ import {
 } from '../../../../src/nest/storage/storage-paths';
 import { STORAGE_CATEGORIES } from '../../../../src/nest/storage/storage.types';
 import { createTestUnitOfWork, createTestAppSettingsRepo, sharedTestOrm } from '../../../helpers/test-uow';
+import { deleteRows, findRow } from '../../../helpers/factories/rows';
+import { setAppSetting } from '../../../helpers/factories/settings';
+import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -53,8 +56,13 @@ function makeEnvStub(initial: EnvPaths): { env: { placePhotoDir: string | undefi
   return { env: { placePhotoDir: initial.placePhotoDir } };
 }
 
-function setSetting(key: string, value: string): void {
-  testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(key, value);
+async function setSetting(key: string, value: string): Promise<void> {
+  await setAppSetting(await sharedTestOrm(testDb), key, value);
+}
+
+/** The stored value of an app setting, undefined when there is no row. */
+async function storedSetting(key: string): Promise<string | undefined> {
+  return (await findRow(await sharedTestOrm(testDb), AppSettings, { key }))?.value ?? undefined;
 }
 
 function uploadsOverride(root: string): unknown {
@@ -78,8 +86,8 @@ interface RegistryOpts {
  */
 async function makeRegistry(opts: RegistryOpts = {}) {
   const uploadsRoot = opts.uploadsRoot ?? makeTmpDir();
-  setSetting('storage.backends', JSON.stringify([uploadsOverride(uploadsRoot), ...(opts.backends ?? [])]));
-  if (opts.categories) setSetting('storage.categories', JSON.stringify(opts.categories));
+  await setSetting('storage.backends', JSON.stringify([uploadsOverride(uploadsRoot), ...(opts.backends ?? [])]));
+  if (opts.categories) await setSetting('storage.categories', JSON.stringify(opts.categories));
   const stub = makeEnvStub({ placePhotoDir: opts.placePhotoDir });
   const registry = new StorageRegistryService(
     await createTestAppSettingsRepo(testDb),
@@ -93,17 +101,15 @@ async function makeRegistry(opts: RegistryOpts = {}) {
 }
 
 /** For reload tests: swap the override row's root in place. */
-function rewriteUploadsOverride(root: string): void {
-  const row = testDb.prepare("SELECT value FROM app_settings WHERE key = 'storage.backends'").get() as
-    | { value: string }
-    | undefined;
-  const entries = row?.value ? (JSON.parse(row.value) as Array<{ name: string; options: { root: string } }>) : [];
+async function rewriteUploadsOverride(root: string): Promise<void> {
+  const value = await storedSetting('storage.backends');
+  const entries = value ? (JSON.parse(value) as Array<{ name: string; options: { root: string } }>) : [];
   const next = entries.map((e) => (e.name === 'uploads-local' ? { ...e, options: { root } } : e));
-  setSetting('storage.backends', JSON.stringify(next));
+  await setSetting('storage.backends', JSON.stringify(next));
 }
 
-beforeEach(() => {
-  testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'storage.%'").run();
+beforeEach(async () => {
+  await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: { $like: 'storage.%' } });
 });
 
 afterEach(() => {
@@ -165,7 +171,7 @@ describe('StorageRegistryService defaults', () => {
 
   it('roots uploads-local at the computed default when no override row exists', async () => {
     const { registry } = await makeRegistry({ boot: false });
-    testDb.prepare("DELETE FROM app_settings WHERE key = 'storage.backends'").run();
+    await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: 'storage.backends' });
     await registry.onModuleInit();
     const files = registry.resolve('files');
     expect(files.backendName).toBe('uploads-local');
@@ -316,8 +322,8 @@ describe('StorageRegistryService settings', () => {
     ['malformed JSON', 'not json at all', undefined],
   ])('falls back to built-in defaults at boot on invalid settings: %s', async (_label, backendsRow, categoriesRow) => {
     const { registry } = await makeRegistry({ boot: false });
-    if (backendsRow !== undefined) setSetting('storage.backends', backendsRow);
-    if (categoriesRow !== undefined) setSetting('storage.categories', categoriesRow);
+    if (backendsRow !== undefined) await setSetting('storage.backends', backendsRow);
+    if (categoriesRow !== undefined) await setSetting('storage.categories', categoriesRow);
     await registry.onModuleInit();
 
     expect(registry.resolve('files').backendName).toBe('uploads-local');
@@ -337,8 +343,8 @@ describe('StorageRegistryService settings', () => {
     async (_label, backendsRow, categoriesRow) => {
       vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
       const { registry } = await makeRegistry({ boot: false });
-      if (backendsRow !== undefined) setSetting('storage.backends', backendsRow);
-      if (categoriesRow !== undefined) setSetting('storage.categories', categoriesRow);
+      if (backendsRow !== undefined) await setSetting('storage.backends', backendsRow);
+      if (categoriesRow !== undefined) await setSetting('storage.categories', categoriesRow);
       await registry.onModuleInit();
 
       expect(registry.lastLoadError()).not.toBeNull();
@@ -357,7 +363,7 @@ describe('StorageRegistryService settings', () => {
     vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const { registry } = await makeRegistry({ boot: false });
     const secretToken = 'AKIA_SUPER_SECRET_TOKEN_1234567890';
-    setSetting('storage.backends', `{"secretAccessKey": ${secretToken}_undefined_broken}`);
+    await setSetting('storage.backends', `{"secretAccessKey": ${secretToken}_undefined_broken}`);
     await registry.onModuleInit();
 
     const err = registry.lastLoadError();
@@ -370,11 +376,11 @@ describe('StorageRegistryService settings', () => {
   it('lastLoadError() clears on the next successful load/reload', async () => {
     vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const { registry } = await makeRegistry({ boot: false });
-    setSetting('storage.categories', 'garbage {');
+    await setSetting('storage.categories', 'garbage {');
     await registry.onModuleInit();
     expect(registry.lastLoadError()).not.toBeNull();
 
-    setSetting('storage.categories', '{}');
+    await setSetting('storage.categories', '{}');
     await registry.reload();
     expect(registry.lastLoadError()).toBeNull();
   });
@@ -390,7 +396,7 @@ describe('StorageRegistryService settings', () => {
     });
     expect(registry.resolve('backups').backendName).toBe('backup-mirror');
 
-    setSetting('storage.categories', 'garbage {');
+    await setSetting('storage.categories', 'garbage {');
     await registry.reload();
 
     // last-good, i.e. the mirror config — NOT the built-in defaults
@@ -408,7 +414,7 @@ describe('StorageRegistryService reload', () => {
     const before = registry.resolve('files');
     await before.driver.put('files/pre-reload.bin', Readable.from('old root'));
 
-    setUploadsRoot(makeTmpDir());
+    await setUploadsRoot(makeTmpDir());
     await registry.reload();
 
     const after = registry.resolve('files');
@@ -446,17 +452,13 @@ describe('StorageRegistryService reload', () => {
 describe('StorageRegistryService assignCategory', () => {
   it('REG-ASSIGN-001 throws on an unknown backend and persists nothing (belt-and-braces alongside the migration job\'s own guard)', async () => {
     const { registry } = await makeRegistry();
-    const before = testDb.prepare("SELECT value FROM app_settings WHERE key = 'storage.categories'").get() as
-      | { value: string }
-      | undefined;
+    const before = (await findRow(await sharedTestOrm(testDb), AppSettings, { key: 'storage.categories' }));
 
     await expect(registry.assignCategory('files', 'ghost-backend')).rejects.toThrow(
       "cannot assign 'files' to unknown backend 'ghost-backend'",
     );
 
-    const after = testDb.prepare("SELECT value FROM app_settings WHERE key = 'storage.categories'").get() as
-      | { value: string }
-      | undefined;
+    const after = (await findRow(await sharedTestOrm(testDb), AppSettings, { key: 'storage.categories' }));
     expect(after).toEqual(before); // no write happened
     expect(registry.snapshot().categories.files.backend).toBe('uploads-local'); // unchanged
   });
@@ -467,10 +469,8 @@ describe('StorageRegistryService assignCategory', () => {
     await registry.assignCategory('files', 'dest-local');
 
     expect(registry.snapshot().categories.files.backend).toBe('dest-local');
-    const row = testDb.prepare("SELECT value FROM app_settings WHERE key = 'storage.categories'").get() as {
-      value: string;
-    };
-    expect((JSON.parse(row.value) as Record<string, string>).files).toBe('dest-local');
+    const row = (await findRow(await sharedTestOrm(testDb), AppSettings, { key: 'storage.categories' }));
+    expect((JSON.parse(String(row?.value)) as Record<string, string>).files).toBe('dest-local');
   });
 
   it('REG-ASSIGN-003 bumps the shared optimistic-concurrency version counter by exactly one, in the same write (audit #7)', async () => {
@@ -483,9 +483,7 @@ describe('StorageRegistryService assignCategory', () => {
     await registry.assignCategory('journey', 'dest-local');
     expect(await registry.currentConfigVersion()).toBe(2);
 
-    const row = testDb.prepare("SELECT value FROM app_settings WHERE key = 'storage.config_version'").get() as
-      | { value: string }
-      | undefined;
+    const row = (await findRow(await sharedTestOrm(testDb), AppSettings, { key: 'storage.config_version' }));
     expect(row?.value).toBe('2');
   });
 
@@ -565,10 +563,8 @@ describe('StorageRegistryService assignCategory', () => {
     // not by this call) is byte-unchanged — no 'files' key was added.
     expect(registry.snapshot().categories.files.backend).toBe('uploads-local');
     expect(await registry.currentConfigVersion()).toBe(0);
-    const row = testDb.prepare("SELECT value FROM app_settings WHERE key = 'storage.categories'").get() as {
-      value: string;
-    };
-    expect(JSON.parse(row.value)).toEqual({ backups: 'm-backups' });
+    const row = (await findRow(await sharedTestOrm(testDb), AppSettings, { key: 'storage.categories' }));
+    expect(JSON.parse(String(row?.value))).toEqual({ backups: 'm-backups' });
   });
 });
 
@@ -824,11 +820,8 @@ describe('seed-once storage-config.json import', () => {
     );
   }
 
-  function readRow(key: string): string | undefined {
-    const row = testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as
-      | { value: string }
-      | undefined;
-    return row?.value;
+  function readRow(key: string): Promise<string | undefined> {
+    return storedSetting(key);
   }
 
   afterEach(() => {
@@ -865,13 +858,13 @@ describe('seed-once storage-config.json import', () => {
     await registry.onModuleInit();
 
     expect(registry.resolve('backups').driver).toBeInstanceOf(S3Driver);
-    const storedBackends = JSON.parse(readRow('storage.backends')!) as Array<{
+    const storedBackends = JSON.parse((await readRow('storage.backends'))!) as Array<{
       name: string;
       options: Record<string, unknown>;
     }>;
     const offBox = storedBackends.find((b) => b.name === 'off-box')!;
     expect(String(offBox.options.secretAccessKey).startsWith('enc:v1:')).toBe(true); // never plaintext at rest
-    expect(readRow('storage.categories')).toBe(JSON.stringify({ backups: 'off-box' }));
+    expect((await readRow('storage.categories'))).toBe(JSON.stringify({ backups: 'off-box' }));
     const logged = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(logged).toContain('storage config seeded from');
     expect(logged).toContain('the file is now ignored; manage storage in the admin UI');
@@ -890,7 +883,7 @@ describe('seed-once storage-config.json import', () => {
     const registry = await makeUnseededRegistry();
     await registry.onModuleInit();
     expect(registry.resolve('backups').backendName).toBe('backups-local');
-    expect(readRow('storage.backends')).toBeUndefined();
+    expect((await readRow('storage.backends'))).toBeUndefined();
   });
 
   it('SEED-004 unparseable JSON aborts boot with the exact error', async () => {
@@ -933,7 +926,7 @@ describe('seed-once storage-config.json import', () => {
     await registry.onModuleInit();
     // No key-presence gate: the implicit key covers encryption when
     // ENCRYPTION_KEY is unset, and the plaintext never persists.
-    const row = readRow('storage.backends')!;
+    const row = (await readRow('storage.backends'))!;
     expect(row).not.toContain('sk-seed');
     expect(row).toContain('enc:v1:');
   });
@@ -963,12 +956,12 @@ describe('seed-once storage-config.json import', () => {
     const root = nasRoot();
     writeSeed(JSON.stringify({ backends: [{ name: 'nas', type: 'local', options: { root } }], categories: { backups: 'nas' } }));
     await (await makeUnseededRegistry()).onModuleInit();
-    const firstRow = readRow('storage.backends');
+    const firstRow = (await readRow('storage.backends'));
 
     writeSeed(JSON.stringify({ backends: [], categories: { backups: 'other' } })); // would fail preview if read
     const second = await makeUnseededRegistry();
     await second.onModuleInit(); // must not throw — rows exist, file ignored
-    expect(readRow('storage.backends')).toBe(firstRow);
+    expect((await readRow('storage.backends'))).toBe(firstRow);
     expect(second.resolve('backups').backendName).toBe('nas');
   });
 
@@ -996,7 +989,7 @@ describe('seed-once storage-config.json import', () => {
     // enc:v1: values pass through the idempotent encrypt — the ciphertext
     // must persist byte-for-byte.
     expect(registry.resolve('backups').driver).toBeInstanceOf(S3Driver);
-    expect(readRow('storage.backends')).toContain(cipher);
+    expect((await readRow('storage.backends'))).toContain(cipher);
   });
 });
 
@@ -1028,7 +1021,7 @@ describe('snapshot()', () => {
 
   it('reports pure built-in defaults when no settings rows exist', async () => {
     const { registry } = await makeRegistry({ boot: false });
-    testDb.prepare("DELETE FROM app_settings WHERE key = 'storage.backends'").run();
+    await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: 'storage.backends' });
     await registry.onModuleInit();
     const snap = registry.snapshot();
     expect(snap.backends.map((b) => [b.name, b.source])).toEqual([
@@ -1063,7 +1056,7 @@ describe('snapshot()', () => {
     vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const { registry } = await makeRegistry();
     const before = registry.snapshot();
-    setSetting('storage.categories', 'garbage {');
+    await setSetting('storage.categories', 'garbage {');
     await registry.reload();
     expect(registry.snapshot()).toEqual(before);
   });

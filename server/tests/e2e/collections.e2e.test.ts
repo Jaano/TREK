@@ -22,8 +22,6 @@ vi.mock('../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: number | string, userId: number) =>
-      db.prepare('SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)').get(userId, tripId, userId),
     isOwner: () => false,
   };
 });
@@ -39,7 +37,13 @@ import { AddonsService } from '../../src/nest/addons/addons.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { countRows, findRow } from '../helpers/factories/rows';
+import { CollectionPlaces } from '../../src/db/entities/CollectionPlaces.entity';
+import { Collections } from '../../src/db/entities/Collections.entity';
+import { Places } from '../../src/db/entities/Places.entity';
+
+let orm: TestOrm;
 
 describe('Collections e2e (real auth guard + real service + temp SQLite)', () => {
   let server: Server;
@@ -64,6 +68,7 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
   }
 
   beforeAll(async () => {
+    orm = await createTestOrm(db);
     ownerId = createUser(db as never, { username: 'owner', email: 'owner@test.example' }).user.id;
     otherId = createUser(db as never, { username: 'other', email: 'other@test.example' }).user.id;
     createCategory(db as never);
@@ -78,6 +83,7 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   // ── Addon gate ───────────────────────────────────────────────────────────
@@ -128,8 +134,8 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
       .set('Cookie', sessionCookie(ownerId)).send({ trip_id: tripId, place_ids: [saved.body.place.id] });
     expect(copy.status).toBe(200);
     expect(copy.body.copied).toBe(1);
-    const placed = db.prepare("SELECT reservation_status FROM places WHERE trip_id = ? AND name = 'Trevi Fountain'").get(tripId) as { reservation_status: string };
-    expect(placed.reservation_status).toBe('none'); // itinerary defaults
+    const placed = await findRow(orm, Places, { trip: tripId, name: 'Trevi Fountain' });
+    expect(placed?.reservation_status).toBe('none'); // itinerary defaults
   });
 
   // #2483: a place from the TREK index can carry its website without a scheme,
@@ -147,9 +153,7 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
       });
     expect(saved.status).toBe(200);
     expect(saved.body.place.website).toBe('https://fr.wikipedia.org/wiki/Chapelle_Sainte-Barbe_du_Faouët');
-    expect(db.prepare('SELECT website FROM collection_places WHERE id = ?').get(saved.body.place.id)).toEqual({
-      website: 'https://fr.wikipedia.org/wiki/Chapelle_Sainte-Barbe_du_Faouët',
-    });
+    expect((await findRow(orm, CollectionPlaces, { id: saved.body.place.id }))?.website).toBe('https://fr.wikipedia.org/wiki/Chapelle_Sainte-Barbe_du_Faouët');
   });
 
   it('COLLECTIONS-E2E-090: a script link on save is still a 400 and stores nothing', async () => {
@@ -160,7 +164,7 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
       expect(res.status).toBe(400);
       expect(res.body.error).toMatch(/^website: /);
     }
-    expect(db.prepare('SELECT COUNT(*) AS n FROM collection_places WHERE collection_id = ?').get(col.id)).toEqual({ n: 0 });
+    expect(await countRows(orm, CollectionPlaces, { collection: col.id })).toBe(0);
   });
 
   // Regression for #1437: editing a place (PATCH without a status field) must NOT
@@ -171,12 +175,12 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
       .set('Cookie', sessionCookie(ownerId)).send({ collection_id: col.id, name: 'Colosseum', status: 'want' });
     expect(saved.status).toBe(200);
     const placeId = saved.body.place.id;
-    expect(db.prepare('SELECT status FROM collection_places WHERE id = ?').get(placeId)).toEqual({ status: 'want' });
+    expect((await findRow(orm, CollectionPlaces, { id: placeId }))?.status).toBe('want');
 
     const patched = await request(server).patch(`/api/addons/collections/places/${placeId}`)
       .set('Cookie', sessionCookie(ownerId)).send({ name: 'Colosseo' });
     expect(patched.status).toBe(200);
-    expect(db.prepare('SELECT status FROM collection_places WHERE id = ?').get(placeId)).toEqual({ status: 'want' });
+    expect((await findRow(orm, CollectionPlaces, { id: placeId }))?.status).toBe('want');
   });
 
   // #1870: the address was missing from the update contract, so the pipe stripped
@@ -192,19 +196,19 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
       .set('Cookie', sessionCookie(ownerId)).send({ address: 'Via Nuova 1' });
     expect(patched.status).toBe(200);
     expect(patched.body.address).toBe('Via Nuova 1');
-    expect(db.prepare('SELECT address FROM collection_places WHERE id = ?').get(placeId)).toEqual({ address: 'Via Nuova 1' });
+    expect((await findRow(orm, CollectionPlaces, { id: placeId }))?.address).toBe('Via Nuova 1');
 
     // A rename must not wipe the address that was just corrected.
     const renamed = await request(server).patch(`/api/addons/collections/places/${placeId}`)
       .set('Cookie', sessionCookie(ownerId)).send({ name: 'Trattoria da Enzo' });
     expect(renamed.status).toBe(200);
-    expect(db.prepare('SELECT address FROM collection_places WHERE id = ?').get(placeId)).toEqual({ address: 'Via Nuova 1' });
+    expect((await findRow(orm, CollectionPlaces, { id: placeId }))?.address).toBe('Via Nuova 1');
 
     // null clears it again.
     const cleared = await request(server).patch(`/api/addons/collections/places/${placeId}`)
       .set('Cookie', sessionCookie(ownerId)).send({ address: null });
     expect(cleared.status).toBe(200);
-    expect(db.prepare('SELECT address FROM collection_places WHERE id = ?').get(placeId)).toEqual({ address: null });
+    expect((await findRow(orm, CollectionPlaces, { id: placeId }))?.address).toBeNull();
   });
 
   // ── Cross-user isolation ─────────────────────────────────────────────────
@@ -464,6 +468,6 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
 
     expect((await request(server).delete(`/api/addons/collections/${col.id}`).set('Cookie', sessionCookie(otherId))).status).toBe(403);
     expect((await request(server).delete(`/api/addons/collections/${col.id}`).set('Cookie', sessionCookie(ownerId))).status).toBe(200);
-    expect(db.prepare('SELECT COUNT(*) n FROM collections WHERE id = ?').get(col.id)).toEqual({ n: 0 });
+    expect(await countRows(orm, Collections, { id: col.id })).toBe(0);
   });
 });

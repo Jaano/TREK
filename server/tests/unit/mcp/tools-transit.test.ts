@@ -27,6 +27,10 @@ import { ReservationsService } from '../../../src/nest/reservations/reservations
 import type { TransitPlace } from '../../../src/nest/transit/transit.helpers';
 import { TransitService } from '../../../src/nest/transit/transit.service';
 import { createTestUnitOfWork, createTestAppSettingsRepo } from '../../helpers/test-uow';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow } from '../../helpers/factories/rows';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
 
 // savePermissions is no longer bridged; write through a service instance — the
 // permissions cache is module-scoped, so the MCP _shared checkPermission path
@@ -117,7 +121,25 @@ beforeEach(async () => {
   await invalidatePermissionsCache();
 });
 
-afterAll(() => testDb.close());
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
+  testDb.close();
+});
+
+/** The trip's day, on the given date or the first one; fails the test when there is none. */
+async function dayOf(tripId: number, date?: string) {
+  const day = await findRow(orm, Days, date === undefined ? { trip: tripId } : { trip: tripId, date });
+  if (!day) throw new Error(`no day for trip ${tripId}`);
+  return day;
+}
+
+const transitCount = () => countRows(orm, Reservations, { type: 'transit' });
 
 async function withHarness(userId: number, scopes: string[] | null, fn: (harness: McpHarness) => Promise<void>) {
   const harness = await createMcpHarness({ userId, scopes, withResources: false });
@@ -197,7 +219,7 @@ describe('MCP transit tools', () => {
   it('persists a selected itinerary with local dates, endpoints, and transit metadata', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-12-03', end_date: '2026-12-04' });
-    const day = testDb.prepare('SELECT * FROM days WHERE trip_id = ? AND date = ?').get(trip.id, '2026-12-03') as any;
+    const day = await dayOf(trip.id, '2026-12-03');
     await withHarness(user.id, ['reservations:write'], async (harness) => {
       const result = parseToolResult(
         await harness.client.callTool({
@@ -232,9 +254,7 @@ describe('MCP transit tools', () => {
     const datelessTrip = createTrip(testDb, user.id);
     const datelessDay = createDay(testDb, datelessTrip.id);
     const datedTrip = createTrip(testDb, user.id, { start_date: '2026-12-02', end_date: '2026-12-03' });
-    const datedDay = testDb
-      .prepare('SELECT * FROM days WHERE trip_id = ? AND date = ?')
-      .get(datedTrip.id, '2026-12-02') as any;
+    const datedDay = await dayOf(datedTrip.id, '2026-12-02');
     await withHarness(user.id, ['reservations:write'], async (harness) => {
       const dateless = await harness.client.callTool({
         name: 'create_transit_journey',
@@ -259,9 +279,7 @@ describe('MCP transit tools', () => {
             : leg,
         ),
       };
-      const startDay = testDb
-        .prepare('SELECT * FROM days WHERE trip_id = ? AND date = ?')
-        .get(datedTrip.id, '2026-12-03') as any;
+      const startDay = await dayOf(datedTrip.id, '2026-12-03');
       const outside = await harness.client.callTool({
         name: 'create_transit_journey',
         arguments: { tripId: datedTrip.id, dayId: startDay.id, from, to, itinerary: nextDayItinerary },
@@ -274,7 +292,7 @@ describe('MCP transit tools', () => {
   it('rejects malformed provider data before persistence', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-12-03', end_date: '2026-12-03' });
-    const day = testDb.prepare('SELECT * FROM days WHERE trip_id = ?').get(trip.id) as any;
+    const day = await dayOf(trip.id);
     const allWalk = { ...itinerary, legs: [itinerary.legs[0]] };
     await withHarness(user.id, ['reservations:write'], async (harness) => {
       const result = await harness.client.callTool({
@@ -282,9 +300,7 @@ describe('MCP transit tools', () => {
         arguments: { tripId: trip.id, dayId: day.id, from, to, itinerary: allWalk },
       });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare("SELECT COUNT(*) AS count FROM reservations WHERE type = 'transit'").get()).toEqual({
-        count: 0,
-      });
+      expect(await transitCount()).toBe(0);
 
       const wrongDestination = {
         ...itinerary,
@@ -298,9 +314,7 @@ describe('MCP transit tools', () => {
       });
       expect(mismatch.isError).toBe(true);
       expect((mismatch.content[0] as any).text).toContain('does not match');
-      expect(testDb.prepare("SELECT COUNT(*) AS count FROM reservations WHERE type = 'transit'").get()).toEqual({
-        count: 0,
-      });
+      expect(await transitCount()).toBe(0);
 
       const invalidTime = {
         ...itinerary,
@@ -390,9 +404,7 @@ describe('MCP transit tools', () => {
         arguments: { tripId: trip.id, dayId: day.id, from, to, itinerary: disconnected },
       });
       expect(disconnectedResult.isError).toBe(true);
-      expect(testDb.prepare("SELECT COUNT(*) AS count FROM reservations WHERE type = 'transit'").get()).toEqual({
-        count: 0,
-      });
+      expect(await transitCount()).toBe(0);
     });
   });
 
@@ -402,7 +414,7 @@ describe('MCP transit tools', () => {
     const { user: stranger } = createUser(testDb);
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id, { start_date: '2026-12-03', end_date: '2026-12-03' });
-    const day = testDb.prepare('SELECT * FROM days WHERE trip_id = ?').get(trip.id) as any;
+    const day = await dayOf(trip.id);
     addTripMember(testDb, trip.id, demo.id);
     addTripMember(testDb, trip.id, member.id);
 
@@ -436,9 +448,7 @@ describe('MCP transit tools', () => {
       expect((result.content[0] as any).text).toContain('permission');
     });
 
-    expect(testDb.prepare("SELECT COUNT(*) AS count FROM reservations WHERE type = 'transit'").get()).toEqual({
-      count: 0,
-    });
+    expect(await transitCount()).toBe(0);
     expect(broadcastMock).not.toHaveBeenCalled();
     expect(notifyBookingChangeMock).not.toHaveBeenCalled();
   });
@@ -446,7 +456,7 @@ describe('MCP transit tools', () => {
   it('uses scheduled times when realtime stop times are unavailable', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-12-03', end_date: '2026-12-03' });
-    const day = testDb.prepare('SELECT * FROM days WHERE trip_id = ?').get(trip.id) as any;
+    const day = await dayOf(trip.id);
     const scheduledOnly = {
       ...itinerary,
       legs: itinerary.legs.map((leg) => ({
@@ -476,7 +486,7 @@ describe('MCP transit tools', () => {
   it('accepts provider leg modes outside the requestable mode whitelist', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-12-03', end_date: '2026-12-03' });
-    const day = testDb.prepare('SELECT * FROM days WHERE trip_id = ?').get(trip.id) as any;
+    const day = await dayOf(trip.id);
     const flying = {
       ...itinerary,
       legs: itinerary.legs.map((leg) => (leg.mode === 'WALK' ? leg : { ...leg, mode: 'AIRPLANE' })),

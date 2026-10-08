@@ -7,6 +7,7 @@ import { createMcpToken, createUser } from '../../../helpers/factories';
 import { McpTokens } from '../../../../src/db/entities/McpTokens.entity';
 import type { McpTokensRepository } from '../../../../src/db/repositories/McpTokens.repository';
 import { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
+import { countRows, findRow, updateRows } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -25,8 +26,9 @@ afterAll(async () => {
   testDb.close();
 });
 
-function rawToken(id: number): unknown {
-  return testDb.prepare('SELECT * FROM mcp_tokens WHERE id = ?').get(id);
+/** The stored row, read past the shared identity map; undefined when it is gone. */
+async function storedToken(id: number) {
+  return (await findRow(t, McpTokens, { id })) ?? undefined;
 }
 
 describe('McpTokensRepository', () => {
@@ -35,9 +37,9 @@ describe('McpTokensRepository', () => {
       const { user } = createUser(testDb);
       const { user: other } = createUser(testDb);
       const older = createMcpToken(testDb, user.id, { name: 'older', kind: 'mcp' });
-      testDb.prepare("UPDATE mcp_tokens SET created_at = '2020-01-01 00:00:00' WHERE id = ?").run(older.id);
+      await updateRows(t, McpTokens, { id: older.id }, { created_at: '2020-01-01 00:00:00' });
       const newer = createMcpToken(testDb, user.id, { name: 'newer', kind: 'mcp' });
-      testDb.prepare("UPDATE mcp_tokens SET created_at = '2020-01-02 00:00:00' WHERE id = ?").run(newer.id);
+      await updateRows(t, McpTokens, { id: newer.id }, { created_at: '2020-01-02 00:00:00' });
       createMcpToken(testDb, user.id, { name: 'an api key', kind: 'api' });
       createMcpToken(testDb, other.id, { name: 'not mine', kind: 'mcp' });
 
@@ -56,7 +58,7 @@ describe('McpTokensRepository', () => {
     it('MCPTOKREPO-002b: created_at NULL comes back null, not undefined (coverage: rule 16)', async () => {
       const { user } = createUser(testDb);
       const token = createMcpToken(testDb, user.id, { name: 'null-created', kind: 'mcp' });
-      testDb.prepare('UPDATE mcp_tokens SET created_at = NULL WHERE id = ?').run(token.id);
+      await updateRows(t, McpTokens, { id: token.id }, { created_at: null });
       const [row] = await tokens.listByUserAndKind(user.id, 'mcp');
       expect(row.created_at).toBeNull();
     });
@@ -90,7 +92,7 @@ describe('McpTokensRepository', () => {
       // else) to a caller that only asked to mint a row. `findBasic` (TK4)
       // stays the one place a caller reads the row back.
       expect(Object.keys(inserted)).toEqual(['id']);
-      const row = rawToken(inserted.id) as Record<string, unknown>;
+      const row = (await storedToken(inserted.id)) as Record<string, unknown>;
       expect(row.user_id).toBe(user.id);
       expect(row.name).toBe('My Token');
       expect(row.token_hash).toBe('hash-value');
@@ -112,7 +114,7 @@ describe('McpTokensRepository', () => {
         scope_mode: 'limited',
         api_scopes: '["stats","trips"]',
       });
-      const row = rawToken(inserted.id) as { scope_mode: string; api_scopes: string };
+      const row = (await storedToken(inserted.id)) as { scope_mode: string; api_scopes: string };
       expect(row.scope_mode).toBe('limited');
       expect(row.api_scopes).toBe('["stats","trips"]');
     });
@@ -176,7 +178,7 @@ describe('McpTokensRepository', () => {
     it('MCPTOKREPO-007c: created_at NULL comes back null, not undefined (coverage: rule 16)', async () => {
       const { user } = createUser(testDb);
       const created = createMcpToken(testDb, user.id, { name: 'null-created-basic' });
-      testDb.prepare('UPDATE mcp_tokens SET created_at = NULL WHERE id = ?').run(created.id);
+      await updateRows(t, McpTokens, { id: created.id }, { created_at: null });
       const row = await tokens.findBasic(created.id);
       expect(row?.created_at).toBeNull();
     });
@@ -185,7 +187,7 @@ describe('McpTokensRepository', () => {
       const { user } = createUser(testDb);
       const created = createMcpToken(testDb, user.id, { name: 'before' });
       await tokens.findBasic(created.id); // populate identity map
-      testDb.prepare("UPDATE mcp_tokens SET name = 'after' WHERE id = ?").run(created.id);
+      await updateRows(t, McpTokens, { id: created.id }, { name: 'after' });
       const row = await tokens.findBasic(created.id);
       expect(row?.name).toBe('after');
     });
@@ -217,7 +219,7 @@ describe('McpTokensRepository', () => {
       const { user } = createUser(testDb);
       const created = createMcpToken(testDb, user.id);
       await tokens.deleteById(created.id);
-      expect(rawToken(created.id)).toBeUndefined();
+      expect((await storedToken(created.id))).toBeUndefined();
     });
   });
 
@@ -226,9 +228,9 @@ describe('McpTokensRepository', () => {
       const { user: ada } = createUser(testDb, { username: 'ada' });
       const { user: bob } = createUser(testDb, { username: 'bob' });
       const first = createMcpToken(testDb, ada.id, { name: 'first' });
-      testDb.prepare("UPDATE mcp_tokens SET created_at = '2020-01-01 00:00:00' WHERE id = ?").run(first.id);
+      await updateRows(t, McpTokens, { id: first.id }, { created_at: '2020-01-01 00:00:00' });
       const second = createMcpToken(testDb, bob.id, { name: 'second' });
-      testDb.prepare("UPDATE mcp_tokens SET created_at = '2020-06-01 00:00:00' WHERE id = ?").run(second.id);
+      await updateRows(t, McpTokens, { id: second.id }, { created_at: '2020-06-01 00:00:00' });
 
       const rows = await tokens.listAllWithUsername();
       expect(rows.map((r) => r.name)).toEqual(['second', 'first']);
@@ -254,7 +256,7 @@ describe('McpTokensRepository', () => {
     it('MCPTOKREPO-012c: created_at NULL comes back null, not undefined (coverage: rule 16)', async () => {
       const { user } = createUser(testDb, { username: 'null-created-user' });
       const created = createMcpToken(testDb, user.id, { name: 'null-created-list' });
-      testDb.prepare('UPDATE mcp_tokens SET created_at = NULL WHERE id = ?').run(created.id);
+      await updateRows(t, McpTokens, { id: created.id }, { created_at: null });
       const rows = await tokens.listAllWithUsername();
       expect(rows.find((r) => r.id === created.id)?.created_at).toBeNull();
     });
@@ -349,15 +351,15 @@ describe('McpTokensRepository', () => {
       const { user } = createUser(testDb);
       const target = createMcpToken(testDb, user.id, { rawToken: 'trek_touch_me' });
       const other = createMcpToken(testDb, user.id, { rawToken: 'trek_leave_me' });
-      const before = rawToken(target.id) as { name: string; token_hash: string };
+      const before = (await storedToken(target.id)) as { name: string; token_hash: string };
 
       await tokens.touchLastUsedByHash(target.tokenHash);
 
-      const after = rawToken(target.id) as Record<string, unknown>;
+      const after = (await storedToken(target.id)) as Record<string, unknown>;
       expect(after.last_used_at).not.toBeNull();
       expect(after.name).toBe(before.name);
       expect(after.token_hash).toBe(before.token_hash);
-      expect((rawToken(other.id) as { last_used_at: string | null }).last_used_at).toBeNull();
+      expect(((await storedToken(other.id)) as { last_used_at: string | null }).last_used_at).toBeNull();
     });
 
     it('MCPTOKREPO-019b: an unknown hash touches nothing (no error, no row)', async () => {
@@ -375,8 +377,8 @@ describe('McpTokensRepository', () => {
 
       await tokens.deleteAllForUser(user.id);
 
-      expect(testDb.prepare('SELECT COUNT(*) c FROM mcp_tokens WHERE user_id = ?').get(user.id)).toEqual({ c: 0 });
-      expect(rawToken(untouched.id)).toBeDefined();
+      expect(await countRows(t, McpTokens, { user: user.id })).toBe(0);
+      expect((await storedToken(untouched.id))).toBeDefined();
     });
   });
 
@@ -455,7 +457,7 @@ describe('McpTokensRepository', () => {
         await tokens.touchLastUsedByHash(created.tokenHash);
       });
 
-      const row = rawToken(created.id) as { last_used_at: string | null; name: string };
+      const row = (await storedToken(created.id)) as { last_used_at: string | null; name: string };
       expect(row.last_used_at).not.toBeNull();
       expect(row.name).toBe('stays-original');
     });
@@ -485,8 +487,8 @@ describe('McpTokensRepository', () => {
         api_scopes: null,
       });
 
-      expect((rawToken(untouched.id) as { name: string }).name).toBe('do-not-flush-me');
-      expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE token_hash = ?').get('insert-no-side-effect-hash')).toBeDefined();
+      expect(((await storedToken(untouched.id)) as { name: string }).name).toBe('do-not-flush-me');
+      expect(await findRow(t, McpTokens, { token_hash: 'insert-no-side-effect-hash' })).not.toBeNull();
     });
 
     /**
@@ -524,7 +526,7 @@ describe('McpTokensRepository', () => {
         await t.em.nativeUpdate(McpTokens, { id: created.id }, { scope_mode: 'limited' });
       });
 
-      const row = rawToken(created.id) as { scope_mode: string; name: string };
+      const row = (await storedToken(created.id)) as { scope_mode: string; name: string };
       expect(row.scope_mode).toBe('limited');
       expect(row.name).toBe('stays-original');
     });
