@@ -1,6 +1,6 @@
 import type { Platform } from '@mikro-orm/core';
 import { sql, type Expression, type ExpressionBuilder, type ExpressionWrapper, type RawBuilder, type ReferenceExpression, type SqlBool, type StringReference } from 'kysely';
-import { isSqlite, unsupported } from './platform';
+import { isKnownPlatform, isPostgres, isSqlite, PG_ISO_DATE_PREFIX, PG_TIMESTAMP_FORMAT, PG_UTC_NOW, pgTimestampText, unsupported } from './platform';
 
 /**
  * The Kysely-expression half of the dialect layer: the twins of the MikroORM
@@ -32,7 +32,8 @@ import { isSqlite, unsupported } from './platform';
 // shape). Platform-dispatched and fail-closed like every helper in
 // `sql-functions.ts`; each has an SQLF-0xx test pinning its compiled
 // `{sql, parameters}` AND a raw-statement equivalence on seeded rows
-// (`tests/unit/db/dialect/sql-functions.test.ts`).
+// (`tests/unit/db/dialect/sql-functions.test.ts`), and its Postgres branch is
+// pinned in `sql-functions.postgres.test.ts` and run by the CI Postgres probe.
 // ---------------------------------------------------------------------------
 
 /**
@@ -43,7 +44,8 @@ import { isSqlite, unsupported } from './platform';
  * entry). Returns a boolean `Expression<SqlBool>`, usable in a `.where()`
  * or inside a `CASE WHEN` condition. Same digit-class pattern as the
  * MikroORM version — NOT the wider `'????-??-??*'` shorthand (a `?` in
- * SQLite GLOB matches any character, letters included).
+ * SQLite GLOB matches any character, letters included). On Postgres it is
+ * the anchored regular expression `CAST(<ref> AS text) ~ '^[0-9]{4}-…'`.
  */
 export function startsWithIsoDateKysely<DB, TB extends keyof DB>(
   platform: Platform,
@@ -53,6 +55,7 @@ export function startsWithIsoDateKysely<DB, TB extends keyof DB>(
   if (isSqlite(platform)) {
     return eb.fn<SqlBool>('glob', [eb.val('[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'), ref]);
   }
+  if (isPostgres(platform)) return eb(eb.cast<string>(ref, 'text'), '~', eb.val(PG_ISO_DATE_PREFIX));
   return unsupported(platform);
 }
 
@@ -63,7 +66,8 @@ export function startsWithIsoDateKysely<DB, TB extends keyof DB>(
  * as genuine parameters here (`eb.val`) rather than spelled into the SQL
  * text — Kysely's `fn()` takes `ReferenceExpression`s, not a raw text
  * fragment, so there is no equivalent "spell a constant into the SQL"
- * shape to match; a bound integer literal renders identically.
+ * shape to match; a bound integer literal renders identically. Postgres has
+ * the same `substr` with the same 1-based arguments.
  */
 export function substringKysely<DB, TB extends keyof DB>(
   platform: Platform,
@@ -78,7 +82,7 @@ export function substringKysely<DB, TB extends keyof DB>(
   if (length !== undefined && (!Number.isInteger(length) || length < 0)) {
     throw new Error(`sql-functions: substringKysely needs a non-negative integer length, got ${length}`);
   }
-  if (isSqlite(platform)) {
+  if (isKnownPlatform(platform)) {
     const args: ReferenceExpression<DB, TB>[] = length === undefined
       ? [ref, eb.val(start)]
       : [ref, eb.val(start), eb.val(length)];
@@ -99,7 +103,9 @@ export type KyselyConcatPart<DB, TB extends keyof DB> =
  * expression builder's own binary-operator call (`eb(lhs, '||', rhs)`) so
  * it composes with {@link substringKysely}/{@link castIntegerKysely} —
  * exactly the composition `concat()`'s MikroORM form cannot do (its
- * docstring explains why).
+ * docstring explains why). On Postgres a bound value part is cast to `text`:
+ * `pg` sends parameters untyped, and `$1 || $2` alone gives the planner no
+ * type to resolve the operator with.
  */
 export function concatKysely<DB, TB extends keyof DB>(
   platform: Platform,
@@ -109,9 +115,10 @@ export function concatKysely<DB, TB extends keyof DB>(
   if (parts.length < 2) {
     throw new Error(`sql-functions: concatKysely needs at least two parts, got ${parts.length}`);
   }
-  if (!isSqlite(platform)) return unsupported(platform);
+  if (!isKnownPlatform(platform)) return unsupported(platform);
+  const value = (text: string): Expression<string> => (isPostgres(platform) ? eb.cast<string>(eb.val(text), 'text') : eb.val(text));
   const operand = (part: KyselyConcatPart<DB, TB>): Expression<string> =>
-    'column' in part ? eb.ref(part.column).$castTo<string>() : 'value' in part ? eb.val(part.value) : part.expression;
+    'column' in part ? eb.ref(part.column).$castTo<string>() : 'value' in part ? value(part.value) : part.expression;
   let acc: Expression<string> = operand(parts[0]!);
   for (const part of parts.slice(1)) {
     acc = eb(acc, '||', operand(part));
@@ -128,7 +135,10 @@ export function concatKysely<DB, TB extends keyof DB>(
  * INTEGER)`, for `reservations.accommodation_id` (TEXT) compared against an
  * INTEGER column inside a Kysely statement (RS20/RV2's join shape — a
  * correlated `EXISTS`/scalar-subquery context the MikroORM QueryBuilder
- * cannot express, per the inventory's own T6 ruling).
+ * cannot express, per the inventory's own T6 ruling). Postgres refuses to
+ * cast the text `'14.0'` to an integer, so its branch goes through `numeric`
+ * and truncates, as SQLite's cast does: `CAST(trunc(CAST(<ref> AS numeric))
+ * AS integer)`.
  */
 export function castIntegerKysely<DB, TB extends keyof DB>(
   platform: Platform,
@@ -136,6 +146,7 @@ export function castIntegerKysely<DB, TB extends keyof DB>(
   ref: ReferenceExpression<DB, TB>,
 ): ExpressionWrapper<DB, TB, number> {
   if (isSqlite(platform)) return eb.cast<number>(ref, 'integer');
+  if (isPostgres(platform)) return eb.cast<number>(eb.fn('trunc', [eb.cast(ref, 'numeric')]), 'integer');
   return unsupported(platform);
 }
 
@@ -169,6 +180,10 @@ export function castIntegerKysely<DB, TB extends keyof DB>(
  * rather than "fixed" into a float divide that would render a different ISO
  * string for any timestamp not an exact multiple of 1000ms.
  *
+ * On Postgres: `to_char(timezone('UTC', to_timestamp(<ref> / 1000)),
+ * 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`. An integer column divided by an integer
+ * truncates there too, so both engines drop the same sub-second part.
+ *
  * Named for what it computes, not the SQL function it spells — matching
  * every other `*Kysely` twin in this file (`castIntegerKysely`, not
  * `castKysely`; `startsWithIsoDateKysely`, not `globKysely`).
@@ -178,11 +193,13 @@ export function unixEpochToIsoKysely<DB, TB extends keyof DB>(
   eb: ExpressionBuilder<DB, TB>,
   ref: ReferenceExpression<DB, TB>,
 ): ExpressionWrapper<DB, TB, string> {
+  if (!isKnownPlatform(platform)) return unsupported(platform);
+  const seconds = eb(ref, '/', eb.val(1000));
   if (isSqlite(platform)) {
-    const seconds = eb(ref, '/', eb.val(1000));
     return eb.fn<string>('strftime', [eb.val('%Y-%m-%dT%H:%M:%SZ'), seconds, eb.val('unixepoch')]);
   }
-  return unsupported(platform);
+  const utc = eb.fn('timezone', [eb.cast(eb.val('UTC'), 'text'), eb.fn('to_timestamp', [seconds])]);
+  return eb.fn<string>('to_char', [utc, eb.cast(eb.val('YYYY-MM-DD"T"HH24:MI:SS"Z"'), 'text')]);
 }
 
 /**
@@ -194,7 +211,9 @@ export function unixEpochToIsoKysely<DB, TB extends keyof DB>(
  * `Expression`, not a MikroORM `RawQueryFragment` (SQLF-048: a
  * `RawQueryFragment` throws when handed into a Kysely statement). Same
  * validation, same always-non-negative-integer trust boundary as the
- * MikroORM form in `sql-functions.ts`.
+ * MikroORM form in `sql-functions.ts`. On Postgres the validated count is
+ * inlined as a literal into `make_interval(secs => n)` and the sum rendered
+ * as SQLite's timestamp text.
  */
 export function nowPlusSecondsKysely<DB, TB extends keyof DB>(
   platform: Platform,
@@ -206,6 +225,10 @@ export function nowPlusSecondsKysely<DB, TB extends keyof DB>(
   }
   if (isSqlite(platform)) {
     return eb.fn<string>('datetime', [eb.val('now'), eb.val(`+${seconds} seconds`)]);
+  }
+  if (isPostgres(platform)) {
+    const later = sql`${sql.raw(PG_UTC_NOW)} + make_interval(secs => ${sql.lit(seconds)})`;
+    return eb.fn<string>('to_char', [later, eb.cast(eb.val(PG_TIMESTAMP_FORMAT), 'text')]);
   }
   return unsupported(platform);
 }
@@ -226,8 +249,10 @@ export function nowPlusSecondsKysely<DB, TB extends keyof DB>(
  * codebase (the MikroORM helpers in `sql-functions.ts` use `raw()` for the
  * identical reason), never inline in a repository (the TRAP list's "Kysely
  * `sql` banned under repositories" is about repository FILES, not this one).
+ * On Postgres it renders the UTC clock as SQLite's timestamp text.
  */
 export function currentTimestampKysely(platform: Platform): RawBuilder<string> {
   if (isSqlite(platform)) return sql<string>`CURRENT_TIMESTAMP`;
+  if (isPostgres(platform)) return sql.raw<string>(pgTimestampText(PG_UTC_NOW));
   return unsupported(platform);
 }

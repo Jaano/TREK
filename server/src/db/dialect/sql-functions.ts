@@ -1,5 +1,5 @@
 import { raw, type Platform, type RawQueryFragment } from '@mikro-orm/core';
-import { isSqlite, unsupported } from './platform';
+import { isKnownPlatform, isPostgres, isSqlite, PG_ISO_DATE_PREFIX, PG_UTC_NOW, pgDateText, pgTimestampText, unsupported } from './platform';
 
 /**
  * The only place a repository may spell a database function.
@@ -8,11 +8,13 @@ import { isSqlite, unsupported } from './platform';
  * running on (`em.getPlatform()`) plus an already-qualified column reference
  * (`'t.created_at'`), and dispatches on that platform at runtime. TREK ships
  * one binary and the database is chosen by configuration, so the dialect is a
- * runtime property of the live connection, not a build-time swap: when the
- * Postgres driver arrives this file grows a second branch and no repository
- * changes. An unknown platform fails closed rather than guessing a spelling.
- * The Kysely-expression twins live in `kysely-functions.ts`, the platform
- * checks in `platform.ts`.
+ * runtime property of the live connection, not a build-time swap. Every
+ * helper has a SQLite branch (the engine TREK runs on) and a Postgres branch
+ * (the second engine; `scripts/pg-probe.ts` runs each one against a real
+ * Postgres in CI), and a spelling both engines read the same way serves both
+ * through `isKnownPlatform`. An unknown platform fails closed rather than
+ * guessing a spelling. The Kysely-expression twins live in
+ * `kysely-functions.ts`, the platform checks in `platform.ts`.
  *
  * Values are never interpolated — the day count in `dateAdd` is checked to be
  * an integer before it is spelled.
@@ -28,6 +30,7 @@ function column(ref: string): string {
 /** The calendar date (`YYYY-MM-DD`) of a timestamp column. */
 export function dateOf(platform: Platform, ref: string): RawQueryFragment {
   if (isSqlite(platform)) return raw(`date(${column(ref)})`);
+  if (isPostgres(platform)) return raw(pgDateText(`CAST(${column(ref)} AS timestamp)`));
   return unsupported(platform);
 }
 
@@ -38,12 +41,14 @@ export function dateAdd(platform: Platform, ref: string, days: number): RawQuery
     const sign = days < 0 ? '-' : '+';
     return raw(`date(${column(ref)}, '${sign}${Math.abs(days)} days')`);
   }
+  if (isPostgres(platform)) return raw(pgDateText(`CAST(${column(ref)} AS timestamp) + INTERVAL '${days} days'`));
   return unsupported(platform);
 }
 
-/** The database clock, in the same text the column defaults produce. */
+/** The database clock, in the same text the column defaults produce (UTC `YYYY-MM-DD HH:MM:SS`). */
 export function currentTimestamp(platform: Platform): RawQueryFragment {
   if (isSqlite(platform)) return raw('CURRENT_TIMESTAMP');
+  if (isPostgres(platform)) return raw(pgTimestampText(PG_UTC_NOW));
   return unsupported(platform);
 }
 
@@ -57,7 +62,7 @@ export function currentTimestamp(platform: Platform): RawQueryFragment {
  * `no-restricted-syntax` rule for `src/db/repositories/**` can enforce.
  */
 export function columnRef(platform: Platform, ref: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(column(ref));
+  if (isKnownPlatform(platform)) return raw(column(ref));
   return unsupported(platform);
 }
 
@@ -66,7 +71,7 @@ export function columnIncrementedBy(platform: Platform, ref: string, amount: num
   if (!Number.isInteger(amount)) {
     throw new Error(`sql-functions: columnIncrementedBy needs an integer amount, got ${amount}`);
   }
-  if (isSqlite(platform)) {
+  if (isKnownPlatform(platform)) {
     const sign = amount < 0 ? '-' : '+';
     return raw(`${column(ref)} ${sign} ${Math.abs(amount)}`);
   }
@@ -102,9 +107,13 @@ export function columnIncrementedBy(platform: Platform, ref: string, amount: num
  * fragment is only usable as an object key because `raw()`'s default
  * generic already brands it with a `[Symbol.toPrimitive]`. The other
  * helpers here are only ever used as VALUES, where that brand isn't needed.
+ *
+ * Postgres spells it the same, but its `LOWER()` folds every letter, not
+ * only ASCII. Pair it with `lowerParam()` there too and both sides still
+ * fold through one engine, so a lookup agrees with itself on either engine.
  */
 export function lower(platform: Platform, ref: string): RawQueryFragment & symbol {
-  if (isSqlite(platform)) return raw(`LOWER(${column(ref)})`);
+  if (isKnownPlatform(platform)) return raw(`LOWER(${column(ref)})`);
   return unsupported(platform);
 }
 
@@ -121,7 +130,7 @@ export function lower(platform: Platform, ref: string): RawQueryFragment & symbo
  * the mixed-engine bug this helper exists to close.
  */
 export function lowerParam(platform: Platform, value: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw('LOWER(?)', [value]);
+  if (isKnownPlatform(platform)) return raw('LOWER(?)', [value]);
   return unsupported(platform);
 }
 
@@ -152,6 +161,7 @@ export function nowMinusDays(platform: Platform, days: number): RawQueryFragment
     throw new Error(`sql-functions: nowMinusDays needs a non-negative integer day count, got ${days}`);
   }
   if (isSqlite(platform)) return raw(`datetime('now', '-${days} days')`);
+  if (isPostgres(platform)) return raw(pgTimestampText(`${PG_UTC_NOW} - INTERVAL '${days} days'`));
   return unsupported(platform);
 }
 
@@ -167,7 +177,7 @@ export function nowMinusDays(platform: Platform, days: number): RawQueryFragment
  * `lowerTrim()` below for the composed shape.
  */
 export function trim(platform: Platform, ref: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(`TRIM(${column(ref)})`);
+  if (isKnownPlatform(platform)) return raw(`TRIM(${column(ref)})`);
   return unsupported(platform);
 }
 
@@ -181,7 +191,7 @@ export function trim(platform: Platform, ref: string): RawQueryFragment {
  * `TRIM()`.
  */
 export function lowerTrim(platform: Platform, ref: string): RawQueryFragment & symbol {
-  if (isSqlite(platform)) return raw(`LOWER(TRIM(${column(ref)}))`);
+  if (isKnownPlatform(platform)) return raw(`LOWER(TRIM(${column(ref)}))`);
   return unsupported(platform);
 }
 
@@ -202,7 +212,7 @@ export function lowerTrim(platform: Platform, ref: string): RawQueryFragment & s
  * are different shapes).
  */
 export function coalesce(platform: Platform, ref: string, fallbackRef: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(`COALESCE(${column(ref)}, ${column(fallbackRef)})`);
+  if (isKnownPlatform(platform)) return raw(`COALESCE(${column(ref)}, ${column(fallbackRef)})`);
   return unsupported(platform);
 }
 
@@ -223,7 +233,7 @@ export function coalesce(platform: Platform, ref: string, fallbackRef: string): 
  * behaviour change (the function body is untouched).
  */
 export function coalesceParam(platform: Platform, ref: string, value: string | number | null): RawQueryFragment & symbol {
-  if (isSqlite(platform)) return raw(`COALESCE(${column(ref)}, ?)`, [value]);
+  if (isKnownPlatform(platform)) return raw(`COALESCE(${column(ref)}, ?)`, [value]);
   return unsupported(platform);
 }
 
@@ -247,7 +257,7 @@ export function coalesceParam(platform: Platform, ref: string, value: string | n
  * ?)` always preferred the non-null existing value).
  */
 export function coalesceOverride(platform: Platform, value: string | number | null, ref: string): RawQueryFragment & symbol {
-  if (isSqlite(platform)) return raw(`COALESCE(?, ${column(ref)})`, [value]);
+  if (isKnownPlatform(platform)) return raw(`COALESCE(?, ${column(ref)})`, [value]);
   return unsupported(platform);
 }
 
@@ -262,7 +272,7 @@ export function coalesceOverride(platform: Platform, value: string | number | nu
  * brand only lives on that typing for values meant to be used as a key.
  */
 export function absDifference(platform: Platform, ref: string, value: number): RawQueryFragment & symbol {
-  if (isSqlite(platform)) return raw(`ABS(${column(ref)} - ?)`, [value]);
+  if (isKnownPlatform(platform)) return raw(`ABS(${column(ref)} - ?)`, [value]);
   return unsupported(platform);
 }
 
@@ -283,19 +293,19 @@ function alias(name: string): string {
 
 /** `COUNT(*) as <alias>`, for a single-row totals read or a `GROUP BY` count column. */
 export function countAll(platform: Platform, aliasName: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(`COUNT(*) as ${alias(aliasName)}`);
+  if (isKnownPlatform(platform)) return raw(`COUNT(*) as ${alias(aliasName)}`);
   return unsupported(platform);
 }
 
 /** `MIN(<col>) as <alias>`. */
 export function minOf(platform: Platform, ref: string, aliasName: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(`MIN(${column(ref)}) as ${alias(aliasName)}`);
+  if (isKnownPlatform(platform)) return raw(`MIN(${column(ref)}) as ${alias(aliasName)}`);
   return unsupported(platform);
 }
 
 /** `MAX(<col>) as <alias>`. */
 export function maxOf(platform: Platform, ref: string, aliasName: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(`MAX(${column(ref)}) as ${alias(aliasName)}`);
+  if (isKnownPlatform(platform)) return raw(`MAX(${column(ref)}) as ${alias(aliasName)}`);
   return unsupported(platform);
 }
 
@@ -325,7 +335,7 @@ export function maxOf(platform: Platform, ref: string, aliasName: string): RawQu
  * non-finite `value` before calling.)
  */
 export function caseWhenEquals(platform: Platform, ref: string, value: number, whenTrue: string, whenFalse: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(`CASE WHEN ${column(ref)} = ? THEN ? ELSE ? END`, [value, whenTrue, whenFalse]);
+  if (isKnownPlatform(platform)) return raw(`CASE WHEN ${column(ref)} = ? THEN ? ELSE ? END`, [value, whenTrue, whenFalse]);
   return unsupported(platform);
 }
 
@@ -349,7 +359,7 @@ export function caseWhenEquals(platform: Platform, ref: string, value: number, w
  * `.orderBy({ [countAllRef(platform)]: 'desc' })`.
  */
 export function countAllRef(platform: Platform): RawQueryFragment & symbol {
-  if (isSqlite(platform)) return raw('COUNT(*)');
+  if (isKnownPlatform(platform)) return raw('COUNT(*)');
   return unsupported(platform);
 }
 
@@ -380,14 +390,16 @@ export function countAllRef(platform: Platform): RawQueryFragment & symbol {
  * fragment (see `coalesce()`'s docstring on why nesting doesn't work).
  * Kysely has no `GLOB` comparison operator (`operator-node.d.ts`'s
  * `ComparisonOperator` union omits it — verified against the installed
- * 0.29.6 typings, per the inventory's §19 MikroORM/Kysely capability table)
- * — this helper's SQLite-only reach is therefore the only portable spelling
- * for this shape until a second platform is added.
+ * 0.29.6 typings, per the inventory's §19 MikroORM/Kysely capability table),
+ * so this helper is the only portable spelling for this shape.
+ * Postgres reads it as the anchored regular expression
+ * `CAST(<col> AS text) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'`.
  */
 export function startsWithIsoDate(platform: Platform, ref: string): RawQueryFragment {
   if (isSqlite(platform)) {
     return raw(`${column(ref)} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'`);
   }
+  if (isPostgres(platform)) return raw(`CAST(${column(ref)} AS text) ~ '${PG_ISO_DATE_PREFIX}'`);
   return unsupported(platform);
 }
 
@@ -413,7 +425,7 @@ export function substring(platform: Platform, ref: string, start: number, length
   if (length !== undefined && (!Number.isInteger(length) || length < 0)) {
     throw new Error(`sql-functions: substring needs a non-negative integer length, got ${length}`);
   }
-  if (isSqlite(platform)) {
+  if (isKnownPlatform(platform)) {
     if (length === undefined) return raw(`substr(${column(ref)}, ${start})`);
     return raw(`substr(${column(ref)}, ${start}, ${length})`);
   }
@@ -459,7 +471,7 @@ export function concat(platform: Platform, ...parts: readonly ConcatPart[]): Raw
   if (parts.length < 2) {
     throw new Error(`sql-functions: concat needs at least two parts, got ${parts.length}`);
   }
-  if (isSqlite(platform)) {
+  if (isKnownPlatform(platform)) {
     const bindings: string[] = [];
     const sql = parts
       .map((part) => {
@@ -483,7 +495,9 @@ export function concat(platform: Platform, ...parts: readonly ConcatPart[]): Raw
  * with no FK (§18.1 of the inventory — some rows read back as `"14.0"`):
  * casting it to INTEGER before comparing against a genuine INTEGER column
  * (`day_accommodations.id`) applies numeric affinity to BOTH sides, matching
- * `"14"` and `"14.0"` alike, the same way the legacy statement does.
+ * `"14"` and `"14.0"` alike, the same way the legacy statement does. Postgres
+ * refuses `CAST('14.0' AS integer)`, so its branch casts through `numeric`
+ * and truncates: `CAST(trunc(CAST(<col> AS numeric)) AS integer)`.
  *
  * Typed `RawQueryFragment & symbol`, the same brand `lower()`/`lowerTrim()`
  * carry: both known legacy call sites compare the cast against ANOTHER
@@ -496,6 +510,7 @@ export function concat(platform: Platform, ...parts: readonly ConcatPart[]): Raw
  */
 export function castInteger(platform: Platform, ref: string): RawQueryFragment & symbol {
   if (isSqlite(platform)) return raw(`CAST(${column(ref)} AS INTEGER)`);
+  if (isPostgres(platform)) return raw(`CAST(trunc(CAST(${column(ref)} AS numeric)) AS integer)`);
   return unsupported(platform);
 }
 
@@ -516,9 +531,14 @@ export function castInteger(platform: Platform, ref: string): RawQueryFragment &
  * shape exactly (an aliased column cannot be ordered by, the same
  * `ExtractRawAliases` limitation `countAllRef`'s own docstring / SQLF-024's
  * comment documents; ordering by the EXPRESSION itself is what works).
+ * Postgres measures the same distance in days from the epoch difference of
+ * the two values cast to `timestamp`.
  */
 export function dayDistance(platform: Platform, ref: string, isoDate: string): RawQueryFragment & symbol {
   if (isSqlite(platform)) return raw(`ABS(JULIANDAY(${column(ref)}) - JULIANDAY(?))`, [isoDate]);
+  if (isPostgres(platform)) {
+    return raw(`ABS(EXTRACT(EPOCH FROM (CAST(${column(ref)} AS timestamp) - CAST(? AS timestamp))) / 86400)`, [isoDate]);
+  }
   return unsupported(platform);
 }
 
@@ -561,9 +581,16 @@ export function dayDistance(platform: Platform, ref: string, isoDate: string): R
  * `COLLATE`-based comparison lets SQLite use an index on the un-wrapped
  * column in a way `LOWER(col) = ?` cannot — a real, if not row-visible,
  * difference between the two shapes.
+ *
+ * Postgres has no built-in `NOCASE`. Its branch names a collation `nocase`
+ * that a Postgres schema creates as a nondeterministic ICU collation
+ * (`CREATE COLLATION nocase (provider = icu, locale = 'und-u-ks-level2',
+ * deterministic = false)`, which `scripts/pg-probe.ts` does). That one folds
+ * case for every letter, not only ASCII, and supports `=` but not `LIKE`.
  */
 export function collateNoCase(platform: Platform, ref: string): RawQueryFragment & symbol {
   if (isSqlite(platform)) return raw(`${column(ref)} COLLATE NOCASE`);
+  if (isPostgres(platform)) return raw(`${column(ref)} COLLATE "nocase"`);
   return unsupported(platform);
 }
 
@@ -582,6 +609,7 @@ export function nowMinusHours(platform: Platform, hours: number): RawQueryFragme
     throw new Error(`sql-functions: nowMinusHours needs a non-negative integer hour count, got ${hours}`);
   }
   if (isSqlite(platform)) return raw(`datetime('now', '-${hours} hours')`);
+  if (isPostgres(platform)) return raw(pgTimestampText(`${PG_UTC_NOW} - INTERVAL '${hours} hours'`));
   return unsupported(platform);
 }
 
@@ -598,7 +626,7 @@ export function nowMinusHours(platform: Platform, hours: number): RawQueryFragme
  * rule 18: mixing engines is the bug this pairing exists to avoid).
  */
 export function lowerTrimParam(platform: Platform, value: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw('LOWER(TRIM(?))', [value]);
+  if (isKnownPlatform(platform)) return raw('LOWER(TRIM(?))', [value]);
   return unsupported(platform);
 }
 
@@ -664,6 +692,7 @@ export function nowDateOffset(platform: Platform, days: number): RawQueryFragmen
     const sign = days < 0 ? '-' : '+';
     return raw(`date('now', '${sign}${Math.abs(days)} days')`);
   }
+  if (isPostgres(platform)) return raw(pgDateText(`${PG_UTC_NOW} + INTERVAL '${days} days'`));
   return unsupported(platform);
 }
 
@@ -690,6 +719,7 @@ export function nowPlusSeconds(platform: Platform, seconds: number): RawQueryFra
     throw new Error(`sql-functions: nowPlusSeconds needs a non-negative integer second count, got ${seconds}`);
   }
   if (isSqlite(platform)) return raw(`datetime('now', '+${seconds} seconds')`);
+  if (isPostgres(platform)) return raw(pgTimestampText(`${PG_UTC_NOW} + INTERVAL '${seconds} seconds'`));
   return unsupported(platform);
 }
 
@@ -720,7 +750,7 @@ export function nowPlusSeconds(platform: Platform, seconds: number): RawQueryFra
  * part of this fragment — the caller sets it alongside).
  */
 export function foundAgainState(platform: Platform, stateRef: string, fileIdRef: string): RawQueryFragment {
-  if (isSqlite(platform)) {
+  if (isKnownPlatform(platform)) {
     return raw(
       `CASE WHEN ${column(stateRef)} = 'remote_missing' AND ${column(fileIdRef)} IS NOT NULL THEN 'synced' ELSE ${column(stateRef)} END`,
     );
@@ -746,11 +776,16 @@ export function foundAgainState(platform: Platform, stateRef: string, fileIdRef:
  * made for a different key. SET expressions see the row as it was before the
  * UPDATE, so `<keyRef> IS ?` compares the STORED key with the new one even
  * though the same statement overwrites it. `value` is bound twice on purpose:
- * the fragment has two value slots and `raw()` binds positionally.
+ * the fragment has two value slots and `raw()` binds positionally. SQLite's
+ * null-safe `IS` is `IS NOT DISTINCT FROM` on Postgres.
  */
 export function coalesceOverrideWhileSame(platform: Platform, value: number | null, ref: string, keyRef: string, keyValue: string): RawQueryFragment {
   if (isSqlite(platform)) {
     return raw(`CASE WHEN ${column(keyRef)} IS ? THEN COALESCE(?, ${column(ref)}) ELSE COALESCE(?, 0) END`, [keyValue, value, value]);
+  }
+  if (isPostgres(platform)) {
+    const sql = `CASE WHEN ${column(keyRef)} IS NOT DISTINCT FROM ? THEN COALESCE(?, ${column(ref)}) ELSE COALESCE(?, 0) END`;
+    return raw(sql, [keyValue, value, value]);
   }
   return unsupported(platform);
 }
@@ -768,6 +803,6 @@ export function coalesceOverrideWhileSame(platform: Platform, value: number | nu
  * ELSE is deliberate: a null test column yields SQL NULL.
  */
 export function caseWhenNotNull(platform: Platform, testRef: string, thenRef: string): RawQueryFragment {
-  if (isSqlite(platform)) return raw(`CASE WHEN ${column(testRef)} IS NOT NULL THEN ${column(thenRef)} END`);
+  if (isKnownPlatform(platform)) return raw(`CASE WHEN ${column(testRef)} IS NOT NULL THEN ${column(thenRef)} END`);
   return unsupported(platform);
 }
