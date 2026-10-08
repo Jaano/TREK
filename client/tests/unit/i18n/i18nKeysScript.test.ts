@@ -8,13 +8,14 @@ import {
   countMatches,
   evaluate,
   firstArgument,
+  interpolationResults,
   readEnKeys,
   scanSource,
   scanTree,
   templatePattern,
 } from '../../../scripts/i18n-keys.mjs'
 
-// FE-I18N-KEYS-001 to FE-I18N-KEYS-013: the client key check (scripts/i18n-keys.mjs).
+// FE-I18N-KEYS-001 to FE-I18N-KEYS-015: the client key check (scripts/i18n-keys.mjs).
 
 const EN = new Set(['budget.title', 'places.count', 'places.count.one', 'trips.total.other', 'trips.total.one', 'costs.filter.all'])
 
@@ -141,5 +142,25 @@ describe('i18n key check', () => {
     expect(evaluate(scan, EN, narrow).stale).toEqual(narrow)
     const gone = [{ file: 'a.tsx', template: 'gone.prefix.${x}', because: 'test' }]
     expect(evaluate(scan, EN, gone).unmatched.map((u) => u.template)).toEqual(['gone.prefix.${x}'])
+  })
+
+  it('FE-I18N-KEYS-014: checks each literal branch of a template as a key, so a typo in one fails', () => {
+    const scan = scanSource("t(`costs.filter.${on ? 'all' : 'alll'}`)", 'a.tsx')
+    expect(scan.dynamic).toEqual([])
+    expect(scan.literal.map((l) => l.key)).toEqual(['costs.filter.all', 'costs.filter.alll'])
+    expect(evaluate(scan, EN, []).missing.map((m) => m.key)).toEqual(['costs.filter.alll'])
+    // Nested ternaries, parentheses and optional chaining in the condition; a literal in a comparison is no result.
+    expect(interpolationResults("(a?.b === 'x') ? 'p' : c ? ('q') : 'r'")).toEqual({ literals: ['p', 'q', 'r'], complete: true })
+    expect(interpolationResults("fn('a.b')")).toEqual({ literals: [], complete: false })
+  })
+
+  it('FE-I18N-KEYS-015: keeps a template with data in it a pattern and still checks its literal fallback', () => {
+    const scan = scanSource("t(`costs.filter.${role ?? 'nope'}`); t(`budget.${p === 'x' ? 'title' : p}`)", 'a.tsx')
+    expect(scan.dynamic.map((d) => d.template)).toEqual(["costs.filter.${role ?? 'nope'}", "budget.${p === 'x' ? 'title' : p}"])
+    expect(scan.literal.map((l) => l.key)).toEqual(['costs.filter.nope', 'budget.title'])
+    expect(evaluate(scan, EN, []).missing.map((m) => m.key)).toEqual(['costs.filter.nope'])
+    // A derived pattern is judged under its source template's allow-list entry.
+    const two = scanSource("t(`wide.${a ?? 'k0'}.${b}`)", 'a.tsx')
+    expect(two.dynamic.map((d) => d.site)).toEqual([undefined, "wide.${a ?? 'k0'}.${b}"])
   })
 })

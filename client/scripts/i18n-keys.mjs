@@ -20,7 +20,11 @@
  *                                       named *Key, read as a template key
  *
  * A key exists when en declares it, or declares `key.other` (a plural group
- * whose general form is spelled out). A template literal key such as
+ * whose general form is spelled out). A template whose interpolations can
+ * only produce string literals (t(`roadtrip.window.${a ? 'onRoute' : 'atStop'}`))
+ * is expanded into those keys and each is checked like a literal one; a
+ * literal fallback beside data (`${role ?? 'editor'}`) is checked as a key
+ * too. Any other template literal key such as
  * t(`budget.category.${id}`), or a prefix with the rest appended
  * (t('costs.filter.' + f)), cannot be resolved. It is read as a pattern in
  * which each interpolation stands for one key segment (no dot), and it passes
@@ -30,8 +34,11 @@
  * (`settings.${mode}` reaches every settings key, so a wrong suffix would
  * pass unseen) and one without a fixed dotted prefix need an entry in
  * DYNAMIC_ALLOWED, keyed by file and template, saying what bounds the value.
- * Listing every narrow template instead would be a hundred entries restating
- * their own prefix; the bound is what keeps those honest.
+ * Listing every narrow template instead would be well over a hundred entries
+ * restating their own prefix, and nothing in an entry would be checked that
+ * the bound does not already check. What the bound cannot see is a runtime
+ * value with no key under a narrow prefix: that needs the value's type, which
+ * this text scan does not have, and is the price of not listing them.
  * A key held in a variable (`t(opt.label)`) is out of reach unless the table
  * names it in a *Key property.
  *
@@ -198,6 +205,126 @@ export function templatePattern(template) {
   return new RegExp(`^${parts.map(escape).join('[^.]+')}$`)
 }
 
+/**
+ * The top-level operator positions of an expression: ternary `?` and `:`,
+ * and the `??` and `||` fallbacks. Strings and brackets are skipped as units,
+ * `?.` is optional chaining.
+ */
+function topLevelOperators(expr) {
+  const ops = []
+  let depth = 0
+  for (let i = 0; i < expr.length; i++) {
+    const c = expr[i]
+    if (c === "'" || c === '"' || c === '`') {
+      for (i++; i < expr.length && expr[i] !== c; i++) if (expr[i] === '\\') i++
+    } else if (c === '(' || c === '[' || c === '{') depth++
+    else if (c === ')' || c === ']' || c === '}') depth--
+    else if (depth > 0) continue
+    else if ((c === '?' && expr[i + 1] === '?') || (c === '|' && expr[i + 1] === '|')) ops.push({ op: c + c, at: i++ })
+    else if (c === '?' && expr[i + 1] !== '.') ops.push({ op: '?', at: i })
+    else if (c === ':') ops.push({ op: ':', at: i })
+  }
+  return ops
+}
+
+const QUOTED_RE = /^(['"])((?:\\.|(?!\1)[^\\\n])*)\1$/
+
+/** Whether `e` is one parenthesized expression, its first `(` closing at its last character. */
+function wrapsWhole(e) {
+  if (!e.startsWith('(') || !e.endsWith(')')) return false
+  let depth = 0
+  for (let i = 0; i < e.length; i++) {
+    const c = e[i]
+    if (c === "'" || c === '"' || c === '`') {
+      for (i++; i < e.length && e[i] !== c; i++) if (e[i] === '\\') i++
+    } else if (c === '(') depth++
+    else if (c === ')' && --depth === 0) return i === e.length - 1
+  }
+  return false
+}
+
+/**
+ * The string literals an interpolated expression can produce, and whether
+ * those are all it can produce. `x ? 'a' : y ? 'b' : 'c'` gives a, b and c,
+ * complete; `role ?? 'editor'` gives editor, incomplete (role is data);
+ * `phase` gives nothing. A literal in a condition (`phase === 'start'`) is
+ * never a result.
+ */
+export function interpolationResults(expr) {
+  let e = expr.trim()
+  while (wrapsWhole(e)) e = e.slice(1, -1).trim()
+  const ops = topLevelOperators(e)
+  const q = ops.findIndex((o) => o.op === '?')
+  if (q >= 0) {
+    // The matching `:` of the first `?`: nested ternaries in the consequent raise the count.
+    let open = 0
+    for (const o of ops.slice(q + 1)) {
+      if (o.op === '?') open++
+      else if (o.op === ':' && open-- === 0) {
+        const a = interpolationResults(e.slice(ops[q].at + 1, o.at))
+        const b = interpolationResults(e.slice(o.at + 1))
+        return { literals: [...a.literals, ...b.literals], complete: a.complete && b.complete }
+      }
+    }
+    return { literals: [], complete: false }
+  }
+  const fallback = ops.filter((o) => o.op === '??' || o.op === '||')
+  if (fallback.length) {
+    const operands = []
+    let from = 0
+    for (const o of fallback) {
+      operands.push(e.slice(from, o.at))
+      from = o.at + 2
+    }
+    operands.push(e.slice(from))
+    // The left operands are tested values; only the literal ones among them could be produced.
+    const literals = operands.flatMap((x) => interpolationResults(x).literals)
+    return { literals, complete: false }
+  }
+  const m = QUOTED_RE.exec(e)
+  return m ? { literals: [m[2]], complete: true } : { literals: [], complete: false }
+}
+
+/** How many keys a template with only literal choices may expand to before it is read as a pattern instead. */
+const MAX_EXPANSION = 64
+
+/**
+ * The references one template literal makes. Interpolations that can only
+ * produce string literals (`${open ? 'a' : 'b'}`) are expanded, so each
+ * branch is checked as a literal key and a typo in one fails. When some
+ * interpolation is data, the template stays a pattern, and each literal an
+ * interpolation can still produce (`${role ?? 'editor'}`) is checked with
+ * that interpolation fixed, under the original template's allow-list site.
+ */
+function templateRefs(file, line, template) {
+  const parts = template.split(/\$\{([^}]*)\}/)
+  const fixed = parts.filter((_, i) => i % 2 === 0)
+  const results = parts.filter((_, i) => i % 2 === 1).map(interpolationResults)
+  const literal = []
+  const dynamic = []
+  const build = (choices) => fixed.map((f, i) => f + (i < choices.length ? choices[i] : '')).join('')
+  const size = results.reduce((n, r) => n * Math.max(r.literals.length, 1), 1)
+  if (results.every((r) => r.complete) && size <= MAX_EXPANSION) {
+    let keys = ['']
+    results.forEach((r, i) => {
+      keys = keys.flatMap((k) => r.literals.map((lit) => k + fixed[i] + lit))
+    })
+    for (const k of keys) literal.push({ file, line, key: k + fixed[fixed.length - 1] })
+    return { literal, dynamic }
+  }
+  dynamic.push({ file, line, template, pattern: templatePattern(template) })
+  const raw = parts.filter((_, i) => i % 2 === 1).map((x) => `\${${x}}`)
+  results.forEach((r, i) => {
+    for (const lit of r.literals) {
+      const choices = raw.map((x, j) => (j === i ? lit : x))
+      const derived = build(choices)
+      if (!derived.includes('${')) literal.push({ file, line, key: derived })
+      else dynamic.push({ file, line, template: derived, pattern: templatePattern(derived), site: template })
+    }
+  })
+  return { literal, dynamic }
+}
+
 /** Every key reference in one file's source. */
 export function scanSource(text, file = '<source>') {
   const literal = []
@@ -216,7 +343,9 @@ export function scanSource(text, file = '<source>') {
         if (KEY_RE.test(template)) literal.push({ file, line, key: template })
         continue
       }
-      dynamic.push({ file, line, template, pattern: templatePattern(template) })
+      const refs = templateRefs(file, line, template)
+      literal.push(...refs.literal)
+      dynamic.push(...refs.dynamic)
     }
   }
   for (const m of text.matchAll(KEY_BUILDER_RE)) {
@@ -274,11 +403,11 @@ export function evaluate(scan, enKeys, allowed = DYNAMIC_ALLOWED) {
   const broad = []
   for (const d of scan.dynamic) {
     const n = reach(d.template, d.pattern)
-    const isAllowed = allowedSites.has(site(d.file, d.template))
+    const isAllowed = allowedSites.has(site(d.file, d.site ?? d.template))
     if (n === 0 || (n === null && !isAllowed)) unmatched.push(d)
     else if (n > MAX_IMPLICIT_MATCHES && !isAllowed) broad.push({ ...d, matches: n })
   }
-  const usedSites = new Set(scan.dynamic.map((d) => site(d.file, d.template)))
+  const usedSites = new Set(scan.dynamic.map((d) => site(d.file, d.site ?? d.template)))
   const stale = allowed.filter((a) => {
     if (!usedSites.has(site(a.file, a.template))) return true
     if ((a.resolves ?? []).some((k) => !hasKey(enKeys, k))) return true
