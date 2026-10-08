@@ -7,6 +7,7 @@ import { countActivePlacesFilters } from '../../../../utils/placesFilter'
 import { useTranslation } from '../../../../i18n'
 import type { Category, Place } from '../../../../types'
 import { MCategoryFilterList, MRatingFloorChips } from './MPlacesFilterControls'
+import { placesFilterTabs, poolHasTracks } from '../../../../components/Planner/usePlacesPool'
 
 interface MPlacesFilterSheetProps {
   open: boolean
@@ -38,12 +39,7 @@ export default function MPlacesFilterSheet({ open, onClose, places, categories, 
   const resetPlacesFilters = useTripStore(s => s.resetPlacesFilters)
   const activeCount = countActivePlacesFilters({ filter, categoryFilters, ratingFilter })
 
-  const pools = [
-    { id: 'all', label: t('places.all') },
-    { id: 'unplanned', label: t('places.unplanned') },
-    { id: 'planned', label: t('places.planned') },
-  ]
-  if (!toursEnabled && places.some(p => p.route_geometry)) pools.push({ id: 'tracks', label: t('places.filterTracks') })
+  const pools = placesFilterTabs(t, poolHasTracks(places, toursEnabled))
   const hasCategoryChoice = categories.length > 0 || places.some(p => p.category_id == null)
 
   return (

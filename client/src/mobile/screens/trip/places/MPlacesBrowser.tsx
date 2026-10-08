@@ -4,10 +4,7 @@ import {
   SlidersHorizontal, Tag, Trash2, X,
 } from 'lucide-react'
 import MDancingTrek from '../../../components/MDancingTrek'
-import { useTripStore } from '../../../../store/tripStore'
 import { useAddonStore } from '../../../../store/addonStore'
-import { useToast } from '../../../../components/shared/Toast'
-import { collectionsApi } from '../../../../api/collections'
 import PlaceAvatar from '../../../../components/shared/PlaceAvatar'
 import MarkdownText from '../../../../components/shared/MarkdownText'
 import { getCategoryIcon } from '../../../../components/shared/categoryIcons'
@@ -26,6 +23,7 @@ import MToursSelectionList from './MToursSelectionList'
 import { filterPool, firstPlannedDayNumbers, plannedPlaceIds } from './placesBrowserModel'
 import { MCategoryFilterList, MRatingFloorChips, SquareCheck } from './MPlacesFilterControls'
 import { countActivePlacesFilters } from '../../../../utils/placesFilter'
+import { usePlacesPool } from '../../../../components/Planner/usePlacesPool'
 
 /**
  * Fullscreen places pool (mode === 'browse'): All/Unplanned/Tracks filter
@@ -50,27 +48,27 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
   const [toursMode, setToursMode] = useState(false)
   const [toursFilter, setToursFilter] = useState<'all' | 'unplanned' | 'planned'>('all')
 
-  const filter = useTripStore(s => s.placesFilter)
-  const setFilter = useTripStore(s => s.setPlacesFilter)
-  const categoryFilters = useTripStore(s => s.placesCategoryFilter)
-  const ratingFilter = useTripStore(s => s.placesRatingFilter)
+  const poolPlaces = useMemo(
+    // Places that are tours stay out of the Places pool while the addon is on.
+    // The planner's answer, not a second list of its own: that one is kept up
+    // to date by the trip's realtime events and knows the mark on each place.
+    () => toursEnabled ? places.filter(place => !planner.isTourPlace(place.id)) : places,
+    [places, toursEnabled, planner.isTourPlace],
+  )
+  const {
+    search, updateSearch, filter, setFilter, pickFilter, categoryFilters, ratingFilter, selectMode, toggleSelectMode,
+    selectedIds, setSelectedIds, toggleSelected, exitSelectMode, markSelectionVisited, markVisitedBusy, hasTracks,
+  } = usePlacesPool({ tripId: trip.id, places, poolPlaces, toursEnabled, t, staleSelection: 'prune' })
 
-  const [search, setSearch] = useState('')
   const [catOpen, setCatOpen] = useState(false)
-  const [selectMode, setSelectMode] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [saveToListOpen, setSaveToListOpen] = useState(false)
-  const [markVisitedBusy, setMarkVisitedBusy] = useState(false)
-  const toast = useToast()
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
 
   // Entering the browser from the edit segment starts on the unplanned pool.
   useEffect(() => {
     if (shell.browseFromEdit) setFilter('unplanned')
   }, [shell.browseFromEdit, setFilter])
-
-  const hasTracks = useMemo(() => !toursEnabled && places.some(p => p.route_geometry), [places, toursEnabled])
 
   // A hotel is linked through its stay and a venue through its booking; neither is
   // ever dragged onto a day, and the pool used to call both unplanned (#2072).
@@ -79,56 +77,9 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
     [assignments, planner.tripAccommodations, planner.reservations],
   )
   const dayNumberByPlace = useMemo(() => firstPlannedDayNumbers(assignments, days), [assignments, days])
-  const poolPlaces = useMemo(
-    // Places that are tours stay out of the Places pool while the addon is on.
-    // The planner's answer, not a second list of its own: that one is kept up
-    // to date by the trip's realtime events and knows the mark on each place.
-    () => toursEnabled ? places.filter(place => !planner.isTourPlace(place.id)) : places,
-    [places, toursEnabled, planner.isTourPlace],
-  )
   const filtered = useMemo(() => {
     return filterPool(poolPlaces, { filter, categoryFilters, ratingFilter, search, plannedIds })
   }, [poolPlaces, filter, categoryFilters, ratingFilter, search, plannedIds])
-
-  // A bulk delete (or a remote edit) can remove selected places — drop the
-  // stale ids so the toolbar count stays honest.
-  useEffect(() => {
-    if (selectedIds.size === 0) return
-    const alive = new Set(places.map(p => p.id))
-    if ([...selectedIds].some(id => !alive.has(id))) {
-      setSelectedIds(prev => new Set([...prev].filter(id => alive.has(id))))
-    }
-  }, [places, selectedIds])
-
-  const exitSelectMode = () => {
-    setSelectMode(false)
-    setSelectedIds(new Set())
-  }
-
-  const toggleSelected = (id: number) =>
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-
-  /** Mark the selection visited in every list it is saved to (#1469). */
-  const markSelectionVisited = async () => {
-    const ids = [...selectedIds]
-    if (ids.length === 0 || markVisitedBusy) return
-    setMarkVisitedBusy(true)
-    try {
-      const { updated, places: matched } = await collectionsApi.setStatusFromTrip(trip.id, ids, 'visited')
-      if (updated === 0) toast.info(t('collections.markVisitedNone'))
-      else toast.success(t('collections.markedVisitedTrip', { count: matched ?? 0 }))
-      exitSelectMode()
-    } catch {
-      toast.error(t('common.error'))
-    } finally {
-      setMarkVisitedBusy(false)
-    }
-  }
 
   // Compare the ids, not just the counts: a place removed remotely while another
   // one is selected keeps the sizes equal without the sets matching.
@@ -185,23 +136,23 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
           <FilterChip
             active={filter === 'all'}
             label={t('places.all')}
-            onClick={() => { setFilter('all'); setSelectedIds(new Set()) }}
+            onClick={() => pickFilter('all')}
           />
           <FilterChip
             active={filter === 'unplanned'}
             label={t('places.unplanned')}
-            onClick={() => { setFilter('unplanned'); setSelectedIds(new Set()) }}
+            onClick={() => pickFilter('unplanned')}
           />
           <FilterChip
             active={filter === 'planned'}
             label={t('places.planned')}
-            onClick={() => { setFilter('planned'); setSelectedIds(new Set()) }}
+            onClick={() => pickFilter('planned')}
           />
           {hasTracks && (
             <FilterChip
               active={filter === 'tracks'}
               label={t('places.filterTracks')}
-              onClick={() => { setFilter('tracks'); setSelectedIds(new Set()) }}
+              onClick={() => pickFilter('tracks')}
             />
           )}
           {canEditPlaces && (
@@ -220,7 +171,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
         <div className="mt-[10px] flex items-stretch gap-2">
           <input
             value={search}
-            onChange={e => { setSearch(e.target.value); if (selectMode) setSelectedIds(new Set()) }}
+            onChange={e => updateSearch(e.target.value)}
             placeholder={t('places.search')}
             className="box-border min-w-0 flex-1 rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-[13px] py-[10px] text-[0.8125rem] font-medium text-m-ink outline-none placeholder:text-m-faint"
           />
@@ -241,7 +192,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
           {canEditPlaces && (
             <button
               type="button"
-              onClick={() => { setSelectMode(v => !v); setSelectedIds(new Set()) }}
+              onClick={toggleSelectMode}
               aria-pressed={selectMode}
               aria-label={t('common.select')}
               className={`flex w-[42px] flex-none items-center justify-center rounded-full border ${

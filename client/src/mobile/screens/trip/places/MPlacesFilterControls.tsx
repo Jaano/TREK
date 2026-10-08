@@ -5,6 +5,7 @@ import { useTripStore } from '../../../../store/tripStore'
 import { getCategoryIcon } from '../../../../components/shared/categoryIcons'
 import { RATING_FLOORS, UNCATEGORIZED } from '../../../../utils/placesFilter'
 import { useTranslation } from '../../../../i18n'
+import { usePlacesCategoryFilter } from '../../../../components/Planner/usePlacesPool'
 import type { Category, Place } from '../../../../types'
 
 /**
@@ -50,14 +51,7 @@ function CategoryFilterRow({ checked, onToggle, label, children }: {
 /** The trip's categories as a multi-select, plus "no category" while a place has none. */
 export function MCategoryFilterList({ categories, places }: { categories: Category[]; places: Place[] }) {
   const { t } = useTranslation()
-  const categoryFilters = useTripStore(s => s.placesCategoryFilter)
-  const setCategoryFilters = useTripStore(s => s.setPlacesCategoryFilter)
-  const toggle = (catId: string) => {
-    const next = new Set(categoryFilters)
-    if (next.has(catId)) next.delete(catId)
-    else next.add(catId)
-    setCategoryFilters(next)
-  }
+  const { categoryFilters, toggleCategoryFilter: toggle } = usePlacesCategoryFilter()
   return (
     <>
       {categories.map(c => {

@@ -7,7 +7,6 @@ import { Pencil, Trash2, ExternalLink, Navigation, CalendarDays, Bookmark } from
 import { useTranslation } from '../../i18n'
 import { useToast } from '../shared/Toast'
 import { useContextMenu } from '../shared/ContextMenu'
-import { collectionsApi } from '../../api/collections'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useAddonStore } from '../../store/addonStore'
@@ -21,12 +20,10 @@ import { safeHttpUrl } from '../../utils/safeUrl'
 import { plannedPlaceIds, plannedPlaceIdsForDay, type PlannedAccommodation } from '../../utils/plannedPlaces'
 import type { MenuEntry } from './planParts'
 import { useListImport, type ListImportProvider } from './useListImport'
+import { usePlacesPool, type PlacesFilter } from './usePlacesPool'
 
 /** Stable identity — a fresh [] default would invalidate the planned memo on every render. */
 const NO_ACCOMMODATIONS: PlannedAccommodation[] = []
-
-/** What the pool shows: everything, what is not on a day yet, what is, or the tracks. */
-export type PlacesFilter = 'all' | 'unplanned' | 'planned' | 'tracks'
 
 export interface PlacesSidebarProps {
   tripId: number
@@ -144,22 +141,11 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
   const availableListImportProviders: ListImportProvider[] = ['google', 'naver']
   const hasMultipleListImportProviders = availableListImportProviders.length > 1
 
-  const [search, setSearch] = useState('')
-  // Filter state lives in the trip store so it survives the Plan tab
-  // unmounting (tab switch, mobile sheet close) and stays in lockstep with the
-  // map markers, which filter on the same values (#1541).
-  const filter = useTripStore((s) => s.placesFilter)
-  const setFilter = useTripStore((s) => s.setPlacesFilter)
-  const categoryFilters = useTripStore((s) => s.placesCategoryFilter)
-  const setCategoryFilters = useTripStore((s) => s.setPlacesCategoryFilter)
-  const [selectMode, setSelectMode] = useState(false)
-  // Minimum average stars, matching the collections filter (#1435): 'all', or a
-  // floor of 1..5 that unrated places fall through. It replaced a sort toggle,
-  // which put the best first but still left everything else on the list — no
-  // help at all when the point is to see only what the group actually rated.
-  // In the trip store with the other filters, so the map markers follow it too.
-  const ratingFilter = useTripStore((s) => s.placesRatingFilter)
-  const setRatingFilter = useTripStore((s) => s.setPlacesRatingFilter)
+  const {
+    search, setSearch, updateSearch, filter, setFilter, pickFilter, categoryFilters, setCategoryFilters, toggleCategoryFilter,
+    ratingFilter, setRatingFilter, selectMode, setSelectMode, toggleSelectMode, selectedIds, setSelectedIds, toggleSelected,
+    exitSelectMode, markSelectionVisited, markVisitedBusy, hasTracks,
+  } = usePlacesPool({ tripId, places, poolPlaces, toursEnabled: props.toursEnabled, t, staleSelection: 'exit' })
   // The list's order (#2093), remembered on this device.
   const [placesSort, setPlacesSortState] = useState<PlacesSort>(readPlacesSort)
   const setPlacesSort = useCallback((sort: PlacesSort) => { setPlacesSortState(sort); writePlacesSort(sort) }, [])
@@ -168,72 +154,15 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
   const [localityFilter, setLocalityFilter] = useState<LocalityFilter | null>(null)
   const localityOf = useMemo(() => new Map(poolPlaces.map(p => [p.id, placeLocality(p, language)])), [poolPlaces, language])
   const localities = useMemo(() => localityGroups(poolPlaces.map(p => localityOf.get(p.id)!)), [poolPlaces, localityOf])
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [pendingDeleteIds, setPendingDeleteIds] = useState<number[] | null>(null)
   const [categoryPickerOpen, setCategoryPickerOpen] = useState(false)
   const [saveToListOpen, setSaveToListOpen] = useState(false)
 
-  const [markVisitedBusy, setMarkVisitedBusy] = useState(false)
-
-  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()) }
-
-  /**
-   * "I have been to these" for the selection, applied wherever the places are
-   * saved in the library (#1469). The server does the matching, so a place saved
-   * under a different name in a list is still found.
-   */
-  const markSelectionVisited = useCallback(async () => {
-    const ids = Array.from(selectedIds)
-    if (ids.length === 0 || markVisitedBusy) return
-    setMarkVisitedBusy(true)
-    try {
-      const { updated, places: matchedPlaces } = await collectionsApi.setStatusFromTrip(props.tripId, ids, 'visited')
-      if (updated === 0) toast.info(t('collections.markVisitedNone'))
-      else toast.success(t('collections.markedVisitedTrip', { count: matchedPlaces ?? 0 }))
-      exitSelectMode()
-    } catch {
-      toast.error(t('common.error'))
-    } finally {
-      setMarkVisitedBusy(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds, markVisitedBusy, props.tripId, t])
-
-  // Auto-exit when all selected places have been removed from the store (e.g. after bulk delete)
-  useEffect(() => {
-    if (!selectMode || selectedIds.size === 0) return
-    const placeIdSet = new Set(places.map(p => p.id))
-    if ([...selectedIds].every(id => !placeIdSet.has(id))) {
-      setSelectMode(false)
-      setSelectedIds(new Set())
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [places])
-
-  const toggleSelected = useCallback((id: number) => setSelectedIds(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  }), [])
-
-  const toggleCategoryFilter = (catId: string) => {
-    const next = new Set(categoryFilters)
-    if (next.has(catId)) next.delete(catId); else next.add(catId)
-    setCategoryFilters(next)
-  }
   const [dayPickerPlace, setDayPickerPlace] = useState<Place | null>(null)
   // One panel holds what used to be three dropdowns (show, categories, rating).
   const [mobileShowDays, setMobileShowDays] = useState(false)
 
-  /** A new "show" choice starts a fresh selection, as picking it from the old select did. */
-  const pickFilter = (next: PlacesFilter) => { setFilter(next); setSelectedIds(new Set()) }
-
   // Alle geplanten Ort-IDs abrufen (einem Tag zugewiesen)
-  const hasTracks = useMemo(
-    () => !props.toursEnabled && poolPlaces.some(p => p.route_geometry),
-    [poolPlaces, props.toursEnabled],
-  )
-
   const plannedIds = useMemo(
     () => plannedPlaceIds({ assignments, accommodations, reservations }),
     [assignments, accommodations, reservations],
@@ -365,12 +294,12 @@ export function usePlacesSidebar(props: PlacesSidebarProps) {
     listImportLoading: listImport.loading, listImportProvider: listImport.provider, setListImportProvider: listImport.setProvider,
     listImportEnrich: listImport.enrich, setListImportEnrich: listImport.setEnrich, canEnrichImport: listImport.canEnrich,
     availableListImportProviders, hasMultipleListImportProviders, handleListImport: listImport.handleImport,
-    search, setSearch, filter, setFilter, pickFilter, filterCounts,
+    search, setSearch, updateSearch, filter, setFilter, pickFilter, filterCounts,
     categoryFilters, setCategoryFilters,
     ratingFilter, setRatingFilter,
     placesSort, setPlacesSort,
     localityFilter, setLocalityFilter, localities,
-    selectMode, setSelectMode, selectedIds, setSelectedIds, pendingDeleteIds, setPendingDeleteIds,
+    selectMode, setSelectMode, toggleSelectMode, selectedIds, setSelectedIds, pendingDeleteIds, setPendingDeleteIds,
     categoryPickerOpen, setCategoryPickerOpen,
     saveToListOpen, setSaveToListOpen, collectionsEnabled, tripId,
     markSelectionVisited, markVisitedBusy,

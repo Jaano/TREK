@@ -7,7 +7,8 @@ import { useElementSize } from '../../hooks/useElementSize'
 import { Eyebrow } from './bookings/bookingParts'
 import { tintOf } from './planParts'
 import { CategoryTile } from './PlacesBulkCategoryModal'
-import type { PlacesFilter, SidebarState } from './usePlacesSidebar'
+import type { SidebarState } from './usePlacesSidebar'
+import { placesFilterTabs } from './usePlacesPool'
 import { PLACES_SORTS, type PlacesSort } from './placesSort'
 import { RATING_FLOORS, UNCATEGORIZED } from '../../utils/placesFilter'
 
@@ -69,7 +70,7 @@ export function PlacesDropOverlay({ t }: SidebarState) {
  * says so.
  */
 export function PlacesHeader(S: SidebarState) {
-  const { canEditPlaces, t, selectMode, setSelectMode, setSelectedIds } = S
+  const { canEditPlaces, t, selectMode, toggleSelectMode } = S
   return (
     <div className="flex flex-none flex-col gap-2 border-b border-edge-faint px-3 py-2.5" style={{ background: NEUTRAL_TINT }}>
       {canEditPlaces && <AddRow {...S} />}
@@ -80,7 +81,7 @@ export function PlacesHeader(S: SidebarState) {
             label={t('common.select')}
             on={selectMode}
             ariaPressed={selectMode}
-            onClick={() => { setSelectMode(v => !v); setSelectedIds(new Set()) }}
+            onClick={toggleSelectMode}
           >
             {selectMode ? <X size={15} strokeWidth={2.4} /> : <Check size={15} strokeWidth={2.4} />}
           </BandButton>
@@ -98,14 +99,14 @@ export function PlacesHeader(S: SidebarState) {
   )
 }
 
-function SearchField({ t, search, setSearch, selectMode, setSelectedIds }: SidebarState) {
+function SearchField({ t, search, setSearch, updateSearch }: SidebarState) {
   return (
     <label className={`${CONTROL} flex min-w-0 flex-1 items-center gap-2 bg-surface-card ps-2.5 pe-1.5 text-content-faint focus-within:ring-2 focus-within:ring-[color:var(--text-primary)]`}>
       <Search size={13} strokeWidth={2} className="flex-none" />
       <input
         type="text"
         value={search}
-        onChange={e => { setSearch(e.target.value); if (selectMode) setSelectedIds(new Set()) }}
+        onChange={e => updateSearch(e.target.value)}
         placeholder={t('common.search')}
         aria-label={t('common.search')}
         className="min-w-0 flex-1 border-0 bg-transparent text-content outline-none placeholder:text-content-faint"
@@ -136,22 +137,11 @@ function CategoryChoice({ on, onClick, tile, label }: { on: boolean; onClick: ()
   )
 }
 
-/** The "show" choices; tracks only once a place has one. */
-function filterTabs({ t, hasTracks }: Pick<SidebarState, 't' | 'hasTracks'>) {
-  const tabs: Array<{ id: PlacesFilter; label: string }> = [
-    { id: 'all', label: t('places.all') },
-    { id: 'unplanned', label: t('places.unplanned') },
-    { id: 'planned', label: t('places.planned') },
-  ]
-  if (hasTracks) tabs.push({ id: 'tracks', label: t('places.filterTracks') })
-  return tabs
-}
-
 /** What the list shows (every place, the unplanned, the planned, the tracks) as one dropdown with their counts. */
 function ShowDropdown(S: SidebarState) {
   const { t, filter, pickFilter, filterCounts } = S
   const [open, setOpen] = useState(false)
-  const tabs = filterTabs(S)
+  const tabs = placesFilterTabs(t, S.hasTracks)
   const current = tabs.find(tab => tab.id === filter) ?? tabs[0]
   return (
     <FilterDropdown
