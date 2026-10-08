@@ -37,6 +37,7 @@ import type { Server as HttpServer } from 'node:http';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Users } from '../../../src/db/entities/Users.entity';
+import { currentCorrelation, type Correlation } from '../../../src/nest/common/request-correlation';
 
 const testDb = createSnapshotTestDb();
 
@@ -183,6 +184,23 @@ describe('TrekWsAdapter D6 request context (task-2-review.md C3 ruling)', () => 
     } finally {
       await t.close();
     }
+  });
+});
+
+describe('TrekWsAdapter correlation', () => {
+  it('WSAD-050: every message runs under its own ws correlation, and a plain answer still goes out at once', () => {
+    const socket = fakeSocket();
+    const seen: Array<Correlation | undefined> = [];
+    adapter.bindMessageHandlers(
+      socket as never,
+      [{ message: 'join', callback: () => { seen.push(currentCorrelation()); return { type: 'joined' }; } }] as never,
+      transform,
+    );
+    socket.emit('message', frame({ type: 'join', tripId: 1 }));
+    socket.emit('message', frame({ type: 'join', tripId: 2 }));
+    expect(seen.map((c) => c?.kind)).toEqual(['ws', 'ws']);
+    expect(seen[0]!.id).not.toBe(seen[1]!.id);
+    expect(socket.sent).toHaveLength(2);
   });
 });
 

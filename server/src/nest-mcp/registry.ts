@@ -7,6 +7,7 @@ import type {
   McpDynamicTool,
   McpDynamicToolSource,
   McpEntry,
+  McpEntryKind,
   McpRegistryListing,
   PromptOptions,
   ResourceOptions,
@@ -39,6 +40,11 @@ export interface McpRegistryOptions {
 }
 
 type AnyHandler = (this: unknown, ...handlerArgs: unknown[]) => unknown;
+
+/** Run one handler call through the host's `around` wrapper when it set one. */
+function invoke(opts: McpAttachOptions | undefined, info: { kind: McpEntryKind; name: string }, call: () => unknown): unknown {
+  return opts?.around ? opts.around(info, call) : call();
+}
 
 /**
  * Structural view of the SDK registration surface. The SDK's real signatures
@@ -327,11 +333,11 @@ export class McpRegistry {
       options.inputSchema !== undefined
         ? (args: unknown, _extra: unknown) => {
             opts?.onInvoke?.({ kind: 'tool', name: options.name });
-            return handler.call(instance, args, ctx);
+            return invoke(opts, { kind: 'tool', name: options.name }, () => handler.call(instance, args, ctx));
           }
         : (_extra: unknown) => {
             opts?.onInvoke?.({ kind: 'tool', name: options.name });
-            return handler.call(instance, {}, ctx);
+            return invoke(opts, { kind: 'tool', name: options.name }, () => handler.call(instance, {}, ctx));
           };
     registrar.registerTool(options.name, config, cb);
   }
@@ -352,7 +358,7 @@ export class McpRegistry {
     };
     registrar.registerResource(options.name, options.uri, metadata, (uri: unknown, _extra: unknown) => {
       opts?.onInvoke?.({ kind: 'resource', name: options.name });
-      return handler.call(instance, uri, ctx);
+      return invoke(opts, { kind: 'resource', name: options.name }, () => handler.call(instance, uri, ctx));
     });
   }
 
@@ -376,7 +382,9 @@ export class McpRegistry {
       metadata,
       (uri: unknown, variables: unknown, _extra: unknown) => {
         opts?.onInvoke?.({ kind: 'resourceTemplate', name: options.name });
-        return handler.call(instance, uri, variables, ctx);
+        return invoke(opts, { kind: 'resourceTemplate', name: options.name }, () =>
+          handler.call(instance, uri, variables, ctx),
+        );
       },
     );
   }
@@ -404,11 +412,11 @@ export class McpRegistry {
       argsSchema !== undefined
         ? (args: unknown, _extra: unknown) => {
             opts?.onInvoke?.({ kind: 'prompt', name: options.name });
-            return handler.call(instance, args, ctx);
+            return invoke(opts, { kind: 'prompt', name: options.name }, () => handler.call(instance, args, ctx));
           }
         : (_extra: unknown) => {
             opts?.onInvoke?.({ kind: 'prompt', name: options.name });
-            return handler.call(instance, {}, ctx);
+            return invoke(opts, { kind: 'prompt', name: options.name }, () => handler.call(instance, {}, ctx));
           };
     registrar.registerPrompt(options.name, config, cb);
   }

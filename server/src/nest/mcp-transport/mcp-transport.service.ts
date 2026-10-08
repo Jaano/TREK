@@ -17,6 +17,7 @@ import { OauthService } from '../oauth/oauth.service';
 import { AddonsService } from '../addons/addons.service';
 import { AuditService } from '../audit/audit.service';
 import { getClientIp } from '../audit/client-ip';
+import { traceEntry } from '../audit/entry-trace.logger';
 
 /**
  * The MCP transport handler behind the container — the former non-Nest
@@ -311,7 +312,12 @@ export class McpTransportService {
       });
     };
 
-    await registerTools(this.registry, server, user.id, scopes, isStaticToken, getDeprecationNotice, onInvoke);
+    // Every tool, resource and prompt call is its own unit of work: a correlation
+    // id under the /mcp request's, and one log line with its outcome.
+    const around = (info: { kind: string; name: string }, call: () => unknown): unknown =>
+      traceEntry('mcp', `${info.kind} ${info.name} user=${user.id}`, call);
+
+    await registerTools(this.registry, server, user.id, scopes, isStaticToken, getDeprecationNotice, onInvoke, undefined, around);
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),

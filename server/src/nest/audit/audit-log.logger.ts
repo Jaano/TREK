@@ -1,6 +1,7 @@
 import { readEnv } from '../../app-config';
 import { resolveDataPaths } from '../../app-config/data-paths';
 import { BufferedLogFile } from './log-file';
+import { correlationTag, currentCorrelation } from '../common/request-correlation';
 
 /**
  * The server's rotating file logger, a plain module and NOT an injectable
@@ -8,8 +9,10 @@ import { BufferedLogFile } from './log-file';
  * to the console at once and to `data/logs/trek.log` through a buffered,
  * asynchronous sink (log-file.ts), so logging never waits for the disk.
  * Nothing touches the disk at import: the directory appears with the first
- * flush. The LOG_LEVEL freeze below is the one deliberate import-time behavior
- * and is load-bearing for tests/setup.ts.
+ * flush. A line written inside a unit of work (an HTTP request, an MCP call,
+ * a WebSocket message, a plugin RPC, a cron tick) carries its correlation tag,
+ * `[http 1b9d...]`, after the timestamp. The LOG_LEVEL freeze below is the
+ * one deliberate import-time behavior and is load-bearing for tests/setup.ts.
  */
 
 // Frozen at import on purpose (legacy timing; tests/setup.ts sets it pre-import).
@@ -54,36 +57,38 @@ export function flushLogFileSync(): void {
 
 // ── Public log helpers ────────────────────────────────────────────────────
 
-function formatTs(): string {
+/** Timestamp, then the correlation tag of the current unit of work when there is one. */
+function prefix(): string {
   const tz = readEnv().app.tz || 'UTC';
-  return new Date().toLocaleString('sv-SE', { timeZone: tz }).replace(' ', 'T');
+  const ts = new Date().toLocaleString('sv-SE', { timeZone: tz }).replace(' ', 'T');
+  return `${ts} ${correlationTag(currentCorrelation())}`;
 }
 
 export function logInfo(msg: string): void {
   if (LOG_THRESHOLD < LEVEL_RANKS.info) return;
-  const ts = formatTs();
-  console.log(`${C.blue}[INFO]${C.reset} ${ts} ${msg}`);
-  logFile.write(`[INFO] ${ts} ${msg}`);
+  const ts = prefix();
+  console.log(`${C.blue}[INFO]${C.reset} ${ts}${msg}`);
+  logFile.write(`[INFO] ${ts}${msg}`);
 }
 
 export function logDebug(msg: string): void {
   if (LOG_THRESHOLD < LEVEL_RANKS.debug) return;
-  const ts = formatTs();
-  console.log(`${C.cyan}[DEBUG]${C.reset} ${ts} ${msg}`);
-  logFile.write(`[DEBUG] ${ts} ${msg}`);
+  const ts = prefix();
+  console.log(`${C.cyan}[DEBUG]${C.reset} ${ts}${msg}`);
+  logFile.write(`[DEBUG] ${ts}${msg}`);
 }
 
 export function logError(msg: string): void {
-  const ts = formatTs();
-  console.error(`${C.red}[ERROR]${C.reset} ${ts} ${msg}`);
-  logFile.write(`[ERROR] ${ts} ${msg}`);
+  const ts = prefix();
+  console.error(`${C.red}[ERROR]${C.reset} ${ts}${msg}`);
+  logFile.write(`[ERROR] ${ts}${msg}`);
 }
 
 export function logWarn(msg: string): void {
   if (LOG_THRESHOLD < LEVEL_RANKS.warn) return;
-  const ts = formatTs();
-  console.warn(`${C.yellow}[WARN]${C.reset} ${ts} ${msg}`);
-  logFile.write(`[WARN] ${ts} ${msg}`);
+  const ts = prefix();
+  console.warn(`${C.yellow}[WARN]${C.reset} ${ts}${msg}`);
+  logFile.write(`[WARN] ${ts}${msg}`);
 }
 
 export { LOG_LEVEL };

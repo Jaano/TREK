@@ -6,6 +6,7 @@ import { readEnv } from '../../app-config';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import { withRequestContext } from '../database/request-context';
 import { logError } from '../audit/audit-log.logger';
+import { traceEntry, wasTraced } from '../audit/entry-trace.logger';
 
 /**
  * The one way TREK code schedules a cron. Job providers register here from
@@ -84,23 +85,33 @@ export class CronRegistrarService implements OnApplicationShutdown {
     // OUR OWN clear error instead, so a hand-built double that registers a
     // job without an ORM but whose tick reaches a repository fails loudly and
     // distinctly rather than silently degrading.
+    const failed = (error: unknown) =>
+      `Cron job "${name}" failed: ${error instanceof Error ? error.message : String(error)}`;
     const wrappedTick = async () => {
       if (!orm) {
         throw new Error(`CronRegistrarService: no MikroORM available to build a request context for job "${name}"`);
       }
-      return withRequestContext(orm, () => onTick());
+      // Each tick is its own unit of work: one correlation id for every line
+      // the job writes, and one line for the tick itself.
+      return traceEntry('cron', name, () => withRequestContext(orm, () => onTick()), {
+        failureLevel: 'error',
+        failureMessage: failed,
+      });
     };
     // waitForCompletion: a tick still running when the next one is due is not
     // started twice (an hourly backup of a large library can outlast its hour).
     // errorHandler: a rejected tick reaches the app log instead of cron's own
-    // console line.
+    // console line, once: a failure the trace above already logged is not
+    // repeated.
     const job = CronJob.from({
       cronTime: expression,
       onTick: wrappedTick,
       start: true,
       timeZone,
       waitForCompletion: true,
-      errorHandler: (error: unknown) => logError(`Cron job "${name}" failed: ${error instanceof Error ? error.message : String(error)}`),
+      errorHandler: (error: unknown) => {
+        if (!wasTraced(error)) logError(failed(error));
+      },
     });
     this.registry.addCronJob(name, job);
     this.names.add(name);

@@ -181,6 +181,15 @@ export interface McpAttachOptions {
    */
   onInvoke?: (info: { kind: McpEntryKind; name: string }) => void;
   /**
+   * Wraps every attached handler call: `call` runs the handler, and what the
+   * wrapper returns is what the SDK receives. This is the host's tracing seam
+   * (a correlation id and one log line per call); nest-mcp attaches no
+   * semantics to it. Unlike `onInvoke` it sees the outcome. Contract: the
+   * wrapper calls `call` exactly once and passes its result or its error on
+   * unchanged.
+   */
+  around?: (info: { kind: McpEntryKind; name: string }, call: () => unknown) => unknown;
+  /**
    * Extra tools contributed for THIS session only, on top of the decorated
    * ones. Consulted once per `attach()`, after every registered entry.
    *

@@ -6,8 +6,9 @@ import { WebSocketServer } from 'ws';
 import type { Observable } from 'rxjs';
 import type { EntityManager } from '@mikro-orm/core';
 import { readEnv } from '../../app-config';
-import { setServer, type TrekWebSocket } from './ws-state';
+import { setServer, userOf, type TrekWebSocket } from './ws-state';
 import { logError } from '../audit/audit-log.logger';
+import { traceEntry } from '../audit/entry-trace.logger';
 import { withRequestContext } from '../database/request-context';
 import { isSameHostOrigin } from '../common/same-origin';
 
@@ -287,13 +288,22 @@ export class TrekWsAdapter extends WsAdapter {
       if (!this.orm) {
         throw new Error('TrekWsAdapter: no MikroORM available to build a request context for this message handler');
       }
-      const result = withRequestContext(this.orm, () => handler.callback(message, socket));
+      const orm = this.orm;
+      // Each message is its own unit of work with its own correlation id, and
+      // one log line (debug when it succeeds, warn with the reason when it
+      // throws). The handler is still invoked synchronously, inside this frame.
+      const user = userOf(socket);
+      const label = `${message.type}${user ? ` user=${user.id}` : ''}`;
+      const result = traceEntry('ws', label, () => withRequestContext(orm, () => handler.callback(message, socket)));
       transform(result).subscribe({
         next: (response) => {
           if (response !== undefined && socket.readyState === 1) {
             socket.send(JSON.stringify(response));
           }
         },
+        // Already logged by the trace; without a handler rxjs rethrows it
+        // asynchronously, which would take the whole process down.
+        error: () => {},
       });
     });
   }

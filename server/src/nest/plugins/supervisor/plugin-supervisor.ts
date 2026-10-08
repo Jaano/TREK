@@ -10,6 +10,7 @@ import { scheduleJobs, stopJobs, type ScheduledJob } from '../host/plugin-jobs';
 import { SNAPSHOT_GRANT, type PluginEventMeta } from '../../../plugin-event-sink';
 import { RpcRateLimiter, DEFAULT_RPC_LIMIT, TokenBucket, DEFAULT_LOG_LIMIT } from '../host/rate-limit';
 import { withRequestContext } from '../../database/request-context';
+import { traceEntry } from '../../audit/entry-trace.logger';
 
 export interface PluginRouteInfo {
   i: number;
@@ -619,7 +620,14 @@ export class PluginSupervisor {
           sup.child?.send({ k: 'res', id: req.id, ok: false, error: { code: 'HOST_ERROR', message: 'no ORM available to build a request context' } } satisfies RpcError);
           throw new Error('PluginSupervisor: no ORM available to build a request context for this RPC dispatch');
         }
-        const res = await withRequestContext(orm, () => sup.rpcHost.dispatch(req, actingUserId));
+        // One unit of work per RPC, with its own correlation id and one log line;
+        // a refusal travels back as `{ ok: false }`, so that is what the line reports.
+        const res = await traceEntry(
+          'rpc',
+          `${sup.id} ${req.method}`,
+          () => withRequestContext(orm, () => sup.rpcHost.dispatch(req, actingUserId)),
+          { refusal: (answer) => ('error' in answer ? `${answer.error.code} ${answer.error.message}` : null) },
+        );
         sup.child?.send(res);
       } finally {
         sup.rpcLimiter.release();

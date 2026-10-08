@@ -373,3 +373,52 @@ describe('McpAttachOptions.onInvoke', () => {
     expect((result as { isError?: boolean }).isError).toBe(true);
   });
 });
+
+describe('McpAttachOptions.around', () => {
+  let harness: AttachHarness | undefined;
+  afterEach(async () => {
+    await harness?.cleanup();
+    harness = undefined;
+  });
+
+  const fullCtx: TestCtx = { userId: 7, canRead: true, canWrite: true, allow: true };
+
+  it('wraps every invocation and passes the handler result through unchanged', async () => {
+    const seen: Array<{ kind: string; name: string }> = [];
+    const plain = await createAttachHarness(buildRegistry(), fullCtx);
+    const expected = await plain.client.callTool({ name: 'open_tool', arguments: {} });
+    await plain.cleanup();
+
+    harness = await createAttachHarness(buildRegistry(), fullCtx, {
+      around: (info, call) => {
+        seen.push(info);
+        return call();
+      },
+    });
+    expect(seen).toEqual([]);
+    expect(await harness.client.callTool({ name: 'open_tool', arguments: {} })).toEqual(expected);
+    await harness.client.readResource({ uri: 'test://doc' });
+    await harness.client.readResource({ uri: 'test://item/5' });
+    await harness.client.getPrompt({ name: 'fixture_prompt', arguments: { topic: 't' } });
+    expect(seen).toEqual([
+      { kind: 'tool', name: 'open_tool' },
+      { kind: 'resource', name: 'fixture_doc' },
+      { kind: 'resourceTemplate', name: 'fixture_item' },
+      { kind: 'prompt', name: 'fixture_prompt' },
+    ]);
+  });
+
+  it('runs the handler inside the wrapper, so the wrapper sees its outcome', async () => {
+    const outcomes: unknown[] = [];
+    harness = await createAttachHarness(buildRegistry(), fullCtx, {
+      around: async (_info, call) => {
+        const result = await call();
+        outcomes.push(result);
+        return result;
+      },
+    });
+    await harness.client.callTool({ name: 'open_tool', arguments: {} });
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toBeDefined();
+  });
+});

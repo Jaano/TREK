@@ -1,4 +1,5 @@
 import express, { Request, Response, NextFunction } from 'express';
+import { AsyncResource } from 'node:async_hooks';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -8,6 +9,14 @@ import { readEnv } from '../app-config';
 import { httpConfig } from '../nest/app-config/tokens';
 import { logDebug, logWarn, logError } from '../nest/audit/audit-log.logger';
 import { isSameHostOrigin } from '../nest/common/same-origin';
+import {
+  ACCESS_LOG_ATTACHED,
+  REQUEST_ID_HEADER,
+  UNHANDLED_ERROR,
+  acceptRequestId,
+  newCorrelationId,
+  runWithCorrelation,
+} from '../nest/common/request-correlation';
 
 /**
  * Field names redacted from request-log query/body dumps (case-insensitive —
@@ -145,6 +154,16 @@ export function applyGlobalMiddleware(
   const { http = httpConfig(), extraConnectSrc = [] } = opts;
   const liveHttp = readEnv().http;
   const { nodeEnv, isProduction } = readEnv().app;
+
+  // Request correlation comes first, so the whole pipeline and every line the
+  // request logs run under its id. An X-Request-Id set by the proxy in front is
+  // kept when it looks like an id, so its logs and ours line up; anything else
+  // is replaced. The response always says which id it got.
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const id = acceptRequestId(req.headers['x-request-id']) ?? newCorrelationId();
+    res.setHeader(REQUEST_ID_HEADER, id);
+    runWithCorrelation({ id, kind: 'http' }, next);
+  });
 
   // Trust first proxy (nginx/Docker) for correct req.ip
   if (isProduction || http.trustProxyRaw) {
@@ -361,14 +380,33 @@ export function applyGlobalMiddleware(
 
   app.use(cookieParser());
 
-  // Request logging with sensitive field redaction (SENSITIVE_KEYS/redact above)
+  // Request logging with sensitive field redaction (SENSITIVE_KEYS/redact above).
+  // The line is written in the request's own correlation context (the 'finish'
+  // listener would otherwise run in whatever context the socket emits from),
+  // and a 5xx carries the stack the exception filter left on res.locals, so
+  // the request line, its id and the failure are one entry.
   app.use((req: Request, res: Response, next: NextFunction) => {
     if (req.path === '/api/health' || req.path === '/api/health/ready') return next();
     const startedAt = Date.now();
-    res.on('finish', () => {
+    res.locals[ACCESS_LOG_ATTACHED] = true;
+    let reported = false;
+    const failureSuffix = (): string => {
+      const failure: unknown = res.locals[UNHANDLED_ERROR];
+      if (failure === undefined) return '';
+      return `\n${failure instanceof Error ? (failure.stack ?? failure.message) : String(failure)}`;
+    };
+    // A response the filter had to cut off after its headers went out never
+    // finishes; it is reported when the socket closes, with its failure.
+    res.on('close', AsyncResource.bind(() => {
+      if (reported || res.locals[UNHANDLED_ERROR] === undefined) return;
+      reported = true;
+      logError(`${req.method} ${req.path} aborted after headers ${Date.now() - startedAt}ms ip=${req.ip}${failureSuffix()}`);
+    }));
+    res.on('finish', AsyncResource.bind(() => {
+      reported = true;
       const ms = Date.now() - startedAt;
       if (res.statusCode >= 500) {
-        logError(`${req.method} ${req.path} ${res.statusCode} ${ms}ms ip=${req.ip}`);
+        logError(`${req.method} ${req.path} ${res.statusCode} ${ms}ms ip=${req.ip}${failureSuffix()}`);
       } else if (res.statusCode === 401 || res.statusCode === 403) {
         logDebug(`${req.method} ${req.path} ${res.statusCode} ${ms}ms ip=${req.ip}`);
       } else if (res.statusCode >= 400) {
@@ -377,7 +415,7 @@ export function applyGlobalMiddleware(
       const q = Object.keys(req.query).length ? ` query=${JSON.stringify(redact(req.query))}` : '';
       const b = req.body && Object.keys(req.body).length ? ` body=${JSON.stringify(redact(req.body))}` : '';
       logDebug(`${req.method} ${req.path} ${res.statusCode} ${ms}ms ip=${req.ip}${q}${b}`);
-    });
+    }));
     next();
   });
 }

@@ -56,6 +56,7 @@ import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Users } from '../../../src/db/entities/Users.entity';
+import { currentCorrelation, type Correlation } from '../../../src/nest/common/request-correlation';
 
 function makeRegistrar(isTest: boolean) {
   const registry = new SchedulerRegistry();
@@ -249,6 +250,31 @@ describe('CronRegistrarService', () => {
       await h.jobs[0].onTick();
       expect(caught).toBeUndefined();
       expect(typeof result).toBe('number');
+    });
+
+    it('CRONREG-015: each tick runs under its own cron correlation id', async () => {
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      const seen: Array<Correlation | undefined> = [];
+      registrar.register('job', '0 2 * * *', () => {
+        seen.push(currentCorrelation());
+      });
+      await h.jobs[0].onTick();
+      await h.jobs[0].onTick();
+      expect(seen.map((c) => c?.kind)).toEqual(['cron', 'cron']);
+      expect(seen[0]!.id).not.toBe(seen[1]!.id);
+    });
+
+    it('CRONREG-016: a failed tick is logged once, by the trace, and the error handler does not repeat it', async () => {
+      logErrorMock.mockClear();
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      const boom = new Error('kaput');
+      registrar.register('job', '0 2 * * *', () => {
+        throw boom;
+      });
+      await expect(h.jobs[0].onTick()).rejects.toBe(boom);
+      expect(logErrorMock).toHaveBeenCalledWith('Cron job "job" failed: kaput');
+      h.jobs[0].errorHandler!(boom);
+      expect(logErrorMock).toHaveBeenCalledTimes(1);
     });
   });
 
