@@ -6,15 +6,25 @@
  * dependency-free.
  */
 
+import type { PLUGIN_ENTITY_FIELDS } from './generated/host-facts.js';
+
 /** Bumped on any breaking change to the plugin API surface. Embed as `apiVersion` in your manifest. */
 export const PLUGIN_API_VERSION = 1 as const;
 
 // Core entity shapes returned by ctx reads/writes. Only `id` is guaranteed; the rest
-// are the fields plugins most commonly use (typed for autocomplete), left optional
-// because they mirror raw DB rows — and every shape keeps an index signature, so no
-// column is ever hidden from you.
+// are the fields plugins most commonly use (typed for autocomplete), left optional.
+// What a row actually carries is the published field list in PLUGIN_ENTITY_FIELDS
+// (generated from TREK's output contract): a row holds those fields and no others, so
+// a column TREK adds later is not delivered until TREK publishes it there. The index
+// signature types the published fields these interfaces do not name.
 export interface Trip { id: number; user_id?: number; title?: string; start_date?: string | null; end_date?: string | null; currency?: string | null; [k: string]: unknown }
-export interface Place { id: number; trip_id?: number; name?: string; lat?: number | null; lng?: number | null; day_id?: number | null; category_id?: number | null; notes?: string | null; [k: string]: unknown }
+export interface Place {
+  id: number; trip_id?: number; name?: string; lat?: number | null; lng?: number | null;
+  /** @deprecated Never delivered: a place has no day of its own. Its days are the
+   * `assignments` of `trips.getDays()`, each carrying `day_id` and `place_id`. */
+  day_id?: number | null;
+  category_id?: number | null; notes?: string | null; [k: string]: unknown;
+}
 export interface Day { id: number; trip_id?: number; date?: string | null; title?: string | null; [k: string]: unknown }
 export interface Reservation { id: number; trip_id?: number; type?: string; [k: string]: unknown }
 export interface PackingItem { id: number; trip_id?: number; name?: string; [k: string]: unknown }
@@ -22,6 +32,25 @@ export interface TripFile { id: number; trip_id?: number; filename?: string; [k:
 export interface BudgetItem { id: number; trip_id?: number; name?: string; total_price?: number | null; currency?: string | null; [k: string]: unknown }
 export interface Assignment { id: number; day_id?: number; place_id?: number; notes?: string | null; [k: string]: unknown }
 export interface User { id: number; username?: string; display_name?: string | null; avatar?: string | null; [k: string]: unknown }
+
+// Every field an entity interface above names has to be one TREK delivers. A field
+// that is not in PLUGIN_ENTITY_FIELDS fails this check at compile time, so the
+// interfaces cannot promise a field the host drops. `Place.day_id` predates the
+// contract and is the one deprecated exception.
+type NamedKeys<T> = keyof { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] };
+type Undelivered<T, E extends keyof typeof PLUGIN_ENTITY_FIELDS> = Exclude<NamedKeys<T>, (typeof PLUGIN_ENTITY_FIELDS)[E][number]>;
+type NoneUndelivered<T extends never> = T;
+type EntityFieldsAreDelivered = [
+  NoneUndelivered<Undelivered<Trip, 'trip'>>,
+  NoneUndelivered<Exclude<Undelivered<Place, 'place'>, 'day_id'>>,
+  NoneUndelivered<Undelivered<Day, 'day'>>,
+  NoneUndelivered<Undelivered<Reservation, 'reservation'>>,
+  NoneUndelivered<Undelivered<PackingItem, 'packingItem'>>,
+  NoneUndelivered<Undelivered<TripFile, 'tripFile'>>,
+  NoneUndelivered<Undelivered<BudgetItem, 'budgetItem'>>,
+  NoneUndelivered<Undelivered<Assignment, 'assignment'>>,
+  NoneUndelivered<Undelivered<User, 'user'>>,
+];
 
 /** Every ctx.* call is rate-limited per plugin at the host RPC dispatch boundary:
  * burst 60, sustained 20/s, 16 in-flight. A throttled call is refused (retryable)
@@ -976,6 +1005,8 @@ export {
 export {
   EVENT_FAMILIES, EVENT_SNAPSHOT_GRANT, KNOWN_PERMISSIONS,
 } from './generated/host-facts.js';
+// What ctx results carry: the published fields of each entity, and what each method returns.
+export { PLUGIN_ENTITY_FIELDS, PLUGIN_METHOD_RESULT } from './generated/host-facts.js';
 // The lucide icons a `capabilities.poiCategories` entry may use, and the per-plugin cap.
 export { POI_CATEGORY_ICONS, POI_CATEGORY_MAX } from './generated/host-facts.js';
 

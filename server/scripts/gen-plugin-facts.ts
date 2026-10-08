@@ -1,6 +1,7 @@
 /**
  * Regenerates every derived copy of the plugin permission facts from the single source,
- * server/src/nest/plugins/protocol/envelope.ts.
+ * server/src/nest/plugins/protocol/envelope.ts, plus the output contract
+ * (protocol/output-contract.ts) and the addon ids (src/addons.ts) the SDK publishes.
  *
  *   node --import tsx server/scripts/gen-plugin-facts.ts            # write
  *   node --import tsx server/scripts/gen-plugin-facts.ts --check    # exit 1 on drift
@@ -22,6 +23,10 @@ import {
   EVENTS_PERMISSION, JOBS_PERMISSION, USER_DATA_PERMISSION, HTTP_OUTBOUND_PREFIX,
 } from '../src/nest/plugins/protocol/envelope';
 import { SNAPSHOT_GRANT, ENTITY_ID_KEYS } from '../src/plugin-event-sink';
+import {
+  PLUGIN_ENTITY_CONTRACT, PLUGIN_METHOD_OUTPUT, pluginEntityFields, type PluginEntityName, type PluginMethodOutput,
+} from '../src/nest/plugins/protocol/output-contract';
+import { ADDON_IDS } from '../src/addons';
 // A relative import of the shared SOURCE, not @trek/shared: the plugin-facts CI job
 // installs only the server, so shared's dist does not exist there. The file has no
 // imports of its own for exactly this reason.
@@ -34,6 +39,7 @@ const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const HEADER = [
   '// GENERATED — do not edit by hand.',
   '// Source: server/src/nest/plugins/protocol/envelope.ts + server/src/plugin-event-sink.ts',
+  '//         + server/src/nest/plugins/protocol/output-contract.ts + server/src/addons.ts',
   '//         + shared/src/plugins/plugin-poi-facts.ts',
   '// Regenerate: node --import tsx server/scripts/gen-plugin-facts.ts',
   '',
@@ -52,6 +58,19 @@ const pairs = (o: Readonly<Record<string, string>>) =>
  * belongs on the host side, where the data source lives.
  */
 const EVENT_FAMILIES = [...new Set([...Object.keys(ENTITY_ID_KEYS), ...Object.keys(SNAPSHOT_GRANT)])].sort();
+
+/** `'trip'`, `'trip[]'`, `'host'` or `'readModel'`: what a method's result is. */
+const describeOutput = (output: PluginMethodOutput): string =>
+  output.kind === 'entity' ? `${output.entity}${output.many ? '[]' : ''}` : output.kind;
+
+const fieldList = (fields: readonly string[]) => fields.map((f) => `    '${f}',`).join('\n');
+const ENTITY_FIELDS = (Object.keys(PLUGIN_ENTITY_CONTRACT) as PluginEntityName[])
+  .map((entity) => `  ${entity}: [\n${fieldList(pluginEntityFields(entity))}\n  ],`)
+  .join('\n');
+
+const METHOD_RESULT = Object.fromEntries(
+  Object.entries(PLUGIN_METHOD_OUTPUT).map(([method, output]) => [method, describeOutput(output)]),
+);
 
 const SDK_FACTS = `${HEADER}
 export const HOOK_PERMISSION: Readonly<Record<string, string>> = {
@@ -100,6 +119,34 @@ ${list(PLUGIN_POI_ICONS)}
 
 export const POI_CATEGORY_MAX = ${PLUGIN_POI_MAX_CATEGORIES};
 export const POI_CATEGORY_LABEL_MAX = ${PLUGIN_POI_LABEL_MAX};
+
+/**
+ * The addon ids a manifest's \`requiredAddons\` may name: TREK's ADDON_IDS.
+ */
+export const KNOWN_ADDONS: string[] = [
+${list(Object.values(ADDON_IDS))}
+];
+
+/**
+ * The fields each entity result carries, and nothing else: the row's published
+ * columns, then the keys the host adds (joined names, counts, hydrated children).
+ * A column TREK adds later is not delivered until it is listed here. A literal,
+ * unlike the wide tables above, because it is new (nothing published depends on a
+ * wider type) and the SDK's entity interfaces are type-checked against it.
+ */
+export const PLUGIN_ENTITY_FIELDS = {
+${ENTITY_FIELDS}
+} as const;
+
+/**
+ * What each ctx method returns: an entity from PLUGIN_ENTITY_FIELDS (\`trip\`, or
+ * \`trip[]\` for a list), \`host\` for a value the host builds itself or data the
+ * plugin owns, or \`readModel\` for a domain read model passed on as the app's own
+ * REST route returns it.
+ */
+export const PLUGIN_METHOD_RESULT: Readonly<Record<string, string>> = {
+${pairs(METHOD_RESULT)}
+};
 `;
 
 const SHARED_FACTS = `${HEADER}

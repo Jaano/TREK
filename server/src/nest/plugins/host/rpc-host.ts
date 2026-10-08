@@ -9,6 +9,7 @@ import {
 import type { PluginDataDb } from './plugin-data.service';
 import { auditResource, isAuditable } from './plugin-audit';
 import { BadParams, ForbiddenResource } from './rpc-errors';
+import { shapePluginOutput } from '../protocol/output-contract';
 import type { PluginRpcRegistry } from './rpc-kit/registry';
 
 // Both used to be declared here. They now live in rpc-errors.ts so decorated
@@ -28,7 +29,8 @@ export { BadParams, ForbiddenResource };
  * a `@PluginMethod` / `@PluginOpenMethod` on a `@PluginController()` provider in its
  * own domain, and the registry binds the granted subset into the map below. What is
  * left is the part that was never domain-specific: build the map, dispatch into it,
- * audit the call, and map a thrown error onto a wire code.
+ * apply the output contract to the result, audit the call, and map a thrown error
+ * onto a wire code.
  *
  * Runs in the HOST (parent) process.
  */
@@ -129,7 +131,10 @@ export class PluginRpcHost {
       );
     }
     try {
-      const result = await handler(params, actingUserId);
+      // The output contract (protocol/output-contract.ts): every result leaves through
+      // here, so an entity read hands the plugin its published fields only, whatever
+      // the query behind it selected. Other methods' results pass through unchanged.
+      const result = shapePluginOutput(req.method, await handler(params, actingUserId));
       return { k: 'res', id: req.id, ok: true, result };
     } catch (e) {
       if (e instanceof BadParams) return this.err(req.id, 'BAD_PARAMS', e.message);

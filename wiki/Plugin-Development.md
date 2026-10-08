@@ -244,6 +244,29 @@ parser would ignore one if you added it.
 
 ### The `ctx` object
 
+**What the reads return.** Every method's result is one of three kinds, and the SDK
+exports the list per method as `PLUGIN_METHOD_RESULT`:
+
+- **Entity rows** (`trip`, `place`, `day`, `reservation`, `packingItem`, `tripFile`,
+  `budgetItem`, `assignment`, `user`). A row carries exactly the fields TREK publishes
+  for that entity (`PLUGIN_ENTITY_FIELDS` in the SDK): the table's columns in
+  snake_case, then what TREK adds on top, such as a trip's `day_count`,
+  `place_count`, `is_owner`, `owner_username` and `shared_count`, a place's
+  `category`, `tags` and `ratings`, a reservation's `endpoints`, `travelers` and
+  `day_positions`, or a day's `assignments` and `notes_items`. A field appears only
+  where the method's read produces it (`trips.getById` has no `day_count`,
+  `trips.listMine` has). Credentials are never part of a row: a trip's calendar
+  `feed_token` is withheld, and a user is only `id`, `username`, `display_name` and
+  `avatar`. A column TREK adds in a later release is **not** delivered until TREK
+  publishes it in that list, so the rows your plugin reads do not change shape on an
+  update. `Place.day_id` in the SDK types is deprecated and never set: a place's days
+  are the `assignments` of `getDays`.
+- **Read models** (tags, to-dos, collab notes, polls and messages, journals and
+  entries, bags, collections, accommodations, Atlas and Vacay data): the same shape
+  TREK's own REST route returns, passed on unchanged. The SDK types them `unknown`.
+- **Host values**: `{ deleted }`, `{ sent }`, a model's answer, an access token, and
+  your own data (`ctx.db`, `ctx.meta`, another plugin's answer), returned as they are.
+
 | Area | Methods | Requires |
 |---|---|---|
 | `ctx.db` | `query(sql, …args)` / `exec(sql, …args)` / `migrate(id, sql)` / `tx(ops)` against your **own** SQLite file. `tx([{sql, args?}, …])` runs up to 100 statements in one transaction (all commit or all roll back; reads see the batch's own earlier writes) → `{ results: [{changes?}\|{rows?}, …] }`. Your file is capped at **256 MB** (a write past it fails `SQLITE_FULL`, contained to your plugin) and a single result set at **100,000 rows** — page your reads instead of materialising a cartesian product | `db:own` |

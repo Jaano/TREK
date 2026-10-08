@@ -136,12 +136,11 @@ const RESERVED_IDS = new Set(['registry', 'install', 'rescan']);
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 // Addon-id format (lowercase slug, underscores allowed e.g. `llm_parsing`).
 const ADDON_ID_RE = /^[a-z][a-z0-9_]{1,39}$/;
-// Mirror of the server's ADDON_IDS (server/src/addons.ts). Kept in sync so
-// `trek-plugin validate` can WARN on an addon id TREK doesn't know — never a hard
+// The server's ADDON_IDS (server/src/addons.ts), generated into host-facts.ts by
+// gen:plugin-facts so it cannot drift again (dawarich, roadtrip and tours had). Used
+// so `trek-plugin validate` can WARN on an addon id TREK doesn't know, never a hard
 // error (a plugin built for a newer TREK may reference an addon this SDK predates).
-export const KNOWN_ADDONS = [
-  'mcp', 'packing', 'budget', 'documents', 'vacay', 'atlas', 'collab', 'journey', 'airtrail', 'llm_parsing', 'collections',
-];
+export { KNOWN_ADDONS } from './generated/host-facts.js';
 // An outbound host: exact hostname (single-label sibling or dotted FQDN) or a
 // `*.`-wildcard with a multi-label suffix. No `*`, no `*.`, no whole-TLD `*.com`,
 // no spaces (mirrors the server manifest validator).

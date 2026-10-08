@@ -155,6 +155,17 @@ import { MaintenanceRepository } from '../../src/db/repositories/MaintenanceRepo
  * container would discover, handed to the host factory as a registry.
  */
 export async function createPluginRpcHostFactory(db: Database.Database): Promise<PluginRpcHostFactory> {
+  return (await createPluginRpcHostParts(db)).factory;
+}
+
+/**
+ * The host factory together with the controller instances behind its registry, for a
+ * test that needs to call a handler directly as well as through the router (the output
+ * contract compares the two).
+ */
+export async function createPluginRpcHostParts(
+  db: Database.Database,
+): Promise<{ factory: PluginRpcHostFactory; controllers: object[] }> {
   const generalStorage = makeStorageFixture('').storage;
   const appSettings = (await sharedTestOrm(db)).repo(AppSettings);
   const usersRepo = (await sharedTestOrm(db)).repo(Users);
@@ -311,7 +322,7 @@ export async function createPluginRpcHostFactory(db: Database.Database): Promise
   // TripsRepository.findAccessible directly, in the same constructor slot.
   const guards = new PluginGuards(await createTestTripsRepo(db), permissions, addons, usersRepo);
 
-  const registry = createTestPluginRegistry([
+  const controllers: object[] = [
     new TagsRpc(new TagsService(await createTestTagsRepo(db))),
     new CategoriesRpc(new CategoriesService(await createTestCategoriesRepo(db))),
     new WeatherRpc(new WeatherService()),
@@ -358,8 +369,9 @@ export async function createPluginRpcHostFactory(db: Database.Database): Promise
       usersRepo, await createTestTripsRepo(db), pluginOrm.repo(PluginScheduledTasks),
     ),
     new PluginHooks(undefined as never),
-  ]);
-  return new PluginRpcHostFactory(pluginAuditRepo, registry as unknown as PluginRpcRegistryService);
+  ];
+  const registry = createTestPluginRegistry(controllers);
+  return { factory: new PluginRpcHostFactory(pluginAuditRepo, registry as unknown as PluginRpcRegistryService), controllers };
 }
 
 /** A PluginRuntimeService constructed the way Nest would: with a real host factory. */
