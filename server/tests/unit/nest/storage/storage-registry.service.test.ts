@@ -22,6 +22,7 @@ import { Readable } from 'node:stream';
 import { encrypt_api_key } from '../../../../src/nest/common/crypto/apiKeyCrypto';
 import { StorageEventsService } from '../../../../src/nest/storage/storage-events.service';
 import { StorageRegistryService } from '../../../../src/nest/storage/storage-registry.service';
+import { DataPathsService } from '../../../../src/nest/app-config/data-paths.service';
 import { LocalDriver } from '../../../../src/nest/storage/drivers/local.driver';
 import { MirrorDriver, type ReplicaFailure } from '../../../../src/nest/storage/drivers/mirror.driver';
 import { S3Driver } from '../../../../src/nest/storage/drivers/s3.driver';
@@ -170,6 +171,34 @@ describe('StorageRegistryService defaults', () => {
     expect(files.backendName).toBe('uploads-local');
     expect(files.driver.getLocalPath!('files/x.pdf')).toBe(
       path.join(fs.realpathSync(DEFAULT_UPLOADS_ROOT), 'files/x.pdf'),
+    );
+  });
+
+  it('takes the built-in roots and the scratch dir from the injected DataPathsService', async () => {
+    const root = makeTmpDir();
+    const paths = {
+      ...new DataPathsService(),
+      uploadsDir: path.join(root, 'uploads'),
+      backupsDir: path.join(root, 'backups'),
+      tmpDir: path.join(root, 'tmp'),
+    } as DataPathsService;
+    const registry = new StorageRegistryService(
+      await createTestAppSettingsRepo(testDb),
+      makeEnvStub({}).env,
+      new StorageEventsService(),
+      await createTestUnitOfWork(testDb),
+      (await sharedTestOrm(testDb)).orm,
+      paths,
+    );
+    await registry.onModuleInit();
+
+    expect(registry.tempDir()).toBe(paths.tmpDir);
+    expect(fs.statSync(paths.tmpDir).isDirectory()).toBe(true);
+    expect(registry.resolve('files').driver.getLocalPath!('files/x.pdf')).toBe(
+      path.join(fs.realpathSync(paths.uploadsDir), 'files/x.pdf'),
+    );
+    expect(registry.resolve('backups').driver.getLocalPath!('backup-1.zip')).toBe(
+      path.join(fs.realpathSync(paths.backupsDir), 'backup-1.zip'),
     );
   });
 

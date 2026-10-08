@@ -378,7 +378,10 @@ sharing).
   or read runtime-toggled values live through `RuntimeEnvService` / `readEnv()`
   from `src/app-config`. Every variable has exactly one owner, a token or
   `readEnv()`, and `config-ownership.test.ts` fails on a variable read through
-  both. Data paths come from `DataPathsService`. The classification and
+  both. A provider that reads a data path takes `DataPathsService`
+  (`AdminService`, `StorageRegistryService`, and through it the storage
+  jobs); plain helper modules call `resolveDataPaths()` (see
+  `src/app-config/README.md` for which and why). The classification and
   invariants live in `src/app-config/README.md`.
 
 ## Parity gotchas worth remembering

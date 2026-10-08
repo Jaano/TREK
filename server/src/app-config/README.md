@@ -60,10 +60,27 @@ tokens, `RuntimeEnvService`) and consumes the SAME derive functions.
 `uploads/` (on `SERVER_ROOT`, the package directory, never on `process.cwd()`)
 and names what lives in them: backups, the scratch dir, the logs, the JWT
 secret and encryption key files, and the database file (TREK_DB_FILE when set,
-else `data/travel.db`). Code that runs before the container exists imports it
-directly; Nest classes inject `DataPathsService` (`src/nest/app-config/`),
-which resolves the same layout once per built app. Never derive one of these
-paths from `__dirname` in a new file: a moved file would quietly move the data.
+else `data/travel.db`). Never derive one of these paths from `__dirname` in a
+new file: a moved file would quietly move the data.
+
+Two ways in, by where the code runs:
+
+- **Nest providers inject `DataPathsService`** (`src/nest/app-config/`), which
+  resolves the same layout once per built app: `AdminService` (the JWT secret
+  file), `StorageRegistryService` (the built-in uploads and backups roots and
+  the scratch dir) and, through `StorageRegistryService.tempDir()`,
+  `StorageJobsService`. A new provider that needs a data path takes it the
+  same way.
+- **Plain modules call `resolveDataPaths()`** because they run without a
+  container or are shared with code that does: `config.ts` key resolution,
+  `db/db-path.ts`, `index.ts`, the file logger, `demo/demo-reset.ts`, the
+  backup restore and archive functions (`nest/backup/backup.impl.ts`,
+  `auto-backup.settings.ts`, file I/O with no container state), the plugin
+  trees (`nest/plugins/paths.ts`, also read by the out-of-process supervisor),
+  and `nest/storage/storage-paths.ts`, which keeps the seed-config test seam
+  that `StorageAdminService` and the registry share. `files.constants.ts`
+  still exports `filesDir` for the tests that pin the layout; no production
+  code reads it.
 
 ## app-url.ts — instance base-URL resolution (moved 2026-07-28)
 

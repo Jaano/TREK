@@ -5,11 +5,14 @@ import { resolveDataPaths, type DataPaths } from '../../app-config/data-paths';
  * The data layout for Nest classes: the data directory, uploads, backups,
  * scratch space, logs, the key files and the database file.
  *
- * Code that runs before the container exists (config.ts key resolution, the
- * database connection, index.ts, the file logger) calls `resolveDataPaths()`
- * directly; this provider hands the same answer to everything that can take a
- * constructor argument, so neither side counts `..` hops from its own file.
- * Resolved once per built app: none of these move while a process runs.
+ * Providers that read a data path take this one (AdminService,
+ * StorageRegistryService). Code that runs before the container exists or is
+ * shared with code outside it (config.ts key resolution, the database
+ * connection, index.ts, the file logger, the backup functions, the plugin
+ * trees) calls `resolveDataPaths()` directly; src/app-config/README.md keeps
+ * the list. Both get the same answer, and neither counts `..` hops from its
+ * own file. Resolved once per built app: none of these move while a process
+ * runs.
  */
 @Injectable()
 export class DataPathsService implements DataPaths {

@@ -11,7 +11,6 @@ import {
 } from '@trek/shared';
 import { contentTypeFor } from './content-type';
 import { MirrorDriver } from './drivers/mirror.driver';
-import { GLOBAL_TEMP_DIR } from './storage-paths';
 import { StorageRegistryService } from './storage-registry.service';
 import type { StorageDriver } from './storage.types';
 
@@ -252,7 +251,7 @@ export class StorageJobsService {
     sourceKey: string,
     destKey: string,
   ): Promise<boolean> {
-    const file = path.join(GLOBAL_TEMP_DIR, randomUUID());
+    const file = path.join(this.registry.tempDir(), randomUUID());
     try {
       const { stream } = await source.getStream(sourceKey);
       await pipeline(stream, fs.createWriteStream(file)); // source errors RETHROW (abort → failed)

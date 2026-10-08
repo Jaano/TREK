@@ -7,6 +7,7 @@ import { STORAGE_BACKEND_TYPES, storageConfigSchema } from '@trek/shared';
 import { UnitOfWork } from '../database/unit-of-work';
 import { withRequestContext } from '../database/request-context';
 import { storageConfig } from '../app-config/tokens';
+import { DataPathsService } from '../app-config/data-paths.service';
 import { decrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
@@ -14,7 +15,7 @@ import { LocalDriver } from './drivers/local.driver';
 import { MirrorDriver, type ReplicaFailure } from './drivers/mirror.driver';
 import { S3Driver } from './drivers/s3.driver';
 import { StorageEventsService } from './storage-events.service';
-import { DEFAULT_BACKUPS_ROOT, DEFAULT_UPLOADS_ROOT, GLOBAL_TEMP_DIR, getSeedConfigPath } from './storage-paths';
+import { getSeedConfigPath } from './storage-paths';
 import { assertNoMaskSentinels, encryptStorageSecrets } from './storage-secrets';
 import {
   SERVED_CATEGORIES,
@@ -141,6 +142,9 @@ export class StorageRegistryService implements OnModuleInit {
     private readonly events: StorageEventsService,
     private readonly uow: UnitOfWork,
     private readonly orm: MikroORM,
+    // The built-in roots and the scratch dir. A hand-built registry (the unit
+    // suites) resolves the same layout the container's provider does.
+    private readonly dataPaths: DataPathsService = new DataPathsService(),
   ) {}
 
   /**
@@ -199,7 +203,7 @@ export class StorageRegistryService implements OnModuleInit {
 
   /** Driver-agnostic global scratch space (data/tmp). */
   tempDir(): string {
-    return GLOBAL_TEMP_DIR;
+    return this.dataPaths.tmpDir;
   }
 
   /**
@@ -409,8 +413,8 @@ export class StorageRegistryService implements OnModuleInit {
     //    uploads-local's root is the computed default; relocation is a settings
     //    override row bearing the built-in's name.
     const backends = new Map<string, BackendConfig>();
-    backends.set('uploads-local', { name: 'uploads-local', type: 'local', options: { root: DEFAULT_UPLOADS_ROOT } });
-    backends.set('backups-local', { name: 'backups-local', type: 'local', options: { root: DEFAULT_BACKUPS_ROOT } });
+    backends.set('uploads-local', { name: 'uploads-local', type: 'local', options: { root: this.dataPaths.uploadsDir } });
+    backends.set('backups-local', { name: 'backups-local', type: 'local', options: { root: this.dataPaths.backupsDir } });
     const backendSources = new Map<string, BackendSource>([
       ['uploads-local', 'built-in'],
       ['backups-local', 'built-in'],
@@ -482,7 +486,7 @@ export class StorageRegistryService implements OnModuleInit {
         }),
       );
     }
-    fs.mkdirSync(GLOBAL_TEMP_DIR, { recursive: true });
+    fs.mkdirSync(this.dataPaths.tmpDir, { recursive: true });
 
     // 6. The effective world with provenance — assembled from the same merged
     // maps, so it always matches what drivers/categories actually resolve to.
