@@ -13,6 +13,7 @@ npm run lint:pages        # enforce the Page pattern (CI gate)
 npm run lint:rtl          # physical left/right sides and rtl-lint-disable comments may only shrink per file (CI gate; --list shows them, --update lowers both baselines)
 npm run lint:size         # no source file or stylesheet past 1000 lines, no test past 2000, counted wrapped at 120 columns; longer ones may only shrink (CI gate; --update lowers the baseline)
 npm run lint:format       # Prettier: every file outside scripts/format-baseline.json must be formatted, the list only shrinks (CI gate; npx prettier --write <file>, then --update)
+npm run lint:layers       # imports go downwards: components never import pages/ or mobile/, nothing under the views imports a view; per-file counts may only shrink (CI gate; --list, --update)
 npm run test              # vitest run (tests/** + co-located src/**/*.test.{ts,tsx}); also test:unit / test:integration / test:coverage
 npm run e2e               # Playwright (CI runs --project=public --project=app; e2e:report opens the last report)
 npm run shots             # Playwright screenshot project (shots:promote to accept)
@@ -44,6 +45,7 @@ The offline core is flagship work surrounded by a periphery that ignores it. New
 
 - **One data path, no layer skips.** Never import `api/client` (or raw fetch/axios) from a component or modal — especially never *write* from one. A long tail of existing files bypasses the layering and no lint ratchet holds the line yet; that is debt, not precedent.
 - **Offline-first is the product promise.** New domains get a repo with read-through and offline writes (temp id → optimistic Dexie write → idempotent queue entry). If a domain is deliberately online-only, say so explicitly.
+- **Imports go downwards** (`lint:layers`, rules in `scripts/lib/layers.mjs`). A component never imports `pages/` or `mobile/`, a shared hook no view, and stores, repos, sync, api, db and the helpers no view at all. A model or helper both sides need moves down (`utils/`, `hooks/`, `types/`); the counts in `scripts/layers-baseline.json` are debt, not precedent.
 - **No god components or god hooks.** The page pattern is a floor, not a ceiling. Decompose hooks by concern, split renders into memoizable sections, and don't pass huge prop bags with inline-arrow callbacks.
 - **Prefer React 19 idioms**: `useOptimistic`, `useActionState`/`useFormStatus`, `use()` + Suspense, `useSyncExternalStore` for external subscriptions (`hooks/useNetworkMode` is the reference).
 - **Optimistic writes must reconcile** — rollback + user-visible toast on failure. No `.catch(() => {})`, no bare `catch {}`.
