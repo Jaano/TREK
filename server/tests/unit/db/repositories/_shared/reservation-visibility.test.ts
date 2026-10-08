@@ -4,6 +4,8 @@ import { resetTestDb } from '../../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../../helpers/test-orm';
 import { createDayAccommodation, createPlace, createReservation, createTrip, createUser } from '../../../../helpers/factories';
 import { Reservations } from '../../../../../src/db/entities/Reservations.entity';
+import { updateRows } from '../../../../helpers/factories/rows';
+import { readTripDays } from '../../../../helpers/factories/trips';
 import {
   publicReservationCondition,
   publicReservationExpr,
@@ -52,9 +54,9 @@ describe('reservation-visibility parity (RV1: publicReservationCondition vs publ
     const live1 = createReservation(testDb, trip.id, { title: 'Live 1' });
     const live2 = createReservation(testDb, trip.id, { title: 'Live 2' });
     const staged1 = createReservation(testDb, trip.id, { title: 'Staged 1' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged1.id);
+    await updateRows(t, Reservations, { id: staged1.id }, { ingest_state: 'staged' });
     const staged2 = createReservation(testDb, trip.id, { title: 'Staged 2' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged2.id);
+    await updateRows(t, Reservations, { id: staged2.id }, { ingest_state: 'staged' });
 
     const platform = t.em.getPlatform();
     const typed = await t.em.createQueryBuilder(Reservations, 'r')
@@ -64,6 +66,7 @@ describe('reservation-visibility parity (RV1: publicReservationCondition vs publ
       .execute<{ id: number }[]>('all', false);
 
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM reservations r WHERE r.trip_id = ? AND ${publicReservationSql('r')} ORDER BY id ASC`)
       .all(trip.id) as { id: number }[];
 
@@ -75,7 +78,7 @@ describe('reservation-visibility parity (RV1: publicReservationCondition vs publ
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const staged = createReservation(testDb, trip.id, { title: 'Staged only' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged.id);
+    await updateRows(t, Reservations, { id: staged.id }, { ingest_state: 'staged' });
     const platform = t.em.getPlatform();
 
     const typed = await t.em.createQueryBuilder(Reservations, 'r')
@@ -83,6 +86,7 @@ describe('reservation-visibility parity (RV1: publicReservationCondition vs publ
       .where({ 'r.trip_id': trip.id, ...publicReservationCondition(platform, 'r') })
       .execute<{ id: number }[]>('all', false);
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM reservations r WHERE r.trip_id = ? AND ${publicReservationSql('r')}`)
       .all(trip.id) as { id: number }[];
 
@@ -95,7 +99,7 @@ describe('reservation-visibility parity (RV1: publicReservationCondition vs publ
     const trip = createTrip(testDb, user.id);
     const live = createReservation(testDb, trip.id, { title: 'Live' });
     const staged = createReservation(testDb, trip.id, { title: 'Staged' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged.id);
+    await updateRows(t, Reservations, { id: staged.id }, { ingest_state: 'staged' });
     const platform = t.em.getPlatform();
 
     const typed = await t.em.createQueryBuilder(Reservations, 'vr')
@@ -103,6 +107,7 @@ describe('reservation-visibility parity (RV1: publicReservationCondition vs publ
       .where({ 'vr.trip_id': trip.id, ...publicReservationCondition(platform, 'vr') })
       .execute<{ id: number }[]>('all', false);
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM reservations vr WHERE vr.trip_id = ? AND ${publicReservationSql('vr')}`)
       .all(trip.id) as { id: number }[];
 
@@ -130,7 +135,7 @@ describe('reservation-visibility parity (RV1 Kysely form: publicReservationExpr 
     const live1 = createReservation(testDb, trip.id, { title: 'Live 1' });
     const live2 = createReservation(testDb, trip.id, { title: 'Live 2' });
     const staged = createReservation(testDb, trip.id, { title: 'Staged' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged.id);
+    await updateRows(t, Reservations, { id: staged.id }, { ingest_state: 'staged' });
 
     const typed = await t.em.getKysely<PublicReservationExprTestDB>()
       .selectFrom('reservations as r')
@@ -140,6 +145,7 @@ describe('reservation-visibility parity (RV1 Kysely form: publicReservationExpr 
       .orderBy('r.id', 'asc')
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM reservations r WHERE r.trip_id = ? AND ${publicReservationSql('r')} ORDER BY id ASC`)
       .all(trip.id) as { id: number }[];
 
@@ -160,9 +166,9 @@ describe('reservation-visibility parity (RV1 Kysely form: publicReservationExpr 
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const other = createReservation(testDb, trip.id, { title: 'Some other ingest state' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'archived_import' WHERE id = ?").run(other.id);
+    await updateRows(t, Reservations, { id: other.id }, { ingest_state: 'archived_import' });
     const staged = createReservation(testDb, trip.id, { title: 'Staged' });
-    testDb.prepare("UPDATE reservations SET ingest_state = 'staged' WHERE id = ?").run(staged.id);
+    await updateRows(t, Reservations, { id: staged.id }, { ingest_state: 'staged' });
 
     const typed = await t.em.getKysely<PublicReservationExprTestDB>()
       .selectFrom('reservations as r')
@@ -172,6 +178,7 @@ describe('reservation-visibility parity (RV1 Kysely form: publicReservationExpr 
       .orderBy('r.id', 'asc')
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM reservations r WHERE r.trip_id = ? AND ${publicReservationSql('r')} ORDER BY id ASC`)
       .all(trip.id) as { id: number }[];
 
@@ -199,7 +206,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
@@ -210,6 +217,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .orderBy('a.id', 'asc')
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')} ORDER BY a.id ASC`)
       .all(trip.id) as { id: number }[];
 
@@ -221,10 +229,10 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
     const booking = createReservation(testDb, trip.id, { title: 'Hotel', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ? WHERE id = ?").run(String(stay.id), booking.id);
+    await updateRows(t, Reservations, { id: booking.id }, { accommodation_id: String(stay.id) });
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
       .selectFrom('day_accommodations as a')
@@ -233,6 +241,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .where((eb) => publicStayExists(eb))
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')}`)
       .all(trip.id) as { id: number }[];
 
@@ -244,10 +253,10 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
     const booking = createReservation(testDb, trip.id, { title: 'Hotel', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(String(stay.id), booking.id);
+    await updateRows(t, Reservations, { id: booking.id }, { accommodation_id: String(stay.id), ingest_state: 'staged' });
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
       .selectFrom('day_accommodations as a')
@@ -256,6 +265,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .where((eb) => publicStayExists(eb))
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')}`)
       .all(trip.id) as { id: number }[];
 
@@ -267,12 +277,12 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
     const stagedBooking = createReservation(testDb, trip.id, { title: 'Staged copy', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(String(stay.id), stagedBooking.id);
+    await updateRows(t, Reservations, { id: stagedBooking.id }, { accommodation_id: String(stay.id), ingest_state: 'staged' });
     const liveBooking = createReservation(testDb, trip.id, { title: 'Live copy', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ? WHERE id = ?").run(String(stay.id), liveBooking.id);
+    await updateRows(t, Reservations, { id: liveBooking.id }, { accommodation_id: String(stay.id) });
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
       .selectFrom('day_accommodations as a')
@@ -281,6 +291,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .where((eb) => publicStayExists(eb))
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')}`)
       .all(trip.id) as { id: number }[];
 
@@ -296,10 +307,10 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
     const booking = createReservation(testDb, trip.id, { title: 'Hotel', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ? WHERE id = ?").run(`${stay.id}.0`, booking.id);
+    await updateRows(t, Reservations, { id: booking.id }, { accommodation_id: `${stay.id}.0` });
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
       .selectFrom('day_accommodations as a')
@@ -308,6 +319,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .where((eb) => publicStayExists(eb))
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')}`)
       .all(trip.id) as { id: number }[];
 
@@ -319,15 +331,15 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-06' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
 
     const unlinked = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
     const liveLinked = createDayAccommodation(testDb, trip.id, place.id, days[2].id, days[3].id);
     const liveBooking = createReservation(testDb, trip.id, { title: 'Live', type: 'hotel' });
-    testDb.prepare('UPDATE reservations SET accommodation_id = ? WHERE id = ?').run(String(liveLinked.id), liveBooking.id);
+    await updateRows(t, Reservations, { id: liveBooking.id }, { accommodation_id: String(liveLinked.id) });
     const stagedOnly = createDayAccommodation(testDb, trip.id, place.id, days[4].id, days[5].id);
     const stagedBooking = createReservation(testDb, trip.id, { title: 'Staged', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(String(stagedOnly.id), stagedBooking.id);
+    await updateRows(t, Reservations, { id: stagedBooking.id }, { accommodation_id: String(stagedOnly.id), ingest_state: 'staged' });
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
       .selectFrom('day_accommodations as a')
@@ -337,6 +349,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .orderBy('a.id', 'asc')
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')} ORDER BY a.id ASC`)
       .all(trip.id) as { id: number }[];
 
@@ -358,10 +371,10 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
     const booking = createReservation(testDb, trip.id, { title: 'Staged prefix-numeric link', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(`${stay.id}abc`, booking.id);
+    await updateRows(t, Reservations, { id: booking.id }, { accommodation_id: `${stay.id}abc`, ingest_state: 'staged' });
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
       .selectFrom('day_accommodations as a')
@@ -370,6 +383,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .where((eb) => publicStayExists(eb))
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')}`)
       .all(trip.id) as { id: number }[];
 
@@ -387,10 +401,10 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-01', end_date: '2026-09-05' });
     const place = createPlace(testDb, trip.id);
-    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id) as { id: number }[];
+    const days = await readTripDays(t, trip.id);
     const stay = createDayAccommodation(testDb, trip.id, place.id, days[0].id, days[1].id);
     const booking = createReservation(testDb, trip.id, { title: 'Staged padded link', type: 'hotel' });
-    testDb.prepare("UPDATE reservations SET accommodation_id = ?, ingest_state = 'staged' WHERE id = ?").run(`${stay.id} `, booking.id);
+    await updateRows(t, Reservations, { id: booking.id }, { accommodation_id: `${stay.id} `, ingest_state: 'staged' });
 
     const typed = await t.em.getKysely<StayVisibilityTestDB>()
       .selectFrom('day_accommodations as a')
@@ -399,6 +413,7 @@ describe('reservation-visibility parity (RV2: publicStayExists vs publicStaySql)
       .where((eb) => publicStayExists(eb))
       .execute();
     const legacy = testDb
+      // test-sql-allow: the legacy string fragment is this parity harness's oracle and has to run as written.
       .prepare(`SELECT id FROM day_accommodations a WHERE a.trip_id = ? AND ${publicStaySql('a')}`)
       .all(trip.id) as { id: number }[];
 
