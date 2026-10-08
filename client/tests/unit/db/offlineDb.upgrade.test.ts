@@ -211,7 +211,7 @@ const UPGRADE_CASES: Record<number, UpgradeCase> = {
     intent: 'adds accommodations, trip members, tags and categories',
     check: async (db) => {
       await db.table('tripMembers').put({ tripId: 2, id: 7, username: 'ana' });
-      expect(await db.tripMembers.where('tripId').equals(1).count()).toBe(1);
+      expect(await db.tripMembers.where('tripId').equals(2).count()).toBe(1);
       expect(await db.tripMembers.get([2, 7])).toMatchObject({ username: 'ana' });
     },
   },
