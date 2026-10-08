@@ -32,8 +32,6 @@ vi.mock('../../../src/db/database', async () => {
     // mocked `db/database` module's exports, so these module-level fakes
     // were dead. Plan 4 Task 4: `DatabaseService` itself is gone now too —
     // `PlacesService`/`AccommodationsService` are fully repository-backed.
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
   };
     return mock;
 });
@@ -70,6 +68,22 @@ import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.s
 import { TrekPhotoRegistrationService } from '../../../src/nest/photos/trek-photo-registration.service';
 import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
 import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { CollectionPlaces } from '../../../src/db/entities/CollectionPlaces.entity';
+import { Collections } from '../../../src/db/entities/Collections.entity';
+import { DayAccommodations } from '../../../src/db/entities/DayAccommodations.entity';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { FileLinks } from '../../../src/db/entities/FileLinks.entity';
+import { PlaceRatings } from '../../../src/db/entities/PlaceRatings.entity';
+import { PlaceRegions } from '../../../src/db/entities/PlaceRegions.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { Tours } from '../../../src/db/entities/Tours.entity';
+import { TourWaypoints } from '../../../src/db/entities/TourWaypoints.entity';
+import { TripFiles } from '../../../src/db/entities/TripFiles.entity';
+import type { TestOrm } from '../../helpers/test-orm';
+import { countRows, deleteRows, findRow, findRows, insertRow, insertRows, updateRows } from '../../helpers/factories/rows';
+import { dbNow } from '../../../src/db/types/db-timestamp.type';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
 import { noGoogleQuota } from '../../helpers/google-quota';
 import { createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo, createTestTagsRepo, createTestPlaceRatingsRepo, createTestAssignmentParticipantsRepo, createTestPlacesRepo, createTestTripMembersRepo, createTestDayAssignmentsRepo, createTestCategoriesRepo, createTestTripsRepo, sharedTestOrm } from '../../helpers/test-uow';
@@ -152,6 +166,7 @@ async function makePlacesService(
 
 let accommodations: Awaited<ReturnType<typeof accommodationsOver>>;
 let svc: Awaited<ReturnType<typeof makePlacesService>>;
+let orm: TestOrm;
 beforeAll(async () => {
   // Plan 4 Task 4: `DatabaseService` is gone — `PlacesService`/
   // `AccommodationsService` are fully repository-backed now, so the
@@ -161,8 +176,9 @@ beforeAll(async () => {
   svc = await makePlacesService();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
+  orm = await sharedTestOrm(testDb);
 });
 
 afterAll(() => {
@@ -192,7 +208,7 @@ describe('list', () => {
     const trip = createTrip(testDb, user.id);
     const tour = createPlace(testDb, trip.id, { name: 'Facet-backed tour' }) as any;
     const place = createPlace(testDb, trip.id, { name: 'Ordinary place' }) as any;
-    testDb.prepare(`INSERT INTO tours (place_id, tour_type) VALUES (?, 'hike')`).run(tour.id);
+    await insertRow(orm, Tours, { place_id: tour.id, tourTypeRef: 'hike' });
 
     const byId = new Map(((await svc.list(String(trip.id), {})) as any[]).map(item => [item.id, item]));
 
@@ -227,8 +243,8 @@ describe('list', () => {
     const berlin = createPlace(testDb, trip.id, { name: 'Brandenburger Tor', lat: 52.5163, lng: 13.3777 });
     const paris = createPlace(testDb, trip.id, { name: 'Louvre', lat: 48.8606, lng: 2.3376 });
     const nowhere = createPlace(testDb, trip.id, { name: 'Unplaced' });
-    testDb.prepare('UPDATE places SET lat = NULL, lng = NULL, address = NULL WHERE id = ?').run(nowhere.id);
-    testDb.prepare('INSERT INTO place_regions (place_id, country_code, region_code, region_name) VALUES (?, ?, ?, ?)').run(berlin.id, 'DE', 'DE-BE', 'Berlin');
+    await updateRows(orm, Places, { id: nowhere.id }, { lat: null, lng: null, address: null });
+    await insertRow(orm, PlaceRegions, { place_id: berlin.id, country_code: 'DE', region_code: 'DE-BE', region_name: 'Berlin' });
     const byId = new Map(((await svc.list(String(trip.id), {})) as any[]).map(p => [p.id, p]));
     expect(byId.get(berlin.id)).toMatchObject({ country_code: 'DE', region_name: 'Berlin' });
     expect(byId.get(paris.id)).toMatchObject({ country_code: 'FR', region_name: null });
@@ -249,7 +265,7 @@ describe('list', () => {
     const trip = createTrip(testDb, user.id);
     const cat = createCategory(testDb, { name: 'Museum', user_id: user.id }) as any;
     const place = createPlace(testDb, trip.id, { name: 'Art Museum' }) as any;
-    testDb.prepare('UPDATE places SET category_id = ? WHERE id = ?').run(cat.id, place.id);
+    await updateRows(orm, Places, { id: place.id }, { category: cat.id });
 
     const places = (await svc.list(String(trip.id), {})) as any[];
     expect(places[0].category).toBeDefined();
@@ -322,7 +338,7 @@ describe('create', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = await svc.create(String(trip.id), { name: 'My Place' }) as any;
-    const row = testDb.prepare('SELECT trip_id FROM places WHERE id = ?').get(place.id) as any;
+    const row = await findRow(orm, Places, { id: place.id }) as any;
     expect(row.trip_id).toBe(trip.id);
   });
 });
@@ -412,7 +428,7 @@ describe('update', () => {
     const place = createPlace(testDb, trip.id, { name: 'Untouched' });
     const result = await svc.update(String(trip.id), `${place.id} `, { name: 'Clobbered' });
     expect(result).toBeNull();
-    const row = testDb.prepare('SELECT name FROM places WHERE id = ?').get(place.id) as { name: string };
+    const row = await findRow(orm, Places, { id: place.id }) as { name: string };
     expect(row.name).toBe('Untouched');
   });
 
@@ -664,13 +680,13 @@ describe('remove', () => {
     const { accommodation } = (await accommodations.createAccommodation(trip.id, {
       place_id: place.id, start_day_id: day.id, end_day_id: day.id,
     })) as any;
-    expect(testDb.prepare('SELECT id FROM reservations WHERE accommodation_id = ?').get(accommodation.id)).toBeTruthy();
+    expect(await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) })).toBeTruthy();
 
     await svc.remove(String(trip.id), String(place.id));
 
-    expect(testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(accommodation.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM reservations WHERE accommodation_id = ?').get(accommodation.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM day_assignments WHERE day_id = ?').all(day.id)).toEqual([]);
+    expect(await findRow(orm, DayAccommodations, { id: accommodation.id })).toBeNull();
+    expect(await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) })).toBeNull();
+    expect(await findRows(orm, DayAssignments, { day: day.id })).toEqual([]);
   });
 
   it('PLACE-SVC-TOURS-001 — reports Tour deletion and cascades only its facet, waypoints, assignments, and links', async () => {
@@ -681,32 +697,28 @@ describe('remove', () => {
     const keptTour = createPlace(testDb, trip.id, { name: 'Tour to keep' }) as any;
     const keptPlace = createPlace(testDb, trip.id, { name: 'Ordinary place' }) as any;
     for (const place of [tour, keptTour]) {
-      testDb.prepare(`INSERT INTO tours (place_id, tour_type, max_hiking_difficulty) VALUES (?, 'hike', 4)`).run(place.id);
-      testDb.prepare(`INSERT INTO tour_waypoints (place_id, lat, lng, role, sequence) VALUES (?, 48, 11, 'start', 0)`).run(place.id);
-      testDb.prepare('INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (?, ?, 0)').run(day.id, place.id);
+      await insertRow(orm, Tours, { place_id: place.id, tourTypeRef: 'hike', max_hiking_difficulty: 4 });
+      await insertRow(orm, TourWaypoints, { place: place.id, lat: 48, lng: 11, role: 'start', sequence: 0 });
+      await insertRow(orm, DayAssignments, { day: day.id, place: place.id, order_index: 0 });
     }
-    const tourFileId = Number(testDb.prepare(`
-      INSERT INTO trip_files (trip_id, place_id, filename, original_name) VALUES (?, ?, 'tour.gpx', 'tour.gpx')
-    `).run(trip.id, tour.id).lastInsertRowid);
-    const keptFileId = Number(testDb.prepare(`
-      INSERT INTO trip_files (trip_id, place_id, filename, original_name) VALUES (?, ?, 'kept.gpx', 'kept.gpx')
-    `).run(trip.id, keptTour.id).lastInsertRowid);
-    testDb.prepare('INSERT INTO file_links (file_id, place_id) VALUES (?, ?)').run(tourFileId, tour.id);
+    const tourFileId = Number((await insertRow(orm, TripFiles, { trip: trip.id, place: tour.id, filename: 'tour.gpx', original_name: 'tour.gpx' })));
+    const keptFileId = Number((await insertRow(orm, TripFiles, { trip: trip.id, place: keptTour.id, filename: 'kept.gpx', original_name: 'kept.gpx' })));
+    await insertRow(orm, FileLinks, { file: tourFileId, place: tour.id });
 
     const result = await svc.remove(String(trip.id), String(tour.id));
 
     expect(result).toMatchObject({ deleted: true, deletedTourPlaceIds: [tour.id] });
-    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(tour.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT place_id FROM tours WHERE place_id = ?').get(tour.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM tour_waypoints WHERE place_id = ?').all(tour.id)).toEqual([]);
-    expect(testDb.prepare('SELECT id FROM day_assignments WHERE place_id = ?').all(tour.id)).toEqual([]);
-    expect(testDb.prepare('SELECT id, place_id FROM trip_files WHERE id = ?').get(tourFileId)).toMatchObject({ id: tourFileId, place_id: null });
-    expect(testDb.prepare('SELECT id FROM file_links WHERE file_id = ?').all(tourFileId)).toEqual([]);
-    expect(testDb.prepare('SELECT place_id FROM tours WHERE place_id = ?').get(keptTour.id)).toBeTruthy();
-    expect(testDb.prepare('SELECT id FROM tour_waypoints WHERE place_id = ?').all(keptTour.id)).toHaveLength(1);
-    expect(testDb.prepare('SELECT id FROM day_assignments WHERE place_id = ?').all(keptTour.id)).toHaveLength(1);
-    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(keptPlace.id)).toBeTruthy();
-    expect(testDb.prepare('SELECT id, place_id FROM trip_files WHERE id = ?').get(keptFileId)).toMatchObject({ id: keptFileId, place_id: keptTour.id });
+    expect(await findRow(orm, Places, { id: tour.id })).toBeNull();
+    expect(await findRow(orm, Tours, { place_id: tour.id })).toBeNull();
+    expect(await findRows(orm, TourWaypoints, { place: tour.id })).toEqual([]);
+    expect(await findRows(orm, DayAssignments, { place: tour.id })).toEqual([]);
+    expect(await findRow(orm, TripFiles, { id: tourFileId })).toMatchObject({ id: tourFileId, place_id: null });
+    expect(await findRows(orm, FileLinks, { file: tourFileId })).toEqual([]);
+    expect(await findRow(orm, Tours, { place_id: keptTour.id })).toBeTruthy();
+    expect(await findRows(orm, TourWaypoints, { place: keptTour.id })).toHaveLength(1);
+    expect(await findRows(orm, DayAssignments, { place: keptTour.id })).toHaveLength(1);
+    expect(await findRow(orm, Places, { id: keptPlace.id })).toBeTruthy();
+    expect(await findRow(orm, TripFiles, { id: keptFileId })).toMatchObject({ id: keptFileId, place_id: keptTour.id });
   });
 
   it('PLACE-SVC-019e — a place with no booking is untouched by that', async () => {
@@ -721,7 +733,7 @@ describe('remove', () => {
 
     await svc.remove(String(trip.id), String(museum.id));
 
-    expect(testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(accommodation.id)).toBeTruthy();
+    expect(await findRow(orm, DayAccommodations, { id: accommodation.id })).toBeTruthy();
   });
 
   it('PLACE-SVC-019c — the linked expense goes with the place (#1298)', async () => {
@@ -729,15 +741,15 @@ describe('remove', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Louvre' }) as any;
     const other = createPlace(testDb, trip.id, { name: 'Orsay', lat: 48.86, lng: 2.3266 }) as any;
-    const linked = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Tickets', 34, ?)").run(trip.id, place.id).lastInsertRowid);
-    const untouched = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Other tickets', 12, ?)").run(trip.id, other.id).lastInsertRowid);
-    const standalone = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price) VALUES (?, 'Coffee', 3)").run(trip.id).lastInsertRowid);
+    const linked = Number((await insertRow(orm, BudgetItems, { trip: trip.id, name: 'Tickets', total_price: 34, place: place.id })));
+    const untouched = Number((await insertRow(orm, BudgetItems, { trip: trip.id, name: 'Other tickets', total_price: 12, place: other.id })));
+    const standalone = Number((await insertRow(orm, BudgetItems, { trip: trip.id, name: 'Coffee', total_price: 3 })));
 
     // Read the link before the delete — that is what the controller broadcasts.
     expect(await svc.linkedExpenseIds(trip.id, [place.id])).toEqual([linked]);
     expect((await svc.remove(String(trip.id), String(place.id))).deleted).toBe(true);
 
-    const rows = testDb.prepare('SELECT id FROM budget_items ORDER BY id').all() as { id: number }[];
+    const rows = await findRows(orm, BudgetItems, {}, { id: 'asc' }) as { id: number }[];
     expect(rows.map(r => r.id)).toEqual([untouched, standalone]);
   });
 
@@ -748,13 +760,13 @@ describe('remove', () => {
     const b = createPlace(testDb, trip.id, { name: 'B', lat: 48.86, lng: 2.3266 }) as any;
     const keep = createPlace(testDb, trip.id, { name: 'C', lat: 48.87, lng: 2.34 }) as any;
     for (const p of [a, b, keep]) {
-      testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'x', 1, ?)").run(trip.id, p.id);
+      await insertRow(orm, BudgetItems, { trip: trip.id, name: 'x', total_price: 1, place: p.id });
     }
 
     expect(await svc.linkedExpenseIds(trip.id, [a.id, b.id])).toHaveLength(2);
     await svc.removeMany(String(trip.id), [a.id, b.id]);
 
-    const rows = testDb.prepare('SELECT place_id FROM budget_items').all() as { place_id: number }[];
+    const rows = await findRows(orm, BudgetItems, {}) as { place_id: number }[];
     expect(rows.map(r => r.place_id)).toEqual([keep.id]);
   });
 
@@ -763,7 +775,7 @@ describe('remove', () => {
     const trip = createTrip(testDb, user.id);
     const other = createTrip(testDb, user.id);
     const place = createPlace(testDb, other.id, { name: 'Elsewhere' }) as any;
-    testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'x', 1, ?)").run(other.id, place.id);
+    await insertRow(orm, BudgetItems, { trip: other.id, name: 'x', total_price: 1, place: place.id });
 
     expect(await svc.linkedExpenseIds(trip.id, [place.id])).toEqual([]);
     expect(await svc.linkedExpenseIds(trip.id, [])).toEqual([]);
@@ -774,7 +786,7 @@ describe('remove', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'With Photo' }) as any;
-    testDb.prepare('UPDATE places SET google_place_id = ? WHERE id = ?').run('ChIJgid', place.id);
+    await updateRows(orm, Places, { id: place.id }, { google_place_id: 'ChIJgid' });
 
     await svc.remove(String(trip.id), String(place.id));
 
@@ -789,7 +801,7 @@ describe('remove', () => {
     const { accommodation } = (await accommodations.createAccommodation(trip.id, {
       place_id: hotel.id, start_day_id: day.id, end_day_id: day.id,
     })) as { accommodation: { id: number } };
-    const reservation = testDb.prepare('SELECT id FROM reservations WHERE accommodation_id = ?').get(accommodation.id) as { id: number };
+    const reservation = await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) }) as { id: number };
 
     // cancelStaysAt (PL16) calls AccommodationsService.deleteAccommodation
     // FIRST inside this transaction — its own `uow.transactional` call nests
@@ -802,9 +814,9 @@ describe('remove', () => {
     testDb.exec("CREATE TRIGGER boom BEFORE DELETE ON places BEGIN SELECT RAISE(ABORT, 'boom'); END");
     try {
       await expect(svc.remove(String(trip.id), String(hotel.id))).rejects.toThrow();
-      expect(testDb.prepare('SELECT id FROM day_accommodations WHERE id = ?').get(accommodation.id)).toBeDefined();
-      expect(testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(reservation.id)).toBeDefined();
-      expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(hotel.id)).toBeDefined();
+      expect(await findRow(orm, DayAccommodations, { id: accommodation.id })).not.toBeNull();
+      expect(await findRow(orm, Reservations, { id: reservation.id })).not.toBeNull();
+      expect(await findRow(orm, Places, { id: hotel.id })).not.toBeNull();
     } finally {
       testDb.exec('DROP TRIGGER boom');
     }
@@ -821,15 +833,15 @@ describe('removeMany', () => {
     const ordinary = createPlace(testDb, trip.id, { name: 'Ordinary place' }) as any;
     const keptTour = createPlace(testDb, trip.id, { name: 'Tour to keep' }) as any;
     for (const place of [tour, keptTour]) {
-      testDb.prepare(`INSERT INTO tours (place_id, tour_type) VALUES (?, 'hike')`).run(place.id);
+      await insertRow(orm, Tours, { place_id: place.id, tourTypeRef: 'hike' });
     }
 
     const result = await svc.removeMany(String(trip.id), [ordinary.id, tour.id]);
 
     expect(result.deleted).toEqual([ordinary.id, tour.id]);
     expect(result.deletedTourPlaceIds).toEqual([tour.id]);
-    expect(testDb.prepare('SELECT place_id FROM tours WHERE place_id = ?').get(keptTour.id)).toBeTruthy();
-    expect(testDb.prepare('SELECT id FROM places WHERE id = ?').get(keptTour.id)).toBeTruthy();
+    expect(await findRow(orm, Tours, { place_id: keptTour.id })).toBeTruthy();
+    expect(await findRow(orm, Places, { id: keptTour.id })).toBeTruthy();
   });
 
   it('PLACE-SVC-056 — deletes the trip-scoped ids in one transaction and reports them', async () => {
@@ -856,19 +868,17 @@ describe('removeMany', () => {
     const { accommodation } = (await accommodations.createAccommodation(trip.id, {
       place_id: hotel.id, start_day_id: day.id, end_day_id: day.id,
     })) as { accommodation: { id: number } };
-    const reservation = testDb.prepare('SELECT id FROM reservations WHERE accommodation_id = ?').get(accommodation.id) as { id: number };
+    const reservation = await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) }) as { id: number };
     // An expense hung off the reservation rather than the place: linkedExpenseIds
     // selects on budget_items.place_id and never finds this one.
-    const itemId = Number(testDb.prepare(
-      "INSERT INTO budget_items (trip_id, name, total_price, reservation_id) VALUES (?, 'Hotel stay', 240, ?)"
-    ).run(trip.id, reservation.id).lastInsertRowid);
+    const itemId = Number((await insertRow(orm, BudgetItems, { trip: trip.id, name: 'Hotel stay', total_price: 240, reservation: reservation.id })));
 
     const { deleted, cancelled } = await svc.remove(String(trip.id), String(hotel.id));
 
     expect(deleted).toBe(true);
     expect(cancelled.reservationIds).toEqual([reservation.id]);
     expect(cancelled.budgetItemIds).toEqual([itemId]);
-    expect(testDb.prepare('SELECT id FROM budget_items WHERE id = ?').get(itemId)).toBeUndefined();
+    expect(await findRow(orm, BudgetItems, { id: itemId })).toBeNull();
   });
 
   it('PLACE-SVC-057 — returns [] for an empty id list', async () => {
@@ -914,7 +924,7 @@ describe('importGpx', () => {
       <wpt lat="48.8566" lon="2.3522"><name>Paris</name></wpt>
     </gpx>`);
     const result = await svc.importGpx(String(trip.id), gpx) as { places: { id: number }[] };
-    const row = testDb.prepare('SELECT * FROM places WHERE id = ?').get(result.places[0].id) as Record<string, unknown>;
+    const row = await findRow(orm, Places, { id: result.places[0].id }) as Record<string, unknown>;
     expect(row).toMatchObject({
       trip_id: trip.id, name: 'Paris', description: null, lat: 48.8566, lng: 2.3522,
       address: null, category_id: null, price: null, currency: null, place_time: null, end_time: null,
@@ -940,7 +950,7 @@ describe('importGpx', () => {
       <wpt lat="51.5074" lon="-0.1278"><name>London</name></wpt>
     </gpx>`);
     await expect(svc.importGpx(String(trip.id), gpx)).rejects.toThrow('boom');
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id) as { n: number };
+    const count = ({ n: await countRows(orm, Places, { trip: trip.id }) }) as { n: number };
     expect(count.n).toBe(0);
     insertSpy.mockRestore();
   });
@@ -1119,7 +1129,7 @@ describe('importGoogleList', () => {
     ];
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: async () => 'prefix\n' + JSON.stringify(listPayload) }));
     const result = await svc.importGoogleList(String(trip.id), 'https://www.google.com/maps/placelists/list/ABC123DEF456') as { places: { id: number }[] };
-    const row = testDb.prepare('SELECT * FROM places WHERE id = ?').get(result.places[0].id) as Record<string, unknown>;
+    const row = await findRow(orm, Places, { id: result.places[0].id }) as Record<string, unknown>;
     expect(row).toMatchObject({
       trip_id: trip.id, name: 'London', description: null, lat: 51.5074, lng: -0.1278,
       address: null, category_id: null, price: null, currency: null, place_time: null, end_time: null,
@@ -1148,7 +1158,7 @@ describe('importGoogleList', () => {
       return realInsertPlace(input);
     });
     await expect(svc.importGoogleList(String(trip.id), 'https://www.google.com/maps/placelists/list/ABC123DEF456')).rejects.toThrow('boom');
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id) as { n: number };
+    const count = ({ n: await countRows(orm, Places, { trip: trip.id }) }) as { n: number };
     expect(count.n).toBe(0);
     insertSpy.mockRestore();
   });
@@ -1196,7 +1206,7 @@ describe('importGoogleList', () => {
 
     const url = 'https://www.google.com/maps/placelists/list/ABC123DEF456';
     const result = await svc.importGoogleList(String(trip.id), url) as any;
-    const row = testDb.prepare('SELECT google_place_id, google_ftid FROM places WHERE id = ?').get(existing.id) as any;
+    const row = await findRow(orm, Places, { id: existing.id }) as any;
 
     expect(result.places).toHaveLength(0);
     expect(result.skipped).toBe(1);
@@ -1216,8 +1226,7 @@ describe('importGoogleList', () => {
       lat: 43.5118527,
       lng: -80.5542617,
     }) as any;
-    testDb.prepare('UPDATE places SET google_ftid = ? WHERE id = ?')
-      .run('0x882bf179e806d471:0x8591dde29c821a93', renamed.id);
+    await updateRows(orm, Places, { id: renamed.id }, { google_ftid: '0x882bf179e806d471:0x8591dde29c821a93' });
     const namesake = createPlace(testDb, trip.id, {
       name: "St. Jacobs Farmers' Market",
       lat: 40.0,
@@ -1235,7 +1244,7 @@ describe('importGoogleList', () => {
     }));
 
     const result = await svc.importGoogleList(String(trip.id), 'https://www.google.com/maps/placelists/list/ABC123DEF456') as any;
-    const other = testDb.prepare('SELECT google_ftid FROM places WHERE id = ?').get(namesake.id) as any;
+    const other = await findRow(orm, Places, { id: namesake.id }) as any;
 
     expect(result.skipped).toBe(1);
     expect(other.google_ftid).toBeNull();
@@ -1262,14 +1271,13 @@ describe('importGoogleList', () => {
 
     // What the reporter does: rename it to something they can actually read, and
     // move it far enough that the coordinate fallback would not save us either.
-    testDb.prepare('UPDATE places SET name = ?, lat = ?, lng = ? WHERE id = ?')
-      .run('Saturday market', 43.6, -80.6, first.places[0].id);
+    await updateRows(orm, Places, { id: first.places[0].id }, { name: 'Saturday market', lat: 43.6, lng: -80.6 });
 
     respond();
     const second = await svc.importGoogleList(String(trip.id), url) as any;
     expect(second.places).toHaveLength(0);
     expect(second.skipped).toBe(1);
-    expect(testDb.prepare('SELECT COUNT(*) c FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ c: 1 });
+    expect(({ c: await countRows(orm, Places, { trip: trip.id }) })).toEqual({ c: 1 });
   });
 
   it('PLACE-SVC-028e — two places at the same coordinates still both import', async () => {
@@ -1465,7 +1473,7 @@ describe('importKmlPlaces — full stored row and atomicity (M2/L2)', () => {
 </Document></kml>`);
     const result = await svc.importKmlPlaces(String(trip.id), kml);
     expect(result.count).toBe(1);
-    const row = testDb.prepare('SELECT * FROM places WHERE trip_id = ? AND name = ?').get(trip.id, 'Ridge Path') as Record<string, unknown>;
+    const row = await findRow(orm, Places, { trip: trip.id, name: 'Ridge Path' }) as Record<string, unknown>;
     expect(row.route_geometry).toBeTruthy();
     expect(JSON.parse(row.route_geometry as string)).toHaveLength(2);
     expect(row.duration_minutes).toBe(60);
@@ -1490,7 +1498,7 @@ describe('importKmlPlaces — full stored row and atomicity (M2/L2)', () => {
   <Placemark><name>B</name><Point><coordinates>2.1,48.1,0</coordinates></Point></Placemark>
 </Document></kml>`);
     await expect(svc.importKmlPlaces(String(trip.id), kml)).rejects.toThrow('boom');
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id) as { n: number };
+    const count = ({ n: await countRows(orm, Places, { trip: trip.id }) }) as { n: number };
     expect(count.n).toBe(0);
     insertSpy.mockRestore();
   });
@@ -1510,7 +1518,7 @@ describe('custom place image reclaim', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Photo' }) as any;
     const fileA = writePlaceImage('svc-replace-a.jpg');
-    testDb.prepare('UPDATE places SET image_url = ? WHERE id = ?').run('/uploads/places/svc-replace-a.jpg', place.id);
+    await updateRows(orm, Places, { id: place.id }, { image_url: '/uploads/places/svc-replace-a.jpg' });
     expect(fs.existsSync(fileA)).toBe(true);
 
     await svc.update(String(trip.id), String(place.id), { image_url: '/uploads/places/svc-replace-b.jpg' });
@@ -1522,7 +1530,7 @@ describe('custom place image reclaim', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Photo' }) as any;
     const fileA = writePlaceImage('svc-clear.jpg');
-    testDb.prepare('UPDATE places SET image_url = ? WHERE id = ?').run('/uploads/places/svc-clear.jpg', place.id);
+    await updateRows(orm, Places, { id: place.id }, { image_url: '/uploads/places/svc-clear.jpg' });
     expect(fs.existsSync(fileA)).toBe(true);
 
     await svc.update(String(trip.id), String(place.id), { image_url: null } as any);
@@ -1534,7 +1542,7 @@ describe('custom place image reclaim', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Photo' }) as any;
     const fileA = writePlaceImage('svc-delete.jpg');
-    testDb.prepare('UPDATE places SET image_url = ? WHERE id = ?').run('/uploads/places/svc-delete.jpg', place.id);
+    await updateRows(orm, Places, { id: place.id }, { image_url: '/uploads/places/svc-delete.jpg' });
     expect(fs.existsSync(fileA)).toBe(true);
 
     await svc.remove(String(trip.id), String(place.id));
@@ -1546,11 +1554,10 @@ describe('custom place image reclaim', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Shared Photo' }) as any;
     const fileA = writePlaceImage('svc-shared.jpg');
-    testDb.prepare('UPDATE places SET image_url = ? WHERE id = ?').run('/uploads/places/svc-shared.jpg', place.id);
+    await updateRows(orm, Places, { id: place.id }, { image_url: '/uploads/places/svc-shared.jpg' });
     // A saved-place in a collection holds the same uploaded file — the ref-count guard must protect it.
-    const col = testDb.prepare('INSERT INTO collections (owner_id, name) VALUES (?, ?)').run(user.id, 'Saved');
-    testDb.prepare('INSERT INTO collection_places (collection_id, owner_id, name, image_url) VALUES (?, ?, ?, ?)')
-      .run(col.lastInsertRowid, user.id, 'Shared Photo', '/uploads/places/svc-shared.jpg');
+    const col = await insertRow(orm, Collections, { owner: user.id, name: 'Saved' });
+    await insertRow(orm, CollectionPlaces, { collection: col, owner: user.id, name: 'Shared Photo', image_url: '/uploads/places/svc-shared.jpg' });
     expect(fs.existsSync(fileA)).toBe(true);
 
     await svc.remove(String(trip.id), String(place.id));
@@ -1568,15 +1575,15 @@ describe('custom place image reclaim', () => {
     const place = createPlace(testDb, trip.id, { name: 'Rated' }) as { id: number };
 
     await svc.rate(String(trip.id), String(place.id), user.id, 5);
-    let rows = testDb.prepare('SELECT rating FROM place_ratings WHERE place_id = ? AND user_id = ?').all(place.id, user.id) as { rating: number }[];
+    let rows = (await findRows(orm, PlaceRatings, { place: place.id, user: user.id })).map((r) => ({ rating: r.rating }));
     expect(rows).toEqual([{ rating: 5 }]);
 
     await svc.rate(String(trip.id), String(place.id), user.id, 2); // re-vote replaces via the UNIQUE upsert
-    rows = testDb.prepare('SELECT rating FROM place_ratings WHERE place_id = ? AND user_id = ?').all(place.id, user.id) as { rating: number }[];
+    rows = (await findRows(orm, PlaceRatings, { place: place.id, user: user.id })).map((r) => ({ rating: r.rating }));
     expect(rows).toEqual([{ rating: 2 }]);
 
     await svc.rate(String(trip.id), String(place.id), user.id, null); // clear
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ?').get(place.id) as { n: number };
+    const count = ({ n: await countRows(orm, PlaceRatings, { place: place.id }) }) as { n: number };
     expect(count.n).toBe(0);
   });
 
@@ -1587,7 +1594,7 @@ describe('custom place image reclaim', () => {
     const place = createPlace(testDb, otherTrip.id, { name: 'Elsewhere' }) as { id: number };
 
     expect(await svc.rate(String(trip.id), String(place.id), user.id, 4)).toBeNull();
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ?').get(place.id) as { n: number };
+    const count = ({ n: await countRows(orm, PlaceRatings, { place: place.id }) }) as { n: number };
     expect(count.n).toBe(0);
   });
 
@@ -1596,7 +1603,7 @@ describe('custom place image reclaim', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id) as { id: number };
     expect(await svc.rate(String(trip.id), `${place.id} `, user.id, 4)).toBeNull();
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ?').get(place.id) as { n: number };
+    const count = ({ n: await countRows(orm, PlaceRatings, { place: place.id }) }) as { n: number };
     expect(count.n).toBe(0);
   });
 
@@ -1613,15 +1620,15 @@ describe('custom place image reclaim', () => {
     // catch, so `before === after` proved nothing either way (M1 — `upsertRating`
     // also bumping `places.updated_at` — survived this test as written). Seed a
     // visibly stale timestamp first so any bump is unmistakably a different value.
-    testDb.prepare("UPDATE places SET updated_at = datetime('now', '-1 hour') WHERE id = ?").run(place.id);
-    const before = (testDb.prepare('SELECT updated_at FROM places WHERE id = ?').get(place.id) as { updated_at: string | null }).updated_at;
+    await updateRows(orm, Places, { id: place.id }, { updated_at: dbNow(new Date(Date.now() - 60 * 60 * 1000)) });
+    const before = (await findRow(orm, Places, { id: place.id }) as { updated_at: string | null }).updated_at;
 
     await svc.rate(String(trip.id), String(place.id), user.id, 5);
     // Re-vote (the ON CONFLICT DO UPDATE path) — the one statement in the
     // whole cluster that could plausibly touch `updated_at` via a careless
     // merge-field list.
     await svc.rate(String(trip.id), String(place.id), user.id, 2);
-    const after = (testDb.prepare('SELECT updated_at FROM places WHERE id = ?').get(place.id) as { updated_at: string | null }).updated_at;
+    const after = (await findRow(orm, Places, { id: place.id }) as { updated_at: string | null }).updated_at;
     expect(after).toBe(before);
   });
 });
@@ -1650,9 +1657,8 @@ async function importFixture(tripId: number) {
   });
 }
 
-function tracksOf(tripId: number) {
-  return testDb.prepare('SELECT id, route_color FROM places WHERE trip_id = ? AND route_geometry IS NOT NULL ORDER BY id')
-    .all(tripId) as { id: number; route_color: string | null }[];
+async function tracksOf(tripId: number) {
+  return await findRows(orm, Places, { trip: tripId, route_geometry: { $ne: null } }, { id: 'asc' }) as { id: number; route_color: string | null }[];
 }
 
 describe('PlacesService — automatic track colours (#776)', () => {
@@ -1661,7 +1667,7 @@ describe('PlacesService — automatic track colours (#776)', () => {
     const trip = createTrip(testDb, user.id);
     await importFixture(trip.id);
 
-    const tracks = tracksOf(trip.id);
+    const tracks = await tracksOf(trip.id);
     expect(tracks.length).toBeGreaterThan(0);
     for (const track of tracks) {
       expect(TRACK_COLORS).toContain(track.route_color);
@@ -1685,9 +1691,7 @@ describe('PlacesService — automatic track colours (#776)', () => {
     const trip = createTrip(testDb, user.id);
     await importFixture(trip.id);
 
-    const waypoints = testDb.prepare(
-      'SELECT route_color FROM places WHERE trip_id = ? AND route_geometry IS NULL',
-    ).all(trip.id) as { route_color: string | null }[];
+    const waypoints = await findRows(orm, Places, { trip: trip.id, route_geometry: null }) as { route_color: string | null }[];
     for (const wp of waypoints) {
       expect(wp.route_color).toBeNull();
     }
@@ -1697,19 +1701,17 @@ describe('PlacesService — automatic track colours (#776)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     await importFixture(trip.id);
-    const first = tracksOf(trip.id).map(t => t.route_color);
+    const first = (await tracksOf(trip.id)).map(t => t.route_color);
 
     // Same fixture again: dedup skips the identical rows, so seed a distinct
     // track directly and let the service colour the next import round.
-    testDb.prepare(
-      "INSERT INTO places (trip_id, name, lat, lng, route_geometry) VALUES (?, 'Second walk', 1, 1, '[[1,1],[2,2]]')",
-    ).run(trip.id);
-    const seeded = testDb.prepare('SELECT id FROM places WHERE name = ?').get('Second walk') as { id: number };
+    await insertRow(orm, Places, { trip: trip.id, name: 'Second walk', lat: 1, lng: 1, route_geometry: '[[1,1],[2,2]]' });
+    const seeded = await findRow(orm, Places, { name: 'Second walk' }) as { id: number };
     await (svc as any).colorizeImportedTracks(String(trip.id), {
       places: [{ id: seeded.id, route_geometry: '[[1,1],[2,2]]', route_color: null }],
     });
 
-    const seededColor = (testDb.prepare('SELECT route_color FROM places WHERE id = ?').get(seeded.id) as any).route_color;
+    const seededColor = (await findRow(orm, Places, { id: seeded.id }) as any).route_color;
     expect(TRACK_COLORS).toContain(seededColor);
     expect(first).not.toContain(seededColor);
   });
@@ -1719,13 +1721,11 @@ describe('PlacesService — automatic track colours (#776)', () => {
     const trip = createTrip(testDb, user.id);
     // Someone recoloured an existing track to the palette's second entry. A
     // plain row count would hand exactly that colour to the next import.
-    testDb.prepare(
-      "INSERT INTO places (trip_id, name, lat, lng, route_geometry, route_color) VALUES (?, 'Old walk', 1, 1, '[[1,1],[2,2]]', ?)",
-    ).run(trip.id, TRACK_COLORS[1]);
+    await insertRow(orm, Places, { trip: trip.id, name: 'Old walk', lat: 1, lng: 1, route_geometry: '[[1,1],[2,2]]', route_color: TRACK_COLORS[1] });
 
     await importFixture(trip.id);
 
-    const colors = tracksOf(trip.id).map(t => t.route_color);
+    const colors = (await tracksOf(trip.id)).map(t => t.route_color);
     expect(new Set(colors).size).toBe(colors.length);
   });
 
@@ -1734,17 +1734,15 @@ describe('PlacesService — automatic track colours (#776)', () => {
     const trip = createTrip(testDb, user.id);
     await importFixture(trip.id);
     // Drop the first track; its colour becomes free again.
-    const first = tracksOf(trip.id)[0];
-    testDb.prepare('DELETE FROM places WHERE id = ?').run(first.id);
+    const first = (await tracksOf(trip.id))[0];
+    await deleteRows(orm, Places, { id: first.id });
 
-    const seeded = testDb.prepare(
-      "INSERT INTO places (trip_id, name, lat, lng, route_geometry) VALUES (?, 'Later walk', 9, 9, '[[9,9],[8,8]]') RETURNING id",
-    ).get(trip.id) as { id: number };
+    const seeded = { id: await insertRow(orm, Places, { trip: trip.id, name: 'Later walk', lat: 9, lng: 9, route_geometry: '[[9,9],[8,8]]' }) };
     await (svc as any).colorizeImportedTracks(String(trip.id), {
       places: [{ id: seeded.id, route_geometry: '[[9,9],[8,8]]', route_color: null }],
     });
 
-    const colors = tracksOf(trip.id).map(t => t.route_color);
+    const colors = (await tracksOf(trip.id)).map(t => t.route_color);
     expect(new Set(colors).size).toBe(colors.length);
   });
 
@@ -1755,7 +1753,7 @@ describe('PlacesService — automatic track colours (#776)', () => {
     await expect((svc as any).colorizeImportedTracks(String(trip.id), null)).resolves.toBeUndefined();
     await expect((svc as any).colorizeImportedTracks(String(trip.id), { places: [] })).resolves.toBeUndefined();
 
-    expect(tracksOf(trip.id)).toEqual([]);
+    expect(await tracksOf(trip.id)).toEqual([]);
   });
 
   // Task 5 review M1: `PLACEREPO-039` proves the driver's single-connection
@@ -1768,13 +1766,13 @@ describe('PlacesService — automatic track colours (#776)', () => {
   it('PLACES-SVC-018 (M1) — two concurrent colourings of the same trip never share a colour', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const ids = [1, 2].map((n) => (testDb.prepare(
-      "INSERT INTO places (trip_id, name, lat, lng, route_geometry) VALUES (?, ?, 1, 1, '[[1,1],[2,2]]') RETURNING id",
-    ).get(trip.id, 'cc' + n) as { id: number }).id);
+    const ids = await insertRows(orm, Places, [1, 2].map((n) => (
+      { trip: trip.id, name: 'cc' + n, lat: 1, lng: 1, route_geometry: '[[1,1],[2,2]]' }
+    )));
     await Promise.all(ids.map((id) => (svc as unknown as { colorizeImportedTracks: (tripId: string, result: { places: { id: number; route_geometry: string; route_color: string | null }[] }) => Promise<void> }).colorizeImportedTracks(String(trip.id), {
       places: [{ id, route_geometry: '[[1,1],[2,2]]', route_color: null }],
     })));
-    expect(new Set(tracksOf(trip.id).map(t => t.route_color)).size).toBe(2);
+    expect(new Set((await tracksOf(trip.id)).map(t => t.route_color)).size).toBe(2);
   });
 
   // Task 5 review L1: the palette-wrap arm (`TRACK_COLORS[(i - free.length) %
@@ -1783,15 +1781,16 @@ describe('PlacesService — automatic track colours (#776)', () => {
   it('PLACES-SVC-019 (L1) — more tracks than free colours wrap from the palette start', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const places = Array.from({ length: TRACK_COLORS.length + 2 }, (_, i) => ({
-      id: (testDb.prepare(
-        "INSERT INTO places (trip_id, name, lat, lng, route_geometry) VALUES (?, ?, 1, 1, '[[1,1],[2,2]]') RETURNING id",
-      ).get(trip.id, 'w' + i) as { id: number }).id,
+    const placeIds = await insertRows(orm, Places, Array.from({ length: TRACK_COLORS.length + 2 }, (_, i) => (
+      { trip: trip.id, name: 'w' + i, lat: 1, lng: 1, route_geometry: '[[1,1],[2,2]]' }
+    )));
+    const places = placeIds.map((id) => ({
+      id,
       route_geometry: '[[1,1],[2,2]]',
       route_color: null as string | null,
     }));
     await (svc as unknown as { colorizeImportedTracks: (tripId: string, result: { places: typeof places }) => Promise<void> }).colorizeImportedTracks(String(trip.id), { places });
-    const stored = tracksOf(trip.id).map(t => t.route_color);
+    const stored = (await tracksOf(trip.id)).map(t => t.route_color);
     expect(stored).toEqual([...TRACK_COLORS, TRACK_COLORS[0], TRACK_COLORS[1]]);
   });
 });
@@ -1829,7 +1828,7 @@ describe('enrichImportedPlaces', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Bar', lat: 48.85, lng: 2.35 }) as any;
     // An address the import already captured must survive the COALESCE.
-    testDb.prepare('UPDATE places SET address = ? WHERE id = ?').run('Imported address', place.id);
+    await updateRows(orm, Places, { id: place.id }, { address: 'Imported address' });
 
     const svcWithMaps = await enrichSvc({
       getMapsKey: vi.fn(() => 'key'),
@@ -1842,7 +1841,7 @@ describe('enrichImportedPlaces', () => {
 
     await svcWithMaps.enrichImportedPlaces(String(trip.id), user.id, [{ id: place.id, name: 'Bar', lat: 48.85, lng: 2.35 }]);
 
-    const row = testDb.prepare('SELECT google_place_id, google_ftid, address, website, phone, image_url FROM places WHERE id = ?').get(place.id) as any;
+    const row = await findRow(orm, Places, { id: place.id }) as any;
     expect(row.google_place_id).toBe('ChIJ1');
     expect(row.google_ftid).toBe('0x1:0x2');
     expect(row.address).toBe('Imported address'); // NOT clobbered
@@ -1890,7 +1889,7 @@ describe('enrichImportedPlaces', () => {
 
     await svcWithMaps.enrichImportedPlaces(String(trip.id), user.id, [{ id: place.id, name: 'Bar', lat: 48.85, lng: 2.35 }]);
 
-    const row = testDb.prepare('SELECT google_place_id FROM places WHERE id = ?').get(place.id) as any;
+    const row = await findRow(orm, Places, { id: place.id }) as any;
     expect(row.google_place_id).toBeNull();
   });
 
@@ -1907,7 +1906,7 @@ describe('enrichImportedPlaces', () => {
 
     await svcWithMaps.enrichImportedPlaces(String(trip.id), user.id, [{ id: place.id, name: 'Bar', lat: 48.85, lng: 2.35 }]);
 
-    const row = testDb.prepare('SELECT google_place_id, image_url FROM places WHERE id = ?').get(place.id) as any;
+    const row = await findRow(orm, Places, { id: place.id }) as any;
     expect(row.google_place_id).toBe('ChIJ1');
     expect(row.image_url).toBeNull();
   });
@@ -1973,7 +1972,7 @@ describe('zero-valued numeric fields', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Stop' }) as any;
-    testDb.prepare('UPDATE places SET duration_minutes = 90 WHERE id = ?').run(place.id);
+    await updateRows(orm, Places, { id: place.id }, { duration_minutes: 90 });
 
     const zeroed = await svc.update(String(trip.id), String(place.id), { duration_minutes: 0 }) as any;
     expect(zeroed.duration_minutes).toBe(0);
@@ -1990,7 +1989,7 @@ describe('zero-valued numeric fields', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Stop' }) as any;
-    testDb.prepare('UPDATE places SET duration_minutes = 90 WHERE id = ?').run(place.id);
+    await updateRows(orm, Places, { id: place.id }, { duration_minutes: 90 });
 
     const cleared = await svc.update(String(trip.id), String(place.id), { duration_minutes: null }) as any;
     expect(cleared.duration_minutes).toBeNull();
@@ -2000,16 +1999,16 @@ describe('zero-valued numeric fields', () => {
 // ── LIKE metacharacter escaping (#1745) ───────────────────────────────────────
 
 describe('setImageFromFile (#1242)', () => {
-  const attach = (tripId: number, name: string, mime: string, size = 3) => {
+  const attach = async (tripId: number, name: string, mime: string, size = 3) => {
     fs.writeFileSync(path.join(placesStorageFx.root, name), 'img');
-    return Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name, file_size, mime_type) VALUES (?, ?, ?, ?, ?)').run(tripId, name, name, size, mime).lastInsertRowid);
+    return insertRow(orm, TripFiles, { trip: tripId, filename: name, original_name: name, file_size: size, mime_type: mime });
   };
 
   it('PLACE-SVC-IMGFILE-001 — copies an attached picture in as the place image', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    const fileId = attach(trip.id, 'holiday.jpg', 'image/jpeg');
+    const fileId = await attach(trip.id, 'holiday.jpg', 'image/jpeg');
     const updated = await svc.setImageFromFile(String(trip.id), String(place.id), fileId) as any;
     expect(updated.image_url).toMatch(/^\/uploads\/places\/[0-9a-f-]+\.jpg$/);
     expect(fs.existsSync(path.join(placesStorageFx.root, path.basename(updated.image_url)))).toBe(true);
@@ -2022,10 +2021,10 @@ describe('setImageFromFile (#1242)', () => {
     const trip = createTrip(testDb, user.id);
     const other = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id);
-    expect(await svc.setImageFromFile(String(trip.id), String(place.id), attach(other.id, 'x.jpg', 'image/jpeg'))).toBe('not_found');
-    expect(await svc.setImageFromFile(String(trip.id), String(place.id), attach(trip.id, 'ticket.pdf', 'application/pdf'))).toBe('not_image');
-    expect(await svc.setImageFromFile(String(trip.id), String(place.id), attach(trip.id, 'vector.svg', 'image/svg+xml'))).toBe('not_image');
-    expect(await svc.setImageFromFile(String(trip.id), String(place.id), attach(trip.id, 'huge.jpg', 'image/jpeg', 50 * 1024 * 1024))).toBe('too_large');
+    expect(await svc.setImageFromFile(String(trip.id), String(place.id), await attach(other.id, 'x.jpg', 'image/jpeg'))).toBe('not_found');
+    expect(await svc.setImageFromFile(String(trip.id), String(place.id), await attach(trip.id, 'ticket.pdf', 'application/pdf'))).toBe('not_image');
+    expect(await svc.setImageFromFile(String(trip.id), String(place.id), await attach(trip.id, 'vector.svg', 'image/svg+xml'))).toBe('not_image');
+    expect(await svc.setImageFromFile(String(trip.id), String(place.id), await attach(trip.id, 'huge.jpg', 'image/jpeg', 50 * 1024 * 1024))).toBe('too_large');
   });
 });
 
@@ -2192,7 +2191,7 @@ describe('importNaverList provider payload', () => {
       }),
     }));
     const result = await svc.importNaverList(String(trip.id), FOLDER_URL) as { places: { id: number }[] };
-    const row = testDb.prepare('SELECT * FROM places WHERE id = ?').get(result.places[0].id) as Record<string, unknown>;
+    const row = await findRow(orm, Places, { id: result.places[0].id }) as Record<string, unknown>;
     expect(row).toMatchObject({
       trip_id: trip.id, name: 'Gyeongbokgung', description: null, lat: 37.5796, lng: 126.977,
       address: 'Sejongno', category_id: null, price: null, currency: null, place_time: null, end_time: null,
@@ -2224,7 +2223,7 @@ describe('importNaverList provider payload', () => {
       return realInsertPlace(input);
     });
     await expect(svc.importNaverList(String(trip.id), FOLDER_URL)).rejects.toThrow('boom');
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(trip.id) as { n: number };
+    const count = ({ n: await countRows(orm, Places, { trip: trip.id }) }) as { n: number };
     expect(count.n).toBe(0);
     insertSpy.mockRestore();
   });
@@ -2252,7 +2251,7 @@ describe('backfillMissingAddresses', () => {
     ]);
 
     expect(reverseGeocode).toHaveBeenCalledWith('48.85', '2.35', undefined, { lane: 'background', timeoutMs: 10000 });
-    const row = testDb.prepare('SELECT address FROM places WHERE id = ?').get(place.id) as { address: string };
+    const row = await findRow(orm, Places, { id: place.id }) as { address: string };
     expect(row.address).toBe('1 Rue de Rivoli, Paris');
   });
 
@@ -2283,7 +2282,7 @@ describe('backfillMissingAddresses', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Bar', lat: 48.85, lng: 2.35 }) as any;
-    testDb.prepare('UPDATE places SET address = ? WHERE id = ?').run('Imported address', place.id);
+    await updateRows(orm, Places, { id: place.id }, { address: 'Imported address' });
 
     const reverseGeocode = vi.fn(async () => ({ name: null, address: 'Nominatim address' }));
     await (await backfillSvc(reverseGeocode)).backfillMissingAddresses(String(trip.id), [
@@ -2291,7 +2290,7 @@ describe('backfillMissingAddresses', () => {
     ]);
 
     expect(reverseGeocode).not.toHaveBeenCalled();
-    const row = testDb.prepare('SELECT address FROM places WHERE id = ?').get(place.id) as { address: string };
+    const row = await findRow(orm, Places, { id: place.id }) as { address: string };
     expect(row.address).toBe('Imported address');
   });
 
@@ -2304,7 +2303,7 @@ describe('backfillMissingAddresses', () => {
       { id: place.id, name: 'Bar', lat: 48.85, lng: 2.35 },
     ]);
 
-    const row = testDb.prepare('SELECT address FROM places WHERE id = ?').get(place.id) as { address: string | null };
+    const row = await findRow(orm, Places, { id: place.id }) as { address: string | null };
     expect(row.address).toBeNull();
   });
 
@@ -2325,7 +2324,7 @@ describe('backfillMissingAddresses', () => {
       ]),
     ).resolves.toBeUndefined();
 
-    const rows = testDb.prepare('SELECT id, address FROM places WHERE trip_id = ? ORDER BY id').all(trip.id) as {
+    const rows = await findRows(orm, Places, { trip: trip.id }, { id: 'asc' }) as {
       id: number; address: string | null;
     }[];
     expect(rows[0].address).toBeNull();
@@ -2371,7 +2370,7 @@ describe('findMatchingPlaceId', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Original Name' });
-    testDb.prepare('UPDATE places SET google_place_id = ? WHERE id = ?').run('ChIJ_abc', place.id);
+    await updateRows(orm, Places, { id: place.id }, { google_place_id: 'ChIJ_abc' });
 
     expect(
       await svc.findMatchingPlaceId(String(trip.id), { name: 'Renamed By User', google_place_id: 'ChIJ_abc' }),
@@ -2427,7 +2426,7 @@ describe('findMatchingPlaceId', () => {
     const trip = createTrip(testDb, user.id);
     // The place the user renamed, carrying the id the importer knows it by.
     const renamed = createPlace(testDb, trip.id, { name: 'Dinner Tuesday', lat: 41.88, lng: 12.47 });
-    testDb.prepare('UPDATE places SET google_ftid = ? WHERE id = ?').run('0x1:0x2', renamed.id);
+    await updateRows(orm, Places, { id: renamed.id }, { google_ftid: '0x1:0x2' });
     // A different place that happens to carry the name the list still uses.
     createPlace(testDb, trip.id, { name: 'Trattoria da Enzo', lat: 41.9, lng: 12.5 });
 
