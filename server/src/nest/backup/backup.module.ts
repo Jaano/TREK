@@ -10,6 +10,7 @@ import { AppConfigModule } from '../app-config/app-config.module';
 import { StorageModule } from '../storage/storage.module';
 import { StorageService } from '../storage/storage.service';
 import { MAX_BACKUP_UPLOAD_SIZE } from './backup.impl';
+import { DatabaseBackupModule } from './database-backup.module';
 
 /**
  * Multer options for the restore upload. The uploaded zip is a restore INPUT,
@@ -32,6 +33,9 @@ export function buildBackupUploadOptions(storage: StorageService): MulterOptions
   imports: [
     AppConfigModule,
     AuditModule,
+    // Global, so the admin domain sees the port too; imported here because the
+    // backup domain is what it belongs to.
+    DatabaseBackupModule,
     SchedulingModule,
     StorageModule,
     MulterModule.registerAsync({

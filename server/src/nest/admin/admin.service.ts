@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
@@ -17,6 +17,7 @@ import { invalidateMcpSessions } from '../../mcp';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';
 import { maybe_encrypt_api_key, decrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { avatarUrl } from '../common/avatarUrl';
+import { DATABASE_BACKUP, type DatabaseBackupStrategy } from '../database/database-backup.interface';
 import { prepareLlmAddonConfigForWrite, maskLlmAddonConfig } from '../llm-parse/llm-config';
 import { getPhotoProviderConfig } from '../memories/memories.helpers';
 import { validatePassword } from '../common/passwordPolicy';
@@ -128,6 +129,7 @@ export class AdminService {
     private readonly userCleanup: UserCleanupService,
     private readonly realtime: RealtimeService,
     private readonly uow: UnitOfWork,
+    @Inject(DATABASE_BACKUP) private readonly database: DatabaseBackupStrategy,
   ) {}
 
   // ── User CRUD ──────────────────────────────────────────────────────────────
@@ -421,8 +423,8 @@ export class AdminService {
     }
     try {
       // Lazy require: demo-reset is a demo-only module.
-      const { saveBaseline } = require('../../demo/demo-reset');
-      await saveBaseline();
+      const { saveBaseline } = require('../../demo/demo-reset') as typeof import('../../demo/demo-reset');
+      await saveBaseline(this.database);
       return { message: 'Demo baseline saved. Hourly resets will restore to this state.' };
     } catch (err: unknown) {
       console.error(err);

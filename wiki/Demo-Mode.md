@@ -52,9 +52,9 @@ The baseline is the snapshot the hourly reset restores to. The admin can update 
 
 **Endpoint:** `POST /api/admin/save-demo-baseline`
 
-In the admin panel, a **Demo Baseline** card sits above the tabs while demo mode is on; its **Save Baseline** button calls this endpoint. The baseline captures the current state of the database, trip data, settings and encrypted API keys included, so demo features (maps, photos, weather) continue to work after each reset.
+In the admin panel, a **Demo Baseline** card sits above the tabs while demo mode is on; its **Save Baseline** button calls this endpoint. The baseline captures the current state of the database, trip data, settings and encrypted API keys included, so demo features (maps, photos, weather) continue to work after each reset. It is written as a consistent snapshot and only then put in place of the previous baseline, so a save that fails leaves the previous one intact.
 
-On first start with demo mode active, TREK seeds three example trips (Tokyo & Kyoto, Barcelona Long Weekend, New York City) owned by the admin and shared with the demo user, then saves the initial baseline automatically.
+On first start with demo mode active, TREK seeds three example trips (Tokyo & Kyoto, Barcelona Long Weekend, New York City) owned by the admin and shared with the demo user. Once the server is up, a demo start that finds no baseline saves the initial one automatically.
 
 ## Limitations
 

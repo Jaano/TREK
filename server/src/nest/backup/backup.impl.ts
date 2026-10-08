@@ -3,12 +3,10 @@ import path from 'path';
 import { pipeline } from 'node:stream/promises';
 import { readEnv } from '../../app-config';
 import fs from 'fs';
-import { RequestContext } from '@mikro-orm/core';
-import { closeDb, reinitialize } from '../../db/database';
-import { MaintenanceRepository } from '../../db/repositories/MaintenanceRepository';
-import { logInfo, logWarn } from '../audit/audit-log.logger';
+import { logError, logWarn } from '../audit/audit-log.logger';
+import type { DatabaseBackupStrategy } from '../database/database-backup.interface';
 import { VALID_INTERVALS } from './auto-backup.settings';
-import { checkBackupDatabase, extractBackupArchive } from './backup-archive';
+import { extractBackupArchive } from './backup-archive';
 import { invalidatePermissionsCache } from '../permissions/permissions-cache';
 import { pluginsCodeRoot, pluginsDataRoot } from '../plugins/paths';
 import { stageExtractedPluginTrees, applyStagedRestoreNow } from '../plugins/plugin-backup';
@@ -21,6 +19,20 @@ import { StorageInvalidKeyError } from '../storage/storage.types';
 // Paths
 // ---------------------------------------------------------------------------
 
+/**
+ * What a backup and a restore work with: the storage facade for the archives
+ * and the uploads, and the database port for the database itself. BackupService
+ * injects both and hands them in.
+ */
+export interface BackupDeps {
+  storage: StorageService;
+  database: DatabaseBackupStrategy;
+}
+
+const describeError = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+// The scratch and key directory. The database itself may live elsewhere
+// (TREK_DB_FILE); the database port knows where.
 const dataDir = path.join(__dirname, '../../../data');
 const PRECOMPRESSED = /\.(jpe?g|png|webp|gif|heic|heif|avif|mp4|mov|m4v|webm|pdf|zip|gz)$/i;
 
@@ -157,7 +169,10 @@ export const BACKUP_UPLOAD_CATEGORIES = ['files', 'journey', 'covers', 'avatars'
  * only auto-backup-*.zip, and the admin panel badges them as automatic. Manual
  * backups keep the default.
  */
-export async function createBackup(storage: StorageService, prefix: 'backup' | 'auto-backup' = 'backup'): Promise<BackupInfo> {
+export async function createBackup(
+  { storage, database }: BackupDeps,
+  prefix: 'backup' | 'auto-backup' = 'backup',
+): Promise<BackupInfo> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = `${prefix}-${timestamp}.zip`;
   // All staging lives in the backups backend's own spool: same volume as the
@@ -176,26 +191,13 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
   const stagingDir = path.join(spoolDir, `staging-${prefix}-${timestamp}`);
 
   try {
-    // BK1 (R1): PRAGMA wal_checkpoint(TRUNCATE), rendered text pinned,
-    // through the shared MaintenanceRepository.walCheckpoint() — the SAME
-    // method demo-reset.ts's resetDemoUser/saveBaseline use, on the ORM's
-    // own bound driver connection rather than the legacy `db` proxy. Still
-    // best-effort: the swallowing try/catch matches the legacy shape.
+    // Flush the WAL first, so the snapshot below has less to copy from it.
+    // Best effort: the snapshot is consistent either way.
     try {
-      const em = RequestContext.getEntityManager();
-      if (em) {
-        await new MaintenanceRepository(em).walCheckpoint();
-      } else {
-        // Plan 3i Task 4 fix wave (should-land 7): this used to fail
-        // silently exactly like a real checkpoint failure would — no signal
-        // distinguished "no request context around this run" (a
-        // mis-wired caller; legacy always snapshotted) from "the checkpoint
-        // itself errored" (best-effort, fine to swallow). Loud enough to
-        // show up in the backup's own logs, still non-fatal: the fallback
-        // (archive the live file) is unchanged.
-        logWarn('Backup: no EntityManager available, skipping the WAL checkpoint before snapshot');
-      }
-    } catch (e) {}
+      await database.checkpoint();
+    } catch (e) {
+      logWarn(`Backup: the WAL checkpoint before the snapshot failed (${describeError(e)}), taking the snapshot anyway`);
+    }
 
     // Enumerate the archived categories up front (the archiver reads entries
     // lazily during finalize(), so the promise executor below must stay
@@ -230,43 +232,29 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
       }
     }
 
-    // BK2 (R1): VACUUM INTO '<path>', rendered text pinned, through the
-    // shared MaintenanceRepository.vacuumInto() — computed HERE, before the
-    // promise executor below, for the same reason the uploadEntries
-    // enumeration above already is: the archiver reads entries lazily during
-    // finalize(), so the executor itself must stay synchronous, and
-    // `await`ing the snapshot requires an async boundary the executor
-    // (constructed with a plain, non-async callback) cannot have. The
-    // fallback-to-live-file behaviour on failure is unchanged — only WHERE
-    // the async snapshot attempt runs, not what it does.
-    const dbPath = path.join(dataDir, 'travel.db');
-    const dbExists = fs.existsSync(dbPath);
-    let dbToArchive = dbPath;
-    if (dbExists) {
-      // Archive a point-in-time snapshot, not the live file. The archiver reads entries
-      // lazily during finalize(), so a WAL auto-checkpoint writing pages back into
-      // travel.db mid-stream would tear the archived copy — and the -wal that would make
-      // it recoverable isn't in the zip. VACUUM INTO takes a consistent snapshot even
-      // under concurrent writes — the same guarantee the plugin DBs get below.
+    // Archive a point-in-time snapshot, never the live file. The archiver reads
+    // entries lazily during finalize(), so a WAL auto-checkpoint writing pages
+    // back into the live file mid-stream would tear the archived copy, and the
+    // -wal that would make it recoverable is not in the zip. Taken HERE, before
+    // the promise executor below, because the executor must stay synchronous.
+    //
+    // A snapshot that fails fails the backup. It used to fall back to archiving
+    // the live file, which is exactly the torn copy the snapshot exists to
+    // prevent, and it did so without a word in the log. Now nothing is
+    // archived, nothing is committed to the backups store (the finally below
+    // removes the half-built spool), the existing backups stay as they were,
+    // and the reason is logged.
+    const hasDatabase = database.canSnapshot();
+    if (hasDatabase) {
+      fs.rmSync(dbSnap, { force: true });
       try {
-        if (fs.existsSync(dbSnap)) fs.rmSync(dbSnap, { force: true });
-        const em = RequestContext.getEntityManager();
-        if (!em) {
-          // Plan 3i Task 4 fix wave (should-land 7): same distinction as
-          // BK1 above — without this, a backup silently archiving the LIVE
-          // travel.db (the exact WAL-tear risk this whole snapshot exists to
-          // avoid) left no trace anywhere. The fallback itself is unchanged
-          // (parity with legacy, which always had SOME db to archive).
-          logWarn('Backup: no EntityManager available, archiving the live travel.db instead of a VACUUM INTO snapshot');
-          throw new Error('no EntityManager available for VACUUM INTO');
-        }
-        await new MaintenanceRepository(em).vacuumInto(dbSnap);
-        dbToArchive = dbSnap;
+        await database.snapshot(dbSnap);
       } catch (e) {
-        // Snapshot failed (disk/lock/missing context) — fall back to the
-        // checkpointed live file rather than drop the core DB from the
-        // backup entirely.
+        logError(`Backup: could not take a snapshot of the database at ${database.location()} (${describeError(e)}). No backup was written.`);
+        throw new Error(`Database snapshot failed: ${describeError(e)}`, { cause: e });
       }
+    } else {
+      logWarn(`Backup: no database file at ${database.location()}, this backup holds no database`);
     }
 
     await new Promise<void>((resolve, reject) => {
@@ -283,8 +271,8 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
 
       archive.pipe(output);
 
-      if (dbExists) {
-        archive.file(dbToArchive, { name: 'travel.db' });
+      if (hasDatabase) {
+        archive.file(dbSnap, { name: database.archiveEntry });
       }
 
       // Bundle the at-rest encryption key so the backup is self-contained: the
@@ -309,7 +297,7 @@ export async function createBackup(storage: StorageService, prefix: 'backup' | '
       // copy of the user data a plugin holds, so it belongs in the backup. Checkpoint
       // every open handle first (the host keeps them open in WAL mode) so the archived
       // .db files are complete snapshots and not missing recent commits stranded in a
-      // -wal sidecar — the same treatment travel.db gets above.
+      // -wal sidecar, the same treatment the core database gets above.
       const pdata = pluginsDataRoot();
       if (fs.existsSync(pdata)) {
         // Archive a consistent point-in-time snapshot, not the live files: the archiver
@@ -380,8 +368,8 @@ export interface RestoreResult {
 /** Restore a zip that already sits in the backups store, reading it through
  *  the storage facade (primary-local in v1; a remote backend downloads to
  *  tempDir via withLocalFile — the seam is in place, resumability is not). */
-export function restoreBackup(storage: StorageService, filename: string): Promise<RestoreResult> {
-  return storage.withLocalFile('backups', filename, (zipPath) => restoreFromZip(storage, zipPath));
+export function restoreBackup(deps: BackupDeps, filename: string): Promise<RestoreResult> {
+  return deps.storage.withLocalFile('backups', filename, (zipPath) => restoreFromZip(deps, zipPath));
 }
 
 const isBackupCategory = (dir: string): dir is (typeof BACKUP_UPLOAD_CATEGORIES)[number] =>
@@ -421,54 +409,27 @@ export async function rehydrateUploads(storage: StorageService, extractedUploads
   }
 }
 
-/**
- * A copy of the database a restore is about to replace, next to it in data/.
- * The swap below deletes the current file, and a restore of the wrong archive
- * used to leave nothing to go back to. Best effort: a database broken enough to
- * need the restore may not snapshot, and that must not block the recovery.
- */
-async function snapshotBeforeRestore(): Promise<void> {
-  const target = path.join(dataDir, `pre-restore-${Date.now()}.db`);
-  try {
-    const em = RequestContext.getEntityManager();
-    if (!em) throw new Error('no EntityManager available for VACUUM INTO');
-    await new MaintenanceRepository(em).vacuumInto(target);
-    logInfo(`Restore: the replaced database was kept as ${target}`);
-  } catch (err) {
-    logWarn(`Restore: could not keep a copy of the current database (${err instanceof Error ? err.message : String(err)})`);
-  }
-}
-
-export async function restoreFromZip(storage: StorageService, zipPath: string): Promise<RestoreResult> {
+export async function restoreFromZip({ storage, database }: BackupDeps, zipPath: string): Promise<RestoreResult> {
   const extractDir = path.join(dataDir, `restore-${Date.now()}`);
-  let reinitFailed: unknown = null;
+  let reinitFailed: unknown;
   try {
     const refused = await extractBackupArchive(zipPath, extractDir);
     if (refused) return { success: false, ...refused };
 
-    const unreadable = checkBackupDatabase(extractDir);
+    const unreadable = database.verify(extractDir);
     if (unreadable) {
       fs.rmSync(extractDir, { recursive: true, force: true });
       return { success: false, ...unreadable };
     }
-    const extractedDb = path.join(extractDir, 'travel.db');
 
-    await snapshotBeforeRestore();
-    closeDb();
+    await database.keepCopyBeforeRestore();
 
     try {
-      const dbDest = path.join(dataDir, 'travel.db');
-      // Swap the core DB atomically: copy the restored DB to a temp file on the SAME
-      // filesystem, drop the old -wal/-shm sidecars (they belong to the DB being replaced
-      // and would corrupt the new one if left), then rename into place. A rename is atomic,
-      // so a crash mid-swap leaves either the old or the new travel.db intact — never the
-      // deleted-and-not-yet-copied gap that a plain unlink-then-copy could leave.
-      const dbTmp = dbDest + '.restore-tmp';
-      fs.copyFileSync(extractedDb, dbTmp);
-      for (const ext of ['-wal', '-shm']) {
-        try { fs.unlinkSync(dbDest + ext); } catch (e) {}
-      }
-      fs.renameSync(dbTmp, dbDest);
+      // Closes the connection, swaps the database in and reopens it, migrating
+      // the restored file forward. The reopen runs even when the swap throws; a
+      // reopen failure comes back here instead of propagating, because the
+      // files already landed and that has to be reported as "restart required".
+      ({ reopenError: reinitFailed } = await database.replace(path.join(extractDir, database.archiveEntry)));
 
       // Restore the bundled at-rest encryption key (if the archive carries one)
       // so the restored DB's encrypted secrets can be decrypted. Only the file
@@ -480,34 +441,19 @@ export async function restoreFromZip(storage: StorageService, zipPath: string): 
         fs.copyFileSync(extractedEncKey, path.join(dataDir, '.encryption_key'));
       }
     } finally {
-      // Reopening the DB must always run (even if the copy above threw) so the
-      // process is never left without a connection. Capture a reopen failure
-      // instead of letting it propagate as a generic error — a backup whose
-      // files already landed on disk but whose connection failed to reopen
-      // needs to be reported as "restart required", not swallowed.
-      try {
-        // Awaited: reopening also migrates the restored file, which may be an
-        // older backup, and rebuilds the ORM's cached connection.
-        await reinitialize();
-      } catch (reinitErr) {
-        reinitFailed = reinitErr;
-      }
       // The restored DB has different permission-override rows from
       // the pre-restore DB, but our process-local permissions cache
       // still holds the pre-restore state. Any request using a cached
       // permission would decide against the wrong grants until the
       // next restart. Dropping the cache forces a fresh read.
-      // D6: no repository read happens on this path today — invalidation is a
-      // plain function, not a DB call — so no withRequestContext is owed here yet.
-      // The domain phase that gives this restore path a repository read (Plan 3's
-      // admin/backup cluster) must wrap it then; see task-2-review.md's non-HTTP
-      // caller table.
+      // D6: no repository read happens on this path today (invalidation is a
+      // plain function, not a DB call), so no withRequestContext is owed here.
       invalidatePermissionsCache();
     }
 
     if (!reinitFailed) {
       // The registry reads storage.* app_settings through the DB handle that
-      // was just closed and reopened above — reload it now, AFTER reinitialize()
+      // was just closed and reopened above. Reload it now, AFTER the reopen
       // and BEFORE any byte moves, so rehydrated uploads land where the RESTORED
       // config says rather than the stale pre-restore one (audit #4). Skipped
       // entirely when reopen failed: with no live DB handle the registry has
@@ -541,7 +487,7 @@ export async function restoreFromZip(storage: StorageService, zipPath: string): 
     // an un-staged tree there would be gone for good with no recovery path.
     try {
       stageExtractedPluginTrees(extractDir);
-      // Quiesce regardless of whether trees were staged: the restored travel.db carries
+      // Quiesce regardless of whether trees were staged: the restored database carries
       // a different `plugins` table, so any plugin still running with its pre-restore
       // identity/grants is now a ghost — invisible in the restored UI, unstoppable short
       // of a process restart. applyStagedRestoreNow closes those handles; the tree swap

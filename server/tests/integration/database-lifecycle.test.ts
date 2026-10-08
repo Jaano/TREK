@@ -3,6 +3,8 @@ import request from 'supertest';
 import type { INestApplication } from '@nestjs/common';
 import { buildApp } from '../../src/bootstrap';
 import { DatabaseLifecycle } from '../../src/nest/database/database-lifecycle.service';
+import { DATABASE_BACKUP, type DatabaseBackupStrategy } from '../../src/nest/database/database-backup.interface';
+import { SqliteDatabaseBackup } from '../../src/nest/backup/sqlite-database-backup';
 
 /**
  * The core database's lifecycle, owned by the DatabaseLifecycle provider, on a
@@ -11,8 +13,8 @@ import { DatabaseLifecycle } from '../../src/nest/database/database-lifecycle.se
  * The connection used to open as a side effect of importing db/database.ts and
  * was closed and reopened through module functions the restore and the demo
  * reset called directly. buildApp() now opens it through the provider, which
- * also binds the ORM to later swaps, and closes and reopens it through the
- * same provider. Unmocked on purpose: under NODE_ENV=test the
+ * also binds the ORM to later swaps; the backup port closes and reopens it
+ * through the same provider. Unmocked on purpose: under NODE_ENV=test the
  * module opens a copy of the migrated schema snapshot, and every reopen opens a
  * pristine copy again, which is all these cases need.
  */
@@ -51,5 +53,14 @@ describe('the database connection lifecycle under buildApp()', () => {
 
     const up = await request(app.getHttpServer()).get('/api/health/ready');
     expect(up.status).toBe(200);
+  });
+
+  it('LIFECYCLE-003: the backup port the container hands out is the SQLite one, on the file the connection runs on', () => {
+    const port = app.get<DatabaseBackupStrategy>(DATABASE_BACKUP);
+
+    expect(port).toBeInstanceOf(SqliteDatabaseBackup);
+    expect(port.location()).toBe(app.get(DatabaseLifecycle).file);
+    // The in-memory test database has no file to copy.
+    expect(port.canSnapshot()).toBe(false);
   });
 });

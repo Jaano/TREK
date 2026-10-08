@@ -214,20 +214,23 @@ describe('BackupService (wrapper)', () => {
   // The impl module is fully mocked above, so an empty sentinel stands in for
   // the injected StorageService — the wrapper's job is passing it through.
   const storage = { __sentinel: 'storage' } as unknown as import('../../../src/nest/storage/storage.service').StorageService;
-  const wrapper = new RealBackupService(storage);
+  // Same for the injected database port: a backup and a restore get it next to
+  // the storage, everything else does not need it.
+  const database = { __sentinel: 'database' } as unknown as import('../../../src/nest/database/database-backup.interface').DatabaseBackupStrategy;
+  const wrapper = new RealBackupService(storage, database);
 
   it('forwards every call straight to the legacy backup service', async () => {
     expect(await wrapper.listBackups()).toEqual([{ filename: 'svc.zip' }]);
     expect(backupSvc.listBackups).toHaveBeenCalledWith(storage);
 
-    await expect(wrapper.createBackup()).resolves.toEqual({ filename: 'svc.zip', size: 5 });
-    expect(backupSvc.createBackup).toHaveBeenCalled();
+    await expect(wrapper.createBackup('auto-backup')).resolves.toEqual({ filename: 'svc.zip', size: 5 });
+    expect(backupSvc.createBackup).toHaveBeenCalledWith({ storage, database }, 'auto-backup');
 
     await expect(wrapper.restoreFromZip('/tmp/a.zip')).resolves.toEqual({ success: true });
-    expect(backupSvc.restoreFromZip).toHaveBeenCalledWith(storage, '/tmp/a.zip');
+    expect(backupSvc.restoreFromZip).toHaveBeenCalledWith({ storage, database }, '/tmp/a.zip');
 
     await expect(wrapper.restoreBackup('svc.zip')).resolves.toEqual({ success: true });
-    expect(backupSvc.restoreBackup).toHaveBeenCalledWith(storage, 'svc.zip');
+    expect(backupSvc.restoreBackup).toHaveBeenCalledWith({ storage, database }, 'svc.zip');
 
     await wrapper.deleteBackup('svc.zip');
     expect(backupSvc.deleteBackup).toHaveBeenCalledWith(storage, 'svc.zip');

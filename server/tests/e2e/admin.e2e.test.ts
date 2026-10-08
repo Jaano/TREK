@@ -106,6 +106,7 @@ vi.mock('../../src/nest/notifications/notification-preferences.service', async (
 });
 
 import { AdminModule } from '../../src/nest/admin/admin.module';
+import { DatabaseBackupModule } from '../../src/nest/backup/database-backup.module';
 // The admin surface is no longer one module: oidc, the account defaults and the admin
 // preference matrix moved to the domains that own them, so the app has to assemble
 // them too or those routes 404 here while working in production.
@@ -122,7 +123,10 @@ describe('Admin e2e (real auth + admin guard + temp SQLite)', () => {
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, AdminModule, OidcModule, SettingsModule, NotificationsModule] }).compile();
+    // DatabaseBackupModule is global and lives in the backup domain, which the
+    // app imports through BackupModule; the admin surface injects its port for
+    // the demo baseline and reset, so a harness without BackupModule adds it.
+    const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), DatabaseBackupModule, RealtimeModule, AdminModule, OidcModule, SettingsModule, NotificationsModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     // Mirror the production APP_PIPE (app.module.ts): DTO-typed bodies validate

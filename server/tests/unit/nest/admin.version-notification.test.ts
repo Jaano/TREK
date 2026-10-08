@@ -88,6 +88,7 @@ import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-re
 import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import type { DatabaseBackupStrategy } from '../../../src/nest/database/database-backup.interface';
 
 const realtime = new RealtimeService();
 
@@ -102,6 +103,8 @@ let permissions: PermissionsService;
 let userCleanup: UserCleanupService;
 let auth: AuthService;
 let svc: AdminService;
+// The demo baseline route's database port; nothing here reaches it.
+const databaseBackupStub = {} as unknown as DatabaseBackupStrategy;
 beforeAll(async () => {
   webauthn = new WebauthnConfigService(await createTestAppSettingsRepo(testDb));
   permissions = new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb));
@@ -135,6 +138,7 @@ beforeAll(async () => {
   userCleanup,
   realtime,
   await createTestUnitOfWork(testDb),
+  databaseBackupStub,
 );
 });
 const checkAndNotifyVersion = () => svc.checkAndNotifyVersion();

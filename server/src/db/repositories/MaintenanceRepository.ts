@@ -16,12 +16,12 @@ import type { EntityManager } from '@mikro-orm/core';
  * order) is the correct tool, not a shortcut around it.
  *
  * Provided through Nest DI by `MaintenanceModule` (`nest/database/`), a
- * factory over the context-resolving global `EntityManager`; the readiness
- * probe and `UserCleanupService` inject it. `backup.impl.ts` and
- * `demo/demo-reset.ts` still build one over the request's EntityManager until
- * they move behind an injected provider of their own. The class stays free of
- * Nest decorators like every other file under `db/`, so a test can still
- * build one over its own `EntityManager`.
+ * factory over the context-resolving global `EntityManager`; its consumers
+ * inject it: the readiness probe, `UserCleanupService` and the SQLite backup
+ * port (`SqliteDatabaseBackup`), which the backup, the restore and the demo
+ * reset all go through. The class stays free of Nest decorators like every
+ * other file under `db/`, so a test can still build one over its own
+ * `EntityManager`.
  */
 export class MaintenanceRepository {
   constructor(private readonly em: EntityManager) {}
@@ -45,13 +45,10 @@ export class MaintenanceRepository {
 
   /**
    * `PRAGMA wal_checkpoint(TRUNCATE)` — rendered text pinned, identical to
-   * the legacy `db.exec('PRAGMA wal_checkpoint(TRUNCATE)')` it replaces at
-   * three call sites: `backup.impl.ts#createBackup` (BK1), `demo-reset.ts`'s
-   * `resetDemoUser` (DMR3) and `saveBaseline` (DMR3's dup) — one shared
-   * method, three callers, not three near-duplicate raw statements. Flushes
-   * the WAL into the main db file before a snapshot/copy; every call site
-   * treats it as best-effort (wrapped in a swallowing try/catch by the
-   * caller), matching the legacy shape exactly.
+   * the legacy `db.exec('PRAGMA wal_checkpoint(TRUNCATE)')` it replaces.
+   * Reached through the backup port's `checkpoint()`, which the backup
+   * (BK1) and the demo reset (DMR3) call. Flushes the WAL into the main db
+   * file before a snapshot or a swap; every caller treats it as best effort.
    */
   async walCheckpoint(): Promise<void> {
     this.validateRequestContext();
@@ -61,7 +58,7 @@ export class MaintenanceRepository {
   /**
    * `` VACUUM INTO '<path>' `` — rendered text pinned, identical to the
    * legacy `` db.exec(`VACUUM INTO '${dbSnap.replaceAll("'", "''")}'`) ``
-   * (BK2, `backup.impl.ts#createBackup`): single quotes in `path` are
+   * (BK2, reached through the backup port's `snapshot()`): single quotes in `path` are
    * escaped by doubling, the same escaping the legacy statement used — a
    * consistent point-in-time snapshot under concurrent writers, with no
    * MikroORM/Kysely equivalent.
@@ -86,8 +83,8 @@ export class MaintenanceRepository {
    * open `UnitOfWork.transactional(...)` (`deleteUserCompletely`'s
    * transaction). `Connection#execute(query, params, method, ctx)`'s `ctx`
    * defaults to the plain (non-transactional) Kysely client when omitted —
-   * `walCheckpoint`/`vacuumInto` always omit it because their two callers
-   * (`backup.impl.ts`, `demo-reset.ts`) never run inside a transaction, but
+   * `walCheckpoint`/`vacuumInto` always omit it because their callers
+   * (the backup port) never run inside a transaction, but
    * omitting it here deadlocked: this repo's `better-sqlite3` connection is
    * single-connection/single-writer, the open transaction holds it for its
    * whole lifetime, and a bare `execute()` tries to check out that SAME

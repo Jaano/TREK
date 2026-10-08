@@ -112,6 +112,7 @@ import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-re
 import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import type { DatabaseBackupStrategy } from '../../../src/nest/database/database-backup.interface';
 
 const realtime = new RealtimeService();
 
@@ -128,6 +129,15 @@ let auth: AuthService;
 let svc: AdminService;
 let mcpTokensRepo: McpTokensRepository;
 let auditLogRepo: AuditLogRepository;
+// The database backup port AdminService injects for the demo baseline route.
+// Its snapshot fails, which is the failure ADMIN-SVC-095 needs the real
+// saveBaseline() to meet.
+const databaseBackupStub = {
+  canSnapshot: () => true,
+  snapshot: async () => {
+    throw new Error('database or disk is full');
+  },
+} as unknown as DatabaseBackupStrategy;
 beforeAll(async () => {
   webauthn = new WebauthnConfigService(await createTestAppSettingsRepo(testDb));
   permissions = new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb));
@@ -163,6 +173,7 @@ beforeAll(async () => {
   userCleanup,
   realtime,
   await createTestUnitOfWork(testDb),
+  databaseBackupStub,
 );
 });
 
@@ -428,16 +439,15 @@ describe('saveDemoBaseline', () => {
   // it, so a copy failure (proven live in task-4-review.md with a real
   // EISDIR from fs.copyFileSync) went nowhere — the route answered 200 and
   // the rejection later surfaced as an unhandled rejection that crashed the
-  // process. This suite's dynamic require()s of demo-reset.ts (and, inside
-  // it, db/database.ts) bypass this file's top-of-file vi.mock, same
-  // documented limitation as ADMIN-SVC-051 — so instead of mocking, this
-  // test lets the REAL saveBaseline() run with no RequestContext
-  // established, which deterministically rejects at its own
-  // requireEntityManager() guard: the same "the copy failed" shape a real
-  // EISDIR would produce, without touching the filesystem. Awaiting that
-  // rejection (the fix) means the service's own try/catch converts it into
-  // the legacy 500 body, and this test resolving cleanly (not hanging, no
-  // unhandledRejection) is itself proof the rejection was actually caught.
+  // process. This suite's dynamic require()s of demo-reset.ts bypass this
+  // file's top-of-file vi.mock, same documented limitation as ADMIN-SVC-051,
+  // so the REAL saveBaseline() runs here, against the injected database port
+  // whose snapshot rejects (`databaseBackupStub` above): the same "the save
+  // failed" shape a full disk would produce, without touching the
+  // filesystem. Awaiting that rejection (the fix) means the service's own
+  // try/catch converts it into the legacy 500 body, and this test resolving
+  // cleanly (not hanging, no unhandledRejection) is itself proof the
+  // rejection was actually caught.
   it('ADMIN-SVC-095 — a failed baseline save is awaited and answers the legacy 500, not an unhandled rejection', async () => {
     vi.stubEnv('DEMO_MODE', 'true');
     const result = await saveDemoBaseline();

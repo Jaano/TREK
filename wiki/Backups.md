@@ -14,7 +14,7 @@ A backup is a ZIP archive with these entries:
 
 | Entry | Contents |
 |---|---|
-| `travel.db` | The full SQLite database |
+| `travel.db` | The full SQLite database, as a consistent snapshot taken while TREK keeps running (writes during the backup cannot tear it) |
 | `uploads/` | All uploaded attachments, covers, and avatars (default location — see [Admin: Storage](Admin-Storage)) |
 | `plugins-data/` | Each installed plugin's own database + files (present only if plugins are installed) |
 | `plugins-code/` | The installed plugin code, so a restore is self-contained (dev-linked plugins are skipped) |
@@ -24,6 +24,8 @@ A backup is a ZIP archive with these entries:
 ## Manual backup
 
 Click **Create Backup** in the Backup tab. The server creates the ZIP and makes it available for download. Up to 3 manual backups can be created per hour per IP address (rate-limit window: 1 hour).
+
+If the database snapshot cannot be taken (a full disk, for example), the backup fails: the server log says why, no new file appears in the list, and the existing backups stay as they were. TREK never falls back to zipping the live database file, which could hold a half-written state.
 
 You can also **Download** or delete any existing backup from the list. Deleting asks first in TREK's own dialog (**Delete backup "name"?**).
 
@@ -42,7 +44,7 @@ Before restoring, TREK runs integrity checks on the uploaded database:
 2. **Required tables present** — confirms the file contains `users`, `trips`, `trip_members`, `places`, and `days`. Files missing any of these are rejected as not being a valid TREK backup.
 3. **Not from a newer TREK**: a backup whose database a newer release migrated is refused with `This backup was made by a newer TREK version. Update TREK before restoring it.` Restoring it would leave this version unable to start.
 
-The database being replaced is kept as `data/pre-restore-<time>.db`, so a restore of the wrong archive can be undone by hand. Delete these copies once you no longer need them.
+The database being replaced is kept as `pre-restore-<time>.db` next to it (in `data/` on a standard install), so a restore of the wrong archive can be undone by hand. Delete these copies once you no longer need them.
 
 Either way, TREK asks first in a **Restore Backup?** dialog that names the file, warns that all current data (trips, places, users, uploads) will be permanently replaced, and suggests creating a backup of the current state first. **Yes, restore** starts it; when it is done the page reloads.
 

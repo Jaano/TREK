@@ -10,12 +10,15 @@ import { runSchemaBootstrap } from '../../db/orm';
  *
  * The handle itself still lives in `db/database.ts`, because the ORM's bound
  * driver (`db/orm-driver.ts`) reads it on every connect and the test suites
- * replace that module wholesale with `vi.mock`. What moved here is the
- * decision about WHEN it opens and closes: `buildApp()` opens through this and
- * the shutdown closes through this. Nothing opens the database at import any
- * more; the first connect does, and this provider makes it explicit. The
- * restore and the demo reset still call the module's `closeDb()`/`reinitialize()`
- * themselves until they move onto `close()`/`reopen()`.
+ * replace that module wholesale with `vi.mock`. What moved here is every
+ * decision about WHEN it opens and closes: `buildApp()` opens through this,
+ * a restore and the demo reset close and reopen through this (via the backup
+ * port), and the shutdown closes through this. Nothing opens the database at
+ * import any more; the first connect does, and this provider makes it explicit.
+ *
+ * Only the SQLite file engine exists today. The engine specific parts (the file
+ * path, the swap) are confined to `file` and to the backup port's SQLite
+ * implementation, so another engine changes this provider and that one class.
  */
 @Injectable()
 export class DatabaseLifecycle {

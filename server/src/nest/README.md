@@ -88,10 +88,13 @@ better-sqlite3 singleton — folded into `integrations/`. An ESLint
 `no-restricted-imports` rule now refuses any import of a `services/` path, because
 the directory disappearing is not what keeps it gone: it grew one reasonable file
 at a time. Backup made the same trip earlier: `services/backupService.ts` is
-`nest/backup/backup.impl.ts`, imported only by its own domain, and it stays a
-module of free functions rather than becoming methods because the restore path
-closes and reinitializes the core DB handle — rewriting that shape in the same
-step as the move would make a regression there impossible to bisect.
+`nest/backup/backup.impl.ts`, imported only by its own domain. It is still a
+module of free functions, but it no longer closes or reopens the core DB handle
+itself: `BackupService` hands it the injected database backup port
+(`DATABASE_BACKUP`, `SqliteDatabaseBackup`), which snapshots and swaps the file
+through `DatabaseLifecycle`, the provider that owns the connection. The demo
+reset goes through the same port. Another engine plugs in there, with a logical
+dump in place of `VACUUM INTO` and the file swap.
 
 Note that the trip-access and `canEdit` methods on the domain services are **not**
 dead weight waiting for a guard: their callers are overwhelmingly the `*.mcp.ts`
