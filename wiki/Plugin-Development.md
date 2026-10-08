@@ -269,7 +269,7 @@ exports the list per method as `PLUGIN_METHOD_RESULT`:
 
 | Area | Methods | Requires |
 |---|---|---|
-| `ctx.db` | `query(sql, …args)` / `exec(sql, …args)` / `migrate(id, sql)` / `tx(ops)` against your **own** SQLite file. `tx([{sql, args?}, …])` runs up to 100 statements in one transaction (all commit or all roll back; reads see the batch's own earlier writes) → `{ results: [{changes?}\|{rows?}, …] }`. Your file is capped at **256 MB** (a write past it fails `SQLITE_FULL`, contained to your plugin) and a single result set at **100,000 rows** — page your reads instead of materialising a cartesian product | `db:own` |
+| `ctx.db` | `query(sql, …args)` / `exec(sql, …args)` / `migrate(id, sql)` / `tx(ops)` against your **own** SQLite file. `tx([{sql, args?}, …])` runs up to 100 statements in one transaction (all commit or all roll back; reads see the batch's own earlier writes) → `{ results: [{changes?}\|{rows?}, …] }`. Your file is capped at **256 MB** (a write past it fails `SQLITE_FULL`, contained to your plugin), a single result set at **100,000 rows** and a `query` or `tx` at **2 s** (see [Runtime limits](#runtime-limits)) — page your reads instead of materialising a cartesian product | `db:own` |
 | `ctx.trips` | `getById` / `getPlaces` / `getReservations` / `getDays` / `getAccommodations` / `listMine()` — enumerate every trip the acting user can access (membership-checked). `getDays` includes each day's `assignments` + `notes_items`; `getReservations` includes `endpoints` + `day_positions` | `db:read:trips` |
 | `ctx.trips.update(tripId, fields)` | update trip fields (title/dates/currency/reminder_days/…) | `db:write:trips` |
 | `ctx.trips.create(input)` | create a **new trip owned by the acting user** (importers) — `title` required, plus `description?`/`start_date?`/`end_date?`/`currency?`/`reminder_days?`/`day_count?`; without `currency` the trip takes the acting user's display currency, then the instance default, then EUR | `db:create:trips` (+ `trip_create`) |
@@ -401,7 +401,7 @@ stores blobs in `ctx.db` runs into, so build against them.
 | Area | Limit |
 |---|---|
 | every `ctx.*` call | burst 60, sustained 20/s, 16 in-flight per plugin; a throttled call is refused with `HOST_ERROR: rate limit exceeded — slow down ctx.* calls`. Tunable with `TREK_PLUGIN_RPC_BURST` / `TREK_PLUGIN_RPC_PER_SEC` / `TREK_PLUGIN_RPC_INFLIGHT` (see [Environment-Variables](Environment-Variables#plugins)) |
-| `ctx.db` | 256 MB per plugin, one result set capped at 100,000 rows |
+| `ctx.db` | 256 MB per plugin; a `query` or a whole `tx` batch returns at most 100,000 rows and gets 2 s of wall-clock time, checked between the rows it reads and the statements of a batch (past it the call throws `query exceeded its 2000 ms time budget`, and a `tx` rolls back). A single statement that yields nothing until it is finished, such as an aggregate over a cross join of large tables, cannot be stopped midway, because SQLite runs it on TREK's main thread: keep your queries indexed and bounded |
 | event subscriptions | 200 events buffered per plugin while it restarts, dropped unreplayed after 15 minutes |
 | the plugin process | 300 MB RSS (`TREK_PLUGIN_MAX_RSS_MB`) — the child is killed past it; auto-disabled with status `error` after 5 crashes inside a 5-minute window |
 

@@ -72,7 +72,9 @@ export interface PluginContext {
   };
   /** Your OWN sqlite database (`db:own`) — a separate file the plugin never gets a
    * path or connection to directly. Quota: 256 MB per plugin (writes past it fail);
-   * result sets are capped at 100,000 rows. See `tx()` below for the atomic-batch cap. */
+   * result sets are capped at 100,000 rows, and a `query` or `tx` gets 2 s of wall-clock
+   * time, checked between the rows it reads (past it, it throws and a `tx` rolls back).
+   * See `tx()` below for the atomic-batch cap and README § Runtime limits. */
   db: {
     query<T = unknown>(sql: string, ...args: unknown[]): Promise<T[]>;
     exec(sql: string, ...args: unknown[]): Promise<{ changes: number }>;

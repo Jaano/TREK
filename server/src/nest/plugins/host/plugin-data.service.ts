@@ -13,7 +13,7 @@ import { pluginDataDir, pluginDbFile, pluginsDataRoot } from '../paths';
  *
  * A thin guard still rejects statements that would let a plugin escape its file
  * (ATTACH another db, VACUUM INTO elsewhere, PRAGMA fiddling) or DoS via
- * oversize SQL.
+ * oversize SQL, and every read is held to a row cap and a time budget (below).
  */
 
 const MAX_SQL_LENGTH = 100_000;
@@ -41,6 +41,25 @@ const MAX_ROWS = 100_000;
 // Cap statements per atomic batch so a single tx() can't monopolise the synchronous
 // host — generous for real write batches, far below anything abusive.
 const MAX_TX_OPS = 100;
+// Wall-clock budget for one query() or one whole tx() batch. better-sqlite3 has no
+// interrupt or progress handler, so the budget is checked between the rows a statement
+// yields (and between the statements of a batch): a scan that keeps producing rows, or
+// a select whose every row is expensive, stops at the first row past the budget
+// instead of holding the host loop until the row cap. A statement that yields nothing
+// until it is done (an aggregate over a cartesian product) still runs to its first
+// row; only moving plugin SQL off the host thread can bound that, and the plugin-sdk
+// README says so.
+const TIME_BUDGET_MS = 2_000;
+
+/** The caps a PluginDataDb enforces. Overridable for tests; production uses the defaults. */
+export interface PluginDataLimits {
+  maxRows: number;
+  timeBudgetMs: number;
+  /** The clock the time budget reads. */
+  now: () => number;
+}
+
+const DEFAULT_LIMITS: PluginDataLimits = { maxRows: MAX_ROWS, timeBudgetMs: TIME_BUDGET_MS, now: () => Date.now() };
 
 // Every live per-plugin handle, so a backup can WAL-checkpoint them before archiving
 // (the host keeps these open, so their .db files would otherwise be copied with recent
@@ -59,9 +78,11 @@ export function checkpointAllPluginDataDbs(): void {
 export class PluginDataDb {
   private db: Db;
   readonly pluginId: string;
+  private readonly limits: PluginDataLimits;
 
-  constructor(pluginId: string) {
+  constructor(pluginId: string, limits: Partial<PluginDataLimits> = {}) {
     this.pluginId = pluginId;
+    this.limits = { ...DEFAULT_LIMITS, ...limits };
     fs.mkdirSync(pluginDataDir(pluginId), { recursive: true });
     this.db = openDatabase(pluginDbFile(pluginId));
     this.db.pragma('journal_mode = WAL');
@@ -82,15 +103,28 @@ export class PluginDataDb {
     if (FORBIDDEN.test(sql)) throw new Error('statement type not allowed for plugin databases');
   }
 
-  /** Read query — returns rows up to MAX_ROWS. Single statement only. */
+  /** A deadline for one call: throws once the call has run past the time budget. */
+  private startBudget(what: string): () => void {
+    const { now, timeBudgetMs } = this.limits;
+    const startedAt = now();
+    return () => {
+      if (now() - startedAt > timeBudgetMs) throw new Error(`${what} exceeded its ${timeBudgetMs} ms time budget`);
+    };
+  }
+
+  /** Read query: returns rows up to the row cap, within the time budget. Single statement only. */
   query(sql: string, args: unknown[] = []): unknown[] {
     this.guard(sql);
+    const { maxRows } = this.limits;
+    const checkTime = this.startBudget('query');
     // iterate() pulls one row at a time, so a recursive CTE that would yield
-    // unboundedly is halted at the cap instead of materializing via all().
+    // unboundedly is halted at the cap instead of materializing via all(), and the
+    // clock is read between rows.
     const rows: unknown[] = [];
     for (const row of this.db.prepare(sql).iterate(...(args as never[]))) {
       rows.push(row);
-      if (rows.length > MAX_ROWS) throw new Error(`query returned more than ${MAX_ROWS} rows`);
+      if (rows.length > maxRows) throw new Error(`query returned more than ${maxRows} rows`);
+      checkTime();
     }
     return rows;
   }
@@ -127,7 +161,11 @@ export class PluginDataDb {
       const head = String(op?.sql ?? '').replace(/^(?:\s|--[^\n]*\n?|\/\*[\s\S]*?\*\/)*/, '');
       if (TX_CONTROL.test(head)) throw new Error('transaction-control statements are not allowed inside tx()');
     }
+    const { maxRows } = this.limits;
     let batchRows = 0; // one row budget for the WHOLE batch, not per statement
+    // One time budget for the whole batch too. A throw inside the transaction rolls
+    // every statement of the batch back, so running out of time is all-or-nothing.
+    const checkTime = this.startBudget('tx');
     const run = this.db.transaction((batch: Array<{ sql: string; args?: unknown[] }>) => {
       const results: Array<{ changes?: number; rows?: unknown[] }> = [];
       for (const op of batch) {
@@ -137,12 +175,14 @@ export class PluginDataDb {
           const rows: unknown[] = [];
           for (const row of stmt.iterate(...args)) {
             rows.push(row);
-            if (++batchRows > MAX_ROWS) throw new Error(`tx returned more than ${MAX_ROWS} rows in total`);
+            if (++batchRows > maxRows) throw new Error(`tx returned more than ${maxRows} rows in total`);
+            checkTime();
           }
           results.push({ rows });
         } else {
           results.push({ changes: stmt.run(...args).changes });
         }
+        checkTime();
       }
       return results;
     });

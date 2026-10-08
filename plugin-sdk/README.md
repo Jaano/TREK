@@ -238,7 +238,7 @@ for a legitimate plugin and only bite a runaway or abusive one — build against
 | `ctx.ai` | 200 calls/day per plugin (UTC midnight rollover); past it throws `"daily AI budget exhausted (resets at UTC midnight)"` |
 | `ctx.notify` | 100 calls/day per plugin (UTC midnight rollover); past it throws `"daily notification budget exhausted (resets at UTC midnight)"` |
 | RPC (every `ctx.*` call) | burst 60, sustained 20/s, 16 in-flight per plugin; a throttled call is refused with `HOST_ERROR: rate limit exceeded — slow down ctx.* calls` |
-| `ctx.db` (your own sqlite) | 256 MB per plugin |
+| `ctx.db` (your own sqlite) | 256 MB per plugin; a `query` or `tx` returns at most 100,000 rows (a whole `tx` batch shares one count) and has 2 s of wall-clock time, checked between the rows it reads and the statements of a batch; past either it throws (`query exceeded its 2000 ms time budget`) and a `tx` rolls back. `ATTACH`, `DETACH`, `VACUUM`, `PRAGMA`, `WITH RECURSIVE` and `load_extension` are refused. The budget cannot stop a single statement that produces no row until it is finished (an aggregate over a cross join of large tables), because SQLite runs it on TREK's main thread in one step: keep your queries indexed and bounded |
 | `ctx.meta` | 64 KB per value, 256 chars per key, 100 keys per (plugin, entity) |
 | Plugin process | 300 MB RSS ceiling; auto-disabled after 5 crashes in 5 minutes |
 | Event redelivery buffer | 200 events held per plugin, dropped unreplayed after 15 minutes |

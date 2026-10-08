@@ -100,6 +100,54 @@ describe('PluginDataDb', () => {
     db.close();
   });
 
+  /** A clock that moves `step` ms each time it is read, so a budget runs out on cue. */
+  const steppingClock = (step: number) => {
+    let t = 0;
+    return () => (t += step);
+  };
+
+  it('stops a query at the first row past its time budget', () => {
+    const db = new PluginDataDb('budget-query', { timeBudgetMs: 100, now: steppingClock(30) });
+    db.exec('CREATE TABLE seq (n INTEGER)');
+    db.exec('INSERT INTO seq (n) VALUES ' + Array.from({ length: 50 }, (_, i) => `(${i})`).join(','));
+    // The start reads 30 and each row reads again (60, 90, 120, 150): at the fourth
+    // row the call is 120 ms in, past the budget.
+    expect(() => db.query('SELECT n FROM seq')).toThrow('query exceeded its 100 ms time budget');
+    // A query that finishes inside the budget is untouched.
+    expect(db.query('SELECT n FROM seq WHERE n < 2 ORDER BY n')).toEqual([{ n: 0 }, { n: 1 }]);
+    db.close();
+  });
+
+  it('holds a whole tx batch to one time budget and rolls it back when it runs out', () => {
+    const db = new PluginDataDb('budget-tx', { timeBudgetMs: 80, now: steppingClock(30) });
+    db.exec('CREATE TABLE acct (id INTEGER PRIMARY KEY, bal INTEGER)');
+    db.exec('INSERT INTO acct (id, bal) VALUES (1, 100)');
+    // The clock is read at the start and after each statement: 30 ms, 60 ms, then
+    // 90 ms after the third write, past the budget. The two writes that did run are
+    // rolled back with the rest.
+    expect(() =>
+      db.tx([
+        { sql: 'UPDATE acct SET bal = 1 WHERE id = 1' },
+        { sql: 'UPDATE acct SET bal = 2 WHERE id = 1' },
+        { sql: 'UPDATE acct SET bal = 3 WHERE id = 1' },
+      ]),
+    ).toThrow('tx exceeded its 80 ms time budget');
+    expect(db.query('SELECT bal FROM acct WHERE id = 1')).toEqual([{ bal: 100 }]);
+    // The rows a batch reads move the same clock: row, end of statement, row is 90 ms.
+    expect(() => db.tx([{ sql: 'SELECT id FROM acct' }, { sql: 'SELECT bal FROM acct' }])).toThrow(/time budget/);
+    db.close();
+  });
+
+  it('applies an overridden row cap to query and tx alike', () => {
+    const db = new PluginDataDb('budget-rows', { maxRows: 3 });
+    db.exec('CREATE TABLE seq (n INTEGER)');
+    db.exec('INSERT INTO seq (n) VALUES (1), (2), (3), (4)');
+    expect(() => db.query('SELECT n FROM seq')).toThrow('query returned more than 3 rows');
+    expect(() => db.tx([{ sql: 'SELECT n FROM seq' }])).toThrow('tx returned more than 3 rows in total');
+    expect(db.query('SELECT n FROM seq WHERE n <= 3')).toHaveLength(3);
+    db.close();
+  });
+
   it('removePluginData deletes the whole data dir', () => {
     const db = new PluginDataDb('temp');
     db.migrate('001', 'CREATE TABLE t (id INTEGER)');
