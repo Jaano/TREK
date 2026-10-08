@@ -16,28 +16,10 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 // ── DB setup ──────────────────────────────────────────────────────────────────
 
 vi.mock('../../../src/db/database', async () => {
-
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: (placeId: any) => {
-      const place: any = db.prepare(`
-        SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon
-        FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?
-      `).get(placeId);
-      if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
-    },
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-    return mock;
+  // Place, tag and trip access reads go through the repositories now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
 
@@ -52,6 +34,55 @@ import { db as testDb } from '../../../src/db/database';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, createDayAssignment, createDayAccommodation, createDayNote, createTag, createReservation } from '../../helpers/factories';
 import { createTour } from '../../helpers/tours-repos';
+import type { EntityData, RequiredEntityData } from '@mikro-orm/core';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { tagPlace } from '../../helpers/factories/places';
+import { DayAccommodations } from '../../../src/db/entities/DayAccommodations.entity';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { AssignmentParticipants } from '../../../src/db/entities/AssignmentParticipants.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { ReservationEndpoints } from '../../../src/db/entities/ReservationEndpoints.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { RoadtripDayBoundaries } from '../../../src/db/entities/RoadtripDayBoundaries.entity';
+import { RoadtripVias } from '../../../src/db/entities/RoadtripVias.entity';
+import { Tags } from '../../../src/db/entities/Tags.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+
+const orm = () => sharedTestOrm(testDb);
+
+async function setDay(id: number, data: { date?: string | null; day_number?: number }): Promise<void> {
+  await updateRows(await orm(), Days, { id }, data);
+}
+
+/** A booking with exactly the given columns; returns its id. */
+async function addReservation(tripId: number, columns: EntityData<Reservations>): Promise<number> {
+  return insertRow(await orm(), Reservations, { trip: tripId, title: 'Booking', ...columns } as RequiredEntityData<Reservations>);
+}
+
+/** The stored booking; fails the case when it is gone. */
+async function reservationRow(id: number) {
+  const row = await findRow(await orm(), Reservations, { id });
+  if (!row) throw new Error(`no reservation ${id}`);
+  return row;
+}
+
+/** The stay's day span as stored; fails the case when the stay is gone. */
+async function staySpan(id: number) {
+  const row = await findRow(await orm(), DayAccommodations, { id });
+  if (!row) throw new Error(`no stay ${id}`);
+  return { start_day_id: row.start_day_id, end_day_id: row.end_day_id };
+}
+
+/** The trip's days in day order: id, number and date. */
+async function dayRows(tripId: number) {
+  return (await findRows(await orm(), Days, { trip: tripId }, { day_number: 'asc' })).map((d) => ({
+    id: d.id,
+    day_number: d.day_number,
+    date: d.date ?? null,
+  }));
+}
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { DaysService, DayReorderError, DayAppendError, NO_DATES_MESSAGE, addDays } from '../../../src/nest/days/days.service';
 // Was days.bridge, deleted with the other three that had no consumer outside the
@@ -133,7 +164,7 @@ describe('getAssignmentsForDay', () => {
     const tour = createPlace(testDb, trip.id, { name: 'Hike', lat: 48.1, lng: 11.1 });
     const track = createPlace(testDb, trip.id, { name: 'Legacy track', lat: 48.2, lng: 11.2 });
     const geometry = JSON.stringify([[48.1, 11.1], [48.3, 11.3]]);
-    testDb.prepare('UPDATE places SET route_geometry = ? WHERE id IN (?, ?)').run(geometry, tour.id, track.id);
+    await updateRows(await orm(), Places, { id: { $in: [tour.id, track.id] } }, { route_geometry: geometry });
     createTour(testDb, tour.id);
     createDayAssignment(testDb, day.id, tour.id, { order_index: 0 });
     createDayAssignment(testDb, day.id, track.id, { order_index: 1 });
@@ -170,7 +201,7 @@ describe('getAssignmentsForDay', () => {
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id) as any;
     const place = createPlace(testDb, trip.id, { name: 'Esso', lat: 53.8, lng: 10.4 }) as any;
-    testDb.prepare('UPDATE places SET stop_type = ? WHERE id = ?').run('fuel', place.id);
+    await updateRows(await orm(), Places, { id: place.id }, { stop_type: 'fuel' });
     createDayAssignment(testDb, day.id, place.id, { order_index: 0 });
 
     // Both queries build the same place shape by hand, and only one of them used to
@@ -307,7 +338,7 @@ describe('getTripForViewer', () => {
     const { user } = createUser(testDb);
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-06-01', end_date: '2026-06-02' });
-    testDb.prepare('UPDATE trips SET feed_token = ? WHERE id = ?').run('secret-feed', trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { feed_token: 'secret-feed' });
 
     expect(await svc.getTripForViewer(trip.id, user.id)).toMatchObject({
       id: trip.id, end_date: '2026-06-02', day_count: 2, place_count: 0, is_owner: 1, feed_token: null,
@@ -361,9 +392,7 @@ describe('DaysService — the surface the deleted bridge exposed', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id, { date: '2026-01-01' });
-    testDb.prepare(
-      'INSERT INTO reservations (trip_id, day_id, title, reservation_time) VALUES (?, ?, ?, ?)'
-    ).run(trip.id, day.id, 'Dinner', '2026-01-01T19:00');
+    await addReservation(trip.id, { day: day.id, title: 'Dinner', reservation_time: '2026-01-01T19:00' });
 
     await svc.restampReservationDates(
       trip.id,
@@ -371,8 +400,8 @@ describe('DaysService — the surface the deleted bridge exposed', () => {
       new Map([[day.id, '2026-01-05']]),
     );
 
-    const row = testDb.prepare('SELECT reservation_time FROM reservations WHERE trip_id = ?').get(trip.id) as { reservation_time: string };
-    expect(row.reservation_time).toBe('2026-01-05T19:00');
+    const row = await findRow(await orm(), Reservations, { trip: trip.id });
+    expect(row?.reservation_time).toBe('2026-01-05T19:00');
   });
 
   it('DAY-SVC-032 — resyncAccommodationDays re-anchors a stay to the day holding its old date', async () => {
@@ -386,13 +415,13 @@ describe('DaysService — the surface the deleted bridge exposed', () => {
     // The trip's range shifted: d1 now holds 01-02 and d2 holds 01-03; the day
     // holding the stay's old date (01-01) no longer exists → the stay stays
     // glued to its rows, but a range where d2 takes over 01-01 re-anchors it.
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-01-02', d1.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-01-01', d2.id);
-    testDb.prepare('UPDATE days SET day_number = 0 WHERE id = ?').run(d2.id);
+    await setDay(d1.id, { date: '2026-01-02' });
+    await setDay(d2.id, { date: '2026-01-01' });
+    await setDay(d2.id, { day_number: 0 });
 
     await svc.resyncAccommodationDays(trip.id, new Map([[d1.id, '2026-01-01'], [d2.id, '2026-01-02']]));
 
-    const row = testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(accom.id) as { start_day_id: number; end_day_id: number };
+    const row = await staySpan(accom.id);
     expect(row.start_day_id).toBe(d2.id);
     expect(row.end_day_id).toBe(d2.id);
   });
@@ -431,7 +460,7 @@ describe('quirk fixes', () => {
     day = await svc.update(day.id, day, { title: 'Arrival' });
     day = await svc.update(day.id, day, { title: '' });
     expect(day.title).toBe('');
-    expect(testDb.prepare('SELECT title FROM days WHERE id = ?').get(day.id)).toEqual({ title: '' });
+    expect((await findRow(await orm(), Days, { id: day.id }))?.title).toBe('');
   });
 
   // Asserted against AccommodationsService, which owns createAccommodation since
@@ -449,7 +478,7 @@ describe('quirk fixes', () => {
       await expect(accommodations.createAccommodation(trip.id, {
         place_id: place.id, start_day_id: day.id, end_day_id: day.id,
       })).rejects.toThrow();
-      expect(testDb.prepare('SELECT COUNT(*) as n FROM day_accommodations WHERE trip_id = ?').get(trip.id)).toMatchObject({ n: 0 });
+      expect(await countRows(await orm(), DayAccommodations, { trip: trip.id })).toBe(0);
     } finally {
       testDb.exec('DROP TRIGGER boom');
     }
@@ -461,8 +490,8 @@ describe('quirk fixes', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id, { name: 'Tagged' });
     createDayAssignment(testDb, day.id, place.id);
-    const tagId = Number(testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(user.id, 'Food', '#ff0000').lastInsertRowid);
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tagId);
+    const tagId = await insertRow(await orm(), Tags, { user: user.id, name: 'Food', color: '#ff0000' });
+    await tagPlace(await orm(), place.id, [tagId]);
 
     const assignments = await svc.getAssignmentsForDay(day.id);
     expect(assignments[0].place.tags).toHaveLength(1);
@@ -486,12 +515,13 @@ describe('restampReservationDates', () => {
     const unmapped = createDay(testDb, trip.id, { date: '2026-01-02' });
     const halfMapped = createDay(testDb, trip.id, { date: '2026-01-03' });
 
-    const insert = testDb.prepare('INSERT INTO reservations (trip_id, day_id, title, reservation_time) VALUES (?, ?, ?, ?)');
-    const unplaced = Number(insert.run(trip.id, null, 'Unplaced', '2026-01-01T09:00').lastInsertRowid);
-    const untimed = Number(insert.run(trip.id, stayer.id, 'Untimed', null).lastInsertRowid);
-    const parked = Number(insert.run(trip.id, stayer.id, 'Parked', '2026-01-01T19:00').lastInsertRowid);
-    const offMap = Number(insert.run(trip.id, unmapped.id, 'Off map', '2026-01-02T12:00').lastInsertRowid);
-    const halfOff = Number(insert.run(trip.id, halfMapped.id, 'Half off', '2026-01-03T12:00').lastInsertRowid);
+    const insert = (dayId: number | null, title: string, time: string | null) =>
+      addReservation(trip.id, { day: dayId, title, reservation_time: time });
+    const unplaced = await insert(null, 'Unplaced', '2026-01-01T09:00');
+    const untimed = await insert(stayer.id, 'Untimed', null);
+    const parked = await insert(stayer.id, 'Parked', '2026-01-01T19:00');
+    const offMap = await insert(unmapped.id, 'Off map', '2026-01-02T12:00');
+    const halfOff = await insert(halfMapped.id, 'Half off', '2026-01-03T12:00');
 
     await svc.restampReservationDates(
       trip.id,
@@ -501,7 +531,7 @@ describe('restampReservationDates', () => {
     );
 
     const times = Object.fromEntries(
-      (testDb.prepare('SELECT id, reservation_time FROM reservations WHERE trip_id = ?').all(trip.id) as { id: number; reservation_time: string | null }[])
+      (await findRows(await orm(), Reservations, { trip: trip.id }))
         .map(r => [r.id, r.reservation_time])
     );
     expect(times).toEqual({
@@ -517,23 +547,20 @@ describe('restampReservationDates', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id, { date: '2026-01-01' });
-    const flight = Number(testDb.prepare(
-      'INSERT INTO reservations (trip_id, day_id, title, type, reservation_time) VALUES (?, ?, ?, ?, ?)'
-    ).run(trip.id, day.id, 'HEL-NRT', 'flight', '2026-01-01T08:00').lastInsertRowid);
+    const flight = await addReservation(trip.id, { day: day.id, title: 'HEL-NRT', type: 'flight', reservation_time: '2026-01-01T08:00' });
 
-    const endpoint = testDb.prepare(
-      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, lat, lng, local_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
-    );
-    const departure = Number(endpoint.run(flight, 'from', 0, 'HEL', 60.31, 24.96, '2026-01-01').lastInsertRowid);
+    const endpoint = async (role: string, sequence: number, name: string, lat: number, lng: number, localDate: string | null) =>
+      insertRow(await orm(), ReservationEndpoints, { reservation: flight, role, sequence, name, lat, lng, local_date: localDate });
+    const departure = await endpoint('from', 0, 'HEL', 60.31, 24.96, '2026-01-01');
     // The arrival sits a day after departure; the legs must keep that distance,
     // otherwise a moved overnight flight lands before it took off.
-    const arrival = Number(endpoint.run(flight, 'to', 1, 'NRT', 35.76, 140.38, '2026-01-02').lastInsertRowid);
-    const undated = Number(endpoint.run(flight, 'to', 2, 'Unknown', 0, 0, null).lastInsertRowid);
+    const arrival = await endpoint('to', 1, 'NRT', 35.76, 140.38, '2026-01-02');
+    const undated = await endpoint('to', 2, 'Unknown', 0, 0, null);
 
     await svc.restampReservationDates(trip.id, new Map([[day.id, '2026-01-01']]), new Map([[day.id, '2026-01-04']]));
 
     const legs = Object.fromEntries(
-      (testDb.prepare('SELECT id, local_date FROM reservation_endpoints WHERE reservation_id = ?').all(flight) as { id: number; local_date: string | null }[])
+      (await findRows(await orm(), ReservationEndpoints, { reservation: flight }))
         .map(l => [l.id, l.local_date])
     );
     expect(legs).toEqual({ [departure]: '2026-01-04', [arrival]: '2026-01-05', [undated]: null });
@@ -545,11 +572,12 @@ describe('restampReservationDates', () => {
     const start = createDay(testDb, trip.id, { date: '2026-01-01' });
     const end = createDay(testDb, trip.id, { date: '2026-01-03' });
 
-    const insert = testDb.prepare(
-      'INSERT INTO reservations (trip_id, day_id, end_day_id, title, reservation_time, reservation_end_time) VALUES (?, ?, ?, ?, ?, ?)'
-    );
-    const spanning = Number(insert.run(trip.id, start.id, end.id, 'Sleeper train', '2026-01-01T15:00', '2026-01-03').lastInsertRowid);
-    const openEnded = Number(insert.run(trip.id, null, end.id, 'Open ended', null, null).lastInsertRowid);
+    const spanning = await addReservation(trip.id, {
+      day: start.id, endDay: end.id, title: 'Sleeper train', reservation_time: '2026-01-01T15:00', reservation_end_time: '2026-01-03',
+    });
+    const openEnded = await addReservation(trip.id, {
+      day: null, endDay: end.id, title: 'Open ended', reservation_time: null, reservation_end_time: null,
+    });
 
     await svc.restampReservationDates(
       trip.id,
@@ -557,33 +585,29 @@ describe('restampReservationDates', () => {
       new Map([[start.id, '2026-01-02'], [end.id, '2026-01-05']]),
     );
 
-    const moved = testDb.prepare('SELECT reservation_time, reservation_end_time FROM reservations WHERE id = ?').get(spanning) as
-      { reservation_time: string; reservation_end_time: string };
+    const moved = await reservationRow(spanning);
     expect(moved.reservation_time).toBe('2026-01-02T15:00');
     // A date-only end time must not grow a time suffix from the new date string.
     expect(moved.reservation_end_time).toBe('2026-01-05');
-    expect(testDb.prepare('SELECT reservation_end_time FROM reservations WHERE id = ?').get(openEnded))
-      .toMatchObject({ reservation_end_time: null });
+    expect(await reservationRow(openEnded)).toMatchObject({ reservation_end_time: null });
   });
 });
 
 describe('resyncAccommodationDays', () => {
   /** The hotel reservation accommodations/ auto-creates next to a stay. */
   const linkHotel = (tripId: number, accId: number, dayId: number | null, time: string | null) =>
-    Number(testDb.prepare(
-      "INSERT INTO reservations (trip_id, day_id, title, type, accommodation_id, reservation_time) VALUES (?, ?, 'Hotel', 'hotel', ?, ?)"
-    ).run(tripId, dayId, accId, time).lastInsertRowid);
+    addReservation(tripId, { day: dayId, title: 'Hotel', type: 'hotel', accommodation_id: String(accId), reservation_time: time });
 
   it('DAY-SVC-040 — returns before touching a hotel booking when the trip has no stays', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id, { date: '2026-05-01' });
-    const res = linkHotel(trip.id, 4242, null, null);
+    const res = await linkHotel(trip.id, 4242, null, null);
 
     await svc.resyncAccommodationDays(trip.id, new Map([[day.id, '2026-04-01']]));
 
     // No stay owns this booking any more, so the restamp must not adopt it.
-    expect(testDb.prepare('SELECT day_id FROM reservations WHERE id = ?').get(res)).toMatchObject({ day_id: null });
+    expect(await reservationRow(res)).toMatchObject({ day_id: null });
   });
 
   it('DAY-SVC-041 — leaves a stay glued to its rows when the snapshot has no date for them', async () => {
@@ -593,15 +617,15 @@ describe('resyncAccommodationDays', () => {
     const d2 = createDay(testDb, trip.id, { date: '2026-05-02' });
     const place = createPlace(testDb, trip.id, { name: 'Hotel' });
     const stay = createDayAccommodation(testDb, trip.id, place.id, d1.id, d2.id);
-    const res = linkHotel(trip.id, stay.id, d2.id, '2026-04-30T14:00');
+    const res = await linkHotel(trip.id, stay.id, d2.id, '2026-04-30T14:00');
 
     await svc.resyncAccommodationDays(trip.id, new Map());
 
-    expect(testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(stay.id))
+    expect(await staySpan(stay.id))
       .toMatchObject({ start_day_id: d1.id, end_day_id: d2.id });
     // The linked booking still gets pulled back onto the stay's start day: its
     // reservation_time is a stale snapshot of that day's date, check-in time kept.
-    expect(testDb.prepare('SELECT day_id, reservation_time FROM reservations WHERE id = ?').get(res))
+    expect(await reservationRow(res))
       .toMatchObject({ day_id: d1.id, reservation_time: '2026-05-01T14:00' });
   });
 
@@ -612,14 +636,14 @@ describe('resyncAccommodationDays', () => {
     const d2 = createDay(testDb, trip.id, { date: '2026-05-02' });
     const place = createPlace(testDb, trip.id, { name: 'Hotel' });
     const stay = createDayAccommodation(testDb, trip.id, place.id, d1.id, d2.id);
-    const res = linkHotel(trip.id, stay.id, d1.id, null);
+    const res = await linkHotel(trip.id, stay.id, d1.id, null);
 
     await svc.resyncAccommodationDays(trip.id, new Map([[d1.id, '2026-05-01'], [d2.id, '2026-05-02']]));
 
-    expect(testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(stay.id))
+    expect(await staySpan(stay.id))
       .toMatchObject({ start_day_id: d1.id, end_day_id: d2.id });
     // A booking with no time at all takes the bare date, not date + empty suffix.
-    expect(testDb.prepare('SELECT reservation_time FROM reservations WHERE id = ?').get(res))
+    expect(await reservationRow(res))
       .toMatchObject({ reservation_time: '2026-05-01' });
   });
 
@@ -633,12 +657,12 @@ describe('resyncAccommodationDays', () => {
 
     // The range change swapped the two dates across the rows, so the day now
     // holding the old start date sits AFTER the one holding the old end date.
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-05-02', d1.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-05-01', d2.id);
+    await setDay(d1.id, { date: '2026-05-02' });
+    await setDay(d2.id, { date: '2026-05-01' });
 
     await svc.resyncAccommodationDays(trip.id, new Map([[d1.id, '2026-05-01'], [d2.id, '2026-05-02']]));
 
-    expect(testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(stay.id))
+    expect(await staySpan(stay.id))
       .toMatchObject({ start_day_id: d1.id, end_day_id: d2.id });
   });
 
@@ -659,9 +683,9 @@ describe('resyncAccommodationDays', () => {
       new Map([[d1.id, '2026-05-01'], [d2.id, '2026-04-29'], [d3.id, '2026-05-03']]),
     );
 
-    expect(testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(endGone.id))
+    expect(await staySpan(endGone.id))
       .toMatchObject({ start_day_id: d1.id, end_day_id: d2.id });
-    expect(testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(startGone.id))
+    expect(await staySpan(startGone.id))
       .toMatchObject({ start_day_id: d2.id, end_day_id: d3.id });
   });
 
@@ -671,26 +695,27 @@ describe('resyncAccommodationDays', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id, { name: 'Hostel' });
     const stay = createDayAccommodation(testDb, trip.id, place.id, day.id, day.id);
-    const res = linkHotel(trip.id, stay.id, null, null);
+    const res = await linkHotel(trip.id, stay.id, null, null);
 
     await svc.resyncAccommodationDays(trip.id, new Map([[day.id, null]]));
 
     // On a dateless trip there is no date to stamp; writing one would invent a
     // calendar the trip does not have.
-    expect(testDb.prepare('SELECT day_id, reservation_time FROM reservations WHERE id = ?').get(res))
+    expect(await reservationRow(res))
       .toMatchObject({ day_id: null, reservation_time: null });
   });
 
   // The stop a booking wrote goes along when the stay is carried to another day row.
-  const stopsOn = (dayId: number) =>
-    testDb.prepare('SELECT place_id, order_index, accommodation_id FROM day_assignments WHERE day_id = ? ORDER BY order_index').all(dayId) as
-      { place_id: number; order_index: number; accommodation_id: number | null }[];
-  const addVia = (dayId: number, afterOrderIndex: number) =>
-    Number(testDb.prepare('INSERT INTO roadtrip_vias (day_id, after_order_index, sequence, lat, lng) VALUES (?, ?, 0, 48.1, 11.5)')
-      .run(dayId, afterOrderIndex).lastInsertRowid);
-  const viasOn = (dayId: number) =>
-    testDb.prepare('SELECT id, after_order_index FROM roadtrip_vias WHERE day_id = ? ORDER BY id').all(dayId) as
-      { id: number; after_order_index: number }[];
+  const stopsOn = async (dayId: number) =>
+    (await findRows(await orm(), DayAssignments, { day: dayId }, { order_index: 'asc' })).map((a) => ({
+      place_id: a.place_id,
+      order_index: a.order_index,
+      accommodation_id: a.accommodation_id ?? null,
+    }));
+  const addVia = async (dayId: number, afterOrderIndex: number) =>
+    insertRow(await orm(), RoadtripVias, { day: dayId, after_order_index: afterOrderIndex, sequence: 0, lat: 48.1, lng: 11.5 });
+  const viasOn = async (dayId: number) =>
+    (await findRows(await orm(), RoadtripVias, { day: dayId }, { id: 'asc' })).map((v) => ({ id: v.id, after_order_index: v.after_order_index }));
 
   it('DAY-SVC-056: the carried stop is seated by its check-in on its new day, and both days keep their roads in place', async () => {
     // The trip gained a day at the front: d1 now holds the day before, d2 the stay's
@@ -706,27 +731,27 @@ describe('resyncAccommodationDays', () => {
     createDayAssignment(testDb, d1.id, b.id);
     createDayAssignment(testDb, d2.id, c.id);
     createDayAssignment(testDb, d2.id, d.id);
-    expect(stopsOn(d1.id).map(s => s.place_id)).toEqual([hotel.id, a.id, b.id]);
-    const outOfHotel = addVia(d1.id, 0);
-    const outOfA = addVia(d1.id, 1);
-    const outOfC = addVia(d2.id, 0);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-04-30', d1.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-05-01', d2.id);
+    expect((await stopsOn(d1.id)).map(s => s.place_id)).toEqual([hotel.id, a.id, b.id]);
+    const outOfHotel = await addVia(d1.id, 0);
+    const outOfA = await addVia(d1.id, 1);
+    const outOfC = await addVia(d2.id, 0);
+    await setDay(d1.id, { date: '2026-04-30' });
+    await setDay(d2.id, { date: '2026-05-01' });
 
     await svc.resyncAccommodationDays(trip.id, new Map([[d1.id, '2026-05-01'], [d2.id, '2026-05-02']]));
 
-    expect(testDb.prepare('SELECT start_day_id FROM day_accommodations WHERE id = ?').get(accommodation.id)).toMatchObject({ start_day_id: d2.id });
-    expect(stopsOn(d2.id)).toEqual([
+    expect(await staySpan(accommodation.id)).toMatchObject({ start_day_id: d2.id });
+    expect(await stopsOn(d2.id)).toEqual([
       { place_id: hotel.id, order_index: 0, accommodation_id: accommodation.id },
       { place_id: c.id, order_index: 1, accommodation_id: null },
       { place_id: d.id, order_index: 2, accommodation_id: null },
     ]);
-    expect(stopsOn(d1.id).map(s => [s.place_id, s.order_index])).toEqual([[a.id, 0], [b.id, 1]]);
+    expect((await stopsOn(d1.id)).map(s => [s.place_id, s.order_index])).toEqual([[a.id, 0], [b.id, 1]]);
     // The hotel's road on d1 had no stop ahead to fall back on and goes; A's follows A
     // to leg zero. On d2 the road out of C is one number further on, behind C.
-    expect(viasOn(d1.id)).toEqual([{ id: outOfA, after_order_index: 0 }]);
-    expect(viasOn(d1.id).map(v => v.id)).not.toContain(outOfHotel);
-    expect(viasOn(d2.id)).toEqual([{ id: outOfC, after_order_index: 1 }]);
+    expect(await viasOn(d1.id)).toEqual([{ id: outOfA, after_order_index: 0 }]);
+    expect((await viasOn(d1.id)).map(v => v.id)).not.toContain(outOfHotel);
+    expect(await viasOn(d2.id)).toEqual([{ id: outOfC, after_order_index: 1 }]);
   });
 
   it('DAY-SVC-057: a day that already holds the place by hand keeps that stop, and the booking rides along with it', async () => {
@@ -737,14 +762,14 @@ describe('resyncAccommodationDays', () => {
     const hotel = createPlace(testDb, trip.id, { name: 'Rostock' });
     const { accommodation } = await accommodations.createAccommodation(trip.id, { place_id: hotel.id, start_day_id: d1.id, end_day_id: d1.id }) as any;
     const own = createDayAssignment(testDb, d2.id, hotel.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-04-30', d1.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-05-01', d2.id);
+    await setDay(d1.id, { date: '2026-04-30' });
+    await setDay(d2.id, { date: '2026-05-01' });
 
     await svc.resyncAccommodationDays(trip.id, new Map([[d1.id, '2026-05-01'], [d2.id, '2026-05-02']]));
 
-    expect(testDb.prepare('SELECT start_day_id FROM day_accommodations WHERE id = ?').get(accommodation.id)).toMatchObject({ start_day_id: d2.id });
-    expect(stopsOn(d1.id)).toEqual([]);
-    expect(stopsOn(d2.id)).toEqual([{ place_id: hotel.id, order_index: own.order_index, accommodation_id: null }]);
+    expect(await staySpan(accommodation.id)).toMatchObject({ start_day_id: d2.id });
+    expect(await stopsOn(d1.id)).toEqual([]);
+    expect(await stopsOn(d2.id)).toEqual([{ place_id: hotel.id, order_index: own.order_index, accommodation_id: null }]);
   });
 
   it('DAY-SVC-058: a stay whose end alone moves leaves its stop where it is', async () => {
@@ -756,21 +781,19 @@ describe('resyncAccommodationDays', () => {
     const [hotel, a] = ['Rostock', 'Aral'].map(name => createPlace(testDb, trip.id, { name }));
     const { accommodation } = await accommodations.createAccommodation(trip.id, { place_id: hotel.id, start_day_id: d1.id, end_day_id: d2.id, check_in: '10:00' }) as any;
     createDayAssignment(testDb, d1.id, a.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-05-03', d2.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-05-02', d3.id);
+    await setDay(d2.id, { date: '2026-05-03' });
+    await setDay(d3.id, { date: '2026-05-02' });
 
     await svc.resyncAccommodationDays(trip.id, new Map([[d1.id, '2026-05-01'], [d2.id, '2026-05-02'], [d3.id, '2026-05-03']]));
 
-    expect(testDb.prepare('SELECT start_day_id, end_day_id FROM day_accommodations WHERE id = ?').get(accommodation.id))
+    expect(await staySpan(accommodation.id))
       .toMatchObject({ start_day_id: d1.id, end_day_id: d3.id });
-    expect(stopsOn(d1.id).map(s => [s.place_id, s.order_index])).toEqual([[hotel.id, 0], [a.id, 1]]);
+    expect((await stopsOn(d1.id)).map(s => [s.place_id, s.order_index])).toEqual([[hotel.id, 0], [a.id, 1]]);
   });
 });
 
 describe('reorder', () => {
-  const orderedDays = (tripId: number) =>
-    testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as
-      { id: number; day_number: number; date: string | null }[];
+  const orderedDays = dayRows;
 
   it('DAY-SVC-046 — rejects a same-length list that contains a foreign day id', async () => {
     const { user } = createUser(testDb);
@@ -782,7 +805,7 @@ describe('reorder', () => {
     // it — without it the renumber would leave one day orphaned at a negative
     // day_number and drop another out of the itinerary.
     await expect(svc.reorder(trip.id, [d1.id, 999999])).rejects.toThrow(DayReorderError);
-    expect(orderedDays(trip.id).map(d => d.day_number)).toEqual([1, 2]);
+    expect((await orderedDays(trip.id)).map(d => d.day_number)).toEqual([1, 2]);
   });
 
   it('DAY-SVC-047 — renumbers a dateless trip without inventing dates or touching bookings', async () => {
@@ -791,18 +814,15 @@ describe('reorder', () => {
     const d1 = createDay(testDb, trip.id);
     const d2 = createDay(testDb, trip.id);
     const d3 = createDay(testDb, trip.id);
-    const res = Number(testDb.prepare(
-      'INSERT INTO reservations (trip_id, day_id, title, reservation_time) VALUES (?, ?, ?, ?)'
-    ).run(trip.id, d2.id, 'Dinner', '2026-02-02T19:00').lastInsertRowid);
+    const res = await addReservation(trip.id, { day: d2.id, title: 'Dinner', reservation_time: '2026-02-02T19:00' });
 
     const result = await svc.reorder(trip.id, [d3.id, d1.id, d2.id]);
 
     expect(result.days.map(d => d.id)).toEqual([d3.id, d1.id, d2.id]);
-    expect(orderedDays(trip.id).map(d => d.date)).toEqual([null, null, null]);
+    expect((await orderedDays(trip.id)).map(d => d.date)).toEqual([null, null, null]);
     // A trip without dates has no slots to re-pin, so the re-stamp pass is
     // skipped entirely — a booking keeps whatever time it was given by hand.
-    expect(testDb.prepare('SELECT reservation_time FROM reservations WHERE id = ?').get(res))
-      .toMatchObject({ reservation_time: '2026-02-02T19:00' });
+    expect(await reservationRow(res)).toMatchObject({ reservation_time: '2026-02-02T19:00' });
   });
 
   it('DAY-SVC-048 — pins the known dates to the leading slots and nulls the slots beyond them', async () => {
@@ -815,7 +835,7 @@ describe('reorder', () => {
 
     // The slot beyond the known dates must resolve to null: better-sqlite3
     // refuses to bind the `undefined` a bare index lookup would hand it.
-    expect(orderedDays(trip.id)).toEqual([
+    expect(await orderedDays(trip.id)).toEqual([
       { id: dateless.id, day_number: 1, date: '2026-03-01' },
       { id: dated.id, day_number: 2, date: null },
     ]);
@@ -833,12 +853,12 @@ describe('reorder', () => {
     // Stretching the stay over a third slot is legal — the guard only rejects
     // an end that lands before its start.
     await svc.reorder(trip.id, [d1.id, d3.id, d2.id]);
-    expect(orderedDays(trip.id).map(d => d.id)).toEqual([d1.id, d3.id, d2.id]);
+    expect((await orderedDays(trip.id)).map(d => d.id)).toEqual([d1.id, d3.id, d2.id]);
 
     await expect(svc.reorder(trip.id, [d2.id, d3.id, d1.id])).rejects.toThrow(DayReorderError);
     // The guard runs inside the transaction, so the rejected move leaves the
     // day numbers AND the re-pinned dates exactly as the legal move left them.
-    expect(orderedDays(trip.id)).toEqual([
+    expect(await orderedDays(trip.id)).toEqual([
       { id: d1.id, day_number: 1, date: '2026-03-01' },
       { id: d3.id, day_number: 2, date: '2026-03-02' },
       { id: d2.id, day_number: 3, date: '2026-03-03' },
@@ -856,8 +876,7 @@ describe('insert', () => {
     const created = await svc.insert(trip.id);
 
     expect(created).toMatchObject({ day_number: 3, date: null, assignments: [], notes_items: [] });
-    const rows = testDb.prepare('SELECT id, day_number FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as
-      { id: number; day_number: number }[];
+    const rows = (await dayRows(trip.id)).map(({ id, day_number }) => ({ id, day_number }));
     expect(rows).toEqual([
       { id: d1.id, day_number: 1 },
       { id: d2.id, day_number: 2 },
@@ -890,8 +909,7 @@ describe('day shaping', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
-    const placeId = Number(testDb.prepare('INSERT INTO places (trip_id, name, category_id) VALUES (?, ?, NULL)')
-      .run(trip.id, 'Uncategorised').lastInsertRowid);
+    const placeId = await insertRow(await orm(), Places, { trip: trip.id, name: 'Uncategorised', category: null });
     createDayAssignment(testDb, day.id, placeId);
 
     // The LEFT JOIN yields category_name/color/icon as NULL, which must collapse
@@ -909,8 +927,8 @@ describe('day shaping', () => {
     const shared = createDayAssignment(testDb, busy.id, tagged.id, { order_index: 0 });
     createDayAssignment(testDb, busy.id, plain.id, { order_index: 1 });
     const tag = createTag(testDb, user.id, { name: 'Museum' });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(tagged.id, tag.id);
-    testDb.prepare('INSERT INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)').run(shared.id, user.id);
+    await tagPlace(await orm(), tagged.id, [tag.id]);
+    await insertRow(await orm(), AssignmentParticipants, { assignment: shared.id, user: user.id });
     createDayNote(testDb, busy.id, trip.id, { text: 'Breakfast', sort_order: 1 });
     createDayNote(testDb, busy.id, trip.id, { text: 'Dinner', sort_order: 2 });
 
@@ -988,18 +1006,22 @@ describe('DaysService.canEdit', () => {
  * the trip and goes right behind the last dated day; nothing already there moves date.
  */
 describe('DaysService.appendDated', () => {
-  type Row = { id: number; day_number: number; date: string | null };
-  const rows = (tripId: number): Row[] =>
-    testDb.prepare('SELECT id, day_number, date FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as Row[];
-  const endDate = (tripId: number) =>
-    (testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(tripId) as { end_date: string | null }).end_date;
-  const boundaries = (tripId: number) =>
-    testDb.prepare('SELECT day_number, from_assignment_id FROM roadtrip_day_boundaries WHERE trip_id = ? ORDER BY day_number').all(tripId);
+  const rows = dayRows;
+  const endDate = async (tripId: number) => {
+    const trip = await findRow(await orm(), Trips, { id: tripId });
+    if (!trip) throw new Error(`no trip ${tripId}`);
+    return trip.end_date;
+  };
+  const boundaries = async (tripId: number) =>
+    (await findRows(await orm(), RoadtripDayBoundaries, { trip: tripId }, { day_number: 'asc' })).map((b) => ({
+      day_number: b.day_number,
+      from_assignment_id: b.from_assignment_id,
+    }));
 
   it('DAY-SVC-091 appends the day after the end date, with its notes, and moves the end date to it', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-10-10', end_date: '2026-10-12' });
-    const before = rows(trip.id);
+    const before = await rows(trip.id);
 
     const result = await svc.appendDated(trip.id, user.id, 'Late checkout');
 
@@ -1007,14 +1029,14 @@ describe('DaysService.appendDated', () => {
     expect(result.endDate).toBe('2026-10-13');
     expect(result.boundaries).toBeNull();
     expect(result.trip).toMatchObject({ id: trip.id, end_date: '2026-10-13', day_count: 4, is_owner: 1, feed_token: null });
-    expect(rows(trip.id)).toEqual([...before, { id: result.day.id, day_number: 4, date: '2026-10-13' }]);
-    expect(endDate(trip.id)).toBe('2026-10-13');
+    expect(await rows(trip.id)).toEqual([...before, { id: result.day.id, day_number: 4, date: '2026-10-13' }]);
+    expect(await endDate(trip.id)).toBe('2026-10-13');
   });
 
   it('DAY-SVC-092 puts the new day in front of the days without a date, which keep their content and stay undated', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-10-10', end_date: '2026-10-11' });
-    const [d1, d2] = rows(trip.id);
+    const [d1, d2] = await rows(trip.id);
     const spare = createDay(testDb, trip.id, { title: 'Buffer day' });
     const other = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
@@ -1022,26 +1044,26 @@ describe('DaysService.appendDated', () => {
 
     const { day } = await svc.appendDated(trip.id, user.id);
 
-    expect(rows(trip.id)).toEqual([
+    expect(await rows(trip.id)).toEqual([
       d1, d2,
       { id: day.id, day_number: 3, date: '2026-10-12' },
       { id: spare.id, day_number: 4, date: null },
       { id: other.id, day_number: 5, date: null },
     ]);
-    expect(testDb.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(stop.id)).toEqual({ day_id: spare.id });
+    expect((await findRow(await orm(), DayAssignments, { id: stop.id }))?.day_id).toBe(spare.id);
     expect(await svc.getDay(spare.id, trip.id)).toMatchObject({ title: 'Buffer day' });
   });
 
   it('DAY-SVC-093 anchors on a day dated past the end date, so no date is given twice', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-10-10', end_date: '2026-10-11' });
-    const [, d2] = rows(trip.id);
-    testDb.prepare('UPDATE days SET date = ? WHERE id = ?').run('2026-10-14', d2.id);
+    const [, d2] = await rows(trip.id);
+    await setDay(d2.id, { date: '2026-10-14' });
 
     const result = await svc.appendDated(trip.id, user.id);
 
     expect(result.day.date).toBe('2026-10-15');
-    expect(endDate(trip.id)).toBe('2026-10-15');
+    expect(await endDate(trip.id)).toBe('2026-10-15');
   });
 
   it('DAY-SVC-094 refuses a trip without dates and writes nothing', async () => {
@@ -1049,13 +1071,13 @@ describe('DaysService.appendDated', () => {
     const dateless = createTrip(testDb, user.id);
     createDay(testDb, dateless.id);
     const halfDated = createTrip(testDb, user.id);
-    testDb.prepare('UPDATE trips SET start_date = ? WHERE id = ?').run('2026-10-10', halfDated.id);
+    await updateRows(await orm(), Trips, { id: halfDated.id }, { start_date: '2026-10-10' });
 
     for (const trip of [dateless, halfDated]) {
-      const before = rows(trip.id);
+      const before = await rows(trip.id);
       await expect(svc.appendDated(trip.id, user.id)).rejects.toThrow(new DayAppendError(NO_DATES_MESSAGE));
-      expect(rows(trip.id)).toEqual(before);
-      expect(endDate(trip.id)).toBeNull();
+      expect(await rows(trip.id)).toEqual(before);
+      expect(await endDate(trip.id)).toBeNull();
     }
   });
 
@@ -1063,29 +1085,34 @@ describe('DaysService.appendDated', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     // A full-length range without its 999 rows: the limit reads the range, not the rows.
-    testDb.prepare('UPDATE trips SET start_date = ?, end_date = ? WHERE id = ?').run('2026-01-01', addDays('2026-01-01', 998), trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { start_date: '2026-01-01', end_date: addDays('2026-01-01', 998) });
     createDay(testDb, trip.id, { date: '2026-01-01' });
-    const before = rows(trip.id);
+    const before = await rows(trip.id);
 
     await expect(svc.appendDated(trip.id, user.id)).rejects.toThrow(new DayAppendError('A trip can span at most 999 days'));
-    expect(rows(trip.id)).toEqual(before);
-    expect(endDate(trip.id)).toBe(addDays('2026-01-01', 998));
+    expect(await rows(trip.id)).toEqual(before);
+    expect(await endDate(trip.id)).toBe(addDays('2026-01-01', 998));
   });
 
   it('DAY-SVC-096 moves the road trip boundaries of the days behind it back by one, the last one first', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-10-10', end_date: '2026-10-11' });
-    const [d1] = rows(trip.id);
+    const [d1] = await rows(trip.id);
     const spareA = createDay(testDb, trip.id);
     const spareB = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const stops = [d1, spareA, spareB].map(d => createDayAssignment(testDb, d.id, place.id));
-    const boundary = testDb.prepare(
-      'INSERT INTO roadtrip_day_boundaries (trip_id, day_number, from_assignment_id, to_assignment_id, fraction) VALUES (?, ?, ?, NULL, 1)',
-    );
-    boundary.run(trip.id, 1, stops[0].id);
-    boundary.run(trip.id, 3, stops[1].id);
-    boundary.run(trip.id, 4, stops[2].id);
+    const boundary = async (dayNumber: number, fromAssignmentId: number) =>
+      insertRow(await orm(), RoadtripDayBoundaries, {
+        trip: trip.id,
+        day_number: dayNumber,
+        fromAssignment: fromAssignmentId,
+        toAssignment: null,
+        fraction: 1,
+      });
+    await boundary(1, stops[0].id);
+    await boundary(3, stops[1].id);
+    await boundary(4, stops[2].id);
 
     const result = await svc.appendDated(trip.id, user.id);
 
@@ -1094,26 +1121,26 @@ describe('DaysService.appendDated', () => {
       { day_number: 4, from_assignment_id: stops[1].id },
       { day_number: 5, from_assignment_id: stops[2].id },
     ];
-    expect(boundaries(trip.id)).toEqual(moved);
+    expect(await boundaries(trip.id)).toEqual(moved);
     expect(result.boundaries?.map(b => ({ day_number: b.day_number, from_assignment_id: b.from_assignment_id }))).toEqual(moved);
   });
 
   it('DAY-SVC-097 moves no booking, while insert() still dates the days without one', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2026-10-10', end_date: '2026-10-11' });
-    const [, d2] = rows(trip.id);
+    const [, d2] = await rows(trip.id);
     const reservation = createReservation(testDb, trip.id, { day_id: d2.id });
-    testDb.prepare('UPDATE reservations SET reservation_time = ? WHERE id = ?').run('2026-10-11T19:30', reservation.id);
+    await updateRows(await orm(), Reservations, { id: reservation.id }, { reservation_time: '2026-10-11T19:30' });
     const spare = createDay(testDb, trip.id);
 
     await svc.appendDated(trip.id, user.id);
-    expect(testDb.prepare('SELECT day_id, reservation_time FROM reservations WHERE id = ?').get(reservation.id))
-      .toEqual({ day_id: d2.id, reservation_time: '2026-10-11T19:30' });
-    expect(rows(trip.id).find(r => r.id === spare.id)).toMatchObject({ day_number: 4, date: null });
+    const kept = await reservationRow(reservation.id);
+    expect({ day_id: kept.day_id, reservation_time: kept.reservation_time }).toEqual({ day_id: d2.id, reservation_time: '2026-10-11T19:30' });
+    expect((await rows(trip.id)).find(r => r.id === spare.id)).toMatchObject({ day_number: 4, date: null });
 
     // The older path is untouched: an insert re-dates every row, the spare day included.
     const inserted = await svc.insert(trip.id);
-    expect(rows(trip.id).find(r => r.id === spare.id)).toMatchObject({ date: '2026-10-13' });
+    expect((await rows(trip.id)).find(r => r.id === spare.id)).toMatchObject({ date: '2026-10-13' });
     expect(inserted).toMatchObject({ day_number: 5, date: '2026-10-14' });
   });
 
