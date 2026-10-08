@@ -458,4 +458,22 @@ describe('fetchSynologyThumbnailBytes', () => {
     expect(result).toHaveProperty('error');
     expect(safeFetch).not.toHaveBeenCalled();
   });
+
+  it('SYNO-U081: bounds the thumbnail read in time and size, on a host the user configured', async () => {
+    seedUser(7);
+    safeFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => 'image/jpeg' },
+      arrayBuffer: async () => new Uint8Array([1, 2]).buffer,
+    });
+
+    const result = await svc.fetchSynologyThumbnailBytes(7, 7, '101_1633659236');
+
+    expect(result).toEqual({ bytes: Buffer.from([1, 2]), contentType: 'image/jpeg' });
+    const [url, init, options] = safeFetch.mock.calls.at(-1)!;
+    expect(String(url)).toContain('SYNO.Foto.Thumbnail');
+    expect((init as RequestInit).signal).toBeInstanceOf(AbortSignal);
+    expect(options).toEqual({ rejectUnauthorized: false, maxBytes: 8 * 1024 * 1024 });
+  });
 });

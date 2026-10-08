@@ -29,7 +29,12 @@ const { readEnvMock } = vi.hoisted(() => ({
 vi.mock('../../../src/app-config', () => ({ readEnv: readEnvMock }));
 
 import dns from 'dns/promises';
-import { createPinnedDispatcher, safeFetchLlm, safeFetchAdminConfigured } from '../../../src/utils/ssrfGuard';
+import {
+  createPinnedDispatcher,
+  DEFAULT_RESPONSE_TIMEOUT_MS,
+  safeFetchAdminConfigured,
+  safeFetchLlm,
+} from '../../../src/utils/ssrfGuard';
 
 const mockLookup = vi.mocked(dns.lookup);
 
@@ -91,12 +96,21 @@ describe('the ceiling belongs to the model lane only', () => {
     expect(optionsOf().bodyTimeout).toBe(120_000);
   });
 
-  it('safeFetchAdminConfigured keeps undici default — OIDC and plugin OAuth ride this lane', async () => {
+  it('safeFetchAdminConfigured leaves the deadline to the caller signal: OIDC and plugin OAuth ride this lane', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ status: 200 })));
+
+    await safeFetchAdminConfigured('https://idp.example/token', { method: 'POST', signal: AbortSignal.timeout(15_000) });
+
+    expect(optionsOf().headersTimeout).toBeUndefined();
+    expect(optionsOf().bodyTimeout).toBeUndefined();
+  });
+
+  it('safeFetchAdminConfigured without a signal waits a bounded time for the headers, not for the body', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ status: 200 })));
 
     await safeFetchAdminConfigured('https://idp.example/token', { method: 'POST' });
 
-    expect(optionsOf().headersTimeout).toBeUndefined();
+    expect(optionsOf().headersTimeout).toBe(DEFAULT_RESPONSE_TIMEOUT_MS);
     expect(optionsOf().bodyTimeout).toBeUndefined();
   });
 

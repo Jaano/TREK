@@ -279,11 +279,11 @@ describe('pipeAsset fetch options (#1611)', () => {
     expect(mockSafeFetch).toHaveBeenCalledWith(
       'https://example.com/asset',
       expect.anything(),
-      { rejectUnauthorized: false },
+      { rejectUnauthorized: false, maxBytes: null },
     );
   });
 
-  it('MEM-HELPERS-022: omitting fetchOptions leaves safeFetch options undefined', async () => {
+  it('MEM-HELPERS-022: omitting fetchOptions only lifts the body cap, since the asset is streamed through', async () => {
     mockSafeFetch.mockResolvedValue({
       status: 200,
       headers: { get: vi.fn(() => null) },
@@ -293,7 +293,7 @@ describe('pipeAsset fetch options (#1611)', () => {
 
     await pipeAsset('https://example.com/asset', res);
 
-    expect(mockSafeFetch.mock.calls[0][2]).toBeUndefined();
+    expect(mockSafeFetch.mock.calls[0][2]).toEqual({ maxBytes: null });
   });
 
   it('MEM-HELPERS-023: logs the underlying error when responding 500', async () => {

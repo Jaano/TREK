@@ -292,6 +292,18 @@ describe('collectPhotos', () => {
     expect((await make(maps, cacheStub()).enrich(1, REQ)).photos).toEqual([]);
   });
 
+  it('ENRICH-010b: downloads a third-party picture with a deadline and a size cap', async () => {
+    const maps = mapsStub({ fetchCommonsCandidates: vi.fn(async () => [commonsCandidate()]) });
+
+    await make(maps, cacheStub()).enrich(1, REQ);
+
+    expect(mockSafeFetchFollow).toHaveBeenCalled();
+    for (const [, init, options] of mockSafeFetchFollow.mock.calls as unknown as [string, RequestInit, unknown][]) {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+      expect(options).toEqual({ bypassInternalIpAllowed: true, maxBytes: 8 * 1024 * 1024 });
+    }
+  });
+
   it('ENRICH-011: drops a candidate the cache refuses to store', async () => {
     const maps = mapsStub({ fetchCommonsCandidates: vi.fn(async () => [commonsCandidate()]) });
     const cache = cacheStub({ put: vi.fn(async () => { throw new Error('disk full'); }) });

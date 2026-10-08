@@ -9,6 +9,66 @@ import noPromiseAsValue from './eslint-rules/no-promise-as-value.mjs';
 // Local rules live in eslint-rules/ and are exposed under the `trek/` prefix.
 const trek = { rules: { 'no-promise-as-value': noPromiseAsValue } };
 
+// The calls the outbound-timeout selectors below look at: the platform fetch and
+// the SSRF-guarded wrappers whose init is passed on to it. safeFetchLlm is not
+// one of them; its deadline is the LLM_TIMEOUT_MS setting, applied inside.
+const FETCH_CALLEE = '/^(fetch|safeFetch|safeFetchFollow|safeFetchAdminConfigured)$/';
+
+// The no-restricted-syntax selector groups. A flat-config block's options REPLACE
+// those of an earlier block for the same files rather than adding to them, so a
+// block that adds one group has to restate the others; naming them once keeps
+// the restatements identical.
+const ENV_SELECTORS = [
+  {
+    selector: "MemberExpression[object.name='process'][property.name='env']",
+    message:
+      'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
+  },
+  {
+    // Bracket-notation variant (process['env']) — property is a Literal
+    // node (.value), so the selector above can't match it.
+    selector: "MemberExpression[object.name='process'][property.value='env']",
+    message:
+      'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
+  },
+];
+
+const RAW_SQL_SELECTORS = [
+  {
+    selector: "CallExpression[callee.name='raw']",
+    message:
+      'Dialect SQL goes through src/db/dialect/sql-functions.ts, which dispatches on the live MikroORM platform. A repository must not spell raw SQL.',
+  },
+  {
+    selector: "TaggedTemplateExpression[tag.name='sql']",
+    message:
+      'Dialect SQL goes through src/db/dialect/sql-functions.ts, which dispatches on the live MikroORM platform. A repository must not spell raw SQL.',
+  },
+];
+
+const FETCH_SELECTORS = [
+  {
+    // Every outbound fetch needs a timeout (server/CLAUDE.md): a provider
+    // that takes the connection and goes quiet otherwise holds the request
+    // for undici's 300 s default. An init built elsewhere (a variable or a
+    // spread) is trusted to carry its own signal. The SSRF-guarded
+    // wrappers in utils/ssrfGuard.ts are held to the same rule: they hand
+    // the platform a spread init, so the rule cannot see through them, and
+    // their own fallback only bounds the wait for the headers.
+    selector: `CallExpression[callee.name=${FETCH_CALLEE}][arguments.length=1]`,
+    message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+  },
+  {
+    selector: `CallExpression[callee.name=${FETCH_CALLEE}] > ObjectExpression.arguments:nth-child(2):not(:has(Property[key.name='signal'])):not(:has(SpreadElement))`,
+    message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+  },
+  {
+    // `safeFetch(url, undefined, options)` is the same call without an init.
+    selector: `CallExpression[callee.name=${FETCH_CALLEE}] > Identifier.arguments:nth-child(2)[name='undefined']`,
+    message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
+  },
+];
+
 export default tseslint.config(
   gitignore({ strict: false }),
   {
@@ -116,34 +176,7 @@ export default tseslint.config(
       'src/nest/plugins/host/plugin-audit.ts',
     ],
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: "MemberExpression[object.name='process'][property.name='env']",
-          message:
-            'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
-        },
-        {
-          // Bracket-notation variant (process['env']) — property is a Literal
-          // node (.value), so the selector above can't match it.
-          selector: "MemberExpression[object.name='process'][property.value='env']",
-          message:
-            'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
-        },
-        {
-          // Every outbound fetch needs a timeout (server/CLAUDE.md): a provider
-          // that takes the connection and goes quiet otherwise holds the request
-          // for undici's 300 s default. An init built elsewhere (a variable or a
-          // spread) is trusted to carry its own signal.
-          selector: "CallExpression[callee.name='fetch'][arguments.length=1]",
-          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
-        },
-        {
-          selector:
-            "CallExpression[callee.name='fetch'] > ObjectExpression:not(:has(Property[key.name='signal'])):not(:has(SpreadElement))",
-          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...ENV_SELECTORS, ...FETCH_SELECTORS],
     },
   },
   {
@@ -263,42 +296,7 @@ export default tseslint.config(
           ],
         },
       ],
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: "MemberExpression[object.name='process'][property.name='env']",
-          message:
-            'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
-        },
-        {
-          selector: "MemberExpression[object.name='process'][property.value='env']",
-          message:
-            'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
-        },
-        {
-          selector: "CallExpression[callee.name='raw']",
-          message:
-            'Dialect SQL goes through src/db/dialect/sql-functions.ts, which dispatches on the live MikroORM platform. A repository must not spell raw SQL.',
-        },
-        {
-          selector: "TaggedTemplateExpression[tag.name='sql']",
-          message:
-            'Dialect SQL goes through src/db/dialect/sql-functions.ts, which dispatches on the live MikroORM platform. A repository must not spell raw SQL.',
-        },
-        {
-          // Every outbound fetch needs a timeout (server/CLAUDE.md): a provider
-          // that takes the connection and goes quiet otherwise holds the request
-          // for undici's 300 s default. An init built elsewhere (a variable or a
-          // spread) is trusted to carry its own signal.
-          selector: "CallExpression[callee.name='fetch'][arguments.length=1]",
-          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
-        },
-        {
-          selector:
-            "CallExpression[callee.name='fetch'] > ObjectExpression:not(:has(Property[key.name='signal'])):not(:has(SpreadElement))",
-          message: 'Outbound fetch needs a timeout: pass { signal: AbortSignal.timeout(ms) }.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...ENV_SELECTORS, ...RAW_SQL_SELECTORS, ...FETCH_SELECTORS],
     },
   },
   {

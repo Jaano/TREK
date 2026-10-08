@@ -1228,13 +1228,13 @@ describe('Immich self-signed certificate switch (#2475)', () => {
     testDb.prepare('UPDATE users SET immich_allow_insecure_tls = 1 WHERE id = ?').run(user.id);
     await hitEveryPath();
     expect(vi.mocked(safeFetch).mock.calls).toHaveLength(3);
-    for (const call of vi.mocked(safeFetch).mock.calls) expect(call[2]).toEqual(LAX);
+    for (const call of vi.mocked(safeFetch).mock.calls) expect(call[2]).toMatchObject(LAX);
 
     vi.mocked(safeFetch).mockClear();
     testDb.prepare('UPDATE users SET immich_allow_insecure_tls = 0 WHERE id = ?').run(user.id);
     await hitEveryPath();
     expect(vi.mocked(safeFetch).mock.calls).toHaveLength(3);
-    for (const call of vi.mocked(safeFetch).mock.calls) expect(call[2]).toEqual(STRICT);
+    for (const call of vi.mocked(safeFetch).mock.calls) expect(call[2]).toMatchObject(STRICT);
   });
 
   it('IMMICH-105: POST /test probes with the switch in the form, and refuses a value that is not a boolean', async () => {
@@ -1248,11 +1248,11 @@ describe('Immich self-signed certificate switch (#2475)', () => {
     const lax = await test(true);
     expect(lax.status).toBe(200);
     expect(lax.body.connected).toBe(true);
-    expect(vi.mocked(safeFetch).mock.calls[0][2]).toEqual(LAX);
+    expect(vi.mocked(safeFetch).mock.calls[0][2]).toMatchObject(LAX);
 
     const strict = await test(false);
     expect(strict.status).toBe(200);
-    expect(vi.mocked(safeFetch).mock.calls[1][2]).toEqual(STRICT);
+    expect(vi.mocked(safeFetch).mock.calls[1][2]).toMatchObject(STRICT);
 
     // Only a real boolean: the form has always sent one, and anything else
     // must not be read as either answer.

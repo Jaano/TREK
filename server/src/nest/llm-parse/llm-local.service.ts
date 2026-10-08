@@ -69,11 +69,18 @@ export class LlmLocalService {
     const root = this.ollamaRoot(baseUrl);
     let res: Response;
     try {
-      res = await safeFetchLlm(`${root}/api/pull`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model: model.trim(), stream: true }),
-      });
+      // The progress lines stream on to the client for as long as the pull
+      // runs, so the body is not capped; LLM_TIMEOUT_MS bounds each pause.
+      res = await safeFetchLlm(
+        `${root}/api/pull`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ model: model.trim(), stream: true }),
+        },
+        5,
+        null,
+      );
     } catch {
       throw new HttpException({ error: `Could not reach local LLM server at ${root}` }, 502);
     }

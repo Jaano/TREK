@@ -323,8 +323,8 @@ describe('PaperlessClient: the request it builds', () => {
     on('GET /api/ui_settings/', reply({ user: { username: 'admin' }, settings: {}, permissions: [] }));
     await provider.probe(CONN);
     await provider.probe({ ...CONN, allowInsecureTls: true });
-    expect(calls[0]?.options).toEqual({ rejectUnauthorized: true });
-    expect(calls[1]?.options).toEqual({ rejectUnauthorized: false });
+    expect(calls[0]?.options).toEqual({ rejectUnauthorized: true, maxBytes: null });
+    expect(calls[1]?.options).toEqual({ rejectUnauthorized: false, maxBytes: null });
     expect(calls[0]?.init.signal).toBeInstanceOf(AbortSignal);
   });
 

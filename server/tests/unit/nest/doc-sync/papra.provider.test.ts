@@ -257,7 +257,7 @@ describe('probe', () => {
   it('forwards the self-signed switch to the fetch layer and nowhere else', async () => {
     answerWith(reply({ body: { tags: [] } }), reply({ body: { organizations: [] } }));
     await provider.probe({ ...CONN, allowInsecureTls: true });
-    expect(calls[0].options).toEqual({ rejectUnauthorized: false });
+    expect(calls[0].options).toEqual({ rejectUnauthorized: false, maxBytes: null });
   });
 
   it('reports a missing key without touching the network', async () => {

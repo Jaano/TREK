@@ -40,6 +40,12 @@ import { PlacePhotoCacheService } from '../place-photos/place-photo-cache.servic
 const COMMONS_CAP = 5;
 const GOOGLE_CAP = 3;
 
+// A photo from Wikimedia or another third-party URL the place data names: the
+// same ceiling the maps photo proxy holds Wikimedia to, and a deadline so a
+// slow image host cannot hold the enrichment request open.
+const REMOTE_PHOTO_TIMEOUT_MS = 15_000;
+const REMOTE_PHOTO_MAX_BYTES = 8 * 1024 * 1024;
+
 /**
  * Enrichment results live in the same table as the plain details cache, under a
  * third `expanded` value. Descriptions and the set of pictures near a place
@@ -600,7 +606,11 @@ export class PlaceEnrichmentService {
   /** Downloads a non-Google image, re-checking every redirect hop against the SSRF guard. */
   private async fetchRemoteBytes(url: string): Promise<Buffer | null> {
     try {
-      const res = await safeFetchFollow(url, undefined, { bypassInternalIpAllowed: true });
+      const res = await safeFetchFollow(
+        url,
+        { signal: AbortSignal.timeout(REMOTE_PHOTO_TIMEOUT_MS) },
+        { bypassInternalIpAllowed: true, maxBytes: REMOTE_PHOTO_MAX_BYTES },
+      );
       if (!res.ok) return null;
       const bytes = Buffer.from(await res.arrayBuffer());
       return bytes.length ? bytes : null;

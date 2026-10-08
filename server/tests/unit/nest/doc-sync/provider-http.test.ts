@@ -205,13 +205,13 @@ describe('providerFetch', () => {
     expect(url).toBe('https://nas.example.org:5001/webapi/entry.cgi');
     expect(init).toMatchObject({ method: 'POST', headers: { Accept: 'application/json' }, body, duplex: 'half' });
     expect(init.signal).toBeInstanceOf(AbortSignal);
-    expect(options).toEqual({ rejectUnauthorized: true });
+    expect(options).toEqual({ rejectUnauthorized: true, maxBytes: null });
   });
 
   it('PROVIDER-HTTP-011: relaxes the certificate check only when the connection says so', async () => {
     safeFetchMock.mockResolvedValue({ ok: true, status: 200 });
     await providerFetch('https://nas.example.org', {}, { ...OPTIONS, allowInsecureTls: true });
-    expect(safeFetchMock.mock.calls[0][2]).toEqual({ rejectUnauthorized: false });
+    expect(safeFetchMock.mock.calls[0][2]).toEqual({ rejectUnauthorized: false, maxBytes: null });
   });
 
   it('PROVIDER-HTTP-012: an instance that never answers is cut off at the timeout', async () => {

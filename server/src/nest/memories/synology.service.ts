@@ -29,6 +29,12 @@ const SYNOLOGY_ENDPOINT_PATH = '/webapi/entry.cgi';
 
 const SYNOLOGY_DEVICE_NAME = 'trek';
 
+// A cached thumbnail read: Synology's 'm' size is a few hundred kilobytes, so
+// eight megabytes is room to spare, and the NAS is a user-configured host that
+// must not hold the request or fill memory when it misbehaves.
+const SYNOLOGY_THUMBNAIL_TIMEOUT_MS = 30_000;
+const SYNOLOGY_THUMBNAIL_MAX_BYTES = 8 * 1024 * 1024;
+
 const SYNOLOGY_ERROR_MESSAGES: Record<number, string> = {
     101: 'Missing API, method, or version parameter.',
     102: 'Requested API does not exist.',
@@ -675,7 +681,10 @@ export class SynologyService {
 
       const url = this._buildSynologyEndpoint(synology_credentials.data.synology_url, params.toString());
       try {
-          const resp = await safeFetch(url, undefined, { rejectUnauthorized: !synology_credentials.data.synology_skip_ssl });
+          const resp = await safeFetch(url, { signal: AbortSignal.timeout(SYNOLOGY_THUMBNAIL_TIMEOUT_MS) }, {
+              rejectUnauthorized: !synology_credentials.data.synology_skip_ssl,
+              maxBytes: SYNOLOGY_THUMBNAIL_MAX_BYTES,
+          });
           if (!resp.ok) return { error: 'Upstream error', status: resp.status };
           const contentType = resp.headers.get('content-type') || 'image/jpeg';
           const bytes = Buffer.from(await resp.arrayBuffer());

@@ -898,14 +898,14 @@ describe('self-signed certificates', () => {
     await exerciseEveryPath(USER);
 
     expect(safeFetch).toHaveBeenCalledTimes(EVERY_PATH_CALLS);
-    for (const call of safeFetch.mock.calls) expect(call[2]).toEqual(LAX);
+    for (const call of safeFetch.mock.calls) expect(call[2]).toMatchObject(LAX);
   });
 
   it('IMMICH-TLS-003: with the switch off, every request keeps the certificate check', async () => {
     await exerciseEveryPath(USER);
 
     expect(safeFetch).toHaveBeenCalledTimes(EVERY_PATH_CALLS);
-    for (const call of safeFetch.mock.calls) expect(call[2]).toEqual(STRICT);
+    for (const call of safeFetch.mock.calls) expect(call[2]).toMatchObject(STRICT);
   });
 
   it('IMMICH-TLS-004: a shared photo follows the switch of its owner, not of the viewer', async () => {
@@ -922,14 +922,14 @@ describe('self-signed certificates', () => {
     expect(safeFetch).toHaveBeenCalledTimes(3);
     for (const call of safeFetch.mock.calls) {
       expect(call[0]).toContain('https://owner.test');
-      expect(call[2]).toEqual(LAX);
+      expect(call[2]).toMatchObject(LAX);
     }
 
     safeFetch.mockClear();
     seedUser(USER, 'https://viewer.test', 'viewer-key', 0, 1);
     seedUser(20, 'https://owner.test', 'owner-key', 0, 0);
     await svc.getAssetInfo(USER, 'a1', 20);
-    expect(safeFetch.mock.calls[0][2]).toEqual(STRICT);
+    expect(safeFetch.mock.calls[0][2]).toMatchObject(STRICT);
   });
 
   it('IMMICH-TLS-005: saving without the switch keeps it, saving with it sets it, disconnecting clears it', async () => {

@@ -321,7 +321,9 @@ export function describeFetchFailure(err: unknown): string {
  */
 export async function pipeAsset(url: string, response: Response, headers?: Record<string, string>, signal?: AbortSignal, defaultCacheControl?: string, fetchOptions?: SafeFetchOptions): Promise<void> {
     try {
-        const resp = await safeFetch(url, { headers, signal: signal as any }, fetchOptions);
+        // Streamed straight through to the client, never held in memory, so a
+        // video original runs past the body cap a buffered read is held to.
+        const resp = await safeFetch(url, { headers, signal: signal as any }, { ...fetchOptions, maxBytes: null });
 
         response.status(resp.status);
         if (resp.headers.get('content-type')) response.set('Content-Type', resp.headers.get('content-type') as string);
