@@ -36,7 +36,6 @@ import type { BookingExpenseRequest } from '../components/Planner/BookingCostsSe
 import type { BudgetItem } from '../types'
 import PluginFrame from '../components/Plugins/PluginFrame'
 import ErrorBoundary from '../components/shared/ErrorBoundary'
-import { lazyWithRetry } from '../utils/lazyWithRetry'
 import { getDayBookendHotels } from '../utils/dayOrder'
 import TripWarningsBanner from '../components/Planner/TripWarningsBanner'
 import Navbar from '../components/Layout/Navbar'
@@ -57,74 +56,16 @@ import { usePlannerHistory } from '../hooks/usePlannerHistory'
 import type { Accommodation, TripMember, Day, Place, Reservation, PackingItem, TodoItem } from '../types'
 import { ListTodo, ListPlus, Download, Plus, FolderPlus } from 'lucide-react'
 import { useTripPlannerPage } from './tripPlanner/useTripPlannerPage'
+import {
+  ReservationsPanel, PackingListPanel, TodoListPanel, FileManager, CostsPanel, ExpenseModal, CollabPanel,
+  RoadtripSidebar, RoadtripCorridorPanel, RoadtripLimitsCard, RoadtripStopPopup, RoadtripStayModal, RoadtripTrackModal, RoadtripAlternativesBar,
+  TourPlannerRail, TourPlannerToursRail, TransportModal,
+} from './tripPlanner/plannerLazy'
+import { LazyPanel } from './tripPlanner/LazyPanel'
 import { useMergedMapPois } from '../components/Map/useMergedMapPois'
 import PoiCategoryPill from '../components/Map/PoiCategoryPill'
 import { useTouchDragBridge } from '../hooks/useTouchDragBridge'
 import PanelResizeHandle from '../components/Planner/PanelResizeHandle'
-
-// The tab panels are the planner's dead weight: each one mounts only while its
-// own tab is active, so the page chunk carried code most sessions never run. They
-// load on demand now, through the same lazyWithRetry the route chunks use.
-//
-// PluginFrame stays static on purpose: DayDetailPanel and PlaceInspector import it
-// too and both belong to the plan tab, so splitting it here would move nothing.
-const ReservationsPanel = lazyWithRetry(() => import('../components/Planner/ReservationsPanel'))
-const PackingListPanel = lazyWithRetry(() => import('../components/Packing/PackingListPanel'))
-const TodoListPanel = lazyWithRetry(() => import('../components/Todo/TodoListPanel'))
-const FileManager = lazyWithRetry(() => import('../components/Files/FileManager'))
-const CostsPanel = lazyWithRetry(() => import('../components/Budget/CostsPanel'))
-// Named export, so it needs the extra hop. Importing it statically would keep the
-// whole CostsPanel module in the page chunk and undo the split above.
-const ExpenseModal = lazyWithRetry(() =>
-  import('../components/Budget/CostsPanel').then(m => ({ default: m.ExpenseModal }))
-)
-const CollabPanel = lazyWithRetry(() => import('../components/Collab/CollabPanel'))
-const RoadtripSidebar = lazyWithRetry(() => import('../components/Roadtrip/RoadtripSidebar'))
-const RoadtripCorridorPanel = lazyWithRetry(() => import('../components/Roadtrip/RoadtripCorridorPanel'))
-const RoadtripLimitsCard = lazyWithRetry(() => import('../components/Roadtrip/RoadtripLimitsCard'))
-const RoadtripStopPopup = lazyWithRetry(() => import('../components/Roadtrip/RoadtripStopPopup'))
-const RoadtripStayModal = lazyWithRetry(() => import('../components/Roadtrip/RoadtripStayModal'))
-const RoadtripTrackModal = lazyWithRetry(() => import('../components/Roadtrip/RoadtripTrackModal'))
-const RoadtripAlternativesBar = lazyWithRetry(() => import('../components/Roadtrip/RoadtripAlternativesBar'))
-const TourPlannerRail = lazyWithRetry(() =>
-  import('../components/Tours/planner/TourPlannerPanels').then(module => ({ default: module.TourPlannerRail }))
-)
-const TourPlannerToursRail = lazyWithRetry(() =>
-  import('../components/Tours/planner/TourPlannerPanels').then(module => ({ default: module.TourPlannerToursRail }))
-)
-// Already rendered conditionally, so lazy bites immediately. Worth it beyond its
-// own 63 kB: it is the only path to TransitSearchPanel, which drags in tz-lookup
-// — about 200 kB of packed zone geometry that every trip used to load.
-const TransportModal = lazyWithRetry(() =>
-  import('../components/Planner/TransportModal').then(m => ({ default: m.TransportModal }))
-)
-
-/**
- * One tab panel, with its own net.
- *
- * The boundary sits outside the Suspense, not inside: Suspense owns the pending
- * promise, a rejected one throws straight past it. And it has to be per panel —
- * a single boundary around the whole content area would already be mounted with
- * the visible tab, so switching tabs would swap the entire planner for the
- * placeholder instead of just the part that is still loading.
- *
- * No label: ErrorBoundary lets label win over the panel level and would title a
- * broken packing list "This plugin could not be shown".
- */
-function LazyPanel({ id, children, overlay }: { id: string; children: React.ReactNode; overlay?: boolean }): React.ReactElement {
-  return (
-    <ErrorBoundary boundaryId={`planner-panel:${id}`}>
-      {/* A panel holds its place with a skeleton while its chunk arrives; a dialog has no
-          place to hold. Drawn in the page flow, that skeleton was a pale block flashing
-          under the planner the first time each dialog was ever opened, and never again
-          once the chunk was cached. Nothing is the right placeholder for something that
-          is about to cover the screen anyway. */}
-      <Suspense fallback={overlay ? null : <div className="h-full w-full min-h-[180px] rounded-xl bg-surface-secondary animate-pulse" />}>
-        {children}
-      </Suspense>
-    </ErrorBoundary>
-  )
-}
 
 function ListsContainer({ tripId, packingItems, todoItems }: { tripId: number; packingItems: PackingItem[]; todoItems: TodoItem[] }) {
   const [subTab, setSubTab] = useState<'packing' | 'todo'>(() => {
