@@ -38,7 +38,39 @@ import { knownMigrationNames, unknownMigrations } from './known-migrations';
  */
 const STEP_MARKER = /Legacy migration step (\d+)\b/g;
 
-const REFUSAL = '[DB] Refusing to boot:';
+export const REFUSAL = '[DB] Refusing to boot:';
+
+/**
+ * What the boot does around a migration run (`pre-migrate-snapshot.ts` in
+ * production, nothing in the unit tests and on a restore).
+ */
+export interface MigrationSafetyNet {
+  /**
+   * Runs after the plan is known and before anything is written, only when
+   * something is pending. `from` labels the schema the database holds: the
+   * last recorded migration's timestamp, `legacy-<schema_version>`, or null
+   * when nothing is recorded at all. Throwing refuses the boot.
+   */
+  beforeMigrate(from: string | null): Promise<void>;
+  /** A sentence pointing at a copy this release can run, for the newer-database refusal. */
+  restoreHint(thisRelease: string): Promise<string | null>;
+}
+
+export const NO_SAFETY_NET: MigrationSafetyNet = {
+  beforeMigrate: async () => {},
+  restoreHint: async () => null,
+};
+
+/** The part of a migration name that orders it: what a schema state is labelled by. */
+export function migrationLabel(name: string): string {
+  return /^Migration(\d+)_/.exec(name)?.[1] ?? name;
+}
+
+function latest(names: Iterable<string>): string | null {
+  let last: string | null = null;
+  for (const name of names) if (last === null || name > last) last = name;
+  return last;
+}
 
 export interface LegacyStepMap {
   /** The migrations standing for `createTables()`: everything that sorts ahead of step 1. */
@@ -184,12 +216,23 @@ export async function migrateToHead(
   migrator: Migrator,
   readSource: ReadSource = readFromDisk,
   known: Set<string> = knownMigrationNames(),
+  safetyNet: MigrationSafetyNet = NO_SAFETY_NET,
 ): Promise<void> {
   const baselined = await planLegacyBaseline(connection, migrator, readSource);
-  refuseNewerDatabase((await migrator.getExecuted()).map((row) => row.name), known);
+  const executed = (await migrator.getExecuted()).map((row) => row.name);
+  if (unknownMigrations(executed, known).length > 0) {
+    const thisRelease = latest(known);
+    refuseNewerDatabase(executed, known, thisRelease ? await safetyNet.restoreHint(migrationLabel(thisRelease)) : null);
+  }
   const already = new Set(baselined);
   const pending = (await migrator.getPending()).filter((migration) => !already.has(migration.name));
   if (pending.length === 0 && baselined.length === 0) return;
+
+  const lastRecorded = latest(executed);
+  const legacy = lastRecorded === null ? await legacyVersion(connection, migrator) : null;
+  await safetyNet.beforeMigrate(
+    lastRecorded !== null ? migrationLabel(lastRecorded) : legacy !== null ? `legacy-${legacy}` : null,
+  );
   console.log(`[DB] Applying ${pending.length} pending migration(s)`);
   if (baselined.length === 0) {
     await migrator.up();
@@ -210,11 +253,12 @@ export async function migrateToHead(
  * older code against a schema it does not know and fail later, far from the
  * cause. Refused before anything is written.
  */
-export function refuseNewerDatabase(executed: string[], known: Set<string>): void {
+export function refuseNewerDatabase(executed: string[], known: Set<string>, restoreHint: string | null = null): void {
   const unknown = unknownMigrations(executed, known);
   if (unknown.length === 0) return;
   throw new Error(
     `${REFUSAL} the database was migrated by a newer TREK (${unknown.length} unknown migration(s), latest ${unknown[unknown.length - 1]}). ` +
-      'Run that version again, or restore a backup taken with this one.',
+      'Run that version again, or restore a backup taken with this one.' +
+      (restoreHint ? ` ${restoreHint}` : ''),
   );
 }

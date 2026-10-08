@@ -335,6 +335,14 @@ export function deriveDb(raw: RawEnv) {
     synchronous: durability.synchronous,
     /** Complaints about unusable values; derivation stays side-effect free, so db/durability.ts logs them when it opens the file. */
     durabilityWarnings: durability.warnings,
+    /**
+     * Snapshot the database before a boot migrates it. Undefined when unset: the
+     * caller then decides (on, except under NODE_ENV=test). false is the escape
+     * hatch for a data dir that cannot hold a second copy.
+     */
+    preMigrateSnapshot: parseBool(raw.TREK_DB_PRE_MIGRATE_SNAPSHOT),
+    /** How many pre-migration snapshots stay in the data dir, newest first. */
+    preMigrateSnapshotKeep: Math.min(positiveIntOr(raw.TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP, 3), 100),
   };
 }
 

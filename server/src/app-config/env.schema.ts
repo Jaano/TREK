@@ -158,6 +158,12 @@ export const envSchema = z.object({
   // this schema at all. Resolution lives in parsers.resolveDurability().
   TREK_DB_JOURNAL_MODE: anyString,
   TREK_DB_SYNCHRONOUS: anyString,
+  // The copy of the database taken before a boot applies pending migrations.
+  // Unlike the two pragmas a typo here refuses the boot: the switch exists to
+  // turn a safety net off, and a misspelt "off" must not leave it on silently
+  // or a misspelt "on" turn it off.
+  TREK_DB_PRE_MIGRATE_SNAPSHOT: boolStr,
+  TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP: integer(1, 100),
   TREK_WIKI_DIR: anyString,
   TREK_PLACE_PHOTO_DIR: anyString,
   BACKUP_UPLOAD_LIMIT_MB: positiveNumber,

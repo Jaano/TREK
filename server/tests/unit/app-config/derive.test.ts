@@ -14,6 +14,7 @@ import {
   derivePlugins,
   deriveIntegrations,
   deriveBackup,
+  deriveDb,
   deriveFiles,
   deriveNet,
   derivePaths,
@@ -266,6 +267,21 @@ describe('deriveBackup', () => {
     expect(deriveBackup({}).restoreFromBackup).toBeNull();
     expect(deriveBackup({ RESTORE_FROM_BACKUP: '   ' }).restoreFromBackup).toBeNull();
     expect(deriveBackup({ RESTORE_FROM_BACKUP: ' /app/data/b.zip ' }).restoreFromBackup).toBe('/app/data/b.zip');
+  });
+});
+
+describe('deriveDb: the pre-migration snapshot', () => {
+  it('leaves the switch undefined when unset, so the caller can default it per environment', () => {
+    expect(deriveDb({}).preMigrateSnapshot).toBeUndefined();
+    expect(deriveDb({ TREK_DB_PRE_MIGRATE_SNAPSHOT: 'off' }).preMigrateSnapshot).toBe(false);
+    expect(deriveDb({ TREK_DB_PRE_MIGRATE_SNAPSHOT: 'TRUE' }).preMigrateSnapshot).toBe(true);
+  });
+
+  it('keeps three copies unless told otherwise, at most a hundred', () => {
+    expect(deriveDb({}).preMigrateSnapshotKeep).toBe(3);
+    expect(deriveDb({ TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP: '5' }).preMigrateSnapshotKeep).toBe(5);
+    expect(deriveDb({ TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP: '0' }).preMigrateSnapshotKeep).toBe(3);
+    expect(deriveDb({ TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP: '500' }).preMigrateSnapshotKeep).toBe(100);
   });
 });
 

@@ -1,6 +1,7 @@
 import mikroOrmConfig from '../mikro-orm.config';
 import { registerReinitializeHook, runDemoSeed } from './database';
-import { migrateToHead } from './legacy-baseline';
+import { migrateToHead, NO_SAFETY_NET } from './legacy-baseline';
+import { preMigrateSnapshot } from './pre-migrate-snapshot';
 import { withRequestContext } from '../nest/database/request-context';
 import type { AnyEntity, EntityClass, EntityManager, EntitySchema, IDatabaseDriver, MikroORM } from '@mikro-orm/core';
 import type { Migrator } from '@mikro-orm/migrations';
@@ -29,14 +30,21 @@ type AnyOrm = MikroORM<
   readonly (string | EntityClass<AnyEntity> | EntitySchema)[]
 >;
 
-/** Migrate to head, then seed. Safe to call again — both halves are idempotent. */
-export async function runSchemaBootstrap(orm: AnyOrm): Promise<void> {
+/**
+ * Migrate to head, then seed. Safe to call again, both halves are idempotent.
+ *
+ * `snapshot: false` skips the pre-migration copy (`pre-migrate-snapshot.ts`).
+ * Only the restore hook passes it: the file it migrates was just unpacked from
+ * a backup archive, which is still there to go back to.
+ */
+export async function runSchemaBootstrap(orm: AnyOrm, { snapshot = true }: { snapshot?: boolean } = {}): Promise<void> {
   const migrator = orm.config.getExtension('@mikro-orm/migrator') as Migrator;
+  const connection = orm.em.getConnection();
   // A database the retired positional runner migrated has no migrator rows yet;
   // what it already has is recorded in the same transaction as the run, or the
   // run would replay the whole history over it (see legacy-baseline.ts). Every
   // other database just gets its pending migrations.
-  await migrateToHead(orm.em.getConnection(), migrator);
+  await migrateToHead(connection, migrator, undefined, undefined, snapshot ? preMigrateSnapshot(connection) : NO_SAFETY_NET);
 
   const defaultSeeder = orm.config.get('seeder').defaultSeeder;
   if (defaultSeeder) await orm.seeder.seedString(defaultSeeder);
@@ -77,7 +85,7 @@ export function attachOrm(orm: AnyOrm): void {
     // `destroy()` is a no-op (see `orm-driver.ts`), so this close never reaches it.
     await connection.close(true);
     await connection.connect();
-    await runSchemaBootstrap(orm);
+    await runSchemaBootstrap(orm, { snapshot: false });
   });
 }
 

@@ -92,6 +92,8 @@ After each auto-backup run, **auto-backup files** older than `keep_days` are pru
 
 Always create a manual backup before updating. See [Updating](Updating).
 
+TREK also copies the database by itself right before a startup migrates it, to `data/pre-migrate-<schema>-<time>.db`, and keeps the newest three. That copy is what an older image can be started on again if you have to roll an update back. It holds the database only, never uploads, so it does not replace a backup. See [Updating](Updating#database-migrations).
+
 ## Audit log
 
 The following actions are recorded in the [Audit-Log](Audit-Log):

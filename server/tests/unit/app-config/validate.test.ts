@@ -313,3 +313,21 @@ describe('readEnv', () => {
     }
   });
 });
+
+describe('validateEnvAtBoot: the pre-migration snapshot switches', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('accepts a boolean switch and a keep count from 1 to 100', () => {
+    expect(() =>
+      validateEnvAtBoot({ TREK_DB_PRE_MIGRATE_SNAPSHOT: 'false', TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP: '100' }),
+    ).not.toThrow();
+  });
+
+  it('refuses a misspelt switch instead of guessing which way the safety net should go', () => {
+    expect(bootReport({ TREK_DB_PRE_MIGRATE_SNAPSHOT: 'of' }).thrown).toMatch(/Invalid environment configuration/);
+    expect(bootReport({ TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP: '0' }).printed).toContain('TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP');
+    expect(bootReport({ TREK_DB_PRE_MIGRATE_SNAPSHOT_KEEP: '2.5' }).thrown).toMatch(/Invalid environment configuration/);
+  });
+});
