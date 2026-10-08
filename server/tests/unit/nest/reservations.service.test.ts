@@ -695,16 +695,16 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       expect(broadcast).toHaveBeenCalledWith(String(trip.id), 'budget:updated', { item: { id: item.id } }, 'sock');
     });
 
-    it('creates + links a new item when none exists, using the current title fallback', async () => {
+    it('creates a new item linked on its insert when none exists, using the current title fallback', async () => {
       const { trip } = ownerTrip();
       const res = createReservation(testDb, trip.id);
-      const created = createBudgetItem(testDb, trip.id); // the row the mocked create "returns"
-      budget.createBudgetItem.mockReturnValue({ id: created.id });
+      budget.linkBudgetItemToReservation.mockReturnValue({ id: 31, reservation_id: res.id });
       await svc.syncBudgetOnUpdate(String(trip.id), String(res.id), '', undefined, 'Old title', 'flight', { total_price: 120 }, 'sock');
-      expect(budget.createBudgetItem).toHaveBeenCalledWith(String(trip.id), { name: 'Old title', category: 'flight', total_price: 120 });
-      // The service back-links the created item to the reservation itself.
-      expect(testDb.prepare('SELECT reservation_id FROM budget_items WHERE id = ?').get(created.id)).toEqual({ reservation_id: res.id });
-      expect(broadcast).toHaveBeenCalledWith(String(trip.id), 'budget:created', { item: { id: created.id, reservation_id: res.id } }, 'sock');
+      // One statement carries the link: no unlinked insert followed by a separate
+      // back-link that a swallowed failure inside updateWithCost could leave half done.
+      expect(budget.linkBudgetItemToReservation).toHaveBeenCalledWith(String(trip.id), res.id, { name: 'Old title', category: 'flight', total_price: 120 });
+      expect(budget.createBudgetItem).not.toHaveBeenCalled();
+      expect(broadcast).toHaveBeenCalledWith(String(trip.id), 'budget:created', { item: { id: 31, reservation_id: res.id } }, 'sock');
     });
 
     it('RESV-TX-001: updateWithCost rolls the booking edit back when its cost write fails', async () => {

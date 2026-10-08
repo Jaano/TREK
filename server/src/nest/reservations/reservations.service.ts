@@ -1192,9 +1192,8 @@ export class ReservationsService {
         const updated = await this.budget.updateBudgetItem(existing.id, tripId, { name: itemName, category, total_price: entry.total_price });
         this.sendCost(tripId, { event: 'budget:updated', payload: { item: updated } }, socketId, collect);
       } else {
-        const item = await this.budget.createBudgetItem(tripId, { name: itemName, category, total_price: entry.total_price });
-        await this.budgetItemsRepo.setReservationId(item.id, id);
-        item.reservation_id = Number(id);
+        // The link travels on the insert, so a cost is never written without its booking.
+        const item = await this.budget.linkBudgetItemToReservation(tripId, Number(id), { name: itemName, category, total_price: entry.total_price! });
         this.sendCost(tripId, { event: 'budget:created', payload: { item } }, socketId, collect);
       }
     } catch (err) {
