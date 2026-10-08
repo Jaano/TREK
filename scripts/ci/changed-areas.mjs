@@ -72,8 +72,11 @@ export const AREAS = {
 // Markdown outside wiki/ (the root README, CLAUDE.md, the package READMEs,
 // PATTERN.md) changes no test, no build and no scan. The wiki does: the image
 // ships it as the in-app help and tests read its pages and headings, so a
-// wiki page is classified like any other file.
-const isInertMarkdown = (path) => path.endsWith('.md') && !path.startsWith('wiki/');
+// wiki page is classified like any other file. So does Markdown inside a test
+// or fixture directory (server/tests/fixtures/wiki/ feeds wiki.test.ts): it is
+// test input, and a change to it has to run the tests that read it.
+const TEST_INPUT_DIR = /(^|\/)(tests?|fixtures)\//;
+const isInertMarkdown = (path) => path.endsWith('.md') && !path.startsWith('wiki/') && !TEST_INPUT_DIR.test(path);
 
 function matches(rule, path) {
   if (rule instanceof RegExp) return rule.test(path);

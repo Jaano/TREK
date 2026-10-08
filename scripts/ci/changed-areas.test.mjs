@@ -34,6 +34,12 @@ describe('classify', () => {
     assert.deepEqual(classify(['wiki/assets/TripPlanner.png']), { code: true, image: true, deploy: false });
   });
 
+  it('runs the tests for markdown that a test reads as input', () => {
+    // wiki.test.ts parses server/tests/fixtures/wiki/, so those pages are not docs.
+    assert.deepEqual(classify(['server/tests/fixtures/wiki/Sample.md']), { code: true, image: true, deploy: false });
+    assert.equal(classify(['client/tests/fixtures/notes.md']).code, true);
+  });
+
   it('runs the tests and the image for a server change', () => {
     assert.deepEqual(classify(['server/src/nest/weather/weather.service.ts']), { code: true, image: true, deploy: false });
   });
