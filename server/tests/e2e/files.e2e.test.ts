@@ -25,7 +25,11 @@ const { db } = vi.hoisted(() => {
   // FilesService runs its real SQL against these (FILE_SELECT joins reservations
   // and users; the link batch reads file_links; findForeignLinkTarget probes
   // reservations/places/day_assignments).
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, currency TEXT);');
+  // An ORM insert into trips names every column the entity gives a default
+  // (is_archived, reminder_days and the two timestamps); the real schema has all four.
+  tmp.exec(`CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, currency TEXT,
+    is_archived INTEGER DEFAULT 0, reminder_days INTEGER DEFAULT 3,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
   // TripAccessGuard now reads TripsRepository.findAccessible directly
   // (Plan 3c Task 0b), a real join against trip_members.
   tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');

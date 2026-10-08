@@ -40,6 +40,7 @@ import { DayAccommodations } from '../../src/db/entities/DayAccommodations.entit
 import { Days } from '../../src/db/entities/Days.entity';
 import { Reservations } from '../../src/db/entities/Reservations.entity';
 import { Trips } from '../../src/db/entities/Trips.entity';
+import { legacyBoundIntegerText } from '../../src/nest/common/row-id';
 
 let nestApp: INestApplication;
 let app: Application;
@@ -560,7 +561,7 @@ describe('Accommodations', () => {
     expect(res.status).toBe(201);
 
     // Linked reservation should exist
-    const reservation = await findRow(orm(), Reservations, { accommodation_id: String(res.body.accommodation.id) });
+    const reservation = await findRow(orm(), Reservations, { accommodation_id: legacyBoundIntegerText(res.body.accommodation.id) });
     expect(reservation).not.toBeNull();
     expect(reservation!.type).toBe('hotel');
     expect(reservation!.confirmation_number).toBe('CONF-XYZ');
@@ -619,7 +620,7 @@ describe('Accommodations', () => {
       .send({ place_id: place.id, start_day_id: day1.id, end_day_id: day2.id });
 
     const accommodationId = createRes.body.accommodation.id;
-    const reservationBefore = await findRow(orm(), Reservations, { accommodation_id: String(accommodationId) });
+    const reservationBefore = await findRow(orm(), Reservations, { accommodation_id: legacyBoundIntegerText(accommodationId) });
     expect(reservationBefore).not.toBeNull();
 
     const deleteRes = await request(app)

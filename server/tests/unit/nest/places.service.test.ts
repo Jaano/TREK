@@ -62,6 +62,7 @@ import fs from 'fs';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { PlacesService } from '../../../src/nest/places/places.service';
+import { legacyBoundIntegerText } from '../../../src/nest/common/row-id';
 import { MapsService } from '../../../src/nest/maps/maps.service';
 import { QueryHelpersService } from '../../../src/nest/query-helpers/query-helpers.service';
 import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.service';
@@ -208,7 +209,7 @@ describe('list', () => {
     const trip = createTrip(testDb, user.id);
     const tour = createPlace(testDb, trip.id, { name: 'Facet-backed tour' }) as any;
     const place = createPlace(testDb, trip.id, { name: 'Ordinary place' }) as any;
-    await insertRow(orm, Tours, { place_id: tour.id, tourTypeRef: 'hike' });
+    await insertRow(orm, Tours, { place: tour.id, tourTypeRef: 'hike' });
 
     const byId = new Map(((await svc.list(String(trip.id), {})) as any[]).map(item => [item.id, item]));
 
@@ -244,7 +245,7 @@ describe('list', () => {
     const paris = createPlace(testDb, trip.id, { name: 'Louvre', lat: 48.8606, lng: 2.3376 });
     const nowhere = createPlace(testDb, trip.id, { name: 'Unplaced' });
     await updateRows(orm, Places, { id: nowhere.id }, { lat: null, lng: null, address: null });
-    await insertRow(orm, PlaceRegions, { place_id: berlin.id, country_code: 'DE', region_code: 'DE-BE', region_name: 'Berlin' });
+    await insertRow(orm, PlaceRegions, { place: berlin.id, country_code: 'DE', region_code: 'DE-BE', region_name: 'Berlin' });
     const byId = new Map(((await svc.list(String(trip.id), {})) as any[]).map(p => [p.id, p]));
     expect(byId.get(berlin.id)).toMatchObject({ country_code: 'DE', region_name: 'Berlin' });
     expect(byId.get(paris.id)).toMatchObject({ country_code: 'FR', region_name: null });
@@ -680,12 +681,12 @@ describe('remove', () => {
     const { accommodation } = (await accommodations.createAccommodation(trip.id, {
       place_id: place.id, start_day_id: day.id, end_day_id: day.id,
     })) as any;
-    expect(await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) })).toBeTruthy();
+    expect(await findRow(orm, Reservations, { accommodation_id: legacyBoundIntegerText(accommodation.id) })).toBeTruthy();
 
     await svc.remove(String(trip.id), String(place.id));
 
     expect(await findRow(orm, DayAccommodations, { id: accommodation.id })).toBeNull();
-    expect(await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) })).toBeNull();
+    expect(await findRow(orm, Reservations, { accommodation_id: legacyBoundIntegerText(accommodation.id) })).toBeNull();
     expect(await findRows(orm, DayAssignments, { day: day.id })).toEqual([]);
   });
 
@@ -697,7 +698,7 @@ describe('remove', () => {
     const keptTour = createPlace(testDb, trip.id, { name: 'Tour to keep' }) as any;
     const keptPlace = createPlace(testDb, trip.id, { name: 'Ordinary place' }) as any;
     for (const place of [tour, keptTour]) {
-      await insertRow(orm, Tours, { place_id: place.id, tourTypeRef: 'hike', max_hiking_difficulty: 4 });
+      await insertRow(orm, Tours, { place: place.id, tourTypeRef: 'hike', max_hiking_difficulty: 4 });
       await insertRow(orm, TourWaypoints, { place: place.id, lat: 48, lng: 11, role: 'start', sequence: 0 });
       await insertRow(orm, DayAssignments, { day: day.id, place: place.id, order_index: 0 });
     }
@@ -709,12 +710,12 @@ describe('remove', () => {
 
     expect(result).toMatchObject({ deleted: true, deletedTourPlaceIds: [tour.id] });
     expect(await findRow(orm, Places, { id: tour.id })).toBeNull();
-    expect(await findRow(orm, Tours, { place_id: tour.id })).toBeNull();
+    expect(await findRow(orm, Tours, { place: tour.id })).toBeNull();
     expect(await findRows(orm, TourWaypoints, { place: tour.id })).toEqual([]);
     expect(await findRows(orm, DayAssignments, { place: tour.id })).toEqual([]);
     expect(await findRow(orm, TripFiles, { id: tourFileId })).toMatchObject({ id: tourFileId, place_id: null });
     expect(await findRows(orm, FileLinks, { file: tourFileId })).toEqual([]);
-    expect(await findRow(orm, Tours, { place_id: keptTour.id })).toBeTruthy();
+    expect(await findRow(orm, Tours, { place: keptTour.id })).toBeTruthy();
     expect(await findRows(orm, TourWaypoints, { place: keptTour.id })).toHaveLength(1);
     expect(await findRows(orm, DayAssignments, { place: keptTour.id })).toHaveLength(1);
     expect(await findRow(orm, Places, { id: keptPlace.id })).toBeTruthy();
@@ -801,7 +802,7 @@ describe('remove', () => {
     const { accommodation } = (await accommodations.createAccommodation(trip.id, {
       place_id: hotel.id, start_day_id: day.id, end_day_id: day.id,
     })) as { accommodation: { id: number } };
-    const reservation = await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) }) as { id: number };
+    const reservation = await findRow(orm, Reservations, { accommodation_id: legacyBoundIntegerText(accommodation.id) }) as { id: number };
 
     // cancelStaysAt (PL16) calls AccommodationsService.deleteAccommodation
     // FIRST inside this transaction — its own `uow.transactional` call nests
@@ -833,14 +834,14 @@ describe('removeMany', () => {
     const ordinary = createPlace(testDb, trip.id, { name: 'Ordinary place' }) as any;
     const keptTour = createPlace(testDb, trip.id, { name: 'Tour to keep' }) as any;
     for (const place of [tour, keptTour]) {
-      await insertRow(orm, Tours, { place_id: place.id, tourTypeRef: 'hike' });
+      await insertRow(orm, Tours, { place: place.id, tourTypeRef: 'hike' });
     }
 
     const result = await svc.removeMany(String(trip.id), [ordinary.id, tour.id]);
 
     expect(result.deleted).toEqual([ordinary.id, tour.id]);
     expect(result.deletedTourPlaceIds).toEqual([tour.id]);
-    expect(await findRow(orm, Tours, { place_id: keptTour.id })).toBeTruthy();
+    expect(await findRow(orm, Tours, { place: keptTour.id })).toBeTruthy();
     expect(await findRow(orm, Places, { id: keptTour.id })).toBeTruthy();
   });
 
@@ -868,7 +869,7 @@ describe('removeMany', () => {
     const { accommodation } = (await accommodations.createAccommodation(trip.id, {
       place_id: hotel.id, start_day_id: day.id, end_day_id: day.id,
     })) as { accommodation: { id: number } };
-    const reservation = await findRow(orm, Reservations, { accommodation_id: String(accommodation.id) }) as { id: number };
+    const reservation = await findRow(orm, Reservations, { accommodation_id: legacyBoundIntegerText(accommodation.id) }) as { id: number };
     // An expense hung off the reservation rather than the place: linkedExpenseIds
     // selects on budget_items.place_id and never finds this one.
     const itemId = Number((await insertRow(orm, BudgetItems, { trip: trip.id, name: 'Hotel stay', total_price: 240, reservation: reservation.id })));

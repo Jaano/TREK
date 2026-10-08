@@ -61,6 +61,7 @@ import { Reservations } from '../../../src/db/entities/Reservations.entity';
 import { ReservationEndpoints } from '../../../src/db/entities/ReservationEndpoints.entity';
 import { RoadtripDayBoundaries } from '../../../src/db/entities/RoadtripDayBoundaries.entity';
 import { Trips } from '../../../src/db/entities/Trips.entity';
+import { legacyBoundIntegerText } from '../../../src/nest/common/row-id';
 
 let days: DaysService;
 let journey: JourneyDomainService;
@@ -178,7 +179,7 @@ async function bookedNight(tripId: number, startDayId: number, endDayId: number)
   const place = createPlace(testDb, tripId, { name: 'Harbour Hotel' });
   const { accommodation } = await accommodations.createAccommodation(tripId, { place_id: place.id, start_day_id: startDayId, end_day_id: endDayId });
   const stayId = (accommodation as { id: number }).id;
-  const hotelBooking = await findRow(await orm(), Reservations, { accommodation_id: String(stayId) });
+  const hotelBooking = await findRow(await orm(), Reservations, { accommodation_id: legacyBoundIntegerText(stayId) });
   if (!hotelBooking) throw new Error('createAccommodation should have booked the stay');
   const reservationId = hotelBooking.id;
   const budgetId = (await makeBudgetItem(await orm(), tripId, {

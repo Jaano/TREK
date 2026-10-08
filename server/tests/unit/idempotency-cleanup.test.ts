@@ -13,6 +13,7 @@ import { purgeExpiredIdempotencyKeys } from '../../src/nest/common/idempotency-c
 import { IdempotencyCleanupJob } from '../../src/nest/common/idempotency-cleanup.job';
 import { IdempotencyKeys } from '../../src/db/entities/IdempotencyKeys.entity';
 import { countRows, deleteRows, findRows, insertRow } from '../helpers/factories/rows';
+import { makeUser } from '../helpers/factories/users';
 import type { IdempotencyKeysRepository } from '../../src/db/repositories/IdempotencyKeys.repository';
 import type { CronRegistrarService } from '../../src/nest/scheduling/cron-registrar.service';
 
@@ -23,17 +24,20 @@ const NOW_SEC = Math.floor(NOW / 1000);
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
 let idempotencyKeys: IdempotencyKeysRepository;
+/** The user every fixture key belongs to (the table's user_id is a foreign key). */
+let userId: number;
 
 beforeAll(async () => {
   t = await createTestOrm(testDb);
   idempotencyKeys = t.repo(IdempotencyKeys);
+  userId = (await makeUser(t)).user.id;
 });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 async function insertKey(key: string, ageSeconds: number, nowSec = NOW_SEC): Promise<void> {
   await insertRow(t, IdempotencyKeys, {
     key,
-    user: 1,
+    user: userId,
     method: 'POST',
     path: '/x',
     status_code: 200,
@@ -48,14 +52,12 @@ async function remainingKeys(): Promise<string[]> {
 }
 
 beforeEach(async () => {
-  testDb.pragma('foreign_keys = OFF'); // fixtures reference a user we don't seed here
   await deleteRows(t, IdempotencyKeys);
   t.clear();
 });
 
 afterEach(async () => {
   await deleteRows(t, IdempotencyKeys);
-  testDb.pragma('foreign_keys = ON');
   delete process.env.IDEMPOTENCY_TTL_SECONDS;
 });
 

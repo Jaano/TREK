@@ -93,6 +93,7 @@ import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { QueryHelpersService } from '../../../src/nest/query-helpers/query-helpers.service';
 import { makeAccommodationsService } from '../../helpers/accommodations-service';
 import type { Day } from '../../../src/types';
+import { legacyBoundIntegerText } from '../../../src/nest/common/row-id';
 import {
   createTestUnitOfWork, createTestAppSettingsRepo,
   createTestDaysRepo, createTestDayAssignmentsRepo, createTestDayNotesRepo, createTestTripsRepo,
@@ -596,7 +597,7 @@ describe('restampReservationDates', () => {
 describe('resyncAccommodationDays', () => {
   /** The hotel reservation accommodations/ auto-creates next to a stay. */
   const linkHotel = (tripId: number, accId: number, dayId: number | null, time: string | null) =>
-    addReservation(tripId, { day: dayId, title: 'Hotel', type: 'hotel', accommodation_id: String(accId), reservation_time: time });
+    addReservation(tripId, { day: dayId, title: 'Hotel', type: 'hotel', accommodation_id: legacyBoundIntegerText(accId), reservation_time: time });
 
   it('DAY-SVC-040 — returns before touching a hotel booking when the trip has no stays', async () => {
     const { user } = createUser(testDb);
