@@ -102,13 +102,28 @@ export function usePlaceEdits(options: PlaceEditsOptions) {
       await tripActions.updatePlace(tripId, editingPlace.id, placeData)
       // If editing from assignment context, save time per-assignment
       if (editingAssignmentId) {
-        await assignmentsApi.updateTime(tripId, editingAssignmentId, { place_time: place_time || null, end_time: end_time || null })
+        // Through the store and the visit's repo, so a time still waiting in the
+        // queue for this visit goes out first and a retry cannot land over this one.
+        const assignments = useTripStore.getState().assignments
+        const dayKey = Object.keys(assignments).find(key => assignments[key].some(a => a.id === editingAssignmentId))
+        if (dayKey) {
+          await tripActions.setAssignmentTimes(tripId, Number(dayKey), editingAssignmentId, {
+            place_time: place_time || null, end_time: end_time || null,
+          })
+        }
         // The form only includes assignment_notes when the user changed it, so
         // an untouched note never produces a PUT (#2163). '' clears like null.
+        // The note is set on the visit in place: reloading the days would show
+        // the server's time while the new one still waits in the queue.
         if (assignment_notes !== undefined) {
-          await assignmentsApi.updateNotes(tripId, editingAssignmentId, { notes: assignment_notes || null })
+          const notes = assignment_notes || null
+          await assignmentsApi.updateNotes(tripId, editingAssignmentId, { notes })
+          useTripStore.setState(state => ({
+            assignments: Object.fromEntries(Object.entries(state.assignments).map(([key, items]) => [
+              key, items.map(a => (a.id === editingAssignmentId ? { ...a, notes } : a)),
+            ])),
+          }))
         }
-        await tripActions.refreshDays(tripId)
       }
       // Upload pending files with place_id
       if (pendingFiles?.length > 0) {

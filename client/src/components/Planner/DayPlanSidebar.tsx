@@ -1080,17 +1080,10 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     const { dayId, fromId, fromType, toType, toId, insertAfter, toLegIndex } = saved
     setTimeConfirm(null)
 
-    // Remove time from assignment
+    // Remove time from assignment, through the store and the visit's repo so a time
+    // still waiting in the queue for this visit goes out first.
     try {
-      await assignmentsApi.updateTime(tripId, fromId, { place_time: null, end_time: null })
-      const key = String(dayId)
-      const currentAssignments = { ...assignments }
-      if (currentAssignments[key]) {
-        currentAssignments[key] = currentAssignments[key].map(a =>
-          a.id === fromId ? { ...a, place: { ...a.place, place_time: null, end_time: null } } : a
-        )
-        tripActions.setAssignments(currentAssignments)
-      }
+      await tripActions.setAssignmentTimes(tripId, dayId, fromId, { place_time: null, end_time: null })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('common.unknownError'))
       return

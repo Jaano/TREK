@@ -6,7 +6,7 @@
   "components/Map/MapViewGL.tsx": 2572,
   "components/Map/RouteCalculator.ts": 1190,
   "components/PDF/TripPDF.tsx": 1025,
-  "components/Planner/DayPlanSidebar.tsx": 3058,
+  "components/Planner/DayPlanSidebar.tsx": 3051,
   "components/Planner/PlaceFormModal.tsx": 1633,
   "components/Planner/PlaceInspector.tsx": 1273,
   "components/Planner/TransportModal.tsx": 1199,

@@ -156,6 +156,11 @@ function stubTripActions(actions: Record<string, unknown>) {
   useTripStore.setState(actions as unknown as Partial<TripStoreState>)
 }
 
+/** The stand-in for the store's visit-time action that beforeEach puts in place. */
+function setAssignmentTimesStub() {
+  return vi.mocked(useTripStore.getState().setAssignmentTimes)
+}
+
 function dayHeader(title: string) {
   return screen.getByText(title).closest('[style*="cursor: pointer"]') as HTMLElement
 }
@@ -194,6 +199,8 @@ const emptyDataTransfer = { setData: vi.fn(), effectAllowed: '', getData: vi.fn(
 beforeEach(() => {
   resetAllStores()
   vi.clearAllMocks()
+  // The time removal before a reorder goes through the store's visit-time action.
+  stubTripActions({ setAssignmentTimes: vi.fn(async () => undefined) })
   Element.prototype.scrollTo = vi.fn()
   mockPermissions.canEdit = true
   mockPermissions.denied.clear()
@@ -1928,7 +1935,6 @@ describe('DayPlanSidebar', () => {
 
   it('FE-PLANNER-DAYPLAN-081: clicking Confirm in time modal calls confirmTimeRemoval (updates assignment time)', async () => {
     const user = userEvent.setup()
-    const { assignmentsApi } = await import('../../api/client')
     const placeA = buildPlace({ id: 1, name: 'Morning Place', place_time: '08:00' })
     const placeB = buildPlace({ id: 2, name: 'Afternoon Place', place_time: '14:00' })
     const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
@@ -1954,7 +1960,7 @@ describe('DayPlanSidebar', () => {
     const confirmBtn = screen.getByRole('button', { name: /confirm/i })
     await user.click(confirmBtn)
 
-    await waitFor(() => expect((assignmentsApi as any).updateTime).toHaveBeenCalled())
+    await waitFor(() => expect(setAssignmentTimesStub()).toHaveBeenCalled())
   })
 
   // ── applyMergedOrder with notes in list (noteUpdates branch) ──────────────
@@ -2207,7 +2213,6 @@ describe('DayPlanSidebar', () => {
 
   it('FE-PLANNER-DAYPLAN-093: arrow-reorder timed place shows modal then confirm removes time', async () => {
     const user = userEvent.setup()
-    const { assignmentsApi } = await import('../../api/client') as any
     const onReorder = vi.fn().mockResolvedValue(undefined)
     const placeA = buildPlace({ id: 1, name: 'Early Place', place_time: '08:00' })
     const placeB = buildPlace({ id: 2, name: 'Later Place', place_time: '14:00' })
@@ -2230,7 +2235,7 @@ describe('DayPlanSidebar', () => {
       // Click Confirm
       const confirmBtn = screen.getByRole('button', { name: /confirm/i })
       await user.click(confirmBtn)
-      await waitFor(() => expect(assignmentsApi.updateTime).toHaveBeenCalled())
+      await waitFor(() => expect(setAssignmentTimesStub()).toHaveBeenCalled())
     }
   })
 
@@ -3207,8 +3212,7 @@ describe('DayPlanSidebar', () => {
 
   it('FE-PLANNER-DAYPLAN-127: a failing time removal aborts the reorder and reports the error', async () => {
     const user = userEvent.setup()
-    const { assignmentsApi } = await import('../../api/client')
-    vi.mocked(assignmentsApi.updateTime).mockRejectedValueOnce(new Error('locked'))
+    setAssignmentTimesStub().mockRejectedValueOnce(new Error('locked'))
     const placeA = buildPlace({ id: 1, name: 'Morning Place', place_time: '08:00' })
     const placeB = buildPlace({ id: 2, name: 'Afternoon Place', place_time: '14:00' })
     const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
@@ -4658,7 +4662,6 @@ describe('DayPlanSidebar', () => {
 
   it('FE-PLANNER-DAYPLAN-180: the chronology check spans notes and bookings, not just stops', async () => {
     const user = userEvent.setup()
-    const { assignmentsApi } = await import('../../api/client')
     const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
     const placeA = buildPlace({ id: 1, name: 'Morning Place', place_time: '08:00' })
     const placeB = buildPlace({ id: 2, name: 'Afternoon Place', place_time: '14:00' })
@@ -4678,7 +4681,7 @@ describe('DayPlanSidebar', () => {
     fireEvent.drop(dragRow(screen.getByText('Morning Place')), { dataTransfer: { getData: vi.fn(() => '') } })
     await waitFor(() => expect(screen.getByText('Remove time?')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /confirm/i }))
-    await waitFor(() => expect(vi.mocked(assignmentsApi.updateTime)).toHaveBeenCalledWith(1, 12, { place_time: null, end_time: null }))
+    await waitFor(() => expect(setAssignmentTimesStub()).toHaveBeenCalledWith(1, 10, 12, { place_time: null, end_time: null }))
     await waitFor(() => expect(onReorder).toHaveBeenCalledWith(10, [12, 11]))
     // The booking keeps its slot in the rebuilt order.
     expect(screen.getByText('Midday bus')).toBeInTheDocument()
@@ -4686,7 +4689,7 @@ describe('DayPlanSidebar', () => {
 
   it('FE-PLANNER-DAYPLAN-181: an arrow reorder across a booking drops the time and re-slots the booking', async () => {
     const user = userEvent.setup()
-    const { assignmentsApi, reservationsApi } = await import('../../api/client')
+    const { reservationsApi } = await import('../../api/client')
     const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
     const placeA = buildPlace({ id: 1, name: 'Morning Place', place_time: '08:00' })
     const placeB = buildPlace({ id: 2, name: 'Evening Place', place_time: '18:00' })
@@ -4706,7 +4709,7 @@ describe('DayPlanSidebar', () => {
     await user.click(upBtn)
     await waitFor(() => expect(screen.getByText('Remove time?')).toBeInTheDocument())
     await user.click(screen.getByRole('button', { name: /confirm/i }))
-    await waitFor(() => expect(vi.mocked(assignmentsApi.updateTime)).toHaveBeenCalledWith(1, 12, { place_time: null, end_time: null }))
+    await waitFor(() => expect(setAssignmentTimesStub()).toHaveBeenCalledWith(1, 10, 12, { place_time: null, end_time: null }))
     await waitFor(() => expect(onReorder).toHaveBeenCalledWith(10, [11, 12]))
     // The stop really moves past the booking: the bus lands behind both places
     // instead of keeping its old slot between them.

@@ -94,6 +94,7 @@ interface PlannerActions {
   loadBudgetItems: ReturnType<typeof vi.fn>
   loadFiles: ReturnType<typeof vi.fn>
   refreshDays: ReturnType<typeof vi.fn>
+  setAssignmentTimes: ReturnType<typeof vi.fn>
   addPlace: ReturnType<typeof vi.fn>
   updatePlace: ReturnType<typeof vi.fn>
   deletePlace: ReturnType<typeof vi.fn>
@@ -123,6 +124,7 @@ function makeActions(): PlannerActions {
     loadBudgetItems: vi.fn(async () => undefined),
     loadFiles: vi.fn(async () => undefined),
     refreshDays: vi.fn(async () => undefined),
+    setAssignmentTimes: vi.fn(async () => undefined),
     addPlace: vi.fn(async () => ({ id: 900, name: 'New' })),
     updatePlace: vi.fn(async () => undefined),
     deletePlace: vi.fn(async () => undefined),
@@ -1221,8 +1223,8 @@ describe('useTripPlanner — place CRUD', () => {
     })
 
     expect(actions.updatePlace).toHaveBeenCalledWith(42, 1, { name: 'Nara' })
-    expect(assignmentsApi.updateTime).toHaveBeenCalledWith(42, 10, { place_time: '09:00', end_time: '10:00' })
-    expect(actions.refreshDays).toHaveBeenCalledWith(42)
+    expect(actions.setAssignmentTimes).toHaveBeenCalledWith(42, 7, 10, { place_time: '09:00', end_time: '10:00' })
+    expect(assignmentsApi.updateTime).not.toHaveBeenCalled()
   })
 
   it('FE-TP-HOOK-053b: a changed assignment note is stripped off the place and PUT per assignment (#2163)', async () => {
@@ -1241,7 +1243,7 @@ describe('useTripPlanner — place CRUD', () => {
 
     expect(actions.updatePlace).toHaveBeenCalledWith(42, 1, { name: 'Nara' })
     expect(assignmentsApi.updateNotes).toHaveBeenCalledWith(42, 10, { notes: 'Book the 10:00 entry' })
-    expect(actions.refreshDays).toHaveBeenCalledWith(42)
+    expect(useTripStore.getState().assignments['7'][0].notes).toBe('Book the 10:00 entry')
   })
 
   it('FE-TP-HOOK-053c: without assignment_notes in the payload no notes write happens; an empty string clears (#2163)', async () => {
@@ -1278,7 +1280,7 @@ describe('useTripPlanner — place CRUD', () => {
       await result.current.handleSavePlace({ name: 'Nara', _pendingFiles: [new File(['x'], 'a.pdf')] })
     })
 
-    expect(assignmentsApi.updateTime).not.toHaveBeenCalled()
+    expect(actions.setAssignmentTimes).not.toHaveBeenCalled()
     expect(actions.addFile).toHaveBeenCalledTimes(1)
   })
 

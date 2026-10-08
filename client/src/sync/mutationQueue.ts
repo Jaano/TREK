@@ -584,8 +584,7 @@ export const mutationQueue = {
    * so any newer version on the server, a collaborator's or one saved here
    * online, refuses it (409) and it becomes a conflict. A write without a token
    * overwrites what someone else changed on the server meanwhile, as every
-   * replayed offline write of those resources does, and so do writes made here
-   * that skip the repos (the planner's two direct time edits of a visit).
+   * replayed offline write of those resources does.
    */
   async retryFailed(): Promise<void> {
     await offlineDb.mutationQueue

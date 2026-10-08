@@ -5,7 +5,12 @@
 // and every write goes to a recorded stand-in for the store's actions, so each case
 // can read what was written and what the undo would put back.
 import { act, renderHook } from '@testing-library/react'
+import { http, HttpResponse } from 'msw'
 import { assignmentsApi } from '../../api/client'
+import { offlineDb, clearAll } from '../../db/offlineDb'
+import { mutationQueue } from '../../sync/mutationQueue'
+import { setAuthed } from '../../sync/authGate'
+import { server } from '../../../tests/helpers/msw/server'
 import { useTripStore, type TripStoreState } from '../../store/tripStore'
 import { resetAllStores } from '../../../tests/helpers/store'
 import { buildAssignment, buildDay, buildPlace, buildReservation, buildTrip } from '../../../tests/helpers/factories'
@@ -35,6 +40,7 @@ function makeActions() {
     addPlace: vi.fn(async (): Promise<{ id: number } | null> => ({ id: 900 })),
     assignPlaceToDay: vi.fn(async () => ({ id: 555 })),
     refreshDays: vi.fn(async () => undefined),
+    setAssignmentTimes: vi.fn(async () => undefined),
     addFile: vi.fn(async () => undefined),
     deletePlace: vi.fn(async (): Promise<{ tourPlaceIds?: number[] } | undefined> => undefined),
     deletePlacesMany: vi.fn(async (): Promise<{ tourPlaceIds?: number[] } | undefined> => undefined),
@@ -170,6 +176,7 @@ describe('usePlaceEdits', () => {
     const updateNotes = vi.spyOn(assignmentsApi, 'updateNotes').mockResolvedValue({} as never)
     actions.addFile.mockRejectedValueOnce(new Error('files.tooLarge')).mockResolvedValueOnce(undefined)
     const file = new File(['x'], 'a.pdf')
+    useTripStore.setState(state => ({ assignments: { ...state.assignments, 10: [{ ...state.assignments[10][0], notes: 'old' }] } }))
     const { result } = renderEdits({ editingPlace: lake, editingAssignmentId: 101 })
 
     let saved: unknown
@@ -181,9 +188,13 @@ describe('usePlaceEdits', () => {
 
     expect(saved).toEqual({ id: 1 })
     expect(actions.updatePlace).toHaveBeenCalledWith(42, 1, { name: 'Lake' })
-    expect(updateTime).toHaveBeenCalledWith(42, 101, { place_time: '09:00', end_time: null })
+    // The times go through the store and the visit's repo, never straight to the API.
+    expect(actions.setAssignmentTimes).toHaveBeenCalledWith(42, 10, 101, { place_time: '09:00', end_time: null })
+    expect(updateTime).not.toHaveBeenCalled()
     expect(updateNotes).toHaveBeenCalledWith(42, 101, { notes: null })
-    expect(actions.refreshDays).toHaveBeenCalledWith(42)
+    // The note lands on the visit without reloading the days over a queued time.
+    expect(useTripStore.getState().assignments[10][0].notes).toBeNull()
+    expect(actions.refreshDays).not.toHaveBeenCalled()
     expect(actions.addFile).toHaveBeenCalledTimes(2)
     expect(toast.error).toHaveBeenCalledWith('files.uploadError')
     expect(toast.success).toHaveBeenCalledWith('trip.toast.placeUpdated')
@@ -196,8 +207,43 @@ describe('usePlaceEdits', () => {
     await act(async () => { await result.current.handleSavePlace({ name: 'Castle', place_time: '10:00' }) })
 
     expect(actions.updatePlace).toHaveBeenCalledWith(42, 2, { name: 'Castle' })
+    expect(actions.setAssignmentTimes).not.toHaveBeenCalled()
     expect(updateTime).not.toHaveBeenCalled()
     expect(actions.refreshDays).not.toHaveBeenCalled()
+  })
+
+  it('FE-TP-PLACEEDITS-006b: a time saved from the dialog waits behind a parked time of the same visit', async () => {
+    // The older time was parked as failed; the one saved now online must not land first,
+    // or Try again would replay the older time over it.
+    await clearAll()
+    mutationQueue._resetFlushing()
+    setAuthed(true)
+    onTestFinished(() => setAuthed(false))
+    await offlineDb.mutationQueue.put({
+      id: 'parked', tripId: 42, method: 'PUT', url: '/trips/42/assignments/101/time',
+      body: { place_time: '07:00', end_time: null }, createdAt: 1, status: 'failed', attempts: 8,
+      lastError: 'boom', resource: 'assignments', entityId: 101,
+    })
+    const sent: string[] = []
+    server.use(http.put('/api/trips/42/assignments/101/time', async ({ request }) => {
+      const body = await request.json() as { place_time: string }
+      sent.push(body.place_time)
+      return HttpResponse.json({ assignment: buildAssignment({ id: 101, day_id: 10, place: lake, assignment_time: body.place_time }) })
+    }))
+    const { setAssignmentTimes } = useTripStore.getState()
+    const { result } = renderEdits({
+      editingPlace: lake, editingAssignmentId: 101,
+      tripActions: { ...fixed.tripActions, setAssignmentTimes } as TripStoreState,
+    })
+
+    await act(async () => { await result.current.handleSavePlace({ name: 'Lake', place_time: '09:00', end_time: '' }) })
+    await new Promise(resolve => setTimeout(resolve, 20))
+    expect(sent).toEqual([])
+    expect(useTripStore.getState().assignments[10][0].assignment_time).toBe('09:00')
+
+    await mutationQueue.retryFailed()
+    expect(sent).toEqual(['07:00', '09:00'])
+    expect(await offlineDb.mutationQueue.count()).toBe(0)
   })
 
   it('FE-TP-PLACEEDITS-008: a service stop the drawn card does not show still lands on the day and position it named', async () => {
