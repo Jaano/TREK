@@ -25,10 +25,11 @@ permissions:
 #     must stop the scan — a missing lcov file would make every line of that
 #     package report as uncovered, and the dashboard would show a collapse
 #     that did not happen. (The preflight gates stop it transitively.)
-#   - Fork PRs don't receive secrets, so the two jobs that need them skip
-#     themselves: s3-contract (MINIO_LICENSE_KEY) and scan (SONAR_TOKEN).
-#     Everything else runs on fork PRs so outside contributors still get the
-#     full test signal.
+#   - Fork PRs and runs Dependabot triggers don't receive the repo's Actions
+#     secrets, so the two jobs that need them skip themselves: s3-contract
+#     (MINIO_LICENSE_KEY) and scan (SONAR_TOKEN). ci-ok counts a skip as
+#     passed. Everything else runs on those PRs so outside contributors and
+#     dependency bumps still get the full test signal.
 #   - changes runs first and decides which of the jobs below a change needs
 #     (scripts/ci/changed-areas.mjs holds the rules). A docs-only push or PR
 #     runs nothing else. The filter lives in a job, not in `on.paths`, because
@@ -449,10 +450,14 @@ jobs:
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     # Fork PRs don't get repo secrets, so MINIO_LICENSE_KEY would be empty and
-    # the AIStor container would fail to boot. Pushes and manual dispatches do
-    # have secrets, so only fork PRs are filtered out. (The implicit success()
-    # on this expression also keeps the job skipped when a preflight fails.)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # the AIStor container would fail to boot. A run Dependabot triggers gets
+    # only Dependabot secrets, so its PRs (same repo, not a fork) hit the same
+    # wall. Pushes and manual dispatches by anyone else do have secrets, so
+    # only those two are filtered out. (The implicit success() on this
+    # expression also keeps the job skipped when a preflight fails.)
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
 
     steps:
       - uses: actions/checkout@v6
@@ -653,8 +658,11 @@ jobs:
     name: Scan
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # Fork PRs don't receive SONAR_TOKEN — skip the scan rather than fail it.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    # Fork PRs and Dependabot runs don't receive SONAR_TOKEN, so skip the scan
+    # rather than fail it.
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     # Coverage jobs failing must stop the scan: a missing lcov file would make
     # every line of that package report as uncovered, and the dashboard would
     # show a collapse that did not happen. The preflight gates already stop it
