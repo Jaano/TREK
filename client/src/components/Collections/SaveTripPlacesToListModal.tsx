@@ -1,12 +1,9 @@
-import React, { useEffect, useId, useMemo, useState } from 'react'
+import React, { useId } from 'react'
 import { Search, Bookmark, ArrowRight, Loader2 } from 'lucide-react'
 import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { INPUT } from '../shared/dialogParts'
-import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
-import { collectionsApi } from '../../api/collections'
-import { getApiErrorMessage } from '../../utils/apiError'
-import type { Collection } from '@trek/shared'
+import { useSaveTripPlacesToList } from './useSaveTripPlacesToList'
 
 interface SaveTripPlacesToListModalProps {
   isOpen: boolean
@@ -24,50 +21,12 @@ interface SaveTripPlacesToListModalProps {
  */
 export default function SaveTripPlacesToListModal({ isOpen, tripId, placeIds, onClose, onDone }: SaveTripPlacesToListModalProps): React.ReactElement | null {
   const { t } = useTranslation()
-  const toast = useToast()
   const labelId = useId()
-  const [lists, setLists] = useState<Collection[]>([])
-  const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState('')
-  const [busyId, setBusyId] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!isOpen) return
-    let cancelled = false
-    setLoading(true)
-    setSearch('')
-    collectionsApi.list()
-      // Only lists the user can add to (their own or an editor/admin share). The
-      // server still enforces this; here we drop lists that are clearly read-only.
-      .then(res => { if (!cancelled) setLists((res.collections ?? []).filter(c => c.is_owner !== false)) })
-      .catch(() => { if (!cancelled) setLists([]) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [isOpen])
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return q ? lists.filter(l => l.name.toLowerCase().includes(q)) : lists
-  }, [lists, search])
+  const { lists, loading, search, setSearch, filtered, busyId, pick } = useSaveTripPlacesToList({
+    open: isOpen, tripId, placeIds, onClose, onDone,
+  })
 
   if (!isOpen) return null
-
-  const pick = async (list: Collection) => {
-    if (busyId != null || placeIds.length === 0) return
-    setBusyId(list.id)
-    try {
-      const res = await collectionsApi.saveFromTripMany(list.id, tripId, placeIds)
-      if (res.copied > 0) toast.success(t('collections.addedNToList', { count: res.copied, name: list.name }))
-      if (res.skipped.length > 0) toast.info(t('collections.skippedDuplicates', { count: res.skipped.length }))
-      if (res.copied === 0 && res.skipped.length === 0) toast.info(t('collections.copyNothing'))
-      onDone()
-      onClose()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setBusyId(null)
-    }
-  }
 
   return (
     <DialogShell
