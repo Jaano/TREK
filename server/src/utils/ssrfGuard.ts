@@ -447,7 +447,7 @@ export function capResponse(response: Response, maxBytes: number | null): Respon
  * Redirects are followed through safeFetchFollow, so every hop is re-checked and
  * re-pinned, with safeFetchFollow's defaults: a body cap and, for a call without
  * a signal, a bounded wait for the headers. It used to hand the platform a
- * `redirect: 'follow'` with a dispatcher pinned to the FIRST hop only — the same shape as
+ * `redirect: 'follow'` with a dispatcher pinned to the FIRST hop only, the same shape as
  * GHSA-8mw6-xphx-886m, and pinning does not help there because Node skips the
  * pinned lookup for an IP-literal host. Sixteen callers ride on this, several
  * with a URL out of a per-user setting (Immich, Synology, AirTrail), and one

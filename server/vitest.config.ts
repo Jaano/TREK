@@ -110,9 +110,9 @@ export default defineConfig({
         'src/nest/geo/**/*.ts': { statements: 99, branches: 95, functions: 99, lines: 99 },
         // google-quota, managed, mcp-shared, mcp-transport, public-api,
         // receipt-scan, route-usage, scheduling, school-holidays, tokens and tours
-        // sat on the 80 catch-all until 2026-10-08. Each is pinned at
-        // floor(measured) - 1 over the unit, integration and e2e suites that load
-        // it, a subset a full run can only measure higher. managed holds an empty
+        // sat on the 80 catch-all until 2026-10-08. Each is pinned one point under
+        // what the unit, integration and e2e suites that load it measure, as the
+        // script prints it: a subset a full run can only measure higher. managed holds an empty
         // module and nothing to count. mcp-shared and route-usage measure below
         // the 80 floor on branches and functions and are pinned where they are.
         // tests/unit/coverage-thresholds.test.ts fails on a domain without an entry.
