@@ -27,6 +27,12 @@ import {
 } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 import { DaysService } from '../../../src/nest/days/days.service';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow, updateRows } from '../../helpers/factories/rows';
+import { readTripDays } from '../../helpers/factories/trips';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -34,7 +40,14 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -44,20 +57,19 @@ async function withHarness(userId: number, fn: (h: McpHarness) => Promise<void>)
 }
 
 /** The stored day row, which is what a tool's echo can disagree with. */
-function dayRow(dayId: number) {
-  return testDb.prepare('SELECT title, notes, day_number, date FROM days WHERE id = ?').get(dayId) as
-    { title: string | null; notes: string | null; day_number: number; date: string | null };
+async function dayRow(dayId: number) {
+  const row = await findRow(orm, Days, { id: dayId });
+  if (!row) throw new Error(`no day ${dayId}`);
+  return row;
 }
 
 /** Day ids of a trip in stored order, so a reorder can be read back positionally. */
-function dayIdsInOrder(tripId: number): number[] {
-  return (testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as { id: number }[])
-    .map(r => r.id);
+async function dayIdsInOrder(tripId: number): Promise<number[]> {
+  return (await readTripDays(orm, tripId)).map(r => r.id);
 }
 
-function dayDatesInOrder(tripId: number): (string | null)[] {
-  return (testDb.prepare('SELECT date FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as { date: string | null }[])
-    .map(r => r.date);
+async function dayDatesInOrder(tripId: number): Promise<(string | null)[]> {
+  return (await readTripDays(orm, tripId)).map(r => r.date ?? null);
 }
 
 // ---------------------------------------------------------------------------
@@ -99,7 +111,7 @@ describe('Tool: update_day', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
-    testDb.prepare('UPDATE days SET notes = ? WHERE id = ?').run('Walking day', day.id);
+    await updateRows(orm, Days, { id: day.id }, { notes: 'Walking day' });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
@@ -125,7 +137,7 @@ describe('Tool: update_day', () => {
       expect(data.day.notes).toBe('Ferry leaves at 08:00');
     });
 
-    expect(dayRow(day.id)).toMatchObject({ title: 'Arrival in Paris', notes: 'Ferry leaves at 08:00' });
+    expect(await dayRow(day.id)).toMatchObject({ title: 'Arrival in Paris', notes: 'Ferry leaves at 08:00' });
   });
 
   it('sets a title and notes in one call', async () => {
@@ -140,14 +152,14 @@ describe('Tool: update_day', () => {
       });
     });
 
-    expect(dayRow(day.id)).toMatchObject({ title: 'Free day', notes: 'Nothing booked' });
+    expect(await dayRow(day.id)).toMatchObject({ title: 'Free day', notes: 'Nothing booked' });
   });
 
   it('clears the notes with an empty string', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id, { title: 'Arrival' });
-    testDb.prepare('UPDATE days SET notes = ? WHERE id = ?').run('Ferry leaves at 08:00', day.id);
+    await updateRows(orm, Days, { id: day.id }, { notes: 'Ferry leaves at 08:00' });
 
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
@@ -156,7 +168,7 @@ describe('Tool: update_day', () => {
       });
     });
 
-    expect(dayRow(day.id)).toMatchObject({ title: 'Arrival', notes: null });
+    expect(await dayRow(day.id)).toMatchObject({ title: 'Arrival', notes: null });
   });
 
   it('refuses a non-string notes value', async () => {
@@ -173,7 +185,7 @@ describe('Tool: update_day', () => {
       expect((result.content as { text: string }[])[0].text).toContain('Invalid arguments');
     });
 
-    expect(dayRow(day.id).notes).toBeNull();
+    expect((await dayRow(day.id)).notes).toBeNull();
   });
 
   it('broadcasts day:updated event', async () => {
@@ -245,14 +257,14 @@ describe('Tool: create_day (position)', () => {
       insertedId = (parseToolResult(result) as { day: { id: number } }).day.id;
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1.id, insertedId, d2.id, d3.id]);
-    expect(dayRow(insertedId)).toMatchObject({ day_number: 2, date: null });
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1.id, insertedId, d2.id, d3.id]);
+    expect(await dayRow(insertedId)).toMatchObject({ day_number: 2, date: null });
   });
 
   it('re-pins the dates and extends the trip when inserting into a dated trip', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-03' });
-    const [d1, d2, d3] = dayIdsInOrder(trip.id);
+    const [d1, d2, d3] = await dayIdsInOrder(trip.id);
 
     let insertedId = 0;
     await withHarness(user.id, async (h) => {
@@ -264,10 +276,10 @@ describe('Tool: create_day (position)', () => {
       insertedId = (parseToolResult(result) as { day: { id: number } }).day.id;
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1, insertedId, d2, d3]);
-    expect(dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03', '2025-06-04']);
-    expect(dayRow(insertedId)).toMatchObject({ date: '2025-06-02', notes: null });
-    expect(testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(trip.id)).toEqual({ end_date: '2025-06-04' });
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1, insertedId, d2, d3]);
+    expect(await dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03', '2025-06-04']);
+    expect(await dayRow(insertedId)).toMatchObject({ date: '2025-06-02', notes: null });
+    expect((await findRow(orm, Trips, { id: trip.id }))?.end_date).toBe('2025-06-04');
   });
 
   it('appends when position is omitted and still honours date and notes', async () => {
@@ -284,8 +296,8 @@ describe('Tool: create_day (position)', () => {
       appendedId = (parseToolResult(result) as { day: { id: number } }).day.id;
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1.id, appendedId]);
-    expect(dayRow(appendedId)).toMatchObject({ date: '2025-06-15', notes: 'Arrival day' });
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1.id, appendedId]);
+    expect(await dayRow(appendedId)).toMatchObject({ date: '2025-06-15', notes: 'Arrival day' });
   });
 
   it('broadcasts day:reordered for an insert and day:created for an append', async () => {
@@ -318,13 +330,13 @@ describe('Tool: create_day (position)', () => {
       expect((result.content as { text: string }[])[0].text).toContain('Invalid arguments');
     });
 
-    expect(dayIdsInOrder(trip.id)).toHaveLength(1);
+    expect(await dayIdsInOrder(trip.id)).toHaveLength(1);
   });
 
   it('refuses an insert that would invert a stay, leaving the trip untouched', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-03' });
-    const [d1, d2, d3] = dayIdsInOrder(trip.id);
+    const [d1, d2, d3] = await dayIdsInOrder(trip.id);
     const place = createPlace(testDb, trip.id);
     // The stay ends on the last day, so pushing a day in front of its start
     // cannot invert it; anchoring it the other way round is what does.
@@ -339,8 +351,8 @@ describe('Tool: create_day (position)', () => {
       expect((result.content as { text: string }[])[0].text).toContain('accommodation');
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1, d2, d3]);
-    expect(dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03']);
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1, d2, d3]);
+    expect(await dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03']);
   });
 
   it('blocks demo user on an insert', async () => {
@@ -352,7 +364,7 @@ describe('Tool: create_day (position)', () => {
       const result = await h.client.callTool({ name: 'create_day', arguments: { tripId: trip.id, position: 1 } });
       expect(result.isError).toBe(true);
     });
-    expect(dayIdsInOrder(trip.id)).toHaveLength(1);
+    expect(await dayIdsInOrder(trip.id)).toHaveLength(1);
   });
 });
 
@@ -361,13 +373,12 @@ describe('Tool: create_day (position)', () => {
 // ---------------------------------------------------------------------------
 
 describe('Tool: create_day (dated)', () => {
-  const endDate = (tripId: number) =>
-    (testDb.prepare('SELECT end_date FROM trips WHERE id = ?').get(tripId) as { end_date: string | null }).end_date;
+  const endDate = async (tripId: number) => (await findRow(orm, Trips, { id: tripId }))?.end_date;
 
   it('appends the next date behind the dated days, extends the trip and answers with both', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-02' });
-    const [d1, d2] = dayIdsInOrder(trip.id);
+    const [d1, d2] = await dayIdsInOrder(trip.id);
     const spare = createDay(testDb, trip.id);
 
     let data = {} as { day: { id: number; date: string; notes: string | null }; trip: { end_date: string; day_count: number } };
@@ -381,9 +392,9 @@ describe('Tool: create_day (dated)', () => {
 
     expect(data.day).toMatchObject({ date: '2025-06-03', notes: 'Late checkout' });
     expect(data.trip).toMatchObject({ end_date: '2025-06-03', day_count: 4 });
-    expect(dayIdsInOrder(trip.id)).toEqual([d1, d2, data.day.id, spare.id]);
-    expect(dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03', null]);
-    expect(endDate(trip.id)).toBe('2025-06-03');
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1, d2, data.day.id, spare.id]);
+    expect(await dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03', null]);
+    expect(await endDate(trip.id)).toBe('2025-06-03');
     // The insert shape of day:reordered, so collaborators refetch, then the trip.
     expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'day:reordered', expect.objectContaining({ day: expect.objectContaining({ id: data.day.id }) }));
     expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'trip:updated', expect.objectContaining({ trip: expect.objectContaining({ end_date: '2025-06-03' }) }));
@@ -402,8 +413,8 @@ describe('Tool: create_day (dated)', () => {
       }
     });
 
-    expect(dayIdsInOrder(trip.id)).toHaveLength(2);
-    expect(endDate(trip.id)).toBe('2025-06-02');
+    expect(await dayIdsInOrder(trip.id)).toHaveLength(2);
+    expect(await endDate(trip.id)).toBe('2025-06-02');
     expect(broadcastMock).not.toHaveBeenCalled();
   });
 
@@ -418,7 +429,7 @@ describe('Tool: create_day (dated)', () => {
       expect((result.content as { text: string }[])[0].text).toContain('This trip has no dates');
     });
 
-    expect(dayDatesInOrder(trip.id)).toEqual([null]);
+    expect(await dayDatesInOrder(trip.id)).toEqual([null]);
     expect(broadcastMock).not.toHaveBeenCalled();
   });
 
@@ -448,8 +459,8 @@ describe('Tool: create_day (dated)', () => {
       expect(result.isError).toBe(true);
     });
 
-    expect(dayIdsInOrder(trip.id)).toHaveLength(2);
-    expect(endDate(trip.id)).toBe('2025-06-02');
+    expect(await dayIdsInOrder(trip.id)).toHaveLength(2);
+    expect(await endDate(trip.id)).toBe('2025-06-02');
   });
 
   it('an insert at a position announces the grown trip as well', async () => {
@@ -486,16 +497,15 @@ describe('Tool: reorder_days', () => {
       expect(parseToolResult(result)).toEqual({ success: true });
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d3.id, d1.id, d2.id]);
-    expect(dayRow(d3.id)).toMatchObject({ day_number: 1, title: 'Third' });
-    expect(testDb.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(assignment.id))
-      .toEqual({ day_id: d3.id });
+    expect(await dayIdsInOrder(trip.id)).toEqual([d3.id, d1.id, d2.id]);
+    expect(await dayRow(d3.id)).toMatchObject({ day_number: 1, title: 'Third' });
+    expect((await findRow(orm, DayAssignments, { id: assignment.id }))?.day_id).toBe(d3.id);
   });
 
   it('keeps the dates pinned to their slots so the content moves across them', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-03' });
-    const [d1, d2, d3] = dayIdsInOrder(trip.id);
+    const [d1, d2, d3] = await dayIdsInOrder(trip.id);
 
     await withHarness(user.id, async (h) => {
       await h.client.callTool({
@@ -504,9 +514,9 @@ describe('Tool: reorder_days', () => {
       });
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d3, d1, d2]);
-    expect(dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03']);
-    expect(dayRow(d3).date).toBe('2025-06-01');
+    expect(await dayIdsInOrder(trip.id)).toEqual([d3, d1, d2]);
+    expect(await dayDatesInOrder(trip.id)).toEqual(['2025-06-01', '2025-06-02', '2025-06-03']);
+    expect((await dayRow(d3)).date).toBe('2025-06-01');
   });
 
   it('broadcasts day:reordered with the ordered ids', async () => {
@@ -542,7 +552,7 @@ describe('Tool: reorder_days', () => {
       expect((result.content as { text: string }[])[0].text).toContain('permutation');
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id, d3.id]);
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id, d3.id]);
     expect(broadcastMock).not.toHaveBeenCalled();
   });
 
@@ -562,14 +572,14 @@ describe('Tool: reorder_days', () => {
       expect(result.isError).toBe(true);
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id]);
-    expect(dayRow(foreign.id).day_number).toBe(1);
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id]);
+    expect((await dayRow(foreign.id)).day_number).toBe(1);
   });
 
   it('refuses a move that would make a stay end before it starts, and rolls back', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { start_date: '2025-06-01', end_date: '2025-06-03' });
-    const [d1, d2, d3] = dayIdsInOrder(trip.id);
+    const [d1, d2, d3] = await dayIdsInOrder(trip.id);
     const place = createPlace(testDb, trip.id);
     createDayAccommodation(testDb, trip.id, place.id, d1, d2);
 
@@ -582,7 +592,7 @@ describe('Tool: reorder_days', () => {
       expect((result.content as { text: string }[])[0].text).toContain('accommodation');
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1, d2, d3]);
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1, d2, d3]);
     expect(broadcastMock).not.toHaveBeenCalled();
   });
 
@@ -616,7 +626,7 @@ describe('Tool: reorder_days', () => {
       expect(result.isError).toBe(true);
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id]);
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id]);
   });
 
   it('blocks demo user', async () => {
@@ -634,7 +644,7 @@ describe('Tool: reorder_days', () => {
       expect(result.isError).toBe(true);
     });
 
-    expect(dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id]);
+    expect(await dayIdsInOrder(trip.id)).toEqual([d1.id, d2.id]);
   });
 });
 

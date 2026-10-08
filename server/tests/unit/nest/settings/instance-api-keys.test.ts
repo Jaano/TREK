@@ -21,6 +21,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser, createAdmin } from '../../../helpers/factories';
+import { countRows, findRow, insertRow, updateRows } from '../../../helpers/factories/rows';
 import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../../../src/db/repositories/AppSettings.repository';
 import { Users } from '../../../../src/db/entities/Users.entity';
@@ -54,37 +55,35 @@ afterAll(async () => {
   testDb.close();
 });
 
-const storedValue = (key: string) =>
-  (testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+const storedValue = async (key: string) => (await findRow(t, AppSettings, { key }))?.value;
 
 describe('instance API keys', () => {
   it('INSTKEY-001: round-trips through encryption at rest', async () => {
     await writeInstanceApiKey(appSettings, 'maps_api_key', 'AIza-instance-key');
-    expect(storedValue('maps_api_key')).toMatch(/^enc:v1:/);
-    expect(storedValue('maps_api_key')).not.toContain('AIza-instance-key');
+    expect(await storedValue('maps_api_key')).toMatch(/^enc:v1:/);
+    expect(await storedValue('maps_api_key')).not.toContain('AIza-instance-key');
     expect(await readInstanceApiKey(appSettings, 'maps_api_key')).toBe('AIza-instance-key');
   });
 
   it('INSTKEY-002: a second write of the same value replaces the row (no second one)', async () => {
     await writeInstanceApiKey(appSettings, 'maps_api_key', 'same-key');
-    const first = storedValue('maps_api_key');
+    const first = await storedValue('maps_api_key');
     await writeInstanceApiKey(appSettings, 'maps_api_key', 'same-key');
     // Same plaintext, different blob — the IV is random. That is exactly why
     // "did this change?" is never asked of the stored value.
-    expect(storedValue('maps_api_key')).not.toBe(first);
+    expect(await storedValue('maps_api_key')).not.toBe(first);
     expect(await readInstanceApiKey(appSettings, 'maps_api_key')).toBe('same-key');
-    const rows = testDb.prepare("SELECT COUNT(*) AS n FROM app_settings WHERE key = 'maps_api_key'").get() as { n: number };
-    expect(rows.n).toBe(1);
+    expect(await countRows(t, AppSettings, { key: 'maps_api_key' })).toBe(1);
   });
 
   it('INSTKEY-003: a blank value reads back as unset but keeps the row', async () => {
     await writeInstanceApiKey(appSettings, 'unsplash_api_key', '   ');
-    expect(storedValue('unsplash_api_key')).toBe('');
+    expect(await storedValue('unsplash_api_key')).toBe('');
     expect(await readInstanceApiKey(appSettings, 'unsplash_api_key')).toBeNull();
   });
 
   it('INSTKEY-004: a legacy plaintext row still reads', async () => {
-    testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('maps_api_key', 'plain-old-key')").run();
+    await insertRow(t, AppSettings, { key: 'maps_api_key', value: 'plain-old-key' });
     expect(await readInstanceApiKey(appSettings, 'maps_api_key')).toBe('plain-old-key');
   });
 
@@ -99,7 +98,7 @@ describe('instance API keys', () => {
 
   it('INSTKEY-006: the instance value wins over the caller own row', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('personal-key', user.id);
+    await updateRows(t, Users, { id: user.id }, { maps_api_key: 'personal-key' });
     await writeInstanceApiKey(appSettings, 'maps_api_key', 'instance-key');
     expect(await resolveApiKey(appSettings, users, 'maps_api_key', user.id, undefined)).toEqual({
       key: 'instance-key',
@@ -109,7 +108,7 @@ describe('instance API keys', () => {
 
   it("INSTKEY-007: without an instance value the caller's own row answers — and nobody else's (#1939)", async () => {
     const { user: admin } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('admins-own-key', admin.id);
+    await updateRows(t, Users, { id: admin.id }, { maps_api_key: 'admins-own-key' });
     const { user: member } = createUser(testDb);
 
     // The admin gets theirs...
@@ -124,7 +123,7 @@ describe('instance API keys', () => {
 
   it('INSTKEY-009: userId 0 asks about the instance only', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('personal-key', user.id);
+    await updateRows(t, Users, { id: user.id }, { maps_api_key: 'personal-key' });
     // app-config is optional-auth: with nobody asking there is no own row, and
     // the answer must not be some other row that happens to be first.
     expect(await resolveApiKey(appSettings, users, 'maps_api_key', 0, undefined)).toEqual({ key: null, source: null });
@@ -137,13 +136,13 @@ describe('instance API keys', () => {
 
   it('INSTKEY-008: an empty instance value does not fall through to the own row', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET unsplash_api_key = ? WHERE id = ?').run('stale-personal', user.id);
+    await updateRows(t, Users, { id: user.id }, { unsplash_api_key: 'stale-personal' });
     await writeInstanceApiKey(appSettings, 'unsplash_api_key', 'to-be-cleared');
     await writeInstanceApiKey(appSettings, 'unsplash_api_key', '');
     // The admin who cleared the field cleared their column in the same save, so
     // the fallback finding the old value would only happen on a row nobody
     // touched — here it must not resurrect a cleared instance key for them.
-    testDb.prepare('UPDATE users SET unsplash_api_key = NULL WHERE id = ?').run(user.id);
+    await updateRows(t, Users, { id: user.id }, { unsplash_api_key: null });
     expect(await resolveApiKey(appSettings, users, 'unsplash_api_key', user.id, undefined)).toEqual({ key: null, source: null });
   });
 });

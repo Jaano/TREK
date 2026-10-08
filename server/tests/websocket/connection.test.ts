@@ -36,6 +36,12 @@ import { createEphemeralToken } from '../../src/nest/auth/ephemeral-tokens';
 import { TokenService } from '../../src/nest/tokens/token.service';
 import { EphemeralTokenService } from '../../src/nest/auth/ephemeral-token.service';
 import { createTestMcpTokensRepo, createTestUsersRepo } from '../helpers/test-uow';
+import { MikroORM } from '@mikro-orm/core';
+import { Users } from '../../src/db/entities/Users.entity';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { deleteRows, updateRows } from '../helpers/factories/rows';
+import { setAppSetting } from '../helpers/factories/settings';
+import { readUser } from '../helpers/factories/users';
 
 // The gateway consumes ws-tokens through its injected TokenService; the
 // ephemeral store is module-scoped on purpose, so a directly-constructed
@@ -52,6 +58,7 @@ const createWsToken = (...args: Parameters<TokenService['createWsToken']>) =>
 let server: http.Server;
 let wsUrl: string;
 let nestApp: INestApplication;
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
 
 beforeAll(async () => {
   tokenService = new TokenService(await createTestMcpTokensRepo(testDb), await createTestUsersRepo(testDb), new EphemeralTokenService());
@@ -453,7 +460,7 @@ describe('WS auth edge cases', () => {
     const { user } = createUser(testDb);
     const token = createEphemeralToken(user.id, 'ws')!;
     // Remove the user so the DB lookup returns undefined
-    testDb.prepare('DELETE FROM users WHERE id = ?').run(user.id);
+    await deleteRows(orm(), Users, { id: user.id });
 
     const closeCode = await new Promise<number>((resolve) => {
       const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
@@ -465,7 +472,7 @@ describe('WS auth edge cases', () => {
 
   it('WS-013 — MFA is enforced when require_mfa is enabled and user has no MFA', async () => {
     // Enable require_mfa in app_settings
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('require_mfa', 'true')").run();
+    await setAppSetting(orm(), 'require_mfa', 'true');
 
     // Create a regular user without MFA
     const { user } = createUser(testDb);
@@ -481,11 +488,11 @@ describe('WS auth edge cases', () => {
 
   it('WS-014 — MFA-enabled user connects successfully when require_mfa is enabled', async () => {
     // Enable require_mfa
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('require_mfa', 'true')").run();
+    await setAppSetting(orm(), 'require_mfa', 'true');
 
     // Create a user with MFA enabled
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run('JBSWY3DPEHPK3PXP', user.id);
+    await updateRows(orm(), Users, { id: user.id }, { mfa_enabled: 1, mfa_secret: 'JBSWY3DPEHPK3PXP' });
 
     const token = createEphemeralToken(user.id, 'ws')!;
     const client = await connectWs(token);
@@ -504,7 +511,8 @@ describe('WS auth edge cases', () => {
     const token = result.token!;
 
     // Simulate a password reset bumping the version AFTER the token was issued.
-    testDb.prepare('UPDATE users SET password_version = password_version + 1 WHERE id = ?').run(user.id);
+    const { password_version: version } = await readUser(orm(), user.id);
+    await updateRows(orm(), Users, { id: user.id }, { password_version: version + 1 });
 
     const closeCode = await new Promise<number>((resolve) => {
       const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);
@@ -517,7 +525,7 @@ describe('WS auth edge cases', () => {
   it('WS-028 — ws-token whose password_version still matches connects successfully', async () => {
     const { user } = createUser(testDb);
     // Bump the version first, THEN mint — the token captures the current pv.
-    testDb.prepare('UPDATE users SET password_version = 3 WHERE id = ?').run(user.id);
+    await updateRows(orm(), Users, { id: user.id }, { password_version: 3 });
     const result = await createWsToken(user.id);
     const client = await connectWs(result.token!);
     try {
@@ -532,7 +540,7 @@ describe('WS auth edge cases', () => {
     // Tokens minted via createEphemeralToken carry no pv (treated as version 0).
     const { user } = createUser(testDb);
     const token = createEphemeralToken(user.id, 'ws')!;
-    testDb.prepare('UPDATE users SET password_version = 1 WHERE id = ?').run(user.id);
+    await updateRows(orm(), Users, { id: user.id }, { password_version: 1 });
 
     const closeCode = await new Promise<number>((resolve) => {
       const ws = new WebSocket(`${wsUrl}?token=${encodeURIComponent(token)}`);

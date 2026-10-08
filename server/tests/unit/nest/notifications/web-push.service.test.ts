@@ -51,6 +51,11 @@ vi.mock('../../../../src/utils/ssrfGuard', () => {
 import { db as testDb } from '../../../../src/db/database';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createUser } from '../../../helpers/factories';
+import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { findRows, updateRows } from '../../../helpers/factories/rows';
+import { readAppSetting } from '../../../helpers/factories/settings';
+import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
+import { PushSubscriptions } from '../../../../src/db/entities/PushSubscriptions.entity';
 import { makePushSubscriptionsService, makeVapidKeysService } from '../../../helpers/notifications';
 import { SsrfBlockedError } from '../../../../src/utils/ssrfGuard';
 import type { PushSubscriptionsService } from '../../../../src/nest/notifications/push/push-subscriptions.service';
@@ -149,7 +154,14 @@ beforeEach(() => {
   logError.mockClear();
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -299,7 +311,7 @@ describe('WebPushService delivery', () => {
   it('WPUSH-008: a row made for a previous server key is dropped without a request', async () => {
     const { user } = createUser(testDb);
     await subscribe(user.id, 'https://fcm.googleapis.com/fcm/send/old');
-    testDb.prepare("UPDATE push_subscriptions SET vapid_public_key = 'previous-key'").run();
+    await updateRows(orm, PushSubscriptions, {}, { vapid_public_key: 'previous-key' });
     await expect(push.sendToUser(user.id, MSG)).resolves.toBe(false);
     expect(safeFetchFollow).not.toHaveBeenCalled();
     expect(await rows(user.id)).toEqual([]);
@@ -309,10 +321,8 @@ describe('WebPushService delivery', () => {
     const { user } = createUser(testDb);
     await subscribe(user.id, 'https://fcm.googleapis.com/fcm/send/x');
     await subscribe(user.id, 'https://fcm.googleapis.com/fcm/send/y');
-    testDb
-      .prepare("UPDATE push_subscriptions SET endpoint = 'https://attacker.example.test/collect' WHERE endpoint LIKE '%/x'")
-      .run();
-    testDb.prepare("UPDATE push_subscriptions SET endpoint = 'not a url' WHERE endpoint LIKE '%/y'").run();
+    await updateRows(orm, PushSubscriptions, { endpoint: { $like: '%/x' } }, { endpoint: 'https://attacker.example.test/collect' });
+    await updateRows(orm, PushSubscriptions, { endpoint: { $like: '%/y' } }, { endpoint: 'not a url' });
     await expect(push.sendToUser(user.id, MSG)).resolves.toBe(false);
     expect(safeFetchFollow).not.toHaveBeenCalled();
     expect(await rows(user.id)).toEqual([]);
@@ -325,7 +335,7 @@ describe('WebPushService delivery', () => {
   it('WPUSH-010: broken stored keys count as a failure for that row', async () => {
     const { user } = createUser(testDb);
     await subscribe(user.id, 'https://fcm.googleapis.com/fcm/send/x');
-    testDb.prepare("UPDATE push_subscriptions SET auth = '***'").run();
+    await updateRows(orm, PushSubscriptions, {}, { auth: '***' });
     await expect(push.sendToUser(user.id, MSG)).resolves.toBe(false);
     expect(safeFetchFollow).not.toHaveBeenCalled();
     expect((await rows(user.id))[0].failure_count).toBe(1);
@@ -352,9 +362,7 @@ describe('WebPushService delivery', () => {
     await subscribe(user.id, 'https://fcm.googleapis.com/fcm/send/x');
     const publicKey = await keys.getPublicKey();
     // A restore under a different ENCRYPTION_KEY: the ciphertext no longer opens.
-    testDb
-      .prepare("UPDATE app_settings SET value = 'enc:v1:bm90IGEgY2lwaGVydGV4dA' WHERE key = ?")
-      .run(VAPID_PRIVATE_KEY_SETTING);
+    await updateRows(orm, AppSettings, { key: VAPID_PRIVATE_KEY_SETTING }, { value: 'enc:v1:bm90IGEgY2lwaGVydGV4dA' });
 
     await expect(push.sendToUser(user.id, MSG)).resolves.toBe(false);
 
@@ -385,7 +393,7 @@ describe('WebPushService delivery', () => {
 
       expect(await push.isAvailable()).toBe(false);
       expect(safeFetchFollow).not.toHaveBeenCalled();
-      expect(testDb.prepare("SELECT key FROM app_settings WHERE key LIKE 'web_push_vapid_%'").all()).toEqual([]);
+      expect(await findRows(orm, AppSettings, { key: { $like: 'web_push_vapid_%' } })).toEqual([]);
       expect((await rows(user.id)).map((row) => row.vapid_public_key)).toEqual([pair.publicKey, pair.publicKey]);
 
       // The Secret fixed: the same devices receive again, nobody turns push on again.
@@ -419,9 +427,7 @@ describe('WebPushService delivery', () => {
       expect(safeFetchFollow).not.toHaveBeenCalled();
       // Signing with the stored pair would have dropped both rows; they stay on the environment key.
       expect((await rows(user.id)).map((row) => row.vapid_public_key)).toEqual([pair.publicKey, pair.publicKey]);
-      expect(testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(VAPID_PUBLIC_KEY_SETTING)).toEqual({
-        value: storedKey,
-      });
+      expect(await readAppSetting(orm, VAPID_PUBLIC_KEY_SETTING)).toBe(storedKey);
       // Browsers are not handed the stored key to subscribe again with either.
       let refusal: unknown = null;
       try {

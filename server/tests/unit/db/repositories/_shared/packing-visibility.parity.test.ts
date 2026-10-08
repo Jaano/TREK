@@ -2,6 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSnapshotTestDb } from '../../../../helpers/db-mock';
 import { resetTestDb } from '../../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../../helpers/test-orm';
+import { insertRow } from '../../../../helpers/factories/rows';
+import { addPackingItemRecipients } from '../../../../helpers/factories/packing';
 import { createTrip, createUser } from '../../../../helpers/factories';
 import { PackingItems } from '../../../../../src/db/entities/PackingItems.entity';
 import {
@@ -41,22 +43,16 @@ type Actor = 'owner' | 'recipient' | 'stranger' | 'no-actor';
  * item ids plus the owner/recipient/stranger user ids the 12-cell matrix
  * below runs against.
  */
-function seedFixture() {
+async function seedFixture() {
   const { user: owner } = createUser(testDb);
   const { user: recipient } = createUser(testDb);
   const { user: stranger } = createUser(testDb);
   const trip = createTrip(testDb, owner.id);
 
-  const common = testDb
-    .prepare('INSERT INTO packing_items (trip_id, name, is_private, owner_id) VALUES (?, ?, 0, NULL)')
-    .run(trip.id, 'Common item').lastInsertRowid as number;
-  const personal = testDb
-    .prepare('INSERT INTO packing_items (trip_id, name, is_private, owner_id) VALUES (?, ?, 1, ?)')
-    .run(trip.id, 'Personal item', owner.id).lastInsertRowid as number;
-  const shared = testDb
-    .prepare('INSERT INTO packing_items (trip_id, name, is_private, owner_id) VALUES (?, ?, 1, ?)')
-    .run(trip.id, 'Shared item', owner.id).lastInsertRowid as number;
-  testDb.prepare('INSERT INTO packing_item_recipients (item_id, user_id) VALUES (?, ?)').run(shared, recipient.id);
+  const common = await insertRow(t, PackingItems, { trip: trip.id, name: 'Common item', is_private: 0, owner: null });
+  const personal = await insertRow(t, PackingItems, { trip: trip.id, name: 'Personal item', is_private: 1, owner: owner.id });
+  const shared = await insertRow(t, PackingItems, { trip: trip.id, name: 'Shared item', is_private: 1, owner: owner.id });
+  await addPackingItemRecipients(t, shared, [recipient.id]);
 
   return {
     tripId: trip.id as number,
@@ -72,6 +68,7 @@ function resolveActorId(actor: Actor, actorIds: Record<Exclude<Actor, 'no-actor'
 
 async function legacyVisibleIds(tripId: number, actorId: number | undefined): Promise<number[]> {
   const rows = testDb
+    // test-sql-allow: the legacy fragment is this parity test's oracle and has to run as written.
     .prepare(`SELECT id FROM packing_items WHERE trip_id = ? AND ${VISIBLE_TO_ACTOR} ORDER BY id ASC`)
     .all(tripId, actorId ?? null, actorId ?? null) as { id: number }[];
   return rows.map((r) => r.id);
@@ -117,7 +114,7 @@ describe('packing-visibility parity — 12-cell matrix (4 actor types × 3 item 
 
   for (const actor of actors) {
     it(`PKVIS-${actor}: legacy fragment, typed QB condition and typed Kysely expr all select the same tiers for a(n) ${actor} actor`, async () => {
-      const { tripId, itemIds, actorIds } = seedFixture();
+      const { tripId, itemIds, actorIds } = await seedFixture();
       const actorId = resolveActorId(actor, actorIds);
 
       const legacy = await legacyVisibleIds(tripId, actorId);
@@ -133,12 +130,12 @@ describe('packing-visibility parity — 12-cell matrix (4 actor types × 3 item 
   }
 
   it('PKVIS-mixed: every actor checked against the SAME seeded trip, plus a second trip that must never leak in', async () => {
-    const fixture = seedFixture();
+    const fixture = await seedFixture();
     // A second, unrelated trip's items must never leak into either actor's
     // result — the WHERE clause is trip-scoped independently of visibility.
     const { user: otherOwner } = createUser(testDb);
     const otherTrip = createTrip(testDb, otherOwner.id);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, is_private, owner_id) VALUES (?, ?, 0, NULL)').run(otherTrip.id, 'Other trip common');
+    await insertRow(t, PackingItems, { trip: otherTrip.id, name: 'Other trip common', is_private: 0, owner: null });
 
     for (const actor of ['owner', 'recipient', 'stranger', 'no-actor'] as const) {
       const actorId = resolveActorId(actor, fixture.actorIds);
@@ -160,16 +157,16 @@ describe('packing-visibility parity — 12-cell matrix (4 actor types × 3 item 
   // ANY item shares with them. Proven red, then restored — see this test's
   // own trailing comment for the exact mutation and the observed failure.
   it('PKVIS-mutation: a second, unrelated Shared item (recipient not invited) stays hidden from that recipient', async () => {
-    const { tripId, itemIds, actorIds } = seedFixture();
-    const otherShared = testDb
-      .prepare('INSERT INTO packing_items (trip_id, name, is_private, owner_id) VALUES (?, ?, 1, ?)')
-      .run(tripId, 'Second shared item, different recipients', actorIds.owner).lastInsertRowid as number;
+    const { tripId, itemIds, actorIds } = await seedFixture();
+    const otherShared = await insertRow(t, PackingItems, {
+      trip: tripId, name: 'Second shared item, different recipients', is_private: 1, owner: actorIds.owner,
+    });
     // Deliberately NOT inviting `recipient` to this second shared item —
     // only `stranger` is invited here, so `recipient`'s own visibility must
     // stay exactly {common, shared} (itemIds.shared), never picking up
     // `otherShared` just because SOME row in packing_item_recipients names them
     // as a recipient of a DIFFERENT item.
-    testDb.prepare('INSERT INTO packing_item_recipients (item_id, user_id) VALUES (?, ?)').run(otherShared, actorIds.stranger);
+    await addPackingItemRecipients(t, otherShared, [actorIds.stranger]);
 
     const actorId = actorIds.recipient;
     const legacy = await legacyVisibleIds(tripId, actorId);
