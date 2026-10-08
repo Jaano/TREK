@@ -174,14 +174,6 @@ export function joinRoom(ws: TrekWebSocket, tripId: number): void {
   roomsSlot.get().join(ws, tripId);
 }
 
-export function leaveRoom(ws: TrekWebSocket, tripId: number): void {
-  roomsSlot.get().leave(ws, tripId);
-}
-
-export function leaveAllRooms(ws: TrekWebSocket): void {
-  roomsSlot.get().leaveAll(ws);
-}
-
 // ── Studio books ──────────────────────────────────────────────────────────
 
 export interface BookPeer {
@@ -197,11 +189,6 @@ export function joinBook(ws: TrekWebSocket, journeyId: number): void {
 
 export function leaveBook(ws: TrekWebSocket, journeyId: number): void {
   roomsSlot.get().leaveBook(ws, journeyId);
-}
-
-/** Every book this socket had open — called when the connection goes. */
-export function leaveAllBooks(ws: TrekWebSocket): number[] {
-  return roomsSlot.get().leaveAllBooks(ws);
 }
 
 /**

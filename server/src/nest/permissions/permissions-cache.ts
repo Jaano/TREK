@@ -59,11 +59,6 @@ export function getPermissionsCache(): Promise<Map<string, PermissionLevel> | nu
   return permissionsCacheSlot.get().get();
 }
 
-/** Install a fresh cache map and return it (the loader fills it in place). */
-export function setPermissionsCache(next: Map<string, PermissionLevel>): Promise<Map<string, PermissionLevel>> {
-  return permissionsCacheSlot.get().set(next);
-}
-
 export function invalidatePermissionsCache(): Promise<void> {
   return permissionsCacheSlot.get().invalidate();
 }
