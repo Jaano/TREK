@@ -150,6 +150,7 @@ The `@trek/shared` package is the single source of truth for code shared between
 | `npm run lint`              | Lint source                          |
 | `npm run format`            | Format source                        |
 | `npm run format:check`   | Check formatting                  |
+| `npm run contracts:open`    | Open shapes in the request contracts may only shrink (CI gate) |
 
 ### Server (`/server`)
 
@@ -172,6 +173,8 @@ The `@trek/shared` package is the single source of truth for code shared between
 | `npm run lint`               | Lint source                              |
 | `npm run lint:check`         | Lint everything, no `--fix` (CI gate)    |
 | `npm run check:plugin-facts` | Verify generated plugin facts (CI gate)  |
+| `npm run lint:size`          | No source file grows past its line limit or its baseline entry (CI gate) |
+| `npm run lint:boundaries`    | Import cycles and domain boundaries may not grow past their baseline (CI gate) |
 | `npm run format`             | Format source                            |
 
 ### Client (`/client`)
@@ -188,8 +191,16 @@ The `@trek/shared` package is the single source of truth for code shared between
 | `npm run test:watch`       | Run tests in watch mode                              |
 | `npm run test:coverage`    | Run tests with coverage report                       |
 | `npm run lint`             | Lint source                                          |
-| `npm run lint:check`       | Same command as `npm run lint` — the name CI uses    |
+| `npm run lint:check`       | Same command as `npm run lint`, no longer run in CI  |
+| `npm run lint:warnings`    | ESLint, failing on any error and on warnings above the per-rule baseline (CI gate, replaces `lint:check`) |
 | `npm run lint:pages`       | Enforce the Page pattern (CI gate)                   |
+| `npm run lint:rtl`         | Physical left/right styling may not grow past its baseline, so the layout follows the reading direction (CI gate) |
+| `npm run lint:size`        | No file grows past its line limit or its baseline entry (CI gate) |
+| `npm run lint:format`      | Every file outside the shrinking baseline is Prettier-formatted (CI gate) |
+| `npm run lint:layers`      | Imports only go downwards through the layers (CI gate) |
+| `npm run lint:offline`     | Views reach `src/api/` only through the offline core; the baseline only shrinks (CI gate) |
+| `npm run lint:skips`       | No focused test, and skipped tests may only go away (CI gate) |
+| `npm run lint:i18n-keys`   | Every translation key the client names exists in `en` (CI gate) |
 | `npm run theme:lint`       | Flag styling that bypasses the appearance tokens (not run in CI) |
 | `npm run check:gl-split`   | Fail when one built chunk carries both map engines (MapLibre and Mapbox); run after a build |
 | `npm run build:analyze`    | Production build with the bundle analyzer            |
@@ -222,5 +233,9 @@ Then open a Pull Request from your fork to `liketrek/TREK` targeting the `dev` b
 ## Tips
 
 - Always branch off from an up-to-date `dev` — run `git fetch upstream && git rebase upstream/dev` before starting new work.
-- Run tests before pushing: `npm test` at the repo root runs all workspaces. That alone is not the full CI gate — also run `npm run typecheck && npm run typecheck:tests && npm run lint:check && npm run check:plugin-facts` in `server/`, `npm run typecheck && npm run lint:check && npm run lint:pages` in `client/`, and `npm run i18n:parity:strict --workspace=shared` at the root if you touched translations.
+- Run tests before pushing: `npm test` at the repo root runs all workspaces. That alone is not the full CI gate. With `shared` built, these are the checks CI runs before any test (`.github/workflows/test.yml` is the source of truth):
+  - in `shared/`: `npm run typecheck && npm run contracts:open`
+  - in `server/`: `npm run build && npm run typecheck && npm run typecheck:tests && npm run typecheck:scripts && npm run check:entities && npm run lint:check && npm run db:call-graph -- --sync --tx && npm run lint:size && npm run lint:boundaries && npm run check:plugin-facts`
+  - in `client/`: `npm run typecheck && npm run lint:warnings && npm run lint:pages && npm run lint:rtl && npm run lint:size && npm run lint:format && npm run lint:layers && npm run lint:offline && npm run lint:skips && npm run lint:i18n-keys`
+  - at the root, if you touched translations: `npm run i18n:parity:strict --workspace=shared`
 - Follow the commit message conventions described in the [[Contributing]] guidelines.
