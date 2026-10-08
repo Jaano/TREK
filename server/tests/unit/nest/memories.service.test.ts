@@ -121,10 +121,10 @@ describe('MemoriesService (delegation wrapper over services/memories/*)', () => 
     expect(immich.getConnectionSettings).toHaveBeenCalledWith(7);
 
     await svc.immichSaveSettings(7, 'u', 'k', '1.2.3.4', true);
-    expect(immich.saveImmichSettings).toHaveBeenCalledWith(7, 'u', 'k', '1.2.3.4', true);
+    expect(immich.saveImmichSettings).toHaveBeenCalledWith(7, 'u', 'k', '1.2.3.4', true, undefined);
 
-    await svc.immichSetAutoUpload(7, true);
-    expect(immich.setImmichAutoUpload).toHaveBeenCalledWith(7, true);
+    await svc.immichSaveSettings(7, 'u', 'k', '1.2.3.4', undefined, false);
+    expect(immich.saveImmichSettings).toHaveBeenLastCalledWith(7, 'u', 'k', '1.2.3.4', undefined, false);
 
     await svc.immichGetConnectionStatus(7);
     expect(immich.getConnectionStatus).toHaveBeenCalledWith(7);

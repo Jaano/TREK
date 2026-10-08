@@ -236,23 +236,21 @@ describe('ImmichMemoriesController (parity with /api/integrations/memories/immic
       expect(res.json).toHaveBeenCalledWith({ error: 'Bad URL' });
     });
 
-    it('applies auto_upload when it is a boolean and returns success', async () => {
+    it('hands auto_upload to the one settings save when it is a boolean and returns success', async () => {
       const immichSaveSettings = vi.fn().mockResolvedValue({ success: true });
-      const immichSetAutoUpload = vi.fn();
-      const svc = makeService({ immichSaveSettings, immichSetAutoUpload });
+      const svc = makeService({ immichSaveSettings });
       const res = makeRes();
       await new ImmichMemoriesController(svc).putSettings(user, { immich_url: 'x', immich_api_key: 'k', auto_upload: true }, req, res);
-      expect(immichSaveSettings).toHaveBeenCalledWith(7, 'x', 'k', '1.2.3.4', undefined);
-      expect(immichSetAutoUpload).toHaveBeenCalledWith(7, true);
+      expect(immichSaveSettings).toHaveBeenCalledTimes(1);
+      expect(immichSaveSettings).toHaveBeenCalledWith(7, 'x', 'k', '1.2.3.4', undefined, true);
       expect(res.json).toHaveBeenCalledWith({ success: true });
     });
 
-    it('skips auto_upload when it is not a boolean', async () => {
+    it('leaves auto_upload undefined when it is not a boolean', async () => {
       const immichSaveSettings = vi.fn().mockResolvedValue({ success: true });
-      const immichSetAutoUpload = vi.fn();
-      const svc = makeService({ immichSaveSettings, immichSetAutoUpload });
+      const svc = makeService({ immichSaveSettings });
       await new ImmichMemoriesController(svc).putSettings(user, { auto_upload: 'yes' as unknown as boolean }, req, makeRes());
-      expect(immichSetAutoUpload).not.toHaveBeenCalled();
+      expect(immichSaveSettings).toHaveBeenCalledWith(7, undefined, undefined, '1.2.3.4', undefined, undefined);
     });
 
     it('hands the self-signed switch to the save both ways (#2475)', async () => {
@@ -270,7 +268,7 @@ describe('ImmichMemoriesController (parity with /api/integrations/memories/immic
       const immichSaveSettings = vi.fn().mockResolvedValue({ success: true });
       const svc = makeService({ immichSaveSettings });
       await new ImmichMemoriesController(svc).putSettings(user, { immich_url: 'x', immich_api_key: 'k' }, req, makeRes());
-      expect(immichSaveSettings).toHaveBeenCalledWith(7, 'x', 'k', '1.2.3.4', undefined);
+      expect(immichSaveSettings).toHaveBeenCalledWith(7, 'x', 'k', '1.2.3.4', undefined, undefined);
     });
 
     it('returns the warning when the save carries one', async () => {

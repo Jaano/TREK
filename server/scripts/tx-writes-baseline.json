@@ -40,7 +40,6 @@
   "src/nest/maps/maps.service.ts#MapsService.getPlaceDetails": 2,
   "src/nest/maps/maps.service.ts#MapsService.getPlaceDetailsExpanded": 2,
   "src/nest/maps/maps.service.ts#MapsService.getPlacePhoto": 7,
-  "src/nest/memories/immich.controller.ts#ImmichMemoriesController.putSettings": 2,
   "src/nest/memories/photo-resolver.service.ts#PhotoResolverService.streamCachedThumbnail": 3,
   "src/nest/memories/photo-resolver.service.ts#PhotoResolverService.streamPhoto": 2,
   "src/nest/memories/synology.service.ts#SynologyService._fetchAllSynologyAlbums": 2,

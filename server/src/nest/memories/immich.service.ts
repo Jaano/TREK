@@ -11,6 +11,7 @@ import path from 'node:path';
 import { MemoriesAccessService } from './memories-access.service';
 import { describeFetchFailure, fail, handleServiceResult, isWithinLocalDayRange, pipeAsset, shiftCalendarDay, sortAssetsByTakenAtDesc, type Selection } from './memories.helpers';
 import { Users } from '../../db/entities/Users.entity';
+import { UnitOfWork } from '../database/unit-of-work';
 import type { UsersRepository } from '../../db/repositories/Users.repository';
 
 const ALBUM_PAGE_SIZE = 1000;
@@ -81,6 +82,7 @@ export class ImmichService {
     private readonly access: MemoriesAccessService,
     private readonly storage: StorageService,
     @InjectRepository(Users) private readonly users: UsersRepository,
+    private readonly uow: UnitOfWork,
   ) {}
 
   async getImmichCredentials(userId: number): Promise<ImmichCreds | null> {
@@ -138,7 +140,9 @@ export class ImmichService {
    * `allowInsecureTls` left undefined keeps the stored choice while the URL
    * stays the same, so a client that does not know the switch cannot clear it
    * by saving. The switch trusts one server, so a new URL without it starts
-   * off, and disconnecting (no URL) always turns it off again.
+   * off, and disconnecting (no URL) always turns it off again. `autoUpload`
+   * is written with the connection in one transaction, after the URL check;
+   * left undefined it keeps the stored choice.
    */
   async saveImmichSettings(
     userId: number,
@@ -146,32 +150,38 @@ export class ImmichService {
     immichApiKey: string | undefined,
     clientIp: string | null,
     allowInsecureTls?: boolean,
+    autoUpload?: boolean,
   ): Promise<{ success: boolean; warning?: string; error?: string }> {
+    let ssrf: Awaited<ReturnType<typeof checkSsrf>> | null = null;
+    const url = (immichUrl?.endsWith('/') ? immichUrl.slice(0, -1) : immichUrl ?? '').trim();
     if (immichUrl) {
-      if (immichUrl.endsWith('/')) {
-        immichUrl = immichUrl.slice(0, -1);
-      }
-      const ssrf = await checkSsrf(immichUrl.trim());
+      ssrf = await checkSsrf(url);
       if (!ssrf.allowed) {
         return { success: false, error: `Invalid Immich URL: ${ssrf.error}` };
       }
-      const insecure = allowInsecureTls === undefined ? null : Number(allowInsecureTls);
-      // The stored URL decides whether an undefined switch keeps its value (IM4).
-      await this.users.setImmichSettings(userId, immichUrl.trim(), maybe_encrypt_api_key(immichApiKey), insecure);
-      if (ssrf.isPrivate) {
-        await this.audit.writeAudit({
-          userId,
-          action: 'immich.private_ip_configured',
-          ip: clientIp,
-          details: { immich_url: immichUrl.trim(), resolved_ip: ssrf.resolvedIp },
-        });
-        return {
-          success: true,
-          warning: `Immich URL resolves to a private IP address (${ssrf.resolvedIp}). Make sure this is intentional.`,
-        };
+    }
+    // The DNS check above is network I/O, so it runs before the transaction opens.
+    await this.uow.transactional(async () => {
+      if (immichUrl) {
+        const insecure = allowInsecureTls === undefined ? null : Number(allowInsecureTls);
+        // The stored URL decides whether an undefined switch keeps its value (IM4).
+        await this.users.setImmichSettings(userId, url, maybe_encrypt_api_key(immichApiKey), insecure);
+      } else {
+        await this.users.clearImmichSettings(userId, maybe_encrypt_api_key(immichApiKey));
       }
-    } else {
-      await this.users.clearImmichSettings(userId, maybe_encrypt_api_key(immichApiKey));
+      if (typeof autoUpload === 'boolean') await this.setImmichAutoUpload(userId, autoUpload);
+    });
+    if (ssrf?.isPrivate) {
+      await this.audit.writeAudit({
+        userId,
+        action: 'immich.private_ip_configured',
+        ip: clientIp,
+        details: { immich_url: url, resolved_ip: ssrf.resolvedIp },
+      });
+      return {
+        success: true,
+        warning: `Immich URL resolves to a private IP address (${ssrf.resolvedIp}). Make sure this is intentional.`,
+      };
     }
     return { success: true };
   }

@@ -206,7 +206,8 @@ describe('Memories e2e (real auth guard + temp SQLite)', () => {
       const ok = await request(server).put(`${IMMICH}/settings`).set('Cookie', sessionCookie(1)).send({ immich_url: 'https://x', immich_api_key: 'k', auto_upload: true });
       expect(ok.status).toBe(200);
       expect(ok.body).toEqual({ success: true });
-      expect(immich.setImmichAutoUpload).toHaveBeenCalledWith(1, true);
+      expect(immich.saveImmichSettings).toHaveBeenCalledWith(1, 'https://x', 'k', expect.anything(), undefined, true);
+      expect(immich.setImmichAutoUpload).not.toHaveBeenCalled();
 
       immich.saveImmichSettings.mockResolvedValue({ success: false, error: 'Invalid Immich URL: bad' });
       const bad = await request(server).put(`${IMMICH}/settings`).set('Cookie', sessionCookie(1)).send({ immich_url: 'bad' });

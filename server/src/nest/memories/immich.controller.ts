@@ -37,14 +37,13 @@ export class ImmichMemoriesController {
   ): Promise<void> {
     const { immich_url, immich_api_key, auto_upload, allow_insecure_tls } = body;
     // Absent stays undefined and leaves the stored choice alone, so an older
-    // client cannot clear it by saving.
-    const result = await this.memories.immichSaveSettings(user.id, immich_url, immich_api_key, getClientIp(req), allow_insecure_tls);
+    // client cannot clear it by saving. auto_upload is written with the
+    // connection in one transaction, and only when it is a boolean.
+    const autoUpload = typeof auto_upload === 'boolean' ? auto_upload : undefined;
+    const result = await this.memories.immichSaveSettings(user.id, immich_url, immich_api_key, getClientIp(req), allow_insecure_tls, autoUpload);
     if (!result.success) {
       res.status(400).json({ error: result.error });
       return;
-    }
-    if (typeof auto_upload === 'boolean') {
-      await this.memories.immichSetAutoUpload(user.id, auto_upload);
     }
     if (result.warning) {
       res.json({ success: true, warning: result.warning });

@@ -47,7 +47,7 @@ import type { MemoriesAccessService } from '../../../src/nest/memories/memories-
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
-import { createTestUsersRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestUsersRepo } from '../../helpers/test-uow';
 import { PROVIDER_SELECT_ALL_MAX_PAGES } from '@trek/shared';
 
 const audit = { writeAudit: vi.fn() };
@@ -76,7 +76,7 @@ function upstream(opts: { ok?: boolean; status?: number; json?: unknown; url?: s
 
 beforeAll(async () => {
   const users = await createTestUsersRepo(testDb);
-  svc = new ImmichService(audit as unknown as AuditService, access as unknown as MemoriesAccessService, journeyFx.storage, users);
+  svc = new ImmichService(audit as unknown as AuditService, access as unknown as MemoriesAccessService, journeyFx.storage, users, await createTestUnitOfWork(testDb));
 });
 
 beforeEach(() => {
@@ -174,6 +174,35 @@ describe('saveImmichSettings', () => {
     expect(result).toEqual({ success: true });
     expect(checkSsrf).not.toHaveBeenCalled();
     expect(await svc.getImmichCredentials(USER)).toBeNull();
+  });
+
+  it('IMMICH-052: writes auto_upload with the connection, and keeps it when the flag is absent', async () => {
+    const autoUpload = () => (testDb.prepare('SELECT immich_auto_upload FROM users WHERE id = ?').get(USER) as { immich_auto_upload: number }).immich_auto_upload;
+
+    await svc.saveImmichSettings(USER, 'https://new.test', 'k2', null, undefined, true);
+    expect(autoUpload()).toBe(1);
+    await svc.saveImmichSettings(USER, 'https://new.test', 'k2', null);
+    expect(autoUpload()).toBe(1);
+    await svc.saveImmichSettings(USER, undefined, undefined, null, undefined, false);
+    expect(autoUpload()).toBe(0);
+  });
+
+  it('IMMICH-053: a refused URL writes no auto_upload either', async () => {
+    checkSsrf.mockResolvedValue({ allowed: false, error: 'blocked host' });
+
+    await svc.saveImmichSettings(USER, 'http://169.254.169.254', 'k', null, undefined, true);
+
+    expect(testDb.prepare('SELECT immich_auto_upload FROM users WHERE id = ?').get(USER)).toEqual({ immich_auto_upload: 0 });
+  });
+
+  it('IMMICH-054: a failing auto_upload write rolls the new connection back with it', async () => {
+    const spy = vi.spyOn(svc, 'setImmichAutoUpload').mockRejectedValueOnce(new Error('boom'));
+    try {
+      await expect(svc.saveImmichSettings(USER, 'https://new.test', 'k2', null, undefined, true)).rejects.toThrow('boom');
+      expect((await svc.getImmichCredentials(USER))!.immich_url).toBe('https://immich.test');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   // R6 — the encrypt call still runs; this file mocks `maybe_encrypt_api_key`

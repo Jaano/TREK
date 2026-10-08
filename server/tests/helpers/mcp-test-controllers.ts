@@ -403,7 +403,7 @@ export async function createMcpTestRegistry(): Promise<McpRegistry> {
     // Plan 3g Task 4 constructor-ripple: MA1/MA2/MA6's journey half.
     await createTestJourneysRepo(db), await createTestJourneyContributorsRepo(db), await createTestJourneyPhotosRepo(db),
   );
-  const immichService = new ImmichService(new AuditService(auditLogRepo, usersRepo), memoriesAccess, generalStorage, usersRepo);
+  const immichService = new ImmichService(new AuditService(auditLogRepo, usersRepo), memoriesAccess, generalStorage, usersRepo, await createTestUnitOfWork(db));
   const synologyService = new SynologyService(memoriesAccess, notificationsStub(), usersRepo);
   const trekPhotos = new TrekPhotoRegistrationService(mcpOrm.repo(TrekPhotos), mcpOrm.repo(TripPhotos), await createTestJourneyPhotosRepo(db));
   const captureBackfill = new PhotoCaptureBackfillService(new PhotoResolverService(trekPhotos, new ThumbnailService(addonsService, generalStorage, mcpOrm.repo(TrekPhotos)), new TrekPhotoCacheService(mcpOrm.repo(TrekPhotoCacheMeta), generalStorage), new PhotoProviderRegistry([new ImmichPhotoProvider(immichService), new SynologyPhotoProvider(synologyService)]), generalStorage), trekPhotos, generalStorage);
