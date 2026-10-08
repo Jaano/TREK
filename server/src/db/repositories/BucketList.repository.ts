@@ -128,8 +128,8 @@ export class BucketListRepository extends TrekRepository<BucketList> {
     target_date: string | null;
     region_code: string | null;
   }): Promise<number> {
-    const result = await this.insertDb().insertInto('bucket_list').values(row).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.insertDb().insertInto('bucket_list').values(row).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** AT33 (`createBucketItem`'s post-insert re-select, NOT user-scoped — the legacy statement's own shape) — `SELECT * FROM bucket_list WHERE id = ?`. */

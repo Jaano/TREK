@@ -75,11 +75,12 @@ export class TodoItemsRepository extends TrekRepository<TodoItems> {
     trip_id: number | string; name: string; category: string | null; sort_order: number;
     due_date: string | null; description: string | null; assigned_user_id: number | null; priority: number;
   }): Promise<number> {
-    const result = await this.kysely<TodoItemsInsertKyselyDB>()
+    const inserted = await this.kysely<TodoItemsInsertKyselyDB>()
       .insertInto('todo_items')
       .values({ ...row, trip_id: row.trip_id as number, checked: 0 })
+      .returning('id')
       .executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    return inserted.id;
   }
 
   /** TD4/TD7 (`createItem`/`updateItem`'s post-write re-select) — `SELECT * FROM todo_items WHERE id = ?` (no trip filter — the caller already knows `id` is in-scope, having just written it). */
@@ -157,11 +158,12 @@ export class TodoItemsRepository extends TrekRepository<TodoItems> {
     trip_id: number | string; name: string; category: string | null; sort_order: number | null;
     due_date: string | null; description: string | null; priority: number | null;
   }): Promise<number> {
-    const result = await this.kysely<TodoItemsCopyInsertKyselyDB>()
+    const inserted = await this.kysely<TodoItemsCopyInsertKyselyDB>()
       .insertInto('todo_items')
       .values({ ...row, trip_id: row.trip_id as number, checked: 0, assigned_user_id: null })
+      .returning('id')
       .executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    return inserted.id;
   }
 
   // ---------------------------------------------------------------------------

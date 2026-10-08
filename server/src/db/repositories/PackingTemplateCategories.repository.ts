@@ -37,8 +37,8 @@ export class PackingTemplateCategoriesRepository extends TrekRepository<PackingT
    * with `TrekRepository`/`EntityRepository`'s own same-named method.
    */
   async insertCategory(template_id: number | string, name: string, sort_order: number): Promise<number> {
-    const result = await this.kysely<PackingTemplateCategoriesInsertKyselyDB>().insertInto('packing_template_categories').values({ template_id: template_id as number, name, sort_order }).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<PackingTemplateCategoriesInsertKyselyDB>().insertInto('packing_template_categories').values({ template_id: template_id as number, name, sort_order }).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** PK76 (`createTemplateCategory`) — `SELECT MAX(sort_order) as max FROM packing_template_categories WHERE template_id = ?`. */

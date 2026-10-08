@@ -101,14 +101,15 @@ export class BudgetSettlementsRepository extends TrekRepository<BudgetSettlement
     trip_id: number | string; from_user_id: number; to_user_id: number; amount: number;
     currency: string | null; exchange_rate: number; settled_at: string | null; note: string | null; created_by_user_id: number | null;
   }): Promise<number> {
-    const result = await this.kysely<BudgetSettlementsWriteKyselyDB>()
+    const inserted = await this.kysely<BudgetSettlementsWriteKyselyDB>()
       .insertInto('budget_settlements')
       .values({
         trip_id: row.trip_id as number, from_user_id: row.from_user_id, to_user_id: row.to_user_id, amount: row.amount,
         currency: row.currency, exchange_rate: row.exchange_rate, settled_at: row.settled_at, note: row.note, created_by_user_id: row.created_by_user_id,
       })
+      .returning('id')
       .executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    return inserted.id;
   }
 
   /**

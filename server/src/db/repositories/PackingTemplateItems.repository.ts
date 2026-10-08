@@ -92,7 +92,7 @@ export class PackingTemplateItemsRepository extends TrekRepository<PackingTempla
     quantity?: number;
     bag_name?: string | null;
   }): Promise<number> {
-    const result = await this.kysely<PackingTemplateItemsInsertKyselyDB>()
+    const inserted = await this.kysely<PackingTemplateItemsInsertKyselyDB>()
       .insertInto('packing_template_items')
       .values({
         category_id: row.category_id as number,
@@ -102,8 +102,9 @@ export class PackingTemplateItemsRepository extends TrekRepository<PackingTempla
         quantity: row.quantity,
         bag_name: row.bag_name,
       })
+      .returning('id')
       .executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    return inserted.id;
   }
 
   /** PK85 (`createTemplateItem`) — `SELECT MAX(sort_order) as max FROM packing_template_items WHERE category_id = ?`. */

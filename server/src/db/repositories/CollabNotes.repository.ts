@@ -202,15 +202,17 @@ export class CollabNotesRepository extends TrekRepository<CollabNotes> {
   /**
    * CB18 (`addNoteFile`'s insert half) — `INSERT INTO trip_files (trip_id,
    * note_id, filename, original_name, file_size, mime_type) VALUES (?×6)`.
-   * Returns the new row's id (Kysely's `InsertResult.insertId`, this
-   * dialect's `lastInsertRowid` equivalent) for CB19's re-select.
+   * Returns the new row's id (read back with `RETURNING id`, which every
+   * supported engine answers, unlike `InsertResult.insertId`) for CB19's
+   * re-select.
    */
   async insertAttachmentForNote(row: { trip_id: number | string; note_id: number | string; filename: string; original_name: string; file_size: number; mime_type: string }): Promise<number> {
-    const result = await this.kysely<NoteAttachmentInsertKyselyDB>()
+    const inserted = await this.kysely<NoteAttachmentInsertKyselyDB>()
       .insertInto('trip_files')
       .values({ trip_id: row.trip_id as number, note_id: row.note_id as number, filename: row.filename, original_name: row.original_name, file_size: row.file_size, mime_type: row.mime_type })
+      .returning('id')
       .executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    return inserted.id;
   }
 
   /** CB19 (`addNoteFile`'s re-select, immediately after {@link insertAttachmentForNote}) — `SELECT * FROM trip_files WHERE id = ?`, unscoped (the caller just wrote this exact id). */

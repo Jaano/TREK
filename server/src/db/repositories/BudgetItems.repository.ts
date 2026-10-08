@@ -153,8 +153,8 @@ export class BudgetItemsRepository extends TrekRepository<BudgetItems> {
     exchange_rate: number; persons: number | null; days: number | null; note: string | null; ticket_json: string | null;
     sort_order: number; expense_date: string | null; reservation_id: number | null; place_id: number | null;
   }): Promise<number> {
-    const result = await this.kysely<BudgetItemsInsertKyselyDB>().insertInto('budget_items').values({ ...row, trip_id: row.trip_id as number }).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<BudgetItemsInsertKyselyDB>().insertInto('budget_items').values({ ...row, trip_id: row.trip_id as number }).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /**
@@ -170,8 +170,8 @@ export class BudgetItemsRepository extends TrekRepository<BudgetItems> {
     note: string | null; sort_order: number | null; reservation_id: number | null; currency: string | null;
     exchange_rate: number; expense_date: string | null; ticket_json: string | null; paid_by_user_id: number | null;
   }): Promise<number> {
-    const result = await this.kysely<BudgetItemsCopyInsertKyselyDB>().insertInto('budget_items').values({ ...row, trip_id: row.trip_id as number }).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<BudgetItemsCopyInsertKyselyDB>().insertInto('budget_items').values({ ...row, trip_id: row.trip_id as number }).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /**

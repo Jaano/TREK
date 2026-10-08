@@ -1265,8 +1265,8 @@ export class PlacesRepository extends TrekRepository<Places> {
     phone: string | null;
     osm_id: string | null;
   }): Promise<number> {
-    const result = await this.kysely<PlacesNarrowInsertKyselyDB>().insertInto('places').values(row).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<PlacesNarrowInsertKyselyDB>().insertInto('places').values(row).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   // ---------------------------------------------------------------------------

@@ -91,6 +91,22 @@ describe('DemoRepository', () => {
     expect(note).toEqual({ day_id: dayId, trip_id: tripId, text: 'Note text', time: '13:00', icon: 'Info', sort_order: 0.5 });
   });
 
+  it('DEMOREPO-007: the inserts read the new id back with RETURNING, and a packing item gets its updated_at stamp', async () => {
+    const { user } = createAdmin(testDb);
+    const tripId = await demo.insertTrip(user.id, 'Ids', 'd', '2026-05-01', '2026-05-02', 'EUR');
+    expect(typeof tripId).toBe('number');
+    const latest = testDb.prepare('SELECT MAX(id) AS id FROM trips').get() as { id: number };
+    expect(tripId).toBe(latest.id);
+
+    const dayId = await demo.insertDay(tripId, 1, '2026-05-01');
+    const secondDayId = await demo.insertDay(tripId, 2, '2026-05-02');
+    expect(secondDayId).toBeGreaterThan(dayId);
+
+    await demo.insertPackingItem(tripId, 'Charger', 0, 'Tech', 1);
+    const packing = testDb.prepare('SELECT updated_at FROM packing_items WHERE trip_id = ?').get(tripId) as { updated_at: string | null };
+    expect(packing.updated_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  });
+
   it('DEMOREPO-CRED-001 (DMR1/DMR5 round trip): getAdminCredentials reads exactly what restoreAdminCredentials wrote', async () => {
     const { user } = createAdmin(testDb, { email: 'admin@nomad.app' });
     testDb.prepare('UPDATE users SET maps_api_key = ?, openweather_api_key = ?, unsplash_api_key = ?, avatar = ? WHERE id = ?')

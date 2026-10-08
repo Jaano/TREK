@@ -118,8 +118,8 @@ export class PackingTemplatesRepository extends TrekRepository<PackingTemplates>
    * .insertItem`'s precedent).
    */
   async insertTemplate(name: string, created_by: number): Promise<number> {
-    const result = await this.kysely<PackingTemplatesInsertKyselyDB>().insertInto('packing_templates').values({ name, created_by }).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<PackingTemplatesInsertKyselyDB>().insertInto('packing_templates').values({ name, created_by }).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** PK71 (`updatePackingTemplate`) — `UPDATE packing_templates SET name = ? WHERE id = ?`. */

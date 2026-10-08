@@ -188,8 +188,8 @@ export class CollectionsRepository extends TrekRepository<Collections> {
     links: string | null;
     sort_order: number;
   }): Promise<number> {
-    const result = await this.insertDb().insertInto('collections').values(row).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.insertDb().insertInto('collections').values(row).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /**
@@ -394,8 +394,8 @@ export class CollectionsRepository extends TrekRepository<Collections> {
     links: string | null;
     sort_order: number;
   }): Promise<number> {
-    const result = await this.placesWriteDb().insertInto('collection_places').values(row).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.placesWriteDb().insertInto('collection_places').values(row).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** CL24 (`writeFilePlaces`'s `assignLabel` prepared statement) — `INSERT OR IGNORE INTO collection_place_labels (collection_place_id, label_id) VALUES (?,?)`. */

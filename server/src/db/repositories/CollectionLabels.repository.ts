@@ -61,8 +61,8 @@ export class CollectionLabelsRepository extends TrekRepository<CollectionLabels>
 
   /** CL20 (`insertImportedLabel`) — `INSERT INTO collection_labels (collection_id, name, color, sort_order) VALUES (?,?,?,?)`. Returns the new row's id. Dup text also `createLabel` (Task 2's own call site). */
   async insertLabel(row: { collection_id: number; name: string; color: string; sort_order: number }): Promise<number> {
-    const result = await this.kysely<CollectionLabelsInsertKyselyDB>().insertInto('collection_labels').values(row).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<CollectionLabelsInsertKyselyDB>().insertInto('collection_labels').values(row).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   // -------------------------------------------------------------------------

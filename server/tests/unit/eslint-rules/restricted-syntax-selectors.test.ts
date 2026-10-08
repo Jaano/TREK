@@ -141,7 +141,6 @@ declare const repo: { run(sql: string, params?: unknown[]): Promise<unknown>; ge
   // the ignores entry) has to follow.
   const EXEMPT_SQL_STRINGS: Record<string, number> = {
     'src/db/repositories/MaintenanceRepository.ts': 4,
-    'src/db/repositories/DemoRepository.ts': 9,
     'src/db/seeders/AddonSeeder.ts': 1,
     'src/db/seeders/AdminSeeder.ts': 2,
     'src/db/seeders/CategorySeeder.ts': 2,
@@ -200,5 +199,31 @@ void safeFetch(url);`,
   it('does not reach outside src/db', async () => {
     const options = await selectorsFor('src/nest/memories/probe.service.ts');
     expect(hits(options, "void connection.execute('SELECT 1');")).toEqual([]);
+  });
+});
+
+describe('insertId selectors', () => {
+  const INSERT = `
+declare const result: { insertId: bigint | undefined };
+declare const query: { executeTakeFirstOrThrow(): Promise<{ insertId: bigint | undefined }> };
+`;
+  const insertIdHits = (options: unknown[], code: string) =>
+    messages(options, `${INSERT}\n${code}`).filter((m) => m.startsWith('InsertResult.insertId'));
+
+  it('flags a read of insertId in every repository, the SQL-exempt one included, and in a seeder', async () => {
+    for (const file of [
+      'src/db/repositories/Probe.repository.ts',
+      'src/db/repositories/MaintenanceRepository.ts',
+      'src/db/seeders/ProbeSeeder.ts',
+    ]) {
+      const options = await selectorsFor(file);
+      expect(insertIdHits(options, 'void Number(result.insertId);'), file).toHaveLength(1);
+      expect(insertIdHits(options, 'void query.executeTakeFirstOrThrow().then(({ insertId }) => insertId);'), file).toHaveLength(1);
+    }
+  });
+
+  it('leaves a returning() read alone', async () => {
+    const options = await selectorsFor('src/db/repositories/Probe.repository.ts');
+    expect(insertIdHits(options, 'declare const row: { id: number };\nvoid row.id;')).toEqual([]);
   });
 });

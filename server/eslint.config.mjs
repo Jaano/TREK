@@ -46,6 +46,16 @@ const RAW_SQL_SELECTORS = [
   },
 ];
 
+// Kysely fills InsertResult.insertId from SQLite's last_insert_rowid. Postgres
+// has no such value, so there it is undefined and Number(result.insertId) is
+// NaN: an insert that needs the new id reads it with .returning('id').
+const INSERT_ID_MESSAGE =
+  "InsertResult.insertId is SQLite's last_insert_rowid and undefined on Postgres. Read the new id with .returning('id').executeTakeFirstOrThrow().";
+const INSERT_ID_SELECTORS = [
+  { selector: "MemberExpression[property.name='insertId']", message: INSERT_ID_MESSAGE },
+  { selector: "ObjectPattern > Property[key.name='insertId']", message: INSERT_ID_MESSAGE },
+];
+
 // A guarded call whose options object (third argument) sets `timeoutMs` has a
 // deadline over the whole exchange, so it does not need a signal in the init.
 // esquery only resolves `:nth-child` inside `:has` when each step is its own
@@ -334,7 +344,13 @@ export default tseslint.config(
           ],
         },
       ],
-      'no-restricted-syntax': ['error', ...ENV_SELECTORS, ...RAW_SQL_SELECTORS, ...FETCH_SELECTORS],
+      'no-restricted-syntax': [
+        'error',
+        ...ENV_SELECTORS,
+        ...RAW_SQL_SELECTORS,
+        ...FETCH_SELECTORS,
+        ...INSERT_ID_SELECTORS,
+      ],
     },
   },
   {
@@ -344,8 +360,7 @@ export default tseslint.config(
     // same and passed unseen, in the seeders too, which no repository rule
     // reached. The files below already hold such strings and are named one by
     // one, so the list can only shrink: MaintenanceRepository is the SQLite
-    // maintenance adapter (PRAGMA, VACUUM INTO), DemoRepository is the
-    // documented escape hatch for the demo seed data, and every seeder but
+    // maintenance adapter (PRAGMA, VACUUM INTO), and every seeder but
     // DatabaseSeeder writes its rows as SQL text (four of them with the
     // SQLite-only INSERT OR IGNORE). A new seeder starts on the query builder.
     // tests/unit/eslint-rules/restricted-syntax-selectors.test.ts pins how many
@@ -354,7 +369,6 @@ export default tseslint.config(
     files: ['src/db/repositories/**/*.ts', 'src/db/seeders/**/*.ts'],
     ignores: [
       'src/db/repositories/MaintenanceRepository.ts',
-      'src/db/repositories/DemoRepository.ts',
       'src/db/seeders/AddonSeeder.ts',
       'src/db/seeders/AdminSeeder.ts',
       'src/db/seeders/CategorySeeder.ts',
@@ -369,6 +383,7 @@ export default tseslint.config(
         ...RAW_SQL_SELECTORS,
         ...FETCH_SELECTORS,
         ...STRING_SQL_SELECTORS,
+        ...INSERT_ID_SELECTORS,
       ],
     },
   },

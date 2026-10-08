@@ -1,8 +1,17 @@
 import type { EntityManager } from '@mikro-orm/core';
+import type { SqlEntityManager } from '@mikro-orm/sql';
 import { Users } from '../entities/Users.entity';
 import type { NewAdminUserRow } from './Users.repository';
 import { AppSettings } from '../entities/AppSettings.entity';
 import { Trips } from '../entities/Trips.entity';
+import { currentTimestampKysely } from '../dialect/sql-functions';
+import type { DB } from '../kysely/db';
+
+/** The tables the example-trip seed writes through Kysely. */
+type DemoSeedKyselyDB = Pick<
+  DB,
+  'trip_members' | 'trips' | 'days' | 'places' | 'day_assignments' | 'packing_items' | 'budget_items' | 'reservations' | 'day_notes'
+>;
 
 /** DMR1's projection (`resetDemoUser`'s pre-close credential read). */
 export interface DemoAdminCredentialsRow {
@@ -60,14 +69,11 @@ export type NewDemoPlaceRow = readonly [
  * repository composes it via `this.em.getRepository(Entity)` rather than
  * duplicating the statement — `Users.repository.ts`/`AppSettings.repository.ts`
  * are Plan 3i Task 1's territory this task and never edits. The remaining
- * shapes (a `trips` count/list, the shared `trip_members` "insert or ignore"
- * membership row, and the seven bulk INSERT loops for the three example
- * trips) go through `connection.execute()` — rule 4's last-tier escape
- * hatch, reserved for exactly this repository — because a prepared
- * statement run in a loop over hand-written seed data is the natural shape
- * here, and forcing ~90 rows of literal data through per-entity `insert()`
- * calls (importing eight more entity classes this task does not own) buys
- * nothing a raw, parameterised statement doesn't already give.
+ * shapes (the shared `trip_members` "insert or ignore" membership row and
+ * the seven bulk INSERT loops for the three example trips) are Kysely
+ * statements on the generated table types: one query-builder insert per row,
+ * with `RETURNING id` where the caller needs the new id, so the seed runs on
+ * any engine the dialect layer supports and never spells SQL text.
  *
  * Constructed directly (`new DemoRepository(em)`), never through Nest DI:
  * its only two callers — `demo/demo-seed.ts` and `demo/demo-reset.ts` — are
@@ -86,11 +92,14 @@ export class DemoRepository {
     this.em.getContext();
   }
 
-  /** `this.em.getConnection().execute(sql, params, 'run')`, validated first — the one place every raw statement below funnels through. */
-  private async run(sql: string, params: readonly unknown[]): Promise<{ insertId: number }> {
+  /**
+   * `em.getKysely()`, validated first: the one place every seed insert below
+   * starts from. The callers hand in the SQL driver's EntityManager under
+   * core's type, which does not declare `getKysely`.
+   */
+  private kysely() {
     this.validateRequestContext();
-    const result = await this.em.getConnection().execute<{ id: number }>(sql, [...params], 'run');
-    return { insertId: Number(result.insertId) };
+    return (this.em as SqlEntityManager).getKysely<DemoSeedKyselyDB>();
   }
 
   // ---------------------------------------------------------------------
@@ -148,46 +157,66 @@ export class DemoRepository {
    * the legacy code's own dup-text shape.
    */
   async addTripMember(tripId: number, userId: number, invitedBy: number): Promise<void> {
-    await this.run('INSERT OR IGNORE INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)', [tripId, userId, invitedBy]);
+    await this.kysely()
+      .insertInto('trip_members')
+      .values({ trip_id: tripId, user_id: userId, invited_by: invitedBy })
+      .onConflict((oc) => oc.columns(['trip_id', 'user_id']).doNothing())
+      .execute();
   }
 
   /** DMS7 — `INSERT INTO trips (user_id, title, description, start_date, end_date, currency) VALUES (?, ?, ?, ?, ?, ?)`. Returns the generated trip id. */
   async insertTrip(userId: number, title: string, description: string, startDate: string, endDate: string, currency: string): Promise<number> {
-    const { insertId } = await this.run(
-      'INSERT INTO trips (user_id, title, description, start_date, end_date, currency) VALUES (?, ?, ?, ?, ?, ?)',
-      [userId, title, description, startDate, endDate, currency],
-    );
-    return insertId;
+    const inserted = await this.kysely()
+      .insertInto('trips')
+      .values({ user_id: userId, title, description, start_date: startDate, end_date: endDate, currency })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** DMS8 — `INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, ?)`. Returns the generated day id. */
   async insertDay(tripId: number, dayNumber: number, date: string): Promise<number> {
-    const { insertId } = await this.run('INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, ?)', [tripId, dayNumber, date]);
-    return insertId;
+    const inserted = await this.kysely()
+      .insertInto('days')
+      .values({ trip_id: tripId, day_number: dayNumber, date })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** DMS9 — the 13-column `places` insert (see {@link NewDemoPlaceRow}). Returns the generated place id. */
   async insertPlace(row: NewDemoPlaceRow): Promise<number> {
-    const { insertId } = await this.run(
-      'INSERT INTO places (trip_id, name, lat, lng, address, category_id, place_time, duration_minutes, notes, image_url, google_place_id, website, phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      row,
-    );
-    return insertId;
+    const [trip_id, name, lat, lng, address, category_id, place_time, duration_minutes, notes, image_url, google_place_id, website, phone] = row;
+    const inserted = await this.kysely()
+      .insertInto('places')
+      .values({
+        trip_id, name, lat, lng, address, category_id, place_time, duration_minutes, notes, image_url, google_place_id, website, phone,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** DMS10 — `INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (?, ?, ?)`. */
   async insertDayAssignment(dayId: number, placeId: number, orderIndex: number): Promise<void> {
-    await this.run('INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (?, ?, ?)', [dayId, placeId, orderIndex]);
+    await this.kysely().insertInto('day_assignments').values({ day_id: dayId, place_id: placeId, order_index: orderIndex }).execute();
   }
 
   /** DMS11 — `INSERT INTO packing_items (trip_id, name, checked, category, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`. */
   async insertPackingItem(tripId: number, name: string, checked: number, category: string, sortOrder: number): Promise<void> {
-    await this.run('INSERT INTO packing_items (trip_id, name, checked, category, sort_order, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)', [tripId, name, checked, category, sortOrder]);
+    const platform = this.em.getPlatform();
+    await this.kysely()
+      .insertInto('packing_items')
+      .values({ trip_id: tripId, name, checked, category, sort_order: sortOrder, updated_at: currentTimestampKysely(platform) })
+      .execute();
   }
 
   /** DMS12 — `INSERT INTO budget_items (trip_id, category, name, total_price, persons, note) VALUES (?, ?, ?, ?, ?, ?)`. */
   async insertBudgetItem(tripId: number, category: string, name: string, totalPrice: number, persons: number, note: string | null): Promise<void> {
-    await this.run('INSERT INTO budget_items (trip_id, category, name, total_price, persons, note) VALUES (?, ?, ?, ?, ?, ?)', [tripId, category, name, totalPrice, persons, note]);
+    await this.kysely()
+      .insertInto('budget_items')
+      .values({ trip_id: tripId, category, name, total_price: totalPrice, persons, note })
+      .execute();
   }
 
   /**
@@ -206,15 +235,20 @@ export class DemoRepository {
     type: string,
     location: string,
   ): Promise<void> {
-    await this.run(
-      'INSERT INTO reservations (trip_id, day_id, title, reservation_time, confirmation_number, status, type, location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [tripId, dayId, title, reservationTime, confirmationNumber, status, type, location],
-    );
+    await this.kysely()
+      .insertInto('reservations')
+      .values({
+        trip_id: tripId, day_id: dayId, title, reservation_time: reservationTime, confirmation_number: confirmationNumber, status, type, location,
+      })
+      .execute();
   }
 
   /** DMS14 — `INSERT INTO day_notes (day_id, trip_id, text, time, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)`. */
   async insertDayNote(dayId: number, tripId: number, text: string, time: string, icon: string, sortOrder: number): Promise<void> {
-    await this.run('INSERT INTO day_notes (day_id, trip_id, text, time, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)', [dayId, tripId, text, time, icon, sortOrder]);
+    await this.kysely()
+      .insertInto('day_notes')
+      .values({ day_id: dayId, trip_id: tripId, text, time, icon, sort_order: sortOrder })
+      .execute();
   }
 
   // ---------------------------------------------------------------------

@@ -112,8 +112,8 @@ export class PackingBagsRepository extends TrekRepository<PackingBags> {
    * the new row's id.
    */
   async insertMinimal(trip_id: number | string, name: string, color: string): Promise<number> {
-    const result = await this.kysely<PackingBagsMinimalInsertKyselyDB>().insertInto('packing_bags').values({ trip_id: trip_id as number, name, color }).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<PackingBagsMinimalInsertKyselyDB>().insertInto('packing_bags').values({ trip_id: trip_id as number, name, color }).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /**
@@ -122,8 +122,8 @@ export class PackingBagsRepository extends TrekRepository<PackingBags> {
    * set from {@link insertMinimal}'s. Returns the new row's id.
    */
   async insertBag(row: { trip_id: number | string; name: string; color: string; sort_order: number | null; weight_limit_grams: number | null }): Promise<number> {
-    const result = await this.kysely<PackingBagsInsertKyselyDB>().insertInto('packing_bags').values({ ...row, trip_id: row.trip_id as number }).executeTakeFirstOrThrow();
-    return Number(result.insertId);
+    const inserted = await this.kysely<PackingBagsInsertKyselyDB>().insertInto('packing_bags').values({ ...row, trip_id: row.trip_id as number }).returning('id').executeTakeFirstOrThrow();
+    return inserted.id;
   }
 
   /** PK43 (`createBag`'s post-insert re-select) — `SELECT * FROM packing_bags WHERE id = ?`. */
