@@ -17,7 +17,8 @@ const VIEW = ['components', 'mobile', 'pages', 'hooks'];
  * (date helpers) are helpers like utils/. Directories without an entry are
  * free on purpose: mobile and pages sit at the top, the app root wires
  * everything, and managed/ is the slot an operator fills with whole screens
- * at build time.
+ * at build time. A file directly in src/ is the layer of its name, so
+ * src/types.ts falls under types like the src/types/ directory.
  */
 export const RULES = {
   components: ['pages', 'mobile'],

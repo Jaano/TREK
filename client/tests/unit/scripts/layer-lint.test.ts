@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { importsOf, layerOf } from '../../../scripts/lib/imports.mjs';
+import { importsOf, layerOf, layerOfPath } from '../../../scripts/lib/imports.mjs';
 import { check, RULES, violations } from '../../../scripts/lib/layers.mjs';
 import { RatchetError } from '../../../scripts/lib/ratchet.mjs';
 import { ratchetTree, type RatchetTree } from '../../helpers/ratchetFixture';
@@ -56,6 +56,16 @@ describe('scripts/lib/imports', () => {
     expect(layerOf(src, from, '../../types')).toBe('types');
     expect(layerOf(src, from, 'react')).toBeNull();
     expect(layerOf(src, from, '../../../../shared/src')).toBeNull();
+  });
+
+  it('IMPORTS-003: a file directly in src/ is the layer of its name without the extension', () => {
+    expect(layerOfPath('types.ts')).toBe('types');
+    expect(layerOfPath('App.tsx')).toBe('App');
+    expect(layerOfPath('vite-env.d.ts')).toBe('vite-env');
+    expect(layerOfPath('types/tz-lookup.d.ts')).toBe('types');
+    expect(layerOfPath('components/Map/MapView.tsx')).toBe('components');
+    const src = join('/r', 'src');
+    expect(layerOf(src, join(src, 'App.tsx'), './types.ts')).toBe('types');
   });
 });
 
@@ -123,6 +133,15 @@ describe('lint:layers', () => {
     expect(run({}, files)).toBe(1);
     expect(tree.error.join('\n')).toMatch(/src\/help\/contexts\/trip\.ts: 1 import\(s\) against the layering/);
     expect(tree.error.join('\n')).toMatch(/src\/vacay\/yearWindow\.ts: 1 import\(s\) against the layering/);
+  });
+
+  it('LAYERS-008: src/types.ts is held to the rules of types and imports no view', () => {
+    const files = {
+      'src/types.ts': "import type { Props } from './components/Map/MapView'\nimport type { T } from '@trek/shared'\n",
+    };
+    expect(run({}, files)).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/src\/types\.ts: 1 import\(s\) against the layering/);
+    expect(tree.error.join('\n')).toMatch(/\(types into components\)/);
   });
 
   it('LAYERS-006: a missing baseline stops the check', () => {

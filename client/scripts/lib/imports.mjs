@@ -53,9 +53,19 @@ export function importsOf(source, file) {
 }
 
 /**
- * The top directory under src/ a relative import lands in ("components",
- * "api"; a file directly in src/ gives its own name), or null for a package
- * or a path outside src/.
+ * The layer of a path from src/: its top directory ("components", "api"), or,
+ * for a file directly in src/, its name without the extension. src/types.ts
+ * is then the layer "types" both when it imports and when it is imported as
+ * '../types', and its rules are those of the src/types/ directory.
+ */
+export function layerOfPath(fromSrc) {
+  const [top, ...rest] = fromSrc.split('/');
+  return rest.length ? top : top.replace(/(\.d)?\.[cm]?[jt]sx?$/, '');
+}
+
+/**
+ * The layer a relative import lands in (see layerOfPath), or null for a
+ * package or a path outside src/.
  */
 export function layerOf(srcRoot, fromFile, specifier) {
   if (!specifier.startsWith('.')) return null;
@@ -63,7 +73,7 @@ export function layerOf(srcRoot, fromFile, specifier) {
     .split('\\')
     .join('/');
   if (!target || target.startsWith('..')) return null;
-  return target.split('/')[0];
+  return layerOfPath(target);
 }
 
 /** Every source file under root/src outside the tests, with its key, its layer and its imports resolved to layers. */
@@ -71,7 +81,7 @@ export function sourceGraph(root) {
   const src = join(root, 'src');
   return listFiles(root, ['src'], (key) => /\.tsx?$/.test(key) && !TEST_FILE.test(key)).map((path) => ({
     key: toKey(root, path),
-    layer: toKey(src, path).split('/')[0],
+    layer: layerOfPath(toKey(src, path)),
     imports: importsOf(readText(path), path).map((imp) => ({ ...imp, layer: layerOf(src, path, imp.specifier) })),
   }));
 }
