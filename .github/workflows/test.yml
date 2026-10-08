@@ -266,6 +266,12 @@ jobs:
         # only shrink; @txStandalone/@txIndependent mark the deliberate ones.
         run: cd server && npm run lint:tx
 
+      - name: Raw SQL in tests may only shrink
+        # Counts the better-sqlite3 .prepare() calls under tests/ per file
+        # against scripts/test-sql-baseline.json. New fixtures seed and read
+        # through tests/helpers/factories (MikroORM) instead.
+        run: cd server && npm run lint:test-sql
+
       - name: Open request schemas may only shrink
         # Needs the shared build above. Counts open shapes (records of
         # unknown, passthrough, any) in shared's request schemas.

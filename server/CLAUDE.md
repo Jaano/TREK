@@ -24,6 +24,7 @@ npm run lint:boundaries   # import cycles and cross-domain reach-ins may only sh
 npm run lint:dialect      # SQLite-only SQL spellings under src/ may only shrink (CI gate)
 npm run probe:pg          # dialect helpers + the repository statements it reaches against Postgres (CI job postgres-probe; needs TREK_PG_PROBE_URL)
 npm run lint:tx           # methods writing more than once outside one transaction may only shrink (CI gate)
+npm run lint:test-sql     # raw better-sqlite3 statements in tests/ may only shrink (CI gate)
 npm run contracts:dto-open # open shapes in the createZodDto schemas may only shrink (runs in the unit tests)
 ```
 
@@ -34,6 +35,8 @@ npm run contracts:dto-open # open shapes in the createZodDto schemas may only sh
 **`lint:tx`** (`scripts/tx-writes.mjs`) reads every class under `src/` and counts, per method, the writes it issues outside a `.transactional(...)` callback: a repository call that builds an INSERT/UPDATE/DELETE, a call to a method that writes (of its own class or of a constructor-injected one), a transaction holding writes as one. A write in a loop counts twice, of two branches only the larger counts, and a helper whose every call sits inside a transaction is not reported. A method at two or more is held to its entry in `scripts/tx-writes-baseline.json`; a new one fails, and so does an entry above what its method holds now, so a fix lands with `npm run lint:tx -- --update` (it never raises or adds an entry). `--explain` lists the line of every call that counted. Two JSDoc tags mark the deliberate cases, each with its reason in the tag text: `@txStandalone` on a method whose write stands on its own whatever its caller does (an audit row, a notification, a non-fatal derived refresh, an idempotent lazy provision) makes it count for nothing at its callers, and `@txIndependent` on a method whose writes are complete one by one on purpose (network I/O between them, a retention sweep in passes, one transaction per item of a batch) keeps it out of the report.
 
 **`lint:size`** (`scripts/size-lint.mjs`) counts a line longer than 120 columns once per 120 columns it spans, so joining lines does not make room. Files that were already longer are held at their length in `scripts/size-baseline.json`; a file that needs to grow past its entry is split by concern instead. An entry above what its file holds now, or for a file that is gone, fails as well, so after a split `npm run lint:size -- --update` lowers the baseline in the same change (it never raises or adds an entry).
+
+**`lint:test-sql`** (`scripts/test-sql-ratchet.mjs`) counts every `.prepare(` under `tests/` per file against `scripts/test-sql-baseline.json`: a file may hold at most its entry, a file without one none. Growth fails, and so does an entry above what its file holds now, so a conversion lands with `npm run lint:test-sql -- --update` (it only lowers and drops entries). Files whose subject is raw SQL (the dialect functions, PRAGMA introspection, the legacy upgrade fixtures) sit in the baseline's `exempt` list with a reason; a single statement that must stay raw carries a `test-sql-allow: <reason>` comment on its line or the line above. `tests/unit/scripts/test-sql-ratchet.test.ts` also runs it on the tree.
 
 Single test: `npx vitest run tests/unit/nest/weather.controller.test.ts`, or `npx vitest run -t "returns 401 without cookie"`.
 
@@ -106,6 +109,8 @@ SQLite is the engine today and Postgres is the planned second one. Code under `s
 ## Tests
 
 `tests/` is split into `unit/` (mirrors `src/`), `integration/`, `e2e/` (one `<domain>.e2e.test.ts` per module, booting the real guards against a temp DB via `tests/e2e/harness.ts`) and `websocket/`; helpers in `tests/helpers/`, fixtures in `tests/fixtures/`.
+
+- **Seed and read through the ORM factories** in `tests/helpers/factories/` (`makeUser`, `makeTrip`, `makePlace`, … plus the typed `findRow`/`findRows`/`countRows`/`updateRows`/`deleteRows` readers), handed the app's ORM (`app.get(MikroORM)`) or a `createTestOrm(db)`. They go through MikroORM in a request context of their own, the way the app does, instead of raw SQLite on the sync handle; the README there has the before/after patterns. The raw `tests/helpers/factories.ts` and the `.prepare()` fixtures are legacy that `lint:test-sql` only lets shrink.
 
 - **Upgrade fixtures**: `tests/fixtures/legacy/legacy-v*.sql` are databases the retired positional runner built; `tests/integration/legacy-upgrade-v*.test.ts` boot `buildApp()` on each. `legacy-v244` is the v4.3.3 release with rows across the main tables, rebuilt reproducibly by `node scripts/build-legacy-fixture-v244.mjs` (archives the tag into a temp dir, boots that release's runner, seeds, pins timestamps, dumps).
 

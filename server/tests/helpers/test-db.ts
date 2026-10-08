@@ -153,6 +153,7 @@ export function resetTestDb(db: Database.Database): void {
   // (collections, oauth, plugins, settlements, …), every one of which leaked
   // its rows from one test into the next. Deletion order does not matter:
   // foreign_keys is OFF for the duration.
+  // test-sql-allow: the table list comes from sqlite_master, which no entity or repository maps.
   const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[])
     .map(r => r.name)
     // sqlite_* are SQLite's own (sqlite_sequence, sqlite_stat1) — never ours.

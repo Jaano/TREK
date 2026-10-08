@@ -2,6 +2,10 @@
  * Test data factories.
  * Each factory inserts a row into the provided in-memory DB and returns the created object.
  * Passwords are stored as bcrypt hashes (cost factor 4 for speed in tests).
+ *
+ * Legacy: these write raw SQLite on the sync handle. New fixtures use the ORM
+ * factories in ./factories/ (mostly the same names, `make` for `create`; see the README
+ * there), and `npm run lint:test-sql` only lets this file shrink.
  */
 
 import Database from 'better-sqlite3';

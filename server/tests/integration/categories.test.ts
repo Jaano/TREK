@@ -22,19 +22,33 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
+import { MikroORM } from '@mikro-orm/core';
 import { db as testDb } from '../../src/db/database';
 import { buildApp } from '../../src/bootstrap';
+import { Categories } from '../../src/db/entities/Categories.entity';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
-import { createUser, createAdmin } from '../helpers/factories';
+import { makeUser, makeAdmin } from '../helpers/factories/users';
+import { findRow } from '../helpers/factories/rows';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { authCookie } from '../helpers/auth';
 
 let nestApp: INestApplication;
 let app: Application;
+// The app's own ORM: the factories seed and read through it, never through raw SQL.
+let orm: FactoryOrm;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
+
+/** A seeded default category, for the cases that only need some existing id. */
+async function someCategoryId(): Promise<number> {
+  const cat = await findRow(orm, Categories, {});
+  if (!cat) throw new Error('the reset should have seeded the default categories');
+  return cat.id;
+}
 
 beforeEach(async () => {
   resetTestDb(testDb);
@@ -48,7 +62,7 @@ afterAll(async () => {
 
 describe('Categories', () => {
   it('CAT-001: GET /api/categories returns seeded default categories', async () => {
-    const { user } = createUser(testDb);
+    const { user } = await makeUser(orm);
     const res = await request(app)
       .get('/api/categories')
       .set('Cookie', authCookie(user.id));
@@ -60,7 +74,7 @@ describe('Categories', () => {
   });
 
   it('CAT-002: POST /api/categories - admin creates a new category', async () => {
-    const { user: admin } = createAdmin(testDb);
+    const { user: admin } = await makeAdmin(orm);
     const res = await request(app)
       .post('/api/categories')
       .set('Cookie', authCookie(admin.id))
@@ -71,7 +85,7 @@ describe('Categories', () => {
   });
 
   it('CAT-003: POST /api/categories - non-admin returns 403', async () => {
-    const { user } = createUser(testDb);
+    const { user } = await makeUser(orm);
     const res = await request(app)
       .post('/api/categories')
       .set('Cookie', authCookie(user.id))
@@ -80,7 +94,7 @@ describe('Categories', () => {
   });
 
   it('CAT-004: POST /api/categories - missing name returns 400', async () => {
-    const { user: admin } = createAdmin(testDb);
+    const { user: admin } = await makeAdmin(orm);
     const res = await request(app)
       .post('/api/categories')
       .set('Cookie', authCookie(admin.id))
@@ -90,7 +104,7 @@ describe('Categories', () => {
   });
 
   it('CAT-005: PUT /api/categories/:id - admin updates a category', async () => {
-    const { user: admin } = createAdmin(testDb);
+    const { user: admin } = await makeAdmin(orm);
     // First create one
     const createRes = await request(app)
       .post('/api/categories')
@@ -110,18 +124,17 @@ describe('Categories', () => {
   });
 
   it('CAT-006: PUT /api/categories/:id - non-admin returns 403', async () => {
-    const { user } = createUser(testDb);
-    // Get a seeded category id
-    const cat = testDb.prepare('SELECT id FROM categories LIMIT 1').get() as { id: number };
+    const { user } = await makeUser(orm);
+    const catId = await someCategoryId();
     const res = await request(app)
-      .put(`/api/categories/${cat.id}`)
+      .put(`/api/categories/${catId}`)
       .set('Cookie', authCookie(user.id))
       .send({ name: 'Hacked' });
     expect(res.status).toBe(403);
   });
 
   it('CAT-007: PUT /api/categories/:id - non-existent category returns 404', async () => {
-    const { user: admin } = createAdmin(testDb);
+    const { user: admin } = await makeAdmin(orm);
     const res = await request(app)
       .put('/api/categories/99999')
       .set('Cookie', authCookie(admin.id))
@@ -130,7 +143,7 @@ describe('Categories', () => {
   });
 
   it('CAT-008: DELETE /api/categories/:id - admin deletes a category', async () => {
-    const { user: admin } = createAdmin(testDb);
+    const { user: admin } = await makeAdmin(orm);
     const createRes = await request(app)
       .post('/api/categories')
       .set('Cookie', authCookie(admin.id))
@@ -144,15 +157,14 @@ describe('Categories', () => {
     expect(res.body.success).toBe(true);
 
     // Verify it's gone
-    const gone = testDb.prepare('SELECT id FROM categories WHERE id = ?').get(catId);
-    expect(gone).toBeUndefined();
+    expect(await findRow(orm, Categories, { id: catId })).toBeNull();
   });
 
   it('CAT-009: DELETE /api/categories/:id - non-admin returns 403', async () => {
-    const { user } = createUser(testDb);
-    const cat = testDb.prepare('SELECT id FROM categories LIMIT 1').get() as { id: number };
+    const { user } = await makeUser(orm);
+    const catId = await someCategoryId();
     const res = await request(app)
-      .delete(`/api/categories/${cat.id}`)
+      .delete(`/api/categories/${catId}`)
       .set('Cookie', authCookie(user.id));
     expect(res.status).toBe(403);
   });
@@ -163,7 +175,7 @@ describe('Categories', () => {
   });
 
   it('CAT-011: PUT /api/categories/abc - non-numeric id returns the legacy 404, not a 500 (Plan 3b Task 2 fix round, item 1b)', async () => {
-    const { user: admin } = createAdmin(testDb);
+    const { user: admin } = await makeAdmin(orm);
     const res = await request(app)
       .put('/api/categories/abc')
       .set('Cookie', authCookie(admin.id))
@@ -173,7 +185,7 @@ describe('Categories', () => {
   });
 
   it('CAT-012: DELETE /api/categories/abc - non-numeric id returns the legacy 404, not a 500 (Plan 3b Task 2 fix round, item 1b)', async () => {
-    const { user: admin } = createAdmin(testDb);
+    const { user: admin } = await makeAdmin(orm);
     const res = await request(app)
       .delete('/api/categories/abc')
       .set('Cookie', authCookie(admin.id));
