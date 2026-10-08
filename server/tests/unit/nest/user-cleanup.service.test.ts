@@ -59,6 +59,23 @@ import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-re
 import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import type { TestOrm } from '../../helpers/test-orm';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { makeShareToken } from '../../helpers/factories/trips';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { BudgetSettlements } from '../../../src/db/entities/BudgetSettlements.entity';
+import { JourneyContributors } from '../../../src/db/entities/JourneyContributors.entity';
+import { JourneyEntries } from '../../../src/db/entities/JourneyEntries.entity';
+import { JourneyPhotos } from '../../../src/db/entities/JourneyPhotos.entity';
+import { JourneyShareTokens } from '../../../src/db/entities/JourneyShareTokens.entity';
+import { Journeys } from '../../../src/db/entities/Journeys.entity';
+import { PluginUserConfig } from '../../../src/db/entities/PluginUserConfig.entity';
+import { PluginUserErasureQueue } from '../../../src/db/entities/PluginUserErasureQueue.entity';
+import { Plugins } from '../../../src/db/entities/Plugins.entity';
+import { ShareTokens } from '../../../src/db/entities/ShareTokens.entity';
+import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
+import { TripMembers } from '../../../src/db/entities/TripMembers.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 let em: EntityManager;
 let budget: BudgetService;
@@ -67,7 +84,8 @@ beforeAll(async () => {
   // Plan 4 Task 4: UserCleanupService's own DatabaseService param is gone.
   // UC1 goes through MaintenanceRepository, which Nest injects (built here
   // over the test ORM's EntityManager, as MaintenanceModule's factory does).
-  em = (await sharedTestOrm(testDb)).em;
+  orm = await sharedTestOrm(testDb);
+  em = orm.em;
   budget = new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb)));
   svc = new UserCleanupService(
     new MaintenanceRepository(em), budget, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb),
@@ -85,26 +103,31 @@ beforeAll(async () => {
   );
 });
 
-const installPlugin = (id: string, permissions: string[] | null) => {
-  testDb.prepare('INSERT INTO plugins (id, name, version, permissions) VALUES (?, ?, ?, ?)')
-    .run(id, id, '1.0.0', permissions === null ? null : JSON.stringify(permissions));
+let orm: TestOrm;
+
+const installPlugin = async (id: string, permissions: string[] | null) => {
+  await insertRow(orm, Plugins, { id, name: id, version: '1.0.0', permissions: permissions === null ? null : JSON.stringify(permissions) });
 };
 
-const createJourney = (userId: number, title: string): number =>
-  Number(testDb.prepare("INSERT INTO journeys (user_id, title, status, created_at, updated_at) VALUES (?, ?, 'draft', 0, 0)")
-    .run(userId, title).lastInsertRowid);
+const createJourney = (userId: number, title: string): Promise<number> =>
+  insertRow(orm, Journeys, { user: userId, title, status: 'draft', created_at: 0, updated_at: 0 });
 
-const queuedFor = (userId: number): string[] =>
-  (testDb.prepare('SELECT plugin_id FROM plugin_user_erasure_queue WHERE user_id = ? ORDER BY plugin_id')
-    .all(userId) as Array<{ plugin_id: string }>).map(r => r.plugin_id);
+const queuedFor = async (userId: number): Promise<string[]> =>
+  (await findRows(orm, PluginUserErasureQueue, { user_id: userId }, { plugin_id: 'asc' })).map(r => r.plugin_id);
 
-beforeEach(() => {
+/** A journey entry by the author, as the journal writes it. */
+const addEntry = (journeyId: number, authorId: number, type: string, title: string, entryDate: string) =>
+  insertRow(orm, JourneyEntries, {
+    journey: journeyId, author: authorId, type, title, entry_date: entryDate, created_at: 0, updated_at: 0,
+  });
+
+beforeEach(async () => {
   resetTestDb(testDb);
   // The plugin tables are not user data, so resetTestDb leaves them alone —
   // these tests own them and must not leak rows into each other.
-  for (const t of ['plugin_user_erasure_queue', 'plugin_user_config', 'plugins']) {
-    testDb.prepare(`DELETE FROM ${t}`).run();
-  }
+  await deleteRows(orm, PluginUserErasureQueue);
+  await deleteRows(orm, PluginUserConfig);
+  await deleteRows(orm, Plugins);
   dataRootRef.value = path.join(os.tmpdir(), 'trek-user-cleanup-absent');
 });
 
@@ -116,37 +139,34 @@ describe('erasePluginUserData', () => {
   it('USER-CLEANUP-001: deletes the host-side per-user plugin rows', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
-    installPlugin('demo', []);
-    testDb.prepare('INSERT INTO plugin_user_config (plugin_id, user_id, config) VALUES (?, ?, ?)')
-      .run('demo', user.id, '{"token":"secret"}');
-    testDb.prepare('INSERT INTO plugin_user_config (plugin_id, user_id, config) VALUES (?, ?, ?)')
-      .run('demo', other.id, '{"token":"keep-me"}');
+    await installPlugin('demo', []);
+    await insertRow(orm, PluginUserConfig, { plugin_id: 'demo', user_id: user.id, config: '{"token":"secret"}' });
+    await insertRow(orm, PluginUserConfig, { plugin_id: 'demo', user_id: other.id, config: '{"token":"keep-me"}' });
 
     await svc.erasePluginUserData(user.id);
 
-    const rows = testDb.prepare('SELECT user_id FROM plugin_user_config').all() as Array<{ user_id: number }>;
+    const rows = await findRows(orm, PluginUserConfig);
     expect(rows.map(r => r.user_id)).toEqual([other.id]);
   });
 
   it('USER-CLEANUP-002: enqueues an erasure only for plugins holding hook:user-data', async () => {
     const { user } = createUser(testDb);
-    installPlugin('with-hook', ['hook:user-data', 'trips:read']);
-    installPlugin('without-hook', ['trips:read']);
-    installPlugin('no-permissions', null);
+    await installPlugin('with-hook', ['hook:user-data', 'trips:read']);
+    await installPlugin('without-hook', ['trips:read']);
+    await installPlugin('no-permissions', null);
 
     await svc.erasePluginUserData(user.id);
 
-    expect(queuedFor(user.id)).toEqual(['with-hook']);
+    expect(await queuedFor(user.id)).toEqual(['with-hook']);
   });
 
   it('USER-CLEANUP-003: treats an unparseable permissions column as no permissions', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO plugins (id, name, version, permissions) VALUES (?, ?, ?, ?)')
-      .run('broken', 'broken', '1.0.0', '{not json');
+    await insertRow(orm, Plugins, { id: 'broken', name: 'broken', version: '1.0.0', permissions: '{not json' });
 
     await svc.erasePluginUserData(user.id);
 
-    expect(queuedFor(user.id)).toEqual([]);
+    expect(await queuedFor(user.id)).toEqual([]);
   });
 
   it('USER-CLEANUP-004: enqueues every orphan data dir — an uninstall keeps no permissions row', async () => {
@@ -155,14 +175,14 @@ describe('erasePluginUserData', () => {
     dataRootRef.value = root;
     fs.mkdirSync(path.join(root, 'uninstalled-but-retained'));
     fs.writeFileSync(path.join(root, 'stray-file'), ''); // not a directory → ignored
-    installPlugin('installed', ['hook:user-data']);
+    await installPlugin('installed', ['hook:user-data']);
     fs.mkdirSync(path.join(root, 'installed'));
 
     try {
       await svc.erasePluginUserData(user.id);
       // 'installed' comes from the permissions scan, not the orphan scan, and the
       // INSERT OR IGNORE keeps it single.
-      expect(queuedFor(user.id)).toEqual(['installed', 'uninstalled-but-retained']);
+      expect(await queuedFor(user.id)).toEqual(['installed', 'uninstalled-but-retained']);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -171,6 +191,7 @@ describe('erasePluginUserData', () => {
   it('USER-CLEANUP-005: survives a slim schema without the plugin tables', async () => {
     const slim = new (require('better-sqlite3'))(':memory:');
     slim.exec('CREATE TABLE users (id INTEGER PRIMARY KEY)');
+    // test-sql-allow: the slim database is hand-rolled without the migrated schema, so no entity can write its users row.
     slim.prepare('INSERT INTO users (id) VALUES (1)').run();
     // `erasePluginUserData`'s UC1 (this test's only call) DOES reach
     // `MaintenanceRepository` now (Plan 4 Task 4) — it needs a real
@@ -210,16 +231,14 @@ describe('deleteUserCompletely', () => {
     const { user: owner } = createUser(testDb);
     const { user: victim } = createUser(testDb, { username: 'victim' });
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)')
-      .run(trip.id, owner.id, victim.id);
-    testDb.prepare("INSERT INTO share_tokens (trip_id, token, created_by) VALUES (?, 'tok', ?)")
-      .run(trip.id, victim.id);
+    await insertRow(orm, TripMembers, { trip: trip.id, user: owner.id, invitedByRef: victim.id });
+    await makeShareToken(orm, trip.id, victim.id, { token: 'tok' });
 
     await svc.deleteUserCompletely(victim.id);
 
-    expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(victim.id)).toBeUndefined();
-    expect((testDb.prepare('SELECT invited_by FROM trip_members WHERE user_id = ?').get(owner.id) as { invited_by: number | null }).invited_by).toBeNull();
-    expect(testDb.prepare('SELECT COUNT(*) AS c FROM share_tokens').get()).toEqual({ c: 0 });
+    expect(await findRow(orm, Users, { id: victim.id })).toBeNull();
+    expect((await findRow(orm, TripMembers, { user: owner.id }))?.invited_by).toBeNull();
+    expect(await countRows(orm, ShareTokens)).toBe(0);
   });
 
   it('USER-CLEANUP-011: deletes a user who recorded a payment between two other members, and keeps the payment', async () => {
@@ -227,29 +246,33 @@ describe('deleteUserCompletely', () => {
     const { user: payer } = createUser(testDb, { username: 'payer' });
     const { user: recorder } = createUser(testDb, { username: 'recorder' });
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('INSERT INTO budget_settlements (trip_id, from_user_id, to_user_id, amount, created_by_user_id) VALUES (?, ?, ?, 12.5, ?)')
-      .run(trip.id, payer.id, owner.id, recorder.id);
+    await insertRow(orm, BudgetSettlements, {
+      trip: trip.id, fromUser: payer.id, toUser: owner.id, amount: 12.5, createdByUser: recorder.id,
+    });
 
     await svc.deleteUserCompletely(recorder.id);
 
-    expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(recorder.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT from_user_id, to_user_id, amount, created_by_user_id FROM budget_settlements').get())
+    expect(await findRow(orm, Users, { id: recorder.id })).toBeNull();
+    const settlement = await findRow(orm, BudgetSettlements, {});
+    expect({
+      from_user_id: settlement?.from_user_id, to_user_id: settlement?.to_user_id,
+      amount: settlement?.amount, created_by_user_id: settlement?.created_by_user_id,
+    })
       .toEqual({ from_user_id: payer.id, to_user_id: owner.id, amount: 12.5, created_by_user_id: null });
   });
 
   it('USER-CLEANUP-007: deletes their journeys and the entries they authored elsewhere', async () => {
     const { user: owner } = createUser(testDb);
     const { user: victim } = createUser(testDb, { username: 'victim' });
-    const ownJourney = createJourney(victim.id, 'Mine');
-    const foreignJourney = createJourney(owner.id, 'Theirs');
-    testDb.prepare("INSERT INTO journey_entries (journey_id, author_id, type, title, entry_date, created_at, updated_at) VALUES (?, ?, 'note', 'Guest post', '2026-08-08', 0, 0)")
-      .run(foreignJourney, victim.id);
+    const ownJourney = await createJourney(victim.id, 'Mine');
+    const foreignJourney = await createJourney(owner.id, 'Theirs');
+    await addEntry(foreignJourney, victim.id, 'note', 'Guest post', '2026-08-08');
 
     await svc.deleteUserCompletely(victim.id);
 
-    expect(testDb.prepare('SELECT id FROM journeys WHERE id = ?').get(ownJourney)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM journeys WHERE id = ?').get(foreignJourney)).toBeDefined();
-    expect(testDb.prepare('SELECT COUNT(*) AS c FROM journey_entries').get()).toEqual({ c: 0 });
+    expect(await findRow(orm, Journeys, { id: ownJourney })).toBeNull();
+    expect(await findRow(orm, Journeys, { id: foreignJourney })).not.toBeNull();
+    expect(await countRows(orm, JourneyEntries)).toBe(0);
   });
 
   it('USER-CLEANUP-010: GDPR erasure — UC6-10 remove every journey/share-table row the departing user reaches, and only those', async () => {
@@ -259,22 +282,20 @@ describe('deleteUserCompletely', () => {
 
     // Victim owns a journey with an entry, a gallery photo and a share token
     // they created — every one of these is reached by UC8's FK cascade.
-    const ownJourney = createJourney(victim.id, 'Mine');
-    testDb.prepare("INSERT INTO journey_entries (journey_id, author_id, type, title, entry_date, created_at, updated_at) VALUES (?, ?, 'entry', 'Own entry', '2026-01-01', 0, 0)")
-      .run(ownJourney, victim.id);
-    const photoId = Number(testDb.prepare("INSERT INTO trek_photos (provider, owner_id, created_at) VALUES ('local', ?, 0)").run(victim.id).lastInsertRowid);
-    testDb.prepare('INSERT INTO journey_photos (journey_id, photo_id, created_at) VALUES (?, ?, 0)').run(ownJourney, photoId);
-    testDb.prepare("INSERT INTO journey_share_tokens (journey_id, token, created_by) VALUES (?, 'own-tok', ?)").run(ownJourney, victim.id);
+    const ownJourney = await createJourney(victim.id, 'Mine');
+    await addEntry(ownJourney, victim.id, 'entry', 'Own entry', '2026-01-01');
+    const photoId = await insertRow(orm, TrekPhotos, { provider: 'local', owner: victim.id });
+    await insertRow(orm, JourneyPhotos, { journey: ownJourney, photo: photoId, created_at: 0 });
+    await insertRow(orm, JourneyShareTokens, { journey: ownJourney, token: 'own-tok', createdByRef: victim.id });
 
     // Victim contributes (editor) to a SECOND user's journey — not owned, so UC8's cascade never reaches it; UC10 must.
-    const secondJourney = createJourney(second.id, 'Theirs');
-    testDb.prepare("INSERT INTO journey_contributors (journey_id, user_id, role, added_at) VALUES (?, ?, 'editor', 0)").run(secondJourney, victim.id);
+    const secondJourney = await createJourney(second.id, 'Theirs');
+    await insertRow(orm, JourneyContributors, { journey: secondJourney, user: victim.id, role: 'editor', added_at: 0 });
 
     // Victim authored an entry, and separately created a share link, on a THIRD user's journey — UC9/UC7 must catch these.
-    const thirdJourney = createJourney(third.id, 'Elsewhere');
-    testDb.prepare("INSERT INTO journey_entries (journey_id, author_id, type, title, entry_date, created_at, updated_at) VALUES (?, ?, 'entry', 'Guest entry', '2026-01-02', 0, 0)")
-      .run(thirdJourney, victim.id);
-    testDb.prepare("INSERT INTO journey_share_tokens (journey_id, token, created_by) VALUES (?, 'third-tok', ?)").run(thirdJourney, victim.id);
+    const thirdJourney = await createJourney(third.id, 'Elsewhere');
+    await addEntry(thirdJourney, victim.id, 'entry', 'Guest entry', '2026-01-02');
+    await insertRow(orm, JourneyShareTokens, { journey: thirdJourney, token: 'third-tok', createdByRef: victim.id });
 
     // R10/UC6, full-key: `share_tokens` (trip-level, `nest/share`) — a
     // GENUINELY DIFFERENT table from `journey_share_tokens` above, on the
@@ -285,45 +306,46 @@ describe('deleteUserCompletely', () => {
     // `third` (not the victim), is the control row UC6 must NOT touch.
     const ownTrip = createTrip(testDb, victim.id);
     const foreignTrip = createTrip(testDb, second.id);
-    testDb.prepare("INSERT INTO share_tokens (trip_id, token, created_by) VALUES (?, 'own-trip-tok', ?)").run(ownTrip.id, victim.id);
-    testDb.prepare("INSERT INTO share_tokens (trip_id, token, created_by) VALUES (?, 'foreign-trip-tok', ?)").run(foreignTrip.id, victim.id);
-    testDb.prepare("INSERT INTO share_tokens (trip_id, token, created_by) VALUES (?, 'control-tok', ?)").run(foreignTrip.id, third.id);
+    await makeShareToken(orm, ownTrip.id, victim.id, { token: 'own-trip-tok' });
+    await makeShareToken(orm, foreignTrip.id, victim.id, { token: 'foreign-trip-tok' });
+    await makeShareToken(orm, foreignTrip.id, third.id, { token: 'control-tok' });
 
     await svc.deleteUserCompletely(victim.id);
 
     // Everything the departing user owned is gone (UC8 + cascade).
-    expect(testDb.prepare('SELECT id FROM journeys WHERE id = ?').get(ownJourney)).toBeUndefined();
-    expect(testDb.prepare('SELECT COUNT(*) AS c FROM journey_entries WHERE journey_id = ?').get(ownJourney)).toEqual({ c: 0 });
-    expect(testDb.prepare('SELECT COUNT(*) AS c FROM journey_photos WHERE journey_id = ?').get(ownJourney)).toEqual({ c: 0 });
-    expect(testDb.prepare('SELECT COUNT(*) AS c FROM journey_share_tokens WHERE journey_id = ?').get(ownJourney)).toEqual({ c: 0 });
+    expect(await findRow(orm, Journeys, { id: ownJourney })).toBeNull();
+    expect(await countRows(orm, JourneyEntries, { journey: ownJourney })).toBe(0);
+    expect(await countRows(orm, JourneyPhotos, { journey: ownJourney })).toBe(0);
+    expect(await countRows(orm, JourneyShareTokens, { journey: ownJourney })).toBe(0);
     // Everything the departing user merely touched on OTHER users' journeys is gone too (UC7/UC9/UC10).
-    expect(testDb.prepare('SELECT id FROM journey_entries WHERE journey_id = ? AND author_id = ?').get(thirdJourney, victim.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT user_id FROM journey_contributors WHERE journey_id = ? AND user_id = ?').get(secondJourney, victim.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT id FROM journey_share_tokens WHERE journey_id = ? AND created_by = ?').get(thirdJourney, victim.id)).toBeUndefined();
+    expect(await findRow(orm, JourneyEntries, { journey: thirdJourney, author: victim.id })).toBeNull();
+    expect(await findRow(orm, JourneyContributors, { journey: secondJourney, user: victim.id })).toBeNull();
+    expect(await findRow(orm, JourneyShareTokens, { journey: thirdJourney, createdByRef: victim.id })).toBeNull();
     // Nothing extra removed: the other two users' own journeys survive.
-    expect(testDb.prepare('SELECT id FROM journeys WHERE id = ?').get(secondJourney)).toBeDefined();
-    expect(testDb.prepare('SELECT id FROM journeys WHERE id = ?').get(thirdJourney)).toBeDefined();
+    expect(await findRow(orm, Journeys, { id: secondJourney })).not.toBeNull();
+    expect(await findRow(orm, Journeys, { id: thirdJourney })).not.toBeNull();
 
     // UC6/R10: every `share_tokens` row `created_by` the departing user is
     // gone, on BOTH their own trip and a trip they don't own — and the
     // control row (same foreign trip, created by someone else) survives
     // untouched. `ownTrip` itself cascades away with the user's cleanup
     // elsewhere (not this test's concern); the assertion is on `created_by`.
-    expect(testDb.prepare('SELECT id FROM share_tokens WHERE created_by = ?').get(victim.id)).toBeUndefined();
-    expect(testDb.prepare('SELECT token FROM share_tokens WHERE trip_id = ?').get(foreignTrip.id)).toEqual({ token: 'control-tok' });
+    expect(await findRow(orm, ShareTokens, { createdByRef: victim.id })).toBeNull();
+    expect((await findRow(orm, ShareTokens, { trip: foreignTrip.id }))?.token).toBe('control-tok');
   });
 
   it('USER-CLEANUP-008: re-derives the expense divisor before the member rows cascade away', async () => {
     const { user: owner } = createUser(testDb);
     const { user: victim } = createUser(testDb, { username: 'victim' });
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(trip.id, victim.id);
+    await insertRow(orm, TripMembers, { trip: trip.id, user: victim.id });
     const item = await budget.createBudgetItem(trip.id, { name: 'Dinner', total_price: 80, member_ids: [owner.id, victim.id] });
-    testDb.prepare('UPDATE budget_items SET paid_by_user_id = ? WHERE id = ?').run(victim.id, item.id);
+    await updateRows(orm, BudgetItems, { id: item.id }, { paidByUser: victim.id });
 
     await svc.deleteUserCompletely(victim.id);
 
-    const row = testDb.prepare('SELECT persons, paid_by_user_id FROM budget_items WHERE id = ?').get(item.id) as { persons: number | null; paid_by_user_id: number | null };
+    const stored = await findRow(orm, BudgetItems, { id: item.id });
+    const row = { persons: stored?.persons, paid_by_user_id: stored?.paid_by_user_id };
     expect(row).toEqual({ persons: 1, paid_by_user_id: null });
   });
 
@@ -331,8 +353,7 @@ describe('deleteUserCompletely', () => {
     const { user: owner } = createUser(testDb);
     const { user: victim } = createUser(testDb, { username: 'victim' });
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id, invited_by) VALUES (?, ?, ?)')
-      .run(trip.id, owner.id, victim.id);
+    await insertRow(orm, TripMembers, { trip: trip.id, user: owner.id, invitedByRef: victim.id });
 
     // Fail on the final statement only (UC11, `UsersRepository.deleteById`),
     // after the reference cleanup (UC1-UC10, still raw and unaffected by this
@@ -352,8 +373,8 @@ describe('deleteUserCompletely', () => {
         await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb),
       ).deleteUserCompletely(victim.id)).rejects.toThrow('boom');
 
-      expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(victim.id)).toBeDefined();
-      expect((testDb.prepare('SELECT invited_by FROM trip_members WHERE user_id = ?').get(owner.id) as { invited_by: number | null }).invited_by).toBe(victim.id);
+      expect(await findRow(orm, Users, { id: victim.id })).not.toBeNull();
+      expect((await findRow(orm, TripMembers, { user: owner.id }))?.invited_by).toBe(victim.id);
     } finally {
       deleteByIdSpy.mockRestore();
     }
