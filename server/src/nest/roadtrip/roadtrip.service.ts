@@ -107,15 +107,17 @@ export class RoadtripService {
   async create(dayId: string | number, input: { after_order_index: number; lat: number; lng: number; sequence?: number }): Promise<RoadtripVia> {
     const dayIdNum = this.requireDayId(dayId);
     // Appended after whatever already follows that stop, unless the caller says where.
-    // RT4 (`nextSequence`) then RT5 (`insertVia`), un-transacted (R7 — pin, don't fix):
-    // two concurrent adds on one leg can read the same next sequence.
-    const sequence = input.sequence ?? (await this.viasRepo.nextSequence(dayIdNum, input.after_order_index));
-    const id = await this.viasRepo.insertVia({
-      day_id: dayIdNum,
-      after_order_index: input.after_order_index,
-      sequence,
-      lat: input.lat,
-      lng: input.lng,
+    // RT4 (`nextSequence`) and RT5 (`insertVia`) in one transaction, so two adds on
+    // one leg at once cannot read the same next sequence.
+    const id = await this.uow.transactional(async () => {
+      const sequence = input.sequence ?? (await this.viasRepo.nextSequence(dayIdNum, input.after_order_index));
+      return await this.viasRepo.insertVia({
+        day_id: dayIdNum,
+        after_order_index: input.after_order_index,
+        sequence,
+        lat: input.lat,
+        lng: input.lng,
+      });
     });
     return (await this.viasRepo.findById(id))!;
   }

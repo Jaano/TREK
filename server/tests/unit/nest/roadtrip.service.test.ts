@@ -326,15 +326,11 @@ describe('RoadtripService', () => {
     expect(await service.tracksForTrip(f.tripA.id)).toEqual([]);
   });
 
-  // R7 (Plan 3d Task 7 whole-plan review, item 12 — flag + pin, not fix, the
-  // MEMBERS-SVC-018 shape): `create`'s `nextSequence` (MAX(sequence)+1) READ
-  // and its `insertVia` WRITE are two separate statements with no lock
-  // between them. Measured under real concurrency (`Promise.allSettled`, no
-  // mocks): both calls succeed — there is no UNIQUE constraint to lose a
-  // race on, unlike `trip_members` — but both land on the SAME `sequence`
-  // (`0`), a genuine duplicate the un-serialized read-then-write leaves
-  // behind. Today's actual outcome, pinned; not a fix.
-  it('R7: two concurrent creates on the same leg both succeed but can land on the SAME sequence (unserialized nextSequence read)', async () => {
+  // R7: `create`'s `nextSequence` (MAX(sequence)+1) read and its `insertVia`
+  // write run in one transaction, which holds the connection, so two concurrent
+  // creates (`Promise.allSettled`, no mocks) take one sequence each. Before,
+  // both landed on sequence 0.
+  it('R7: two concurrent creates on the same leg both succeed and take consecutive sequences', async () => {
     const results = await Promise.allSettled([
       service.create(f.dayA1.id, { after_order_index: 0, lat: 1, lng: 1 }),
       service.create(f.dayA1.id, { after_order_index: 0, lat: 2, lng: 2 }),
@@ -342,8 +338,7 @@ describe('RoadtripService', () => {
     expect(results.every((r) => r.status === 'fulfilled')).toBe(true);
     const rows = await service.listForDay(f.dayA1.id);
     expect(rows).toHaveLength(2);
-    // Both landed on the same leg, at the same sequence — the duplicate R7 flags.
     expect(rows.map((r) => r.after_order_index)).toEqual([0, 0]);
-    expect(rows.map((r) => r.sequence)).toEqual([0, 0]);
+    expect(rows.map((r) => r.sequence).sort((a, b) => a - b)).toEqual([0, 1]);
   });
 });

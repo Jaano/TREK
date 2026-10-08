@@ -64,13 +64,15 @@ export class TodoService {
   async createItem(tripId: string | number, data: {
     name: string; category?: string | null; due_date?: string | null; description?: string | null; assigned_user_id?: number | null; priority?: number;
   }) {
-    const maxOrder = await this.todoItemsRepo.maxSortOrder(tripId);
-    const sortOrder = (maxOrder !== null ? maxOrder : -1) + 1;
-
-    const id = await this.todoItemsRepo.insertItem({
-      trip_id: tripId, name: data.name, category: data.category || null, sort_order: sortOrder,
-      due_date: data.due_date || null, description: data.description || null,
-      assigned_user_id: data.assigned_user_id || null, priority: data.priority || 0,
+    // The next position and the row that takes it in one transaction, so two items
+    // added at once cannot both read the same MAX.
+    const id = await this.uow.transactional(async () => {
+      const maxOrder = await this.todoItemsRepo.maxSortOrder(tripId);
+      return await this.todoItemsRepo.insertItem({
+        trip_id: tripId, name: data.name, category: data.category || null, sort_order: (maxOrder ?? -1) + 1,
+        due_date: data.due_date || null, description: data.description || null,
+        assigned_user_id: data.assigned_user_id || null, priority: data.priority || 0,
+      });
     });
 
     return this.todoItemsRepo.findById(id);

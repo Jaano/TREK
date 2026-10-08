@@ -241,6 +241,16 @@ describe('create (service)', () => {
     expect(d2.day_number).toBe(2);
   });
 
+  it('DAY-SVC-009b: days added at the same time take one day number each', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    // Without the transaction both read the same MAX and both became day 1.
+    await Promise.all([svc.create(trip.id), svc.create(trip.id), svc.create(trip.id)]);
+    const numbers = (testDb.prepare('SELECT day_number FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { day_number: number }[])
+      .map((d) => d.day_number);
+    expect(numbers).toEqual([1, 2, 3]);
+  });
+
   it('DAY-SVC-010 — returns day with empty assignments array', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);

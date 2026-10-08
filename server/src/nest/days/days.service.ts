@@ -304,18 +304,12 @@ export class DaysService {
     // of defect `PlacesService.create` was fixed for (A-M1).
     const tripIdNum = toRowId(tripId);
     if (tripIdNum === null) throw new HttpException({ error: 'Trip not found' }, 404);
-    // DY5: `DaysRepository.maxDayNumber` already folds the no-rows case to 0
-    // (`?? 0`); the `|| 0` here is the legacy expression kept verbatim so a
-    // stored 0 still becomes 1 — the same outcome either fold produces, but
-    // the ruling is to keep the literal formula in the service.
-    const maxDayNumber = await this.daysRepo.maxDayNumber(tripIdNum);
-    const dayNumber = (maxDayNumber || 0) + 1;
-
-    const day = await this.daysRepo.createDay({
-      trip_id: tripIdNum,
-      day_number: dayNumber,
-      date: date || null,
-      notes: notes || null,
+    // DY5: the next day number and the row that takes it in one transaction, so
+    // two days added at once cannot both read the same MAX. `|| 0` keeps a stored
+    // 0 becoming 1, as the legacy formula did.
+    const day = await this.uow.transactional(async () => {
+      const dayNumber = ((await this.daysRepo.maxDayNumber(tripIdNum)) || 0) + 1;
+      return await this.daysRepo.createDay({ trip_id: tripIdNum, day_number: dayNumber, date: date || null, notes: notes || null });
     });
     return { ...day, assignments: [] };
   }

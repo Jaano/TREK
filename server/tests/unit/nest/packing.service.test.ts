@@ -224,6 +224,22 @@ function seedTemplate(userId: number, itemNames: string[]): number {
   return templateId;
 }
 
+describe('template positions', () => {
+  it('PACK-SVC-002b: template categories and items added at the same time take one position each', async () => {
+    const { user } = createUser(testDb);
+    const templateId = seedTemplate(user.id, ['Tent']);
+    // seedTemplate's own category holds position 0 and its item position 0.
+    const categories = await Promise.all(['Kitchen', 'Sleep', 'Clothes'].map((name) => svc.createTemplateCategory(String(templateId), name)));
+    const catIds = categories.map((c) => (c as { category: { id: number } }).category.id);
+    expect((testDb.prepare('SELECT sort_order FROM packing_template_categories WHERE template_id = ? ORDER BY sort_order').all(templateId) as { sort_order: number }[])
+      .map((r) => r.sort_order)).toEqual([0, 1, 2, 3]);
+
+    await Promise.all(['Stove', 'Pot', 'Lighter'].map((name) => svc.createTemplateItem(String(templateId), String(catIds[0]), name)));
+    expect((testDb.prepare('SELECT sort_order FROM packing_template_items WHERE category_id = ? ORDER BY sort_order').all(catIds[0]) as { sort_order: number }[])
+      .map((r) => r.sort_order)).toEqual([0, 1, 2]);
+  });
+});
+
 describe('applyTemplate', () => {
   it('PACK-SVC-003: adds template items to a trip packing list', async () => {
     const { user } = createUser(testDb);
@@ -330,6 +346,18 @@ describe('createBag / deleteBag', () => {
     const bag = testDb.prepare('SELECT * FROM packing_bags WHERE id = ?').get(result.id) as any;
     expect(bag).toBeDefined();
     expect(bag.name).toBe('Carry-On');
+  });
+
+  it('PACK-SVC-005b: bags and items created at the same time take one position each', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    // Without the transaction every one of them read the same MAX and landed on 0.
+    await Promise.all(['Carry-On', 'Checked', 'Daypack'].map((name) => svc.createBag(trip.id, { name })));
+    await Promise.all(['Tent', 'Stove', 'Mat'].map((name) => svc.createItem(trip.id, { name }, user.id)));
+    const orders = (table: string) => (testDb.prepare(`SELECT sort_order FROM ${table} WHERE trip_id = ? ORDER BY sort_order`).all(trip.id) as { sort_order: number }[])
+      .map((r) => r.sort_order);
+    expect(orders('packing_bags')).toEqual([0, 1, 2]);
+    expect(orders('packing_items')).toEqual([0, 1, 2]);
   });
 
   it('PACK-SVC-006: deleteBag removes the bag and returns true', async () => {

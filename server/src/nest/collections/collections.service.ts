@@ -133,11 +133,8 @@ export class CollectionsService {
     @InjectRepository(CollectionMembers) private readonly members: CollectionMembersRepository,
     @InjectRepository(CollectionLabels) private readonly labels: CollectionLabelsRepository,
     @InjectRepository(Categories) private readonly categories: CategoriesRepository,
-    // Plan 3h Task 2 (part B) — savePlace onward. `collectionPlaces`/
-    // `collectionPlaceRatings` own this service's own two remaining tables;
-    // `trips`/`tripMembers`/`tripPlaces`/`tripPlaceRatings`/`tags`/`users`
-    // are 3b/3c's, injected directly (AP1-AP6 each become a
-    // `TripsRepository.findAccessible` call, replacing `this.db.canAccessTrip`).
+    // The saved places and their ratings are this service's own; the trip-side
+    // repositories below are injected directly for the copy-to-trip paths.
     @InjectRepository(CollectionPlaces) private readonly collectionPlaces: CollectionPlacesRepository,
     @InjectRepository(CollectionPlaceRatings) private readonly collectionPlaceRatings: CollectionPlaceRatingsRepository,
     @InjectRepository(Trips) private readonly trips: TripsRepository,
@@ -594,8 +591,9 @@ export class CollectionsService {
   }
 
   async createCollection(userId: number, body: CollectionCreateRequest): Promise<Collection> {
-    const max = await this.collectionsRepo.maxSortOrder(userId);
-    const id = await this.collectionsRepo.insertCollection({
+    // The MAX read and the insert in one transaction: two lists created at once
+    // cannot take the same position.
+    const id = await this.uow.transactional(async () => this.collectionsRepo.insertCollection({
       owner_id: userId,
       name: body.name,
       description: body.description ?? null,
@@ -603,8 +601,8 @@ export class CollectionsService {
       icon: body.icon ?? 'Bookmark',
       cover_image: body.cover_image ?? null,
       links: serializeLinks(body.links),
-      sort_order: max + 1,
-    });
+      sort_order: (await this.collectionsRepo.maxSortOrder(userId)) + 1,
+    }));
     const col = await this.getCollectionRow(id);
     return { ...col, is_owner: true };
   }
@@ -1286,13 +1284,15 @@ export class CollectionsService {
     await this.assertCanEdit(userId, collectionId);
     const trimmed = name.trim();
     if (!trimmed) httpError(400, 'Label name is required');
-    const count = await this.labels.countByCollection(collectionId);
-    if (count >= MAX_LABELS_PER_COLLECTION) httpError(400, `A list can have at most ${MAX_LABELS_PER_COLLECTION} labels`);
-    if (await this.labels.nameExists(collectionId, trimmed)) {
-      httpError(409, 'A label with this name already exists');
-    }
-    const nextSort = (await this.labels.maxSortOrder(collectionId)) + 1;
-    const newId = await this.labels.insertLabel({ collection_id: collectionId, name: trimmed, color: color ?? '#6366f1', sort_order: nextSort });
+    // The limit, the name check, the position and the insert in one transaction,
+    // so two labels added at once can neither both pass the checks nor share a position.
+    const newId = await this.uow.transactional(async () => {
+      const count = await this.labels.countByCollection(collectionId);
+      if (count >= MAX_LABELS_PER_COLLECTION) httpError(400, `A list can have at most ${MAX_LABELS_PER_COLLECTION} labels`);
+      if (await this.labels.nameExists(collectionId, trimmed)) httpError(409, 'A label with this name already exists');
+      const nextSort = (await this.labels.maxSortOrder(collectionId)) + 1;
+      return await this.labels.insertLabel({ collection_id: collectionId, name: trimmed, color: color ?? '#6366f1', sort_order: nextSort });
+    });
     await this.notifyCollectionUsers(collectionId, socketId, 'collections:updated');
     return this.getLabelById(newId);
   }

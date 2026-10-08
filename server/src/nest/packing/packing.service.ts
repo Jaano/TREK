@@ -277,12 +277,13 @@ export class PackingService {
     ownerId?: number,
   ) {
     if (data.bag_id != null && !(await this.bagInTrip(tripId, data.bag_id))) return { invalidBag: true } as const;
-    const maxOrder = await this.itemsRepo.maxSortOrder(tripId);
-    const sortOrder = (maxOrder !== null ? maxOrder : -1) + 1;
     const qty = Math.max(1, Math.min(999, Number(data.quantity) || 1));
     const isPrivate = this.visibilityToPrivate(data.visibility, data.is_private);
 
+    // The MAX read and the insert share the transaction, so two items added at
+    // once cannot take the same position.
     const itemId = await this.uow.transactional(async () => {
+      const sortOrder = ((await this.itemsRepo.maxSortOrder(tripId)) ?? -1) + 1;
       const id = await this.itemsRepo.insertItem({
         trip_id: tripId,
         name: data.name,
@@ -490,12 +491,11 @@ export class PackingService {
   // ── Bulk Import ────────────────────────────────────────────────────────────
 
   async bulkImport(tripId: string | number, items: ImportItem[], ownerId?: number) {
-    const maxOrder = await this.itemsRepo.maxSortOrder(tripId);
-    let sortOrder = (maxOrder !== null ? maxOrder : -1) + 1;
-
     const created: any[] = [];
 
     await this.uow.transactional(async () => {
+      // Read inside the transaction, like createItem.
+      let sortOrder = ((await this.itemsRepo.maxSortOrder(tripId)) ?? -1) + 1;
       for (const item of items) {
         if (!item.name?.trim()) continue;
         const checked = item.checked ? 1 : 0;
@@ -615,13 +615,15 @@ export class PackingService {
   }
 
   async createBag(tripId: string | number, data: { name: string; color?: string; weight_limit_grams?: number | null }) {
-    const maxOrder = await this.bagsRepo.maxSortOrder(tripId);
-    const newId = await this.bagsRepo.insertBag({
-      trip_id: tripId,
-      name: data.name.trim(),
-      color: data.color || '#6366f1',
-      sort_order: (maxOrder ?? -1) + 1,
-      weight_limit_grams: data.weight_limit_grams ?? null,
+    const newId = await this.uow.transactional(async () => {
+      const maxOrder = await this.bagsRepo.maxSortOrder(tripId);
+      return await this.bagsRepo.insertBag({
+        trip_id: tripId,
+        name: data.name.trim(),
+        color: data.color || '#6366f1',
+        sort_order: (maxOrder ?? -1) + 1,
+        weight_limit_grams: data.weight_limit_grams ?? null,
+      });
     });
     return await this.bagsRepo.findById(newId);
   }
@@ -682,13 +684,13 @@ export class PackingService {
 
     if (templateItems.length === 0) return null;
 
-    const maxOrder = await this.itemsRepo.maxSortOrder(tripId);
-    let sortOrder = (maxOrder !== null ? maxOrder : -1) + 1;
     const isPrivate = ownerId != null ? this.visibilityToPrivate(visibility) : 0;
     const owner = isPrivate ? ownerId! : null;
 
     const added: any[] = [];
     await this.uow.transactional(async () => {
+      // Read inside the transaction, like createItem.
+      let sortOrder = ((await this.itemsRepo.maxSortOrder(tripId)) ?? -1) + 1;
       for (const ti of templateItems) {
         // Weight, count and bag ride along since #1131; a bag the trip lacks is
         // created, the way the import does it.
@@ -837,8 +839,10 @@ export class PackingService {
     if (!name?.trim()) return { error: 'Category name is required', status: 400 };
     const template = await this.templatesRepo.findById(templateId);
     if (!template) return { error: 'Template not found', status: 404 };
-    const maxOrder = await this.templateCategoriesRepo.maxSortOrder(templateId);
-    const newId = await this.templateCategoriesRepo.insertCategory(templateId, name.trim(), (maxOrder ?? -1) + 1);
+    const newId = await this.uow.transactional(async () => {
+      const maxOrder = await this.templateCategoriesRepo.maxSortOrder(templateId);
+      return await this.templateCategoriesRepo.insertCategory(templateId, name.trim(), (maxOrder ?? -1) + 1);
+    });
     return { category: await this.templateCategoriesRepo.findById(newId) };
   }
 
@@ -863,8 +867,10 @@ export class PackingService {
     if (!name?.trim()) return { error: 'Item name is required', status: 400 };
     const cat = await this.templateCategoriesRepo.findInTemplate(catId, templateId);
     if (!cat) return { error: 'Category not found', status: 404 };
-    const maxOrder = await this.templateItemsRepo.maxSortOrder(catId);
-    const newId = await this.templateItemsRepo.insertTemplateItem({ category_id: catId, name: name.trim(), sort_order: (maxOrder ?? -1) + 1 });
+    const newId = await this.uow.transactional(async () => {
+      const maxOrder = await this.templateItemsRepo.maxSortOrder(catId);
+      return await this.templateItemsRepo.insertTemplateItem({ category_id: catId, name: name.trim(), sort_order: (maxOrder ?? -1) + 1 });
+    });
     return { item: await this.templateItemsRepo.findById(newId) };
   }
 

@@ -146,6 +146,23 @@ describe('collections CRUD + visibility', () => {
     expect((await svc.listCollections(b.id)).collections).toHaveLength(0);
   });
 
+  it('COLLECTIONS-SVC-001b: lists and labels created at the same time take one position each', async () => {
+    const a = createUser(testDb).user;
+    // Without the transaction every one read the same MAX and they shared a position.
+    const lists = await Promise.all(['A', 'B', 'C'].map((name) => svc.createCollection(a.id, { name })));
+    expect(lists.map((l) => l.sort_order).sort((x, y) => x - y)).toEqual([0, 1, 2]);
+    const labels = await Promise.all(['Food', 'Sights', 'Bars'].map((name) => svc.createLabel(a.id, lists[0].id, name)));
+    expect(labels.map((l) => l.sort_order).sort((x, y) => x - y)).toEqual([0, 1, 2]);
+  });
+
+  it('COLLECTIONS-SVC-001c: two labels of one name created at the same time: one lands, the other is a 409', async () => {
+    const a = createUser(testDb).user;
+    const list = await svc.createCollection(a.id, { name: 'Tokyo' });
+    const results = await Promise.allSettled([svc.createLabel(a.id, list.id, 'Food'), svc.createLabel(a.id, list.id, 'Food')]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.find((r) => r.status === 'rejected')).toMatchObject({ reason: { status: 409 } });
+  });
+
   it('COLLECTIONS-SVC-002: getCollection 404 for a non-member', async () => {
     const a = createUser(testDb).user;
     const b = createUser(testDb).user;
