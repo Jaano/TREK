@@ -3,12 +3,14 @@
  */
 import { ESLint } from 'eslint';
 import { join } from 'node:path';
-import { countMap, lowerCounts, readBaseline, TEST_FILE, toKey, writeBaseline } from './ratchet.mjs';
+import ts from 'typescript';
+import { countMap, lowerCounts, readBaseline, readText, TEST_FILE, toKey, writeBaseline } from './ratchet.mjs';
 
 /**
  * Where a warning is counted: in the app code, in the tests, or, for a
  * message an eslint-disable comment silenced, among the suppressed ones. An
- * inline disable must not be the cheap way under the ratchet.
+ * inline disable must not be the cheap way under the ratchet, and an inline
+ * rule config, which silences without a trace, fails outright (see tally).
  */
 export const AREAS = ['src', 'tests', 'suppressed'];
 
@@ -30,9 +32,55 @@ export function areaCounts(value) {
   return null;
 }
 
+const scriptKind = (file) =>
+  file.endsWith('.tsx')
+    ? ts.ScriptKind.TSX
+    : /\.[cm]?ts$/.test(file)
+      ? ts.ScriptKind.TS
+      : file.endsWith('.jsx')
+        ? ts.ScriptKind.JSX
+        : ts.ScriptKind.JS;
+
+/** ESLint's label for a block comment that configures rules, as opposed to eslint-disable and the like. */
+const INLINE_CONFIG = /^\s*eslint(?:\s|$)/;
+
+/**
+ * The block comments in a file that configure ESLint rules, such as
+ * `/* eslint no-empty: off *\/`, as `line:column  comment`. Such a comment
+ * switches a rule off for the whole file without a single message reaching
+ * either the warnings or the suppressed ones, so it would walk past the
+ * ratchet unseen. The comments come from the TypeScript parser, so the same
+ * text inside a string or a template does not count.
+ */
+export function inlineConfigsOf(source, file) {
+  const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, scriptKind(file));
+  const seen = new Set();
+  const found = [];
+  const collect = (ranges) => {
+    for (const range of ranges ?? []) {
+      if (seen.has(range.pos)) continue;
+      seen.add(range.pos);
+      if (range.kind !== ts.SyntaxKind.MultiLineCommentTrivia) continue;
+      const text = source.slice(range.pos, range.end);
+      if (!INLINE_CONFIG.test(text.slice(2, -2))) continue;
+      const { line, character } = sf.getLineAndCharacterOfPosition(range.pos);
+      found.push(`${line + 1}:${character + 1}  ${text.replace(/\s+/g, ' ').slice(0, 80)}`);
+    }
+  };
+  const visit = (node) => {
+    collect(ts.getLeadingCommentRanges(source, node.pos));
+    collect(ts.getTrailingCommentRanges(source, node.pos));
+    for (const child of node.getChildren(sf)) visit(child);
+  };
+  visit(sf);
+  return found;
+}
+
 /**
  * The warnings per area and rule in ESLint's results, the files behind each
  * count, and every error (an error, a parse failure included, always fails).
+ * An inline rule config comment (see inlineConfigsOf) is an error too: the
+ * place to change a rule is eslint.config.mjs.
  */
 export function tally(results, root) {
   const counts = Object.fromEntries(AREAS.map((area) => [area, {}]));
@@ -45,6 +93,8 @@ export function tally(results, root) {
   };
   for (const result of results) {
     const key = toKey(root, result.filePath);
+    for (const comment of result.inlineConfigs ?? [])
+      errors.push(`${key}:${comment}  configures a rule inline; set it in eslint.config.mjs (inline-config)`);
     for (const message of result.messages) {
       if (message.fatal || message.severity === 2)
         errors.push(`${key}:${message.line ?? 0}:${message.column ?? 0}  ${message.message} (${ruleOf(message)})`);
@@ -59,17 +109,22 @@ export function tally(results, root) {
  * The part of an ESLint result the tally reads.
  *
  * @typedef {{ ruleId: string | null, severity: number, message: string, fatal?: boolean, line?: number, column?: number }} LintMessage
- * @typedef {{ filePath: string, messages: LintMessage[], suppressedMessages?: LintMessage[] }} LintResult
+ * @typedef {{ filePath: string, messages: LintMessage[], suppressedMessages?: LintMessage[], inlineConfigs?: string[] }} LintResult
  */
 
 /**
- * ESLint over the whole client, with its own config, as `npm run lint:check` runs it.
+ * ESLint over the whole client, with its own config, as `npm run lint:check`
+ * runs it, each result with the inline rule configs of its file.
  *
  * @param {string} root
  * @returns {Promise<LintResult[]>}
  */
 export async function lintClient(root) {
-  return new ESLint({ cwd: root }).lintFiles(['.']);
+  const results = await new ESLint({ cwd: root }).lintFiles(['.']);
+  return results.map((result) => ({
+    ...result,
+    inlineConfigs: inlineConfigsOf(readText(result.filePath), result.filePath),
+  }));
 }
 
 const sum = (map) => Object.values(map).reduce((a, b) => a + b, 0);

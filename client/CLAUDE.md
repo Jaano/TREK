@@ -9,7 +9,7 @@ npm run dev               # Vite dev server; proxies the API/ws/uploads/MCP/OAut
 npm run build             # prebuild generates PWA icons, then vite build
 npm run typecheck         # tsc --noEmit (CI)
 npm run lint              # eslint .   (lint:check in CI)
-npm run lint:warnings     # eslint, failing on any error and on any warning count per rule above scripts/eslint-baseline.json (app code, tests and eslint-disable'd messages counted apart; --update lowers it)
+npm run lint:warnings     # eslint, failing on any error and on any warning count per rule above scripts/eslint-baseline.json (app code, tests and eslint-disable'd messages counted apart; a `/* eslint <rule>: ... */` config comment fails outright; --update lowers it)
 npm run lint:pages        # enforce the Page pattern (CI gate)
 npm run lint:rtl          # physical left/right sides and rtl-lint-disable comments may only shrink per file (CI gate; --list shows them, --update lowers both baselines)
 npm run lint:size         # no source file or stylesheet past 1000 lines, no test (Playwright specs and fixtures under e2e/ included) past 2000, counted wrapped at 120 columns; longer ones may only shrink (CI gate; --update lowers the baseline)

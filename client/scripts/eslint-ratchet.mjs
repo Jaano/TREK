@@ -9,7 +9,10 @@
  * client and counts the warnings per rule, separately for app code and
  * tests, and the messages an eslint-disable comment silenced as a third
  * group. Each count may not pass its entry in scripts/eslint-baseline.json.
- * Any error fails as well, so the check can stand in for `npm run lint:check`.
+ * Any error fails as well, so the check can stand in for `npm run lint:check`,
+ * and so does a block comment that configures a rule inline (such as one that
+ * turns no-explicit-any off): it leaves no message to count, so it would
+ * otherwise be the free way past the ratchet.
  *
  *   npm run lint:warnings              check against the baseline (CI)
  *   npm run lint:warnings -- --update  lower the baseline to today's counts;

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { areaCounts, check, tally } from '../../../scripts/lib/eslint-warnings.mjs';
+import { areaCounts, check, inlineConfigsOf, lintClient, tally } from '../../../scripts/lib/eslint-warnings.mjs';
 import { RatchetError } from '../../../scripts/lib/ratchet.mjs';
 import { ratchetTree, type RatchetTree } from '../../helpers/ratchetFixture';
 
@@ -127,5 +127,49 @@ describe('lint:warnings', () => {
     expect(areaCounts({ ...empty, other: {} })).toMatch(/"other" is not one of/);
     expect(areaCounts({ ...empty, src: { a: -1 } })).toMatch(/in "src"/);
     await expect(run({ src: {} }, () => [])).rejects.toThrow(RatchetError);
+  });
+
+  it('ESLINT-009: finds the block comments that configure a rule, and nothing in strings, templates or regexes', () => {
+    const source = [
+      '/* eslint @typescript-eslint/no-explicit-any: off */',
+      'const a = "/* eslint no-empty: off */";',
+      'const b = `${a} /* eslint no-empty: off */`;',
+      '/* eslint-disable no-empty */',
+      '/*eslint no-empty:0*/ const c = <div>{/* eslint no-empty: 1 */}</div>;',
+      'const r = /\\/\\* eslint no-empty/;',
+      '// eslint no-empty: off',
+      '/** eslint is the linter */',
+    ].join('\n');
+    expect(inlineConfigsOf(source, 'src/a.tsx')).toEqual([
+      '1:1  /* eslint @typescript-eslint/no-explicit-any: off */',
+      '5:1  /*eslint no-empty:0*/',
+      '5:39  /* eslint no-empty: 1 */',
+    ]);
+    expect(inlineConfigsOf('export const a = 1 /* eslint no-empty: off */\n', 'src/a.ts')).toHaveLength(1);
+    expect(inlineConfigsOf('export const a = 1\n', 'src/a.ts')).toEqual([]);
+  });
+
+  it('ESLINT-010: an inline rule config fails the check although it leaves no message behind', async () => {
+    const code = await run(empty, (root) => [
+      { ...result(root, 'src/a.ts', []), inlineConfigs: ['1:1  /* eslint no-empty: off */'] },
+    ]);
+    expect(code).toBe(1);
+    expect(tree.error.join('\n')).toMatch(
+      /src\/a\.ts:1:1 {2}\/\* eslint no-empty: off \*\/ {2}configures a rule inline/
+    );
+  });
+
+  it('ESLINT-011: lintClient reads the inline rule configs of every file it lints', async () => {
+    tree = ratchetTree({
+      'eslint.config.mjs': "export default [{ files: ['**/*.js'], rules: { 'no-empty': 'warn' } }];\n",
+      'src/a.js': '/* eslint no-empty: off */\nif (globalThis.x) {}\n',
+      'src/b.js': 'if (globalThis.x) {}\n',
+    });
+    const results = await lintClient(tree.root);
+    const byKey = Object.fromEntries(results.map((r) => [r.filePath.split('\\').join('/').split('/src/')[1], r]));
+    expect(byKey['a.js'].messages).toEqual([]);
+    expect(byKey['a.js'].inlineConfigs).toEqual(['1:1  /* eslint no-empty: off */']);
+    expect(byKey['b.js'].messages.map((m) => m.ruleId)).toEqual(['no-empty']);
+    expect(byKey['b.js'].inlineConfigs).toEqual([]);
   });
 });
