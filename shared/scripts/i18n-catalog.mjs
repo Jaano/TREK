@@ -21,6 +21,13 @@ export const I18N_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', 'sr
 
 export const FALLBACK_MARKER = '// en-fallback';
 
+/**
+ * The marker a translator leaves on a value that is the locale's own word and
+ * happens to be spelled as in en (German "Status", French "Transport"). The
+ * untranslated ratchet honours it only in Latin-script locales.
+ */
+export const SAME_MARKER = '// same-as-en';
+
 /** A root given as a file URL (what a spec can build without node types) or a path. */
 export const asPath = (root) => (root instanceof URL ? fileURLToPath(root) : root);
 
@@ -70,7 +77,8 @@ function readLiteral(text) {
 
 /**
  * Every top-level entry of one table's source: key, value, whether the
- * declaration carries the fallback marker, and the line it starts on.
+ * declaration carries the fallback marker (`marked`) or the same-as-en
+ * marker (`same`), and the line it starts on.
  * Throws with file and line on anything it cannot read.
  */
 export function parseCatalog(source, label = 'catalogue') {
@@ -91,7 +99,13 @@ export function parseCatalog(source, label = 'catalogue') {
     if (!literal || !/^(,|\})?\s*(\/\/.*)?$/.test(tail)) {
       throw new Error(`${label}:${i + 1}: '${key}' is not a single string literal`);
     }
-    entries.push({ key, value: literal.value, marked: tail.includes(FALLBACK_MARKER), line: i + 1 });
+    entries.push({
+      key,
+      value: literal.value,
+      marked: tail.includes(FALLBACK_MARKER),
+      same: tail.includes(SAME_MARKER),
+      line: i + 1,
+    });
     i = end;
   }
   return entries;

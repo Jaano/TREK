@@ -9,7 +9,9 @@
  *   marked     a declaration carrying `// en-fallback`, the marker a
  *              translator leaves on a string they could not translate yet
  *   identical  an unmarked value equal to en's, unless the rule in
- *              `isInvariant` says the text reads the same in every language
+ *              `isInvariant` says the text reads the same in every language,
+ *              or a translator confirmed it with `// same-as-en` in a
+ *              Latin-script locale (`isExcused`)
  *
  * Both counts are held at scripts/i18n-untranslated-baseline.json. The check
  * fails when either grows past its entry (a file without one may hold none),
@@ -28,19 +30,76 @@
  * files, or a value the catalogue reader cannot parse is an error, never a
  * pass.
  */
+import { asPath, I18N_ROOT, listDomainFiles, listLocales, readCatalog } from './i18n-catalog.mjs';
+
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { asPath, I18N_ROOT, listDomainFiles, listLocales, readCatalog } from './i18n-catalog.mjs';
 
 export const BASELINE = join(dirname(fileURLToPath(import.meta.url)), 'i18n-untranslated-baseline.json');
 
 /**
- * Names of two or more plain words that read the same in every language.
- * One-word names (Mapbox, Immich) and names with an inner capital (MapLibre,
- * OpenStreetMap) are already covered by the word rule below.
+ * Product and service names, which read the same in every language. A value
+ * is excused for them, never for an ordinary word: German "Status" or French
+ * "Transport" are the locale's own words only by coincidence, and a one-word
+ * label copied from en ("Appearance", "Settings") is the commonest untranslated
+ * string there is. Names with an inner capital (MapLibre, OpenStreetMap) and
+ * acronyms need no entry, the word rule below already skips them.
  */
-export const BRAND_NAMES = ['Apple Maps', 'Google Maps', 'Google Places', 'Home Assistant', 'Organic Maps', 'Synology Photos'];
+export const BRAND_NAMES = [
+  'Amap',
+  'Anthropic',
+  'Apple Maps',
+  'Atlas',
+  'Dawarich',
+  'Discord',
+  'Docker',
+  'Google',
+  'Google Maps',
+  'Google Places',
+  'Home Assistant',
+  'Immich',
+  'Mapbox',
+  'Ntfy',
+  'Organic Maps',
+  'Polaroid',
+  'Synology',
+  'Synology Photos',
+  'Vacay',
+  'Webhook',
+  'wanderer',
+];
+
+/** Unit symbols, short codes rather than words: "{count} km", "{minutes} min". */
+export const UNITS = ['km', 'mi', 'ft', 'min'];
+
+/**
+ * Locales written in a script other than Latin. A Latin word left in one of
+ * them is English whatever the word, so `// same-as-en` is not honoured
+ * there. Every locale folder must be listed in exactly one of the two lists,
+ * so a new locale cannot slip past this rule unclassified.
+ */
+export const NON_LATIN_LOCALES = ['ar', 'gr', 'ja', 'ko', 'ru', 'th', 'uk', 'zh', 'zh-TW'];
+export const LATIN_LOCALES = [
+  'az',
+  'br',
+  'ca',
+  'cs',
+  'de',
+  'en',
+  'es',
+  'et',
+  'fr',
+  'hu',
+  'id',
+  'it',
+  'nl',
+  'pl',
+  'sk',
+  'sv',
+  'tr',
+  'vi',
+];
 
 const PLACEHOLDER_RE = /\{[a-zA-Z0-9_]+\}/g;
 const TAG_RE = /<\/?[a-zA-Z][^>]*>/g;
@@ -48,6 +107,15 @@ const TAG_RE = /<\/?[a-zA-Z][^>]*>/g;
 const ADDRESS_RE = /\S*[/@]\S*/g;
 // Hyphens join a word: "Check-in", "Wi-Fi" and "Auto-Backup" are one each.
 const WORD_RE = /\p{L}[\p{L}\p{M}'’-]*/gu;
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Longest first, so "Google Maps" goes as one name before "Google" could split it.
+const NAME_RE = new RegExp(
+  `(?<![\\p{L}\\p{N}])(?:${[...BRAND_NAMES, ...UNITS]
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRe)
+    .join('|')})(?![\\p{L}\\p{N}])`,
+  'gu',
+);
 
 /**
  * A word in the sense of the rule: two letters or more and no capital after
@@ -58,22 +126,37 @@ const WORD_RE = /\p{L}[\p{L}\p{M}'’-]*/gu;
 export const isPlainWord = (word) => word.length >= 2 && !/\p{Lu}/u.test(word.slice(1));
 
 /**
- * Whether a value equal to en's is legitimately the same text. True when,
- * after dropping placeholders, markup, addresses and the brand names above,
- * at most one plain word is left: "{count} km", "OAuth", "GPX", "Google Maps",
- * "PDF · {size}", "Budget", the sort label "Name (A to Z)". Two plain words or
- * more are a phrase, and phrases differ between languages.
+ * Whether a value equal to en's is legitimately the same text in every
+ * language. True when, after dropping placeholders, markup, addresses, the
+ * names in BRAND_NAMES and the UNITS, no plain word is left: "{count} km",
+ * "OAuth", "GPX", "Google Maps", "Atlas", "PDF · {size}". A single plain word
+ * is counted like a phrase: "Budget" and "Status" may be the locale's word too,
+ * and that is for a translator to confirm, not for the rule to assume.
  */
 export function isInvariant(value) {
-  let text = value.replace(PLACEHOLDER_RE, ' ').replace(TAG_RE, ' ').replace(ADDRESS_RE, ' ');
-  for (const name of BRAND_NAMES) text = text.split(name).join(' ');
-  return (text.match(WORD_RE) ?? []).filter(isPlainWord).length <= 1;
+  const text = value.replace(PLACEHOLDER_RE, ' ').replace(TAG_RE, ' ').replace(ADDRESS_RE, ' ').replace(NAME_RE, ' ');
+  return !(text.match(WORD_RE) ?? []).some(isPlainWord);
+}
+
+/** Whether `locale` is written in Latin script. Throws for a locale on neither list. */
+export function isLatinLocale(locale) {
+  if (LATIN_LOCALES.includes(locale)) return true;
+  if (NON_LATIN_LOCALES.includes(locale)) return false;
+  throw new Error(
+    `locale ${locale} is on neither LATIN_LOCALES nor NON_LATIN_LOCALES in scripts/i18n-untranslated.mjs`,
+  );
 }
 
 /**
+ * Whether an unmarked value equal to en's is excused: it is invariant, or a
+ * translator marked it `// same-as-en` in a Latin-script locale.
+ */
+export const isExcused = (value, same, locale) => isInvariant(value) || (same && isLatinLocale(locale));
+
+/**
  * Today's counts: `{ [locale]: { [file]: { marked, identical } } }`, only
- * non-zero entries. Throws on a locale missing one of en's files or a value
- * the reader cannot parse.
+ * non-zero entries. Throws on a locale missing one of en's files, a locale
+ * on neither script list or a value the reader cannot parse.
  */
 export function countUntranslated(root = I18N_ROOT) {
   const locales = listLocales(root);
@@ -82,6 +165,8 @@ export function countUntranslated(root = I18N_ROOT) {
   const enValues = new Map(enFiles.map((f) => [f, new Map(readCatalog('en', f, root).map((e) => [e.key, e.value]))]));
   const counts = {};
   for (const locale of locales) {
+    // Classify every folder first: an unlisted locale is an error, not a pass.
+    isLatinLocale(locale);
     if (locale === 'en') continue;
     const files = new Set(listDomainFiles(locale, root));
     for (const file of enFiles) {
@@ -89,9 +174,9 @@ export function countUntranslated(root = I18N_ROOT) {
       const en = enValues.get(file);
       let marked = 0;
       let identical = 0;
-      for (const { key, value, marked: isMarked } of readCatalog(locale, file, root)) {
+      for (const { key, value, marked: isMarked, same } of readCatalog(locale, file, root)) {
         if (isMarked) marked++;
-        else if (en.get(key) === value && !isInvariant(value)) identical++;
+        else if (en.get(key) === value && !isExcused(value, same, locale)) identical++;
       }
       if (marked || identical) (counts[locale] ??= {})[file] = { marked, identical };
     }
@@ -191,7 +276,9 @@ const total = (map, kind) =>
 
 // Compared by real path, so the check still runs when the script is started through a symlink.
 const isCli =
-  Boolean(process.argv[1]) && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
+  Boolean(process.argv[1]) &&
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isCli) {
   try {
     const counts = countUntranslated();
@@ -207,7 +294,9 @@ if (isCli) {
       console.error('Translate the new strings (shared/CLAUDE.md: an English placeholder is not acceptable).');
     }
     if (lowerable && !process.argv.includes('--update')) {
-      console.log(`${lowerable} baseline entr${lowerable === 1 ? 'y is' : 'ies are'} above today's count: run with --update to lower.`);
+      console.log(
+        `${lowerable} baseline entr${lowerable === 1 ? 'y is' : 'ies are'} above today's count: run with --update to lower.`,
+      );
     }
     console.log(
       `untranslated: ${total(counts, 'marked')} marked en-fallback, ${total(counts, 'identical')} unmarked English copies`,

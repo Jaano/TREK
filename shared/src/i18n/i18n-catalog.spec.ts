@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
  */
 const ROOT = new URL('../../scripts/fixtures/i18n/', import.meta.url);
 
-type Entry = { key: string; value: string; marked: boolean; line: number };
+type Entry = { key: string; value: string; marked: boolean; same: boolean; line: number };
 
 describe('i18n catalogue reader', () => {
   it('reads single-line, wrapped, double-quoted and escaped values with their markers', () => {
@@ -22,13 +22,15 @@ describe('i18n catalogue reader', () => {
         "    'Two, wrapped', // en-fallback",
         `  'a.three': "It's",`,
         "  'a.four': 'Don\\'t \\u00e9',",
+        "  'a.five': 'Status', // same-as-en",
       ].join('\r\n'),
     );
-    expect(entries.map((e: Entry) => [e.key, e.value, e.marked])).toEqual([
-      ['a.one', 'One', false],
-      ['a.two', 'Two, wrapped', true],
-      ['a.three', "It's", false],
-      ['a.four', "Don't é", false],
+    expect(entries.map((e: Entry) => [e.key, e.value, e.marked, e.same])).toEqual([
+      ['a.one', 'One', false, false],
+      ['a.two', 'Two, wrapped', true, false],
+      ['a.three', "It's", false, false],
+      ['a.four', "Don't é", false, false],
+      ['a.five', 'Status', false, true],
     ]);
   });
 

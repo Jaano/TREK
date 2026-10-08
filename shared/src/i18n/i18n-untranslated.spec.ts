@@ -1,6 +1,7 @@
 import {
   compare,
   countUntranslated,
+  isExcused,
   isInvariant,
   lowered,
   readBaseline,
@@ -14,7 +15,7 @@ import { describe, it, expect } from 'vitest';
  * The untranslated-strings ratchet (scripts/i18n-untranslated.mjs). The
  * fixtures under scripts/fixtures/ hold a two-locale table with one marked
  * fallback, two unmarked English copies and the invariant strings the rule
- * excuses.
+ * excuses; i18n-words/ holds the one-word cases per script.
  */
 const FIXTURES = new URL('../../scripts/fixtures/', import.meta.url);
 const ROOT = new URL('i18n/', FIXTURES);
@@ -22,24 +23,32 @@ const ROOT = new URL('i18n/', FIXTURES);
 type Counts = Record<string, Record<string, { marked: number; identical: number }>>;
 
 describe('i18n untranslated ratchet', () => {
-  it('excuses placeholders, codes, names and single words, never a phrase', () => {
+  it('excuses placeholders, codes, units and names, never an ordinary word or a phrase', () => {
     for (const same of [
       '{count} km',
+      '{minutes} min',
       'GPX',
       'OAuth',
       'Google Maps',
+      'Atlas',
+      'Mapbox (3D)',
+      'Dawarich {version}',
       'PDF · {size}',
-      'Budget',
-      'Name (A\u2013Z)',
-      'Check-in',
       'https://ntfy.sh',
       'your@email.com',
-      'Update → v{version}',
       '<b>{name}</b>',
     ]) {
       expect([same, isInvariant(same)]).toEqual([same, true]);
     }
     for (const copy of [
+      'Settings',
+      'Appearance',
+      'Readability',
+      'Budget',
+      'Check-in',
+      'Atlases',
+      'Name (A\u2013Z)',
+      'Update → v{version}',
       'Trip settings',
       'Remove {count} items',
       'Open in Google Maps',
@@ -48,6 +57,25 @@ describe('i18n untranslated ratchet', () => {
     ]) {
       expect([copy, isInvariant(copy)]).toEqual([copy, false]);
     }
+  });
+
+  it('honours // same-as-en in a Latin-script locale only, and refuses an unlisted locale', () => {
+    expect(isExcused('Status', true, 'de')).toBe(true);
+    expect(isExcused('Status', false, 'de')).toBe(false);
+    expect(isExcused('Status', true, 'ja')).toBe(false);
+    expect(isExcused('GPX', false, 'ja')).toBe(true);
+    expect(() => isExcused('Status', true, 'xx')).toThrow(/neither LATIN_LOCALES nor NON_LATIN_LOCALES/);
+  });
+
+  it('counts a one-word English copy: Settings in fr, Appearance in ja', () => {
+    expect(countUntranslated(new URL('i18n-words/', FIXTURES))).toEqual({
+      fr: { 'a.ts': { marked: 0, identical: 2 } },
+      ja: { 'a.ts': { marked: 0, identical: 2 } },
+    });
+  });
+
+  it('fails closed on a locale folder on neither script list', () => {
+    expect(() => countUntranslated(new URL('i18n-unlisted/', FIXTURES))).toThrow(/locale xx is on neither/);
   });
 
   it('counts marked fallbacks and unmarked English copies per locale and file', () => {
