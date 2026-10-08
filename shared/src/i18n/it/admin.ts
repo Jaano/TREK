@@ -23,10 +23,14 @@ const admin: TranslationStrings = {
   'admin.tabs.categories': 'Categorie',
   'admin.tabs.backup': 'Backup',
   'admin.stats.users': 'Utenti',
+  'admin.stats.users.one': 'Utente',
   'admin.stats.trips': 'Viaggi',
+  'admin.stats.trips.one': 'Viaggio',
   'admin.stats.places': 'Luoghi',
+  'admin.stats.places.one': 'Luogo',
   'admin.stats.photos': 'Foto',
   'admin.stats.files': 'File',
+  'admin.stats.files.one': 'File',
   'admin.table.user': 'Utente',
   'admin.table.email': 'Email',
   'admin.table.role': 'Ruolo',
@@ -93,7 +97,7 @@ const admin: TranslationStrings = {
   'admin.googleCaveat.body':
     "TREK è software libero e su questo non siamo neutrali. A questa scala recensioni e foto degli esercizi comuni esistono solo da Google, ed è questo un monopolio. Il campo c'è per mancanza di alternative, non perché lo consigliamo. Ogni interrogazione va allora a Google.",
   'admin.trekApi.tagline':
-    'L\'indice di luoghi di TREK. Cercare senza chiave Google, senza quota e senza che nessuno conti le tue ricerche.',
+    "L'indice di luoghi di TREK. Cercare senza chiave Google, senza quota e senza che nessuno conti le tue ricerche.",
   'admin.trekApi.factPlaces':
     '73,6 milioni di luoghi nel mondo',
   'admin.trekApi.factNoKey':
@@ -115,7 +119,7 @@ const admin: TranslationStrings = {
   'admin.trekApi.notPhotos':
     'Foto degli esercizi comuni',
   'admin.trekApi.notIncludedNote':
-    'Nessuna fonte aperta ha né le une né le altre, a nessun prezzo. Per quelle due una chiave Google resta l\'unica strada.',
+    "Nessuna fonte aperta ha né le une né le altre, a nessun prezzo. Per quelle due una chiave Google resta l'unica strada.",
   'admin.trekApi.sourcesLabel':
     'Fonti',
   'admin.trekApi.sourcesNote':
@@ -177,8 +181,10 @@ const admin: TranslationStrings = {
   'admin.placesEnrich.subtitle':
     'Mostra immagini e una descrizione mentre aggiungi un luogo. Wikipedia e OpenStreetMap sono sempre usati; Google si aggiunge se Foto luoghi o Dettagli luoghi sono attivi.',
   'admin.placesGoogleOnly.title': 'Cerca solo con Google',
-  'admin.placesGoogleOnly.subtitle': 'Ogni ricerca e ogni suggerimento vanno a Google Places. Spento, rispondono prima l\'indice di TREK e OpenStreetMap, e Google viene interrogato solo se non trovano nulla.',
-  'admin.placesGoogleOnly.missingKey': 'Richiede una chiave API di Google Maps. Senza, la ricerca usa l\'indice di TREK e OpenStreetMap, comunque sia impostato questo interruttore.',
+  'admin.placesGoogleOnly.subtitle':
+    "Ogni ricerca e ogni suggerimento vanno a Google Places. Spento, rispondono prima l'indice di TREK e OpenStreetMap, e Google viene interrogato solo se non trovano nulla.",
+  'admin.placesGoogleOnly.missingKey':
+    "Richiede una chiave API di Google Maps. Senza, la ricerca usa l'indice di TREK e OpenStreetMap, comunque sia impostato questo interruttore.",
   'admin.placesGoogleOnly.otherProvider': 'Richiede Google come provider dei luoghi. Con Amap o OpenStreetMap selezionati, nessuna ricerca va a Google, qualunque sia la posizione di questo interruttore.',
   'admin.googleQuota.title': 'Limite giornaliero di chiamate a Google',
   'admin.googleQuota.subtitle': 'Una volta raggiunto, TREK smette di chiamare Google fino al giorno dopo (UTC) e cerca con OpenStreetMap. Vuoto significa nessun limite.',
@@ -194,7 +200,8 @@ const admin: TranslationStrings = {
   'admin.transitProvider.transitousHint': 'Feed GTFS della comunità. Gratuito e senza chiave, con la migliore copertura in Europa.',
   'admin.transitProvider.googleHint': 'Usa la chiave Google qui sopra, per le regioni senza dati Transitous. Addebitato per ricerca: finché non è impostata una chiave viene usato Transitous.',
   'admin.transitProvider.noKeyWarning': 'Google è selezionato, ma non è configurata alcuna chiave Google: la ricerca del trasporto usa ancora Transitous. Aggiungi una chiave in Chiavi API qui sopra.',
-  'admin.transitProvider.personalKeyWarning': 'È impostata solo la tua chiave Google, quindi la ricerca degli altri membri continua a ripiegare su Transitous. Salva la chiave qui sopra come amministratore per applicarla all\'intera istanza.',
+  'admin.transitProvider.personalKeyWarning':
+    "È impostata solo la tua chiave Google, quindi la ricerca degli altri membri continua a ripiegare su Transitous. Salva la chiave qui sopra come amministratore per applicarla all'intera istanza.",
   'admin.placeShadow.title': 'Registro delle ricerche di luoghi',
   'admin.placeShadow.subtitle':
     'Annotare quale risultato di ricerca è stato scelto, così da poter valutare in seguito un altro indice di luoghi su ricerche reali. Nulla esce da questa istanza e un amministratore può esportare o cancellare il registro in qualsiasi momento.',
@@ -223,7 +230,9 @@ const admin: TranslationStrings = {
   'admin.packingTemplates.namePlaceholder': 'Nome modello (es. Vacanza al mare)',
   'admin.packingTemplates.empty': 'Ancora nessun modello creato',
   'admin.packingTemplates.items': 'elementi',
+  'admin.packingTemplates.items.one': 'elemento',
   'admin.packingTemplates.categories': 'categorie',
+  'admin.packingTemplates.categories.one': 'categoria',
   'admin.packingTemplates.itemName': 'Nome elemento',
   'admin.packingTemplates.itemCategory': 'Categoria',
   'admin.packingTemplates.categoryName': 'Nome categoria (es. Abbigliamento)',
@@ -273,6 +282,7 @@ const admin: TranslationStrings = {
   'admin.plugins.allowedHosts.restartNote': 'Il salvataggio riavvia il plugin perché prenda la nuova lista.',
   'admin.plugins.allowedHosts.add': 'Aggiungi host consentito',
   'admin.plugins.allowedHosts.count': '{n} host consentiti',
+  'admin.plugins.allowedHosts.count.one': '{n} host consentito',
   'admin.plugins.operatorEgressPill': '+ host aggiunti da te',
   'admin.plugins.operatorEgressHint':
     'Questo plugin comunica con un servizio che solo tu puoi indicare (un server self-hosted). Dopo l’installazione, aggiungi gli host che può raggiungere in ⋯ → Host consentiti. Non ne raggiungerà altri.',
@@ -506,6 +516,7 @@ const admin: TranslationStrings = {
   'admin.plugins.sortUpdates': 'Prima gli aggiornamenti',
   'admin.plugins.sortDownloads': 'Più scaricati',
   'admin.plugins.updatesAvailable': '{count} aggiornamenti disponibili per i tuoi plugin.',
+  'admin.plugins.updatesAvailable.one': '{count} aggiornamento disponibile per i tuoi plugin.',
   'admin.plugins.newerNeedsTrek': 'v{version} disponibile — richiede TREK {range}',
   'admin.plugins.versionsTitle': 'Versioni',
   'admin.plugins.versionPickerTitle': 'Cambia versione — {name}',
@@ -778,7 +789,8 @@ const admin: TranslationStrings = {
   'admin.notifications.adminNotificationsHint':
     'Configura quali canali consegnano le notifiche admin (es. avvisi di versione). Il webhook si attiva automaticamente se è impostato un URL webhook admin.',
   'admin.notificationDefaults.title': 'Impostazioni predefinite per gli utenti',
-  'admin.notificationDefaults.hint': "Come partono le notifiche di ogni utente. \"Disattivato\" l'utente può ancora attivarlo; \"Bloccato\" lo spegne per tutti e appare bloccato nelle loro impostazioni. Vale per chi non ha cambiato la cella.",
+  'admin.notificationDefaults.hint':
+    'Come partono le notifiche di ogni utente. "Disattivato" l\'utente può ancora attivarlo; "Bloccato" lo spegne per tutti e appare bloccato nelle loro impostazioni. Vale per chi non ha cambiato la cella.',
   'admin.notificationDefaults.on': 'Attivo',
   'admin.notificationDefaults.off': 'Disattivato',
   'admin.notificationDefaults.blocked': 'Bloccato',
@@ -812,6 +824,7 @@ const admin: TranslationStrings = {
     'Rimuovi tutte le passkey di questo utente (es. in caso di dispositivo smarrito). Potrà comunque accedere con la sua password.',
   'admin.passkey.resetConfirm': 'Rimuovere tutte le passkey di {name}?',
   'admin.passkey.resetDone': 'Rimosse {count} passkey',
+  'admin.passkey.resetDone.one': 'Rimossa {count} passkey',
   'admin.defaultSettings.mapProvider': 'Motore mappe',
   'admin.defaultSettings.mapProviderHint':
     'La mappa predefinita per tutti gli utenti di questa istanza. Ogni utente può comunque sostituirla nelle proprie impostazioni.',

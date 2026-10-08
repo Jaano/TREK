@@ -68,7 +68,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.scope': '날짜',
   'roadtrip.poi.looking': '찾는 항목',
   'roadtrip.poi.searchingHint': '경로를 검색하는 중…',
-  'roadtrip.poi.found': '경로에 {count}곳',
+  'roadtrip.poi.found': '경로상 {count}곳',
   'roadtrip.poi.fuel': '주유',
   'roadtrip.poi.charging': '충전',
   'roadtrip.stop.offRoad': '도로에서 {distance}',
@@ -188,7 +188,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noneMatchFilters': '이 필터에 맞는 곳이 경로에 없습니다.',
   'roadtrip.poi.foundFiltered': '경로상 {total}곳 중 {count}곳',
   'roadtrip.poi.truncated':
-    '{count}개 구간에서 한 번에 반환할 수 있는 수를 넘었습니다. 회랑을 좁히면 나머지를 볼 수 있습니다.',
+    '{count}개 구간은 결과가 너무 많아 한 번에 모두 표시하지 못했습니다. 검색 반경을 줄이면 나머지를 볼 수 있습니다.',
   'roadtrip.poi.search': '검색',
   'roadtrip.poi.searching': '검색 중 {done}/{total}',
   'roadtrip.poi.capped': '경로가 길어 앞부분만 검색했습니다.',

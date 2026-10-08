@@ -123,7 +123,7 @@ const budget: TranslationStrings = {
   'costs.payersUnbalanced': 'Jumlah pembayar harus berjumlah {amount}',
   'costs.splitBetween': 'Bagi rata antara',
   'costs.pickSomeone': 'Pilih setidaknya satu orang untuk berbagi.',
-  'costs.splitSummary': 'Dibagi {count} cara · {amount} masing-masing',
+  'costs.splitSummary': 'Dibagi untuk {count} orang · {amount} per orang',
   'costs.cat.accommodation': 'Akomodasi',
   'costs.cat.food': 'Makanan & minuman',
   'costs.cat.groceries': 'Belanja kebutuhan',
@@ -193,6 +193,6 @@ const budget: TranslationStrings = {
   'costs.noReceipts': 'Tidak ada kuitansi terlampir',
   'costs.deleteReceipt': 'Hapus kuitansi',
   'costs.viewReceipt': 'Lihat kuitansi',
-  'costs.receiptLeftBehind': 'Gagal menyimpan, dan {count} struk yang diunggah masih ada. Hapus di tab Berkas.',
+  'costs.receiptLeftBehind': 'Gagal menyimpan, tetapi {count} kuitansi yang diunggah masih ada. Hapus di tab File.',
 };
 export default budget;

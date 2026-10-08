@@ -369,7 +369,7 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'AirTrail 连接已保存',
   'settings.airtrail.toast.saveError': '无法保存连接',
   'settings.airtrail.test.button': '测试连接',
-  'settings.airtrail.test.success': '已连接——找到 {count} 个航班',
+  'settings.airtrail.test.success': '已连接。找到 {count} 个航班',
   'settings.airtrail.test.failed': '连接失败',
   'settings.aiParsing.title': 'AI 解析',
   'settings.aiParsing.hint': '选择用于从上传的文件中提取预订信息的 AI 模型。仅当管理员未为整个实例配置模型时才会生效。',

@@ -371,7 +371,7 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'AirTrail の接続を保存しました',
   'settings.airtrail.toast.saveError': '接続を保存できませんでした',
   'settings.airtrail.test.button': '接続をテスト',
-  'settings.airtrail.test.success': '接続成功 — {count} 件のフライトが見つかりました',
+  'settings.airtrail.test.success': '接続に成功しました。{count} 件のフライトが見つかりました',
   'settings.airtrail.test.failed': '接続に失敗しました',
   'settings.aiParsing.title': 'AI解析',
   'settings.aiParsing.hint':

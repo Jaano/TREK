@@ -1285,7 +1285,7 @@ function InstalledRow({ p, t, busy, menu, setMenu, hasUpdate, latestVer, newerIn
                   className={`${CHIP} ${hostCount > 0 ? CHIP_NET : CHIP_WARN} hover:opacity-80`} style={fs(11)}>
                   <Globe size={12} />
                   {hostCount > 0
-                    ? t('admin.plugins.allowedHosts.count').replace('{n}', String(hostCount))
+                    ? t('admin.plugins.allowedHosts.count', { n: hostCount })
                     : t('admin.plugins.allowedHosts.add')}
                 </button>
               </Tooltip>

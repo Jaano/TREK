@@ -208,7 +208,7 @@ function JourneyPageDesktop() {
                 <span className="text-[13px] text-zinc-500">
                   {filteredJourneys.length === 0
                     ? t('journey.search.noResults', { query: searchQuery.trim() })
-                    : `${filteredJourneys.length} ${t('journey.frontpage.journeys')}`}
+                    : `${filteredJourneys.length} ${t('journey.frontpage.journeys', { count: filteredJourneys.length })}`}
                 </span>
               </div>
             )}
@@ -372,9 +372,10 @@ function CreateJourneyDialog({ title, onTitleChange, subtitle, onSubtitleChange,
               let status: TripStatus = 'upcoming'
               if (trip.end_date && trip.end_date < today) status = 'completed'
               else if (trip.start_date && trip.start_date <= today) status = 'active'
+              // A trip without dates has no length to show, so it gets no day chip.
               const days = trip.start_date
                 ? Math.ceil((new Date(trip.end_date || trip.start_date).getTime() - new Date(trip.start_date).getTime()) / 86400000) + 1
-                : '?'
+                : null
               return (
                 <div
                   key={trip.id}
@@ -396,8 +397,8 @@ function CreateJourneyDialog({ title, onTitleChange, subtitle, onSubtitleChange,
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold text-content" style={fs(13.5, 'body')}>{trip.title}</div>
                     <div className="mt-0.5 flex items-center gap-2.5 text-content-faint" style={fs(11.5)}>
-                      <span className="flex items-center gap-1"><Calendar size={11} /> {days} {t('journey.stats.days').toLowerCase()}</span>
-                      <span className="flex items-center gap-1"><MapPin size={11} /> {trip.place_count || 0} {t('journey.frontpage.places')}</span>
+                      {days !== null && <span className="flex items-center gap-1"><Calendar size={11} /> {t('mobileJourney.daysCount', { count: days })}</span>}
+                      <span className="flex items-center gap-1"><MapPin size={11} /> {trip.place_count || 0} {t('journey.frontpage.places', { count: trip.place_count || 0 })}</span>
                     </div>
                   </div>
                   <span className={`flex-none rounded-full px-2 py-[2px] font-semibold ${TRIP_STATUS_LOOK[status]}`} style={fs(10.5)}>

@@ -60,6 +60,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.latestJourney': 'Laatste reisverslag',
   'journey.frontpage.allJourneys': 'Alle reisverslagen',
   'journey.frontpage.journeys': 'reisverslagen',
+  'journey.frontpage.journeys.one': 'reisverslag',
   'journey.frontpage.createNew': 'Nieuw reisverslag aanmaken',
   'journey.frontpage.createNewSub': 'Kies reizen, schrijf verhalen, deel je avonturen',
   'journey.frontpage.live': 'Live',
@@ -76,6 +77,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.trips': 'reizen',
   'journey.frontpage.placesImported': 'plaatsen worden geïmporteerd',
   'journey.frontpage.places': 'plaatsen',
+  'journey.frontpage.places.one': 'plaats',
   'journey.detail.backToJourney': 'Terug naar reisverslag',
   'journey.detail.syncedWithTrips': 'Gesynchroniseerd met reizen',
   'journey.detail.addEntry': 'Vermelding toevoegen',
@@ -83,6 +85,7 @@ const journey: TranslationStrings = {
   'journey.detail.jumpToLast': 'Naar de laatste notitie',
   'journey.detail.dayJump': 'Naar een dag springen',
   'journey.detail.dayJumpCount': '{count} dagen',
+  'journey.detail.dayJumpCount.one': '{count} dag',
   'journey.detail.newEntry': 'Nieuwe vermelding',
   'journey.detail.editEntry': 'Vermelding bewerken',
   'journey.detail.noEntries': 'Nog geen vermeldingen',
@@ -96,6 +99,7 @@ const journey: TranslationStrings = {
   'journey.detail.readMore': 'Lees meer',
   'journey.detail.prosCons': 'Voor- & nadelen',
   'journey.detail.photos': "foto's",
+  'journey.detail.photos.one': 'foto',
   'journey.detail.day': 'Dag {number}',
   'journey.detail.places': 'plaatsen',
   'journey.stats.days': 'Dagen',
@@ -108,6 +112,7 @@ const journey: TranslationStrings = {
   'journey.verdict.lovedIt': 'Geweldig',
   'journey.verdict.couldBeBetter': 'Kan beter',
   'journey.synced.places': 'plaatsen',
+  'journey.synced.places.one': 'plaats',
   'journey.synced.synced': 'gesynchroniseerd',
   'journey.editor.discardChangesConfirm': 'Je hebt niet-opgeslagen wijzigingen. Verwerpen?',
   'journey.editor.uploadFailed': 'Foto uploaden mislukt',
@@ -221,8 +226,10 @@ const journey: TranslationStrings = {
   'journey.settings.failedToDelete': 'Verwijderen mislukt',
   'journey.entries.deleteTitle': 'Vermelding verwijderen',
   'journey.photosUploaded': "{count} foto's geüpload",
+  'journey.photosUploaded.one': '{count} foto geüpload',
   'journey.photosUploadFailed': "Sommige foto's konden niet worden geüpload",
   'journey.photosAdded': "{count} foto's toegevoegd",
+  'journey.photosAdded.one': '{count} foto toegevoegd',
   'journey.public.notFound': 'Niet gevonden',
   'journey.public.notFoundMessage': 'Dit reisverslag bestaat niet of de link is verlopen.',
   'journey.public.readOnly': 'Alleen-lezen · Openbaar reisverslag',
@@ -288,18 +295,23 @@ const journey: TranslationStrings = {
   'journey.studio.exportFinishing': 'Afwerking',
   'journey.studio.exportMarks': 'Snijtekens',
   'journey.studio.exportMarksHint': 'Voegt {bleed} mm afloop toe aan elke rand en markeert waar gesneden wordt',
-  'journey.studio.exportNote': '{sheets} bladen van {width} × {height} mm. De browser maakt van de afdrukweergave een PDF.',
+  'journey.studio.exportNote':
+    '{count} bladen van {width} × {height} mm. De browser maakt van de afdrukweergave een PDF.',
+  'journey.studio.exportNote.one':
+    '{count} blad van {width} × {height} mm. De browser maakt van de afdrukweergave een PDF.',
   'journey.studio.exportOpen': 'Afdrukweergave',
   'journey.studio.exportSave': 'Opslaan als PDF',
   'journey.studio.exportPreparing': 'Wordt voorbereid',
   'journey.studio.exportSheetCount': '{count} bladen',
+  'journey.studio.exportSheetCount.one': '{count} blad',
   'journey.studio.undo': 'Undo', // en-fallback
   'journey.studio.redo': 'Redo', // en-fallback
   'journey.studio.zoomIn': 'Zoom in', // en-fallback
   'journey.studio.zoomOut': 'Zoom out', // en-fallback
   'journey.studio.zoomFit': 'Fit to view', // en-fallback
   'journey.studio.downloadSpread': 'Deze dubbele pagina downloaden',
-  'journey.studio.downloadSpreadHint': 'Slaat het ontwerp van deze dubbele pagina op als bestand, zonder de foto\'s, om te delen of opnieuw te gebruiken',
+  'journey.studio.downloadSpreadHint':
+    "Slaat het ontwerp van deze dubbele pagina op als bestand, zonder de foto's, om te delen of opnieuw te gebruiken",
   'journey.studio.importSpread': 'Importeren',
   'journey.studio.importSpreadHint': 'Voegt een dubbele pagina toe uit een gedownload ontwerpbestand',
   'journey.studio.importSpreadFailed': 'Dat bestand is geen TREK Studio-pagina',
@@ -638,6 +650,7 @@ const journey: TranslationStrings = {
   'journey.studio.uploading': '{done} van {total} wordt geüpload',
   'journey.studio.dropFilesHere': 'Laat los om de afbeeldingen toe te voegen',
   'journey.studio.videosSkipped': "{count} video's zijn overgeslagen. Een boek bevat afbeeldingen.",
+  'journey.studio.videosSkipped.one': '{count} video is overgeslagen. Een boek bevat afbeeldingen.',
   'journey.studio.fillPage': 'Pagina vullen',
   'journey.studio.fillSpread': 'Dubbele pagina vullen',
   'journey.studio.fillHint':
@@ -665,6 +678,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.restore': 'Verworpen suggesties terughalen',
   'journey.suggestions.restoreCount': 'Verworpen suggesties ({count})',
   'journey.suggestions.restored': '{count} suggesties zijn terug',
+  'journey.suggestions.restored.one': '{count} suggestie is terug',
   'journey.detail.addOnThisDay': 'Een item op deze dag toevoegen',
   'journey.detail.jumpToDay': 'Naar {date} springen',
   'journey.detail.searchPlaceholder': 'Zoeken in deze reis',

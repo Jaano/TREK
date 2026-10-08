@@ -2,9 +2,12 @@ import type { TranslationStrings } from '../types';
 
 const atlas: TranslationStrings = {
   'atlas.subtitle': 'Dünya üzrə səyahət iziniz',
-  'atlas.countries': 'Ölkələr',
-  'atlas.trips': 'Səyahətlər',
-  'atlas.places': 'Məkanlar',
+  'atlas.countries': 'Ölkə',
+  'atlas.countries.one': 'Ölkə',
+  'atlas.trips': 'Səyahət',
+  'atlas.trips.one': 'Səyahət',
+  'atlas.places': 'Məkan',
+  'atlas.places.one': 'Məkan',
   'atlas.placesShow': 'Bu ölkədəki məkanları göstər',
   'atlas.placesSearch': 'Məkanları axtar',
   'atlas.placesNone': 'Uyğun məkan yoxdur',
@@ -47,9 +50,12 @@ const atlas: TranslationStrings = {
     'Ziyarət etməyi arzuladığınız yerləri əlavə edin',
 
   'atlas.days': 'Gün',
+  'atlas.days.one': 'Gün',
   'atlas.visitedCountries': 'Ziyarət edilmiş ölkələr',
-  'atlas.cities': 'Şəhərlər',
-  'atlas.regions': 'Regionlar',
+  'atlas.cities': 'Şəhər',
+  'atlas.cities.one': 'Şəhər',
+  'atlas.regions': 'Region',
+  'atlas.regions.one': 'Region',
   'atlas.noData': 'Hələ səyahət məlumatı yoxdur',
   'atlas.noDataHint':
     'Dünya xəritənizi görmək üçün səyahət yaradın və məkanlar əlavə edin',
@@ -74,16 +80,17 @@ const atlas: TranslationStrings = {
 
   'atlas.firstVisit': 'İlk səyahət',
   'atlas.lastVisitLabel': 'Son səyahət',
-  'atlas.tripPlural': 'Səyahətlər',
-  'atlas.tripsLabel': 'Səyahətlər',
+  'atlas.tripsLabel': 'Səyahət',
   'atlas.tripsLabel.one': 'Səyahət',
-  'atlas.placesVisited': 'Ziyarət edilmiş məkanlar',
+  'atlas.placesVisited': 'Ziyarət edilmiş məkan',
   'atlas.placesVisited.one': 'Ziyarət edilmiş məkan',
 
   'atlas.planned': 'Planlaşdırılıb',
   'atlas.showPlanned': 'Planlaşdırılan ölkələri göstər',
   'atlas.plannedFor': 'Planlaşdırılan tarix',
   'atlas.antarctica': 'Antarktida',
+  'atlas.regionPlacesLabel': 'məkan',
+  'atlas.regionPlacesLabel.one': 'məkan',
 };
 
 export default atlas;

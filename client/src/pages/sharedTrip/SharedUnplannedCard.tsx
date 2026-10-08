@@ -26,7 +26,7 @@ export function SharedUnplannedCard({ places, categories }: SharedUnplannedCardP
           <MapPin size={14} strokeWidth={2} />
         </span>
         <span className="min-w-0 flex-1 truncate font-bold text-content" style={fs(13.5, 'body')}>{t('shared.unplanned')}</span>
-        <SoftPill>{places.length} {t('shared.places')}</SoftPill>
+        <SoftPill>{places.length} {t('shared.places', { count: places.length })}</SoftPill>
         <button
           type="button"
           onClick={() => setCollapsed(c => !c)}

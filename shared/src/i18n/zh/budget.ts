@@ -122,7 +122,7 @@ const budget: TranslationStrings = {
   'costs.payersUnbalanced': '付款人金额总和必须为 {amount}',
   'costs.splitBetween': '平均分摊给',
   'costs.pickSomeone': '至少选择一人参与分摊。',
-  'costs.splitSummary': '分 {count} 份 · 每份 {amount}',
+  'costs.splitSummary': '{count} 人分摊 · 每人 {amount}',
   'costs.cat.accommodation': '住宿',
   'costs.cat.food': '餐饮',
   'costs.cat.groceries': '采买',
@@ -192,6 +192,6 @@ const budget: TranslationStrings = {
   'costs.noReceipts': '未附加收据',
   'costs.deleteReceipt': '删除收据',
   'costs.viewReceipt': '查看收据',
-  'costs.receiptLeftBehind': '保存失败，还有 {count} 个已上传的收据。请在“文件”标签页中删除。',
+  'costs.receiptLeftBehind': '保存失败，但已上传的 {count} 张收据仍然保留。请在“文件”标签页中删除。',
 };
 export default budget;

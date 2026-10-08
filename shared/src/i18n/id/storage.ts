@@ -113,7 +113,7 @@ const storage: TranslationStrings = {
   'storage.sync.error': 'Sinkronisasi gagal: {error}',
   'storage.sync.prompt': 'Objek yang ada belum direplikasi — sinkronkan sekarang?',
   'storage.sync.dismiss': 'Abaikan',
-  'storage.usage.line': '{objects} objek · {size}',
+  'storage.usage.line': '{count} objek · {size}',
   'storage.usage.computed': 'Penggunaan dihitung {age}',
   'storage.usage.never': 'Penggunaan belum dihitung',
   'storage.usage.refresh': 'Segarkan',

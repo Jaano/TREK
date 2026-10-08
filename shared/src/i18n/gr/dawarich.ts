@@ -18,6 +18,7 @@ const dawarich: TranslationStrings = {
     'Απενεργοποιημένο σημαίνει ότι το TREK διαβάζει το Dawarich μόνο όταν του το ζητήσετε.',
   'dawarich.test.button': 'Δοκιμή σύνδεσης',
   'dawarich.test.success': 'Συνδέθηκε. Βρέθηκαν {count} στάσεις τις τελευταίες 30 ημέρες.',
+  'dawarich.test.success.one': 'Συνδέθηκε. Βρέθηκε {count} στάση τις τελευταίες 30 ημέρες.',
   'dawarich.test.failed': 'Δεν ήταν δυνατή η επικοινωνία με το Dawarich.',
   'dawarich.syncNow': 'Έλεγχος τώρα',
   'dawarich.connected': 'Συνδεδεμένο',
@@ -32,6 +33,7 @@ const dawarich: TranslationStrings = {
   'dawarich.toast.saveError': 'Δεν ήταν δυνατή η αποθήκευση της σύνδεσης',
   'dawarich.toast.disconnected': 'Το Dawarich αποσυνδέθηκε',
   'dawarich.toast.synced': 'Βρέθηκαν {count} νέες στάσεις',
+  'dawarich.toast.synced.one': 'Βρέθηκε {count} νέα στάση',
   'dawarich.toast.syncError': 'Δεν ήταν δυνατή η ανάγνωση του Dawarich',
   'dawarich.toast.syncRunning': 'Εκτελείται ήδη έλεγχος',
   'dawarich.toast.acceptError': 'Δεν ήταν δυνατή η προσθήκη',
@@ -82,7 +84,8 @@ const dawarich: TranslationStrings = {
   'dawarich.badge.sourceMissing': 'Χάθηκε από το Dawarich',
 
   'dawarich.suggestions.title': 'Από το Dawarich',
-  'dawarich.suggestions.pending': '{count} περιμένουν από εσάς',
+  'dawarich.suggestions.pending': '{count} σας περιμένουν',
+  'dawarich.suggestions.pending.one': '{count} σας περιμένει',
   'dawarich.suggestions.loading': 'Ανάγνωση του Dawarich…',
   'dawarich.suggestions.notConnected':
     'Συνδέστε το Dawarich στις Ρυθμίσεις για να βλέπετε εδώ τις στάσεις σας.',
@@ -146,7 +149,9 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.alreadyVisited': 'Ήδη σημειωμένο ως εκπληρωμένο',
   'dawarich.bucket.confirm': 'Σημείωση {count} ως εκπληρωμένων',
   'dawarich.bucket.confirmed': '{count} επιθυμίες σημειώθηκαν ως εκπληρωμένες',
+  'dawarich.bucket.confirmed.one': '{count} επιθυμία σημειώθηκε ως εκπληρωμένη',
   'dawarich.bucket.skipped': '{count} καταχωρήσεις δεν έχουν συντεταγμένες και δεν ήταν δυνατό να ελεγχθούν.',
+  'dawarich.bucket.skipped.one': '{count} καταχώρηση δεν έχει συντεταγμένες και δεν ήταν δυνατό να ελεγχθεί.',
   'dawarich.bucket.truncated':
     'Ελέγχθηκαν μόνο οι πρώτες καταχωρήσεις. Εκτελέστε το ξανά για τις υπόλοιπες.',
   'dawarich.bucket.visitedFrom': 'Σημειώθηκε ως εκπληρωμένη από τις καταγραφές σας στο Dawarich',
@@ -160,9 +165,11 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': 'Ανάγνωση των καταγραφών σας…',
   'dawarich.atlas.empty': 'Οι καταγραφές σας δεν δείχνουν χώρες που δεν έχει ήδη το TREK.',
   'dawarich.atlas.cities': '{count} πόλεις',
-  'dawarich.atlas.citiesOne': '1 πόλη',
+  'dawarich.atlas.cities.one': '{count} πόλη',
   'dawarich.atlas.accept': 'Προσθήκη {count} χωρών',
+  'dawarich.atlas.accept.one': 'Προσθήκη {count} χώρας',
   'dawarich.atlas.accepted': '{count} χώρες προστέθηκαν',
+  'dawarich.atlas.accepted.one': '{count} χώρα προστέθηκε',
   'dawarich.atlas.unresolved': 'Το TREK δεν μπόρεσε να τα αντιστοιχίσει σε χώρα: {names}.',
   'dawarich.atlas.source': 'Από το Dawarich',
   'dawarich.atlas.range': 'Εξετάστηκε το διάστημα {from} έως {to}',
@@ -173,13 +180,14 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.tab.countries': 'Χώρες',
   'dawarich.atlas.window': 'Ελέγχθηκαν οι τελευταίοι 12 μήνες.',
   'dawarich.selected': 'Επιλέχθηκαν {count}',
+  'dawarich.selected.one': 'Επιλέχθηκε {count}',
   'dawarich.again': 'Έλεγχος ξανά',
   'dawarich.bucket.metersAway': '{meters} μ. μακριά',
   'dawarich.bucket.kilometersAway': '{km} χλμ. μακριά',
   'dawarich.bucket.rule': 'Μια επιθυμία μετράει ως εκπληρωμένη σε απόσταση έως {meters} μ. και μετά από {minutes} λεπτά στο σημείο.',
-
-  'dawarich.journey.dayStays.one': '1 στάση από το Dawarich',
   'dawarich.journey.dayStays.other': '{count} στάσεις από το Dawarich',
+  'dawarich.journey.dayStays.one': '1 στάση από το Dawarich',
+
 };
 
 export default dawarich;

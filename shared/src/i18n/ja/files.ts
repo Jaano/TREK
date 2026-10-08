@@ -14,7 +14,7 @@ const files: TranslationStrings = {
   'files.openError': 'ファイルを開けませんでした',
   'files.downloadPdf': 'PDFをダウンロード',
   'files.count': '{count}件のファイル',
-  'files.uploaded': '{count}件アップロード',
+  'files.uploaded': '{count}件アップロードしました',
   'files.uploadError': 'アップロードに失敗しました',
   'files.uploadErrorType': 'このファイル形式はサポートされていません',
   'files.dropzone': 'ここにファイルをドロップ',

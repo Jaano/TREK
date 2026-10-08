@@ -29,6 +29,7 @@ const budget: TranslationStrings = {
   'budget.editTooltip': 'Muutmiseks klõpsa',
   'budget.linkedToReservation': 'Seotud broneeringuga — muuda nime seal',
   'budget.confirm.deleteCategory': 'Kas soovid kindlasti kustutada kategooria "{name}" koos {count} kirjega?',
+  'budget.confirm.deleteCategory.one': 'Kas soovid kindlasti kustutada kategooria "{name}" koos {count} kirjega?',
   'budget.deleteCategory': 'Kustuta kategooria',
   'budget.perPerson': 'Inimese kohta',
   'budget.paid': 'Makstud',
@@ -59,6 +60,7 @@ const budget: TranslationStrings = {
   'costs.outstandingItems': 'kulu vajab maksjat',
   'costs.expenses': 'Kulud',
   'costs.entries': '{count} kirjet',
+  'costs.entries.one': '{count} kirje',
   'costs.searchPlaceholder': 'Otsi kulusid…',
   'costs.filter.all': 'Kõik',
   'costs.filter.mine': 'Minu makstud',
@@ -66,6 +68,7 @@ const budget: TranslationStrings = {
   'costs.filter.allCategories': 'Kõik kategooriad',
   'costs.filter.allDays': 'Kõik päevad',
   'costs.expensesCount': '{count} kulu',
+  'costs.expensesCount.one': '{count} kulu',
   'costs.addExpense': 'Lisa kulu',
   'costs.view.label': 'Vaade',
   'costs.view.list': 'Loend',
@@ -105,6 +108,7 @@ const budget: TranslationStrings = {
   'costs.settleHistory': 'Arveldusajalugu',
   'costs.noSettlements': 'Tasaarveldatud makseid veel pole.',
   'costs.paymentsSettled': '{count} makset tasaarveldatud',
+  'costs.paymentsSettled.one': '{count} makse tasaarveldatud',
   'costs.paid': 'maksis',
   'costs.undo': 'Võta tagasi',
   'costs.whatFor': 'Mille eest?',
@@ -140,6 +144,7 @@ const budget: TranslationStrings = {
   'costs.splitHint.ticket': 'Loetle, mis tšekil oli, ja märgi iga kirje juurde, kellele see kuulus.',
   'costs.pickSomeone': 'Vali jagamiseks vähemalt üks inimene.',
   'costs.splitSummary': 'Jaotatud {count} osaks · igaühele {amount}',
+  'costs.splitSummary.one': '{count} inimene · {amount}',
   'costs.cat.accommodation': 'Majutus',
   'costs.cat.food': 'Söök ja jook',
   'costs.cat.groceries': 'Toidukaubad',
@@ -155,7 +160,9 @@ const budget: TranslationStrings = {
   'costs.cat.parking': 'Parkimine',
   'costs.cat.other': 'Muu',
   'costs.daysCount': '{count} päeva',
+  'costs.daysCount.one': '{count} päev',
   'costs.travelers': '{count} reisijat',
+  'costs.travelers.one': '{count} reisija',
   'costs.liveRate': 'hetkekurss',
   'costs.settleAll': 'Arvelda kõik',
   'costs.payment': 'Makse',
@@ -175,6 +182,7 @@ const budget: TranslationStrings = {
   'costs.splitSumOver': 'Osade summa: {sum} / {total} (üle {diff})',
   'costs.toggleSign': 'Vaheta kulu ja tagasimakse vahel',
   'costs.receipts': 'Kviitungid',
+  'costs.receipts.one': 'Kviitung',
   'costs.receiptsTitle': 'Kviitungid ja arved',
   'costs.attachReceipt': 'Lisa kviitung või arve',
   'costs.attach': 'Lisa',
@@ -194,7 +202,9 @@ const budget: TranslationStrings = {
   'costs.deleteReceipt': 'Eemalda kviitung',
   'costs.viewReceipt': 'Vaata kviitungit',
   'costs.receiptLeftBehind':
-    'Salvestamine ebaõnnestus ja {count} üleslaaditud kviitungit on endiselt alles. Eemalda need failide vahekaardil.',
+    'Salvestamine ebaõnnestus ja {count} üleslaaditud kviitungit on endiselt alles. Eemalda need vahekaardil Failid.',
+  'costs.receiptLeftBehind.one':
+    'Salvestamine ebaõnnestus ja {count} üleslaaditud kviitung on endiselt alles. Eemalda see vahekaardil Failid.',
 };
 
 export default budget;

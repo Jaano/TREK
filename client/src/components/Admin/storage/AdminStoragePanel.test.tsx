@@ -434,7 +434,7 @@ describe('AdminStoragePanel', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: 'Compute now' }));
     await screen.findByText(/Usage computed/);
-    expect(within(categoryRow('files')).getByText(/1 objects · 2\.0 KB/)).toBeInTheDocument();
+    expect(within(categoryRow('files')).getByText(/1 object · 2\.0 KB/)).toBeInTheDocument();
   });
 
   it('FE-ADMIN-STOR-020: Sync now runs the backfill — running line with counts, then the done line (50ms test poll)', async () => {

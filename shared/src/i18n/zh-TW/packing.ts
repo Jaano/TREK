@@ -73,7 +73,7 @@ const packing: TranslationStrings = {
   'packing.addBag': '新增行李',
   'packing.changeCategory': '移動到清單',
   'packing.confirm.clearChecked': '確定移除 {count} 個已勾選的物品？',
-  'packing.confirm.deleteCat': '確定要刪除清單「{name}」及其 {count} 個項目嗎？',
+  'packing.confirm.deleteCat': '確定要刪除清單「{name}」及其 {count} 個物品嗎？',
   'packing.defaultCategory': '其他',
   'packing.toast.saveError': '儲存失敗',
   'packing.toast.deleteError': '刪除失敗',

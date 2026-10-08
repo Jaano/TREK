@@ -42,10 +42,13 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.resBadge': 'Broneering',
   'mobileTrip.showOnMap': 'Näita kaardil',
   'mobileTrip.statDocuments': '{count} faili',
+  'mobileTrip.statDocuments.one': '{count} fail',
   'mobileTrip.statPeople': '{count} inimest',
+  'mobileTrip.statPeople.one': '{count} inimene',
   'mobileTrip.stay': 'Peatumine',
   'mobileTrip.tapAgainToDelete': 'Kustutamiseks puuduta uuesti',
   'mobileTrip.todoOpenCount': '{count} tegemata',
+  'mobileTrip.todoOpenCount.one': '{count} tegemata',
   'mobileTrip.travel': 'Reisimine',
   'mobileTrip.upNext': 'Järgmisena',
   'mobileTrip.viewDetails': 'Vaata üksikasju',
@@ -61,7 +64,9 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtStayScope':
     'Peatumise kestus kuulub koha juurde, seega arvestatakse seda igal päeval, kuhu peatus on plaanitud.',
   'mobileTrip.rtStayLess': '{count} minutit vähem',
+  'mobileTrip.rtStayLess.one': '{count} minut vähem',
   'mobileTrip.rtStayMore': '{count} minutit rohkem',
+  'mobileTrip.rtStayMore.one': '{count} minut rohkem',
   'mobileTrip.rtNightDesktopOnly':
     'Sellesse kohta saab ööbimise broneerida töölauavaates. Siin saad selle ainult eemaldada.',
   'mobileTrip.rtReach': 'Kui kaugel',
@@ -70,10 +75,10 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': 'Etapi algusest',
   'mobileTrip.rtNoneAhead': 'Eesoleval teel pole midagi. Proovi kogu etappi.',
   'mobileTrip.rtNoneOnStage': 'Selle etapi ääres pole seda tüüpi kohti.',
-  'mobileTrip.rtTruncated.one':
-    'Ühel lõigul oli rohkem tulemusi, kui vastusesse mahub. Ülejäänute nägemiseks vali vähem liike.',
   'mobileTrip.rtTruncated.other':
     '{count} lõigul oli rohkem tulemusi, kui vastusesse mahub. Ülejäänute nägemiseks vali vähem liike.',
+  'mobileTrip.rtTruncated.one':
+    'Ühel lõigul oli rohkem tulemusi, kui vastusesse mahub. Ülejäänute nägemiseks vali vähem liike.',
   'mobileTrip.rtNoDay': 'Päev valimata',
   'mobileTrip.rtNoDayHint': 'Kaardil on kogu reis. Selle päeva sõidu nägemiseks puuduta ülal päeva.',
 };

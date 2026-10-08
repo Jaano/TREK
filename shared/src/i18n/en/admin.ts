@@ -74,10 +74,14 @@ const admin: TranslationStrings = {
   'admin.tabs.notifications': 'Notifications',
   'admin.tabs.audit': 'Audit',
   'admin.stats.users': 'Users',
+  'admin.stats.users.one': 'User',
   'admin.stats.trips': 'Trips',
+  'admin.stats.trips.one': 'Trip',
   'admin.stats.places': 'Places',
+  'admin.stats.places.one': 'Place',
   'admin.stats.photos': 'Photos',
   'admin.stats.files': 'Files',
+  'admin.stats.files.one': 'File',
   'admin.table.user': 'User',
   'admin.table.email': 'Email',
   'admin.table.role': 'Role',
@@ -143,7 +147,7 @@ const admin: TranslationStrings = {
   'admin.googleCaveat.body':
     'TREK is open source and we are not neutral here. Ratings and photos of ordinary businesses exist at this scale only at Google, and that is what a monopoly is. The field is here because there is no alternative, not because we recommend it. Every lookup then goes to Google.',
   'admin.trekApi.tagline':
-    'TREK\'s own place index. Search without a Google key, without a quota and without anyone counting your lookups.',
+    "TREK's own place index. Search without a Google key, without a quota and without anyone counting your lookups.",
   'admin.trekApi.factPlaces':
     '73.6 million places worldwide',
   'admin.trekApi.factNoKey':
@@ -159,7 +163,7 @@ const admin: TranslationStrings = {
   'admin.trekApi.fieldStableId':
     'Stable id',
   'admin.trekApi.includedNote':
-    'Descriptions come from the place\'s own website; opening hours from OpenStreetMap where they are tagged.',
+    "Descriptions come from the place's own website; opening hours from OpenStreetMap where they are tagged.",
   'admin.trekApi.notRatings':
     'Ratings',
   'admin.trekApi.notPhotos':
@@ -226,8 +230,10 @@ const admin: TranslationStrings = {
   'admin.placesEnrich.subtitle':
     'Show pictures and a description while adding a place. Wikipedia and OpenStreetMap are always used; Google is added on top when Place Photos or Place Details are on.',
   'admin.placesGoogleOnly.title': 'Search with Google only',
-  'admin.placesGoogleOnly.subtitle': 'Every search and every suggestion goes to Google Places. Off, TREK\'s own index and OpenStreetMap answer first and Google is only asked when they find nothing.',
-  'admin.placesGoogleOnly.missingKey': 'Needs a Google Maps API key. Without one, search runs on TREK\'s own index and OpenStreetMap whatever this switch says.',
+  'admin.placesGoogleOnly.subtitle':
+    "Every search and every suggestion goes to Google Places. Off, TREK's own index and OpenStreetMap answer first and Google is only asked when they find nothing.",
+  'admin.placesGoogleOnly.missingKey':
+    "Needs a Google Maps API key. Without one, search runs on TREK's own index and OpenStreetMap whatever this switch says.",
   'admin.placesGoogleOnly.otherProvider': 'Needs Google as the places provider. With Amap or OpenStreetMap picked, search never goes to Google whatever this switch says.',
   'admin.googleQuota.title': 'Daily limit for Google calls',
   'admin.googleQuota.subtitle': 'Once reached, TREK stops calling Google until the next day (UTC) and searches with OpenStreetMap instead. Leave it empty for no limit.',
@@ -243,7 +249,8 @@ const admin: TranslationStrings = {
   'admin.transitProvider.transitousHint': 'Community GTFS feeds. Free and keyless, with the best coverage in Europe.',
   'admin.transitProvider.googleHint': 'Uses the Google API key above, for regions Transitous has no data for. Billed per search — Transitous is used while no key is set.',
   'admin.transitProvider.noKeyWarning': 'Google is selected, but no Google API key is configured — transit search is still using Transitous. Add a key under API Keys above.',
-  'admin.transitProvider.personalKeyWarning': 'Only your own Google key is set, so other members\' transit searches still fall back to Transitous. Save the key above as an admin to apply it instance-wide.',
+  'admin.transitProvider.personalKeyWarning':
+    "Only your own Google key is set, so other members' transit searches still fall back to Transitous. Save the key above as an admin to apply it instance-wide.",
   'admin.placeShadow.title': 'Place Search Log',
   'admin.placeShadow.subtitle':
     'Record which search result was picked, so a different place index can be measured against real searches later. Nothing leaves this instance, and an admin can export or delete the log at any time.',
@@ -288,7 +295,9 @@ const admin: TranslationStrings = {
   'admin.packingTemplates.namePlaceholder': 'Template name (e.g. Beach Holiday)',
   'admin.packingTemplates.empty': 'No templates created yet',
   'admin.packingTemplates.items': 'items',
+  'admin.packingTemplates.items.one': 'item',
   'admin.packingTemplates.categories': 'categories',
+  'admin.packingTemplates.categories.one': 'category',
   'admin.packingTemplates.itemName': 'Item name',
   'admin.packingTemplates.itemCategory': 'Category',
   'admin.packingTemplates.categoryName': 'Category name (e.g. Clothing)',

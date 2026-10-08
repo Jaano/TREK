@@ -33,6 +33,7 @@ const dashboard: TranslationStrings = {
   'dashboard.sharedBy': 'Dibagikan oleh {name}',
   'dashboard.days': 'Hari',
   'dashboard.places': 'Tempat',
+  'dashboard.pass.places': 'Tempat',
   'dashboard.members': 'Teman perjalanan',
   'dashboard.card.buddies': 'Teman perjalanan',
   'dashboard.archive': 'Arsipkan',

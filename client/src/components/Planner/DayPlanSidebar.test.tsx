@@ -527,7 +527,7 @@ describe('DayPlanSidebar', () => {
     // title uses an arrow icon, so its parts are separate text nodes.
     expect(screen.getByText('U2')).toBeInTheDocument()
     // Transfer counts stay out of the compact row — the chips say it all.
-    expect(screen.queryByText(/1 transfers/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/1 transfer/)).not.toBeInTheDocument()
     // Clicking the row opens the journey view — not the edit form.
     await user.click(screen.getByText('Fernsehturm'))
     expect(onEditTransport).not.toHaveBeenCalled()

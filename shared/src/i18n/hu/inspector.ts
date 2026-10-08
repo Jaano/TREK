@@ -7,6 +7,7 @@ const inspector: TranslationStrings = {
   'inspector.showHours': 'Nyitvatartás megjelenítése',
   'inspector.files': 'Fájlok',
   'inspector.filesCount': '{count} fájl',
+  'inspector.filesCount.one': '{count} fájl',
   'inspector.removeFromDay': 'Eltávolítás a napról',
   'inspector.remove': 'Eltávolítás',
   'inspector.addToDay': 'Hozzáadás a naphoz',

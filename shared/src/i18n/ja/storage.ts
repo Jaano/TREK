@@ -112,7 +112,7 @@ const storage: TranslationStrings = {
   'storage.sync.error': '同期に失敗しました: {error}',
   'storage.sync.prompt': '既存のオブジェクトはまだ複製されていません — 今すぐ同期しますか？',
   'storage.sync.dismiss': '閉じる',
-  'storage.usage.line': '{objects}個のオブジェクト · {size}',
+  'storage.usage.line': '{count}個のオブジェクト · {size}',
   'storage.usage.computed': '使用量計算済み: {age}',
   'storage.usage.never': '使用量はまだ計算されていません',
   'storage.usage.refresh': '更新',

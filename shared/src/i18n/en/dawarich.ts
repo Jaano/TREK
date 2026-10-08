@@ -161,7 +161,6 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.empty': 'Your recordings show no countries TREK does not already have.',
   'dawarich.atlas.cities': '{count} cities',
   'dawarich.atlas.cities.one': '{count} city',
-  'dawarich.atlas.citiesOne': '1 city',
   'dawarich.atlas.accept': 'Add {count} countries',
   'dawarich.atlas.accept.one': 'Add {count} country',
   'dawarich.atlas.accepted': '{count} countries added',
@@ -181,9 +180,9 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.metersAway': '{meters} m away',
   'dawarich.bucket.kilometersAway': '{km} km away',
   'dawarich.bucket.rule': 'A wish counts as reached within {meters} m and after {minutes} minutes on the spot.',
-
-  'dawarich.journey.dayStays.one': '1 stay from Dawarich',
   'dawarich.journey.dayStays.other': '{count} stays from Dawarich',
+  'dawarich.journey.dayStays.one': '{count} stay from Dawarich',
+
 };
 
 export default dawarich;

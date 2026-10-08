@@ -97,10 +97,10 @@ function AdminPageDesktop(): React.ReactElement {
             actions={stats ? (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {[
-                  { label: t('admin.stats.users'), value: stats.totalUsers, icon: Users },
-                  { label: t('admin.stats.trips'), value: stats.totalTrips, icon: Briefcase },
-                  { label: t('admin.stats.places'), value: stats.totalPlaces, icon: Map },
-                  { label: t('admin.stats.files'), value: stats.totalFiles || 0, icon: FileText },
+                  { label: t('admin.stats.users', { count: stats.totalUsers }), value: stats.totalUsers, icon: Users },
+                  { label: t('admin.stats.trips', { count: stats.totalTrips }), value: stats.totalTrips, icon: Briefcase },
+                  { label: t('admin.stats.places', { count: stats.totalPlaces }), value: stats.totalPlaces, icon: Map },
+                  { label: t('admin.stats.files', { count: stats.totalFiles || 0 }), value: stats.totalFiles || 0, icon: FileText },
                 ].map(({ label, value, icon: Icon }) => (
                   <AdminStatCard key={label} label={label} value={value} icon={Icon} />
                 ))}

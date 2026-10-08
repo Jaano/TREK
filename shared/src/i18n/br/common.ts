@@ -67,14 +67,15 @@ const common: TranslationStrings = {
   'common.datepicker.typeDate': 'Type a date', // en-fallback
   'common.datepicker.dialog': 'Date picker', // en-fallback
   'common.datepicker.clearDate': 'Clear date', // en-fallback
-  'common.errorTitle': 'Un dra bennak a zo aet a-dreuz',
-  'common.errorBody': 'Al lodenn-mañ eus an arload n\'a ket en-dro ken. Hoc\'h roadennoù a zo diarvar.',
-  'common.errorPanelTitle': 'N\'eus ket bet gallet diskwel al lodenn-mañ',
-  'common.errorPanelBody': 'Peurrest ar bajenn a ya en-dro atav.',
-  'common.errorRetry': 'Klask en-dro',
-  'common.errorReload': 'Adkargañ ar bajenn',
-  'common.errorUpdateTitle': 'Un handelv nevez a zo hegerz',
-  'common.errorUpdateBody': 'TREK a zo bet hizivaet e-pad ma oa digor an ivinell-mañ. Adkargit evit kaout an handelv nevez.',
-  'common.errorPluginTitle': 'N\'eus ket bet gallet diskwel an enlugellad-mañ',
+  'common.errorTitle': 'Algo deu errado',
+  'common.errorBody': 'Esta parte do aplicativo parou de funcionar. Seus dados estão seguros.',
+  'common.errorPanelTitle': 'Não foi possível exibir esta seção',
+  'common.errorPanelBody': 'O restante da página continua funcionando.',
+  'common.errorRetry': 'Tentar novamente',
+  'common.errorReload': 'Recarregar página',
+  'common.errorUpdateTitle': 'Uma nova versão está disponível',
+  'common.errorUpdateBody':
+    'O TREK foi atualizado enquanto esta aba estava aberta. Recarregue para obter a nova versão.',
+  'common.errorPluginTitle': 'Não foi possível exibir este plugin',
 };
 export default common;

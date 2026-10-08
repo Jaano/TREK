@@ -7,6 +7,7 @@ const inspector: TranslationStrings = {
   'inspector.showHours': 'İş saatlarını göstər',
   'inspector.files': 'Fayllar',
   'inspector.filesCount': '{count} fayl',
+  'inspector.filesCount.one': '{count} fayl',
   'inspector.remove': 'Sil',
   'inspector.removeFromDay': 'Gündən çıxar',
   'inspector.addToDay': 'Günə əlavə et',

@@ -405,7 +405,8 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'Connexion AirTrail enregistrée',
   'settings.airtrail.toast.saveError': "Impossible d'enregistrer la connexion",
   'settings.airtrail.test.button': 'Tester la connexion',
-  'settings.airtrail.test.success': 'Connecté — {count} vol(s) trouvé(s)',
+  'settings.airtrail.test.success': 'Connecté. {count} vols trouvés',
+  'settings.airtrail.test.success.one': 'Connecté. {count} vol trouvé',
   'settings.airtrail.test.failed': 'Échec de la connexion',
   'settings.aiParsing.title': 'Analyse par IA',
   'settings.aiParsing.hint':
@@ -550,7 +551,8 @@ const settings: TranslationStrings = {
   'settings.offline.storage.tripOn': 'Stocké hors ligne',
   'settings.offline.storage.tripOff': 'Non stocké',
   'settings.offline.storage.tripFinished': 'Terminé. Conservé uniquement si vous l’activez.',
-  'settings.offline.notice.stored': '{count} voyage(s) enregistré(s) sur cet appareil',
+  'settings.offline.notice.stored': '{count} voyages enregistrés sur cet appareil',
+  'settings.offline.notice.stored.one': '{count} voyage enregistré sur cet appareil',
   'settings.offline.notice.nothing': 'Rien à enregistrer. Activez les voyages que vous souhaitez conserver.',
   'settings.offline.notice.busy': 'Une synchronisation est déjà en cours. Réessayez dans un instant.',
   'settings.offline.notice.offline': 'Aucune connexion. Connectez-vous pour enregistrer des voyages hors ligne.',
@@ -620,7 +622,8 @@ const settings: TranslationStrings = {
   'settings.apiScopes.bucket-list': 'Liste de souhaits',
   'settings.apiScopes.stats': 'Totaux',
   'settings.apiKeys.title': 'Clés API',
-  'settings.apiKeys.description': 'Clés pour l\'API publique, afin que d\'autres logiciels puissent lire vos voyages. Lecture seule : une clé ne peut rien modifier ni supprimer.',
+  'settings.apiKeys.description':
+    "Clés pour l'API publique, afin que d'autres logiciels puissent lire vos voyages. Lecture seule : une clé ne peut rien modifier ni supprimer.",
   'settings.apiKeys.create': 'Créer une clé',
   'settings.apiKeys.empty': 'Aucune clé pour le moment. Créez-en une pour connecter un autre logiciel.',
   'settings.apiKeys.createdAt': 'créée',
@@ -635,7 +638,8 @@ const settings: TranslationStrings = {
   'settings.apiKeys.endpoint': 'Point de terminaison',
   'settings.apiKeys.neverUsed': 'jamais utilisée',
   'settings.apiKeys.loadFailed': 'Impossible de charger vos clés. Rechargez la page pour réessayer.',
-  'settings.apiKeys.limitReached': 'Vous avez {max} clés, le maximum pour un compte. Supprimez-en une dont vous n\'avez plus besoin pour en créer une autre.',
+  'settings.apiKeys.limitReached':
+    "Vous avez {max} clés, le maximum pour un compte. Supprimez-en une dont vous n'avez plus besoin pour en créer une autre.",
   'settings.apiKeys.copyFailed': 'Impossible de copier. Sélectionnez le texte et copiez-le manuellement.',
   'settings.apiKeys.modal.createTitle': 'Créer une clé API',
   'settings.apiKeys.modal.name': 'Nom',
@@ -644,7 +648,8 @@ const settings: TranslationStrings = {
   'settings.apiKeys.modal.creating': 'Création...',
   'settings.apiKeys.modal.create': 'Créer',
   'settings.apiKeys.modal.createdTitle': 'Clé API créée',
-  'settings.apiKeys.modal.createdWarning': 'Copiez la clé maintenant. Elle n\'est affichée qu\'une seule fois et ne peut pas être récupérée ensuite.',
+  'settings.apiKeys.modal.createdWarning':
+    "Copiez la clé maintenant. Elle n'est affichée qu'une seule fois et ne peut pas être récupérée ensuite.",
   'settings.apiKeys.modal.done': 'Terminé',
 };
 

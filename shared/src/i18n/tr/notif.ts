@@ -21,6 +21,7 @@ const notif: TranslationStrings = {
   'notif.collection_invite.text': '{actor} sizi bir koleksiyona davet etti',
   'notif.photos_shared.title': 'Fotoğraflar Paylaşıldı',
   'notif.photos_shared.text': '{actor}, {trip} içinde {count} fotoğraf paylaştı',
+  'notif.photos_shared.text.one': '{actor}, {trip} içinde {count} fotoğraf paylaştı',
   'notif.collab_message.title': 'Yeni Mesaj',
   'notif.collab_message.text': '{actor}, {trip} içinde mesaj gönderdi',
   'notif.packing_tagged.title': 'Paket listesi ataması',

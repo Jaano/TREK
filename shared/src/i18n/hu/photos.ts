@@ -3,6 +3,7 @@ import type { TranslationStrings } from '../types';
 const photos: TranslationStrings = {
   'photos.title': 'Fotók',
   'photos.subtitle': '{count} fotó a következőhöz: {trip}',
+  'photos.subtitle.one': '{count} fotó a következőhöz: {trip}',
   'photos.dropHere': 'Húzza ide a fényképeket...',
   'photos.dropHereActive': 'Húzza ide a fényképeket',
   'photos.captionForAll': 'Felirat (mindenkinek)',

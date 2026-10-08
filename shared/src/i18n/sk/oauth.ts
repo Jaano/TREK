@@ -88,6 +88,7 @@ const oauth: TranslationStrings = {
   'oauth.authorize.selectScope': 'Vyberte aspoň jedno oprávnenie',
   'oauth.authorize.approveScopes': 'Schváliť ({count} oprávnení)',
   'oauth.authorize.approveScopes.one': 'Schváliť ({count} oprávnenie)',
+  'oauth.authorize.approveScopes.few': 'Schváliť ({count} oprávnenia)',
   'oauth.authorize.approveAccess': 'Schváliť prístup',
   'oauth.authorize.deny': 'Zamietnuť',
   'oauth.authorize.choosePermissions': 'Vyberte, ktoré oprávnenia udeliť',

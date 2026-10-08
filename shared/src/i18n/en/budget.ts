@@ -144,7 +144,7 @@ const budget: TranslationStrings = {
   'costs.splitHint.ticket': 'List what was on the receipt and tick who had each item.',
   'costs.pickSomeone': 'Pick at least one person to split with.',
   'costs.splitSummary': 'Split {count} ways · {amount} each',
-  'costs.splitSummary.one': 'Split {count} way · {amount} each',
+  'costs.splitSummary.one': '{count} person · {amount}',
   'costs.cat.accommodation': 'Accommodation',
   'costs.cat.food': 'Food & drink',
   'costs.cat.groceries': 'Groceries',
@@ -182,6 +182,7 @@ const budget: TranslationStrings = {
   'costs.splitSumOver': 'Sum of splits: {sum} of {total} (over by {diff})',
   'costs.toggleSign': 'Switch between expense and refund',
   'costs.receipts': 'Receipts',
+  'costs.receipts.one': 'Receipt',
   'costs.receiptsTitle': 'Receipts & Invoices',
   'costs.attachReceipt': 'Attach receipt / invoice',
   'costs.attach': 'Attach',
@@ -202,6 +203,8 @@ const budget: TranslationStrings = {
   'costs.viewReceipt': 'View receipt',
   'costs.receiptLeftBehind':
     'Save failed, and {count} uploaded receipts are still there. Remove them in the Files tab.',
+  'costs.receiptLeftBehind.one':
+    'Save failed, and {count} uploaded receipt is still there. Remove it in the Files tab.',
 };
 
 export default budget;

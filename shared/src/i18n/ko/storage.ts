@@ -109,7 +109,7 @@ const storage: TranslationStrings = {
   'storage.sync.error': '동기화 실패: {error}',
   'storage.sync.prompt': '기존 객체가 아직 복제되지 않았습니다 — 지금 동기화할까요?',
   'storage.sync.dismiss': '닫기',
-  'storage.usage.line': '{objects}개 객체 · {size}',
+  'storage.usage.line': '{count}개 객체 · {size}',
   'storage.usage.computed': '사용량 계산됨 {age}',
   'storage.usage.never': '아직 사용량이 계산되지 않았습니다',
   'storage.usage.refresh': '새로고침',

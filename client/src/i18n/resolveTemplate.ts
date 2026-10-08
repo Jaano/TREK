@@ -7,7 +7,9 @@ import type { TranslationStrings } from '@trek/shared/i18n'
  * form the language's own rule selects (see `@trek/shared` plural helpers):
  * `places.count.one`, `.few`, ... and the key itself as the general form.
  * The active locale is asked with its rule first; English, with English's,
- * only when the locale has none of the key's forms.
+ * only when the locale has none of the key's forms. A count that arrives as
+ * text (in-app notification params are strings) counts when it is a plain
+ * whole number.
  */
 export function resolveTemplate(
   strings: TranslationStrings,
@@ -15,8 +17,7 @@ export function resolveTemplate(
   key: string,
   params?: Record<string, string | number>,
 ): string {
-  const raw = params?.count ?? params?.n
-  const count = typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
+  const count = asCount(params?.count ?? params?.n)
   if (count !== undefined) {
     const own = resolvePluralKey(strings, key, count, intlLanguage)
     if (own) return strings[own] as string
@@ -25,4 +26,10 @@ export function resolveTemplate(
     return key
   }
   return (strings[key] ?? en[key] ?? key) as string
+}
+
+function asCount(raw: string | number | undefined): number | undefined {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : undefined
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw)
+  return undefined
 }

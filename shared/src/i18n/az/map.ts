@@ -41,8 +41,10 @@ const map: TranslationStrings = {
   'map.attribution': 'Xəritə mənbələri',
   'map.overview.unrouted':
     '{count} marşrut hissəsini hesablamaq mümkün olmadığından məsafələr tam deyil.',
+  'map.overview.unrouted.one': '{count} marşrut hissəsini hesablamaq mümkün olmadığından məsafələr tam deyil.',
   'map.overview.dayUnrouted':
     'Bu günün {count} marşrut hissəsini hesablamaq mümkün olmadı',
+  'map.overview.dayUnrouted.one': 'Bu günün {count} marşrut hissəsini hesablamaq mümkün olmadı',
 };
 
 export default map;

@@ -19,7 +19,7 @@ const tours: TranslationStrings = {
   'tours.caution.badge': '请谨慎使用',
   'tours.caution.tooltip': '海拔或指标数据不完整，已带警告导入',
   'tours.import.caution': '已带警告导入，海拔或指标数据不完整',
-  'tours.import.success': '已从 GPX 导入 {count} 项游览活动',
+  'tours.import.success': '已从 GPX 导入 {count} 条游览路线',
   'tours.import.noTrack': '该 GPX 文件中未找到轨迹或路线',
   'tours.import.error': '无法导入 GPX 文件',
   'tours.delete.confirmBody': '要永久删除此行程吗？其路线、可编辑的途经点和日期安排都将被删除。此操作无法撤销。',

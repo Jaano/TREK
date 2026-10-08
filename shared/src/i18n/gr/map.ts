@@ -29,7 +29,9 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Απόκρυψη όλου του ταξιδιού',
   'map.overview.total': 'Συνολική απόσταση',
   'map.attribution': 'Πηγές χάρτη',
-  'map.overview.unrouted': '{count} σκέλος/η δεν μπόρεσαν να υπολογιστούν, οι αποστάσεις είναι ελλιπείς.',
-  'map.overview.dayUnrouted': '{count} σκέλος/η αυτής της ημέρας δεν μπόρεσαν να υπολογιστούν',
+  'map.overview.unrouted': '{count} σκέλη δεν μπόρεσαν να υπολογιστούν, οπότε οι αποστάσεις είναι ελλιπείς.',
+  'map.overview.unrouted.one': '{count} σκέλος δεν μπόρεσε να υπολογιστεί, οπότε οι αποστάσεις είναι ελλιπείς.',
+  'map.overview.dayUnrouted': '{count} σκέλη αυτής της ημέρας δεν μπόρεσαν να υπολογιστούν',
+  'map.overview.dayUnrouted.one': '{count} σκέλος αυτής της ημέρας δεν μπόρεσε να υπολογιστεί',
 };
 export default map;

@@ -59,7 +59,7 @@ export function BagModal(S: PackingState) {
                   {unassignedWeight >= 1000 ? `${(unassignedWeight / 1000).toFixed(1)} kg` : `${unassignedWeight} g`}
                 </span>
               </div>
-              <div style={{ fontSize: 'calc(11px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{unassigned.length} {t('admin.packingTemplates.items')}</div>
+              <div style={{ fontSize: 'calc(11px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{unassigned.length} {t('admin.packingTemplates.items', { count: unassigned.length })}</div>
             </div>
           )
         })()}

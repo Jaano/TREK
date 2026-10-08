@@ -463,7 +463,7 @@ describe('MTripSheets', () => {
       expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Upload' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Edit track colour' })).not.toBeInTheDocument()
-      fireEvent.click(screen.getByRole('button', { name: '1 files' }))
+      fireEvent.click(screen.getByRole('button', { name: '1 file' }))
       expect(screen.getByText('ridge.gpx')).toBeInTheDocument()
       expect(Boolean(screen.queryByRole('button', { name: /Add to day/i }))).toBe(dayEdit)
     },

@@ -68,7 +68,7 @@ const docsync: TranslationStrings = {
   'docsync.state.local_deleted': 'محذوف في TREK',
   'docsync.state.scope_drift': 'نُقل خارج المجلد',
 
-  'docsync.conflict.resolve': "حلّ {count}",
+  'docsync.conflict.resolve': 'حلّ {count}',
 
   'docsync.conflict.title': 'تغيّرت النسختان',
   'docsync.conflict.keepTrek': 'الإبقاء على نسخة TREK',

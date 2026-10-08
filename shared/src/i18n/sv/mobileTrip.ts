@@ -42,10 +42,13 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.resBadge': 'Bokning',
   'mobileTrip.showOnMap': 'Visa på karta',
   'mobileTrip.statDocuments': '{count} filer',
+  'mobileTrip.statDocuments.one': '{count} fil',
   'mobileTrip.statPeople': '{count} personer',
+  'mobileTrip.statPeople.one': '{count} person',
   'mobileTrip.stay': 'Vistelse',
   'mobileTrip.tapAgainToDelete': 'Tryck igen för att ta bort',
   'mobileTrip.todoOpenCount': '{count} öppna',
+  'mobileTrip.todoOpenCount.one': '{count} öppen',
   'mobileTrip.travel': 'Resa',
   'mobileTrip.upNext': 'Härnäst',
   'mobileTrip.viewDetails': 'Visa detaljer',
@@ -59,7 +62,9 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtStart': 'Start',
   'mobileTrip.rtStayScope': 'Vistelsen hör till platsen och räknas därför varje dag som det här stoppet är inplanerat.',
   'mobileTrip.rtStayLess': '{count} minuter mindre',
+  'mobileTrip.rtStayLess.one': '{count} minut mindre',
   'mobileTrip.rtStayMore': '{count} minuter mer',
+  'mobileTrip.rtStayMore.one': '{count} minut mer',
   'mobileTrip.rtNightDesktopOnly':
     'En övernattning på den här platsen lägger du till i planeraren på datorn. Här kan du bara ta bort den.',
   'mobileTrip.rtReach': 'Hur långt',
@@ -68,10 +73,10 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': 'Från etappens början',
   'mobileTrip.rtNoneAhead': 'Inget på vägen framför dig. Prova hela etappen.',
   'mobileTrip.rtNoneOnStage': 'Inget sådant längs den här etappen.',
-  'mobileTrip.rtTruncated.one':
-    '1 sträcka hade mer än vad som får plats i ett svar. Välj färre sorter för att se resten.',
   'mobileTrip.rtTruncated.other':
     '{count} sträckor hade mer än vad som får plats i ett svar. Välj färre sorter för att se resten.',
+  'mobileTrip.rtTruncated.one':
+    '{count} sträcka hade mer än vad som får plats i ett svar. Välj färre sorter för att se resten.',
   'mobileTrip.rtNoDay': 'Ingen dag vald',
   'mobileTrip.rtNoDayHint': 'Kartan visar hela resan. Tryck på en dag ovanför för att se dess körning.',
 };

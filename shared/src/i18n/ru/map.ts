@@ -29,7 +29,13 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Скрыть всю поездку',
   'map.overview.total': 'Общее расстояние',
   'map.attribution': 'Источники карты',
-  'map.overview.unrouted': 'Не удалось построить {count} участок(ов), поэтому расстояния неполные.',
-  'map.overview.dayUnrouted': 'Не удалось построить {count} участок(ов) этого дня',
+  'map.overview.unrouted': 'Не удалось построить маршрут для {count} участка, поэтому расстояния неполные.',
+  'map.overview.unrouted.one': 'Не удалось построить маршрут для {count} участка, поэтому расстояния неполные.',
+  'map.overview.unrouted.few': 'Не удалось построить маршрут для {count} участков, поэтому расстояния неполные.',
+  'map.overview.unrouted.many': 'Не удалось построить маршрут для {count} участков, поэтому расстояния неполные.',
+  'map.overview.dayUnrouted': 'Не удалось построить маршрут для {count} участка этого дня',
+  'map.overview.dayUnrouted.one': 'Не удалось построить маршрут для {count} участка этого дня',
+  'map.overview.dayUnrouted.few': 'Не удалось построить маршрут для {count} участков этого дня',
+  'map.overview.dayUnrouted.many': 'Не удалось построить маршрут для {count} участков этого дня',
 };
 export default map;

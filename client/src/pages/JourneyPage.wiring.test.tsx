@@ -102,7 +102,7 @@ describe('JourneyPage wiring', () => {
   it('FE-JRN-LISTWIRE-005: an active search reports how many journeys matched', () => {
     const journeys = [buildJourney({ id: 1, title: 'Kyoto trip' })];
     setup({ journeys, filteredJourneys: journeys, searchQuery: 'kyo' });
-    expect(screen.getByText('1 journeys')).toBeInTheDocument();
+    expect(screen.getByText('1 journey')).toBeInTheDocument();
     expect(screen.queryByText('All Journeys')).not.toBeInTheDocument();
   });
 

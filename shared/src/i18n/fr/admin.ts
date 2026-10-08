@@ -23,10 +23,14 @@ const admin: TranslationStrings = {
   'admin.tabs.categories': 'Catégories',
   'admin.tabs.backup': 'Sauvegarde',
   'admin.stats.users': 'Utilisateurs',
+  'admin.stats.users.one': 'Utilisateur',
   'admin.stats.trips': 'Voyages',
+  'admin.stats.trips.one': 'Voyage',
   'admin.stats.places': 'Lieux',
+  'admin.stats.places.one': 'Lieu',
   'admin.stats.photos': 'Photos',
   'admin.stats.files': 'Fichiers',
+  'admin.stats.files.one': 'Fichier',
   'admin.table.user': 'Utilisateur',
   'admin.table.email': 'E-mail',
   'admin.table.role': 'Rôle',
@@ -93,7 +97,7 @@ const admin: TranslationStrings = {
   'admin.googleCaveat.body':
     "TREK est un logiciel libre et nous ne sommes pas neutres ici. À cette échelle, les avis et les photos de commerces ordinaires n'existent que chez Google, et c'est cela, un monopole. Le champ est là faute d'alternative, pas parce que nous le recommandons. Chaque requête part alors chez Google.",
   'admin.trekApi.tagline':
-    'L\'index de lieux propre à TREK. Chercher sans clé Google, sans quota et sans que personne ne compte vos recherches.',
+    "L'index de lieux propre à TREK. Chercher sans clé Google, sans quota et sans que personne ne compte vos recherches.",
   'admin.trekApi.factPlaces':
     '73,6 millions de lieux dans le monde',
   'admin.trekApi.factNoKey':
@@ -102,24 +106,22 @@ const admin: TranslationStrings = {
     'Paquets par pays utilisables hors ligne',
   'admin.trekApi.factPrivacy':
     'Les recherches ne sont jamais journalisées',
-  'admin.trekApi.more':
-    'Ce qu\'il contient',
+  'admin.trekApi.more': "Ce qu'il contient",
   'admin.trekApi.fieldPhone':
     'Téléphone',
   'admin.trekApi.fieldStableId':
     'Identifiant stable',
   'admin.trekApi.includedNote':
-    'Les descriptions viennent du site du lieu lui-même ; les horaires d\'OpenStreetMap là où ils sont renseignés.',
+    "Les descriptions viennent du site du lieu lui-même ; les horaires d'OpenStreetMap là où ils sont renseignés.",
   'admin.trekApi.notRatings':
     'Avis',
   'admin.trekApi.notPhotos':
     'Photos des commerces ordinaires',
   'admin.trekApi.notIncludedNote':
-    'Aucune source ouverte ne propose l\'un ni l\'autre, à aucun prix. Une clé Google reste le seul chemin vers ces deux-là.',
+    "Aucune source ouverte ne propose l'un ni l'autre, à aucun prix. Une clé Google reste le seul chemin vers ces deux-là.",
   'admin.trekApi.sourcesLabel':
     'Sources',
-  'admin.trekApi.sourcesNote':
-    'Chaque champ d\'une réponse indique de laquelle il provient.',
+  'admin.trekApi.sourcesNote': "Chaque champ d'une réponse indique de laquelle il provient.",
   'admin.trekApi.included':
     'Inclus',
   'admin.trekApi.notIncluded':
@@ -179,8 +181,10 @@ const admin: TranslationStrings = {
   'admin.placesEnrich.subtitle':
     "Affiche des images et une description lors de l'ajout d'un lieu. Wikipédia et OpenStreetMap sont toujours utilisés ; Google s'y ajoute si Photos de lieux ou Détails de lieux sont activés.",
   'admin.placesGoogleOnly.title': 'Rechercher uniquement avec Google',
-  'admin.placesGoogleOnly.subtitle': 'Chaque recherche et chaque suggestion passent par Google Places. Désactivé, l\'index de TREK et OpenStreetMap répondent d\'abord, Google n\'est interrogé que s\'ils ne trouvent rien.',
-  'admin.placesGoogleOnly.missingKey': 'Nécessite une clé API Google Maps. Sans elle, la recherche passe par l\'index de TREK et OpenStreetMap, quelle que soit la position de cet interrupteur.',
+  'admin.placesGoogleOnly.subtitle':
+    "Chaque recherche et chaque suggestion passent par Google Places. Désactivé, l'index de TREK et OpenStreetMap répondent d'abord, Google n'est interrogé que s'ils ne trouvent rien.",
+  'admin.placesGoogleOnly.missingKey':
+    "Nécessite une clé API Google Maps. Sans elle, la recherche passe par l'index de TREK et OpenStreetMap, quelle que soit la position de cet interrupteur.",
   'admin.placesGoogleOnly.otherProvider': 'Nécessite Google comme fournisseur de lieux. Avec Amap ou OpenStreetMap sélectionné, aucune recherche ne part vers Google, quelle que soit la position de cet interrupteur.',
   'admin.googleQuota.title': "Limite quotidienne d'appels à Google",
   'admin.googleQuota.subtitle': "Une fois atteinte, TREK n'appelle plus Google jusqu'au lendemain (UTC) et cherche avec OpenStreetMap. Laissez vide pour aucune limite.",
@@ -194,9 +198,12 @@ const admin: TranslationStrings = {
   'admin.transitProvider.transitous': 'Transitous (gratuit)',
   'admin.transitProvider.google': 'Google',
   'admin.transitProvider.transitousHint': 'Flux GTFS communautaires. Gratuit et sans clé, avec la meilleure couverture en Europe.',
-  'admin.transitProvider.googleHint': 'Utilise la clé Google ci-dessus, pour les régions sans données Transitous. Facturé à la recherche — tant qu\'aucune clé n\'est définie, Transitous est utilisé.',
-  'admin.transitProvider.noKeyWarning': 'Google est sélectionné, mais aucune clé Google n\'est configurée — la recherche de transports utilise toujours Transitous. Ajoutez une clé dans Clés d\'API ci-dessus.',
-  'admin.transitProvider.personalKeyWarning': 'Seule votre propre clé Google est définie : la recherche des autres membres continue de basculer sur Transitous. Enregistrez la clé ci-dessus en tant qu\'administrateur pour l\'appliquer à toute l\'instance.',
+  'admin.transitProvider.googleHint':
+    "Utilise la clé Google ci-dessus, pour les régions sans données Transitous. Facturé à la recherche — tant qu'aucune clé n'est définie, Transitous est utilisé.",
+  'admin.transitProvider.noKeyWarning':
+    "Google est sélectionné, mais aucune clé Google n'est configurée — la recherche de transports utilise toujours Transitous. Ajoutez une clé dans Clés d'API ci-dessus.",
+  'admin.transitProvider.personalKeyWarning':
+    "Seule votre propre clé Google est définie : la recherche des autres membres continue de basculer sur Transitous. Enregistrez la clé ci-dessus en tant qu'administrateur pour l'appliquer à toute l'instance.",
   'admin.placeShadow.title': 'Journal des recherches de lieux',
   'admin.placeShadow.subtitle':
     'Enregistrer quel résultat de recherche a été retenu, afin de pouvoir évaluer plus tard un autre index de lieux sur de vraies recherches. Rien ne quitte cette instance, et un administrateur peut exporter ou supprimer le journal à tout moment.',
@@ -225,7 +232,9 @@ const admin: TranslationStrings = {
   'admin.packingTemplates.namePlaceholder': 'Nom du modèle (ex. Vacances à la plage)',
   'admin.packingTemplates.empty': 'Aucun modèle créé',
   'admin.packingTemplates.items': 'articles',
+  'admin.packingTemplates.items.one': 'article',
   'admin.packingTemplates.categories': 'catégories',
+  'admin.packingTemplates.categories.one': 'catégorie',
   'admin.packingTemplates.itemName': "Nom de l'article",
   'admin.packingTemplates.itemCategory': 'Catégorie',
   'admin.packingTemplates.categoryName': 'Nom de catégorie (ex. Vêtements)',
@@ -275,7 +284,8 @@ const admin: TranslationStrings = {
   'admin.plugins.allowedHosts.restartNote':
     'L’enregistrement redémarre le plugin pour qu’il prenne en compte la nouvelle liste.',
   'admin.plugins.allowedHosts.add': 'Ajouter un hôte autorisé',
-  'admin.plugins.allowedHosts.count': '{n} hôte(s) autorisé(s)',
+  'admin.plugins.allowedHosts.count': '{n} hôtes autorisés',
+  'admin.plugins.allowedHosts.count.one': '{n} hôte autorisé',
   'admin.plugins.operatorEgressPill': '+ hôtes que vous ajoutez',
   'admin.plugins.operatorEgressHint':
     'Ce plugin communique avec un service que vous seul pouvez nommer (un serveur auto-hébergé). Après installation, ajoutez les hôtes qu’il peut joindre via ⋯ → Hôtes autorisés. Il ne joindra aucun autre.',
@@ -511,6 +521,7 @@ const admin: TranslationStrings = {
   'admin.plugins.sortUpdates': 'Mises à jour en premier',
   'admin.plugins.sortDownloads': 'Plus téléchargés',
   'admin.plugins.updatesAvailable': '{count} mises à jour disponibles pour vos plugins.',
+  'admin.plugins.updatesAvailable.one': '{count} mise à jour disponible pour vos plugins.',
   'admin.plugins.newerNeedsTrek': 'v{version} disponible — nécessite TREK {range}',
   'admin.plugins.versionsTitle': 'Versions',
   'admin.plugins.versionPickerTitle': 'Changer de version — {name}',
@@ -816,7 +827,8 @@ const admin: TranslationStrings = {
   'admin.passkey.resetHint':
     "Supprime toutes les passkeys de cet utilisateur (ex. en cas d'appareil perdu). Il pourra toujours se connecter avec son mot de passe.",
   'admin.passkey.resetConfirm': 'Supprimer toutes les passkeys de {name} ?',
-  'admin.passkey.resetDone': '{count} passkey(s) supprimée(s)',
+  'admin.passkey.resetDone': '{count} passkeys supprimées',
+  'admin.passkey.resetDone.one': '{count} passkey supprimée',
   'admin.defaultSettings.mapProvider': 'Moteur cartographique',
   'admin.defaultSettings.mapProviderHint':
     'La carte par défaut pour tous les utilisateurs de cette instance. Chaque utilisateur peut toujours la remplacer dans ses propres paramètres.',

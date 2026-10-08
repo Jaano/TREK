@@ -74,6 +74,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.latestJourney': 'Son səyahət gündəliyi',
   'journey.frontpage.allJourneys': 'Bütün səyahət gündəlikləri',
   'journey.frontpage.journeys': 'səyahət gündəliyi',
+  'journey.frontpage.journeys.one': 'səyahət gündəliyi',
   'journey.frontpage.createNew': 'Yeni səyahət gündəliyi yarat',
   'journey.frontpage.createNewSub':
     'Səyahətləri seçin, hekayələr yazın və macəralarınızı paylaşın',
@@ -92,6 +93,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.trips': 'səyahət',
   'journey.frontpage.placesImported': 'məkan idxal ediləcək',
   'journey.frontpage.places': 'məkan',
+  'journey.frontpage.places.one': 'məkan',
 
   'journey.detail.backToJourney': 'Səyahət gündəliyinə qayıt',
   'journey.detail.syncedWithTrips': 'Səyahətlərlə sinxronlaşdırılıb',
@@ -100,6 +102,7 @@ const journey: TranslationStrings = {
   'journey.detail.jumpToLast': 'Sonuncu qeydə keç',
   'journey.detail.dayJump': 'Günə keç',
   'journey.detail.dayJumpCount': '{count} gün',
+  'journey.detail.dayJumpCount.one': '{count} gün',
   'journey.detail.newEntry': 'Yeni qeyd',
   'journey.detail.editEntry': 'Qeydi redaktə et',
   'journey.detail.noEntries': 'Hələ qeyd yoxdur',
@@ -116,6 +119,7 @@ const journey: TranslationStrings = {
   'journey.detail.readMore': 'Davamını oxu',
   'journey.detail.prosCons': 'Müsbət və mənfi cəhətlər',
   'journey.detail.photos': 'foto',
+  'journey.detail.photos.one': 'foto',
   'journey.detail.day': '{number}-ci gün',
   'journey.detail.places': 'məkan',
 
@@ -130,6 +134,7 @@ const journey: TranslationStrings = {
   'journey.verdict.lovedIt': 'Çox bəyəndim',
   'journey.verdict.couldBeBetter': 'Daha yaxşı ola bilərdi',
   'journey.synced.places': 'məkan',
+  'journey.synced.places.one': 'məkan',
   'journey.synced.synced': 'sinxronlaşdırılıb',
 
   'journey.editor.discardChangesConfirm':
@@ -274,8 +279,10 @@ const journey: TranslationStrings = {
 
   'journey.entries.deleteTitle': 'Qeydi sil',
   'journey.photosUploaded': '{count} foto yükləndi',
+  'journey.photosUploaded.one': '{count} foto yükləndi',
   'journey.photosUploadFailed': 'Bəzi fotoları yükləmək mümkün olmadı',
   'journey.photosAdded': '{count} foto əlavə edildi',
+  'journey.photosAdded.one': '{count} foto əlavə edildi',
 
   'journey.public.notFound': 'Tapılmadı',
   'journey.public.notFoundMessage':
@@ -340,11 +347,14 @@ const journey: TranslationStrings = {
   'journey.studio.exportMarksHint':
     'Hər kənara {bleed} mm daşma payı əlavə edir və kəsiləcək yerləri işarələyir',
   'journey.studio.exportNote':
-    '{width} × {height} mm ölçüdə {sheets} vərəq. Brauzeriniz çap görünüşünü PDF-ə çevirəcək.',
+    '{width} × {height} mm ölçüdə {count} vərəq. Brauzeriniz çap görünüşünü PDF-ə çevirəcək.',
+  'journey.studio.exportNote.one':
+    '{width} × {height} mm ölçüdə {count} vərəq. Brauzeriniz çap görünüşünü PDF-ə çevirəcək.',
   'journey.studio.exportOpen': 'Çap görünüşü',
   'journey.studio.exportSave': 'PDF kimi yadda saxla',
   'journey.studio.exportPreparing': 'Hazırlanır',
   'journey.studio.exportSheetCount': '{count} vərəq',
+  'journey.studio.exportSheetCount.one': '{count} vərəq',
 
   'journey.studio.undo': 'Geri qaytar',
   'journey.studio.redo': 'Təkrar et',
@@ -759,6 +769,7 @@ const journey: TranslationStrings = {
   'journey.studio.dropFilesHere': 'Şəkilləri əlavə etmək üçün buraya buraxın',
   'journey.studio.videosSkipped':
     '{count} video daxil edilmədi. Kitabda yalnız şəkillər istifadə olunur.',
+  'journey.studio.videosSkipped.one': '{count} video daxil edilmədi. Kitabda yalnız şəkillər istifadə olunur.',
 
   'journey.studio.fillPage': 'Səhifəni doldur',
   'journey.studio.fillSpread': 'Açılımı doldur',
@@ -790,6 +801,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.restore': 'Bağlanmış təklifləri geri qaytar',
   'journey.suggestions.restoreCount': 'Bağlanmış təkliflər ({count})',
   'journey.suggestions.restored': '{count} təklif geri qaytarıldı',
+  'journey.suggestions.restored.one': '{count} təklif geri qaytarıldı',
 
   'journey.detail.addOnThisDay': 'Bu günə qeyd əlavə et',
   'journey.detail.jumpToDay': '{date} tarixinə keç',

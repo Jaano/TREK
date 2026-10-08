@@ -70,7 +70,7 @@ export function SharedDayCard(p: SharedDayCardProps) {
             </span>
             <span className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1">
               {p.stays.map(stay => <StayPill key={stay.id} stay={stay} dayId={day.id} />)}
-              {!p.travelOnly && <SoftPill>{p.placeCount} {t('shared.places')}</SoftPill>}
+              {!p.travelOnly && <SoftPill>{p.placeCount} {t('shared.places', { count: p.placeCount })}</SoftPill>}
             </span>
           </span>
         </button>

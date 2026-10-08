@@ -155,9 +155,8 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': '기록을 읽는 중…',
   'dawarich.atlas.empty': '기록에는 TREK에 아직 없는 국가가 없습니다.',
   'dawarich.atlas.cities': '도시 {count}곳',
-  'dawarich.atlas.citiesOne': '도시 1곳',
-  'dawarich.atlas.accept': '국가 {count}곳 추가',
-  'dawarich.atlas.accepted': '국가 {count}곳을 추가했습니다',
+  'dawarich.atlas.accept': '{count}개국 추가',
+  'dawarich.atlas.accepted': '{count}개국을 추가했습니다',
   'dawarich.atlas.unresolved': 'TREK이 다음 항목을 국가와 연결하지 못했습니다: {names}.',
   'dawarich.atlas.source': 'Dawarich에서',
   'dawarich.atlas.range': '{from}부터 {to}까지 확인함',
@@ -172,9 +171,8 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.metersAway': '{meters} m 거리',
   'dawarich.bucket.kilometersAway': '{km} km 거리',
   'dawarich.bucket.rule': '{meters} m 이내에서 {minutes}분 이상 머무르면 소원을 이룬 것으로 봅니다.',
+  'dawarich.journey.dayStays.other': 'Dawarich 방문 기록 {count}건',
 
-  'dawarich.journey.dayStays.one': 'Dawarich 체류 1곳',
-  'dawarich.journey.dayStays.other': 'Dawarich 체류 {count}곳',
 };
 
 export default dawarich;

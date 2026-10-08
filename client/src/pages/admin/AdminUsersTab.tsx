@@ -51,7 +51,7 @@ export default function AdminUsersTab({ admin, t, locale }: AdminUsersTabProps):
       <SettingsCard
         icon={Users}
         title={t('admin.tabs.users')}
-        hint={<>{users.length} {t('admin.stats.users')}</>}
+        hint={<>{users.length} {t('admin.stats.users', { count: users.length })}</>}
         action={
           <button type="button" onClick={() => setShowCreateUser(true)} className={SETTINGS_BUTTON_PRIMARY} style={fs(12.5, 'body')}>
             <UserPlus size={14} strokeWidth={2.1} />

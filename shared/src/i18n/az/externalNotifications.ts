@@ -1,4 +1,6 @@
 import type { NotificationLocale } from '../externalNotifications/types';
+import { pluralForm } from '../plural';
+
 const az: NotificationLocale = {
   email: {
     footer: 'Bu məktubu TREK-də bildirişləriniz aktiv olduğu üçün aldınız.',
@@ -36,8 +38,11 @@ const az: NotificationLocale = {
       body: `${p.actor} sizi kolleksiyanı paylaşmağa dəvət etdi. Qəbul və ya rədd etmək üçün TREK-i açın.`,
     }),
     photos_shared: (p) => ({
-      title: `${p.count} foto paylaşıldı`,
-      body: `${p.actor} “${p.trip}” səyahətində ${p.count} foto paylaşdı.`,
+      title: pluralForm(p.count, 'az', { one: `${p.count} foto paylaşıldı`, other: `${p.count} foto paylaşıldı` }),
+      body: pluralForm(p.count, 'az', {
+        one: `${p.actor} “${p.trip}” səyahətində ${p.count} foto paylaşdı.`,
+        other: `${p.actor} “${p.trip}” səyahətində ${p.count} foto paylaşdı.`,
+      }),
     }),
     collab_message: (p) => ({
       title: `“${p.trip}” səyahətində yeni mesaj`,
@@ -56,7 +61,10 @@ const az: NotificationLocale = {
       body:
         `“${p.backend}” replikasına yazmaq mümkün olmadı: ${p.key} üçün ${p.op} — ${p.error}.` +
         (p.suppressed !== '0'
-          ? ` Son bildirişdən bəri ${p.suppressed} əlavə xəta gizlədilib.`
+          ? pluralForm(p.suppressed, 'az', {
+              one: ` Son bildirişdən bəri ${p.suppressed} əlavə xəta gizlədilib.`,
+              other: ` Son bildirişdən bəri ${p.suppressed} əlavə xəta gizlədilib.`,
+            })
           : ''),
     }),
     synology_session_cleared: () => ({

@@ -7,6 +7,8 @@ const inspector: TranslationStrings = {
   'inspector.showHours': 'Zobraziť otváracie hodiny',
   'inspector.files': 'Súbory',
   'inspector.filesCount': '{count} súborov',
+  'inspector.filesCount.one': '{count} súbor',
+  'inspector.filesCount.few': '{count} súbory',
   'inspector.remove': 'Odstrániť',
   'inspector.removeFromDay': 'Odobrať z dňa',
   'inspector.addToDay': 'Pridať k dňu',

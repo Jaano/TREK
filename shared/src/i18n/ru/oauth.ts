@@ -86,8 +86,10 @@ const oauth: TranslationStrings = {
   'oauth.authorize.requestDescription': 'This application is requesting access to your TREK account.', // en-fallback
   'oauth.authorize.trustNote': 'Only grant access to applications you trust. Your data stays on your server.', // en-fallback
   'oauth.authorize.selectScope': 'Select at least one scope', // en-fallback
-  'oauth.authorize.approveScopes': 'Approve ({count} scopes)', // en-fallback
-  'oauth.authorize.approveScopes.one': 'Approve ({count} scope)', // en-fallback
+  'oauth.authorize.approveScopes': 'Разрешить ({count} области доступа)',
+  'oauth.authorize.approveScopes.one': 'Разрешить ({count} область доступа)',
+  'oauth.authorize.approveScopes.few': 'Разрешить ({count} области доступа)',
+  'oauth.authorize.approveScopes.many': 'Разрешить ({count} областей доступа)',
   'oauth.authorize.approveAccess': 'Approve Access', // en-fallback
   'oauth.authorize.deny': 'Deny', // en-fallback
   'oauth.authorize.choosePermissions': 'Choose which permissions to grant', // en-fallback

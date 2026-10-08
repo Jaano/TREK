@@ -19,8 +19,8 @@ const atlas: TranslationStrings = {
   'atlas.streak': '连续',
   'atlas.year': '年',
   'atlas.years': '年',
-  'atlas.yearsInRow': '年连续',
-  'atlas.tripsIn': '次旅行在',
+  'atlas.yearsInRow': '年不间断',
+  'atlas.tripsIn': '次旅行 ·',
   'atlas.since': '自',
   'atlas.europe': '欧洲',
   'atlas.asia': '亚洲',
@@ -31,7 +31,6 @@ const atlas: TranslationStrings = {
   'atlas.other': '其他',
   'atlas.firstVisit': '首次旅行',
   'atlas.lastVisitLabel': '最近旅行',
-  'atlas.tripPlural': '次旅行',
   'atlas.tripsLabel': '次旅行',
   'atlas.placesVisited': '个地点已访问',
   'atlas.statsTab': '统计',
@@ -62,5 +61,6 @@ const atlas: TranslationStrings = {
   'atlas.showPlanned': '显示计划中的国家',
   'atlas.plannedFor': '计划于',
   'atlas.antarctica': '南极洲',
+  'atlas.regionPlacesLabel': '个地点',
 };
 export default atlas;

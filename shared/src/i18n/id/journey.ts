@@ -286,7 +286,8 @@ const journey: TranslationStrings = {
   'journey.studio.exportFinishing': 'Penyelesaian',
   'journey.studio.exportMarks': 'Tanda potong',
   'journey.studio.exportMarksHint': 'Menambahkan bleed {bleed} mm di setiap tepi dan menandai tempat pemotongan',
-  'journey.studio.exportNote': '{sheets} lembar {width} × {height} mm. Peramban mengubah tampilan cetak menjadi PDF.',
+  'journey.studio.exportNote':
+    '{count} lembar berukuran {width} × {height} mm. Peramban mengubah tampilan cetak menjadi PDF.',
   'journey.studio.exportOpen': 'Tampilan cetak',
   'journey.studio.exportSave': 'Simpan sebagai PDF',
   'journey.studio.exportPreparing': 'Menyiapkan',
@@ -634,7 +635,7 @@ const journey: TranslationStrings = {
   'journey.studio.uploadToGallery': 'Gambar baru akan masuk ke galeri',
   'journey.studio.uploading': 'Mengunggah {done} dari {total}',
   'journey.studio.dropFilesHere': 'Lepaskan untuk menambahkan gambar',
-  'journey.studio.videosSkipped': '{count} video dilewati. Buku berisi gambar.',
+  'journey.studio.videosSkipped': '{count} video tidak disertakan. Buku hanya berisi gambar.',
   'journey.studio.fillPage': 'Isi halaman',
   'journey.studio.fillSpread': 'Isi halaman ganda',
   'journey.studio.fillHint':
@@ -659,7 +660,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Saran diabaikan',
   'journey.suggestions.restore': 'Kembalikan saran yang diabaikan',
   'journey.suggestions.restoreCount': 'Saran yang diabaikan ({count})',
-  'journey.suggestions.restored': '{count} saran telah kembali',
+  'journey.suggestions.restored': '{count} saran dikembalikan',
   'journey.detail.addOnThisDay': 'Tambahkan catatan pada hari ini',
   'journey.detail.jumpToDay': 'Lompat ke {date}',
   'journey.detail.searchPlaceholder': 'Cari di perjalanan ini',

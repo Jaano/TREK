@@ -80,6 +80,7 @@ const places: TranslationStrings = {
   'places.search': 'Search places...',
   'places.allCategories': 'All Categories',
   'places.categoriesSelected': 'categories',
+  'places.categoriesSelected.one': 'category',
   'places.clearFilter': 'Clear filter',
   'places.count': '{count} places',
   'places.count.one': '{count} place',

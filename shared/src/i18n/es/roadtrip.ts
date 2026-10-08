@@ -70,6 +70,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.looking': 'Se busca',
   'roadtrip.poi.searchingHint': 'Buscando por la ruta…',
   'roadtrip.poi.found': '{count} por el camino',
+  'roadtrip.poi.found.one': '{count} por el camino',
   'roadtrip.poi.fuel': 'Gasolina',
   'roadtrip.poi.charging': 'Recarga',
   'roadtrip.stop.offRoad': '{distance} desde la carretera',
@@ -105,6 +106,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.limit.echoOver': '{over} de {days} días superan tu límite.',
   'roadtrip.limit.echoNone': 'Los {days} días están dentro de tus límites.',
   'roadtrip.limit.echoDry': '{count} tramos sin parada alcanzable.',
+  'roadtrip.limit.echoDry.one': '{count} tramo sin parada alcanzable.',
   'roadtrip.limit.echoEmpty': 'Abre una ruta para ver el efecto.',
   'roadtrip.limit.specToggle': 'Calcular a partir del coche',
   'roadtrip.limit.hint': 'Solo cuenta el tiempo de conducción. Las paradas y las noches no se incluyen.',
@@ -128,6 +130,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.avoid.unavailable':
     'No disponible: esta instancia usa su propio motor, que no puede omitir una clase de vía.',
   'roadtrip.avoid.badge': '{count} evitados',
+  'roadtrip.avoid.badge.one': '{count} evitado',
   'roadtrip.avoid.missed': '{classes} inevitable(s)',
   'roadtrip.avoid.missedHint':
     'Este día no tiene ninguna ruta que lo evite, así que el trayecto lo usa. Los demás días siguen evitando lo que pueden.',
@@ -175,12 +178,17 @@ const roadtrip: TranslationStrings = {
   'roadtrip.track.action': 'Seguir esta traza',
   'roadtrip.track.working': 'Ajustando el trayecto a la traza, ronda {round}',
   'roadtrip.track.done': '{count} puntos de paso colocados. El trayecto se mantiene a menos de {distance} de la traza.',
+  'roadtrip.track.done.one':
+    '{count} punto de paso colocado. El trayecto se mantiene a menos de {distance} de la traza.',
   'roadtrip.track.capped':
-    '{count} puntos de paso colocados. En su punto más ancho, el trayecto queda a {distance} de la traza.',
+    '{count} puntos de paso colocados. En su punto más alejado, el trayecto queda a {distance} de la traza.',
+  'roadtrip.track.capped.one':
+    '{count} punto de paso colocado. En su punto más alejado, el trayecto queda a {distance} de la traza.',
   'roadtrip.track.already': 'El trayecto ya seguía esta traza.',
   'roadtrip.track.errorRoute': 'El servicio de rutas no respondió.',
   'roadtrip.track.errorSave': 'No se pudieron guardar los puntos de paso.',
   'roadtrip.track.clear': 'Quitar {count} puntos de paso',
+  'roadtrip.track.clear.one': 'Quitar {count} punto de paso',
   'roadtrip.track.current': 'Actualmente sigue {name}',
   'roadtrip.poi.rest': 'Área de descanso',
   'roadtrip.poi.campsite': 'Camping',
@@ -193,10 +201,13 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.foundFiltered': '{count} de {total} en la ruta',
   'roadtrip.poi.truncated':
     'En {count} tramos había más de lo que cabe en una respuesta: reduce el corredor para ver el resto.',
+  'roadtrip.poi.truncated.one':
+    'En {count} tramo había más de lo que cabe en una respuesta: reduce el corredor para ver el resto.',
   'roadtrip.poi.search': 'Buscar',
   'roadtrip.poi.searching': 'Buscando {done} de {total}',
   'roadtrip.poi.capped': 'La ruta es larga: solo se buscó en el primer tramo.',
-  'roadtrip.poi.partial': 'No se pudieron buscar {count} tramos: la búsqueda de lugares no respondió.',
+  'roadtrip.poi.partial': 'No se pudo buscar en {count} tramos: la búsqueda de lugares no respondió.',
+  'roadtrip.poi.partial.one': 'No se pudo buscar en {count} tramo: la búsqueda de lugares no respondió.',
   'roadtrip.poi.failed': 'La búsqueda de lugares no responde ahora mismo.',
   'roadtrip.poi.empty': 'Elige lo que necesitas y busca.',
   'roadtrip.poi.add': 'Añadir',
@@ -241,6 +252,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.quietDay.one': 'Por ahora solo {name}: suelta una parada aquí',
   'roadtrip.leg.driveText': '{distance} en {time}',
   'roadtrip.day.stopCount': '{count} paradas',
+  'roadtrip.day.stopCount.one': '{count} parada',
   'roadtrip.day.fold': 'Plegar',
   'roadtrip.day.folded': 'Plegado',
   'roadtrip.stop.stayShort': 'Parada',

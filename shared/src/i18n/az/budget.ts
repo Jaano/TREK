@@ -33,6 +33,8 @@ const budget: TranslationStrings = {
   'budget.linkedToReservation': 'Rezervasiya ilə əlaqələndirilib — adı orada redaktə edin',
   'budget.confirm.deleteCategory':
     '“{name}” kateqoriyasını daxilindəki {count} qeydlə birlikdə silmək istədiyinizə əminsiniz?',
+  'budget.confirm.deleteCategory.one':
+    '“{name}” kateqoriyasını daxilindəki {count} qeydlə birlikdə silmək istədiyinizə əminsiniz?',
   'budget.deleteCategory': 'Kateqoriyanı sil',
   'budget.perPerson': 'Nəfər başına',
   'budget.paid': 'Ödənilib',
@@ -66,6 +68,7 @@ const budget: TranslationStrings = {
 
   'costs.expenses': 'Xərclər',
   'costs.entries': '{count} qeyd',
+  'costs.entries.one': '{count} qeyd',
   'costs.searchPlaceholder': 'Xərcləri axtarın…',
   'costs.filter.all': 'Hamısı',
   'costs.filter.mine': 'Mənim ödədiklərim',
@@ -73,6 +76,7 @@ const budget: TranslationStrings = {
   'costs.filter.allCategories': 'Bütün kateqoriyalar',
   'costs.filter.allDays': 'Bütün günlər',
   'costs.expensesCount': '{count} xərc',
+  'costs.expensesCount.one': '{count} xərc',
 
   'costs.addExpense': 'Xərc əlavə et',
   'costs.view.label': 'Görünüş',
@@ -116,6 +120,7 @@ const budget: TranslationStrings = {
   'costs.settleHistory': 'Hesablaşma tarixçəsi',
   'costs.noSettlements': 'Hələ hesablaşmış ödəniş yoxdur.',
   'costs.paymentsSettled': '{count} ödəniş üzrə hesablaşılıb',
+  'costs.paymentsSettled.one': '{count} ödəniş üzrə hesablaşılıb',
   'costs.paid': 'ödədi',
   'costs.undo': 'Geri qaytar',
 
@@ -155,6 +160,7 @@ const budget: TranslationStrings = {
   'costs.splitHint.ticket': 'Qəbzdə olanları sadalayın və hər elementi kimin götürdüyünü işarələyin.',
   'costs.pickSomeone': 'Bölüşdürmək üçün ən azı bir nəfər seçin.',
   'costs.splitSummary': '{count} nəfər arasında bölünüb · hərəsinə {amount}',
+  'costs.splitSummary.one': '{count} nəfər · {amount}',
 
   'costs.cat.accommodation': 'Yaşayış yeri',
   'costs.cat.food': 'Yemək və içki',
@@ -172,7 +178,9 @@ const budget: TranslationStrings = {
   'costs.cat.other': 'Digər',
 
   'costs.daysCount': '{count} gün',
+  'costs.daysCount.one': '{count} gün',
   'costs.travelers': '{count} səyahətçi',
+  'costs.travelers.one': '{count} səyahətçi',
   'costs.liveRate': 'cari məzənnə',
 
   'costs.settleAll': 'Hamısı üzrə hesablaş',
@@ -196,6 +204,7 @@ const budget: TranslationStrings = {
   'costs.toggleSign': 'Xərc və geri ödəniş arasında keçid et',
 
   'costs.receipts': 'Qəbzlər',
+  'costs.receipts.one': 'Qəbz',
   'costs.receiptsTitle': 'Qəbzlər və fakturalar',
   'costs.attachReceipt': 'Qəbz / faktura əlavə et',
   'costs.attach': 'Əlavə et',
@@ -216,6 +225,8 @@ const budget: TranslationStrings = {
   'costs.viewReceipt': 'Qəbzə bax',
   'costs.receiptLeftBehind':
     'Yadda saxlamaq mümkün olmadı və yüklənmiş {count} qəbz hələ də qalır. Onları Fayllar bölməsindən silin.',
+  'costs.receiptLeftBehind.one':
+    'Yadda saxlamaq mümkün olmadı və yüklənmiş {count} qəbz hələ də qalır. Onu Fayllar bölməsindən silin.',
 };
 
 export default budget;

@@ -19,8 +19,10 @@ const tours: TranslationStrings = {
   'tours.caution.badge': 'используйте с осторожностью',
   'tours.caution.tooltip': 'Данные о высоте или показателях неполные — импорт с оговорками',
   'tours.import.caution': 'Импорт с оговорками — данные о высоте или показателях неполные',
-  'tours.import.success': 'Импортировано туров из GPX: {count}',
+  'tours.import.success': 'Импортировано {count} тура из GPX',
   'tours.import.success.one': 'Импортирован {count} тур из GPX',
+  'tours.import.success.few': 'Импортировано {count} тура из GPX',
+  'tours.import.success.many': 'Импортировано {count} туров из GPX',
   'tours.import.noTrack': 'В этом файле GPX не найден трек или маршрут',
   'tours.import.error': 'Не удалось импортировать файл GPX',
   'tours.delete.confirmBody':

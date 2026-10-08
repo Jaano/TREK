@@ -88,8 +88,8 @@ const oauth: TranslationStrings = {
   'oauth.authorize.requestDescription': 'This application is requesting access to your TREK account.', // en-fallback
   'oauth.authorize.trustNote': 'Only grant access to applications you trust. Your data stays on your server.', // en-fallback
   'oauth.authorize.selectScope': 'Select at least one scope', // en-fallback
-  'oauth.authorize.approveScopes': 'Approve ({count} scopes)', // en-fallback
-  'oauth.authorize.approveScopes.one': 'Approve ({count} scope)', // en-fallback
+  'oauth.authorize.approveScopes': 'Approuver ({count} portées)',
+  'oauth.authorize.approveScopes.one': 'Approuver ({count} portée)',
   'oauth.authorize.approveAccess': 'Approve Access', // en-fallback
   'oauth.authorize.deny': 'Deny', // en-fallback
   'oauth.authorize.choosePermissions': 'Choose which permissions to grant', // en-fallback
@@ -110,7 +110,7 @@ const oauth: TranslationStrings = {
   'oauth.scope.settings:write.label': 'Modifier vos préférences',
   'oauth.scope.settings:write.description': 'Modifier les unités, le format horaire, la langue, la devise par défaut et la page d’accueil. Jamais les clés API enregistrées',
   'oauth.scope.group.plugins': 'Extensions',
-  'oauth.scope.plugins:use.label': 'Exécuter les outils d\'extension',
+  'oauth.scope.plugins:use.label': "Exécuter les outils d'extension",
   'oauth.scope.plugins:use.description': 'Autorise ce client à appeler les outils publiés par les extensions installées et approuvées par un administrateur. Chaque extension agit avec les accès qui lui ont déjà été accordés, et non avec les portées de ce jeton',
 };
 export default oauth;

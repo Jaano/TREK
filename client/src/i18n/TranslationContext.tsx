@@ -112,7 +112,10 @@ interface TranslationProviderProps {
 
 export function TranslationProvider({ children }: TranslationProviderProps) {
   const language = useSettingsStore((s) => s.settings.language) || 'en'
-  const [strings, setStrings] = useState<TranslationStrings>(en)
+  // The catalogue together with the language it belongs to: while another
+  // language loads, or when its chunk fails, the strings on screen are still
+  // the previous ones, and their plural forms follow that language's rule.
+  const [catalogue, setCatalogue] = useState<{ language: string; strings: TranslationStrings }>({ language: 'en', strings: en })
 
   useEffect(() => {
     document.documentElement.lang = getIntlLanguage(language)
@@ -125,7 +128,11 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
 
     let cancelled = false
     importChunk(loader).then(mod => {
-      if (!cancelled) setStrings(mod.default)
+      // The same table for the same language keeps the state, and with it t():
+      // English arrives as the very table the provider started with.
+      if (!cancelled) {
+        setCatalogue(prev => (prev.language === language && prev.strings === mod.default ? prev : { language, strings: mod.default }))
+      }
     }).catch(err => {
       // The locale chunk can be gone after a deploy. Keep the strings we have —
       // an untranslated UI beats an unhandled rejection and a blank screen.
@@ -135,9 +142,9 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
   }, [language])
 
   const value = useMemo((): TranslationContextValue => {
-    const intlLanguage = getIntlLanguage(language)
+    const intlLanguage = getIntlLanguage(catalogue.language)
     const template = (key: string, params?: Record<string, string | number>): string =>
-      resolveTemplate(strings, intlLanguage, key, params)
+      resolveTemplate(catalogue.strings, intlLanguage, key, params)
 
     function t(key: string, params?: Record<string, string | number>): string {
       let val = template(key, params)
@@ -167,7 +174,7 @@ export function TranslationProvider({ children }: TranslationProviderProps) {
     }
 
     return { t, tHtml, language, locale: getLocaleForLanguage(language) }
-  }, [strings, language])
+  }, [catalogue, language])
 
   return <TranslationContext value={value}>{children}</TranslationContext>
 }

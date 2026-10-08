@@ -157,7 +157,6 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': 'Membaca rekamanmu…',
   'dawarich.atlas.empty': 'Rekamanmu tidak menunjukkan negara yang belum dimiliki TREK.',
   'dawarich.atlas.cities': '{count} kota',
-  'dawarich.atlas.citiesOne': '1 kota',
   'dawarich.atlas.accept': 'Tambah {count} negara',
   'dawarich.atlas.accepted': '{count} negara ditambahkan',
   'dawarich.atlas.unresolved': 'TREK tidak dapat mencocokkan ini dengan sebuah negara: {names}.',
@@ -174,9 +173,8 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.metersAway': '{meters} m dari sana',
   'dawarich.bucket.kilometersAway': '{km} km dari sana',
   'dawarich.bucket.rule': 'Sebuah keinginan dianggap tercapai dalam radius {meters} m dan setelah {minutes} menit di lokasi.',
-
-  'dawarich.journey.dayStays.one': '1 persinggahan dari Dawarich',
   'dawarich.journey.dayStays.other': '{count} persinggahan dari Dawarich',
+
 };
 
 export default dawarich;

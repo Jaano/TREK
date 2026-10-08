@@ -394,7 +394,8 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'AirTrail bağlantısı kaydedildi',
   'settings.airtrail.toast.saveError': 'Bağlantı kaydedilemedi',
   'settings.airtrail.test.button': 'Bağlantıyı test et',
-  'settings.airtrail.test.success': 'Bağlandı — {count} uçuş bulundu',
+  'settings.airtrail.test.success': 'Bağlandı. {count} uçuş bulundu',
+  'settings.airtrail.test.success.one': 'Bağlandı. {count} uçuş bulundu',
   'settings.airtrail.test.failed': 'Bağlantı başarısız',
   'settings.aiParsing.title': 'Yapay zekâ ayrıştırma',
   'settings.aiParsing.hint':
@@ -539,6 +540,7 @@ const settings: TranslationStrings = {
   'settings.offline.storage.tripOff': 'Saklanmadı',
   'settings.offline.storage.tripFinished': 'Tamamlandı. Yalnızca açarsanız saklanır.',
   'settings.offline.notice.stored': 'Bu cihaza {count} gezi kaydedildi',
+  'settings.offline.notice.stored.one': 'Bu cihaza {count} gezi kaydedildi',
   'settings.offline.notice.nothing': 'Kaydedilecek bir şey yok. Saklamak istediğiniz gezileri açın.',
   'settings.offline.notice.busy': 'Zaten bir eşitleme sürüyor. Birazdan yeniden deneyin.',
   'settings.offline.notice.offline': 'Bağlantı yok. Gezileri çevrimdışı kaydetmek için bağlanın.',

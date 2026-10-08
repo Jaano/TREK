@@ -71,7 +71,7 @@ const docsync: TranslationStrings = {
   'docsync.state.local_deleted': 'Dihapus di TREK',
   'docsync.state.scope_drift': 'Dipindahkan keluar folder',
 
-  'docsync.conflict.resolve': "Selesaikan {count}",
+  'docsync.conflict.resolve': 'Selesaikan {count}',
 
   'docsync.conflict.title': 'Kedua salinan berubah',
   'docsync.conflict.keepTrek': 'Pertahankan versi TREK',

@@ -92,7 +92,7 @@ export default function ApplyTemplateButton({ tripId, visibility, style, classNa
               <div style={{ flex: 1, textAlign: 'start' }}>
                 <div style={{ fontWeight: 600 }}>{tmpl.name}</div>
                 <div style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>
-                  {tmpl.item_count} {t('admin.packingTemplates.items')}
+                  {tmpl.item_count} {t('admin.packingTemplates.items', { count: tmpl.item_count })}
                 </div>
               </div>
             </button>

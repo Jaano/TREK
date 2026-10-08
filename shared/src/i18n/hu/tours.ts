@@ -19,7 +19,7 @@ const tours: TranslationStrings = {
   'tours.caution.badge': 'óvatosan használd',
   'tours.caution.tooltip': 'Hiányos magassági adatok vagy mutatók – fenntartással importálva',
   'tours.import.caution': 'Fenntartással importálva – hiányos magassági adatok vagy mutatók',
-  'tours.import.success': 'GPX-ből importált túrák száma: {count}',
+  'tours.import.success': '{count} túra importálva GPX-ből',
   'tours.import.success.one': '{count} túra importálva GPX-ből',
   'tours.import.noTrack': 'Ebben a GPX-fájlban nem található nyomvonal vagy útvonal',
   'tours.import.error': 'Nem sikerült importálni a GPX-fájlt',

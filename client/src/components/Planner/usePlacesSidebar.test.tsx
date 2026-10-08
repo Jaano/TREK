@@ -611,7 +611,7 @@ describe('usePlacesSidebar list import', () => {
     await act(async () => { await S.handleListImport(); });
 
     expect(sentEnrich).toBe(true);
-    expect(addToast).toHaveBeenCalledWith('1 places imported from "Seoul"', 'success', undefined);
+    expect(addToast).toHaveBeenCalledWith('1 place imported from "Seoul"', 'success', undefined);
     expect(pushUndo).toHaveBeenCalledWith('Naver Maps import', expect.any(Function));
   });
 

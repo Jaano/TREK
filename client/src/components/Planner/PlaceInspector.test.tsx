@@ -1119,7 +1119,7 @@ describe('PlaceInspector', () => {
     const { openFile } = await import('../../utils/fileDownload');
     const spy = vi.spyOn({ openFile }, 'openFile');
     render(<PlaceInspector {...defaultProps} files={[placeFile()] as any} />);
-    fireEvent.click(screen.getByText('1 files'));
+    fireEvent.click(screen.getByText('1 file'));
     const link = await screen.findByText('map.pdf');
     fireEvent.click(link);
     // The click is handled without throwing; the row stays in the list.

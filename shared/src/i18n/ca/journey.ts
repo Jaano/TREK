@@ -60,6 +60,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.latestJourney': 'Última travesia',
   'journey.frontpage.allJourneys': 'Totes les travesies',
   'journey.frontpage.journeys': 'travesies',
+  'journey.frontpage.journeys.one': 'travesia',
   'journey.frontpage.createNew': 'Crea una travesia nova',
   'journey.frontpage.createNewSub': 'Tria viatges, escriu històries, comparteix les teves aventures',
   'journey.frontpage.live': 'En viu',
@@ -76,6 +77,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.trips': 'viatges',
   'journey.frontpage.placesImported': "llocs s'importaran",
   'journey.frontpage.places': 'llocs',
+  'journey.frontpage.places.one': 'lloc',
   'journey.detail.backToJourney': 'Torna a la travesia',
   'journey.detail.syncedWithTrips': 'Sincronitzat amb viatges',
   'journey.detail.addEntry': 'Afegeix una entrada',
@@ -83,6 +85,7 @@ const journey: TranslationStrings = {
   'journey.detail.jumpToLast': 'Ves a l’última entrada',
   'journey.detail.dayJump': 'Ves a un dia',
   'journey.detail.dayJumpCount': '{count} dies',
+  'journey.detail.dayJumpCount.one': '{count} dia',
   'journey.detail.newEntry': 'Entrada nova',
   'journey.detail.editEntry': "Edita l'entrada",
   'journey.detail.noEntries': 'Encara no hi ha entrades',
@@ -96,6 +99,7 @@ const journey: TranslationStrings = {
   'journey.detail.readMore': 'Llegeix-ne més',
   'journey.detail.prosCons': 'Pros i contres',
   'journey.detail.photos': 'fotos',
+  'journey.detail.photos.one': 'foto',
   'journey.detail.day': 'Dia {number}',
   'journey.detail.places': 'llocs',
   'journey.stats.days': 'Dies',
@@ -108,6 +112,7 @@ const journey: TranslationStrings = {
   'journey.verdict.lovedIt': "M'ha encantat",
   'journey.verdict.couldBeBetter': 'Podria millorar',
   'journey.synced.places': 'llocs',
+  'journey.synced.places.one': 'lloc',
   'journey.synced.synced': 'sincronitzat',
   'journey.editor.discardChangesConfirm': 'Tens canvis sense desar. Els descartes?',
   'journey.editor.uploadFailed': 'Error en pujar les fotos',
@@ -220,8 +225,10 @@ const journey: TranslationStrings = {
   'journey.settings.failedToDelete': 'Error en eliminar',
   'journey.entries.deleteTitle': "Elimina l'entrada",
   'journey.photosUploaded': '{count} fotos pujades',
+  'journey.photosUploaded.one': '{count} foto pujada',
   'journey.photosUploadFailed': "Algunes fotos no s'han pogut pujar",
   'journey.photosAdded': '{count} fotos afegides',
+  'journey.photosAdded.one': '{count} foto afegida',
   'journey.public.notFound': 'No trobat',
   'journey.public.notFoundMessage': "Aquesta travesia no existeix o l'enllaç ha caducat.",
   'journey.public.readOnly': 'Només lectura · Travesia pública',
@@ -287,23 +294,29 @@ const journey: TranslationStrings = {
   'journey.studio.exportFinishing': 'Acabat',
   'journey.studio.exportMarks': 'Marques de tall',
   'journey.studio.exportMarksHint': 'Afegeix {bleed} mm de sagnat a cada vora i marca on s’ha de tallar',
-  'journey.studio.exportNote': '{sheets} fulls de {width} × {height} mm. El navegador converteix la vista d’impressió en un PDF.',
+  'journey.studio.exportNote':
+    '{count} fulls de {width} × {height} mm. El navegador converteix la vista d’impressió en un PDF.',
+  'journey.studio.exportNote.one':
+    '{count} full de {width} × {height} mm. El navegador converteix la vista d’impressió en un PDF.',
   'journey.studio.exportOpen': 'Vista d’impressió',
   'journey.studio.exportSave': 'Desa com a PDF',
   'journey.studio.exportPreparing': 'S’està preparant',
   'journey.studio.exportSheetCount': '{count} fulls',
+  'journey.studio.exportSheetCount.one': '{count} full',
   'journey.studio.undo': 'Undo', // en-fallback
   'journey.studio.redo': 'Redo', // en-fallback
   'journey.studio.zoomIn': 'Zoom in', // en-fallback
   'journey.studio.zoomOut': 'Zoom out', // en-fallback
   'journey.studio.zoomFit': 'Fit to view', // en-fallback
   'journey.studio.downloadSpread': 'Baixa aquesta doble pàgina',
-  'journey.studio.downloadSpreadHint': 'Desa el disseny d\'aquesta doble pàgina com a fitxer, sense les fotos, per compartir-lo o reutilitzar-lo',
+  'journey.studio.downloadSpreadHint':
+    "Desa el disseny d'aquesta doble pàgina com a fitxer, sense les fotos, per compartir-lo o reutilitzar-lo",
   'journey.studio.importSpread': 'Importa',
-  'journey.studio.importSpreadHint': 'Afegeix una doble pàgina des d\'un fitxer de disseny baixat',
+  'journey.studio.importSpreadHint': "Afegeix una doble pàgina des d'un fitxer de disseny baixat",
   'journey.studio.importSpreadFailed': 'Aquest fitxer no és una doble pàgina del TREK Studio',
   'journey.studio.desktopOnly': 'Studio needs a bigger screen', // en-fallback
-  'journey.studio.desktopOnlyHint': 'Dissenyar un llibre demana espai per treballar, per això l\'Studio només hi és a l\'escriptori, i el PDF també. La resta del teu viatge funciona aquí com sempre.', // en-fallback
+  'journey.studio.desktopOnlyHint':
+    "Dissenyar un llibre demana espai per treballar, per això l'Studio només hi és a l'escriptori, i el PDF també. La resta del teu viatge funciona aquí com sempre.", // en-fallback
   'journey.studio.formatA5Landscape': 'A5 landscape', // en-fallback
   'journey.studio.bookView': 'Book view', // en-fallback
   'journey.studio.multiple': 'Several', // en-fallback
@@ -638,6 +651,7 @@ const journey: TranslationStrings = {
   'journey.studio.uploading': 'Pujant {done} de {total}',
   'journey.studio.dropFilesHere': 'Deixa anar per afegir les imatges',
   'journey.studio.videosSkipped': "S'han deixat fora {count} vídeos. Un llibre conté imatges.",
+  'journey.studio.videosSkipped.one': "S'ha deixat fora {count} vídeo. Un llibre conté imatges.",
   'journey.studio.fillPage': 'Omple la pàgina',
   'journey.studio.fillSpread': 'Omple la doble pàgina',
   'journey.studio.fillHint': 'Estira la imatge per tota la pàgina, sagnat inclòs, i la posa darrere de tota la resta.',
@@ -663,15 +677,16 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'Suggeriment descartat',
   'journey.suggestions.restore': 'Recupera els suggeriments descartats',
   'journey.suggestions.restoreCount': 'Suggeriments descartats ({count})',
-  'journey.suggestions.restored': '{count} suggeriments han tornat',
+  'journey.suggestions.restored': 'S’han recuperat {count} suggeriments',
+  'journey.suggestions.restored.one': 'S’ha recuperat {count} suggeriment',
   'journey.detail.addOnThisDay': 'Afegeix una entrada en aquest dia',
   'journey.detail.jumpToDay': 'Ves al {date}',
   'journey.detail.searchPlaceholder': 'Cerca en aquest viatge',
   'journey.detail.searchEmpty': 'Cap entrada coincideix amb «{query}»',
-  'journey.settings.entryFields': 'Camps de l\'entrada',
+  'journey.settings.entryFields': "Camps de l'entrada",
   'journey.settings.entryFieldsHint': 'Desactiva el que aquest viatge no faci servir. No es perd res del que ja has escrit.',
   'journey.settings.showVerdict': 'Pros i contres',
-  'journey.settings.showMood': 'Estat d\'ànim',
+  'journey.settings.showMood': "Estat d'ànim",
   'journey.settings.showWeather': 'Temps',
   'journey.entry.suggestion': 'Suggeriment',
   'journey.editor.addDetails': '+ Detalls',

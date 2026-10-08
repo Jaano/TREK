@@ -345,7 +345,7 @@ describe('GalleryView', () => {
 
     await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1))
     expect(uploadGalleryPhotos).toHaveBeenCalledTimes(1)
-    expect(toastSpy).toHaveBeenCalledWith('1 photos uploaded', 'success', undefined)
+    expect(toastSpy).toHaveBeenCalledWith('1 photo uploaded', 'success', undefined)
     expect(input.value).toBe('')
   })
 

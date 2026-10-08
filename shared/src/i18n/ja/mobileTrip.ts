@@ -67,8 +67,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': '区間の始まりから',
   'mobileTrip.rtNoneAhead': 'この先の道沿いには何もありません。区間全体で試してください。',
   'mobileTrip.rtNoneOnStage': 'この区間沿いにはそうした場所はありません。',
-  'mobileTrip.rtTruncated.one': '1 区間は1回の答えに収まりきりませんでした。種類を減らすと残りも見られます。',
-  'mobileTrip.rtTruncated.other': '{count} 区間は1回の答えに収まりきりませんでした。種類を減らすと残りも見られます。',
+  'mobileTrip.rtTruncated.other': '{count} 区間で一度に返せる件数を超えました。種類を減らすと残りを確認できます。',
   'mobileTrip.rtNoDay': '日が選択されていません',
   'mobileTrip.rtNoDayHint': '地図には旅程全体が表示されています。上の日をタップするとその日の行程が見られます。',
 };

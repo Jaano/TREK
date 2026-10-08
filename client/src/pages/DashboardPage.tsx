@@ -423,7 +423,7 @@ function BoardingPassHero({ trip, bundle, locale, onOpen, onEdit, onCopy, onArch
       </div>
 
       <div className="pass-cell places">
-        <div className="pass-label">{t('dashboard.places')}</div>
+        <div className="pass-label">{t('dashboard.pass.places')}</div>
         <div className="places-preview">
           {places.slice(0, 3).map(p => (
             <div key={p.id} className="place-av">
@@ -664,8 +664,8 @@ function TripCard({ trip, locale, badges, matchedPlaces, onOpen, onEdit, onCopy,
           </div>
         )}
         <div className="trip-meta" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-          <div><span className="n mono">{trip.day_count ?? 0}</span><span className="k">{t('dashboard.days')}</span></div>
-          <div><span className="n mono">{trip.place_count ?? 0}</span><span className="k">{t('dashboard.places')}</span></div>
+          <div><span className="n mono">{trip.day_count ?? 0}</span><span className="k">{t('dashboard.days', { count: trip.day_count ?? 0 })}</span></div>
+          <div><span className="n mono">{trip.place_count ?? 0}</span><span className="k">{t('dashboard.places', { count: trip.place_count ?? 0 })}</span></div>
           <div><span className="n mono">{trip.shared_count ?? 0}</span><span className="k">{t('dashboard.card.buddies', { count: trip.shared_count ?? 0 })}</span></div>
         </div>
         <TripCardBadges items={badges ?? []} />

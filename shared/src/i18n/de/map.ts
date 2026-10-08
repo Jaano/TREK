@@ -29,7 +29,9 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Ganze Reise ausblenden',
   'map.overview.total': 'Gesamtstrecke',
   'map.attribution': 'Kartenquellen',
-  'map.overview.unrouted': '{count} Etappe(n) konnten nicht berechnet werden, die Entfernungen sind unvollständig.',
-  'map.overview.dayUnrouted': '{count} Etappe(n) dieses Tages konnten nicht berechnet werden',
+  'map.overview.unrouted': '{count} Etappen konnten nicht berechnet werden, die Entfernungen sind unvollständig.',
+  'map.overview.unrouted.one': '{count} Etappe konnte nicht berechnet werden, die Entfernungen sind unvollständig.',
+  'map.overview.dayUnrouted': '{count} Etappen dieses Tages konnten nicht berechnet werden',
+  'map.overview.dayUnrouted.one': '{count} Etappe dieses Tages konnte nicht berechnet werden',
 };
 export default map;

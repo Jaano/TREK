@@ -42,10 +42,16 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.resBadge': 'Rezervácia',
   'mobileTrip.showOnMap': 'Zobraziť na mape',
   'mobileTrip.statDocuments': '{count} súborov',
+  'mobileTrip.statDocuments.one': '{count} súbor',
+  'mobileTrip.statDocuments.few': '{count} súbory',
   'mobileTrip.statPeople': '{count} ľudí',
+  'mobileTrip.statPeople.one': '{count} človek',
+  'mobileTrip.statPeople.few': '{count} ľudia',
   'mobileTrip.stay': 'Pobyt',
   'mobileTrip.tapAgainToDelete': 'Ťuknite znova pre odstránenie',
   'mobileTrip.todoOpenCount': '{count} otvorených',
+  'mobileTrip.todoOpenCount.one': '{count} otvorená',
+  'mobileTrip.todoOpenCount.few': '{count} otvorené',
   'mobileTrip.travel': 'Cestovanie',
   'mobileTrip.upNext': 'Ďalej na rade',
   'mobileTrip.viewDetails': 'Zobraziť podrobnosti',
@@ -60,7 +66,11 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtStayScope':
     'Doba pobytu patrí k miestu, takže platí pre každý deň, na ktorý je táto zastávka naplánovaná.',
   'mobileTrip.rtStayLess': 'o {count} minút menej',
+  'mobileTrip.rtStayLess.one': 'o {count} minútu menej',
+  'mobileTrip.rtStayLess.few': 'o {count} minúty menej',
   'mobileTrip.rtStayMore': 'o {count} minút viac',
+  'mobileTrip.rtStayMore.one': 'o {count} minútu viac',
+  'mobileTrip.rtStayMore.few': 'o {count} minúty viac',
   'mobileTrip.rtNightDesktopOnly':
     'Rezervácia noci na tomto mieste funguje v plánovači na počítači. Tu ju môžete iba zrušiť.',
   'mobileTrip.rtReach': 'Ako ďaleko',
@@ -69,10 +79,12 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': 'Od začiatku etapy',
   'mobileTrip.rtNoneAhead': 'Na ceste pred vami nič nie je. Skúste celú etapu.',
   'mobileTrip.rtNoneOnStage': 'Nič také pozdĺž tejto etapy nie je.',
-  'mobileTrip.rtTruncated.one':
-    '1 úsek mal viac, než sa zmestí do jednej odpovede. Vyberte menej druhov, aby ste videli zvyšok.',
   'mobileTrip.rtTruncated.other':
     '{count} úsekov malo viac, než sa zmestí do jednej odpovede. Vyberte menej druhov, aby ste videli zvyšok.',
+  'mobileTrip.rtTruncated.one':
+    '{count} úsek mal viac, než sa zmestí do jednej odpovede. Vyberte menej druhov, aby ste videli zvyšok.',
+  'mobileTrip.rtTruncated.few':
+    '{count} úseky mali viac, než sa zmestí do jednej odpovede. Vyberte menej druhov, aby ste videli zvyšok.',
   'mobileTrip.rtNoDay': 'Nie je vybraný žiadny deň',
   'mobileTrip.rtNoDayHint': 'Mapa zobrazuje celú cestu. Ťuknite hore na deň a zobrazí sa jeho trasa.',
 };

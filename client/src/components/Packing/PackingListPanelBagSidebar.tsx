@@ -85,7 +85,7 @@ export function BagSidebar(S: PackingState) {
             <div style={{ ...hairline(bags.length === 0), display: 'flex', alignItems: 'center', gap: 6, padding: '11px 0' }}>
               <span style={{ width: 10, height: 10, borderRadius: '50%', border: '1.5px dashed var(--text-faint)', flexShrink: 0 }} />
               <span style={{ fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 600, color: 'var(--text-muted)' }}>{t('packing.noBag')}</span>
-              <span title={`${unassigned.length} ${t('admin.packingTemplates.items')}`} style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 700, padding: '1px 6px', borderRadius: 99, minWidth: 18, textAlign: 'center', background: 'var(--bg-tertiary)', color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>{unassigned.length}</span>
+              <span title={`${unassigned.length} ${t('admin.packingTemplates.items', { count: unassigned.length })}`} style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 700, padding: '1px 6px', borderRadius: 99, minWidth: 18, textAlign: 'center', background: 'var(--bg-tertiary)', color: 'var(--text-faint)', fontVariantNumeric: 'tabular-nums' }}>{unassigned.length}</span>
               <span style={{ flex: 1 }} />
               <span style={{ fontSize: 'calc(11px * var(--fs-scale-caption, 1))', fontWeight: 600, color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{kgOrG(unassignedWeight)}</span>
             </div>

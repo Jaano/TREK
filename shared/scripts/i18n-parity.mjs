@@ -29,15 +29,17 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getIntlLanguage } from '../src/i18n/languages.ts';
-import { allPluralCategories, integerPluralCategories } from '../src/i18n/plural.ts';
+import { allPluralCategories, integerPluralCategories, pluralFormOf, pluralGroups } from '../src/i18n/plural.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const i18nRoot = join(here, '..', 'src', 'i18n');
 
 // Match a top-level translation key declaration: leading whitespace, then a
 // quoted key (must start with a lowercase letter), then a colon. This is the
-// exact pattern every domain file uses.
-const TOP_LEVEL_KEY_RE = /^\s*'([a-z][a-zA-Z0-9.\-_]*)'\s*:/gm;
+// exact pattern every domain file uses. Keys may hold a colon themselves
+// (admin.plugins.perm.db:read:trips); without it in the class those keys were
+// never compared, and two locales lacked dozens of them unnoticed.
+const TOP_LEVEL_KEY_RE = /^\s*'([a-z][a-zA-Z0-9.\-_:]*)'\s*:/gm;
 
 function listLocales() {
   return readdirSync(i18nRoot)
@@ -61,31 +63,8 @@ function extractKeys(locale, file) {
   return keys;
 }
 
-const VARIANT_CATEGORIES = ['zero', 'one', 'two', 'few', 'many'];
-
-/** The plural groups en defines in one domain file: their base keys. */
-function pluralGroups(enKeys) {
-  const groups = new Set();
-  for (const key of enKeys) {
-    const dot = key.lastIndexOf('.');
-    if (dot < 0 || !VARIANT_CATEGORIES.includes(key.slice(dot + 1))) continue;
-    const base = key.slice(0, dot);
-    if (enKeys.has(base) || enKeys.has(`${base}.other`)) groups.add(base);
-  }
-  return groups;
-}
-
-/** `{ base, category }` when `key` is a category form of one of `groups`. */
-function asVariant(key, groups) {
-  const dot = key.lastIndexOf('.');
-  if (dot < 0) return null;
-  const category = key.slice(dot + 1);
-  const base = key.slice(0, dot);
-  return VARIANT_CATEGORIES.includes(category) && groups.has(base) ? { base, category } : null;
-}
-
 function withoutVariants(keys, groups) {
-  return new Set([...keys].filter((k) => !asVariant(k, groups)));
+  return new Set([...keys].filter((k) => !pluralFormOf(k, groups)));
 }
 
 /** What one locale owes the plural groups of one file. */
@@ -99,8 +78,8 @@ function checkPluralForms(locale, keys, groups) {
     for (const c of required) if (!keys.has(`${base}.${c}`)) missing.push(`${base}.${c}`);
   }
   for (const key of keys) {
-    const v = asVariant(key, groups);
-    if (v && !allowed.has(v.category)) invalid.push(key);
+    const form = pluralFormOf(key, groups);
+    if (form && !allowed.has(form.category)) invalid.push(key);
   }
   return { missing, invalid };
 }

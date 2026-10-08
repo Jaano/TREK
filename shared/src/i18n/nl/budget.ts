@@ -29,6 +29,8 @@ const budget: TranslationStrings = {
   'budget.editTooltip': 'Klik om te bewerken',
   'budget.linkedToReservation': 'Gekoppeld aan een reservering — bewerk de naam daar',
   'budget.confirm.deleteCategory': 'Weet je zeker dat je de categorie "{name}" met {count} invoeren wilt verwijderen?',
+  'budget.confirm.deleteCategory.one':
+    'Weet je zeker dat je de categorie "{name}" met {count} invoer wilt verwijderen?',
   'budget.deleteCategory': 'Categorie verwijderen',
   'budget.perPerson': 'Per persoon',
   'budget.paid': 'Betaald',
@@ -59,6 +61,7 @@ const budget: TranslationStrings = {
   'costs.outstandingItems': 'uitgaven zonder betaler',
   'costs.expenses': 'Uitgaven',
   'costs.entries': '{count} invoeren',
+  'costs.entries.one': '{count} invoer',
   'costs.searchPlaceholder': 'Uitgaven zoeken…',
   'costs.filter.all': 'Alles',
   'costs.filter.mine': 'Door mij betaald',
@@ -102,6 +105,7 @@ const budget: TranslationStrings = {
   'costs.settleHistory': 'Afrekengeschiedenis',
   'costs.noSettlements': 'Nog geen afgerekende betalingen.',
   'costs.paymentsSettled': '{count} betalingen afgerekend',
+  'costs.paymentsSettled.one': '{count} betaling afgerekend',
   'costs.paid': 'betaald',
   'costs.undo': 'Ongedaan maken',
   'costs.whatFor': 'Waar was het voor?',
@@ -123,7 +127,8 @@ const budget: TranslationStrings = {
   'costs.payersUnbalanced': 'De bedragen van de betalers moeten optellen tot {amount}',
   'costs.splitBetween': 'Gelijk verdelen over',
   'costs.pickSomeone': 'Kies minstens één persoon om mee te delen.',
-  'costs.splitSummary': 'Verdeeld over {count} · {amount} elk',
+  'costs.splitSummary': 'Verdeeld over {count} personen · {amount} per persoon',
+  'costs.splitSummary.one': '{count} persoon · {amount}',
   'costs.cat.accommodation': 'Accommodatie',
   'costs.cat.food': 'Eten & drinken',
   'costs.cat.groceries': 'Boodschappen',
@@ -139,7 +144,9 @@ const budget: TranslationStrings = {
   'costs.cat.parking': 'Parkeren',
   'costs.cat.other': 'Overig',
   'costs.daysCount': '{count} dagen',
+  'costs.daysCount.one': '{count} dag',
   'costs.travelers': '{count} reizigers',
+  'costs.travelers.one': '{count} reiziger',
   'costs.liveRate': 'live koers',
   'costs.settleAll': 'Alles afrekenen',
   'costs.payment': 'Betaling',
@@ -165,6 +172,7 @@ const budget: TranslationStrings = {
   'costs.filter.allCategories': 'Alle categorieën',
   'costs.filter.allDays': 'Alle dagen',
   'costs.expensesCount': '{count} uitgaven',
+  'costs.expensesCount.one': '{count} uitgave',
   'costs.ticketItemName': 'Naam van het item',
   'costs.ticketSplitting': 'Verdeeld over:',
   'costs.ticketAddItem': 'Item toevoegen',
@@ -175,6 +183,7 @@ const budget: TranslationStrings = {
   'costs.splitSumOver': 'Som van de delen: {sum} van {total} ({diff} te veel)',
   'costs.toggleSign': 'Wisselen tussen uitgave en terugbetaling',
   'costs.receipts': 'Bonnetjes',
+  'costs.receipts.one': 'Bonnetje',
   'costs.receiptsTitle': 'Bonnetjes & facturen',
   'costs.attachReceipt': 'Bon / factuur bijvoegen',
   'costs.attach': 'Bijvoegen',
@@ -195,5 +204,7 @@ const budget: TranslationStrings = {
   'costs.viewReceipt': 'Bonnetje bekijken',
   'costs.receiptLeftBehind':
     'Opslaan mislukt en er staan nog {count} geüploade bonnen. Verwijder ze op het tabblad Bestanden.',
+  'costs.receiptLeftBehind.one':
+    'Opslaan mislukt en er staat nog {count} geüploade bon. Verwijder hem op het tabblad Bestanden.',
 };
 export default budget;

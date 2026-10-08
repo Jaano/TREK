@@ -15,7 +15,7 @@ const help: TranslationStrings = {
   'help.center.onThisScreen': 'Di layar ini',
   'help.center.screens': 'Layar',
   'help.center.thisScreen': 'Layar ini',
-  'help.center.subScreens': 'Sublayar: {count}',
+  'help.center.subScreens': '{count} sublayar',
   'help.center.subScreensLabel': 'Sublayar',
   'help.center.guidesCount': '{count} panduan',
   'help.center.goToScreen': 'Buka {screen}',

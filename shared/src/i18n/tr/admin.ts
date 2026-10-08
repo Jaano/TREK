@@ -74,11 +74,15 @@ const admin: TranslationStrings = {
   'admin.tabs.backup': 'Yedekleme',
   'admin.tabs.notifications': 'Bildirimler',
   'admin.tabs.audit': 'Denetim',
-  'admin.stats.users': 'Kullanıcılar',
-  'admin.stats.trips': 'Seyahatler',
-  'admin.stats.places': 'Yerler',
+  'admin.stats.users': 'Kullanıcı',
+  'admin.stats.users.one': 'Kullanıcı',
+  'admin.stats.trips': 'Seyahat',
+  'admin.stats.trips.one': 'Seyahat',
+  'admin.stats.places': 'Yer',
+  'admin.stats.places.one': 'Yer',
   'admin.stats.photos': 'Fotoğraflar',
-  'admin.stats.files': 'Dosyalar',
+  'admin.stats.files': 'Dosya',
+  'admin.stats.files.one': 'Dosya',
   'admin.table.user': 'Kullanıcı',
   'admin.table.email': 'E-posta',
   'admin.table.role': 'Rol',
@@ -145,7 +149,7 @@ const admin: TranslationStrings = {
   'admin.googleCaveat.body':
     "TREK açık kaynaklıdır ve burada tarafsız değiliz. Bu ölçekte değerlendirmeler ve sıradan işletme fotoğrafları yalnızca Google'da vardır; tekel budur. Alan, başka seçenek olmadığı için burada; önerdiğimiz için değil. O zaman her sorgu Google'a gider.",
   'admin.trekApi.tagline':
-    'TREK\'in kendi yer dizini. Google anahtarı olmadan, kota olmadan ve kimse aramalarınızı saymadan arama.',
+    "TREK'in kendi yer dizini. Google anahtarı olmadan, kota olmadan ve kimse aramalarınızı saymadan arama.",
   'admin.trekApi.factPlaces':
     'Dünya genelinde 73,6 milyon yer',
   'admin.trekApi.factNoKey':
@@ -161,7 +165,7 @@ const admin: TranslationStrings = {
   'admin.trekApi.fieldStableId':
     'Kalıcı kimlik',
   'admin.trekApi.includedNote':
-    'Açıklamalar yerin kendi sitesinden, çalışma saatleri girilmiş olduğu yerlerde OpenStreetMap\'ten gelir.',
+    "Açıklamalar yerin kendi sitesinden, çalışma saatleri girilmiş olduğu yerlerde OpenStreetMap'ten gelir.",
   'admin.trekApi.notRatings':
     'Değerlendirmeler',
   'admin.trekApi.notPhotos':
@@ -232,9 +236,11 @@ const admin: TranslationStrings = {
   'admin.placesEnrich.subtitle':
     'Bir yer eklerken görseller ve açıklama gösterir. Wikipedia ve OpenStreetMap her zaman kullanılır; Yer Fotoğrafları veya Yer Ayrıntıları açıkken Google da eklenir.',
   'admin.placesGoogleOnly.title': 'Yalnızca Google ile ara',
-  'admin.placesGoogleOnly.subtitle': 'Her arama ve her öneri Google Places\'e gider. Kapalıyken önce TREK dizini ve OpenStreetMap yanıtlar, Google yalnızca hiçbir şey bulamadıklarında sorulur.',
+  'admin.placesGoogleOnly.subtitle':
+    "Her arama ve her öneri Google Places'e gider. Kapalıyken önce TREK dizini ve OpenStreetMap yanıtlar, Google yalnızca hiçbir şey bulamadıklarında sorulur.",
   'admin.placesGoogleOnly.missingKey': 'Google Maps API anahtarı gerektirir. Anahtar yoksa arama, bu anahtar ne olursa olsun TREK dizini ve OpenStreetMap üzerinden çalışır.',
-  'admin.placesGoogleOnly.otherProvider': 'Yer sağlayıcısı olarak Google gerekir. Amap veya OpenStreetMap seçiliyken bu anahtar ne derse desin hiçbir arama Google\'a gitmez.',
+  'admin.placesGoogleOnly.otherProvider':
+    "Yer sağlayıcısı olarak Google gerekir. Amap veya OpenStreetMap seçiliyken bu anahtar ne derse desin hiçbir arama Google'a gitmez.",
   'admin.googleQuota.title': 'Google çağrıları için günlük sınır',
   'admin.googleQuota.subtitle': "Sınıra ulaşıldığında TREK ertesi güne (UTC) kadar Google'ı çağırmaz ve OpenStreetMap ile arar. Boş bırakılırsa sınır yoktur.",
   'admin.googleQuota.placeholder': 'Sınırsız',
@@ -246,10 +252,12 @@ const admin: TranslationStrings = {
   'admin.transitProvider.subtitle': 'Toplu taşıma aramasını hangi hizmetin yanıtlayacağı.',
   'admin.transitProvider.transitous': 'Transitous (ücretsiz)',
   'admin.transitProvider.google': 'Google',
-  'admin.transitProvider.transitousHint': 'Topluluk GTFS akışları. Ücretsiz ve anahtarsız, Avrupa\'da en iyi kapsama.',
-  'admin.transitProvider.googleHint': 'Transitous\'un verisi olmayan bölgeler için yukarıdaki Google anahtarını kullanır. Arama başına ücretlendirilir — anahtar ayarlanmadığı sürece Transitous kullanılır.',
+  'admin.transitProvider.transitousHint': "Topluluk GTFS akışları. Ücretsiz ve anahtarsız, Avrupa'da en iyi kapsama.",
+  'admin.transitProvider.googleHint':
+    "Transitous'un verisi olmayan bölgeler için yukarıdaki Google anahtarını kullanır. Arama başına ücretlendirilir — anahtar ayarlanmadığı sürece Transitous kullanılır.",
   'admin.transitProvider.noKeyWarning': 'Google seçili, ancak yapılandırılmış bir Google anahtarı yok — toplu taşıma araması hâlâ Transitous kullanıyor. Yukarıdaki API Anahtarları bölümünden bir anahtar ekleyin.',
-  'admin.transitProvider.personalKeyWarning': 'Yalnızca kendi Google anahtarınız ayarlı, bu yüzden diğer üyelerin araması hâlâ Transitous\'a düşüyor. Tüm kuruluma uygulamak için anahtarı yukarıda yönetici olarak kaydedin.',
+  'admin.transitProvider.personalKeyWarning':
+    "Yalnızca kendi Google anahtarınız ayarlı, bu yüzden diğer üyelerin araması hâlâ Transitous'a düşüyor. Tüm kuruluma uygulamak için anahtarı yukarıda yönetici olarak kaydedin.",
   'admin.placeShadow.title': 'Yer arama günlüğü',
   'admin.placeShadow.subtitle':
     'Hangi arama sonucunun seçildiğini kaydeder, böylece başka bir yer dizini daha sonra gerçek aramalarla ölçülebilir. Hiçbir şey bu sunucudan çıkmaz ve bir yönetici günlüğü istediği zaman dışa aktarabilir veya silebilir.',
@@ -277,8 +285,10 @@ const admin: TranslationStrings = {
   'admin.packingTemplates.create': 'Yeni Şablon',
   'admin.packingTemplates.namePlaceholder': 'Şablon adı (ör. Plaj Tatili)',
   'admin.packingTemplates.empty': 'Henüz şablon oluşturulmadı',
-  'admin.packingTemplates.items': 'öğeler',
-  'admin.packingTemplates.categories': 'kategoriler',
+  'admin.packingTemplates.items': 'öğe',
+  'admin.packingTemplates.items.one': 'öğe',
+  'admin.packingTemplates.categories': 'kategori',
+  'admin.packingTemplates.categories.one': 'kategori',
   'admin.packingTemplates.itemName': 'Öğe adı',
   'admin.packingTemplates.itemCategory': 'Kategori',
   'admin.packingTemplates.categoryName': 'Kategori adı (ör. Giyim)',
@@ -327,7 +337,8 @@ const admin: TranslationStrings = {
     'Bu eklenti operatör tarafından verilen ana bilgisayarları kullanmaz. İzin verilenler manifestinde sabittir.',
   'admin.plugins.allowedHosts.restartNote': 'Kaydetmek, yeni listeyi alması için eklentiyi yeniden başlatır.',
   'admin.plugins.allowedHosts.add': 'İzin verilen ana bilgisayar ekle',
-  'admin.plugins.allowedHosts.count': '{n} izin verilen ana bilgisayar',
+  'admin.plugins.allowedHosts.count': 'İzin verilen {n} ana bilgisayar',
+  'admin.plugins.allowedHosts.count.one': 'İzin verilen {n} ana bilgisayar',
   'admin.plugins.operatorEgressPill': '+ eklediğiniz ana bilgisayarlar',
   'admin.plugins.operatorEgressHint':
     'Bu eklenti yalnızca sizin adlandırabileceğiniz bir hizmete bağlanır (kendi barındırdığınız sunucu). Kurulumdan sonra ⋯ → İzin verilen ana bilgisayarlar altından ekleyin. Başkasına erişemez.',
@@ -560,6 +571,7 @@ const admin: TranslationStrings = {
   'admin.plugins.sortUpdates': 'Önce güncellemeler',
   'admin.plugins.sortDownloads': 'En çok indirilen',
   'admin.plugins.updatesAvailable': 'Eklentileriniz için {count} güncelleme mevcut.',
+  'admin.plugins.updatesAvailable.one': 'Eklentileriniz için {count} güncelleme mevcut.',
   'admin.plugins.newerNeedsTrek': 'v{version} mevcut — TREK {range} gerektirir',
   'admin.plugins.versionsTitle': 'Sürümler',
   'admin.plugins.versionPickerTitle': 'Sürüm değiştir — {name}',
@@ -813,6 +825,7 @@ const admin: TranslationStrings = {
     'Bu kullanıcının tüm passkey’lerini kaldırın (ör. kaybolan bir cihazda). Yine de şifreleriyle oturum açabilirler.',
   'admin.passkey.resetConfirm': '{name} için tüm passkey’ler kaldırılsın mı?',
   'admin.passkey.resetDone': '{count} passkey kaldırıldı',
+  'admin.passkey.resetDone.one': '{count} passkey kaldırıldı',
   'admin.defaultSettings.mapProvider': 'Harita motoru',
   'admin.defaultSettings.mapProviderHint':
     'Bu örnekteki herkes için varsayılan harita. Her kullanıcı bunu yine de kendi ayarlarında değiştirebilir.',

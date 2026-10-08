@@ -300,7 +300,7 @@ export function useJourneyDetail() {
     try {
       const { restored } = await journeyApi.restoreSuggestions(current.id)
       await loadJourney(current.id)
-      toast.success(t('journey.suggestions.restored', { count: String(restored) }))
+      toast.success(t('journey.suggestions.restored', { count: restored }))
     } catch {
       toast.error(t('common.errorTitle'))
     }

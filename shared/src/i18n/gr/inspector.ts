@@ -7,6 +7,7 @@ const inspector: TranslationStrings = {
   'inspector.showHours': 'Εμφάνιση ωρών λειτουργίας',
   'inspector.files': 'Αρχεία',
   'inspector.filesCount': '{count} αρχεία',
+  'inspector.filesCount.one': '{count} αρχείο',
   'inspector.remove': 'Αφαίρεση',
   'inspector.removeFromDay': 'Αφαίρεση από την Ημέρα',
   'inspector.addToDay': 'Προσθήκη στην Ημέρα',

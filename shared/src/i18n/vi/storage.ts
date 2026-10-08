@@ -113,7 +113,7 @@ const storage: TranslationStrings = {
   'storage.sync.error': 'Đồng bộ thất bại: {error}',
   'storage.sync.prompt': 'Các đối tượng hiện có chưa được nhân bản — đồng bộ ngay?',
   'storage.sync.dismiss': 'Bỏ qua',
-  'storage.usage.line': '{objects} đối tượng · {size}',
+  'storage.usage.line': '{count} đối tượng · {size}',
   'storage.usage.computed': 'Đã tính dung lượng sử dụng {age}',
   'storage.usage.never': 'Chưa tính dung lượng sử dụng',
   'storage.usage.refresh': 'Làm mới',

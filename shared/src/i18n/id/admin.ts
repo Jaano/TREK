@@ -811,7 +811,7 @@ const admin: TranslationStrings = {
   'admin.passkey.resetHint':
     'Hapus semua passkey pengguna ini (mis. saat perangkat hilang). Mereka tetap bisa masuk dengan kata sandi mereka.',
   'admin.passkey.resetConfirm': 'Hapus semua passkey untuk {name}?',
-  'admin.passkey.resetDone': 'Menghapus {count} passkey',
+  'admin.passkey.resetDone': '{count} passkey dihapus',
   'admin.defaultSettings.mapProvider': 'Mesin peta',
   'admin.defaultSettings.mapProviderHint':
     'Peta default untuk semua orang di instance ini. Setiap pengguna tetap dapat menggantinya di pengaturan masing-masing.',

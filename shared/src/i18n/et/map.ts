@@ -31,6 +31,8 @@ const map: TranslationStrings = {
   'map.overview.total': 'Kogupikkus',
   'map.attribution': 'Kaardi allikad',
   'map.overview.unrouted': '{count} lõigu marsruuti ei saanud arvutada, seega on vahemaad puudulikud.',
+  'map.overview.unrouted.one': '{count} lõigu marsruuti ei saanud arvutada, seega on vahemaad puudulikud.',
   'map.overview.dayUnrouted': 'Selle päeva {count} lõigu marsruuti ei saanud arvutada',
+  'map.overview.dayUnrouted.one': 'Selle päeva {count} lõigu marsruuti ei saanud arvutada',
 };
 export default map;

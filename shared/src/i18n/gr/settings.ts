@@ -407,7 +407,8 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'Η σύνδεση με το AirTrail αποθηκεύτηκε',
   'settings.airtrail.toast.saveError': 'Δεν ήταν δυνατή η αποθήκευση της σύνδεσης',
   'settings.airtrail.test.button': 'Δοκιμή σύνδεσης',
-  'settings.airtrail.test.success': 'Συνδέθηκε — βρέθηκαν {count} πτήση/πτήσεις',
+  'settings.airtrail.test.success': 'Συνδέθηκε. Βρέθηκαν {count} πτήσεις',
+  'settings.airtrail.test.success.one': 'Συνδέθηκε. Βρέθηκε {count} πτήση',
   'settings.airtrail.test.failed': 'Η σύνδεση απέτυχε',
   'settings.aiParsing.title': 'Ανάλυση με AI',
   'settings.aiParsing.hint':
@@ -551,6 +552,7 @@ const settings: TranslationStrings = {
   'settings.offline.storage.tripOff': 'Μη αποθηκευμένο',
   'settings.offline.storage.tripFinished': 'Ολοκληρώθηκε. Αποθηκεύεται μόνο αν το ενεργοποιήσετε.',
   'settings.offline.notice.stored': 'Αποθηκεύτηκαν {count} ταξίδια σε αυτή τη συσκευή',
+  'settings.offline.notice.stored.one': 'Αποθηκεύτηκε {count} ταξίδι σε αυτή τη συσκευή',
   'settings.offline.notice.nothing': 'Δεν υπάρχει τίποτα για αποθήκευση. Ενεργοποιήστε τα ταξίδια που θέλετε να κρατήσετε.',
   'settings.offline.notice.busy': 'Γίνεται ήδη συγχρονισμός. Δοκιμάστε ξανά σε λίγο.',
   'settings.offline.notice.offline': 'Δεν υπάρχει σύνδεση. Συνδεθείτε για να αποθηκεύσετε ταξίδια για χρήση χωρίς σύνδεση.',

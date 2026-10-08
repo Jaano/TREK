@@ -208,7 +208,7 @@ describe('MCostSheet', () => {
     fillBasics('Taxi', '30')
     fireEvent.click(screen.getByRole('button', { name: 'B bob' }))
 
-    expect(screen.getByText('Split 1 ways · €30.00 each')).toBeInTheDocument()
+    expect(screen.getByText('1 person · €30.00')).toBeInTheDocument()
     expect(screen.getAllByText('Tap to include')).toHaveLength(1)
 
     fireEvent.click(submit())

@@ -493,8 +493,8 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saveError':
     'Bağlantını yadda saxlamaq mümkün olmadı',
   'settings.airtrail.test.button': 'Bağlantını yoxla',
-  'settings.airtrail.test.success':
-    'Qoşuldu — {count} uçuş tapıldı',
+  'settings.airtrail.test.success': 'Qoşuldu. {count} uçuş tapıldı',
+  'settings.airtrail.test.success.one': 'Qoşuldu. {count} uçuş tapıldı',
   'settings.airtrail.test.failed': 'Bağlantı uğursuz oldu',
 
   'settings.aiParsing.title': 'AI ilə təhlil',
@@ -659,6 +659,7 @@ const settings: TranslationStrings = {
 
   'settings.offline.notice.stored':
     'Bu cihazda {count} səyahət saxlanıldı',
+  'settings.offline.notice.stored.one': 'Bu cihazda {count} səyahət saxlanıldı',
   'settings.offline.notice.nothing':
     'Saxlanılacaq heç nə yoxdur. Saxlamaq istədiyiniz səyahətləri aktivləşdirin.',
   'settings.offline.notice.busy':

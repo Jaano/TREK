@@ -69,7 +69,7 @@ const docsync: TranslationStrings = {
   'docsync.state.local_deleted': 'Đã xóa trong TREK',
   'docsync.state.scope_drift': 'Đã chuyển ra khỏi thư mục',
 
-  'docsync.conflict.resolve': "Giải quyết {count}",
+  'docsync.conflict.resolve': 'Giải quyết {count}',
 
   'docsync.conflict.title': 'Cả hai bản đều thay đổi',
   'docsync.conflict.keepTrek': 'Giữ bản TREK',

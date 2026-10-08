@@ -9,6 +9,7 @@ const members: TranslationStrings = {
   'members.access': 'Prístup',
   'members.persons': 'osôb',
   'members.persons.one': 'osoba',
+  'members.persons.few': 'osoby',
   'members.you': 'vy',
   'members.owner': 'Vlastník',
   'members.leaveTrip': 'Opustiť cestu',

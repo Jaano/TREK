@@ -193,7 +193,7 @@ export default function MAtlas() {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-[1.0625rem] font-extrabold text-m-ink">{resolveName(selectedCountry)}</div>
                 <div className="mt-[4px] flex flex-wrap gap-1">
-                  {[[countryDetail.places.length, t('atlas.places')], [countryDetail.trips.length, t('atlas.trips')]].map(([n, label]) => (
+                  {[[countryDetail.places.length, t('atlas.places', { count: countryDetail.places.length })], [countryDetail.trips.length, t('atlas.trips', { count: countryDetail.trips.length })]].map(([n, label]) => (
                     <span key={label} className="rounded-full bg-[color:var(--m-ic)] px-2 py-[1px] font-geist text-[0.625rem] font-bold tabular-nums text-m-muted">
                       {n} {label}
                     </span>

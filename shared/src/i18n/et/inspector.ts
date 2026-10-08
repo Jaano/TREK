@@ -7,6 +7,7 @@ const inspector: TranslationStrings = {
   'inspector.showHours': 'Näita lahtiolekuaegu',
   'inspector.files': 'Failid',
   'inspector.filesCount': '{count} faili',
+  'inspector.filesCount.one': '{count} fail',
   'inspector.remove': 'Eemalda',
   'inspector.removeFromDay': 'Eemalda päevast',
   'inspector.addToDay': 'Lisa päevale',

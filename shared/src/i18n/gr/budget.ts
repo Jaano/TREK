@@ -30,6 +30,8 @@ const budget: TranslationStrings = {
   'budget.linkedToReservation': 'Συνδεδεμένο με κράτηση — επεξεργαστείτε το όνομα εκεί',
   'budget.confirm.deleteCategory':
     'Είστε σίγουροι ότι θέλετε να διαγράψετε την κατηγορία "{name}" με {count} εγγραφές;',
+  'budget.confirm.deleteCategory.one':
+    'Είστε σίγουροι ότι θέλετε να διαγράψετε την κατηγορία "{name}" με {count} εγγραφή;',
   'budget.deleteCategory': 'Διαγραφή Κατηγορίας',
   'budget.perPerson': 'Ανά Άτομο',
   'budget.paid': 'Πληρωμένο',
@@ -60,6 +62,7 @@ const budget: TranslationStrings = {
   'costs.outstandingItems': 'έξοδα χρειάζονται πληρωτή',
   'costs.expenses': 'Έξοδα',
   'costs.entries': '{count} εγγραφές',
+  'costs.entries.one': '{count} εγγραφή',
   'costs.searchPlaceholder': 'Αναζήτηση εξόδων…',
   'costs.filter.all': 'Όλα',
   'costs.filter.mine': 'Πληρωμένα από εμένα',
@@ -103,6 +106,7 @@ const budget: TranslationStrings = {
   'costs.settleHistory': 'Ιστορικό εξοφλήσεων',
   'costs.noSettlements': 'Δεν υπάρχουν εξοφλημένες πληρωμές ακόμη.',
   'costs.paymentsSettled': '{count} πληρωμές εξοφλήθηκαν',
+  'costs.paymentsSettled.one': '{count} πληρωμή εξοφλήθηκε',
   'costs.paid': 'πλήρωσε',
   'costs.undo': 'Αναίρεση',
   'costs.whatFor': 'Για τι ήταν;',
@@ -125,6 +129,7 @@ const budget: TranslationStrings = {
   'costs.splitBetween': 'Ισόποση κατανομή μεταξύ',
   'costs.pickSomeone': 'Επιλέξτε τουλάχιστον ένα άτομο για τον διαμοιρασμό.',
   'costs.splitSummary': 'Κατανομή σε {count} μέρη · {amount} το καθένα',
+  'costs.splitSummary.one': '{count} άτομο · {amount}',
   'costs.cat.accommodation': 'Διαμονή',
   'costs.cat.food': 'Φαγητό & ποτό',
   'costs.cat.groceries': 'Ψώνια σούπερ μάρκετ',
@@ -140,7 +145,9 @@ const budget: TranslationStrings = {
   'costs.cat.parking': 'Στάθμευση',
   'costs.cat.other': 'Άλλα',
   'costs.daysCount': '{count} ημέρες',
+  'costs.daysCount.one': '{count} ημέρα',
   'costs.travelers': '{count} ταξιδιώτες',
+  'costs.travelers.one': '{count} ταξιδιώτης',
   'costs.liveRate': 'ζωντανή ισοτιμία',
   'costs.settleAll': 'Εξόφληση όλων',
   'costs.payment': 'Πληρωμή',
@@ -166,6 +173,7 @@ const budget: TranslationStrings = {
   'costs.filter.allCategories': 'Όλες οι κατηγορίες',
   'costs.filter.allDays': 'Όλες οι ημέρες',
   'costs.expensesCount': '{count} έξοδα',
+  'costs.expensesCount.one': '{count} έξοδο',
   'costs.ticketItemName': 'Όνομα είδους',
   'costs.ticketSplitting': 'Μοιράζεται σε:',
   'costs.ticketAddItem': 'Προσθήκη είδους',
@@ -176,6 +184,7 @@ const budget: TranslationStrings = {
   'costs.splitSumOver': 'Άθροισμα μεριδίων: {sum} από {total} ({diff} παραπάνω)',
   'costs.toggleSign': 'Εναλλαγή μεταξύ εξόδου και επιστροφής',
   'costs.receipts': 'Αποδείξεις',
+  'costs.receipts.one': 'Απόδειξη',
   'costs.receiptsTitle': 'Αποδείξεις & Τιμολόγια',
   'costs.attachReceipt': 'Επισύναψη απόδειξης / τιμολογίου',
   'costs.attach': 'Επισύναψη',
@@ -196,5 +205,7 @@ const budget: TranslationStrings = {
   'costs.viewReceipt': 'Προβολή απόδειξης',
   'costs.receiptLeftBehind':
     'Η αποθήκευση απέτυχε και {count} ανεβασμένες αποδείξεις παραμένουν. Διαγράψτε τες στην καρτέλα Αρχεία.',
+  'costs.receiptLeftBehind.one':
+    'Η αποθήκευση απέτυχε και {count} ανεβασμένη απόδειξη παραμένει. Διαγράψτε τη στην καρτέλα Αρχεία.',
 };
 export default budget;

@@ -28,7 +28,7 @@ const budget: TranslationStrings = {
   'budget.byCategory': 'Theo danh mục',
   'budget.editTooltip': 'Bấm để chỉnh sửa',
   'budget.linkedToReservation': 'Đã liên kết với đặt chỗ — chỉnh sửa tên ở đó',
-  'budget.confirm.deleteCategory': 'Bạn có chắc chắn muốn xóa danh mục "{name}" với các mục nhập {count} không?',
+  'budget.confirm.deleteCategory': 'Bạn có chắc chắn muốn xóa danh mục "{name}" cùng {count} mục trong đó không?',
   'budget.deleteCategory': 'Xóa danh mục',
   'budget.perPerson': 'Mỗi người',
   'budget.paid': 'Trả',
@@ -101,7 +101,7 @@ const budget: TranslationStrings = {
   'costs.noCategories': 'Chưa có chi phí nào.',
   'costs.settleHistory': 'Lịch sử thanh toán',
   'costs.noSettlements': 'Chưa có khoản nợ nào được thanh toán.',
-  'costs.paymentsSettled': '{count} nợ đã được thanh toán',
+  'costs.paymentsSettled': '{count} khoản nợ đã được thanh toán',
   'costs.paid': 'trả',
   'costs.undo': 'Hoàn tác',
   'costs.whatFor': 'Nó dùng để làm gì?',
@@ -123,7 +123,7 @@ const budget: TranslationStrings = {
   'costs.payersUnbalanced': 'Tổng số tiền của người trả phải bằng {amount}',
   'costs.splitBetween': 'Chia đều cho',
   'costs.pickSomeone': 'Chọn ít nhất một người để chia tiền.',
-  'costs.splitSummary': 'Chia {count} người · {amount} mỗi người',
+  'costs.splitSummary': 'Chia cho {count} người · {amount} mỗi người',
   'costs.cat.accommodation': 'Chỗ ở',
   'costs.cat.food': 'Thức ăn và đồ uống',
   'costs.cat.groceries': 'Cửa hàng tạp hóa',
@@ -193,7 +193,7 @@ const budget: TranslationStrings = {
   'costs.noReceipts': 'Chưa đính kèm hóa đơn nào',
   'costs.deleteReceipt': 'Xóa hóa đơn',
   'costs.viewReceipt': 'Xem hóa đơn',
-  'costs.receiptLeftBehind': 'Lưu thất bại và {count} biên lai đã tải lên vẫn còn. Hãy xoá chúng trong tab Tệp.',
+  'costs.receiptLeftBehind': 'Không lưu được, và {count} hóa đơn đã tải lên vẫn còn đó. Hãy vào tab Tập tin để xóa.',
 };
 
 export default budget;

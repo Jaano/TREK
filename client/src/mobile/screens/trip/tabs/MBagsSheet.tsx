@@ -95,7 +95,7 @@ export default function MBagsSheet({
               <span className="font-geist text-[0.71875rem] text-m-faint">{formatWeight(unassignedWeight)}</span>
             </div>
             <div className="font-geist text-[0.65625rem] text-m-faint">
-              {unassigned.length} {t('admin.packingTemplates.items')}
+              {unassigned.length} {t('admin.packingTemplates.items', { count: unassigned.length })}
             </div>
           </div>
         )}
@@ -307,7 +307,7 @@ function BagRow({ planner, bag, itemCount, weight, pct, tripMembers, canEdit, on
       <div className="h-[7px] overflow-hidden rounded-full bg-[color:var(--m-ic)]">
         <div className="h-full rounded-full" style={{ width: `${pct}%`, background: bag.color }} />
       </div>
-      <div className="mt-[3px] font-geist text-[0.65625rem] text-m-faint">{itemCount} {t('admin.packingTemplates.items')}</div>
+      <div className="mt-[3px] font-geist text-[0.65625rem] text-m-faint">{itemCount} {t('admin.packingTemplates.items', { count: itemCount })}</div>
     </div>
   )
 }

@@ -374,7 +374,7 @@ export default function MPackingListTab({ planner }: { planner: TripPlanner }) {
                   <Package size={14} strokeWidth={2} className="flex-none text-m-muted" />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[0.78125rem] font-semibold text-m-ink">{tmpl.name}</span>
-                    <span className="block font-geist text-[0.625rem] text-m-faint">{tmpl.item_count} {t('admin.packingTemplates.items')}</span>
+                    <span className="block font-geist text-[0.625rem] text-m-faint">{tmpl.item_count} {t('admin.packingTemplates.items', { count: tmpl.item_count })}</span>
                   </span>
                 </button>
               ))}

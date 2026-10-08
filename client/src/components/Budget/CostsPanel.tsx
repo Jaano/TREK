@@ -871,7 +871,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
                 }}
               >
                 <Receipt size={12} className="text-content-muted" />
-                <span>{t('costs.receipts') || 'Beleg'}{e.receipts!.length > 1 ? ` (${e.receipts!.length})` : ''}</span>
+                <span>{t('costs.receipts', { count: e.receipts!.length })}{e.receipts!.length > 1 ? ` (${e.receipts!.length})` : ''}</span>
               </button>
               </Tooltip>
             )}

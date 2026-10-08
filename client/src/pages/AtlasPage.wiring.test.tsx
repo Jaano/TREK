@@ -460,8 +460,8 @@ describe('AtlasPage wiring', () => {
       render(<AtlasPage />);
 
       expect(screen.getByText('France')).toBeInTheDocument();
-      expect(screen.getAllByText((_, el) => el?.textContent?.trim() === '3 atlas.places').length).toBeGreaterThan(0);
-      expect(screen.getAllByText((_, el) => el?.textContent?.trim() === '4 atlas.tripPlural').length).toBeGreaterThan(0);
+      expect(screen.getAllByText((_, el) => el?.textContent?.trim() === '3 atlas.places:3').length).toBeGreaterThan(0);
+      expect(screen.getAllByText((_, el) => el?.textContent?.trim() === '4 atlas.tripsLabel:4').length).toBeGreaterThan(0);
       // Only the first three trips are shown.
       expect(screen.queryByText('Brest')).not.toBeInTheDocument();
 

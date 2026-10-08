@@ -42,10 +42,13 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.resBadge': 'Κράτηση',
   'mobileTrip.showOnMap': 'Εμφάνιση στον χάρτη',
   'mobileTrip.statDocuments': '{count} αρχεία',
+  'mobileTrip.statDocuments.one': '{count} αρχείο',
   'mobileTrip.statPeople': '{count} άτομα',
+  'mobileTrip.statPeople.one': '{count} άτομο',
   'mobileTrip.stay': 'Διαμονή',
   'mobileTrip.tapAgainToDelete': 'Πατήστε ξανά για διαγραφή',
-  'mobileTrip.todoOpenCount': '{count} ανοιχτά',
+  'mobileTrip.todoOpenCount': '{count} ανοιχτές',
+  'mobileTrip.todoOpenCount.one': '{count} ανοιχτή',
   'mobileTrip.travel': 'Ταξίδι',
   'mobileTrip.upNext': 'Επόμενο',
   'mobileTrip.viewDetails': 'Προβολή λεπτομερειών',
@@ -61,7 +64,9 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtStayScope':
     'Η διάρκεια της στάσης ανήκει στο μέρος, οπότε μετράει σε κάθε ημέρα που είναι προγραμματισμένη αυτή η στάση.',
   'mobileTrip.rtStayLess': '{count} λεπτά λιγότερα',
+  'mobileTrip.rtStayLess.one': '{count} λεπτό λιγότερο',
   'mobileTrip.rtStayMore': '{count} λεπτά περισσότερα',
+  'mobileTrip.rtStayMore.one': '{count} λεπτό περισσότερο',
   'mobileTrip.rtNightDesktopOnly':
     'Η κράτηση διανυκτέρευσης σε αυτό το μέρος γίνεται στον σχεδιαστή του υπολογιστή. Εδώ μπορείτε μόνο να την αφαιρέσετε.',
   'mobileTrip.rtReach': 'Πόσο μακριά',
@@ -70,10 +75,10 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': 'Από την αρχή του σκέλους',
   'mobileTrip.rtNoneAhead': 'Τίποτα στον δρόμο μπροστά σας. Δοκιμάστε όλο το σκέλος.',
   'mobileTrip.rtNoneOnStage': 'Τίποτα τέτοιο κατά μήκος αυτού του σκέλους.',
-  'mobileTrip.rtTruncated.one':
-    '1 τμήμα είχε περισσότερα από όσα χωρούν σε μία απάντηση. Διαλέξτε λιγότερα είδη για να δείτε τα υπόλοιπα.',
   'mobileTrip.rtTruncated.other':
     '{count} τμήματα είχαν περισσότερα από όσα χωρούν σε μία απάντηση. Διαλέξτε λιγότερα είδη για να δείτε τα υπόλοιπα.',
+  'mobileTrip.rtTruncated.one':
+    '1 τμήμα είχε περισσότερα από όσα χωρούν σε μία απάντηση. Διαλέξτε λιγότερα είδη για να δείτε τα υπόλοιπα.',
   'mobileTrip.rtNoDay': 'Δεν επιλέχθηκε ημέρα',
   'mobileTrip.rtNoDayHint': 'Ο χάρτης δείχνει ολόκληρο το ταξίδι. Πατήστε μια ημέρα παραπάνω για τη διαδρομή της.',
 };

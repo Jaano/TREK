@@ -85,6 +85,7 @@ Offline-first, with a layered data flow. A Page never owns state directly:
 
 - A route is "done" only once its contract lives in `shared/` and both sides import the inferred types. Edit the Zod schema, rebuild shared, then server (validation + DTO types) and client (typed requests) pick it up.
 - Locale files live in `shared/src/i18n/<locale>/`, one file per domain; `en/` is canonical. When you add or change a key, **add a real translation to every locale** — parity fails CI on missing keys, and an English placeholder is not acceptable in a non-`en` locale.
+- Count-bearing strings are plural groups: the key holds the general form and `key.one`, `.few` … the forms the language's `Intl.PluralRules` selects. Pass `{ count }` as a number and never choose between two keys with `count === 1`; details in `shared/CLAUDE.md`.
 
 ## Project direction
 

@@ -15,6 +15,7 @@ const shared: TranslationStrings = {
   'shared.tabChat': 'Csevegés',
   'shared.days': 'nap',
   'shared.places': 'hely',
+  'shared.places.one': 'hely',
   'shared.unplanned': 'Még nincs megtervezve',
   'shared.other': 'Egyéb',
   'shared.totalBudget': 'Összes költség',

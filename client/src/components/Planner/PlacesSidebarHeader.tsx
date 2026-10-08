@@ -262,7 +262,7 @@ function CategoryFilter(S: SidebarState) {
     if (categoryFilters.has(UNCATEGORIZED)) label = t('places.noCategory')
     else if (only) label = only.name
   } else if (categoryFilters.size > 1) {
-    label = `${categoryFilters.size} ${t('places.categoriesSelected')}`
+    label = `${categoryFilters.size} ${t('places.categoriesSelected', { count: categoryFilters.size })}`
   }
   return (
     <FilterDropdown name={t('categories.title')} label={label} active={categoryFilters.size > 0} badge={categoryFilters.size}

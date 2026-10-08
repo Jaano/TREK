@@ -73,9 +73,9 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': 'From the start of the stage',
   'mobileTrip.rtNoneAhead': 'Nothing on the road ahead. Try the whole stage.',
   'mobileTrip.rtNoneOnStage': 'Nothing of that kind along this stage.',
-  'mobileTrip.rtTruncated.one': '1 stretch had more than fits in one answer. Pick fewer kinds to see the rest.',
   'mobileTrip.rtTruncated.other':
     '{count} stretches had more than fits in one answer. Pick fewer kinds to see the rest.',
+  'mobileTrip.rtTruncated.one': '{count} stretch had more than fits in one answer. Pick fewer kinds to see the rest.',
   'mobileTrip.rtNoDay': 'No day picked',
   'mobileTrip.rtNoDayHint': 'The map is showing the whole trip. Tap a day above to see its drive.',
 };

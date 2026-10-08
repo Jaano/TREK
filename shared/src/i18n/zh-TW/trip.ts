@@ -31,7 +31,7 @@ const trip: TranslationStrings = {
   'trip.toast.reservationAdded': '預訂已新增',
   'trip.toast.deleted': '已刪除',
   'trip.confirm.deletePlace': '確定要刪除這個地點嗎？',
-  'trip.confirm.deletePlaces': '刪除 {count} 個地點？',
+  'trip.confirm.deletePlaces': '確定要刪除 {count} 個地點嗎？',
   'trip.toast.placesDeleted': '已刪除 {count} 個地點',
   'trip.invite.linkTitle': '行程邀請連結',
   'trip.invite.linkHint': '任何擁有 TREK 帳號的人開啟此連結，都會以成員身分加入行程。重新產生可使舊連結失效。',

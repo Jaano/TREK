@@ -397,7 +397,8 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'AirTrail-kapcsolat mentve',
   'settings.airtrail.toast.saveError': 'Nem sikerült menteni a kapcsolatot',
   'settings.airtrail.test.button': 'Kapcsolat tesztelése',
-  'settings.airtrail.test.success': 'Csatlakoztatva — {count} járat található',
+  'settings.airtrail.test.success': 'Csatlakoztatva. {count} járat található',
+  'settings.airtrail.test.success.one': 'Csatlakoztatva. {count} járat található',
   'settings.airtrail.test.failed': 'A kapcsolat sikertelen',
   'settings.aiParsing.title': 'AI-feldolgozás',
   'settings.aiParsing.hint':
@@ -540,6 +541,7 @@ const settings: TranslationStrings = {
   'settings.offline.storage.tripOff': 'Nincs tárolva',
   'settings.offline.storage.tripFinished': 'Befejezve. Csak akkor mentjük, ha bekapcsolod.',
   'settings.offline.notice.stored': '{count} utazás mentve ezen az eszközön',
+  'settings.offline.notice.stored.one': '{count} utazás mentve ezen az eszközön',
   'settings.offline.notice.nothing': 'Nincs mit menteni. Kapcsold be azokat az utazásokat, amelyeket meg szeretnél tartani.',
   'settings.offline.notice.busy': 'Már fut egy szinkronizálás. Próbáld újra egy pillanat múlva.',
   'settings.offline.notice.offline': 'Nincs kapcsolat. Csatlakozz, hogy offline menthesd az utazásokat.',

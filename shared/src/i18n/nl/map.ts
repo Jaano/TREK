@@ -29,7 +29,9 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Hele reis verbergen',
   'map.overview.total': 'Totale afstand',
   'map.attribution': 'Kaartvermeldingen',
-  'map.overview.unrouted': '{count} etappe(s) konden niet worden berekend, de afstanden zijn onvolledig.',
-  'map.overview.dayUnrouted': '{count} etappe(s) van deze dag konden niet worden berekend',
+  'map.overview.unrouted': '{count} etappes konden niet worden berekend, dus de afstanden zijn onvolledig.',
+  'map.overview.unrouted.one': '{count} etappe kon niet worden berekend, dus de afstanden zijn onvolledig.',
+  'map.overview.dayUnrouted': '{count} etappes van deze dag konden niet worden berekend',
+  'map.overview.dayUnrouted.one': '{count} etappe van deze dag kon niet worden berekend',
 };
 export default map;

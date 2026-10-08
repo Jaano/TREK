@@ -199,10 +199,10 @@ export default function MAdmin() {
       {/* Stats grid (§6.3) */}
       {stats && (
         <div className="mb-3 grid grid-cols-2 gap-[10px]">
-          <MAdminStat label={t('admin.stats.users')} value={stats.totalUsers} icon={Users} />
-          <MAdminStat label={t('admin.stats.trips')} value={stats.totalTrips} icon={Briefcase} />
-          <MAdminStat label={t('admin.stats.places')} value={stats.totalPlaces} icon={Map} />
-          <MAdminStat label={t('admin.stats.files')} value={stats.totalFiles || 0} icon={FileText} />
+          <MAdminStat label={t('admin.stats.users', { count: stats.totalUsers })} value={stats.totalUsers} icon={Users} />
+          <MAdminStat label={t('admin.stats.trips', { count: stats.totalTrips })} value={stats.totalTrips} icon={Briefcase} />
+          <MAdminStat label={t('admin.stats.places', { count: stats.totalPlaces })} value={stats.totalPlaces} icon={Map} />
+          <MAdminStat label={t('admin.stats.files', { count: stats.totalFiles || 0 })} value={stats.totalFiles || 0} icon={FileText} />
         </div>
       )}
 

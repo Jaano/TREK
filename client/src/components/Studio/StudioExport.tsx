@@ -128,7 +128,7 @@ export function StudioExport({
 
         <p className="m-0 text-content-muted" style={fs(12, 'body')}>
           {t('journey.studio.exportNote', {
-            sheets: sheets.length,
+            count: sheets.length,
             width: round1(box.width),
             height: round1(box.height),
           })}

@@ -52,8 +52,8 @@ export default function SharedTripPage() {
   ];
 
   const stats: HeroStat[] = [
-    { key: 'days', value: data.days?.length || 0, label: t('dashboard.days') },
-    { key: 'places', value: data.places?.length || 0, label: t('dashboard.places') },
+    { key: 'days', value: data.days?.length || 0, label: t('dashboard.days', { count: data.days?.length || 0 }) },
+    { key: 'places', value: data.places?.length || 0, label: t('dashboard.places', { count: data.places?.length || 0 }) },
     { key: 'bookings', value: permissions?.share_bookings ? reservations.length : 0, label: t('trip.tabs.reservations') },
   ].filter(s => s.value > 0);
 

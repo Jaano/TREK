@@ -17,6 +17,7 @@ const dawarich: TranslationStrings = {
   'dawarich.syncEnabledHint': 'Väljalülitatuna loeb TREK Dawarichi andmeid ainult sinu taotlusel.',
   'dawarich.test.button': 'Testi ühendust',
   'dawarich.test.success': 'Ühendatud. Viimase 30 päeva jooksul leiti {count} peatumist.',
+  'dawarich.test.success.one': 'Ühendatud. Viimase 30 päeva jooksul leiti {count} peatumine.',
   'dawarich.test.failed': 'Dawarichiga ei saadud ühendust.',
   'dawarich.syncNow': 'Kontrolli kohe',
   'dawarich.connected': 'Ühendatud',
@@ -31,6 +32,7 @@ const dawarich: TranslationStrings = {
   'dawarich.toast.saveError': 'Ühenduse salvestamine ebaõnnestus',
   'dawarich.toast.disconnected': 'Dawarichi ühendus katkestatud',
   'dawarich.toast.synced': 'Leiti {count} uut peatumist',
+  'dawarich.toast.synced.one': 'Leiti {count} uus peatumine',
   'dawarich.toast.syncError': 'Dawarichi lugemine ebaõnnestus',
   'dawarich.toast.syncRunning': 'Kontroll juba käib',
   'dawarich.toast.acceptError': 'Lisamine ebaõnnestus',
@@ -83,6 +85,7 @@ const dawarich: TranslationStrings = {
 
   'dawarich.suggestions.title': 'Dawarichist',
   'dawarich.suggestions.pending': '{count} ootab sind',
+  'dawarich.suggestions.pending.one': '{count} ootab sind',
   'dawarich.suggestions.loading': 'Dawarichi lugemine…',
   'dawarich.suggestions.notConnected': 'Peatumiste nägemiseks ühenda Dawarich seadetes.',
   'dawarich.suggestions.unavailable': 'Dawarichi andmeid ei saanud lugeda.',
@@ -145,7 +148,9 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.alreadyVisited': 'Juba täidetuks märgitud',
   'dawarich.bucket.confirm': 'Märgi {count} täidetuks',
   'dawarich.bucket.confirmed': '{count} soovi täidetuks märgitud',
+  'dawarich.bucket.confirmed.one': '{count} soov täidetuks märgitud',
   'dawarich.bucket.skipped': '{count} kirjel pole koordinaate ja neid ei saanud kontrollida.',
+  'dawarich.bucket.skipped.one': '{count} kirjel pole koordinaate ja seda ei saanud kontrollida.',
   'dawarich.bucket.truncated': 'Kontrolliti ainult esimesi kirjeid. Ülejäänute jaoks käivita uuesti.',
   'dawarich.bucket.visitedFrom': 'Täidetuks märgitud sinu Dawarichi salvestuste põhjal',
   'dawarich.bucket.clearVisit': 'Võta tagasi',
@@ -158,9 +163,11 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': 'Sinu salvestuste lugemine…',
   'dawarich.atlas.empty': 'Salvestustest ei leitud riike, mida TREKis veel pole.',
   'dawarich.atlas.cities': '{count} linna',
-  'dawarich.atlas.citiesOne': '1 linn',
+  'dawarich.atlas.cities.one': '{count} linn',
   'dawarich.atlas.accept': 'Lisa {count} riiki',
+  'dawarich.atlas.accept.one': 'Lisa {count} riik',
   'dawarich.atlas.accepted': '{count} riiki lisatud',
+  'dawarich.atlas.accepted.one': '{count} riik lisatud',
   'dawarich.atlas.unresolved': 'TREK ei suutnud neid riigiga seostada: {names}.',
   'dawarich.atlas.source': 'Dawarichist',
   'dawarich.atlas.range': 'Vaadatud ajavahemik {from} kuni {to}',
@@ -171,13 +178,14 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.tab.countries': 'Riigid',
   'dawarich.atlas.window': 'Vaadati viimast 12 kuud.',
   'dawarich.selected': '{count} valitud',
+  'dawarich.selected.one': '{count} valitud',
   'dawarich.again': 'Kontrolli uuesti',
   'dawarich.bucket.metersAway': '{meters} m kaugusel',
   'dawarich.bucket.kilometersAway': '{km} km kaugusel',
   'dawarich.bucket.rule': 'Soov loetakse täidetuks, kui viibid vähemalt {minutes} minutit kohast {meters} m raadiuses.',
-
-  'dawarich.journey.dayStays.one': '1 peatumine Dawarichist',
   'dawarich.journey.dayStays.other': '{count} peatumist Dawarichist',
+  'dawarich.journey.dayStays.one': '{count} peatumine Dawarichist',
+
 };
 
 export default dawarich;

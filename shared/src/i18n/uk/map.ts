@@ -29,7 +29,13 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Сховати всю подорож',
   'map.overview.total': 'Загальна відстань',
   'map.attribution': 'Джерела карти',
-  'map.overview.unrouted': 'Не вдалося прокласти {count} відрізок(ів), тому відстані неповні.',
-  'map.overview.dayUnrouted': 'Не вдалося прокласти {count} відрізок(ів) цього дня',
+  'map.overview.unrouted': 'Не вдалося прокласти {count} відрізка, тому відстані неповні.',
+  'map.overview.unrouted.one': 'Не вдалося прокласти {count} відрізок, тому відстані неповні.',
+  'map.overview.unrouted.few': 'Не вдалося прокласти {count} відрізки, тому відстані неповні.',
+  'map.overview.unrouted.many': 'Не вдалося прокласти {count} відрізків, тому відстані неповні.',
+  'map.overview.dayUnrouted': 'Не вдалося прокласти {count} відрізка цього дня',
+  'map.overview.dayUnrouted.one': 'Не вдалося прокласти {count} відрізок цього дня',
+  'map.overview.dayUnrouted.few': 'Не вдалося прокласти {count} відрізки цього дня',
+  'map.overview.dayUnrouted.many': 'Не вдалося прокласти {count} відрізків цього дня',
 };
 export default map;

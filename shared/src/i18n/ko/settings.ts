@@ -386,7 +386,7 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'AirTrail 연결이 저장되었습니다',
   'settings.airtrail.toast.saveError': '연결을 저장할 수 없습니다',
   'settings.airtrail.test.button': '연결 테스트',
-  'settings.airtrail.test.success': '연결됨 — {count}개 항공편을 찾았습니다',
+  'settings.airtrail.test.success': '연결되었습니다. 항공편 {count}개를 찾았습니다',
   'settings.airtrail.test.failed': '연결에 실패했습니다',
   'settings.aiParsing.title': 'AI 분석',
   'settings.aiParsing.hint':

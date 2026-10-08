@@ -30,6 +30,16 @@ const map: TranslationStrings = {
   'map.overview.total': 'المسافة الإجمالية',
   'map.attribution': 'مصادر الخريطة',
   'map.overview.unrouted': 'تعذّر حساب {count} مرحلة، لذا المسافات غير مكتملة.',
+  'map.overview.unrouted.zero': 'لا توجد مراحل تعذّر حسابها.',
+  'map.overview.unrouted.one': 'تعذّر حساب مرحلة واحدة، لذا المسافات غير مكتملة.',
+  'map.overview.unrouted.two': 'تعذّر حساب مرحلتين، لذا المسافات غير مكتملة.',
+  'map.overview.unrouted.few': 'تعذّر حساب {count} مراحل، لذا المسافات غير مكتملة.',
+  'map.overview.unrouted.many': 'تعذّر حساب {count} مرحلة، لذا المسافات غير مكتملة.',
   'map.overview.dayUnrouted': 'تعذّر حساب {count} مرحلة من هذا اليوم',
+  'map.overview.dayUnrouted.zero': 'لا توجد مراحل تعذّر حسابها في هذا اليوم',
+  'map.overview.dayUnrouted.one': 'تعذّر حساب مرحلة واحدة من هذا اليوم',
+  'map.overview.dayUnrouted.two': 'تعذّر حساب مرحلتين من هذا اليوم',
+  'map.overview.dayUnrouted.few': 'تعذّر حساب {count} مراحل من هذا اليوم',
+  'map.overview.dayUnrouted.many': 'تعذّر حساب {count} مرحلة من هذا اليوم',
 };
 export default map;

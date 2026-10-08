@@ -17,6 +17,7 @@ const dawarich: TranslationStrings = {
   'dawarich.syncEnabledHint': 'Désactivé, TREK ne consulte Dawarich que lorsque vous le lui demandez.',
   'dawarich.test.button': 'Tester la connexion',
   'dawarich.test.success': 'Connecté. {count} séjours trouvés sur les 30 derniers jours.',
+  'dawarich.test.success.one': 'Connecté. {count} séjour trouvé sur les 30 derniers jours.',
   'dawarich.test.failed': 'Impossible de joindre Dawarich.',
   'dawarich.syncNow': 'Vérifier maintenant',
   'dawarich.connected': 'Connecté',
@@ -31,6 +32,7 @@ const dawarich: TranslationStrings = {
   'dawarich.toast.saveError': 'Impossible d’enregistrer la connexion',
   'dawarich.toast.disconnected': 'Dawarich déconnecté',
   'dawarich.toast.synced': '{count} nouveaux séjours trouvés',
+  'dawarich.toast.synced.one': '{count} nouveau séjour trouvé',
   'dawarich.toast.syncError': 'Impossible de lire Dawarich',
   'dawarich.toast.syncRunning': 'Une vérification est déjà en cours',
   'dawarich.toast.acceptError': 'Impossible d’ajouter cet élément',
@@ -82,6 +84,7 @@ const dawarich: TranslationStrings = {
 
   'dawarich.suggestions.title': 'Depuis Dawarich',
   'dawarich.suggestions.pending': '{count} en attente',
+  'dawarich.suggestions.pending.one': '{count} en attente',
   'dawarich.suggestions.loading': 'Lecture de Dawarich…',
   'dawarich.suggestions.notConnected':
     'Connectez Dawarich dans les Paramètres pour voir vos séjours ici.',
@@ -145,7 +148,9 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.alreadyVisited': 'Déjà coché',
   'dawarich.bucket.confirm': 'Cocher {count}',
   'dawarich.bucket.confirmed': '{count} souhaits cochés',
+  'dawarich.bucket.confirmed.one': '{count} souhait coché',
   'dawarich.bucket.skipped': '{count} entrées n’ont pas de coordonnées et n’ont pas pu être vérifiées.',
+  'dawarich.bucket.skipped.one': '{count} entrée n’a pas de coordonnées et n’a pas pu être vérifiée.',
   'dawarich.bucket.truncated':
     'Seules les premières entrées ont été vérifiées. Relancez pour traiter le reste.',
   'dawarich.bucket.visitedFrom': 'Coché à partir de vos enregistrements Dawarich',
@@ -159,9 +164,11 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': 'Lecture de vos enregistrements…',
   'dawarich.atlas.empty': 'Vos enregistrements ne révèlent aucun pays que TREK ne connaisse déjà.',
   'dawarich.atlas.cities': '{count} villes',
-  'dawarich.atlas.citiesOne': '1 ville',
+  'dawarich.atlas.cities.one': '{count} ville',
   'dawarich.atlas.accept': 'Ajouter {count} pays',
+  'dawarich.atlas.accept.one': 'Ajouter {count} pays',
   'dawarich.atlas.accepted': '{count} pays ajoutés',
+  'dawarich.atlas.accepted.one': '{count} pays ajouté',
   'dawarich.atlas.unresolved': 'TREK n’a pas pu rattacher ceci à un pays : {names}.',
   'dawarich.atlas.source': 'Depuis Dawarich',
   'dawarich.atlas.range': 'Période examinée : du {from} au {to}',
@@ -172,13 +179,14 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.tab.countries': 'Pays',
   'dawarich.atlas.window': 'Les 12 derniers mois ont été examinés.',
   'dawarich.selected': '{count} sélectionnés',
+  'dawarich.selected.one': '{count} sélectionné',
   'dawarich.again': 'Vérifier à nouveau',
   'dawarich.bucket.metersAway': 'à {meters} m',
   'dawarich.bucket.kilometersAway': 'à {km} km',
   'dawarich.bucket.rule': 'Une envie est atteinte à moins de {meters} m et après {minutes} minutes sur place.',
+  'dawarich.journey.dayStays.other': '{count} séjours issus de Dawarich',
+  'dawarich.journey.dayStays.one': '{count} séjour issu de Dawarich',
 
-  'dawarich.journey.dayStays.one': '1 arrêt depuis Dawarich',
-  'dawarich.journey.dayStays.other': '{count} arrêts depuis Dawarich',
 };
 
 export default dawarich;

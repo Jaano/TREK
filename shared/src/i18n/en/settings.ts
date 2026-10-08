@@ -505,7 +505,8 @@ const settings: TranslationStrings = {
   'settings.dayDateFirst': 'Date first in day headings',
   'settings.compactUnplanned': 'Compact markers for unplanned places',
   'settings.compactUnplannedHint': 'Places not planned into any day show as small markers without a photo, so the planned stops stand out.',
-  'settings.dayDateFirstHint': "Lead each day with its calendar date and show \"Day 1\" or the day's own title next to it.",
+  'settings.dayDateFirstHint':
+    'Lead each day with its calendar date and show "Day 1" or the day\'s own title next to it.',
   'settings.startPage': 'Start page',
   'settings.startPageDashboard': 'Dashboard',
   'settings.startPageActiveTrip': 'Active trip',

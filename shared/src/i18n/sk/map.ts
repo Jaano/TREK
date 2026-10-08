@@ -30,7 +30,11 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Skryť celú cestu',
   'map.overview.total': 'Celková vzdialenosť',
   'map.attribution': 'Zdroje mapy',
-  'map.overview.unrouted': '{count} úsek(ov) sa nepodarilo vypočítať, takže vzdialenosti sú neúplné.',
-  'map.overview.dayUnrouted': '{count} úsek(ov) tohto dňa sa nepodarilo vypočítať',
+  'map.overview.unrouted': 'Trasu pre {count} úsekov sa nepodarilo vypočítať, takže vzdialenosti sú neúplné.',
+  'map.overview.unrouted.one': 'Trasu pre {count} úsek sa nepodarilo vypočítať, takže vzdialenosti sú neúplné.',
+  'map.overview.unrouted.few': 'Trasu pre {count} úseky sa nepodarilo vypočítať, takže vzdialenosti sú neúplné.',
+  'map.overview.dayUnrouted': 'Trasu pre {count} úsekov tohto dňa sa nepodarilo vypočítať',
+  'map.overview.dayUnrouted.one': 'Trasu pre {count} úsek tohto dňa sa nepodarilo vypočítať',
+  'map.overview.dayUnrouted.few': 'Trasu pre {count} úseky tohto dňa sa nepodarilo vypočítať',
 };
 export default map;

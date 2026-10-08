@@ -215,7 +215,7 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.manualAppend': 'Nothing has routed yet, so it goes at the end of day {number}.',
   'roadtrip.poi.manualNoResults': 'No places found.',
   'roadtrip.poi.manualNoCoords':
-    'Without a position this goes to the trip\'s places rather than onto a drive. Pick one from the search above, or fill in the coordinates.',
+    "Without a position this goes to the trip's places rather than onto a drive. Pick one from the search above, or fill in the coordinates.",
   'roadtrip.summary.distance': 'Distance',
   'roadtrip.summary.driving': 'Driving time',
   'roadtrip.alt.ask': 'Other ways',

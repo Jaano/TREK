@@ -193,7 +193,7 @@ describe('TripMembersModal', () => {
       )
     );
     render(<TripMembersModal {...defaultProps} />);
-    expect(await screen.findByText(/2 persons/i)).toBeInTheDocument();
+    expect(await screen.findByText(/2 people/i)).toBeInTheDocument();
   });
 
   it('FE-COMP-MEMBERS-012: shows "you" label next to current user', async () => {
@@ -526,7 +526,7 @@ describe('TripMembersModal', () => {
     // The guest carries a "Guest" badge.
     expect(screen.getAllByText('Guest').length).toBeGreaterThan(0);
     // The head band counts the owner and the real member (2), not the guest.
-    expect(screen.getByText('2 persons')).toBeInTheDocument();
+    expect(screen.getByText('2 people')).toBeInTheDocument();
   });
 
   // ── Avatars and load failures (028-031) ───────────────────────────────────
@@ -553,7 +553,7 @@ describe('TripMembersModal', () => {
     render(<TripMembersModal {...defaultProps} />);
 
     await waitFor(() => expect(addToast).toHaveBeenCalledWith('Failed to load members', 'error', undefined));
-    expect(screen.getByText('0 persons')).toBeInTheDocument();
+    expect(screen.getByText('0 people')).toBeInTheDocument();
   });
 
   it('FE-COMP-MEMBERS-031: a failing share-link load still offers link creation', async () => {

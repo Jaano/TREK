@@ -5,7 +5,12 @@ const journey: TranslationStrings = {
   'journey.search.noResults': 'لا توجد رحلات تطابق "{query}"',
   'journey.status.archived': 'مؤرشف',
   'journey.detail.backToJourney': 'العودة للمجلة',
-  'journey.detail.photos': 'صور',
+  'journey.detail.photos': 'صورة',
+  'journey.detail.photos.zero': 'صور',
+  'journey.detail.photos.one': 'صورة',
+  'journey.detail.photos.two': 'صورتان',
+  'journey.detail.photos.few': 'صور',
+  'journey.detail.photos.many': 'صورة',
   'journey.detail.day': 'اليوم {number}',
   'journey.detail.places': 'أماكن',
   'journey.skeletons.show': 'إظهار الاقتراحات',
@@ -40,8 +45,18 @@ const journey: TranslationStrings = {
   'journey.settings.failedToDelete': 'فشل في الحذف',
   'journey.entries.deleteTitle': 'حذف الإدخال',
   'journey.photosUploaded': 'تم رفع {count} صورة',
+  'journey.photosUploaded.zero': 'لم يتم رفع أي صورة',
+  'journey.photosUploaded.one': 'تم رفع صورة واحدة',
+  'journey.photosUploaded.two': 'تم رفع صورتين',
+  'journey.photosUploaded.few': 'تم رفع {count} صور',
+  'journey.photosUploaded.many': 'تم رفع {count} صورة',
   'journey.photosUploadFailed': 'فشل رفع بعض الصور',
   'journey.photosAdded': 'تمت إضافة {count} صورة',
+  'journey.photosAdded.zero': 'لم تتم إضافة أي صورة',
+  'journey.photosAdded.one': 'تمت إضافة صورة واحدة',
+  'journey.photosAdded.two': 'تمت إضافة صورتين',
+  'journey.photosAdded.few': 'تمت إضافة {count} صور',
+  'journey.photosAdded.many': 'تمت إضافة {count} صورة',
   'journey.picker.tripPeriod': 'فترة الرحلة',
   'journey.picker.dateRange': 'نطاق التاريخ',
   'journey.picker.allPhotos': 'كل الصور',
@@ -109,7 +124,12 @@ const journey: TranslationStrings = {
   'journey.frontpage.activeJourney': 'Active Journey', // en-fallback
   'journey.frontpage.latestJourney': 'أحدث رحلة',
   'journey.frontpage.allJourneys': 'All Journeys', // en-fallback
-  'journey.frontpage.journeys': 'journeys', // en-fallback
+  'journey.frontpage.journeys': 'رحلة',
+  'journey.frontpage.journeys.zero': 'رحلات',
+  'journey.frontpage.journeys.one': 'رحلة',
+  'journey.frontpage.journeys.two': 'رحلتان',
+  'journey.frontpage.journeys.few': 'رحلات',
+  'journey.frontpage.journeys.many': 'رحلة',
   'journey.frontpage.createNew': 'Create a new Journey', // en-fallback
   'journey.frontpage.createNewSub': 'Pick trips, write stories, share your adventures', // en-fallback
   'journey.frontpage.live': 'Live', // en-fallback
@@ -125,13 +145,23 @@ const journey: TranslationStrings = {
   'journey.frontpage.tripsSelected': 'trips selected', // en-fallback
   'journey.frontpage.trips': 'trips', // en-fallback
   'journey.frontpage.placesImported': 'places will be imported', // en-fallback
-  'journey.frontpage.places': 'places', // en-fallback
+  'journey.frontpage.places': 'مكان',
+  'journey.frontpage.places.zero': 'أماكن',
+  'journey.frontpage.places.one': 'مكان',
+  'journey.frontpage.places.two': 'مكانان',
+  'journey.frontpage.places.few': 'أماكن',
+  'journey.frontpage.places.many': 'مكانًا',
   'journey.detail.syncedWithTrips': 'Synced with Trips', // en-fallback
   'journey.detail.addEntry': 'Add Entry', // en-fallback
   'journey.detail.jumpToTop': 'العودة إلى الأعلى',
   'journey.detail.jumpToLast': 'الانتقال إلى آخر مدخل',
   'journey.detail.dayJump': 'الانتقال إلى يوم',
-  'journey.detail.dayJumpCount': 'الأيام: {count}',
+  'journey.detail.dayJumpCount': '{count} يوم',
+  'journey.detail.dayJumpCount.zero': 'لا توجد أيام',
+  'journey.detail.dayJumpCount.one': 'يوم واحد',
+  'journey.detail.dayJumpCount.two': 'يومان',
+  'journey.detail.dayJumpCount.few': '{count} أيام',
+  'journey.detail.dayJumpCount.many': '{count} يومًا',
   'journey.detail.newEntry': 'New Entry', // en-fallback
   'journey.detail.editEntry': 'Edit Entry', // en-fallback
   'journey.detail.noEntries': 'No entries yet', // en-fallback
@@ -152,7 +182,12 @@ const journey: TranslationStrings = {
   'journey.stats.places': 'Places', // en-fallback
   'journey.verdict.lovedIt': 'Loved it', // en-fallback
   'journey.verdict.couldBeBetter': 'Could be better', // en-fallback
-  'journey.synced.places': 'places', // en-fallback
+  'journey.synced.places': 'مكان',
+  'journey.synced.places.zero': 'أماكن',
+  'journey.synced.places.one': 'مكان',
+  'journey.synced.places.two': 'مكانان',
+  'journey.synced.places.few': 'أماكن',
+  'journey.synced.places.many': 'مكانًا',
   'journey.synced.synced': 'synced', // en-fallback
   'journey.editor.allPhotosAdded': 'All photos already added', // en-fallback
   'journey.editor.writeStory': 'Write your story...', // en-fallback
@@ -286,11 +321,21 @@ const journey: TranslationStrings = {
   'journey.studio.exportFinishing': 'التشطيب',
   'journey.studio.exportMarks': 'علامات القص',
   'journey.studio.exportMarksHint': 'يضيف {bleed} مم من الفيض عند كل حافة ويحدد موضع القص',
-  'journey.studio.exportNote': '{sheets} ورقة بقياس {width} × {height} مم. يحوّل المتصفح معاينة الطباعة إلى PDF.',
+  'journey.studio.exportNote': '{count} ورقة بقياس {width} × {height} مم. يحوّل المتصفح معاينة الطباعة إلى PDF.',
+  'journey.studio.exportNote.zero': 'لا توجد أوراق بقياس {width} × {height} مم. يحوّل المتصفح معاينة الطباعة إلى PDF.',
+  'journey.studio.exportNote.one': 'ورقة واحدة بقياس {width} × {height} مم. يحوّل المتصفح معاينة الطباعة إلى PDF.',
+  'journey.studio.exportNote.two': 'ورقتان بقياس {width} × {height} مم. يحوّل المتصفح معاينة الطباعة إلى PDF.',
+  'journey.studio.exportNote.few': '{count} أوراق بقياس {width} × {height} مم. يحوّل المتصفح معاينة الطباعة إلى PDF.',
+  'journey.studio.exportNote.many': '{count} ورقة بقياس {width} × {height} مم. يحوّل المتصفح معاينة الطباعة إلى PDF.',
   'journey.studio.exportOpen': 'معاينة الطباعة',
   'journey.studio.exportSave': 'حفظ بصيغة PDF',
   'journey.studio.exportPreparing': 'جارٍ التحضير',
   'journey.studio.exportSheetCount': '{count} ورقة',
+  'journey.studio.exportSheetCount.zero': 'لا توجد أوراق',
+  'journey.studio.exportSheetCount.one': 'ورقة واحدة',
+  'journey.studio.exportSheetCount.two': 'ورقتان',
+  'journey.studio.exportSheetCount.few': '{count} أوراق',
+  'journey.studio.exportSheetCount.many': '{count} ورقة',
   'journey.studio.undo': 'Undo', // en-fallback
   'journey.studio.redo': 'Redo', // en-fallback
   'journey.studio.zoomIn': 'Zoom in', // en-fallback
@@ -634,7 +679,12 @@ const journey: TranslationStrings = {
   'journey.studio.uploadToGallery': 'ستُضاف الصور الجديدة إلى المعرض',
   'journey.studio.uploading': 'جارٍ رفع {done} من {total}',
   'journey.studio.dropFilesHere': 'أفلت لإضافة الصور',
-  'journey.studio.videosSkipped': 'تم تجاهل {count} من مقاطع الفيديو. الكتاب يحتوي على صور فقط.',
+  'journey.studio.videosSkipped': 'تم تجاهل {count} مقطع فيديو. الكتاب يحتوي على صور فقط.',
+  'journey.studio.videosSkipped.zero': 'لم يتم تجاهل أي مقطع فيديو. الكتاب يحتوي على صور فقط.',
+  'journey.studio.videosSkipped.one': 'تم تجاهل مقطع فيديو واحد. الكتاب يحتوي على صور فقط.',
+  'journey.studio.videosSkipped.two': 'تم تجاهل مقطعَي فيديو. الكتاب يحتوي على صور فقط.',
+  'journey.studio.videosSkipped.few': 'تم تجاهل {count} مقاطع فيديو. الكتاب يحتوي على صور فقط.',
+  'journey.studio.videosSkipped.many': 'تم تجاهل {count} مقطع فيديو. الكتاب يحتوي على صور فقط.',
   'journey.studio.fillPage': 'ملء الصفحة',
   'journey.studio.fillSpread': 'ملء الصفحتين المتقابلتين',
   'journey.studio.fillHint': 'يمدّ الصورة على الصفحة كاملة بما في ذلك الفيض، ويضعها خلف كل شيء آخر.',
@@ -657,7 +707,12 @@ const journey: TranslationStrings = {
   'journey.suggestions.dismissed': 'تم تجاهل الاقتراح',
   'journey.suggestions.restore': 'استعادة الاقتراحات المتجاهَلة',
   'journey.suggestions.restoreCount': 'الاقتراحات المتجاهَلة ({count})',
-  'journey.suggestions.restored': 'عادت {count} اقتراحات',
+  'journey.suggestions.restored': 'تمت استعادة {count} اقتراح',
+  'journey.suggestions.restored.zero': 'لم تتم استعادة أي اقتراح',
+  'journey.suggestions.restored.one': 'تمت استعادة اقتراح واحد',
+  'journey.suggestions.restored.two': 'تمت استعادة اقتراحين',
+  'journey.suggestions.restored.few': 'تمت استعادة {count} اقتراحات',
+  'journey.suggestions.restored.many': 'تمت استعادة {count} اقتراحًا',
   'journey.detail.addOnThisDay': 'إضافة مدخل في هذا اليوم',
   'journey.detail.jumpToDay': 'الانتقال إلى {date}',
   'journey.detail.searchPlaceholder': 'ابحث في هذه الرحلة',

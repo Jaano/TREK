@@ -562,8 +562,8 @@ function MTripListCard({ trip, locale, t, badge, pluginBadges, actions, onOpen }
         </div>
         <div className="my-[13px] h-px bg-[color:var(--m-rowbr)]" />
         <div className="flex text-center">
-          <ListStat value={trip.day_count ?? 0} label={t('dashboard.days')} />
-          <ListStat value={trip.place_count ?? 0} label={t('dashboard.places')} />
+          <ListStat value={trip.day_count ?? 0} label={t('dashboard.days', { count: trip.day_count ?? 0 })} />
+          <ListStat value={trip.place_count ?? 0} label={t('dashboard.places', { count: trip.place_count ?? 0 })} />
           <ListStat value={trip.shared_count ?? 0} label={t('dashboard.card.buddies', { count: trip.shared_count ?? 0 })} />
         </div>
         <MTripBadges items={pluginBadges} />

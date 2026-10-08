@@ -14,7 +14,7 @@ const help: TranslationStrings = {
   'help.center.onThisScreen': 'Trên màn hình này',
   'help.center.screens': 'Màn hình',
   'help.center.thisScreen': 'Màn hình này',
-  'help.center.subScreens': 'Màn hình con: {count}',
+  'help.center.subScreens': '{count} màn hình con',
   'help.center.subScreensLabel': 'Màn hình con',
   'help.center.guidesCount': '{count} hướng dẫn',
   'help.center.goToScreen': 'Đi tới {screen}',

@@ -36,7 +36,9 @@ const trip: TranslationStrings = {
 
   'trip.confirm.deletePlace': 'Bu məkanı silmək istədiyinizə əminsiniz?',
   'trip.confirm.deletePlaces': '{count} məkan silinsin?',
+  'trip.confirm.deletePlaces.one': '{count} məkan silinsin?',
   'trip.toast.placesDeleted': '{count} məkan silindi',
+  'trip.toast.placesDeleted.one': '{count} məkan silindi',
 
   'trip.invite.linkTitle': 'Səyahət dəvət linki',
   'trip.invite.linkHint':
@@ -77,8 +79,10 @@ const trip: TranslationStrings = {
     'Uyğun bağlantı tapılmadı. Başqa vaxt və ya filtrlər seçin.',
   'transit.direct': 'Birbaşa',
   'transit.transfers': '{count} dəyişmə',
+  'transit.transfers.one': '{count} dəyişmə',
   'transit.min': '{count} dəq.',
   'transit.stops': '{count} dayanacaq',
+  'transit.stops.one': '{count} dayanacaq',
   'transit.walkTo': '{name} istiqamətinə piyada gedin',
   'transit.platform': 'Platforma {track}',
   'transit.adding': 'Əlavə edilir…',

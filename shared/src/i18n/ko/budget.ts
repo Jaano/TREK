@@ -123,7 +123,7 @@ const budget: TranslationStrings = {
   'costs.payersUnbalanced': '결제자 금액의 합계가 {amount} 여야 합니다',
   'costs.splitBetween': '균등 분할 대상',
   'costs.pickSomeone': '분할할 사람을 한 명 이상 선택하세요.',
-  'costs.splitSummary': '{count}명 분할 · 각 {amount}',
+  'costs.splitSummary': '{count}명 · 1인당 {amount}',
   'costs.cat.accommodation': '숙박',
   'costs.cat.food': '식음료',
   'costs.cat.groceries': '식료품',

@@ -160,7 +160,6 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': '記録を読み取り中…',
   'dawarich.atlas.empty': '記録の中に、TREK にまだない国はありませんでした。',
   'dawarich.atlas.cities': '{count}都市',
-  'dawarich.atlas.citiesOne': '1 都市',
   'dawarich.atlas.accept': '{count}か国を追加',
   'dawarich.atlas.accepted': '{count}か国を追加しました',
   'dawarich.atlas.unresolved': 'TREK はこれらを国と照合できませんでした：{names}。',
@@ -177,9 +176,8 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.metersAway': '{meters} m 先',
   'dawarich.bucket.kilometersAway': '{km} km 先',
   'dawarich.bucket.rule': '{meters} m 以内に {minutes} 分以上滞在すると、願いがかなったとみなします。',
-
-  'dawarich.journey.dayStays.one': 'Dawarich の滞在 1 件',
   'dawarich.journey.dayStays.other': 'Dawarich の滞在 {count} 件',
+
 };
 
 export default dawarich;

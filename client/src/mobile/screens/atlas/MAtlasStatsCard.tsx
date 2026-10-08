@@ -13,11 +13,11 @@ interface MAtlasStatsCardProps {
 export default function MAtlasStatsCard({ stats }: MAtlasStatsCardProps) {
   const { t } = useTranslation()
   const cols: [number, string][] = [
-    [stats.totalCountries, t('atlas.countries')],
-    [stats.totalTrips, t('atlas.trips')],
-    [stats.totalPlaces, t('atlas.places')],
-    [stats.totalCities || 0, t('atlas.cities')],
-    [stats.totalDays, t('atlas.days')],
+    [stats.totalCountries, t('atlas.countries', { count: stats.totalCountries })],
+    [stats.totalTrips, t('atlas.trips', { count: stats.totalTrips })],
+    [stats.totalPlaces, t('atlas.places', { count: stats.totalPlaces })],
+    [stats.totalCities || 0, t('atlas.cities', { count: stats.totalCities || 0 })],
+    [stats.totalDays, t('atlas.days', { count: stats.totalDays })],
   ]
   // All five columns are spoken for, so the planned count rides along with the country
   // number as a superscript rather than claiming a sixth column.

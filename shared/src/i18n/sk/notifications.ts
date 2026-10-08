@@ -32,5 +32,8 @@ const notifications: TranslationStrings = {
   'notifications.test.adminText': '{actor} odoslal testovacie oznámenie všetkým správcom.',
   'notifications.test.tripTitle': '{actor} prispel do vášho výletu',
   'notifications.test.tripText': 'Testovacie oznámenie pre výlet "{trip}".',
+  'notifications.countLabel': 'oznámení',
+  'notifications.countLabel.one': 'oznámenie',
+  'notifications.countLabel.few': 'oznámenia',
 };
 export default notifications;

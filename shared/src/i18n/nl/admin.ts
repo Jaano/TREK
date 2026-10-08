@@ -24,10 +24,14 @@ const admin: TranslationStrings = {
   'admin.tabs.backup': 'Back-up',
   'admin.tabs.audit': 'Audit',
   'admin.stats.users': 'Gebruikers',
+  'admin.stats.users.one': 'Gebruiker',
   'admin.stats.trips': 'Reizen',
+  'admin.stats.trips.one': 'Reis',
   'admin.stats.places': 'Plaatsen',
+  'admin.stats.places.one': 'Plaats',
   'admin.stats.photos': "Foto's",
   'admin.stats.files': 'Bestanden',
+  'admin.stats.files.one': 'Bestand',
   'admin.table.user': 'Gebruiker',
   'admin.table.email': 'E-mail',
   'admin.table.role': 'Rol',
@@ -94,7 +98,7 @@ const admin: TranslationStrings = {
   'admin.googleCaveat.body':
     "TREK is open source en wij zijn hier niet neutraal. Op deze schaal bestaan beoordelingen en foto's van gewone zaken alleen bij Google, en dat is een monopolie. Het veld staat er bij gebrek aan alternatief, niet omdat wij het aanraden. Elke opvraging gaat dan naar Google.",
   'admin.trekApi.tagline':
-    'TREK\'s eigen plaatsenindex. Zoeken zonder Google-sleutel, zonder quotum en zonder dat iemand meetelt.',
+    "TREK's eigen plaatsenindex. Zoeken zonder Google-sleutel, zonder quotum en zonder dat iemand meetelt.",
   'admin.trekApi.factPlaces':
     '73,6 miljoen plaatsen wereldwijd',
   'admin.trekApi.factNoKey':
@@ -113,8 +117,7 @@ const admin: TranslationStrings = {
     'Beschrijvingen komen van de website van de plaats zelf; openingstijden uit OpenStreetMap waar ze zijn ingevuld.',
   'admin.trekApi.notRatings':
     'Beoordelingen',
-  'admin.trekApi.notPhotos':
-    'Foto\'s van gewone zaken',
+  'admin.trekApi.notPhotos': "Foto's van gewone zaken",
   'admin.trekApi.notIncludedNote':
     'Geen enkele open bron heeft ze, voor geen prijs. Een Google-sleutel blijft de enige weg naar die twee.',
   'admin.trekApi.sourcesLabel':
@@ -193,7 +196,8 @@ const admin: TranslationStrings = {
   'admin.transitProvider.transitous': 'Transitous (gratis)',
   'admin.transitProvider.google': 'Google',
   'admin.transitProvider.transitousHint': 'GTFS-feeds van de community. Gratis en zonder sleutel, met de beste dekking in Europa.',
-  'admin.transitProvider.googleHint': 'Gebruikt de Google-sleutel hierboven, voor regio\'s zonder Transitous-data. Wordt per zoekopdracht afgerekend — zolang er geen sleutel is, wordt Transitous gebruikt.',
+  'admin.transitProvider.googleHint':
+    "Gebruikt de Google-sleutel hierboven, voor regio's zonder Transitous-data. Wordt per zoekopdracht afgerekend — zolang er geen sleutel is, wordt Transitous gebruikt.",
   'admin.transitProvider.noKeyWarning': 'Google is geselecteerd, maar er is geen Google-sleutel ingesteld — het ov-zoeken gebruikt nog steeds Transitous. Voeg hierboven een sleutel toe bij API-sleutels.',
   'admin.transitProvider.personalKeyWarning': 'Alleen je eigen Google-sleutel is ingesteld, dus het zoeken van andere leden valt nog steeds terug op Transitous. Sla de sleutel hierboven op als beheerder om hem instantiebreed toe te passen.',
   'admin.placeShadow.title': 'Logboek van plaatszoekopdrachten',
@@ -224,7 +228,9 @@ const admin: TranslationStrings = {
   'admin.packingTemplates.namePlaceholder': 'Sjabloonnaam (bijv. Strandvakantie)',
   'admin.packingTemplates.empty': 'Nog geen sjablonen aangemaakt',
   'admin.packingTemplates.items': 'items',
+  'admin.packingTemplates.items.one': 'item',
   'admin.packingTemplates.categories': 'categorieën',
+  'admin.packingTemplates.categories.one': 'categorie',
   'admin.packingTemplates.itemName': 'Itemnaam',
   'admin.packingTemplates.itemCategory': 'Categorie',
   'admin.packingTemplates.categoryName': 'Categorienaam (bijv. Kleding)',
@@ -273,7 +279,8 @@ const admin: TranslationStrings = {
     'Deze plug-in gebruikt geen door de beheerder opgegeven hosts. De toegestane hosts staan vast in het manifest.',
   'admin.plugins.allowedHosts.restartNote': 'Opslaan herstart de plug-in zodat de nieuwe lijst wordt opgepakt.',
   'admin.plugins.allowedHosts.add': 'Toegestane host toevoegen',
-  'admin.plugins.allowedHosts.count': '{n} toegestane host(s)',
+  'admin.plugins.allowedHosts.count': '{n} toegestane hosts',
+  'admin.plugins.allowedHosts.count.one': '{n} toegestane host',
   'admin.plugins.operatorEgressPill': '+ hosts die jij toevoegt',
   'admin.plugins.operatorEgressHint':
     'Deze plug-in praat met een dienst die alleen jij kunt benoemen (een zelf-gehoste server). Voeg na installatie de bereikbare hosts toe via ⋯ → Toegestane hosts. Andere bereikt hij niet.',
@@ -505,6 +512,7 @@ const admin: TranslationStrings = {
   'admin.plugins.sortUpdates': 'Updates eerst',
   'admin.plugins.sortDownloads': 'Meest gedownload',
   'admin.plugins.updatesAvailable': '{count} updates beschikbaar voor je plugins.',
+  'admin.plugins.updatesAvailable.one': '{count} update beschikbaar voor je plugins.',
   'admin.plugins.newerNeedsTrek': 'v{version} beschikbaar — vereist TREK {range}',
   'admin.plugins.versionsTitle': 'Versies',
   'admin.plugins.versionPickerTitle': 'Versie wijzigen — {name}',
@@ -807,7 +815,8 @@ const admin: TranslationStrings = {
   'admin.passkey.resetHint':
     'Verwijder alle passkeys van deze gebruiker (bijv. bij een verloren apparaat). Ze kunnen nog steeds inloggen met hun wachtwoord.',
   'admin.passkey.resetConfirm': 'Alle passkeys voor {name} verwijderen?',
-  'admin.passkey.resetDone': '{count} passkey(s) verwijderd',
+  'admin.passkey.resetDone': '{count} passkeys verwijderd',
+  'admin.passkey.resetDone.one': '{count} passkey verwijderd',
   'admin.defaultSettings.mapProvider': 'Kaartmotor',
   'admin.defaultSettings.mapProviderHint':
     'De standaardkaart voor iedereen op deze instantie. Elke gebruiker kan dit nog steeds aanpassen in zijn eigen instellingen.',
@@ -834,7 +843,7 @@ const admin: TranslationStrings = {
     'De nieuwe gebruiker wordt automatisch aan deze reis toegevoegd wanneer hij zich via de link registreert.',
   'admin.invite.boundTo': 'voegt toe aan {trip}',
   'admin.placesUsageTitle': 'Waar de sleutel voor wordt gebruikt',
-  'admin.mapsKeyHintShort': 'Voegt foto\'s, beoordelingen en openingstijden toe. Elke opzoeking gaat dan naar Google.',
+  'admin.mapsKeyHintShort': "Voegt foto's, beoordelingen en openingstijden toe. Elke opzoeking gaat dan naar Google.",
   'admin.amapKeyHintShort': 'Voor plaatszoeken in het vasteland van China. Vereist een webservicesleutel, geen JS-API-sleutel.',
   'admin.collab.links.subtitle': 'Gedeelde links en bladwijzers',
 };

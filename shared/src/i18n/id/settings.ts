@@ -394,7 +394,7 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'Koneksi AirTrail disimpan',
   'settings.airtrail.toast.saveError': 'Tidak dapat menyimpan koneksi',
   'settings.airtrail.test.button': 'Uji koneksi',
-  'settings.airtrail.test.success': 'Terhubung — {count} penerbangan ditemukan',
+  'settings.airtrail.test.success': 'Terhubung. {count} penerbangan ditemukan',
   'settings.airtrail.test.failed': 'Koneksi gagal',
   'settings.aiParsing.title': 'Penguraian AI',
   'settings.aiParsing.hint':

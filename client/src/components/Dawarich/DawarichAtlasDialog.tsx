@@ -295,9 +295,7 @@ export default function DawarichAtlasDialog({
                 {country.cities.length > 0 && (
                   <>
                     <DawarichBadge icon={Building2} size="sm">
-                      {country.cities.length === 1
-                        ? t('dawarich.atlas.citiesOne')
-                        : t('dawarich.atlas.cities', { count: country.cities.length })}
+                      {t('dawarich.atlas.cities', { count: country.cities.length })}
                     </DawarichBadge>
                     <span className="min-w-0 truncate text-caption text-content-muted">
                       {cityLine(country.cities)}

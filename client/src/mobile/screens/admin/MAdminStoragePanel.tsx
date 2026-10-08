@@ -510,7 +510,7 @@ export default function MAdminStoragePanel(): React.ReactElement {
                 </p>
                 {rowUsage && (
                   <p className="mt-1 font-geist text-[0.625rem] text-m-muted">
-                    {t('storage.usage.line', { objects: String(rowUsage.objects), size: formatBytes(rowUsage.bytes) })}
+                    {t('storage.usage.line', { count: rowUsage.objects, size: formatBytes(rowUsage.bytes) })}
                     {row.name === 'uploads-local' && state.usage!.legacyPhotos.objects > 0
                       ? ` (${t('storage.usage.legacyNote')})`
                       : ''}
@@ -772,7 +772,7 @@ export default function MAdminStoragePanel(): React.ReactElement {
                 {state.usage?.categories[category] && (
                   <p className="mb-1 font-geist text-[0.625rem] text-m-muted">
                     {t('storage.usage.line', {
-                      objects: String(state.usage.categories[category]!.objects),
+                      count: state.usage.categories[category]!.objects,
                       size: formatBytes(state.usage.categories[category]!.bytes),
                     })}
                   </p>

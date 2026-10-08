@@ -371,7 +371,7 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': '已儲存 AirTrail 連接',
   'settings.airtrail.toast.saveError': '無法儲存連接',
   'settings.airtrail.test.button': '測試連接',
-  'settings.airtrail.test.success': '已連接——找到 {count} 筆航班',
+  'settings.airtrail.test.success': '已連接。找到 {count} 筆航班',
   'settings.airtrail.test.failed': '連接失敗',
   'settings.aiParsing.title': 'AI 解析',
   'settings.aiParsing.hint':

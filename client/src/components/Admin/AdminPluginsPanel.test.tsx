@@ -1178,7 +1178,7 @@ describe('AdminPluginsPanel — compatible updates only', () => {
     render(<AdminPluginsPanel />)
 
     expect(await screen.findByRole('button', { name: /update → v2\.0\.0/i })).toBeInTheDocument()
-    expect(screen.getByText('1 updates available for your plugins.')).toBeInTheDocument()
+    expect(screen.getByText('1 update available for your plugins.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /update → v3\.0\.0/i })).not.toBeInTheDocument()
   })
 
@@ -1254,7 +1254,7 @@ describe('AdminPluginsPanel — update hold', () => {
     }))
     withToast()
 
-    expect(await screen.findByText('1 updates available for your plugins.')).toBeInTheDocument()
+    expect(await screen.findByText('1 update available for your plugins.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /update all/i }))
 
     await waitFor(() => expect(updated).toEqual(['trek-ntfy']))

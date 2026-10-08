@@ -7,6 +7,7 @@ const inspector: TranslationStrings = {
   'inspector.showHours': 'Açılış saatlerini göster',
   'inspector.files': 'Dosyalar',
   'inspector.filesCount': '{count} dosya',
+  'inspector.filesCount.one': '{count} dosya',
   'inspector.remove': 'Kaldırmak',
   'inspector.removeFromDay': 'Günden Kaldır',
   'inspector.addToDay': 'Güne Ekle',

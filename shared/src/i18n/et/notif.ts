@@ -21,6 +21,7 @@ const notif: TranslationStrings = {
   'notif.collection_invite.text': '{actor} kutsus sind kogumikku jagama',
   'notif.photos_shared.title': 'Fotod jagatud',
   'notif.photos_shared.text': '{actor} jagas reisil {trip} {count} fotot',
+  'notif.photos_shared.text.one': '{actor} jagas reisil {trip} {count} foto',
   'notif.collab_message.title': 'Uus sõnum',
   'notif.collab_message.text': '{actor} saatis reisil {trip} sõnumi',
   'notif.packing_tagged.title': 'Pakkimisülesanne',

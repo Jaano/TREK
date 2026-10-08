@@ -34,6 +34,7 @@ const packing: TranslationStrings = {
     'Markdown siyahısı da işləyir: başlıq kateqoriyanı adlandırır, "- [ ]" və "- [x]" elementə çevrilir, adın önündəki "3x" isə miqdarı təyin edir.',
   'packing.importAction': '{count} elementi idxal et',
   'packing.importSuccess': '{count} element idxal edildi',
+  'packing.importSuccess.one': '{count} element idxal edildi',
   'packing.importError': 'İdxal uğursuz oldu',
   'packing.importEmpty': 'İdxal ediləcək element yoxdur',
 
@@ -72,6 +73,7 @@ const packing: TranslationStrings = {
   'packing.template': 'Şablon',
   'packing.templateApplied':
     'Şablondan {count} element əlavə edildi',
+  'packing.templateApplied.one': 'Şablondan {count} element əlavə edildi',
   'packing.templateError': 'Şablonu tətbiq etmək mümkün olmadı',
   'packing.saveAsTemplate': 'Şablon kimi yadda saxla',
   'packing.templateName': 'Şablonun adı',
@@ -112,7 +114,10 @@ const packing: TranslationStrings = {
 
   'packing.confirm.clearChecked':
     'İşarələnmiş {count} elementi silmək istədiyinizə əminsiniz?',
+  'packing.confirm.clearChecked.one': 'İşarələnmiş {count} elementi silmək istədiyinizə əminsiniz?',
   'packing.confirm.deleteCat':
+    '“{name}” siyahısını daxilindəki {count} elementlə birlikdə silmək istədiyinizə əminsiniz?',
+  'packing.confirm.deleteCat.one':
     '“{name}” siyahısını daxilindəki {count} elementlə birlikdə silmək istədiyinizə əminsiniz?',
 
   'packing.defaultCategory': 'Digər',

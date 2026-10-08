@@ -44,7 +44,7 @@ const atlas: TranslationStrings = {
   'atlas.streak': '연속',
   'atlas.years': '년',
   'atlas.yearsInRow': '년 연속',
-  'atlas.tripsIn': '에서 여행',
+  'atlas.tripsIn': '여행',
   'atlas.since': '부터',
   'atlas.europe': '유럽',
   'atlas.asia': '아시아',
@@ -55,12 +55,12 @@ const atlas: TranslationStrings = {
   'atlas.other': '기타',
   'atlas.firstVisit': '첫 번째 여행',
   'atlas.lastVisitLabel': '마지막 여행',
-  'atlas.tripPlural': '여행',
   'atlas.tripsLabel': '여행',
   'atlas.placesVisited': '방문한 장소',
   'atlas.planned': '예정',
   'atlas.showPlanned': '예정된 국가 표시',
   'atlas.plannedFor': '예정일',
   'atlas.antarctica': '남극',
+  'atlas.regionPlacesLabel': '개 장소',
 };
 export default atlas;

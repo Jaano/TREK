@@ -21,6 +21,7 @@ const notif: TranslationStrings = {
   'notif.collection_invite.text': '{actor} meghívott egy gyűjteménybe',
   'notif.photos_shared.title': 'Fotók megosztva',
   'notif.photos_shared.text': '{actor} {count} fotót osztott meg a(z) {trip} utazásban',
+  'notif.photos_shared.text.one': '{actor} {count} fotót osztott meg a(z) {trip} utazásban',
   'notif.collab_message.title': 'Új üzenet',
   'notif.collab_message.text': '{actor} üzenetet küldött a(z) {trip} utazásban',
   'notif.packing_tagged.title': 'Csomagolási feladat',

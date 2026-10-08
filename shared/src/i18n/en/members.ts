@@ -7,7 +7,7 @@ const members: TranslationStrings = {
   'members.invite': 'Invite',
   'members.allHaveAccess': 'All users already have access.',
   'members.access': 'Access',
-  'members.persons': 'persons',
+  'members.persons': 'people',
   'members.persons.one': 'person',
   'members.you': 'you',
   'members.owner': 'Owner',

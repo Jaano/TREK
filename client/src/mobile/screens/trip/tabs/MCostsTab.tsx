@@ -670,7 +670,7 @@ function ExpenseRow({ item, ctx, base, locale, t, canEdit, onEdit, onDelete, onT
                   className="inline-flex items-center gap-1 rounded-full border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-2 py-0.5 text-[0.625rem] font-semibold text-m-muted active:scale-95 transition-all"
                 >
                   <Receipt size={11} className="text-m-faint" />
-                  <span>{t('costs.receipts') || 'Beleg'}{item.receipts!.length > 1 ? ` (${item.receipts!.length})` : ''}</span>
+                  <span>{t('costs.receipts', { count: item.receipts!.length })}{item.receipts!.length > 1 ? ` (${item.receipts!.length})` : ''}</span>
                 </button>
               )}
             </div>

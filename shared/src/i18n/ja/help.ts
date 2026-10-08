@@ -15,7 +15,7 @@ const help: TranslationStrings = {
   'help.center.onThisScreen': 'この画面について',
   'help.center.screens': '画面',
   'help.center.thisScreen': 'この画面',
-  'help.center.subScreens': 'サブ画面: {count}',
+  'help.center.subScreens': 'サブ画面 {count} 件',
   'help.center.subScreensLabel': 'サブ画面',
   'help.center.guidesCount': 'ガイド {count} 件',
   'help.center.goToScreen': '{screen} を開く',

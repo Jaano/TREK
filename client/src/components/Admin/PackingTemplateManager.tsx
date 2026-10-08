@@ -243,7 +243,7 @@ export default function PackingTemplateManager() {
                     <button type="button" onClick={() => toggleExpand(tmpl.id)} className="min-w-0 flex-1 truncate text-start font-semibold text-content" style={fs(13, 'body')}>{tmpl.name}</button>
                   )}
                   <span className="max-sm:hidden">
-                    <StatusPill>{tmpl.category_count} {t('admin.packingTemplates.categories')} · {tmpl.item_count} {t('admin.packingTemplates.items')}</StatusPill>
+                    <StatusPill>{tmpl.category_count} {t('admin.packingTemplates.categories', { count: tmpl.category_count })} · {tmpl.item_count} {t('admin.packingTemplates.items', { count: tmpl.item_count })}</StatusPill>
                   </span>
                   <Tooltip label={t('common.rename')}>
                     <button type="button" onClick={() => { setEditingTemplate(tmpl.id); setEditTemplateName(tmpl.name) }}

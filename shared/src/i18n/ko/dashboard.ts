@@ -33,6 +33,7 @@ const dashboard: TranslationStrings = {
   'dashboard.sharedBy': '{name}이(가) 공유',
   'dashboard.days': '일',
   'dashboard.places': '장소',
+  'dashboard.pass.places': '장소',
   'dashboard.members': '동행자',
   'dashboard.card.buddies': '동행자',
   'dashboard.archive': '보관',

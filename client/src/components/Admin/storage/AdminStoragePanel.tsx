@@ -506,7 +506,7 @@ export default function AdminStoragePanel(): React.ReactElement {
                 <div className={DETAILS}>
                   {rowUsage && (
                     <p className={`${META} font-geist tabular-nums`} style={fs(11.5)}>
-                      {t('storage.usage.line', { objects: String(rowUsage.objects), size: formatBytes(rowUsage.bytes) })}
+                      {t('storage.usage.line', { count: rowUsage.objects, size: formatBytes(rowUsage.bytes) })}
                       {row.name === 'uploads-local' && state.usage!.legacyPhotos.objects > 0
                         ? ` (${t('storage.usage.legacyNote')})`
                         : ''}
@@ -763,7 +763,7 @@ export default function AdminStoragePanel(): React.ReactElement {
                 {state.usage?.categories[category] && (
                   <p className={`${META} font-geist tabular-nums`} style={fs(11.5)}>
                     {t('storage.usage.line', {
-                      objects: String(state.usage.categories[category]!.objects),
+                      count: state.usage.categories[category]!.objects,
                       size: formatBytes(state.usage.categories[category]!.bytes),
                     })}
                   </p>

@@ -15,7 +15,7 @@ const help: TranslationStrings = {
   'help.center.onThisScreen': '關於此頁面',
   'help.center.screens': '頁面',
   'help.center.thisScreen': '目前頁面',
-  'help.center.subScreens': '子頁面：{count}',
+  'help.center.subScreens': '{count} 個子頁面',
   'help.center.subScreensLabel': '子頁面',
   'help.center.guidesCount': '{count} 篇指南',
   'help.center.goToScreen': '前往{screen}',

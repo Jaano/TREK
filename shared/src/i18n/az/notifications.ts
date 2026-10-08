@@ -47,6 +47,8 @@ const notifications: TranslationStrings = {
     '{actor} səyahətinizdə paylaşım etdi',
   'notifications.test.tripText':
     '“{trip}” səyahəti üçün test bildirişi.',
+  'notifications.countLabel': 'bildiriş',
+  'notifications.countLabel.one': 'bildiriş',
 };
 
 export default notifications;

@@ -31,7 +31,7 @@ const trip: TranslationStrings = {
   'trip.toast.reservationAdded': '予約を追加しました',
   'trip.toast.deleted': '削除しました',
   'trip.confirm.deletePlace': 'この場所を削除してもよろしいですか？',
-  'trip.confirm.deletePlaces': '{count}件の場所を削除してもよろしいですか?',
+  'trip.confirm.deletePlaces': '{count}件の場所を削除してもよろしいですか？',
   'trip.toast.placesDeleted': '{count}件の場所を削除しました',
   'trip.invite.linkTitle': '旅行の招待リンク',
   'trip.invite.linkHint':

@@ -31,5 +31,7 @@ const notifications: TranslationStrings = {
   'notifications.test.adminText': '{actor} saatis testteavituse kõigile administraatoritele.',
   'notifications.test.tripTitle': '{actor} postitas sinu reisile',
   'notifications.test.tripText': 'Testteavitus reisile "{trip}".',
+  'notifications.countLabel': 'teavitust',
+  'notifications.countLabel.one': 'teavitus',
 };
 export default notifications;

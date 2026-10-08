@@ -70,7 +70,7 @@ const trip: TranslationStrings = {
   'transit.direct': 'Langsung',
   'transit.transfers': '{count} transit',
   'transit.min': '{count} mnt',
-  'transit.stops': '{count} halte',
+  'transit.stops': '{count} perhentian',
   'transit.walkTo': 'Jalan kaki ke {name}',
   'transit.platform': 'Peron {track}',
   'transit.adding': 'Menambahkan…',

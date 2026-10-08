@@ -261,7 +261,7 @@ export default function MAdminPackingTemplateManager() {
                   <button type="button" className="min-w-0 flex-1 text-start" onClick={() => toggleExpand(tmpl.id)}>
                     <div className="truncate text-[0.8125rem] font-bold text-m-ink">{tmpl.name}</div>
                     <div className="mt-[1px] font-geist text-[0.59375rem] text-m-faint">
-                      {tmpl.category_count} {t('admin.packingTemplates.categories')} · {tmpl.item_count} {t('admin.packingTemplates.items')}
+                      {tmpl.category_count} {t('admin.packingTemplates.categories', { count: tmpl.category_count })} · {tmpl.item_count} {t('admin.packingTemplates.items', { count: tmpl.item_count })}
                     </div>
                   </button>
                 )}

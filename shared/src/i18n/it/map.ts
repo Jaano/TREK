@@ -29,7 +29,11 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Nascondi tutto il viaggio',
   'map.overview.total': 'Distanza totale',
   'map.attribution': 'Crediti della mappa',
-  'map.overview.unrouted': '{count} tratta/e non calcolabile/i, le distanze sono incomplete.',
-  'map.overview.dayUnrouted': '{count} tratta/e di questo giorno non calcolabile/i',
+  'map.overview.unrouted':
+    'Per {count} tratte non è stato possibile calcolare il percorso, quindi le distanze sono incomplete.',
+  'map.overview.unrouted.one':
+    'Per {count} tratta non è stato possibile calcolare il percorso, quindi le distanze sono incomplete.',
+  'map.overview.dayUnrouted': 'Per {count} tratte di questo giorno non è stato possibile calcolare il percorso',
+  'map.overview.dayUnrouted.one': 'Per {count} tratta di questo giorno non è stato possibile calcolare il percorso',
 };
 export default map;

@@ -29,7 +29,9 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Dölj hela resan',
   'map.overview.total': 'Total sträcka',
   'map.attribution': 'Kartkällor',
-  'map.overview.unrouted': '{count} delsträcka/or kunde inte beräknas, så avstånden är ofullständiga.',
-  'map.overview.dayUnrouted': '{count} delsträcka/or för den här dagen kunde inte beräknas',
+  'map.overview.unrouted': '{count} delsträckor kunde inte beräknas, så avstånden är ofullständiga.',
+  'map.overview.unrouted.one': '{count} delsträcka kunde inte beräknas, så avstånden är ofullständiga.',
+  'map.overview.dayUnrouted': '{count} delsträckor för den här dagen kunde inte beräknas',
+  'map.overview.dayUnrouted.one': '{count} delsträcka för den här dagen kunde inte beräknas',
 };
 export default map;

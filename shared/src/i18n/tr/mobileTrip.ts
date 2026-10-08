@@ -42,10 +42,13 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.resBadge': 'Rezervasyon',
   'mobileTrip.showOnMap': 'Haritada göster',
   'mobileTrip.statDocuments': '{count} dosya',
+  'mobileTrip.statDocuments.one': '{count} dosya',
   'mobileTrip.statPeople': '{count} kişi',
+  'mobileTrip.statPeople.one': '{count} kişi',
   'mobileTrip.stay': 'Konaklama',
   'mobileTrip.tapAgainToDelete': 'Silmek için tekrar dokun',
   'mobileTrip.todoOpenCount': '{count} açık',
+  'mobileTrip.todoOpenCount.one': '{count} açık',
   'mobileTrip.travel': 'Seyahat',
   'mobileTrip.upNext': 'Sırada',
   'mobileTrip.viewDetails': 'Ayrıntıları görüntüle',
@@ -59,7 +62,9 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtStart': 'Başlangıç',
   'mobileTrip.rtStayScope': 'Bu süre yere aittir, bu yüzden bu durağın planlandığı her gün için geçerlidir.',
   'mobileTrip.rtStayLess': '{count} dakika daha az',
+  'mobileTrip.rtStayLess.one': '{count} dakika daha az',
   'mobileTrip.rtStayMore': '{count} dakika daha fazla',
+  'mobileTrip.rtStayMore.one': '{count} dakika daha fazla',
   'mobileTrip.rtNightDesktopOnly':
     'Bu yerde konaklama masaüstü planlayıcıda ayarlanır. Burada yalnızca kaldırabilirsiniz.',
   'mobileTrip.rtReach': 'Ne kadar uzağa',
@@ -68,9 +73,9 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': 'Etabın başından itibaren',
   'mobileTrip.rtNoneAhead': 'İleride yol üzerinde bir şey yok. Tüm etabı deneyin.',
   'mobileTrip.rtNoneOnStage': 'Bu etap boyunca bu türden bir şey yok.',
-  'mobileTrip.rtTruncated.one':
-    '1 kesimde tek bir yanıta sığandan fazlası vardı. Geri kalanı görmek için daha az tür seçin.',
   'mobileTrip.rtTruncated.other':
+    '{count} kesimde tek bir yanıta sığandan fazlası vardı. Geri kalanı görmek için daha az tür seçin.',
+  'mobileTrip.rtTruncated.one':
     '{count} kesimde tek bir yanıta sığandan fazlası vardı. Geri kalanı görmek için daha az tür seçin.',
   'mobileTrip.rtNoDay': 'Gün seçilmedi',
   'mobileTrip.rtNoDayHint': 'Harita tüm yolculuğu gösteriyor. Günün sürüşünü görmek için yukarıdan bir güne dokunun.',

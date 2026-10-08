@@ -362,7 +362,7 @@ describe('JourneyDetailPage', () => {
 
       // Gallery view renders photo count text
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
     });
   });
@@ -1100,7 +1100,7 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       // Gallery renders photos as images
@@ -1120,7 +1120,7 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       // Gallery has an Upload button
@@ -1787,7 +1787,7 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       // Click the photo in the gallery grid
@@ -2005,7 +2005,7 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       // Gallery photos render in a grid; each photo has a group container
@@ -2024,7 +2024,7 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       // The photo has caption 'Colosseum'
@@ -2064,7 +2064,7 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       expect(screen.getByText('Immich')).toBeInTheDocument();
@@ -2105,7 +2105,7 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       expect(screen.getByText('Synology Photos')).toBeInTheDocument();
@@ -3357,12 +3357,12 @@ describe('JourneyDetailPage', () => {
       await user.click(galleryBtn);
 
       await waitFor(() => {
-        expect(screen.getByText(/1 photos/i)).toBeInTheDocument();
+        expect(screen.getByText(/1 photo\b/i)).toBeInTheDocument();
       });
 
       // The gallery photo has a delete (X) button that appears on hover
       // In the gallery grid, each photo container has an X button
-      const galleryGrid = screen.getByText(/1 photos/i).closest('div')!.parentElement!;
+      const galleryGrid = screen.getByText(/1 photo\b/i).closest('div')!.parentElement!;
       const xButtons = galleryGrid.querySelectorAll('button');
       // Find the X delete button on the photo
       const deleteBtn = Array.from(xButtons).find(btn => {

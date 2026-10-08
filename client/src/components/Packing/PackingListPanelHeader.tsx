@@ -76,7 +76,7 @@ export function PackingHeader(S: PackingState) {
                       <Package size={13} className="text-content-faint" />
                       <div style={{ flex: 1, textAlign: 'start' }}>
                         <div style={{ fontWeight: 600 }}>{tmpl.name}</div>
-                        <div style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{tmpl.item_count} {t('admin.packingTemplates.items')}</div>
+                        <div style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{tmpl.item_count} {t('admin.packingTemplates.items', { count: tmpl.item_count })}</div>
                       </div>
                     </button>
                   ))}

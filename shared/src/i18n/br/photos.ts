@@ -3,6 +3,7 @@ import type { TranslationStrings } from '../types';
 const photos: TranslationStrings = {
   'photos.title': 'Fotos',
   'photos.subtitle': '{count} fotos para {trip}',
+  'photos.subtitle.one': '{count} foto para {trip}',
   'photos.dropHere': 'Arraste fotos aqui...',
   'photos.dropHereActive': 'Arraste fotos aqui',
   'photos.captionForAll': 'Legenda (para todos)',

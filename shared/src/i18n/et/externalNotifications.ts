@@ -1,4 +1,5 @@
 import type { NotificationLocale } from '../externalNotifications/types';
+import { pluralForm } from '../plural';
 import reservations from './reservations';
 
 const et: NotificationLocale = {
@@ -38,8 +39,11 @@ const et: NotificationLocale = {
       body: `${p.actor} kutsus sind kogumikku jagama. Nõustumiseks või keeldumiseks ava TREK.`,
     }),
     photos_shared: (p) => ({
-      title: `Jagatud ${p.count} fotot`,
-      body: `${p.actor} jagas reisil „${p.trip}” ${p.count} fotot.`,
+      title: pluralForm(p.count, 'et', { one: `Jagatud ${p.count} foto`, other: `Jagatud ${p.count} fotot` }),
+      body: pluralForm(p.count, 'et', {
+        one: `${p.actor} jagas reisil „${p.trip}” ${p.count} foto.`,
+        other: `${p.actor} jagas reisil „${p.trip}” ${p.count} fotot.`,
+      }),
     }),
     collab_message: (p) => ({
       title: `Uus sõnum reisil „${p.trip}”`,
@@ -57,7 +61,12 @@ const et: NotificationLocale = {
       title: 'Salvestuskoopia tõrge',
       body:
         `Koopia kirjutamine taustasüsteemi „${p.backend}” ebaõnnestus: toiming ${p.op}, võti ${p.key} — ${p.error}.` +
-        (p.suppressed !== '0' ? ` Pärast viimast teavitust jäeti veel ${p.suppressed} tõrke teavitused saatmata.` : ''),
+        (p.suppressed !== '0'
+          ? pluralForm(p.suppressed, 'et', {
+              one: ` Pärast viimast teavitust jäeti veel ${p.suppressed} tõrketeavitus saatmata.`,
+              other: ` Pärast viimast teavitust jäeti veel ${p.suppressed} tõrketeavitust saatmata.`,
+            })
+          : ''),
     }),
     synology_session_cleared: () => ({
       title: 'Synology seanss tühjendatud',

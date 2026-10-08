@@ -26,10 +26,12 @@ const planner: TranslationStrings = {
   'planner.days': 'Günlər',
   'planner.allPlaces': 'Bütün məkanlar',
   'planner.totalPlaces': 'Ümumilikdə {n} məkan',
+  'planner.totalPlaces.one': 'Ümumilikdə {n} məkan',
   'planner.noDaysPlanned': 'Hələ heç bir gün planlaşdırılmayıb',
   'planner.editTrip': 'Səyahəti redaktə et →',
   'planner.placeOne': '1 məkan',
   'planner.placeN': '{n} məkan',
+  'planner.placeN.one': '{n} məkan',
 
   'planner.addNote': 'Qeyd əlavə et',
   'planner.noEntries': 'Bu gün üçün heç bir qeyd yoxdur',
@@ -76,6 +78,7 @@ const planner: TranslationStrings = {
   'planner.editTripToAddDays':
     'Günlər əlavə etmək üçün səyahəti redaktə edin',
   'planner.dayCount': '{n} gün',
+  'planner.dayCount.one': '{n} gün',
 
   'planner.clickToUnlock': 'Kilidi açmaq üçün klikləyin',
   'planner.keepPosition':

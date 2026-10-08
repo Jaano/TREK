@@ -15,7 +15,7 @@ const help: TranslationStrings = {
   'help.center.onThisScreen': '이 화면에서',
   'help.center.screens': '화면',
   'help.center.thisScreen': '현재 화면',
-  'help.center.subScreens': '하위 화면: {count}',
+  'help.center.subScreens': '하위 화면 {count}개',
   'help.center.subScreensLabel': '하위 화면',
   'help.center.guidesCount': '가이드 {count}개',
   'help.center.goToScreen': '{screen}(으)로 이동',

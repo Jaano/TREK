@@ -78,7 +78,7 @@ export function GalleryView({ entries, gallery, journeyId, userId, trips, onPhot
       if (failed.length > 0) {
         toast.error(t('journey.editor.uploadPartialFailed', { failed: String(failed.length), total: String(normalized.length) }))
       } else {
-        toast.success(t('journey.photosUploaded', { count: String(files.length) }))
+        toast.success(t('journey.photosUploaded', { count: files.length }))
       }
       onRefresh()
     } catch (err) {
@@ -120,7 +120,7 @@ export function GalleryView({ entries, gallery, journeyId, userId, trips, onPhot
       {/* Header — the provider buttons live in the page header next to Upload */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.07em]" style={{ background: 'var(--vg-surf2)', color: 'var(--vg-ink3)' }}>
-          <Camera size={11} /> {allPhotos.length} {t('journey.detail.photos')}
+          <Camera size={11} /> {allPhotos.length} {t('journey.detail.photos', { count: allPhotos.length })}
         </span>
       </div>
 

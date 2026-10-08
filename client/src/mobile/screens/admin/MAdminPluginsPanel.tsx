@@ -1409,7 +1409,7 @@ function InstalledRow({ p, t, busy, hasUpdate, latestVer, newerIncompatible, blo
             >
               <Globe size={12} className={p.egressHostCount > 0 ? 'text-[color:var(--m-st-info)]' : 'text-[color:var(--m-st-pending)]'} />
               {p.egressHostCount > 0
-                ? t('admin.plugins.allowedHosts.count').replace('{n}', String(p.egressHostCount))
+                ? t('admin.plugins.allowedHosts.count', { n: p.egressHostCount })
                 : t('admin.plugins.allowedHosts.add')}
             </button>
           )}

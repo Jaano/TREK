@@ -163,7 +163,7 @@ const reservations: TranslationStrings = {
     '从 AirTrail 导入。含中转的多段航班没有对应的单个 AirTrail 航班可供同步，因此保留为一次性导入。',
   'reservations.airtrail.loadError': '无法加载您的 AirTrail 航班。',
   'reservations.airtrail.imported': '已导入 {count} 个航班',
-  'reservations.airtrail.skippedDuplicate': '{count} 个已在此行程中，已跳过',
+  'reservations.airtrail.skippedDuplicate': '已跳过 {count} 个已在此行程中的航班',
   'reservations.airtrail.nothingImported': '没有可导入的内容。',
   'reservations.airtrail.importError': '导入失败。请重试。',
   'reservations.airtrail.undo': '从 AirTrail 导入',

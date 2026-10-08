@@ -60,6 +60,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.latestJourney': 'Πρόσφατο Ταξίδι',
   'journey.frontpage.allJourneys': 'Όλα τα Ταξίδια',
   'journey.frontpage.journeys': 'ταξίδια',
+  'journey.frontpage.journeys.one': 'ταξίδι',
   'journey.frontpage.createNew': 'Δημιουργία νέου Ταξιδιού',
   'journey.frontpage.createNewSub': 'Επιλέξτε ταξίδια, γράψτε ιστορίες, μοιραστείτε τις περιπέτειές σας',
   'journey.frontpage.live': 'Ζωντανά',
@@ -76,6 +77,7 @@ const journey: TranslationStrings = {
   'journey.frontpage.trips': 'ταξίδια',
   'journey.frontpage.placesImported': 'τοποθεσίες θα εισαχθούν',
   'journey.frontpage.places': 'τοποθεσίες',
+  'journey.frontpage.places.one': 'τοποθεσία',
   'journey.detail.backToJourney': 'Πίσω στο Ταξίδι',
   'journey.detail.syncedWithTrips': 'Συγχρονισμένο με Ταξίδια',
   'journey.detail.addEntry': 'Προσθήκη Καταχώρησης',
@@ -83,6 +85,7 @@ const journey: TranslationStrings = {
   'journey.detail.jumpToLast': 'Μετάβαση στην τελευταία καταχώρηση',
   'journey.detail.dayJump': 'Μετάβαση σε ημέρα',
   'journey.detail.dayJumpCount': '{count} ημέρες',
+  'journey.detail.dayJumpCount.one': '{count} ημέρα',
   'journey.detail.newEntry': 'Νέα Καταχώρηση',
   'journey.detail.editEntry': 'Επεξεργασία Καταχώρησης',
   'journey.detail.noEntries': 'Δεν υπάρχουν καταχωρήσεις ακόμα',
@@ -98,6 +101,7 @@ const journey: TranslationStrings = {
   'journey.detail.readMore': 'Διαβάστε περισσότερα',
   'journey.detail.prosCons': 'Υπέρ & Κατά',
   'journey.detail.photos': 'φωτογραφίες',
+  'journey.detail.photos.one': 'φωτογραφία',
   'journey.detail.day': 'Ημέρα {number}',
   'journey.detail.places': 'τοποθεσίες',
   'journey.stats.days': 'Ημέρες',
@@ -110,6 +114,7 @@ const journey: TranslationStrings = {
   'journey.verdict.lovedIt': 'Το λάτρεψα',
   'journey.verdict.couldBeBetter': 'Θα μπορούσε να ήταν καλύτερο',
   'journey.synced.places': 'τοποθεσίες',
+  'journey.synced.places.one': 'τοποθεσία',
   'journey.synced.synced': 'συγχρονισμένα',
   'journey.editor.discardChangesConfirm': 'Έχετε μη αποθηκευμένες αλλαγές. Απόρριψη;',
   'journey.editor.uploadFailed': 'Η μεταφόρτωση φωτογραφίας απέτυχε',
@@ -227,8 +232,10 @@ const journey: TranslationStrings = {
   'journey.settings.failedToDelete': 'Αποτυχία διαγραφής',
   'journey.entries.deleteTitle': 'Διαγραφή Καταχώρησης',
   'journey.photosUploaded': '{count} φωτογραφίες μεταφορτώθηκαν',
+  'journey.photosUploaded.one': '{count} φωτογραφία μεταφορτώθηκε',
   'journey.photosUploadFailed': 'Ορισμένες φωτογραφίες απέτυχαν να μεταφορτωθούν',
   'journey.photosAdded': '{count} φωτογραφίες προστέθηκαν',
+  'journey.photosAdded.one': '{count} φωτογραφία προστέθηκε',
   'journey.public.notFound': 'Δεν Βρέθηκε',
   'journey.public.notFoundMessage': 'Αυτό το ταξίδι δεν υπάρχει ή ο σύνδεσμος έχει λήξει.',
   'journey.public.readOnly': 'Μόνο ανάγνωση · Δημόσιο Ταξίδι',
@@ -289,11 +296,15 @@ const journey: TranslationStrings = {
   'journey.studio.exportFinishing': 'Φινίρισμα',
   'journey.studio.exportMarks': 'Σημάδια κοπής',
   'journey.studio.exportMarksHint': 'Προσθέτει {bleed} mm μακετών σε κάθε ακμή και σημειώνει πού κόβεται',
-  'journey.studio.exportNote': '{sheets} φύλλα {width} × {height} mm. Ο browser μετατρέπει την προεπισκόπηση εκτύπωσης σε PDF.',
+  'journey.studio.exportNote':
+    '{count} φύλλα {width} × {height} mm. Ο browser μετατρέπει την προεπισκόπηση εκτύπωσης σε PDF.',
+  'journey.studio.exportNote.one':
+    '{count} φύλλο {width} × {height} mm. Ο browser μετατρέπει την προεπισκόπηση εκτύπωσης σε PDF.',
   'journey.studio.exportOpen': 'Προεπισκόπηση εκτύπωσης',
   'journey.studio.exportSave': 'Αποθήκευση ως PDF',
   'journey.studio.exportPreparing': 'Προετοιμασία',
   'journey.studio.exportSheetCount': '{count} φύλλα',
+  'journey.studio.exportSheetCount.one': '{count} φύλλο',
   'journey.studio.undo': 'Undo', // en-fallback
   'journey.studio.redo': 'Redo', // en-fallback
   'journey.studio.zoomIn': 'Zoom in', // en-fallback
@@ -305,7 +316,8 @@ const journey: TranslationStrings = {
   'journey.studio.importSpreadHint': 'Προσθέτει ένα δισέλιδο από αρχείο σχεδίασης που έχετε κατεβάσει',
   'journey.studio.importSpreadFailed': 'Αυτό το αρχείο δεν είναι δισέλιδο του TREK Studio',
   'journey.studio.desktopOnly': 'Studio needs a bigger screen', // en-fallback
-  'journey.studio.desktopOnlyHint': 'Η σχεδίαση βιβλίου θέλει χώρο, γι\' αυτό το Studio υπάρχει μόνο στον υπολογιστή, όπως και η δημιουργία του PDF. Όλα τα άλλα του ταξιδιού σου δουλεύουν εδώ κανονικά.', // en-fallback
+  'journey.studio.desktopOnlyHint':
+    "Η σχεδίαση βιβλίου θέλει χώρο, γι' αυτό το Studio υπάρχει μόνο στον υπολογιστή, όπως και η δημιουργία του PDF. Όλα τα άλλα του ταξιδιού σου δουλεύουν εδώ κανονικά.", // en-fallback
   'journey.studio.formatA5Landscape': 'A5 landscape', // en-fallback
   'journey.studio.bookView': 'Book view', // en-fallback
   'journey.studio.multiple': 'Several', // en-fallback
@@ -637,7 +649,8 @@ const journey: TranslationStrings = {
   'journey.studio.uploadToGallery': 'Οι νέες εικόνες θα μπουν στη συλλογή',
   'journey.studio.uploading': 'Μεταφόρτωση {done} από {total}',
   'journey.studio.dropFilesHere': 'Αφήστε για να προσθέσετε τις εικόνες',
-  'journey.studio.videosSkipped': '{count} βίντεο παραλείφθηκαν. Ένα βιβλίο περιέχει εικόνες.',
+  'journey.studio.videosSkipped': '{count} βίντεο παραλείφθηκαν. Ένα βιβλίο περιέχει μόνο εικόνες.',
+  'journey.studio.videosSkipped.one': '{count} βίντεο παραλείφθηκε. Ένα βιβλίο περιέχει μόνο εικόνες.',
   'journey.studio.fillPage': 'Γέμισμα σελίδας',
   'journey.studio.fillSpread': 'Γέμισμα δισέλιδου',
   'journey.studio.fillHint':
@@ -663,6 +676,7 @@ const journey: TranslationStrings = {
   'journey.suggestions.restore': 'Επαναφορά των απορριμμένων προτάσεων',
   'journey.suggestions.restoreCount': 'Απορριμμένες προτάσεις ({count})',
   'journey.suggestions.restored': 'Επέστρεψαν {count} προτάσεις',
+  'journey.suggestions.restored.one': 'Επέστρεψε {count} πρόταση',
   'journey.detail.addOnThisDay': 'Προσθήκη καταχώρισης σε αυτήν την ημέρα',
   'journey.detail.jumpToDay': 'Μετάβαση στις {date}',
   'journey.detail.searchPlaceholder': 'Αναζήτηση σε αυτό το ταξίδι',

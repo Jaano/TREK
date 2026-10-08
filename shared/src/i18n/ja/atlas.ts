@@ -55,12 +55,12 @@ const atlas: TranslationStrings = {
   'atlas.other': 'その他',
   'atlas.firstVisit': '最初の旅行',
   'atlas.lastVisitLabel': '最後の旅行',
-  'atlas.tripPlural': '旅行',
   'atlas.tripsLabel': '旅行',
   'atlas.placesVisited': '訪問した場所',
   'atlas.planned': '予定',
   'atlas.showPlanned': '予定の国を表示',
   'atlas.plannedFor': '予定日',
   'atlas.antarctica': '南極',
+  'atlas.regionPlacesLabel': 'か所',
 };
 export default atlas;

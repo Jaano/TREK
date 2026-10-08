@@ -21,6 +21,7 @@ const notif: TranslationStrings = {
   'notif.collection_invite.text': '{actor} ti ha invitato a una raccolta',
   'notif.photos_shared.title': 'Foto condivise',
   'notif.photos_shared.text': '{actor} ha condiviso {count} foto in {trip}',
+  'notif.photos_shared.text.one': '{actor} ha condiviso {count} foto in {trip}',
   'notif.collab_message.title': 'Nuovo messaggio',
   'notif.collab_message.text': '{actor} ha inviato un messaggio in {trip}',
   'notif.packing_tagged.title': 'Assegnazione bagagli',

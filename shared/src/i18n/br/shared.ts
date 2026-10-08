@@ -15,6 +15,7 @@ const shared: TranslationStrings = {
   'shared.tabChat': 'Chat',
   'shared.days': 'dias',
   'shared.places': 'lugares',
+  'shared.places.one': 'lugar',
   'shared.unplanned': 'Ainda não planejado',
   'shared.other': 'Outros',
   'shared.totalBudget': 'Custos totais',

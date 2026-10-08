@@ -190,11 +190,11 @@ const roadtrip: TranslationStrings = {
   'roadtrip.poi.noneMatchFilters': 'Không có gì trên đường phù hợp với các bộ lọc này.',
   'roadtrip.poi.foundFiltered': '{count} trong {total} trên đường',
   'roadtrip.poi.truncated':
-    'Có {count} đoạn nhiều hơn mức một phản hồi chứa được — thu hẹp hành lang để xem phần còn lại.',
+    '{count} đoạn có nhiều kết quả hơn mức một phản hồi chứa được. Thu hẹp hành lang để xem phần còn lại.',
   'roadtrip.poi.search': 'Tìm kiếm',
   'roadtrip.poi.searching': 'Đang tìm {done}/{total}',
   'roadtrip.poi.capped': 'Lộ trình dài — chỉ đoạn đầu được tìm kiếm.',
-  'roadtrip.poi.partial': 'Không tìm được {count} đoạn — tìm kiếm địa điểm không phản hồi.',
+  'roadtrip.poi.partial': 'Không thể tìm kiếm ở {count} đoạn. Tìm kiếm địa điểm không phản hồi.',
   'roadtrip.poi.failed': 'Tìm kiếm địa điểm hiện không phản hồi.',
   'roadtrip.poi.empty': 'Chọn thứ bạn cần rồi tìm.',
   'roadtrip.poi.add': 'Thêm',

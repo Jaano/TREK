@@ -29,7 +29,9 @@ const map: TranslationStrings = {
   'map.overview.hide': 'Masquer tout le voyage',
   'map.overview.total': 'Distance totale',
   'map.attribution': 'Crédits de la carte',
-  'map.overview.unrouted': '{count} étape(s) n’ont pas pu être calculées, les distances sont incomplètes.',
-  'map.overview.dayUnrouted': '{count} étape(s) de cette journée n’ont pas pu être calculées',
+  'map.overview.unrouted': '{count} étapes n’ont pas pu être calculées, les distances sont donc incomplètes.',
+  'map.overview.unrouted.one': '{count} étape n’a pas pu être calculée, les distances sont donc incomplètes.',
+  'map.overview.dayUnrouted': '{count} étapes de cette journée n’ont pas pu être calculées',
+  'map.overview.dayUnrouted.one': '{count} étape de cette journée n’a pas pu être calculée',
 };
 export default map;

@@ -126,7 +126,7 @@ describe('ImportFromTripModal', () => {
     expect([...body.source_place_ids].sort()).toEqual([11, 12]);
 
     await waitFor(() => expect(screen.getByText('2 places added')).toBeInTheDocument());
-    expect(screen.getByText(/1 were already on the list/)).toBeInTheDocument();
+    expect(screen.getByText(/1 was already on the list and stayed as it was/)).toBeInTheDocument();
     expect(onImported).toHaveBeenCalled();
   });
 

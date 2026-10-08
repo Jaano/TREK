@@ -155,7 +155,6 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': '正在讀取你的記錄…',
   'dawarich.atlas.empty': '你的記錄中沒有 TREK 尚未收錄的國家。',
   'dawarich.atlas.cities': '{count} 個城市',
-  'dawarich.atlas.citiesOne': '1 座城市',
   'dawarich.atlas.accept': '新增 {count} 個國家',
   'dawarich.atlas.accepted': '已新增 {count} 個國家',
   'dawarich.atlas.unresolved': 'TREK 無法將這些對應到國家：{names}。',
@@ -172,9 +171,8 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.metersAway': '{meters} 公尺外',
   'dawarich.bucket.kilometersAway': '{km} 公里外',
   'dawarich.bucket.rule': '在 {meters} 公尺內停留 {minutes} 分鐘以上，才算實現心願。',
+  'dawarich.journey.dayStays.other': '來自 Dawarich 的 {count} 個停留點',
 
-  'dawarich.journey.dayStays.one': '來自 Dawarich 的 1 個停留',
-  'dawarich.journey.dayStays.other': '來自 Dawarich 的 {count} 個停留',
 };
 
 export default dawarich;

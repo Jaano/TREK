@@ -107,7 +107,7 @@ describe('TransitSearchPanel', () => {
     // Local Berlin times, U2 badge, 1 transfer.
     expect(await screen.findByText(/08:30 – 09:00/)).toBeInTheDocument()
     expect(screen.getByText('U2')).toBeInTheDocument()
-    expect(screen.getByText('1 transfers')).toBeInTheDocument()
+    expect(screen.getByText('1 transfer')).toBeInTheDocument()
   })
 
   it('FE-PLANNER-TRANSIT-003: adding a route builds a transport payload with local times + endpoints', async () => {

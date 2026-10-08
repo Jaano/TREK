@@ -224,7 +224,7 @@ describe('MPackingListTab', () => {
 
     openActions()
     fireEvent.click(screen.getByRole('button', { name: 'packing.applyTemplate' }))
-    expect(screen.getByText('12 admin.packingTemplates.items')).toBeInTheDocument()
+    expect(screen.getByText('12 admin.packingTemplates.items:12')).toBeInTheDocument()
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Beach trip/ })) })
 
     // The visibility follows the Shared|My-list toggle so the items land where

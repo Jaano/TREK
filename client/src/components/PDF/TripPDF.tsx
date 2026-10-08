@@ -915,11 +915,11 @@ export async function downloadTripPDF({ trip, days, places, assignments: allStor
     <div class="cover-stats">
       <div>
         <div class="cover-stat-num">${sorted.length}</div>
-        <div class="cover-stat-lbl">${escHtml(tr('dashboard.days'))}</div>
+        <div class="cover-stat-lbl">${escHtml(tr('dashboard.days', { count: sorted.length }))}</div>
       </div>
       <div>
         <div class="cover-stat-num">${places?.length || 0}</div>
-        <div class="cover-stat-lbl">${escHtml(tr('dashboard.places'))}</div>
+        <div class="cover-stat-lbl">${escHtml(tr('dashboard.places', { count: places?.length || 0 }))}</div>
       </div>
       <div>
         <div class="cover-stat-num">${totalAssigned}</div>

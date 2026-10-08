@@ -16,6 +16,7 @@ const dawarich: TranslationStrings = {
   'dawarich.syncEnabledHint': 'Desactivat vol dir que TREK només llegeix Dawarich quan tu l’hi demanes.',
   'dawarich.test.button': 'Prova la connexió',
   'dawarich.test.success': 'Connectat. S’han trobat {count} estades en els darrers 30 dies.',
+  'dawarich.test.success.one': 'Connectat. S’ha trobat {count} estada en els darrers 30 dies.',
   'dawarich.test.failed': 'No s’ha pogut contactar amb Dawarich.',
   'dawarich.syncNow': 'Comprova-ho ara',
   'dawarich.connected': 'Connectat',
@@ -30,6 +31,7 @@ const dawarich: TranslationStrings = {
   'dawarich.toast.saveError': 'No s’ha pogut desar la connexió',
   'dawarich.toast.disconnected': 'Dawarich desconnectat',
   'dawarich.toast.synced': 'S’han trobat {count} estades noves',
+  'dawarich.toast.synced.one': 'S’ha trobat {count} estada nova',
   'dawarich.toast.syncError': 'No s’ha pogut llegir Dawarich',
   'dawarich.toast.syncRunning': 'Ja hi ha una comprovació en curs',
   'dawarich.toast.acceptError': 'No s’ha pogut afegir això',
@@ -81,6 +83,7 @@ const dawarich: TranslationStrings = {
 
   'dawarich.suggestions.title': 'Des de Dawarich',
   'dawarich.suggestions.pending': '{count} pendents',
+  'dawarich.suggestions.pending.one': '{count} pendent',
   'dawarich.suggestions.loading': 'S’està llegint Dawarich…',
   'dawarich.suggestions.notConnected': 'Connecta Dawarich a la configuració per veure aquí les teves estades.',
   'dawarich.suggestions.unavailable': 'No s’ha pogut llegir Dawarich.',
@@ -143,7 +146,9 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.alreadyVisited': 'Ja marcat',
   'dawarich.bucket.confirm': 'Marca’n {count}',
   'dawarich.bucket.confirmed': '{count} desitjos marcats',
+  'dawarich.bucket.confirmed.one': '{count} desig marcat',
   'dawarich.bucket.skipped': '{count} entrades no tenen coordenades i no s’han pogut comprovar.',
+  'dawarich.bucket.skipped.one': '{count} entrada no té coordenades i no s’ha pogut comprovar.',
   'dawarich.bucket.truncated': 'Només s’han comprovat les primeres entrades. Torna-ho a executar per a la resta.',
   'dawarich.bucket.visitedFrom': 'Marcat a partir dels teus enregistraments de Dawarich',
   'dawarich.bucket.clearVisit': 'Desfés',
@@ -156,9 +161,11 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': 'S’estan llegint els teus enregistraments…',
   'dawarich.atlas.empty': 'Els teus enregistraments no mostren cap país que TREK no tingui ja.',
   'dawarich.atlas.cities': '{count} ciutats',
-  'dawarich.atlas.citiesOne': '1 ciutat',
+  'dawarich.atlas.cities.one': '{count} ciutat',
   'dawarich.atlas.accept': 'Afegeix {count} països',
+  'dawarich.atlas.accept.one': 'Afegeix {count} país',
   'dawarich.atlas.accepted': '{count} països afegits',
+  'dawarich.atlas.accepted.one': '{count} país afegit',
   'dawarich.atlas.unresolved': 'TREK no ha pogut associar això a cap país: {names}.',
   'dawarich.atlas.source': 'Des de Dawarich',
   'dawarich.atlas.range': 'S’ha mirat de {from} a {to}',
@@ -169,13 +176,14 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.tab.countries': 'Països',
   'dawarich.atlas.window': 'S’han revisat els darrers 12 mesos.',
   'dawarich.selected': '{count} seleccionats',
+  'dawarich.selected.one': '{count} seleccionat',
   'dawarich.again': 'Tornar a comprovar',
   'dawarich.bucket.metersAway': 'a {meters} m',
   'dawarich.bucket.kilometersAway': 'a {km} km',
   'dawarich.bucket.rule': 'Un desig es considera assolit a menys de {meters} m i després de {minutes} minuts al lloc.',
-
-  'dawarich.journey.dayStays.one': '1 estada de Dawarich',
   'dawarich.journey.dayStays.other': '{count} estades de Dawarich',
+  'dawarich.journey.dayStays.one': '{count} estada de Dawarich',
+
 };
 
 export default dawarich;

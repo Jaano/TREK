@@ -68,7 +68,7 @@ const common: TranslationStrings = {
   'common.datepicker.dialog': 'Selettore di date',
   'common.datepicker.clearDate': 'Cancella data',
   'common.errorTitle': 'Qualcosa è andato storto',
-  'common.errorBody': 'Questa parte dell\'app ha smesso di funzionare. I tuoi dati sono al sicuro.',
+  'common.errorBody': "Questa parte dell'app ha smesso di funzionare. I tuoi dati sono al sicuro.",
   'common.errorPanelTitle': 'Impossibile mostrare questa sezione',
   'common.errorPanelBody': 'Il resto della pagina funziona ancora.',
   'common.errorRetry': 'Riprova',

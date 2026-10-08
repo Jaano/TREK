@@ -125,7 +125,7 @@ export function BagCard({ bag, bagItems, totalWeight, pct, tripId, tripMembers, 
         <div style={{ height: '100%', borderRadius: 99, background: bag.color, width: `${pct}%`, transition: 'width 0.3s' }} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 5 }}>
-        <span style={{ fontSize: sz.count, color: 'var(--text-faint)' }}>{bagItems.length} {t('admin.packingTemplates.items')}</span>
+        <span style={{ fontSize: sz.count, color: 'var(--text-faint)' }}>{bagItems.length} {t('admin.packingTemplates.items', { count: bagItems.length })}</span>
         <span style={{ fontSize: sz.weight, color: 'var(--text-muted)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3, fontVariantNumeric: 'tabular-nums' }}>
           {totalWeight >= 1000 ? `${(totalWeight / 1000).toFixed(1)} kg` : `${totalWeight} g`}
           {editingLimit && canEdit ? (

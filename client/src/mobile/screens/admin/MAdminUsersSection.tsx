@@ -37,7 +37,7 @@ export default function MAdminUsersSection({ admin, t, locale }: MAdminUsersSect
         <div className="mb-1 flex items-center gap-2">
           <span className="text-[0.875rem] font-extrabold text-m-ink">{t('admin.tabs.users')}</span>
           <span className="font-geist text-[0.625rem] font-bold text-m-faint">
-            {users.length} {t('admin.stats.users').toLowerCase()}
+            {users.length} {t('admin.stats.users', { count: users.length })}
           </span>
           <MAdminButton className="ms-auto" onClick={() => setShowCreateUser(true)}>
             <UserPlus size={12} strokeWidth={2.2} />

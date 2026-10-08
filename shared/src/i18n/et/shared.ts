@@ -14,6 +14,7 @@ const shared: TranslationStrings = {
   'shared.tabChat': 'Vestlus',
   'shared.days': 'päeva',
   'shared.places': 'kohta',
+  'shared.places.one': 'koht',
   'shared.unplanned': 'Veel planeerimata',
   'shared.other': 'Muu',
   'shared.totalBudget': 'Kulud kokku',

@@ -111,6 +111,7 @@ const oauth: TranslationStrings = {
   'oauth.scope.settings:write.description': 'Canviar unitats, format d’hora, idioma, moneda per defecte i pàgina d’inici. Mai les claus API desades',
   'oauth.scope.group.plugins': 'Connectors',
   'oauth.scope.plugins:use.label': 'Executar eines de connectors',
-  'oauth.scope.plugins:use.description': 'Permet que aquest client cridi eines publicades pels connectors que un administrador ha instal·lat i aprovat. Cada connector actua amb els permisos que ja tenia concedits, no amb els àmbits d\'aquest testimoni',
+  'oauth.scope.plugins:use.description':
+    "Permet que aquest client cridi eines publicades pels connectors que un administrador ha instal·lat i aprovat. Cada connector actua amb els permisos que ja tenia concedits, no amb els àmbits d'aquest testimoni",
 };
 export default oauth;

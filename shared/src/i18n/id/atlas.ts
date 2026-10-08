@@ -44,7 +44,7 @@ const atlas: TranslationStrings = {
   'atlas.streak': 'Rentetan',
   'atlas.years': 'tahun',
   'atlas.yearsInRow': 'tahun berturut-turut',
-  'atlas.tripsIn': 'perjalanan ke',
+  'atlas.tripsIn': 'perjalanan pada',
   'atlas.since': 'sejak',
   'atlas.europe': 'Eropa',
   'atlas.asia': 'Asia',
@@ -55,12 +55,12 @@ const atlas: TranslationStrings = {
   'atlas.other': 'Lainnya',
   'atlas.firstVisit': 'Perjalanan pertama',
   'atlas.lastVisitLabel': 'Perjalanan terakhir',
-  'atlas.tripPlural': 'Perjalanan',
   'atlas.tripsLabel': 'Perjalanan',
   'atlas.placesVisited': 'Tempat dikunjungi',
   'atlas.planned': 'Direncanakan',
   'atlas.showPlanned': 'Tampilkan negara yang direncanakan',
   'atlas.plannedFor': 'Direncanakan untuk',
   'atlas.antarctica': 'Antarktika',
+  'atlas.regionPlacesLabel': 'tempat',
 };
 export default atlas;

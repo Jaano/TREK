@@ -123,7 +123,7 @@ const budget: TranslationStrings = {
   'costs.payersUnbalanced': '支払者の金額の合計は {amount} である必要があります',
   'costs.splitBetween': '均等に分割する相手',
   'costs.pickSomeone': '分割する相手を少なくとも1人選んでください。',
-  'costs.splitSummary': '{count}人で分割 · 各{amount}',
+  'costs.splitSummary': '{count}人で負担 · 1人あたり{amount}',
   'costs.cat.accommodation': '宿泊',
   'costs.cat.food': '飲食',
   'costs.cat.groceries': '食料品',
@@ -194,6 +194,6 @@ const budget: TranslationStrings = {
   'costs.deleteReceipt': 'レシートを削除',
   'costs.viewReceipt': 'レシートを表示',
   'costs.receiptLeftBehind':
-    '保存に失敗し、アップロード済みの領収書が {count} 件残っています。ファイルタブで削除してください。',
+    '保存に失敗し、アップロード済みのレシートが{count}件残っています。「ファイル」タブで削除してください。',
 };
 export default budget;

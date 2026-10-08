@@ -398,7 +398,7 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'AirTrail đã lưu kết nối',
   'settings.airtrail.toast.saveError': 'Không thể lưu kết nối',
   'settings.airtrail.test.button': 'Kiểm tra kết nối',
-  'settings.airtrail.test.success': 'Đã kết nối — đã tìm thấy {count} chuyến bay',
+  'settings.airtrail.test.success': 'Đã kết nối. Tìm thấy {count} chuyến bay',
   'settings.airtrail.test.failed': 'Kết nối không thành công',
   'settings.aiParsing.title': 'Phân tích bằng AI',
   'settings.aiParsing.hint':

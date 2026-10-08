@@ -3,11 +3,13 @@ import type { TranslationStrings } from '../types';
 const dashboard: TranslationStrings = {
   'dashboard.title': 'Τα Ταξίδια μου',
   'dashboard.subtitle.loading': 'Φόρτωση των ταξιδιών...',
-  'dashboard.subtitle.trips': '{count} ταξίδια ({archived} αρχειοθετημένα)',
+  'dashboard.subtitle.trips': '{count} ταξίδια (αρχειοθετημένα: {archived})',
+  'dashboard.subtitle.trips.one': '{count} ταξίδι (αρχειοθετημένα: {archived})',
   'dashboard.subtitle.empty': 'Ξεκινήστε το πρώτο σας ταξίδι',
   'dashboard.subtitle.activeOne': '{count} ενεργό ταξίδι',
   'dashboard.subtitle.activeMany': '{count} ενεργά ταξίδια',
   'dashboard.subtitle.archivedSuffix': ' · {count} αρχειοθετημένα',
+  'dashboard.subtitle.archivedSuffix.one': ' · {count} αρχειοθετημένο',
   'dashboard.newTrip': 'Νέο Ταξίδι',
   'dashboard.gridView': 'Προβολή στοιχείων',
   'dashboard.listView': 'Προβολή λίστας',
@@ -28,10 +30,13 @@ const dashboard: TranslationStrings = {
   'dashboard.shared': 'Κοινοποιημένο',
   'dashboard.sharedBy': 'Κοινοποιήθηκε από {name}',
   'dashboard.days': 'Ημέρες',
+  'dashboard.days.one': 'Ημέρα',
   'dashboard.places': 'Τόποι',
+  'dashboard.places.one': 'Τόπος',
+  'dashboard.pass.places': 'Τόποι',
   'dashboard.members': 'Μέλη',
   'dashboard.card.buddies': 'Μέλη',
-  'dashboard.card.buddies.one': 'Buddy', // en-fallback
+  'dashboard.card.buddies.one': 'Μέλος',
   'dashboard.archive': 'Αρχειοθήκευση',
   'dashboard.copyTrip': 'Αντιγραφή',
   'dashboard.copySuffix': 'αντιγραφή',
@@ -45,7 +50,8 @@ const dashboard: TranslationStrings = {
   'dashboard.status.today': 'Σήμερα',
   'dashboard.status.tomorrow': 'Αύριο',
   'dashboard.status.past': 'Παρελθόν',
-  'dashboard.status.daysLeft': '{count} μέρες έμειναν',
+  'dashboard.status.daysLeft': 'Απομένουν {count} ημέρες',
+  'dashboard.status.daysLeft.one': 'Απομένει {count} ημέρα',
   'dashboard.toast.loadError': 'Αποτυχία φόρτωσης ταξιδιών',
   'dashboard.loadErrorBanner':
     'Δεν ήταν δυνατή η σύνδεση με τον διακομιστή. Τα ταξίδια σας είναι ασφαλή — δοκιμάστε ξανά.',
@@ -141,6 +147,7 @@ const dashboard: TranslationStrings = {
   'dashboard.mobile.liveNow': 'Ζωντανά Τώρα',
   'dashboard.mobile.tripProgress': 'Πρόοδος ταξιδιού',
   'dashboard.mobile.daysLeft': '{count} ημέρες ακόμα',
+  'dashboard.mobile.daysLeft.one': '{count} ημέρα ακόμα',
   'dashboard.mobile.places': 'Τοποθεσίες',
   'dashboard.mobile.buddies': 'Συνταξιδιώτες',
   'dashboard.mobile.newTrip': 'Νέο Ταξίδι',
@@ -158,7 +165,9 @@ const dashboard: TranslationStrings = {
   'dashboard.mobile.startsToday': 'Ξεκινά σήμερα',
   'dashboard.mobile.tomorrow': 'Αύριο',
   'dashboard.mobile.inDays': 'Σε {count} ημέρες',
+  'dashboard.mobile.inDays.one': 'Σε {count} ημέρα',
   'dashboard.mobile.inMonths': 'Σε {count} μήνες',
+  'dashboard.mobile.inMonths.one': 'Σε {count} μήνα',
   'dashboard.mobile.spotlightDayOf': 'Ημέρα {day} από {total}',
   'dashboard.mobile.spotlightDays': '{count} ημέρες',
   'dashboard.mobile.spotlightDays.one': '{count} ημέρα',
@@ -176,21 +185,22 @@ const dashboard: TranslationStrings = {
   'dashboard.hero.badgeRecent': 'RECENT', // en-fallback
   'dashboard.hero.tripDates': 'Trip dates', // en-fallback
   'dashboard.hero.noDates': 'No dates set', // en-fallback
-  'dashboard.hero.travelers': '{count} travelers', // en-fallback
-  'dashboard.hero.travelers.one': '{count} traveler', // en-fallback
-  'dashboard.hero.destinations': '{count} destinations', // en-fallback
-  'dashboard.hero.destinations.one': '{count} destination', // en-fallback
-  'dashboard.hero.dayUnit': 'days', // en-fallback
-  'dashboard.hero.dayUnit.one': 'day', // en-fallback
-  'dashboard.hero.daysLeft': 'Days left', // en-fallback
-  'dashboard.hero.daysLeft.one': 'Day left', // en-fallback
+  'dashboard.hero.travelers': '{count} ταξιδιώτες',
+  'dashboard.hero.travelers.one': '{count} ταξιδιώτης',
+  'dashboard.hero.destinations': '{count} προορισμοί',
+  'dashboard.hero.destinations.one': '{count} προορισμός',
+  'dashboard.hero.dayUnit': 'ημέρες',
+  'dashboard.hero.dayUnit.one': 'ημέρα',
+  'dashboard.hero.daysLeft': 'Ημέρες απομένουν',
+  'dashboard.hero.daysLeft.one': 'Ημέρα απομένει',
   'dashboard.hero.lastDay': 'Last day', // en-fallback
   'dashboard.hero.untilStart': 'Until start', // en-fallback
   'dashboard.hero.startsIn': 'Trip starts in', // en-fallback
   'dashboard.atlas.countriesVisited': 'Atlas · Countries visited', // en-fallback
   'dashboard.atlas.ofTotal': 'of {total}', // en-fallback
   'dashboard.atlas.tripsTotal': 'Trips total', // en-fallback
-  'dashboard.atlas.placesMapped': '{count} places mapped', // en-fallback
+  'dashboard.atlas.placesMapped': '{count} τοποθεσίες στον χάρτη',
+  'dashboard.atlas.placesMapped.one': '{count} τοποθεσία στον χάρτη',
   'dashboard.atlas.daysTraveled': 'Days traveled', // en-fallback
   'dashboard.atlas.daysUnit': 'days', // en-fallback
   'dashboard.atlas.acrossAllTrips': 'across all trips', // en-fallback

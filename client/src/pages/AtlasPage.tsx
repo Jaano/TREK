@@ -146,7 +146,7 @@ function AtlasPageDesktop(): React.ReactElement {
               labelId="atlas-places-title"
               onClose={() => setPlacesOpen(false)}
               title={resolveName(selectedCountry)}
-              sub={`${countryDetail.places.length} ${t('atlas.places')}`}
+              sub={`${countryDetail.places.length} ${t('atlas.places', { count: countryDetail.places.length })}`}
             />
           )}
         >
@@ -161,9 +161,9 @@ function AtlasPageDesktop(): React.ReactElement {
             {/* Countries highlighted */}
             <div className="text-center px-3 py-1.5 rounded-xl" style={{ background: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }}>
               <p className="text-3xl font-black tabular-nums leading-none text-content">{stats.totalCountries}</p>
-              <p className="text-[9px] font-semibold uppercase tracking-wide mt-1 text-content-faint">{t('atlas.countries')}</p>
+              <p className="text-[9px] font-semibold uppercase tracking-wide mt-1 text-content-faint">{t('atlas.countries', { count: stats.totalCountries })}</p>
             </div>
-            {[[regionsVisited, t('atlas.regions')], [stats.totalTrips, t('atlas.trips')], [stats.totalPlaces, t('atlas.places')], [stats.totalCities || 0, t('atlas.cities')], [stats.totalDays, t('atlas.days')]].map(([v, l], i) => (
+            {[[regionsVisited, t('atlas.regions', { count: regionsVisited })], [stats.totalTrips, t('atlas.trips', { count: stats.totalTrips })], [stats.totalPlaces, t('atlas.places', { count: stats.totalPlaces })], [stats.totalCities || 0, t('atlas.cities', { count: stats.totalCities || 0 })], [stats.totalDays, t('atlas.days', { count: stats.totalDays })]].map(([v, l], i) => (
               <div key={i} className="text-center px-1">
                 <p className="text-xl font-black tabular-nums leading-none text-content">{v}</p>
                 <p className="text-[9px] font-semibold uppercase tracking-wide mt-1 text-content-faint">{l}</p>
@@ -752,7 +752,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
       <div className="flex flex-col justify-center px-5 py-4 mx-2 my-2 rounded-xl" style={{ background: bg(0.08) }}>
         <div className="flex items-baseline gap-1.5">
           <span className="text-5xl font-black tabular-nums leading-none" style={{ color: tp }}>{stats.totalCountries}</span>
-          <span className="text-sm font-medium" style={{ color: tm }}>{t('atlas.countries')}</span>
+          <span className="text-sm font-medium" style={{ color: tm }}>{t('atlas.countries', { count: stats.totalCountries })}</span>
         </div>
         {(stats.totalCountriesPlanned || 0) > 0 && (
           <span className="text-[9px] font-semibold mt-1.5 uppercase tracking-wide whitespace-nowrap" style={{ color: tf }}>
@@ -761,7 +761,7 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
         )}
       </div>
       {/* Other stats */}
-      {[[regionsVisited, t('atlas.regions')], [stats.totalTrips, t('atlas.trips')], [stats.totalPlaces, t('atlas.places')], [stats.totalCities || 0, t('atlas.cities')], [stats.totalDays, t('atlas.days')]].map(([v, l], i) => (
+      {[[regionsVisited, t('atlas.regions', { count: regionsVisited })], [stats.totalTrips, t('atlas.trips', { count: stats.totalTrips })], [stats.totalPlaces, t('atlas.places', { count: stats.totalPlaces })], [stats.totalCities || 0, t('atlas.cities', { count: stats.totalCities || 0 })], [stats.totalDays, t('atlas.days', { count: stats.totalDays })]].map(([v, l], i) => (
         <div key={i} className="flex flex-col items-center justify-center px-3 py-5 shrink-0">
           <span className="text-2xl font-black tabular-nums leading-none" style={{ color: tp }}>{v}</span>
           <span className="text-[9px] font-semibold mt-1.5 uppercase tracking-wide whitespace-nowrap" style={{ color: tf }}>{l}</span>
@@ -835,13 +835,13 @@ function SidebarContent({ data, stats, regionsVisited, countryRegions, onOpenPla
                     <button type="button" onClick={onOpenPlaces}
                       className="inline-flex items-center gap-1 whitespace-nowrap rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums transition-opacity hover:opacity-75"
                       style={{ background: bg(0.1), color: tp }}>
-                      <MapPin size={9} />{countryDetail.places.length} {t('atlas.places')}
+                      <MapPin size={9} />{countryDetail.places.length} {t('atlas.places', { count: countryDetail.places.length })}
                     </button>
                   </Tooltip>
                 )}
                 {[
-                  [countryDetail.trips.length, t('atlas.tripPlural')],
-                  ...(countryRegions > 0 ? [[countryRegions, t('atlas.regions')] as const] : []),
+                  [countryDetail.trips.length, t('atlas.tripsLabel', { count: countryDetail.trips.length })],
+                  ...(countryRegions > 0 ? [[countryRegions, t('atlas.regions', { count: countryRegions })] as const] : []),
                 ].map(([n, label]) => (
                   <span key={label} className="whitespace-nowrap rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums" style={{ background: bg(0.06), color: tf }}>
                     {n} {label}

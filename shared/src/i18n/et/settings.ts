@@ -405,7 +405,8 @@ const settings: TranslationStrings = {
   'settings.airtrail.toast.saved': 'AirTraili ühendus salvestatud',
   'settings.airtrail.toast.saveError': 'Ühenduse salvestamine ebaõnnestus',
   'settings.airtrail.test.button': 'Testi ühendust',
-  'settings.airtrail.test.success': 'Ühendatud — leiti {count} lendu',
+  'settings.airtrail.test.success': 'Ühendatud. Leiti {count} lendu',
+  'settings.airtrail.test.success.one': 'Ühendatud. Leiti {count} lend',
   'settings.airtrail.test.failed': 'Ühendus ebaõnnestus',
   'settings.aiParsing.title': 'Tehisintellektiga töötlemine',
   'settings.aiParsing.hint':
@@ -548,6 +549,7 @@ const settings: TranslationStrings = {
   'settings.offline.storage.tripOff': 'Salvestamata',
   'settings.offline.storage.tripFinished': 'Lõppenud. Salvestatakse ainult siis, kui lubad.',
   'settings.offline.notice.stored': 'Seadmesse salvestati {count} reisi',
+  'settings.offline.notice.stored.one': 'Seadmesse salvestati {count} reis',
   'settings.offline.notice.nothing': 'Pole midagi salvestada. Luba reisid, mida soovid säilitada.',
   'settings.offline.notice.busy': 'Sünkroonimine juba käib. Proovi hetke pärast uuesti.',
   'settings.offline.notice.offline': 'Ühendus puudub. Reiside võrguühenduseta salvestamiseks loo ühendus.',

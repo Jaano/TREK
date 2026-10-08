@@ -301,7 +301,7 @@ describe('MAdminPluginsPanel — toolbar', () => {
       [registryEntry({ id: 'zulu', name: 'Zulu', latest: '2.0.0' }), registryEntry({ id: 'alpha', name: 'Alpha', latest: '1.0.0' })],
     );
     render(<MAdminPluginsPanel />);
-    await screen.findByText('1 updates available for your plugins.');
+    await screen.findByText('1 update available for your plugins.');
 
     fireEvent.click(screen.getByTitle('Sort: Name'));
     fireEvent.click(await screen.findByRole('button', { name: 'Updates first' }));
@@ -318,7 +318,7 @@ describe('MAdminPluginsPanel — toolbar', () => {
       [registryEntry({ id: 'alpha', name: 'Alpha', latest: '2.0.0' }), registryEntry({ id: 'zulu', name: 'Zulu', latest: '9.0.0' })],
     );
     render(<MAdminPluginsPanel />);
-    await screen.findByText('1 updates available for your plugins.');
+    await screen.findByText('1 update available for your plugins.');
 
     fireEvent.click(screen.getByTitle('Status: All'));
     fireEvent.click(await screen.findByRole('button', { name: 'Update available' }));
@@ -932,7 +932,7 @@ describe('MAdminPluginsPanel — updates and consent', () => {
     );
     render(<MAdminPluginsPanel />);
 
-    expect(await screen.findByText('1 updates available for your plugins.')).toBeInTheDocument();
+    expect(await screen.findByText('1 update available for your plugins.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /update → v2\.0\.0/i })).toBeInTheDocument();
   });
 

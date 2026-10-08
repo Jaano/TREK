@@ -299,7 +299,7 @@ export default function MJourneyDetail() {
       if (failed.length > 0) {
         toast.error(t('journey.editor.uploadPartialFailed', { failed: String(failed.length), total: String(normalized.length) }))
       } else {
-        toast.success(t('journey.photosUploaded', { count: String(files.length) }))
+        toast.success(t('journey.photosUploaded', { count: files.length }))
       }
       loadJourney(Number(id))
     } catch (err) {

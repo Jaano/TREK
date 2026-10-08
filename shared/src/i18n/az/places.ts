@@ -18,6 +18,7 @@ const places: TranslationStrings = {
   'places.importAllSkipped': 'Bütün məkanlar artıq bu səyahətdə mövcuddur.',
 
   'places.gpxImported': 'GPX-dən {count} məkan idxal edildi',
+  'places.gpxImported.one': 'GPX-dən {count} məkan idxal edildi',
   'places.gpxImportTypes': 'Nələri idxal etmək istəyirsiniz?',
   'places.gpxImportWaypoints': 'Yol nöqtələri',
   'places.gpxImportRoutes': 'Marşrutlar',
@@ -30,10 +31,13 @@ const places: TranslationStrings = {
   'places.kmlImportNoneSelected': 'İdxal etmək üçün ən azı bir növ seçin.',
 
   'places.selectionCount': '{count} seçilib',
+  'places.selectionCount.one': '{count} seçilib',
   'places.deleteSelected': 'Seçilənləri sil',
   'places.changeCategory': 'Kateqoriyanı dəyiş',
   'places.categoryChanged': '{count} məkan yeniləndi',
+  'places.categoryChanged.one': '{count} məkan yeniləndi',
   'places.kmlKmzImported': 'KMZ/KML-dən {count} məkan idxal edildi',
+  'places.kmlKmzImported.one': 'KMZ/KML-dən {count} məkan idxal edildi',
   'places.urlResolved': 'Məkan URL-dən idxal edildi',
   'places.importList': 'Siyahı idxalı',
   'places.kmlKmzSummaryValues': 'Məkan nişanları: {total} • İdxal edildi: {created} • Buraxıldı: {skipped}',
@@ -44,9 +48,11 @@ const places: TranslationStrings = {
   'places.googleDirHint':
     'İstiqamət linki də istifadə edilə bilər: dayanacaqlar avtomobillə hərəkət sırasına uyğun məkanlara çevriləcək.',
   'places.googleListImported': '“{list}” siyahısından {count} məkan idxal edildi',
+  'places.googleListImported.one': '“{list}” siyahısından {count} məkan idxal edildi',
   'places.googleListError': 'Google Maps siyahısını idxal etmək mümkün olmadı',
   'places.naverListHint': 'Bütün məkanları idxal etmək üçün paylaşılan Naver Maps siyahısının linkini daxil edin.',
   'places.naverListImported': '“{list}” siyahısından {count} məkan idxal edildi',
+  'places.naverListImported.one': '“{list}” siyahısından {count} məkan idxal edildi',
   'places.naverListError': 'Naver Maps siyahısını idxal etmək mümkün olmadı',
 
   'places.viewDetails': 'Təfərrüatlara bax',
@@ -77,6 +83,7 @@ const places: TranslationStrings = {
   'places.search': 'Məkanları axtarın...',
   'places.allCategories': 'Bütün kateqoriyalar',
   'places.categoriesSelected': 'kateqoriya',
+  'places.categoriesSelected.one': 'kateqoriya',
   'places.clearFilter': 'Filtri təmizlə',
   'places.count': '{count} məkan',
   'places.count.one': '{count} məkan',

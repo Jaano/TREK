@@ -103,7 +103,7 @@ const storage: TranslationStrings = {
   'storage.sync.error': '同步失敗：{error}',
   'storage.sync.prompt': '現有物件尚未複製 — 要立即同步嗎？',
   'storage.sync.dismiss': '關閉',
-  'storage.usage.line': '{objects} 個物件 · {size}',
+  'storage.usage.line': '{count} 個物件 · {size}',
   'storage.usage.computed': '用量已計算：{age}',
   'storage.usage.never': '尚未計算用量',
   'storage.usage.refresh': '重新整理',

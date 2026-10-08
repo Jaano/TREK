@@ -72,7 +72,7 @@ const docsync: TranslationStrings = {
   'docsync.state.local_deleted': 'Удалено в TREK',
   'docsync.state.scope_drift': 'Перемещено за пределы папки',
 
-  'docsync.conflict.resolve': "Решить: {count}",
+  'docsync.conflict.resolve': 'Решить: {count}',
 
   'docsync.conflict.title': 'Изменились обе копии',
   'docsync.conflict.keepTrek': 'Оставить версию TREK',

@@ -7,6 +7,7 @@ const inspector: TranslationStrings = {
   'inspector.showHours': 'Mostrar horário de funcionamento',
   'inspector.files': 'Arquivos',
   'inspector.filesCount': '{count} arquivos',
+  'inspector.filesCount.one': '{count} arquivo',
   'inspector.removeFromDay': 'Remover do dia',
   'inspector.remove': 'Remover',
   'inspector.addToDay': 'Adicionar ao dia',

@@ -293,7 +293,7 @@ const admin: TranslationStrings = {
   'admin.packingTemplates.namePlaceholder': 'Tên mẫu (ví dụ: Kỳ nghỉ ở bãi biển)',
   'admin.packingTemplates.empty': 'Chưa có mẫu nào được tạo',
   'admin.packingTemplates.items': 'mặt hàng',
-  'admin.packingTemplates.categories': 'Thể loại',
+  'admin.packingTemplates.categories': 'danh mục',
   'admin.packingTemplates.itemName': 'Tên mặt hàng',
   'admin.packingTemplates.itemCategory': 'Loại',
   'admin.packingTemplates.categoryName': 'Tên danh mục (ví dụ: Quần áo)',
@@ -396,6 +396,65 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.db:read:trips': 'Đọc các chuyến đi mà người dùng hiện tại có quyền truy cập',
   'admin.plugins.perm.db:read:users':
     'Đọc thông tin hồ sơ cơ bản (tên, ảnh đại diện — không bao giờ là thông tin đăng nhập)',
+  'admin.plugins.perm.db:read:costs': 'Đọc chi phí (mục ngân sách) mà người dùng hiện tại có quyền truy cập',
+  'admin.plugins.perm.db:read:packing':
+    'Đọc danh sách đóng gói của các chuyến đi mà người dùng hiện tại có quyền truy cập',
+  'admin.plugins.perm.db:write:packing':
+    'Tạo, chỉnh sửa và xóa mặt hàng đóng gói trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.weather:read': 'Đọc dự báo thời tiết đã lưu cache của máy chủ (theo tọa độ)',
+  'admin.plugins.perm.db:read:categories': 'Đọc danh sách danh mục địa điểm chung của hệ thống',
+  'admin.plugins.perm.db:read:tags': 'Đọc các thẻ riêng của người dùng hiện tại',
+  'admin.plugins.perm.db:write:tags': 'Tạo, chỉnh sửa và xóa các thẻ riêng của người dùng hiện tại',
+  'admin.plugins.perm.db:read:todos': 'Đọc việc cần làm của các chuyến đi mà người dùng hiện tại có quyền truy cập',
+  'admin.plugins.perm.db:write:todos':
+    'Tạo, chỉnh sửa và xóa việc cần làm trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:atlas':
+    'Đánh dấu các quốc gia và khu vực đã ghé thăm và quản lý danh sách mong muốn của người dùng hiện tại (cần add-on Atlas)',
+  'admin.plugins.perm.db:write:vacay':
+    'Bật hoặc tắt ngày nghỉ phép và ngày lễ của công ty trong kế hoạch đang dùng của người dùng hiện tại (cần add-on Vacay)',
+  'admin.plugins.perm.db:write:journal':
+    'Tạo, chỉnh sửa, xóa mục nhật ký và đính kèm ảnh vào chúng trên các hành trình mà người dùng hiện tại có quyền chỉnh sửa (cần add-on Journey)',
+  'admin.plugins.perm.db:write:collections':
+    'Tạo và chỉnh sửa bộ sưu tập, lưu địa điểm vào đó, theo vai trò của người dùng hiện tại trong bộ sưu tập (cần add-on Collections)',
+  'admin.plugins.perm.db:write:files':
+    'Đính kèm tệp vào các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa (tối đa 10MB, từ chối các phần mở rộng bị chặn) và quản lý liên kết của tệp',
+  'admin.plugins.perm.db:write:collab':
+    'Đăng ghi chú, bình chọn và tin nhắn trò chuyện trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa (cần add-on Collab)',
+  'admin.plugins.perm.db:write:members':
+    'Thêm người dùng vào chuyến đi (tức là cấp quyền truy cập chuyến đi); chỉ được phép khi người dùng hiện tại có quyền quản lý thành viên',
+  'admin.plugins.perm.notify:send':
+    'Gửi thông báo (chuông trong ứng dụng + email/ntfy) đến người dùng hiện tại hoặc một chuyến đi mà họ tham gia; không bao giờ gửi cho người nhận tùy ý',
+  'admin.plugins.perm.ai:invoke':
+    'Chạy nhà cung cấp AI do quản trị viên cấu hình (tạo văn bản + trích xuất tài liệu) thay mặt người dùng hiện tại; plugin không bao giờ giữ khóa API',
+  'admin.plugins.perm.oauth:client':
+    'Kết nối với dịch vụ bên thứ ba thay mặt bạn qua OAuth do máy chủ làm trung gian (máy chủ giữ token, plugin không bao giờ thấy chúng)',
+  'admin.plugins.perm.db:read:files': 'Đọc tệp của các chuyến đi mà người dùng hiện tại có quyền truy cập',
+  'admin.plugins.perm.db:read:journal': 'Đọc nhật ký du lịch của người dùng hiện tại (cần add-on Journey)',
+  'admin.plugins.perm.db:read:atlas':
+    'Đọc các quốc gia và khu vực đã ghé thăm của người dùng hiện tại (cần add-on Atlas)',
+  'admin.plugins.perm.db:read:vacay': 'Đọc kế hoạch kỳ nghỉ của người dùng hiện tại (cần add-on Vacay)',
+  'admin.plugins.perm.db:read:daynotes':
+    'Đọc ghi chú theo ngày của các chuyến đi mà người dùng hiện tại có quyền truy cập',
+  'admin.plugins.perm.db:read:collections':
+    'Đọc các bộ sưu tập địa điểm đã lưu của người dùng hiện tại (cần add-on Collections)',
+  'admin.plugins.perm.db:write:costs':
+    'Tạo chi phí (mục ngân sách) trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:places':
+    'Thêm, chỉnh sửa và xóa địa điểm trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:days':
+    'Thêm, chỉnh sửa và xóa ngày trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:itinerary':
+    'Gán và gỡ địa điểm trong các ngày của chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:trips':
+    'Chỉnh sửa thông tin chuyến đi (tiêu đề, ngày, tiền tệ…) trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:reservations':
+    'Tạo, chỉnh sửa và xóa đặt chỗ trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:accommodations':
+    'Tạo, chỉnh sửa và xóa chỗ ở (các khoảng lưu trú) trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:write:daynotes':
+    'Tạo, chỉnh sửa và xóa ghi chú theo ngày trên các chuyến đi mà người dùng hiện tại có quyền chỉnh sửa',
+  'admin.plugins.perm.db:meta':
+    'Gắn dữ liệu riêng tư của plugin vào các chuyến đi, địa điểm và ngày mà người dùng hiện tại có quyền truy cập',
   'admin.plugins.perm.ws:broadcast:trip': 'Gửi cập nhật thời gian thực đến các thành viên',
   'admin.plugins.perm.ws:broadcast:user': 'Gửi cập nhật thời gian thực đến từng người dùng',
   'admin.plugins.perm.hook:photo-provider': 'Cung cấp ảnh cho tính năng Ảnh',
@@ -437,6 +496,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:notification-channel': 'Gửi thông báo của bạn qua một kênh bổ sung',
   'admin.plugins.perm.events:subscribe':
     'Phản hồi các sự kiện hoạt động cốt lõi (chỉ tên sự kiện + chuyến đi, không bao giờ là nội dung)',
+  'admin.plugins.perm.jobs:run':
+    'Chạy các tác vụ nền đã khai báo theo lịch (không có ngữ cảnh người dùng, không thể đọc dữ liệu người dùng)',
   'admin.plugins.perm.http:outbound': 'Gửi yêu cầu ra ngoài đến các máy chủ đã khai báo',
   'admin.plugins.perm.db:read:collab':
     'Đọc ghi chú, bình chọn và tin nhắn trò chuyện của các chuyến đi mà người dùng hiện tại có quyền truy cập (cần add-on Collab)',

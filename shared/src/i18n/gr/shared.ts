@@ -15,6 +15,7 @@ const shared: TranslationStrings = {
   'shared.tabChat': 'Συνομιλία',
   'shared.days': 'ημέρες',
   'shared.places': 'τόποι',
+  'shared.places.one': 'τόπος',
   'shared.unplanned': 'Δεν έχει προγραμματιστεί ακόμη',
   'shared.other': 'Άλλα',
   'shared.totalBudget': 'Συνολικά Κόστη',

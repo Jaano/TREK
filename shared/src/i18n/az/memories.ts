@@ -22,6 +22,7 @@ const memories: TranslationStrings = {
   'memories.reviewHint':
     'Paylaşılmasını istəmədiyiniz fotolara klikləyin.',
   'memories.shareCount': '{count} foto paylaş',
+  'memories.shareCount.one': '{count} foto paylaş',
 
   'memories.providerUrl': 'Server URL-i',
   'memories.providerApiKey': 'API açarı',
@@ -64,6 +65,7 @@ const memories: TranslationStrings = {
   'memories.selectHint': 'Seçmək üçün fotolara toxunun.',
   'memories.selected': 'seçilib',
   'memories.addSelected': '{count} foto əlavə et',
+  'memories.addSelected.one': '{count} foto əlavə et',
   'memories.alreadyAdded': 'Əlavə edilib',
 
   'memories.private': 'Şəxsi',

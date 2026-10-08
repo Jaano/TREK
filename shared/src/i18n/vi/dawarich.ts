@@ -79,7 +79,7 @@ const dawarich: TranslationStrings = {
   'dawarich.badge.sourceMissing': 'Không còn trong Dawarich',
 
   'dawarich.suggestions.title': 'Từ Dawarich',
-  'dawarich.suggestions.pending': '{count} đang chờ bạn',
+  'dawarich.suggestions.pending': '{count} điểm lưu trú đang chờ bạn',
   'dawarich.suggestions.loading': 'Đang đọc Dawarich…',
   'dawarich.suggestions.notConnected': 'Hãy kết nối Dawarich trong Cài đặt để xem các điểm lưu trú của bạn ở đây.',
   'dawarich.suggestions.unavailable': 'Không đọc được Dawarich.',
@@ -155,7 +155,6 @@ const dawarich: TranslationStrings = {
   'dawarich.atlas.loading': 'Đang đọc các bản ghi của bạn…',
   'dawarich.atlas.empty': 'Các bản ghi của bạn không có quốc gia nào mà TREK chưa biết.',
   'dawarich.atlas.cities': '{count} thành phố',
-  'dawarich.atlas.citiesOne': '1 thành phố',
   'dawarich.atlas.accept': 'Thêm {count} quốc gia',
   'dawarich.atlas.accepted': 'Đã thêm {count} quốc gia',
   'dawarich.atlas.unresolved': 'TREK không khớp được những mục này với quốc gia nào: {names}.',
@@ -172,9 +171,8 @@ const dawarich: TranslationStrings = {
   'dawarich.bucket.metersAway': 'cách {meters} m',
   'dawarich.bucket.kilometersAway': 'cách {km} km',
   'dawarich.bucket.rule': 'Một điều ước được tính là đã đến khi trong vòng {meters} m và sau {minutes} phút tại chỗ.',
+  'dawarich.journey.dayStays.other': '{count} điểm lưu trú từ Dawarich',
 
-  'dawarich.journey.dayStays.one': '1 điểm dừng từ Dawarich',
-  'dawarich.journey.dayStays.other': '{count} điểm dừng từ Dawarich',
 };
 
 export default dawarich;

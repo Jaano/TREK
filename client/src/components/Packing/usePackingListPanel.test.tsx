@@ -621,7 +621,7 @@ describe('usePackingList — templates, import and signals', () => {
     await act(async () => { await result.current.handleApplyTemplate(2) })
 
     expect(useTripStore.getState().packingItems).toContainEqual(fresh)
-    expect(toastSpy).toHaveBeenCalledWith('1 items added from template', 'success', undefined)
+    expect(toastSpy).toHaveBeenCalledWith('1 item added from template', 'success', undefined)
     expect(result.current.showTemplateDropdown).toBe(false)
     expect(result.current.applyingTemplate).toBe(false)
   })
@@ -700,7 +700,7 @@ describe('usePackingList — templates, import and signals', () => {
     await act(async () => { await result.current.handleBulkImport() })
 
     expect(useTripStore.getState().packingItems).toContainEqual(imported)
-    expect(toastSpy).toHaveBeenCalledWith('1 items imported', 'success', undefined)
+    expect(toastSpy).toHaveBeenCalledWith('1 item imported', 'success', undefined)
     expect(result.current.importText).toBe('')
     expect(result.current.showImportModal).toBe(false)
   })

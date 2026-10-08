@@ -1150,7 +1150,7 @@ describe('CostsPanel — filtering the ledger', () => {
     fireEvent.click(within(screen.getByRole('menu')).getByRole('button', { name: 'Sun, Jun 15' }))
 
     expect(screen.getByText('Sunday, June 15')).toBeInTheDocument()
-    expect(screen.getByText('1 expenses')).toBeInTheDocument()
+    expect(screen.getByText('1 expense')).toBeInTheDocument()
     expect(screen.getByText('Dinner')).toBeInTheDocument()
     expect(screen.queryByText('Taxi')).not.toBeInTheDocument()
     // The 16th carries the payment, so it is filtered out with the day too.

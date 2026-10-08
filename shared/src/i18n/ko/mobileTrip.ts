@@ -67,9 +67,8 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.rtFromStart': '구간 시작부터',
   'mobileTrip.rtNoneAhead': '앞쪽 도로에는 아무것도 없습니다. 구간 전체로 찾아보세요.',
   'mobileTrip.rtNoneOnStage': '이 구간에는 그런 곳이 없습니다.',
-  'mobileTrip.rtTruncated.one': '1개 구간은 한 번의 답에 담기지 않았습니다. 종류를 줄이면 나머지도 볼 수 있습니다.',
   'mobileTrip.rtTruncated.other':
-    '{count}개 구간은 한 번의 답에 담기지 않았습니다. 종류를 줄이면 나머지도 볼 수 있습니다.',
+    '{count}개 구간은 결과가 너무 많아 한 번에 모두 표시하지 못했습니다. 종류를 줄이면 나머지도 볼 수 있습니다.',
   'mobileTrip.rtNoDay': '선택된 날이 없습니다',
   'mobileTrip.rtNoDayHint': '지도에 전체 여행이 표시됩니다. 위에서 날짜를 눌러 해당 일정을 확인하세요.',
 };
