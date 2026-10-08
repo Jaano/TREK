@@ -17,6 +17,7 @@ const logMock = vi.hoisted(() => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logWar
 vi.mock('../../../src/nest/audit/audit-log.logger', () => logMock);
 
 import { SqliteDatabaseBackup } from '../../../src/nest/backup/sqlite-database-backup';
+import { DatabaseConnectionLostError } from '../../../src/nest/database/database-backup.interface';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
 import type { DatabaseLifecycle } from '../../../src/nest/database/database-lifecycle.service';
 import { withRequestContext } from '../../../src/nest/database/request-context';
@@ -213,5 +214,36 @@ describe('SqliteDatabaseBackup', () => {
       expect(lifecycle.reopen).toHaveBeenCalledTimes(1);
       expect(readLabel(liveFile)).toBe('live');
     });
+
+    it('SQLBK-013: a swap that fails and a reopen that fails too both go up, so the lost connection is not hidden', async () => {
+      writeDb(liveFile, 'live');
+      const reopenFailure = new Error('database is locked');
+      lifecycle.reopen.mockRejectedValueOnce(reopenFailure);
+
+      const thrown = await portWith(maintenanceStub())
+        .replace(path.join(dir, 'does-not-exist.db'))
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+
+      expect(thrown).toBeInstanceOf(DatabaseConnectionLostError);
+      const lost = thrown as DatabaseConnectionLostError;
+      expect((lost.swapError as Error).message).toMatch(/ENOENT/);
+      expect(lost.cause).toBe(reopenFailure);
+      expect(lost.message).toMatch(/could not be replaced \(ENOENT.*\) and the connection could not be reopened \(database is locked\)\. Restart the server\.$/);
+      expect(lifecycle.reopen).toHaveBeenCalledTimes(1);
+      expect(readLabel(liveFile)).toBe('live');
+    });
+  });
+
+  it('SQLBK-014: the lost-connection error names values that are not Errors as they are', () => {
+    const lost = new DatabaseConnectionLostError('disk gone', 42);
+    expect(lost.name).toBe('DatabaseConnectionLostError');
+    expect(lost.swapError).toBe('disk gone');
+    expect(lost.cause).toBe(42);
+    expect(lost.message).toBe(
+      'The database could not be replaced (disk gone) and the connection could not be reopened (42). Restart the server.',
+    );
   });
 });

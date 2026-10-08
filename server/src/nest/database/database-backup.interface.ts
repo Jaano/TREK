@@ -58,7 +58,8 @@ export interface DatabaseBackupStrategy {
    * Puts `source` (a database this strategy wrote or verified) in place of the
    * live one, then reopens the connection, migrating it forward. The reopen
    * runs even when the swap throws, so the process is never left without a
-   * connection; the swap's error is rethrown after it.
+   * connection; the swap's error is rethrown after it. When that reopen fails
+   * as well, it throws a `DatabaseConnectionLostError` instead, carrying both.
    *
    * Resolves with `reopenError` set when the new database landed but the
    * connection could not be reopened: the caller reports "restart required".
@@ -74,3 +75,25 @@ export interface DatabaseBackupRefusal {
 
 /** Injection token for the active `DatabaseBackupStrategy`. */
 export const DATABASE_BACKUP = Symbol('DATABASE_BACKUP');
+
+const describeError = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * Thrown by `replace` when the swap failed and the reopen that always follows
+ * failed too. The process is left without a database connection until a
+ * restart, so this must reach a log line rather than read as an ordinary failed
+ * swap. `swapError` is why the swap failed; `cause` is the reopen failure.
+ */
+export class DatabaseConnectionLostError extends Error {
+  constructor(
+    readonly swapError: unknown,
+    reopenError: unknown,
+  ) {
+    super(
+      `The database could not be replaced (${describeError(swapError)}) and the connection could not be reopened ` +
+        `(${describeError(reopenError)}). Restart the server.`,
+      { cause: reopenError },
+    );
+    this.name = 'DatabaseConnectionLostError';
+  }
+}

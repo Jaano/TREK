@@ -3,7 +3,7 @@ import path from 'path';
 import { RequestContext, type EntityManager } from '@mikro-orm/core';
 import { readEnv } from '../app-config';
 import { DemoRepository, type DemoAdminCredentialsRow, type DemoInstanceKeyRow } from '../db/repositories/DemoRepository';
-import type { DatabaseBackupStrategy } from '../nest/database/database-backup.interface';
+import { DatabaseConnectionLostError, type DatabaseBackupStrategy } from '../nest/database/database-backup.interface';
 
 const dataDir = path.join(__dirname, '../../data');
 const baselinePath = path.join(dataDir, 'travel-baseline.db');
@@ -84,11 +84,14 @@ async function resetDemoUser(database: DatabaseBackupStrategy): Promise<void> {
   }
 
   // Close, swap the baseline in, reopen. The reopen runs even when the swap
-  // fails, so the instance is never left without a connection.
+  // fails, so the instance is never left without a connection. A failed swap
+  // alone is logged and the reset skipped; a failed swap whose reopen failed as
+  // well goes up to the tick's log line, because the connection is gone.
   let reopenError: unknown;
   try {
     ({ reopenError } = await database.replace(baselinePath));
   } catch (e: unknown) {
+    if (e instanceof DatabaseConnectionLostError) throw e;
     console.error('[Demo Reset] Failed to restore baseline:', e instanceof Error ? e.message : e);
     return;
   }

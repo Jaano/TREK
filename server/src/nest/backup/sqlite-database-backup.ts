@@ -3,7 +3,11 @@ import path from 'path';
 import { Injectable } from '@nestjs/common';
 import { MaintenanceRepository } from '../../db/repositories/MaintenanceRepository';
 import { DatabaseLifecycle } from '../database/database-lifecycle.service';
-import type { DatabaseBackupRefusal, DatabaseBackupStrategy } from '../database/database-backup.interface';
+import {
+  DatabaseConnectionLostError,
+  type DatabaseBackupRefusal,
+  type DatabaseBackupStrategy,
+} from '../database/database-backup.interface';
 import { logInfo, logWarn } from '../audit/audit-log.logger';
 import { checkBackupDatabase } from './backup-archive';
 
@@ -81,7 +85,8 @@ export class SqliteDatabaseBackup implements DatabaseBackupStrategy {
   async replace(source: string): Promise<{ reopenError: unknown }> {
     const dest = this.lifecycle.file;
     this.lifecycle.close();
-    let reopenError: unknown = null;
+    let swapFailed = false;
+    let swapError: unknown = null;
     try {
       // Copy to a temp file on the SAME filesystem, drop the old sidecars (they
       // belong to the database being replaced and would corrupt the new one),
@@ -96,15 +101,25 @@ export class SqliteDatabaseBackup implements DatabaseBackupStrategy {
         }
       }
       fs.renameSync(tmp, dest);
-    } finally {
-      // Reopening must always run, even when the swap threw, so the process is
-      // never left without a connection. A reopen failure is reported, not
-      // thrown: the files already landed and the caller has to say "restart".
-      try {
-        await this.lifecycle.reopen();
-      } catch (err) {
-        reopenError = err;
-      }
+    } catch (err) {
+      swapFailed = true;
+      swapError = err;
+    }
+
+    // Reopening must always run, even when the swap threw, so the process is
+    // never left without a connection. After a swap that landed, a reopen
+    // failure is reported, not thrown: the files are in place and the caller
+    // has to say "restart". After a swap that failed, both errors go up
+    // together, because the swap's alone would hide that the connection is gone.
+    let reopenError: unknown = null;
+    try {
+      await this.lifecycle.reopen();
+    } catch (err) {
+      reopenError = err;
+    }
+    if (swapFailed) {
+      if (reopenError) throw new DatabaseConnectionLostError(swapError, reopenError);
+      throw swapError;
     }
     return { reopenError };
   }

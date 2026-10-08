@@ -32,6 +32,7 @@ import { SqliteDatabaseBackup } from '../../../src/nest/backup/sqlite-database-b
 import type { DatabaseLifecycle } from '../../../src/nest/database/database-lifecycle.service';
 import type { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
 import { resetDemoUser, saveBaseline } from '../../../src/demo/demo-reset';
+import { DatabaseConnectionLostError } from '../../../src/nest/database/database-backup.interface';
 
 const LIVE_DB = path.join(path.sep, 'srv', 'trek', 'custom-name.db');
 const BASELINE = path.resolve(__dirname, '..', '..', '..', 'data', 'travel-baseline.db');
@@ -127,5 +128,17 @@ describe('demo-reset DB path', () => {
     lifecycle.reopen.mockRejectedValueOnce(new Error('database is locked'));
 
     await expect(withCtx(() => resetDemoUser(database))).rejects.toThrow('database is locked');
+  });
+
+  it('DEMORESET-007: a swap that fails with a reopen that fails too is not swallowed either', async () => {
+    copyFileSync.mockImplementation(() => { throw new Error('EACCES'); });
+    lifecycle.reopen.mockRejectedValueOnce(new Error('database is locked'));
+
+    // The instance has no connection now: the tick has to log that, so the
+    // reset does not end as a plain "failed to restore" line.
+    await expect(withCtx(() => resetDemoUser(database))).rejects.toBeInstanceOf(DatabaseConnectionLostError);
+
+    expect(console.error).not.toHaveBeenCalledWith('[Demo Reset] Failed to restore baseline:', expect.anything());
+    expect(renameSync).not.toHaveBeenCalled();
   });
 });
