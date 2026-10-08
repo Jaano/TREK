@@ -1,7 +1,4 @@
 {
-  "src/db/document-provider-seed.ts": {
-    "insert-or": 2
-  },
   "src/db/entities/IdempotencyKeys.entity.ts": {
     "strftime": 1
   },

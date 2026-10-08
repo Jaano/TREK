@@ -273,12 +273,11 @@ export default tseslint.config(
       // outside the app's ORM and connection.
       'src/nest/plugins/host/plugin-data.service.ts',
       // Frozen forever (ruling 7): invoked from inside numbered, already-shipped
-      // MikroORM migrations — rewriting either onto the ORM would change what a
+      // MikroORM migrations: rewriting it onto the ORM would change what a
       // re-run of an old migration against an old schema snapshot produces,
       // which is never done to a landed migration. Not Plan 4's or any future
       // plan's to touch.
       'src/db/reseat-booked-nights.ts',
-      'src/db/document-provider-seed.ts',
     ],
     rules: {
       'no-restricted-imports': [

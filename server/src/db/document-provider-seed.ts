@@ -1,12 +1,11 @@
-import type Database from 'better-sqlite3';
 
 /**
  * The five document providers and the fields their connection form asks for.
  *
- * Shared by the migration that introduces the tables and by `seeds.ts`, so a
- * fresh install and an upgraded one end up with the same rows. Both call sites
- * use INSERT OR IGNORE, which is what lets an operator rename or re-sort a row
- * without a later boot undoing it.
+ * Shared by the migration that introduces the tables and by
+ * DocumentProviderSeeder, so a fresh install and an upgraded one end up with
+ * the same rows. Both insert without overwriting an existing row, which is what
+ * lets an operator rename or re-sort a row without a later boot undoing it.
  *
  * `label` and `hint` are i18n key suffixes, never display text: the client
  * resolves them as `docsync.<label>`, the same way the photo provider form
@@ -337,31 +336,3 @@ export const DOCUMENT_PROVIDER_FIELDS: ProviderFieldRow[] = [
     sort_order: 5,
   },
 ];
-
-export function seedDocumentProviders(db: Database.Database): void {
-  const insertProvider = db.prepare(
-    'INSERT OR IGNORE INTO document_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, ?, ?, 0, ?)',
-  );
-  for (const p of DOCUMENT_PROVIDERS) insertProvider.run(p.id, p.name, p.description, p.icon, p.sort_order);
-
-  const insertField = db.prepare(
-    `INSERT OR IGNORE INTO document_provider_fields
-       (provider_id, field_key, label, input_type, placeholder, hint, required, secret, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  for (const f of DOCUMENT_PROVIDER_FIELDS) {
-    insertField.run(
-      f.provider_id,
-      f.field_key,
-      f.label,
-      f.input_type,
-      f.placeholder,
-      f.hint,
-      f.required,
-      f.secret,
-      f.sort_order,
-    );
-  }
-}
-
-export const DOCUMENT_PROVIDER_SEED_IDS = DOCUMENT_PROVIDERS.map((p) => p.id);
