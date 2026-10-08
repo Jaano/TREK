@@ -190,6 +190,7 @@ import { createTestPushSubscriptionsRepo } from './notifications-repos';
 import { createTestToursRepo } from './tours-repos';
 import { createTestBudgetSettlementsRepo } from './budget-repos';
 import { MaintenanceRepository } from '../../src/db/repositories/MaintenanceRepository';
+import { createTestSessionsService, createTestUserSessionsRepo } from './sessions';
 
 /**
  * Hand-wired counterpart of the boot-time discovery in McpRegistryService,
@@ -240,6 +241,8 @@ export async function createMcpTestRegistry(): Promise<McpRegistry> {
     new AllowedFileTypesService(appSettings), await createTestUnitOfWork(db),
     appSettings, usersRepo, inviteTokensRepo, mcpTokensRepoForAuth, oauthTokensRepo, webauthnCredentialsRepoForAuth, passwordResetTokensRepo,
     await createTestPushSubscriptionsRepo(db),
+    await createTestUserSessionsRepo(db),
+    await createTestSessionsService(db),
   );
   const queryHelpersService = new QueryHelpersService(await createTestTagsRepo(db), await createTestPlaceRatingsRepo(db), await createTestAssignmentParticipantsRepo(db));
   const daysService = new DaysService(

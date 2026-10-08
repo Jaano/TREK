@@ -12,6 +12,7 @@ import { EphemeralTokenService } from '../auth/ephemeral-token.service';
 import { verifyJwtAndLoadUser } from '../auth/jwt-verify';
 import { EntityManager } from '@mikro-orm/core';
 import { Users } from '../../db/entities/Users.entity';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
 import type { User } from '../../types';
 import type { TripAccess } from '../../db/repositories/Trips.repository';
 import { Trips } from '../../db/entities/Trips.entity';
@@ -168,7 +169,7 @@ export class FilesService {
       // Use the shared helper so the password_version gate applies here too;
       // previously this bypassed the check and stolen download tokens stayed
       // valid across a password reset.
-      const user = await verifyJwtAndLoadUser(jwtToken, this.em.getRepository(Users));
+      const user = await verifyJwtAndLoadUser(jwtToken, this.em.getRepository(Users), this.em.getRepository(UserSessions));
       if (!user) return { error: 'Invalid or expired token', status: 401 };
       return { userId: user.id };
     }

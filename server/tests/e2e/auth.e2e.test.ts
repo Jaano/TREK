@@ -45,7 +45,7 @@ import { createUser } from '../helpers/factories';
 import { encrypt_api_key } from '../../src/nest/common/crypto/apiKeyCrypto';
 import { resetRateLimits } from '../helpers/test-db';
 import { AuthModule } from '../../src/nest/auth/auth.module';
-import { AuthService } from '../../src/nest/auth/auth.service';
+import { SessionsService } from '../../src/nest/sessions/sessions.service';
 import { SessionRenewalInterceptor } from '../../src/nest/auth/session-renewal.interceptor';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
@@ -74,7 +74,7 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
     nest.useGlobalPipes(new ZodValidationPipe());
     // Mirror the production APP_INTERCEPTOR: sliding session renewal (#1927).
     // Inert for the harness's exp-less tokens and freshly issued logins.
-    nest.useGlobalInterceptors(new SessionRenewalInterceptor(moduleRef.get(AuthService)));
+    nest.useGlobalInterceptors(new SessionRenewalInterceptor(moduleRef.get(SessionsService)));
     await nest.init();
     return nest;
   }

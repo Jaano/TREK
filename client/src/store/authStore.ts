@@ -24,7 +24,11 @@ const LOGOUT_FLUSH_MS = 5000
 
 interface AuthResponse {
   user: User
-  token: string
+  /**
+   * @deprecated Still in the body for API clients that read it; the session is
+   * the httpOnly cookie the same response sets. Nothing here reads it.
+   */
+  token?: string
 }
 
 export type LoginResult = AuthResponse | { mfa_required: true; mfa_token: string }

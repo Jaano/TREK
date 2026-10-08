@@ -10,6 +10,8 @@ import { willDropSecureCookie } from '../common/cookie';
 import type { User } from '../../types';
 import { Public } from './public.decorator';
 import { MfaExempt } from './mfa-policy.guard';
+import { extractToken, verifiedSessionClaims } from './jwt-verify';
+import { SessionsService, sessionClientFrom } from '../sessions/sessions.service';
 
 const WINDOW = 15 * 60 * 1000;
 const LOGIN_MIN_LATENCY_MS = 350;
@@ -23,11 +25,21 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Express route (server/src/routes/auth.ts): the same per-IP rate-limit buckets
  * + limits, the constant-time login/forgot latency padding, the enumeration-safe
  * forgot response, the audit writes and the JWT httpOnly cookie set/clear via
- * the shared cookie service (no new token shape).
+ * the shared cookie service.
+ *
+ * The `token` in the login, register, demo-login and MFA bodies is deprecated:
+ * the httpOnly cookie is the session, and the web app has never read the field.
+ * It stays for API clients that took it as a bearer token, and the API docs
+ * mark it; nothing here or in the client relies on it.
  */
 @Controller('api/auth')
 export class AuthPublicController {
-  constructor(private readonly auth: AuthService, private readonly rl: RateLimitService, private readonly audit: AuditService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly rl: RateLimitService,
+    private readonly audit: AuditService,
+    private readonly sessions: SessionsService,
+  ) {}
 
   private async limit(bucket: string, req: Request, max: number): Promise<void> {
     if (!(await this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now()))) {
@@ -70,7 +82,7 @@ export class AuthPublicController {
   @HttpCode(201)
   async register(@Body() body: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.limit('login', req, 10);
-    const result = await this.auth.registerUser(body);
+    const result = await this.auth.registerUser(body, sessionClientFrom(req));
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -85,7 +97,7 @@ export class AuthPublicController {
   async login(@Body() body: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.limit('login', req, 10);
     const started = Date.now();
-    const result = await this.auth.loginUser(body);
+    const result = await this.auth.loginUser(body, sessionClientFrom(req));
     if (result.auditAction) {
       await this.audit.writeAudit({ userId: result.auditUserId ?? null, action: result.auditAction, ip: getClientIp(req), details: result.auditDetails });
     }
@@ -160,7 +172,7 @@ export class AuthPublicController {
   @HttpCode(200)
   async verifyMfaLogin(@Body() body: MfaVerifyLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.limit('mfa', req, 5);
-    const result = await this.auth.verifyMfaLogin(body);
+    const result = await this.auth.verifyMfaLogin(body, sessionClientFrom(req));
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -172,7 +184,11 @@ export class AuthPublicController {
   @Post('logout')
   @Public('clearing a cookie must work even with an expired token, or the client cannot sign out')
   @HttpCode(200)
-  logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    // Ends the session itself, not only this browser's copy of it: a copy of
+    // the token anywhere else stops working too. Only a token whose signature
+    // checks out names the session to end; anything else just loses its cookie.
+    await this.sessions.endSession(verifiedSessionClaims(extractToken(req)));
     this.auth.clearAuthCookie(res, req);
     return { success: true };
   }

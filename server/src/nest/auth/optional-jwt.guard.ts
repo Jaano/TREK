@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { EntityManager } from '@mikro-orm/core';
 import type { Request } from 'express';
 import { Users } from '../../db/entities/Users.entity';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
 import { extractToken, verifyJwtAndLoadUser } from './jwt-verify';
 
 /**
@@ -20,7 +21,7 @@ export class OptionalJwtGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<Request>();
     const token = extractToken(req);
-    (req as { user: unknown }).user = (token ? await verifyJwtAndLoadUser(token, this.em.getRepository(Users)) : null) || null;
+    (req as { user: unknown }).user = (token ? await verifyJwtAndLoadUser(token, this.em.getRepository(Users), this.em.getRepository(UserSessions)) : null) || null;
     return true;
   }
 }

@@ -101,6 +101,8 @@ import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourney
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import { createTestSessionsService, createTestUserSessionsRepo, sessionRows } from '../../helpers/sessions';
+import { decode as decodeJwt } from 'jsonwebtoken';
 
 // MailerService is injected since the notifications fold — a stub instead of a
 // module mock. sendPasswordResetEmail is the only thing auth reaches for.
@@ -129,6 +131,8 @@ beforeAll(async () => {
   await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb), await createTestOauthTokensRepo(testDb),
   await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
   await createTestPushSubscriptionsRepo(testDb),
+  await createTestUserSessionsRepo(testDb),
+  await createTestSessionsService(testDb),
 );
 });
 
@@ -518,11 +522,11 @@ describe('changePassword — session invalidation', () => {
     const { user, password } = createUser(testDb);
     const stolen = await svc.generateToken({ id: user.id }); // pv=0 at mint time
 
-    expect(await verifyJwtAndLoadUser(stolen, await createTestUsersRepo(testDb))).not.toBeNull();
+    expect(await verifyJwtAndLoadUser(stolen, await createTestUsersRepo(testDb), await createTestUserSessionsRepo(testDb))).not.toBeNull();
 
     await svc.changePassword(user.id, user.email, { current_password: password, new_password: 'New1234!' });
 
-    expect(await verifyJwtAndLoadUser(stolen, await createTestUsersRepo(testDb))).toBeNull(); // invalidated by the pv bump
+    expect(await verifyJwtAndLoadUser(stolen, await createTestUsersRepo(testDb), await createTestUserSessionsRepo(testDb))).toBeNull(); // invalidated by the pv bump
   });
 
   it('AUTH-DB-036d: preserves the remember choice in the re-issued session (#1927)', async () => {
@@ -1266,5 +1270,101 @@ describe('registerUser loses the race for an email', () => {
       error: 'Registration failed. Please try different credentials.',
       status: 409,
     });
+  });
+});
+
+describe('session tracking', () => {
+  const active = (userId: number) => sessionRows(testDb, userId).filter((row) => row.revoked_at === null);
+
+  it('AUTH-SESS-001: a minted token names a new session row whose expiry is the token\'s own', async () => {
+    const { user } = createUser(testDb);
+    const token = await svc.generateToken({ id: user.id }, true, { userAgent: 'x'.repeat(300) });
+    const claims = decodeJwt(token) as { jti: string; exp: number };
+
+    const rows = sessionRows(testDb, user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(claims.jti);
+    expect(rows[0].expires_at).toBe(new Date(claims.exp * 1000).toISOString().slice(0, 19).replace('T', ' '));
+    expect(rows[0].user_agent).toHaveLength(256); // cut like a Web Push device's
+    expect(rows[0].revoked_at).toBeNull();
+  });
+
+  it('AUTH-SESS-002: login records the device it came from', async () => {
+    const { user, password } = createUser(testDb);
+    const result = await svc.loginUser({ email: user.email, password }, { userAgent: 'Firefox/130' });
+    expect(typeof result.token).toBe('string');
+    expect(sessionRows(testDb, user.id).map((row) => row.user_agent)).toEqual(['Firefox/130']);
+  });
+
+  it('AUTH-SESS-003: a revoked session token no longer verifies', async () => {
+    const { user } = createUser(testDb);
+    const token = await svc.generateToken({ id: user.id });
+    expect(await svc.verifyJwtToken(token)).not.toBeNull();
+
+    testDb.prepare("UPDATE user_sessions SET revoked_at = '2026-01-01 00:00:00' WHERE user_id = ?").run(user.id);
+    expect(await svc.verifyJwtToken(token)).toBeNull();
+  });
+
+  it('AUTH-SESS-004: a password change ends every session and hands back a new one for this device', async () => {
+    const { user, password } = createUser(testDb);
+    const laptop = await svc.generateToken({ id: user.id });
+    const phone = await svc.generateToken({ id: user.id });
+
+    const result = await svc.changePassword(user.id, user.email, { current_password: password, new_password: 'New1234!' }, undefined, { userAgent: 'Safari' });
+
+    expect(await svc.verifyJwtToken(laptop)).toBeNull();
+    expect(await svc.verifyJwtToken(phone)).toBeNull();
+    expect(await svc.verifyJwtToken(result.token!)).not.toBeNull();
+    expect(active(user.id).map((row) => row.user_agent)).toEqual(['Safari']);
+  });
+
+  it('AUTH-SESS-005: a password reset ends every session', async () => {
+    const { user } = createUser(testDb);
+    const token = await svc.generateToken({ id: user.id });
+    const issued = await svc.requestPasswordReset(user.email, null);
+
+    expect(await svc.resetPassword({ token: issued.tokenForDelivery!, new_password: 'Fresh123!' })).toEqual({ success: true, userId: user.id });
+    expect(active(user.id)).toEqual([]);
+    expect(await svc.verifyJwtToken(token)).toBeNull();
+  });
+
+  it('AUTH-SESS-006: disabling MFA ends every other session and keeps the one it was done from', async () => {
+    const { user, password } = createUser(testDb);
+    const secret = authenticator.generateSecret();
+    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run('enc:' + secret, user.id);
+    const here = await svc.generateToken({ id: user.id });
+    const elsewhere = await svc.generateToken({ id: user.id });
+    const hereId = (decodeJwt(here) as { jti: string }).jti;
+
+    expect(await svc.disableMfa(user.id, user.email, { password, code: authenticator.generate(secret) }, hereId)).toEqual({ success: true, mfa_enabled: false });
+    expect(await svc.verifyJwtToken(here)).not.toBeNull();
+    expect(await svc.verifyJwtToken(elsewhere)).toBeNull();
+  });
+
+  it('AUTH-SESS-007: a refused MFA disable leaves the sessions alone', async () => {
+    const { user } = createUser(testDb);
+    const secret = authenticator.generateSecret();
+    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run('enc:' + secret, user.id);
+    const token = await svc.generateToken({ id: user.id });
+
+    expect((await svc.disableMfa(user.id, user.email, { password: 'wrong', code: authenticator.generate(secret) })).status).toBe(401);
+    expect(await svc.verifyJwtToken(token)).not.toBeNull();
+  });
+
+  it('AUTH-SESS-008: an MFA login records the device too', async () => {
+    const { user, password } = createUser(testDb);
+    const secret = authenticator.generateSecret();
+    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run('enc:' + secret, user.id);
+    const interstitial = await svc.loginUser({ email: user.email, password });
+
+    const result = await svc.verifyMfaLogin({ mfa_token: interstitial.mfa_token, code: authenticator.generate(secret) }, { userAgent: 'Edge' });
+    expect(await svc.verifyJwtToken(result.token!)).not.toBeNull();
+    expect(sessionRows(testDb, user.id).map((row) => row.user_agent)).toEqual(['Edge']);
+  });
+
+  it('AUTH-SESS-009: register records the first session with its device', async () => {
+    const result = await svc.registerUser({ username: 'sess-reg', email: 'sess-reg@example.test', password: 'Secure123!' }, { userAgent: 'Chrome' });
+    const userId = (decodeJwt(result.token!) as { id: number }).id;
+    expect(sessionRows(testDb, userId).map((row) => row.user_agent)).toEqual(['Chrome']);
   });
 });

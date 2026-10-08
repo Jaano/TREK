@@ -11,6 +11,7 @@ import { PasskeyService } from './passkey.service';
 import { PasskeyRegisterOptionsDto, PasskeyRegisterVerifyDto, PasskeyLoginVerifyDto, PasskeyRenameDto, PasskeyDeleteDto } from './auth.dto';
 import type { User } from '../../types';
 import { MfaExempt } from './mfa-policy.guard';
+import { sessionClientFrom } from '../sessions/sessions.service';
 
 const WINDOW = 15 * 60 * 1000;
 const LOGIN_MIN_LATENCY_MS = 350;
@@ -86,7 +87,7 @@ export class PasskeyController {
   async loginVerify(@Body() body: PasskeyLoginVerifyDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.limit('login', req, 10);
     const started = Date.now();
-    const result = await this.passkeys.passkeyLoginVerify(body);
+    const result = await this.passkeys.passkeyLoginVerify(body, sessionClientFrom(req));
     if (result.auditAction) {
       await this.audit.writeAudit({ userId: result.auditUserId ?? null, action: result.auditAction, ip: getClientIp(req) });
     }

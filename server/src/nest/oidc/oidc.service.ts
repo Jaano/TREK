@@ -7,12 +7,12 @@ import bcrypt from 'bcryptjs';
 import type { Request, Response } from 'express';
 import { InjectRepository } from '@mikro-orm/nestjs';
 import { readEnv, getAppUrl } from '../../app-config';
-import { JWT_SECRET, SESSION_DURATION_SECONDS, SESSION_DURATION_REMEMBER_SECONDS } from '../../config';
 import { User } from '../../types';
 import { decrypt_api_key, maybe_encrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { TripMembershipService } from '../trip-membership/trip-membership.service';
 import { setAuthCookie, RememberOption } from '../common/cookie';
 import { AuthService } from '../auth/auth.service';
+import type { SessionClient } from '../sessions/sessions.service';
 import { UnitOfWork } from '../database/unit-of-work';
 import { logError } from '../audit/audit-log.logger';
 import { safeFetchAdminConfigured } from '../../utils/ssrfGuard';
@@ -460,20 +460,14 @@ export class OidcService implements OnModuleDestroy {
     return base + path;
   }
 
-  async generateToken(user: { id: number }, remember?: boolean): Promise<string> {
-    // Embed the current password_version so an OIDC-issued session is invalidated
-    // by a password change/reset exactly like a password-login session (the auth
-    // middleware compares this `pv` against users.password_version).
-    const pv = (await this.usersRepo.getPasswordVersion(user.id)) ?? 0;
-    // "Remember me" mirrors the password flow: the JWT lifetime matches the
-    // persistent cookie maxAge picked by the cookie service off the same flag,
-    // and the claim lets sliding renewal preserve those semantics.
-    const expiresIn = remember === true ? SESSION_DURATION_REMEMBER_SECONDS : SESSION_DURATION_SECONDS;
-    return jwt.sign(
-      { id: user.id, pv, ...(typeof remember === 'boolean' ? { remember } : {}) },
-      JWT_SECRET,
-      { expiresIn, algorithm: 'HS256' },
-    );
+  /**
+   * The same session token a password login gets, through the one issuer: it
+   * embeds the current password_version (so a password change or reset ends an
+   * SSO session too), takes the "remember me" lifetime and claim, and records
+   * the session so it can be listed and revoked.
+   */
+  async generateToken(user: { id: number }, remember?: boolean, client?: SessionClient): Promise<string> {
+    return this.auth.generateToken({ id: user.id }, remember, client);
   }
 
   // -------------------------------------------------------------------------

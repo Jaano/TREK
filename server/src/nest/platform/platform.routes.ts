@@ -8,7 +8,9 @@ import { withRequestContext } from '../database/request-context';
 import { StorageService } from '../storage/storage.service';
 import { StorageInvalidKeyError, StorageNotFoundError, type StorageCategory } from '../storage/storage.types';
 import { Users } from '../../db/entities/Users.entity';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
 import type { UsersRepository } from '../../db/repositories/Users.repository';
+import type { UserSessionsRepository } from '../../db/repositories/UserSessions.repository';
 import { ShareTokens } from '../../db/entities/ShareTokens.entity';
 import type { ShareTokensRepository } from '../../db/repositories/ShareTokens.repository';
 import { Photos } from '../../db/entities/Photos.entity';
@@ -114,7 +116,15 @@ export function storageStaticHandler(storage: StorageService, category: StorageC
   };
 }
 
-async function servePhoto(storage: StorageService, req: Request, res: Response, users: UsersRepository, shareTokens: ShareTokensRepository, photos: PhotosRepository): Promise<void> {
+async function servePhoto(
+  storage: StorageService,
+  req: Request,
+  res: Response,
+  users: UsersRepository,
+  shareTokens: ShareTokensRepository,
+  photos: PhotosRepository,
+  sessions: UserSessionsRepository,
+): Promise<void> {
   const safeName = path.basename(req.params.filename);
   // Parity: after basename(), the old resolve()+startsWith guard could only
   // fire when the remaining segment was '..' — keep that exact 403.
@@ -146,7 +156,7 @@ async function servePhoto(storage: StorageService, req: Request, res: Response, 
   }
 
   // JWT session path (with pv check).
-  const user = await verifyJwtAndLoadUser(rawToken, users);
+  const user = await verifyJwtAndLoadUser(rawToken, users, sessions);
   if (user) return sendPhoto();
 
   // Share-token path: require the token to cover the exact trip the
@@ -240,7 +250,17 @@ export function applyPlatformUploads(app: express.Application, storage: StorageS
       next(new Error('applyPlatformUploads: no MikroORM available to build a request context for /uploads/photos/*'));
       return;
     }
-    return withRequestContext(orm, () => servePhoto(storage, req, res, orm.em.getRepository(Users), orm.em.getRepository(ShareTokens), orm.em.getRepository(Photos))).catch(next);
+    return withRequestContext(orm, () =>
+      servePhoto(
+        storage,
+        req,
+        res,
+        orm.em.getRepository(Users),
+        orm.em.getRepository(ShareTokens),
+        orm.em.getRepository(Photos),
+        orm.em.getRepository(UserSessions),
+      ),
+    ).catch(next);
   });
 
   // Block direct access to /uploads/files

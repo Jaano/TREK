@@ -29,6 +29,12 @@ Some accounts are flagged as needing a new password: the admin account TREK seed
 
 There is no control in the Admin Panel that flags an existing account. An admin-set password (see [Admin-Users-and-Invites](Admin-Users-and-Invites)) neither raises the flag nor clears it, so a user who already carries it is still asked to choose their own password at the next sign-in.
 
+### Signing out
+
+Logging out ends the session on the server, not only in this browser: the token behind the cookie stops working wherever a copy of it may be. Each sign-in is its own session, so logging out on the laptop leaves the phone signed in.
+
+To end sessions on other devices, the API offers `GET /api/auth/sessions` (the signed-in sessions with their browser and last use), `DELETE /api/auth/sessions/{id}` (end one) and `POST /api/auth/sessions/revoke-others` (end all but this one). The settings screen has no list of sessions yet. Changing the password also signs out every other device. Which other actions end sessions is listed under [Security-Hardening](Security-Hardening#ending-sessions).
+
 ## Registering
 
 The Register form appears under one of these conditions:

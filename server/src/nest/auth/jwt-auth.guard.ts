@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, HttpException, Injectable } from '@nestj
 import { EntityManager } from '@mikro-orm/core';
 import type { Request } from 'express';
 import { Users } from '../../db/entities/Users.entity';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
 import { extractToken, verifyJwtAndLoadUser } from './jwt-verify';
 
 /**
@@ -53,7 +54,7 @@ export class JwtAuthGuard implements CanActivate {
     if (!token) {
       throw new HttpException({ error: 'Access token required', code: 'AUTH_REQUIRED' }, 401);
     }
-    const user = await verifyJwtAndLoadUser(token, this.em.getRepository(Users));
+    const user = await verifyJwtAndLoadUser(token, this.em.getRepository(Users), this.em.getRepository(UserSessions));
     if (!user) {
       throw new HttpException({ error: 'Invalid or expired token', code: 'AUTH_REQUIRED' }, 401);
     }

@@ -21,6 +21,7 @@ import { Users } from '../../db/entities/Users.entity';
 import type { UsersRepository, UserRow } from '../../db/repositories/Users.repository';
 import type { User } from '../../types';
 import { toRowId } from '../common/row-id';
+import type { SessionClient } from '../sessions/sessions.service';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -364,7 +365,7 @@ export class PasskeyService {
     return { options };
   }
 
-  async passkeyLoginVerify(body: { assertionResponse?: unknown }): Promise<{
+  async passkeyLoginVerify(body: { assertionResponse?: unknown }, client?: SessionClient): Promise<{
     error?: string;
     status?: number;
     token?: string;
@@ -437,7 +438,7 @@ export class PasskeyService {
     // A user-verified passkey is phishing-resistant and inherently two-factor
     // (device possession + biometric/PIN), so it mints the real session directly
     // — the SAME path as password and OIDC login (no new token shape).
-    const token = await this.auth.generateToken(user);
+    const token = await this.auth.generateToken(user, undefined, client);
     const userSafe = stripUserForClient(toClientUser(user)) as Record<string, unknown>;
     return { token, user: { ...userSafe, avatar_url: avatarUrl(user) }, auditUserId: Number(user.id) };
   }

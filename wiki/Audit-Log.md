@@ -34,6 +34,15 @@ A request for an account that can actually be reset writes **two** rows: one wit
 | `user.mfa_enable` | MFA enabled on an account |
 | `user.mfa_disable` | MFA disabled on an account |
 
+### Sessions
+
+| Action key | Description |
+|---|---|
+| `user.session_revoke` | A user ended one of their own sessions (resource = the session id) |
+| `user.sessions_revoke_others` | A user ended every session but the current one (`revoked` = how many in details) |
+
+Logging out writes no row, and neither do the sessions a password change, a reset or an MFA change ends along the way: those actions have rows of their own.
+
 ### Passkeys
 
 | Action key | Description |

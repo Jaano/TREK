@@ -60,6 +60,7 @@ import { TripMembers } from './TripMembers.entity';
 import { TripPhotos } from './TripPhotos.entity';
 import { Trips } from './Trips.entity';
 import { UserNoticeDismissals } from './UserNoticeDismissals.entity';
+import { UserSessions } from './UserSessions.entity';
 import { VacayEntries } from './VacayEntries.entity';
 import { VacayPlanMembers } from './VacayPlanMembers.entity';
 import { VacayPlans } from './VacayPlans.entity';
@@ -182,6 +183,7 @@ export class Users {
   trip_photos_collection = new Collection<TripPhotos>(this);
   trips_collection = new Collection<Trips>(this);
   user_notice_dismissals_collection = new Collection<UserNoticeDismissals>(this);
+  user_sessions_collection = new Collection<UserSessions>(this);
   vacay_entries_collection = new Collection<VacayEntries>(this);
   vacay_plan_members_collection = new Collection<VacayPlanMembers>(this);
   vacay_plans_collection = new Collection<VacayPlans>(this);
@@ -321,6 +323,7 @@ export const UsersSchema = defineEntity({
     trip_photos_collection: () => p.oneToMany(TripPhotos).mappedBy('user').hidden(),
     trips_collection: () => p.oneToMany(Trips).mappedBy('user').hidden(),
     user_notice_dismissals_collection: () => p.oneToMany(UserNoticeDismissals).mappedBy('user').hidden(),
+    user_sessions_collection: () => p.oneToMany(UserSessions).mappedBy('user').hidden(),
     vacay_entries_collection: () => p.oneToMany(VacayEntries).mappedBy('user').hidden(),
     vacay_plan_members_collection: () => p.oneToMany(VacayPlanMembers).mappedBy('user').hidden(),
     vacay_plans_collection: () => p.oneToMany(VacayPlans).mappedBy('owner').hidden(),

@@ -21,7 +21,8 @@ A production TREK deployment checklist. All items reference actual TREK configur
 - [ ] Enable two-factor authentication for your admin account. See [Two-Factor-Authentication](Two-Factor-Authentication).
 - [ ] Require MFA for all users if your use case demands it: Admin Panel → Settings → **Require two-factor authentication (2FA)**. Note: you must secure your own admin account first, with either TOTP or a registered passkey — the server refuses the toggle otherwise. A passkey satisfies the policy for everyone else too, so nobody is forced onto TOTP specifically.
 - [ ] Disable open registration if you control who can access the instance. See [Admin-Users-and-Invites](Admin-Users-and-Invites).
-- [ ] Rotate the JWT signing secret if a session may have been leaked: Admin Panel → Settings → Danger Zone → **Rotate** (`POST /api/admin/rotate-jwt-secret`). This invalidates all active sessions immediately, including your own.
+- [ ] If one account's session may have been leaked, end that account's sessions rather than everyone's: the user signs out the other sessions (`POST /api/auth/sessions/revoke-others`) or changes the password, or an admin sets a new password for them. See [Ending sessions](#ending-sessions) below.
+- [ ] Rotate the JWT signing secret if the secret itself may have been leaked: Admin Panel → Settings → Danger Zone → **Rotate** (`POST /api/admin/rotate-jwt-secret`). This invalidates all active sessions immediately, including your own.
 
 ## Session Security
 
@@ -29,6 +30,31 @@ TREK stores sessions as JWTs in an httpOnly `trek_session` cookie (SameSite=Lax)
 
 - [ ] Ensure `FORCE_HTTPS=true` (or `NODE_ENV=production`) so the `trek_session` cookie carries the `secure` flag and is never sent over plain HTTP.
 - [ ] Set `COOKIE_SECURE=false` only as a temporary escape hatch for LAN testing without TLS — do not use in production.
+
+### Ending sessions
+
+Every sign-in (password, MFA, passkey, SSO, registration, the demo button) is also recorded on the server as a session: the JWT carries a session id, and the server refuses a token whose session has ended, even though its signature and expiry are still good. A copy of the cookie that ended up somewhere else (a proxy log, a debugging tool, a stolen laptop) therefore stops working the moment its session ends, rather than living out its 24 hours or 30 days.
+
+A session ends when:
+
+| Action | Sessions ended |
+|---|---|
+| **Log out** (`POST /api/auth/logout`) | The one it is called with. Clearing the cookie alone used to leave the token valid. |
+| `DELETE /api/auth/sessions/{id}` | That one session of your own account. |
+| `POST /api/auth/sessions/revoke-others` | Every session of your account but the current one. |
+| Password change | Every session; the device the change was made on gets a new one. |
+| Password reset by email | Every session. |
+| Admin sets a new password for a user | Every session of that user. |
+| Recovery script `reset-admin.js` | Every session of the account it resets. |
+| Disabling two-factor authentication | Every other session; the one that proved the password and code stays. |
+| Admin clears a user's two-factor authentication | Every session of that user. |
+| Account deletion | Every session, with the account. |
+
+`GET /api/auth/sessions` lists the active sessions of your account, most recently used first, with when each started, when it was last used (refreshed at most every few minutes), when it expires, the browser's User-Agent at sign-in (cut to 256 characters) and which one is the current one. No IP address is stored. The settings screen does not show this list yet; the routes are there for it and for API clients.
+
+Sessions issued before this was introduced carry no session id. They keep working until they expire (or until the password changes, which ends them through the password version), are not listed, and are not ended by **revoke-others**. Once such a session passes half its lifetime, the sliding renewal replaces it with a tracked one. Expired and ended session rows are removed by a nightly job.
+
+> **Deprecated:** the login, registration, demo-login, MFA and passkey sign-in responses still carry the session JWT as `token` in the JSON body, for API clients that read it. The web app does not use it; the session is the httpOnly cookie the same response sets. The field will be removed in a future major version.
 
 ## Password Policy
 

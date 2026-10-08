@@ -1,0 +1,204 @@
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import jwt from 'jsonwebtoken';
+
+import { createSnapshotTestDb } from '../../../helpers/db-mock';
+import { resetTestDb } from '../../../helpers/test-db';
+import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { createUser } from '../../../helpers/factories';
+import { UserSessions } from '../../../../src/db/entities/UserSessions.entity';
+import { SessionsService, USER_AGENT_MAX_LENGTH, sessionClientFrom } from '../../../../src/nest/sessions/sessions.service';
+import type { Request } from 'express';
+import { JWT_SECRET, SESSION_DURATION_REMEMBER_SECONDS, SESSION_DURATION_SECONDS } from '../../../../src/config';
+
+const testDb = createSnapshotTestDb();
+let t: TestOrm;
+let svc: SessionsService;
+
+beforeAll(async () => {
+  t = await createTestOrm(testDb);
+  svc = new SessionsService(t.repo(UserSessions));
+});
+beforeEach(() => { resetTestDb(testDb); t.clear(); });
+afterEach(() => { vi.useRealTimers(); });
+afterAll(async () => { await t.close(); testDb.close(); });
+
+interface Claims { id: number; pv: number; jti: string; iat: number; exp: number; remember?: boolean }
+
+function claimsOf(token: string): Claims {
+  return jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as Claims;
+}
+
+function rowOf(id: string) {
+  return testDb.prepare('SELECT * FROM user_sessions WHERE id = ?').get(id) as
+    | { user_id: number; created_at: string; last_seen_at: string; expires_at: string; revoked_at: string | null; user_agent: string | null }
+    | undefined;
+}
+
+function textOf(seconds: number): string {
+  return new Date(seconds * 1000).toISOString().slice(0, 19).replace('T', ' ');
+}
+
+describe('sessionClientFrom', () => {
+  it('reads the User-Agent header', () => {
+    expect(sessionClientFrom({ headers: { 'user-agent': 'Firefox/130' } } as unknown as Request)).toEqual({ userAgent: 'Firefox/130' });
+  });
+
+  it('is null without one, or with an empty one', () => {
+    expect(sessionClientFrom({ headers: {} } as unknown as Request)).toEqual({ userAgent: null });
+    expect(sessionClientFrom({ headers: { 'user-agent': '' } } as unknown as Request)).toEqual({ userAgent: null });
+  });
+});
+
+describe('SessionsService.issue', () => {
+  it('SESS-001: signs a token with a fresh jti and records its session with the token\'s own times', async () => {
+    const { user } = createUser(testDb);
+    const token = await svc.issue({ id: user.id, pv: 2 }, undefined, { userAgent: 'Firefox/130' });
+    const claims = claimsOf(token);
+
+    expect(claims).toEqual(expect.objectContaining({ id: user.id, pv: 2 }));
+    expect('remember' in claims).toBe(false);
+    expect(claims.jti).toMatch(/^[0-9a-f-]{36}$/);
+    expect(claims.exp - claims.iat).toBe(SESSION_DURATION_SECONDS);
+    expect(rowOf(claims.jti)).toEqual({
+      id: claims.jti,
+      user_id: user.id,
+      created_at: textOf(claims.iat),
+      last_seen_at: textOf(claims.iat),
+      expires_at: textOf(claims.exp),
+      revoked_at: null,
+      user_agent: 'Firefox/130',
+    });
+  });
+
+  it('SESS-002: "remember me" picks the long lifetime and keeps the claim either way', async () => {
+    const { user } = createUser(testDb);
+    const long = claimsOf(await svc.issue({ id: user.id, pv: 0 }, true));
+    const short = claimsOf(await svc.issue({ id: user.id, pv: 0 }, false));
+
+    expect(long.remember).toBe(true);
+    expect(long.exp - long.iat).toBe(SESSION_DURATION_REMEMBER_SECONDS);
+    expect(short.remember).toBe(false);
+    expect(short.exp - short.iat).toBe(SESSION_DURATION_SECONDS);
+  });
+
+  it('SESS-003: every sign-in is its own session; the user agent is cut and may be absent', async () => {
+    const { user } = createUser(testDb);
+    const a = claimsOf(await svc.issue({ id: user.id, pv: 0 }, undefined, { userAgent: 'x'.repeat(400) }));
+    const b = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+
+    expect(a.jti).not.toBe(b.jti);
+    expect(rowOf(a.jti)?.user_agent).toHaveLength(USER_AGENT_MAX_LENGTH);
+    expect(rowOf(b.jti)?.user_agent).toBeNull();
+  });
+});
+
+describe('SessionsService.renew', () => {
+  it('SESS-004: re-signs a tracked token under the same id and moves the session expiry with it', async () => {
+    // Only the clock: the ORM's own timers keep running.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-08T00:00:00Z'));
+    const { user } = createUser(testDb);
+    const first = claimsOf(await svc.issue({ id: user.id, pv: 1 }, false));
+
+    // Past half of the default lifetime, still inside it.
+    vi.setSystemTime(new Date(Date.parse('2026-10-08T00:00:00Z') + SESSION_DURATION_SECONDS * 750));
+    const renewed = await svc.renew({ id: user.id, pv: 1, remember: false, jti: first.jti }, { userAgent: 'ignored' });
+    const claims = claimsOf(renewed!);
+
+    expect(claims.jti).toBe(first.jti);
+    expect(claims.remember).toBe(false);
+    expect(claims.exp).toBeGreaterThan(first.exp);
+    expect(rowOf(first.jti)).toEqual(expect.objectContaining({
+      expires_at: textOf(claims.exp),
+      last_seen_at: textOf(Date.parse('2026-10-08T00:00:00Z') / 1000 + SESSION_DURATION_SECONDS * 0.75),
+      created_at: '2026-10-08 00:00:00',
+      user_agent: null,
+    }));
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions').get()).toEqual({ n: 1 });
+  });
+
+  it('SESS-005: a session that ended in the meantime is not renewed', async () => {
+    const { user } = createUser(testDb);
+    const first = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+    await svc.revoke(user.id, first.jti);
+
+    expect(await svc.renew({ id: user.id, pv: 0, jti: first.jti })).toBeNull();
+    expect(rowOf(first.jti)?.expires_at).toBe(textOf(first.exp));
+  });
+
+  it('SESS-006: a token from before sessions were tracked comes back as a tracked session', async () => {
+    const { user } = createUser(testDb);
+    const renewed = await svc.renew({ id: user.id, remember: true }, { userAgent: 'Safari' });
+    const claims = claimsOf(renewed!);
+
+    expect(claims.pv).toBe(0);
+    expect(claims.remember).toBe(true);
+    expect(rowOf(claims.jti)).toEqual(expect.objectContaining({ user_id: user.id, user_agent: 'Safari', revoked_at: null }));
+  });
+});
+
+describe('SessionsService list and revoke', () => {
+  it('SESS-007: lists the active sessions and flags the current one', async () => {
+    const { user } = createUser(testDb);
+    const { user: other } = createUser(testDb);
+    const here = claimsOf(await svc.issue({ id: user.id, pv: 0 }, undefined, { userAgent: 'here' }));
+    const there = claimsOf(await svc.issue({ id: user.id, pv: 0 }, undefined, { userAgent: 'there' }));
+    const ended = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+    await svc.issue({ id: other.id, pv: 0 });
+    await svc.revoke(user.id, ended.jti);
+
+    const listed = await svc.list(user.id, here.jti);
+    expect(listed.map((s) => [s.id, s.user_agent, s.current]).sort()).toEqual(
+      [[here.jti, 'here', true], [there.jti, 'there', false]].sort(),
+    );
+    expect((await svc.list(user.id)).every((s) => !s.current)).toBe(true);
+  });
+
+  it('SESS-008: revoke ends one session of the caller only', async () => {
+    const { user } = createUser(testDb);
+    const { user: other } = createUser(testDb);
+    const mine = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+
+    expect(await svc.revoke(other.id, mine.jti)).toBe(false);
+    expect(await svc.revoke(user.id, mine.jti)).toBe(true);
+    expect(rowOf(mine.jti)?.revoked_at).not.toBeNull();
+  });
+
+  it('SESS-009: revokeAll ends every session, or every one but the current', async () => {
+    const { user } = createUser(testDb);
+    const a = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+    const b = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+    const c = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+
+    expect(await svc.revokeAll(user.id, b.jti)).toBe(2);
+    expect(rowOf(b.jti)?.revoked_at).toBeNull();
+    expect(rowOf(a.jti)?.revoked_at).not.toBeNull();
+    expect(rowOf(c.jti)?.revoked_at).not.toBeNull();
+    expect(await svc.revokeAll(user.id)).toBe(1);
+  });
+
+  it('SESS-010: endSession ends the session a token names, and nothing for an untracked or missing token', async () => {
+    const { user } = createUser(testDb);
+    const mine = claimsOf(await svc.issue({ id: user.id, pv: 0 }));
+
+    expect(await svc.endSession(null)).toBe(false);
+    expect(await svc.endSession({ id: user.id })).toBe(false);
+    expect(await svc.endSession({ id: user.id, jti: mine.jti })).toBe(true);
+    expect(rowOf(mine.jti)?.revoked_at).not.toBeNull();
+  });
+
+  it('SESS-011: purgeInactive removes the expired and revoked rows', async () => {
+    const { user } = createUser(testDb);
+    const live = claimsOf(await svc.issue({ id: user.id, pv: 0 }, true));
+    const ended = claimsOf(await svc.issue({ id: user.id, pv: 0 }, true));
+    const short = claimsOf(await svc.issue({ id: user.id, pv: 0 }, false));
+    await svc.revoke(user.id, ended.jti);
+
+    // Just past the default lifetime: the short session has expired, the remembered one has not.
+    expect(SESSION_DURATION_REMEMBER_SECONDS).toBeGreaterThan(SESSION_DURATION_SECONDS + 60);
+    expect(await svc.purgeInactive(new Date(Date.now() + (SESSION_DURATION_SECONDS + 60) * 1000))).toBe(2);
+    expect(rowOf(live.jti)).toBeDefined();
+    expect(rowOf(ended.jti)).toBeUndefined();
+    expect(rowOf(short.jti)).toBeUndefined();
+  });
+});

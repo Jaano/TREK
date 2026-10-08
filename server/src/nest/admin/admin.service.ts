@@ -67,6 +67,7 @@ import {
   type VersionInfo,
 } from './admin.helpers';
 import { MANAGED_FORBIDDEN_ERROR } from '../common/managed';
+import { SessionsService } from '../sessions/sessions.service';
 
 /** Outbound GitHub calls: hard timeout and response-size cap (server/CLAUDE.md). */
 const GITHUB_TIMEOUT_MS = 10_000;
@@ -131,6 +132,7 @@ export class AdminService {
     private readonly uow: UnitOfWork,
     @Inject(DATABASE_BACKUP) private readonly database: DatabaseBackupStrategy,
     private readonly dataPaths: DataPathsService,
+    private readonly sessions: SessionsService,
   ) {}
 
   // ── User CRUD ──────────────────────────────────────────────────────────────
@@ -284,6 +286,7 @@ export class AdminService {
           // Push devices outlive every session, so the intruder's browser would
           // keep receiving this account's notifications. They go with the rest.
           await this.pushSubscriptions.deleteAllForUser(userId);
+          await this.sessions.revokeAll(userId);
         }
       });
     } catch (err) {
@@ -351,8 +354,12 @@ export class AdminService {
     if (!target) return { error: 'User not found', status: 404 };
 
     // Same three columns disableMfa clears, so an admin reset and a self-service
-    // disable leave the account in exactly one state rather than two.
-    await this.users.disableMfa(targetId);
+    // disable leave the account in exactly one state rather than two; the
+    // account's sessions end with the second factor, as on that path.
+    await this.uow.transactional(async () => {
+      await this.users.disableMfa(targetId);
+      await this.sessions.revokeAll(targetId);
+    });
 
     return { success: true, email: target.email };
   }

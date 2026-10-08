@@ -22,7 +22,13 @@ export function setupApiDocs(app: INestApplication): void {
     .setTitle('TREK API')
     .setDescription(
       'The REST API the TREK web app itself runs on. Authenticate with a session JWT — '
-      + 'either the `trek_session` cookie (same browser) or an `Authorization: Bearer <jwt>` header.',
+      + 'either the `trek_session` cookie (same browser) or an `Authorization: Bearer <jwt>` header.\n\n'
+      + 'Every session can be ended before it expires: `POST /api/auth/logout` ends the one it is called with, '
+      + '`GET /api/auth/sessions` lists the signed-in sessions, `DELETE /api/auth/sessions/{id}` ends one and '
+      + '`POST /api/auth/sessions/revoke-others` ends all but the current one.\n\n'
+      + '**Deprecated:** the `token` field in the bodies of `POST /api/auth/login`, `/register`, `/demo-login`, '
+      + '`/mfa/verify-login` and `/passkey/login/verify`. It is still sent, for clients that read it, but will be '
+      + 'removed in a future major version. Use the `trek_session` cookie the same response sets.',
     )
     .setVersion(version)
     .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'session')

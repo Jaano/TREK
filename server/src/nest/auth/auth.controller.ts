@@ -39,7 +39,8 @@ import {
 import { RateLimitService } from '../common/rate-limit.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
-import { decodeSessionClaims } from './jwt-verify';
+import { currentSessionId, decodeSessionClaims } from './jwt-verify';
+import { sessionClientFrom } from '../sessions/sessions.service';
 import { getClientIp } from '../audit/client-ip';
 import { AuditService } from '../audit/audit.service';
 import type { User } from '../../types';
@@ -113,7 +114,7 @@ export class AuthController {
     // "remember me" login survives a password change (#1927). Bearer callers
     // have no cookie → undefined → the historical default duration.
     const remember = decodeSessionClaims((req.cookies as Record<string, string> | undefined)?.trek_session)?.remember;
-    const result = await this.auth.changePassword(user.id, user.email, body, remember);
+    const result = await this.auth.changePassword(user.id, user.email, body, remember, sessionClientFrom(req));
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
@@ -288,7 +289,7 @@ export class AuthController {
   @HttpCode(200)
   async mfaDisable(@CurrentUser() user: User, @Body() body: MfaDisableDto, @Req() req: Request) {
     await this.limit('login', req, 5);
-    const result = await this.auth.disableMfa(user.id, user.email, body);
+    const result = await this.auth.disableMfa(user.id, user.email, body, currentSessionId(req));
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }

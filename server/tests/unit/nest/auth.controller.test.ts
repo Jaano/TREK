@@ -18,6 +18,9 @@ import { isDemoEmail } from '../../../src/nest/common/demo';
 import type { User } from '../../../src/types';
 import { anyBody } from '../../helpers/dto';
 import type { ForgotPasswordDto } from '../../../src/nest/auth/auth.dto';
+import type { SessionsService } from '../../../src/nest/sessions/sessions.service';
+import { JWT_SECRET } from '../../../src/config';
+import jwt from 'jsonwebtoken';
 
 const user = { id: 1, username: 'u', role: 'user', email: 'u@example.test' } as User;
 const req = { ip: '9.9.9.9', headers: {} } as Request;
@@ -32,7 +35,10 @@ function rl(): RateLimitService { return new RateLimitService(); }
 // wrappers keep the historical construction sites positional.
 const writeAudit = vi.fn();
 const audit = { writeAudit } as unknown as AuditService;
-const apc = (a: AuthService, limiter: RateLimitService) => new AuthPublicController(a, limiter, audit);
+// Logout ends the session through SessionsService, the controller's fourth argument.
+const endSession = vi.fn().mockResolvedValue(true);
+const sessionsStub = { endSession } as unknown as SessionsService;
+const apc = (a: AuthService, limiter: RateLimitService) => new AuthPublicController(a, limiter, audit, sessionsStub);
 // Tokens moved to TokenService; the controller takes it second. Stubbed via a
 // third, optional argument so every non-token call site stays as it was.
 const storageStub = { put: vi.fn().mockResolvedValue(undefined) } as unknown as import('../../../src/nest/storage/storage.service').StorageService;
@@ -204,9 +210,43 @@ describe('AuthPublicController', () => {
     expect(await c.verifyMfaLogin(anyBody(), req, res)).toEqual({ token: 'tk', user });
     expect(setAuthCookie).toHaveBeenCalled();
     const clearAuthCookie = vi.fn();
-    expect(apc(asvc({ clearAuthCookie } as Partial<AuthService>), rl()).logout(req, res)).toEqual({ success: true });
+    expect(await apc(asvc({ clearAuthCookie } as Partial<AuthService>), rl()).logout(req, res)).toEqual({ success: true });
     expect(clearAuthCookie).toHaveBeenCalledWith(res, req);
+    // No token: nothing to end, the cookie still goes.
+    expect(endSession).toHaveBeenCalledWith(null);
   });
+
+  it('logout ends the session a well-signed token names, expired or not', async () => {
+    const expired = jwt.sign({ id: 1, pv: 0, exp: Math.floor(Date.now() / 1000) - 60 }, JWT_SECRET, { algorithm: 'HS256', jwtid: 'sid-1' });
+    const withCookie = { ip: '9.9.9.9', headers: {}, cookies: { trek_session: expired } } as unknown as Request;
+    const clearAuthCookie = vi.fn();
+    expect(await apc(asvc({ clearAuthCookie } as Partial<AuthService>), rl()).logout(withCookie, res)).toEqual({ success: true });
+    expect(endSession).toHaveBeenCalledWith(expect.objectContaining({ id: 1, jti: 'sid-1' }));
+    expect(clearAuthCookie).toHaveBeenCalledWith(res, withCookie);
+  });
+
+  it('logout with a forged token only clears the cookie', async () => {
+    const forged = jwt.sign({ id: 1, pv: 0 }, 'not-the-secret', { algorithm: 'HS256', jwtid: 'sid-1' });
+    const withHeader = { ip: '9.9.9.9', headers: { authorization: `Bearer ${forged}` } } as unknown as Request;
+    const clearAuthCookie = vi.fn();
+    expect(await apc(asvc({ clearAuthCookie } as Partial<AuthService>), rl()).logout(withHeader, res)).toEqual({ success: true });
+    expect(endSession).toHaveBeenCalledWith(null);
+    expect(clearAuthCookie).toHaveBeenCalled();
+  });
+
+  it('login, register and MFA login hand the device to the service', async () => {
+    const withAgent = { ip: '9.9.9.9', headers: { 'user-agent': 'Firefox/130' } } as unknown as Request;
+    const loginUser = vi.fn().mockReturnValue({ token: 'tk', user });
+    const registerUser = vi.fn().mockReturnValue({ token: 'tk', user, auditUserId: 1 });
+    const verifyMfaLogin = vi.fn().mockReturnValue({ token: 'tk', user, auditUserId: 1 });
+    const c = apc(asvc({ loginUser, registerUser, verifyMfaLogin } as Partial<AuthService>), rl());
+    await c.login(anyBody(), withAgent, res);
+    await c.register(anyBody(), withAgent, res);
+    await c.verifyMfaLogin(anyBody(), withAgent, res);
+    expect(loginUser).toHaveBeenCalledWith(anyBody(), { userAgent: 'Firefox/130' });
+    expect(registerUser).toHaveBeenCalledWith(anyBody(), { userAgent: 'Firefox/130' });
+    expect(verifyMfaLogin).toHaveBeenCalledWith(anyBody(), { userAgent: 'Firefox/130' });
+  }, 10000);
 });
 
 describe('AuthController (authenticated)', () => {
@@ -309,7 +349,7 @@ describe('AuthController (authenticated)', () => {
     const changePassword = vi.fn().mockReturnValue({ token: 'tk3' });
     const c = ac(asvc({ changePassword, setAuthCookie } as Partial<AuthService>), rl());
     expect(await c.changePassword(user, anyBody(), reqCookie, res)).toEqual({ success: true });
-    expect(changePassword).toHaveBeenCalledWith(1, 'u@example.test', anyBody(), true);
+    expect(changePassword).toHaveBeenCalledWith(1, 'u@example.test', anyBody(), true, { userAgent: null });
     expect(setAuthCookie).toHaveBeenCalledWith(res, 'tk3', reqCookie, true);
   });
 
@@ -403,8 +443,15 @@ describe('AuthController (authenticated)', () => {
   it('mfa/enable + mfa/disable map errors', async () => {
     expect(await thrownAsync(() => ac(asvc({ enableMfa: vi.fn().mockReturnValue({ error: 'Invalid code', status: 400 }) } as Partial<AuthService>), rl()).mfaEnable(user, { code: 'x' }, req))).toEqual({ status: 400, body: { error: 'Invalid code' } });
     expect(await thrownAsync(() => ac(asvc({ disableMfa: vi.fn().mockReturnValue({ error: 'Wrong', status: 401 }) } as Partial<AuthService>), rl()).mfaDisable(user, anyBody(), req))).toEqual({ status: 401, body: { error: 'Wrong' } });
-    const ok = ac(asvc({ disableMfa: vi.fn().mockReturnValue({ mfa_enabled: false }) } as Partial<AuthService>), rl());
+    const disableMfa = vi.fn().mockReturnValue({ mfa_enabled: false });
+    const ok = ac(asvc({ disableMfa } as Partial<AuthService>), rl());
     expect(await ok.mfaDisable(user, anyBody(), req)).toEqual({ success: true, mfa_enabled: false });
+    // No session id on this request's token, so no session is kept back.
+    expect(disableMfa).toHaveBeenCalledWith(1, 'u@example.test', anyBody(), undefined);
+    const tracked = jwt.sign({ id: 1, pv: 0 }, JWT_SECRET, { algorithm: 'HS256', jwtid: 'sid-here' });
+    const reqTracked = { ip: '9.9.9.9', headers: {}, cookies: { trek_session: tracked } } as unknown as Request;
+    await ok.mfaDisable(user, anyBody(), reqTracked);
+    expect(disableMfa).toHaveBeenLastCalledWith(1, 'u@example.test', anyBody(), 'sid-here');
     expect(writeAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'user.mfa_disable' }));
   });
 

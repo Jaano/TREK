@@ -6,6 +6,7 @@ import { pluginsEnabled } from './kill-switch';
 import { PluginRuntimeService } from './plugin-runtime.service';
 import { Public } from '../auth/public.decorator';
 import { Users } from '../../db/entities/Users.entity';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
 
 /**
  * Proxies a plugin's own HTTP routes at /api/plugins/:id/* (#plugins, M2).
@@ -102,7 +103,7 @@ export class PluginsProxyController {
     let user: { id: number; username: string; role?: 'admin' | 'user' } | null = null;
     if (route.auth) {
       const token = extractToken(req);
-      const loaded = token ? await verifyJwtAndLoadUser(token, this.em.getRepository(Users)) : null;
+      const loaded = token ? await verifyJwtAndLoadUser(token, this.em.getRepository(Users), this.em.getRepository(UserSessions)) : null;
       if (!loaded) {
         res.status(401).json({ error: 'Access token required', code: 'AUTH_REQUIRED' });
         return;

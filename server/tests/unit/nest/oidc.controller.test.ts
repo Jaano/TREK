@@ -464,7 +464,8 @@ describe('OidcController /callback', () => {
         generateToken,
         createAuthCode,
       })).callback('c', 's', undefined, reqCb('s'), res);
-      expect(generateToken).toHaveBeenCalledWith({ id: 1 }, remember);
+      // The device rides along so the session list can name it (none on this stub request).
+      expect(generateToken).toHaveBeenCalledWith({ id: 1 }, remember, { userAgent: null });
       expect(createAuthCode).toHaveBeenCalledWith('jwt', remember);
     }
   });

@@ -45,6 +45,7 @@ import { Trips } from '../../db/entities/Trips.entity';
 import { Places } from '../../db/entities/Places.entity';
 import { TripFiles } from '../../db/entities/TripFiles.entity';
 import { PushSubscriptions } from '../../db/entities/PushSubscriptions.entity';
+import { SessionsModule } from '../sessions/sessions.module';
 
 /**
  * MikroOrmModule.forFeature registers the repositories `AdminService`'s
@@ -62,7 +63,7 @@ import { PushSubscriptions } from '../../db/entities/PushSubscriptions.entity';
 @Module({
   imports: [
     MikroOrmModule.forFeature([Users, AuditLog, AppSettings, Addons, PhotoProviders, PhotoProviderFields, DocumentProviders, McpTokens, OauthTokens, Trips, Places, TripFiles, PushSubscriptions]),
-    AppConfigModule, DatabaseLifecycleModule, PluginsRuntimeModule, SettingsModule, AuditModule, AddonsModule, AuthModule, NotificationsModule, PackingModule, PermissionsModule, TokensModule, OauthModule, SchedulingModule, KitineraryExtractorModule,
+    AppConfigModule, DatabaseLifecycleModule, PluginsRuntimeModule, SessionsModule, SettingsModule, AuditModule, AddonsModule, AuthModule, NotificationsModule, PackingModule, PermissionsModule, TokensModule, OauthModule, SchedulingModule, KitineraryExtractorModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, VersionCheckJob, DemoResetJob],

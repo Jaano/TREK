@@ -15,6 +15,8 @@ const ACTION_LABELS: Record<string, string> = {
   'user.account_delete': 'deleted account',
   'user.mfa_enable': 'enabled MFA',
   'user.mfa_disable': 'disabled MFA',
+  'user.session_revoke': 'signed out a session',
+  'user.sessions_revoke_others': 'signed out other sessions',
   'settings.app_update': 'updated settings',
   'settings.api_keys_update': 'updated API keys',
   'trip.create': 'created trip',

@@ -115,6 +115,7 @@ import { TripMembersSchema } from './TripMembers.entity';
 import { TripPhotosSchema } from './TripPhotos.entity';
 import { TripsSchema } from './Trips.entity';
 import { UserNoticeDismissalsSchema } from './UserNoticeDismissals.entity';
+import { UserSessionsSchema } from './UserSessions.entity';
 import { UsersSchema } from './Users.entity';
 import { VacayCompanyHolidaysSchema } from './VacayCompanyHolidays.entity';
 import { VacayEntriesSchema } from './VacayEntries.entity';
@@ -248,6 +249,7 @@ export const ALL_ENTITIES: readonly EntitySchema[] = [
   TripPhotosSchema,
   TripsSchema,
   UserNoticeDismissalsSchema,
+  UserSessionsSchema,
   UsersSchema,
   VacayCompanyHolidaysSchema,
   VacayEntriesSchema,

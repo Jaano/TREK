@@ -123,6 +123,7 @@ import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-re
 import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import { createTestSessionsService, createTestUserSessionsRepo } from '../../helpers/sessions';
 
 // MailerService is injected since the notifications fold — a stub instead of a
 // module mock. sendPasswordResetEmail is the only thing auth reaches for.
@@ -150,6 +151,8 @@ beforeAll(async () => {
   await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb), await createTestOauthTokensRepo(testDb),
   await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
   await createTestPushSubscriptionsRepo(testDb),
+  await createTestUserSessionsRepo(testDb),
+  await createTestSessionsService(testDb),
 );
   svc = new OidcService(auth, membership, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestInviteTokensRepo(testDb), await createTestAppSettingsRepo(testDb));
 });
@@ -306,6 +309,15 @@ describe('generateToken', () => {
       const decoded = jwtLib.decode(token) as { iat: number; exp: number };
       expect(decoded.exp - decoded.iat).toBe(86400);
     }
+  });
+
+  it('OIDC-SVC-059: an SSO session is a tracked session like a password login, with its device', async () => {
+    const { user } = createUser(testDb, { email: 'sso-session@example.com' });
+    const token = await svc.generateToken({ id: user.id }, undefined, { userAgent: 'SSO Browser' });
+    const { jti } = jwtLib.decode(token) as { jti: string };
+    const row = testDb.prepare('SELECT user_id, user_agent, revoked_at FROM user_sessions WHERE id = ?').get(jti);
+    expect(row).toEqual({ user_id: user.id, user_agent: 'SSO Browser', revoked_at: null });
+    expect((await auth.verifyJwtToken(token))?.id).toBe(user.id);
   });
 });
 

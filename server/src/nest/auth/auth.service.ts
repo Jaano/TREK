@@ -9,7 +9,7 @@ import { randomBytes, createHash } from 'crypto';
 import type { Request, Response } from 'express';
 import { WEB_PUSH_CHANNEL_ID } from '@trek/shared';
 import { readEnv } from '../../app-config';
-import { JWT_SECRET, SESSION_DURATION_SECONDS, SESSION_DURATION_REMEMBER_SECONDS } from '../../config';
+import { JWT_SECRET } from '../../config';
 import { UnitOfWork } from '../database/unit-of-work';
 import { PermissionsService } from '../permissions/permissions.service';
 import { validatePassword } from '../common/passwordPolicy';
@@ -33,6 +33,9 @@ import { PasswordResetTokens } from '../../db/entities/PasswordResetTokens.entit
 import type { PasswordResetTokensRepository } from '../../db/repositories/PasswordResetTokens.repository';
 import { PushSubscriptions } from '../../db/entities/PushSubscriptions.entity';
 import type { PushSubscriptionsRepository } from '../../db/repositories/PushSubscriptions.repository';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
+import type { UserSessionsRepository } from '../../db/repositories/UserSessions.repository';
+import { SessionsService, type SessionClient } from '../sessions/sessions.service';
 // Type-and-guard only: the app-config read reports the provider choice, it does
 // not construct one, so this does not pull the maps domain into auth.
 import { isPlacesProviderChoice } from '../maps/providers/places-provider';
@@ -185,6 +188,8 @@ export class AuthService {
     @InjectRepository(WebauthnCredentials) private readonly webauthnCredentials: WebauthnCredentialsRepository,
     @InjectRepository(PasswordResetTokens) private readonly passwordResetTokens: PasswordResetTokensRepository,
     @InjectRepository(PushSubscriptions) private readonly pushSubscriptions: PushSubscriptionsRepository,
+    @InjectRepository(UserSessions) private readonly userSessions: UserSessionsRepository,
+    private readonly sessions: SessionsService,
   ) {}
 
   // Cookie
@@ -255,22 +260,11 @@ export class AuthService {
     return !(await this.resolveAuthToggles()).password_login;
   }
 
-  async generateToken(user: { id: number | bigint; password_version?: number }, remember?: boolean) {
+  async generateToken(user: { id: number | bigint; password_version?: number }, remember?: boolean, client?: SessionClient) {
     const pv = typeof user.password_version === 'number'
       ? user.password_version
       : ((await this.usersRepo.getPasswordVersion(Number(user.id))) ?? 0);
-    // "Remember me" extends the JWT lifetime to match the persistent cookie maxAge;
-    // the cookie service decides session-vs-persistent off the same flag.
-    const expiresIn = remember === true ? SESSION_DURATION_REMEMBER_SECONDS : SESSION_DURATION_SECONDS;
-    // The flag is embedded as a claim so sliding renewal can re-issue with the
-    // same duration AND cookie semantics (false → browser-session cookie is not
-    // recoverable from exp − iat). Omitted when the caller didn't choose, so
-    // register/demo/passkey tokens keep their historical payload.
-    return jwt.sign(
-      { id: user.id, pv, ...(typeof remember === 'boolean' ? { remember } : {}) },
-      JWT_SECRET,
-      { expiresIn, algorithm: 'HS256' }
-    );
+    return this.sessions.issue({ id: Number(user.id), pv }, remember, client);
   }
 
   getPendingMfaSecret(userId: number): string | null {
@@ -442,7 +436,7 @@ export class AuthService {
     return { valid: true, max_uses: invite.max_uses, used_count: invite.used_count, expires_at: invite.expires_at };
   }
 
-  async registerUser(rawBody: unknown): Promise<{ error?: string; status?: number; token?: string; user?: Record<string, unknown>; auditUserId?: number; auditDetails?: Record<string, unknown> }> {
+  async registerUser(rawBody: unknown, client?: SessionClient): Promise<{ error?: string; status?: number; token?: string; user?: Record<string, unknown>; auditUserId?: number; auditDetails?: Record<string, unknown> }> {
     const body = rawBody as { username?: string; email?: string; password?: string; invite_token?: string };
     const username = typeof body.username === 'string' ? body.username.trim() : '';
     const email = typeof body.email === 'string' ? body.email.trim() : '';
@@ -496,7 +490,7 @@ export class AuthService {
         });
 
         const user = { id: inserted.id, username, email, role, avatar: null, mfa_enabled: false };
-        const token = await this.generateToken(user);
+        const token = await this.generateToken(user, undefined, client);
 
         if (validInvite) {
           const updated = await this.inviteTokens.incrementUsedCount(validInvite.token);
@@ -527,7 +521,7 @@ export class AuthService {
     }
   }
 
-  async loginUser(rawBody: unknown): Promise<{
+  async loginUser(rawBody: unknown, client?: SessionClient): Promise<{
     error?: string;
     status?: number;
     token?: string;
@@ -589,7 +583,7 @@ export class AuthService {
     }
 
     await this.usersRepo.touchLastLogin(user.id);
-    const token = await this.generateToken(user, remember);
+    const token = await this.generateToken(user, remember, client);
     const userSafe = stripUserForClient(toClientUser(user)) as Record<string, unknown>;
 
     return {
@@ -632,6 +626,7 @@ export class AuthService {
     userEmail: string,
     rawBody: unknown,
     remember?: boolean,
+    client?: SessionClient,
   ): Promise<{ error?: string; status?: number; success?: boolean; token?: string }> {
     const body = rawBody as { current_password?: string; new_password?: string };
     if (await this.isOidcOnlyMode()) {
@@ -658,10 +653,9 @@ export class AuthService {
 
     await this.uow.transactional(async () => {
       await this.usersRepo.setPassword(userId, hash, newPv);
-      // A password change rotates the user's sessions: bumping password_version
-      // invalidates existing JWT cookie sessions, and the separate MCP static
-      // token and OAuth bearer-token stores are pruned to match (same set the
-      // password-reset path already revokes).
+      // A password change ends every session (the pv bump covers the tokens from
+      // before sessions were tracked) and prunes the MCP static token and OAuth
+      // bearer-token stores to match, the same set the password reset revokes.
       await this.mcpTokens.deleteAllForUser(userId);
       try {
         await this.oauthTokens.revokeAllForUser(userId);
@@ -671,15 +665,14 @@ export class AuthService {
       // the client reloads the user after the change, and that re-syncs its
       // subscription. Other devices do so after their next sign-in.
       await this.pushSubscriptions.deleteAllForUser(userId);
+      await this.sessions.revokeAll(userId);
     });
 
     try { revokeUserSessions?.(userId); } catch { /* best-effort */ }
 
-    // Re-issue a session bound to the new password_version so the current device
-    // stays logged in while other existing sessions are rotated out by the pv
-    // gate — preserving the login's remember choice instead of downgrading a
-    // remembered session to the default duration (#1927).
-    const token = await this.generateToken({ id: userId, password_version: newPv }, remember);
+    // Re-issue a session for the current device only, keeping the login's remember
+    // choice instead of downgrading it to the default duration (#1927).
+    const token = await this.generateToken({ id: userId, password_version: newPv }, remember, client);
     return { success: true, token };
   }
 
@@ -868,7 +861,8 @@ export class AuthService {
   async disableMfa(
     userId: number,
     userEmail: string,
-    rawBody: unknown
+    rawBody: unknown,
+    currentSessionId?: string,
   ): Promise<{ error?: string; status?: number; success?: boolean; mfa_enabled?: boolean }> {
     const body = rawBody as { password?: string; code?: string };
     if (readEnv().demo.enabled && isDemoEmail(userEmail)) {
@@ -895,12 +889,16 @@ export class AuthService {
     if (!ok) {
       return { error: 'Invalid verification code', status: 401 };
     }
-    await this.usersRepo.disableMfa(userId);
+    // Every other session ends with the second factor; this one just proved both.
+    await this.uow.transactional(async () => {
+      await this.usersRepo.disableMfa(userId);
+      await this.sessions.revokeAll(userId, currentSessionId);
+    });
     mfaSetupPending.delete(userId);
     return { success: true, mfa_enabled: false };
   }
 
-  async verifyMfaLogin(rawBody: unknown): Promise<{
+  async verifyMfaLogin(rawBody: unknown, client?: SessionClient): Promise<{
     error?: string;
     status?: number;
     token?: string;
@@ -944,7 +942,7 @@ export class AuthService {
       } else {
         await this.usersRepo.touchLastLogin(user.id);
       }
-      const sessionToken = await this.generateToken(user, remember);
+      const sessionToken = await this.generateToken(user, remember, client);
       const userSafe = stripUserForClient(toClientUser(user)) as Record<string, unknown>;
       return {
         token: sessionToken,
@@ -1103,6 +1101,7 @@ export class AuthService {
       // Push devices are a delivery channel that outlives every session, so an
       // intruder's browser would keep reading this account's notifications.
       await this.pushSubscriptions.deleteAllForUser(user.id);
+      await this.sessions.revokeAll(user.id);
     });
 
     // Kick off any MCP/WS session cleanup — same hook the account-delete path uses.
@@ -1135,6 +1134,6 @@ export class AuthService {
    * route) should go through.
    */
   async verifyJwtToken(token: string): Promise<User | null> {
-    return verifyJwtAndLoadUser(token, this.usersRepo);
+    return verifyJwtAndLoadUser(token, this.usersRepo, this.userSessions);
   }
 }

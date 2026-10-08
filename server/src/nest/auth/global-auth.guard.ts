@@ -4,6 +4,7 @@ import { Reflector } from '@nestjs/core';
 import { EntityManager } from '@mikro-orm/core';
 import type { Request } from 'express';
 import { Users } from '../../db/entities/Users.entity';
+import { UserSessions } from '../../db/entities/UserSessions.entity';
 import { extractToken, verifyJwtAndLoadUser } from './jwt-verify';
 import { IS_PUBLIC, OPTIONAL_AUTH } from './public.decorator';
 
@@ -49,7 +50,7 @@ export class GlobalAuthGuard implements CanActivate {
 
     if (this.reflector.getAllAndOverride(OPTIONAL_AUTH, [handler, controller])) {
       const token = extractToken(req);
-      (req as { user: unknown }).user = (token ? await verifyJwtAndLoadUser(token, this.em.getRepository(Users)) : null) || null;
+      (req as { user: unknown }).user = (token ? await verifyJwtAndLoadUser(token, this.em.getRepository(Users), this.em.getRepository(UserSessions)) : null) || null;
       return true;
     }
 
@@ -66,7 +67,7 @@ export class GlobalAuthGuard implements CanActivate {
     ];
     if (declared.length > 0) {
       const declaredToken = extractToken(req);
-      (req as { user: unknown }).user = (declaredToken ? await verifyJwtAndLoadUser(declaredToken, this.em.getRepository(Users)) : null) || null;
+      (req as { user: unknown }).user = (declaredToken ? await verifyJwtAndLoadUser(declaredToken, this.em.getRepository(Users), this.em.getRepository(UserSessions)) : null) || null;
       return true;
     }
 
@@ -74,7 +75,7 @@ export class GlobalAuthGuard implements CanActivate {
     if (!token) {
       throw new HttpException({ error: 'Access token required', code: 'AUTH_REQUIRED' }, 401);
     }
-    const user = await verifyJwtAndLoadUser(token, this.em.getRepository(Users));
+    const user = await verifyJwtAndLoadUser(token, this.em.getRepository(Users), this.em.getRepository(UserSessions));
     if (!user) {
       throw new HttpException({ error: 'Invalid or expired token', code: 'AUTH_REQUIRED' }, 401);
     }

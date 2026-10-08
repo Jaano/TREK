@@ -34,6 +34,9 @@ vi.mock('../../../src/db/database', async () => {
 vi.mock('../../../src/config', () => ({
   JWT_SECRET: 'test-secret',
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
+  // The session cases sign real session tokens.
+  SESSION_DURATION_SECONDS: 86400,
+  SESSION_DURATION_REMEMBER_SECONDS: 2592000,
   updateJwtSecret: () => {},
 }));
 vi.mock('../../../src/nest/common/crypto/apiKeyCrypto', () => ({
@@ -114,6 +117,7 @@ import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-rep
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
 import type { DatabaseBackupStrategy } from '../../../src/nest/database/database-backup.interface';
+import { createTestSessionsService, createTestUserSessionsRepo } from '../../helpers/sessions';
 
 const realtime = new RealtimeService();
 
@@ -148,6 +152,8 @@ beforeAll(async () => {
     await createTestAppSettingsRepo(testDb), await createTestUsersRepo(testDb), await createTestInviteTokensRepo(testDb), await createTestMcpTokensRepo(testDb),
     await createTestOauthTokensRepo(testDb), await createTestWebauthnCredentialsRepo(testDb), await createTestPasswordResetTokensRepo(testDb),
     await createTestPushSubscriptionsRepo(testDb),
+    await createTestUserSessionsRepo(testDb),
+    await createTestSessionsService(testDb),
   );
   const t = await sharedTestOrm(testDb);
   mcpTokensRepo = await createTestMcpTokensRepo(testDb);
@@ -176,6 +182,7 @@ beforeAll(async () => {
   await createTestUnitOfWork(testDb),
   databaseBackupStub,
   new DataPathsService(),
+  await createTestSessionsService(testDb),
 );
 });
 
@@ -731,6 +738,9 @@ const addPushDevice = (userId: number, endpoint: string): void => {
     .run(userId, endpoint);
 };
 
+const liveSessions = (id: number): number =>
+  (testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = ? AND revoked_at IS NULL').get(id) as { n: number }).n;
+
 const pushDeviceCount = (id: number): number =>
   (testDb.prepare('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?').get(id) as { n: number }).n;
 
@@ -792,6 +802,20 @@ describe('admin password reset revokes what an intruder already holds', () => {
     expect(pushDeviceCount(user.id)).toBe(1);
   });
 
+  it('ADMIN-SVC-081d: and ends every session of that user, and only of that user', async () => {
+    const { user } = createUser(testDb);
+    const { user: other } = createUser(testDb);
+    const intruder = await auth.generateToken({ id: user.id });
+    const bystander = await auth.generateToken({ id: other.id });
+
+    await updateUser(String(user.id), { password: 'ANewStrongPass123!' });
+
+    expect(liveSessions(user.id)).toBe(0);
+    expect(liveSessions(other.id)).toBe(1);
+    expect(await auth.verifyJwtToken(intruder)).toBeNull();
+    expect(await auth.verifyJwtToken(bystander)).not.toBeNull();
+  });
+
   it('ADMIN-SVC-082 — renaming a user touches neither, so an ordinary edit stays ordinary', async () => {
     const { user } = createUser(testDb);
     const before = pv(user.id);
@@ -807,6 +831,17 @@ describe('admin password reset revokes what an intruder already holds', () => {
 });
 
 describe('resetUserMfa', () => {
+  it('ADMIN-SVC-083b: ends the sessions of the account whose second factor it removed', async () => {
+    const admin = createAdmin(testDb);
+    const { user } = createUserWithMfa(testDb);
+    await auth.generateToken({ id: user.id });
+    await auth.generateToken({ id: admin.user.id });
+
+    expect((await svc.resetUserMfa(String(user.id), admin.user.id)) as { success?: boolean }).toMatchObject({ success: true });
+    expect(liveSessions(user.id)).toBe(0);
+    expect(liveSessions(admin.user.id)).toBe(1);
+  });
+
   it('ADMIN-SVC-083 — clears the three columns disableMfa clears, so both paths leave one state', async () => {
     // The passkey half has existed since passkeys landed; TOTP never had an
     // answer, which left "somebody on the trip lost their phone" with no way out

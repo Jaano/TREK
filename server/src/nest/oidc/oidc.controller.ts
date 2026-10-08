@@ -13,6 +13,7 @@ import { getClientIp } from '../audit/client-ip';
 import { AdminOidcUpdateDto } from '../admin/admin.dto';
 import { Public } from '../auth/public.decorator';
 import { ManagedForbidden } from '../common/managed';
+import { sessionClientFrom } from '../sessions/sessions.service';
 
 const OIDC_STATE_COOKIE = 'trek_oidc_state';
 const OIDC_EXCHANGE_COOKIE = 'trek_oidc_exchange';
@@ -202,7 +203,7 @@ export class OidcController {
       // Pass the flag through untouched: `undefined` must reach the token as
       // "absent", not `false`, or the sliding renewal would later downgrade the
       // default persistent cookie to a browser-session one (remember-me, #1927).
-      const jwtToken = await this.oidc.generateToken(result.user, pending.remember);
+      const jwtToken = await this.oidc.generateToken(result.user, pending.remember, sessionClientFrom(req));
       const { code: authCode, binding } = await this.oidc.createAuthCode(jwtToken, pending.remember);
       // Bind the code to THIS browser, the way the state cookie binds the callback.
       // The code rides home in a URL, so it is readable from history, from a
