@@ -66,6 +66,8 @@ Nest owns everything. Every domain is a DI module under `src/nest/<domain>/` (`c
 
 `tests/` is split into `unit/` (mirrors `src/`), `integration/`, `e2e/` (one `<domain>.e2e.test.ts` per module, booting the real guards against a temp DB via `tests/e2e/harness.ts`) and `websocket/`; helpers in `tests/helpers/`, fixtures in `tests/fixtures/`.
 
+- **Upgrade fixtures**: `tests/fixtures/legacy/legacy-v*.sql` are databases the retired positional runner built; `tests/integration/legacy-upgrade-v*.test.ts` boot `buildApp()` on each. `legacy-v244` is the v4.3.3 release with rows across the main tables, rebuilt reproducibly by `node scripts/build-legacy-fixture-v244.mjs` (archives the tag into a temp dir, boots that release's runner, seeds, pins timestamps, dumps).
+
 - **vitest uses the SWC plugin**, not esbuild, because Nest's DI needs emitted decorator metadata. Keep that in `vitest.config.ts`. Pool is `forks` (isolated DB per worker). The config also aliases `@modelcontextprotocol/sdk/*` to its CJS dist because the SDK's exports map is unresolvable.
 - **Coverage is a per-domain ratchet over `src/nest/**`** (≥80% floor, most domains pinned higher). Regenerate the block with `scripts/coverage-thresholds.mjs` when coverage rises; never lower a threshold to land a change.
 - CI also runs SonarCloud on the PR's new lines — see the root `CLAUDE.md`.

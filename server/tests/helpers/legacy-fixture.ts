@@ -5,7 +5,8 @@
  *
  * The fixtures are `sqlite3 .dump` output committed under
  * `tests/fixtures/legacy/`; each file's header names the commit whose runner
- * built it. Loaded into a temp FILE database, not `:memory:`, because an
+ * built it. `legacy-v244` (the v4.3.3 release) is rebuilt by
+ * `scripts/build-legacy-fixture-v244.mjs`. Loaded into a temp FILE database, not `:memory:`, because an
  * upgraded install is a file on disk.
  *
  * Imported from inside `vi.mock('…/db/database')` factories, so like
@@ -16,7 +17,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export type LegacyFixture = 'legacy-v066' | 'legacy-v082' | 'legacy-v205' | 'legacy-v242';
+export type LegacyFixture = 'legacy-v066' | 'legacy-v082' | 'legacy-v205' | 'legacy-v242' | 'legacy-v244';
 
 const FIXTURES = path.join(__dirname, '../fixtures/legacy');
 

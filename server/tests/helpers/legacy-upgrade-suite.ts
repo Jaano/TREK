@@ -52,7 +52,20 @@ function migrationFiles(): Array<{ name: string; step: number | null }> {
     });
 }
 
-export function describeLegacyUpgrade(c: LegacyUpgradeCase, legacyDb: Database.Database): void {
+/** What a fixture's own extra cases can read: the boot's log lines. */
+export interface LegacyUpgradeContext {
+  logged: string[];
+}
+
+/**
+ * `extra` declares a fixture's own cases inside the same describe, so they run
+ * against the booted app before the fixture file is closed and deleted.
+ */
+export function describeLegacyUpgrade(
+  c: LegacyUpgradeCase,
+  legacyDb: Database.Database,
+  extra?: (ctx: LegacyUpgradeContext) => void,
+): void {
   describe(`an install the legacy runner left at schema_version ${c.version} boots on this release`, () => {
     let app: INestApplication;
     const logged: string[] = [];
@@ -150,5 +163,7 @@ export function describeLegacyUpgrade(c: LegacyUpgradeCase, legacyDb: Database.D
       const count = legacyDb.prepare('SELECT COUNT(*) AS c FROM mikro_orm_migrations').get() as { c: number };
       expect(count.c).toBe(files.length);
     });
+
+    extra?.({ logged });
   });
 }
