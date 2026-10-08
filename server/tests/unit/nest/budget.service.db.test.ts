@@ -13,15 +13,8 @@ vi.mock('../../../src/db/database', async () => {
 
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: () => null,
-    isOwner: () => false,
-  };
-    return mock;
+  // Trip access and place reads go through the repositories now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
 
@@ -79,6 +72,57 @@ import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourney
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
 import { BudgetItemMembers } from '../../../src/db/entities/BudgetItemMembers.entity';
 import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import { BudgetCategoryOrder } from '../../../src/db/entities/BudgetCategoryOrder.entity';
+import { BudgetItemPayers } from '../../../src/db/entities/BudgetItemPayers.entity';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { BudgetSettlements } from '../../../src/db/entities/BudgetSettlements.entity';
+import { FileLinks } from '../../../src/db/entities/FileLinks.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { TripFiles } from '../../../src/db/entities/TripFiles.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+
+const orm = () => sharedTestOrm(testDb);
+
+async function setTrip(id: number, data: { currency: string | null }): Promise<void> {
+  await updateRows(await orm(), Trips, { id }, data);
+}
+
+/** Hangs the given expenses on the booking. */
+async function linkItems(reservationId: number, itemIds: number[]): Promise<void> {
+  await updateRows(await orm(), BudgetItems, { id: { $in: itemIds } }, { reservation: reservationId });
+}
+
+/** The stored expense; fails the case when it is gone. */
+async function budgetItemRow(id: number) {
+  const row = await findRow(await orm(), BudgetItems, { id });
+  if (!row) throw new Error(`no budget item ${id}`);
+  return row;
+}
+
+async function addPlace(tripId: number, name: string): Promise<number> {
+  return insertRow(await orm(), Places, { trip: tripId, name });
+}
+
+/** A trip file under the same name on disk and on screen. */
+async function addFile(tripId: number, name: string): Promise<number> {
+  return insertRow(await orm(), TripFiles, { trip: tripId, filename: name, original_name: name });
+}
+
+async function fileRow(id: number) {
+  const row = await findRow(await orm(), TripFiles, { id });
+  if (!row) throw new Error(`no trip file ${id}`);
+  return row;
+}
+
+/** The file's one link row; fails the case when it has none. */
+async function linkOfFile(fileId: number) {
+  const row = await findRow(await orm(), FileLinks, { file: fileId });
+  if (!row) throw new Error(`no link for file ${fileId}`);
+  return row;
+}
 
 // Guest fixtures come from TripMembersService since the trip split (they were on
 // TripsService before, and on the deleted services/tripService before that);
@@ -136,20 +180,17 @@ afterAll(() => {
   testDb.close();
 });
 
-function paidFlag(itemId: number, memberId: number): number | undefined {
-  const row = testDb
-    .prepare('SELECT paid FROM budget_item_members WHERE budget_item_id = ? AND user_id = ?')
-    .get(itemId, memberId) as { paid: number } | undefined;
+async function paidFlag(itemId: number, memberId: number): Promise<number | undefined> {
+  const row = await findRow(await orm(), BudgetItemMembers, { budgetItem: itemId, user: memberId });
   return row?.paid;
 }
 
 describe('deleting a member re-splits their expenses (#1553)', () => {
-  function personsOf(itemId: number): number | null {
-    return (testDb.prepare('SELECT persons FROM budget_items WHERE id = ?').get(itemId) as { persons: number | null }).persons;
+  async function personsOf(itemId: number): Promise<number | null | undefined> {
+    return (await budgetItemRow(itemId)).persons;
   }
-  function memberCount(itemId: number): number {
-    return (testDb.prepare('SELECT COUNT(*) AS count FROM budget_item_members WHERE budget_item_id = ?')
-      .get(itemId) as { count: number }).count;
+  async function memberCount(itemId: number): Promise<number> {
+    return countRows(await orm(), BudgetItemMembers, { budgetItem: itemId });
   }
 
   it('BUDGET-SVC-DB-010: re-derives the persons divisor when a guest in the split is deleted', async () => {
@@ -160,15 +201,15 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
       name: 'Dinner', total_price: 400,
       member_ids: [owner.id, ...guests.map(g => g.id)],
     });
-    expect(personsOf(item.id)).toBe(4);
+    expect(await personsOf(item.id)).toBe(4);
 
     await deleteGuest(trip.id, guests[0].id);
     await deleteGuest(trip.id, guests[1].id);
 
     // The member rows cascade with the users row; `persons` is denormalized and has to
     // be re-derived, or the per-person column keeps dividing by the departed.
-    expect(memberCount(item.id)).toBe(2);
-    expect(personsOf(item.id)).toBe(2);
+    expect(await memberCount(item.id)).toBe(2);
+    expect(await personsOf(item.id)).toBe(2);
   });
 
   it('BUDGET-SVC-DB-011: leaves a manually entered persons count alone', async () => {
@@ -180,7 +221,7 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
 
     await deleteGuest(trip.id, guest.id);
 
-    expect(personsOf(item.id)).toBe(6);
+    expect(await personsOf(item.id)).toBe(6);
   });
 
   it('BUDGET-SVC-DB-012: drops the last member to a null divisor rather than zero', async () => {
@@ -191,8 +232,8 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
 
     await deleteGuest(trip.id, guest.id);
 
-    expect(memberCount(item.id)).toBe(0);
-    expect(personsOf(item.id)).toBeNull();
+    expect(await memberCount(item.id)).toBe(0);
+    expect(await personsOf(item.id)).toBeNull();
   });
 
   it('BUDGET-SVC-DB-013: saves a split from a stale client instead of failing on the users FK', async () => {
@@ -207,7 +248,7 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
     const updated = await budget.updateBudgetItem(item.id, trip.id, { member_ids: [owner.id, guest.id] });
 
     expect(updated!.members.map(m => m.user_id)).toEqual([owner.id]);
-    expect(personsOf(item.id)).toBe(1);
+    expect(await personsOf(item.id)).toBe(1);
   });
 
   it('BUDGET-SVC-DB-014: ignores a deleted member arriving through updateMembers', async () => {
@@ -220,7 +261,7 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
     const result = await budget.updateMembers(item.id, trip.id, [owner.id, guest.id]);
 
     expect(result!.members.map(m => m.user_id)).toEqual([owner.id]);
-    expect(personsOf(item.id)).toBe(1);
+    expect(await personsOf(item.id)).toBe(1);
   });
 });
 
@@ -234,7 +275,7 @@ describe('toggleMemberPaid trip-scoping', () => {
     const member = await budget.toggleMemberPaid(item.id, trip.id, user.id, true);
 
     expect(member).not.toBeNull();
-    expect(paidFlag(item.id, user.id)).toBe(1);
+    expect(await paidFlag(item.id, user.id)).toBe(1);
   });
 
   it('BUDGET-SVC-DB-002: refuses to toggle an item from a different trip (cross-trip IDOR)', async () => {
@@ -248,7 +289,7 @@ describe('toggleMemberPaid trip-scoping', () => {
     const member = await budget.toggleMemberPaid(itemB.id, tripA.id, user.id, true);
 
     expect(member).toBeNull();
-    expect(paidFlag(itemB.id, user.id)).toBe(0); // unchanged
+    expect(await paidFlag(itemB.id, user.id)).toBe(0); // unchanged
   });
 
   it('M2-BUDGET-001: getBudgetItem/deleteBudgetItem refuse an item from a different trip (BudgetItems.findInTrip / findForDelete trip-scoping)', async () => {
@@ -278,14 +319,14 @@ describe('toggleMemberPaid trip-scoping', () => {
     const trip = createTrip(testDb, user.id, { title: 'Trip A' });
     const item = await budget.createBudgetItem(trip.id, { name: 'Hotel', total_price: 100 });
     await budget.updateMembers(item.id, trip.id, [user.id]);
-    expect(paidFlag(item.id, user.id)).toBe(0);
+    expect(await paidFlag(item.id, user.id)).toBe(0);
 
     const membersRepo = (await sharedTestOrm(testDb)).repo(BudgetItemMembers);
     const findSpy = vi.spyOn(membersRepo, 'findMemberWithUser').mockRejectedValueOnce(new Error('boom'));
     try {
       await expect(budget.toggleMemberPaid(item.id, trip.id, user.id, true)).rejects.toThrow('boom');
       // The UPDATE ran before the forced failure — rolled back with it, so the flag is still 0.
-      expect(paidFlag(item.id, user.id)).toBe(0);
+      expect(await paidFlag(item.id, user.id)).toBe(0);
     } finally {
       findSpy.mockRestore();
     }
@@ -293,7 +334,7 @@ describe('toggleMemberPaid trip-scoping', () => {
     // The fix works: without the forced failure, the same write commits normally.
     const member = await budget.toggleMemberPaid(item.id, trip.id, user.id, true);
     expect(member).not.toBeNull();
-    expect(paidFlag(item.id, user.id)).toBe(1);
+    expect(await paidFlag(item.id, user.id)).toBe(1);
   });
 });
 
@@ -383,7 +424,7 @@ async function seedIssue1543Trip(tripCurrency: string) {
   const trip = createTrip(testDb, me.id, { title: 'Trip' });
   addTripMember(testDb, trip.id, danil.id);
   addTripMember(testDb, trip.id, serega.id);
-  testDb.prepare('UPDATE trips SET currency = ? WHERE id = ?').run(tripCurrency, trip.id);
+  await setTrip(trip.id, { currency: tripCurrency });
   const members = [{ user_id: me.id }, { user_id: danil.id }, { user_id: serega.id }];
 
   // 9 000 ₽ nobody has paid yet (outstanding, settled by nobody, #2225), 9 000 ₽ paid
@@ -434,14 +475,15 @@ describe('calculateSettlement with a foreign-currency expense (#1543)', () => {
 });
 
 describe('rebaseTripCurrency', () => {
-  const itemRow = (id: number) =>
-    testDb.prepare('SELECT currency, exchange_rate FROM budget_items WHERE id = ?')
-      .get(id) as { currency: string | null; exchange_rate: number };
+  const itemRow = async (id: number) => {
+    const { currency, exchange_rate } = await budgetItemRow(id);
+    return { currency, exchange_rate };
+  };
 
   it('BUDGET-SVC-DB-006: pins currency-less expenses to the outgoing currency and re-freezes the rest', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'EUR' });
     const members = [{ user_id: user.id }];
 
     // An expense that inherits the trip's base (currency NULL), one booked in USD, and
@@ -454,10 +496,10 @@ describe('rebaseTripCurrency', () => {
 
     // The implicit row really held euros, so it is stamped EUR rather than silently
     // becoming 100 ₽, and every rate is re-anchored to the new base.
-    expect(itemRow(implicit.id)).toEqual({ currency: 'EUR', exchange_rate: RATES.RUB.EUR });
-    expect(itemRow(usd.id)).toEqual({ currency: 'USD', exchange_rate: RATES.RUB.USD });
+    expect(await itemRow(implicit.id)).toEqual({ currency: 'EUR', exchange_rate: RATES.RUB.EUR });
+    expect(await itemRow(usd.id)).toEqual({ currency: 'USD', exchange_rate: RATES.RUB.USD });
     // Already in the trip's new currency → no conversion left to freeze.
-    expect(itemRow(rub.id)).toEqual({ currency: 'RUB', exchange_rate: 1 });
+    expect(await itemRow(rub.id)).toEqual({ currency: 'RUB', exchange_rate: 1 });
   });
 
   it('BUDGET-SVC-DB-007: keeps every balance at the same real-world value across the switch', async () => {
@@ -465,7 +507,7 @@ describe('rebaseTripCurrency', () => {
     const { user: bob } = createUser(testDb, { username: 'bob' });
     const trip = createTrip(testDb, alice.id, { title: 'Trip' });
     addTripMember(testDb, trip.id, bob.id);
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'EUR' });
     const members = [{ user_id: alice.id }, { user_id: bob.id }];
 
     await budget.createBudgetItem(trip.id, { name: 'Hotel', payers: [{ user_id: alice.id, amount: 100 }], members });
@@ -474,7 +516,7 @@ describe('rebaseTripCurrency', () => {
     const before = await budget.calculateSettlement(trip.id, { base: 'EUR', tripCurrency: 'EUR', rates: RATES.EUR });
 
     await budget.rebaseTripCurrency(trip.id, 'RUB');
-    testDb.prepare("UPDATE trips SET currency = 'RUB' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'RUB' });
 
     const after = await budget.calculateSettlement(trip.id, { base: 'RUB', tripCurrency: 'RUB', rates: RATES.RUB });
 
@@ -487,31 +529,30 @@ describe('rebaseTripCurrency', () => {
   it('BUDGET-SVC-DB-009: pins currency-less place prices to the outgoing currency', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'EUR' });
 
-    const priced = (price: number | null, currency: string | null) => {
-      const r = testDb.prepare('INSERT INTO places (trip_id, name, price, currency) VALUES (?, ?, ?, ?)')
-        .run(trip.id, 'Place', price, currency);
-      return Number(r.lastInsertRowid);
-    };
+    const priced = async (price: number | null, currency: string | null) =>
+      insertRow(await orm(), Places, { trip: trip.id, name: 'Place', price, currency });
     // A place that inherits the trip's base (currency NULL), one priced in its own
     // currency, and one with no price at all.
-    const implicit = priced(15, null);
-    const jpy = priced(1500, 'JPY');
-    const free = priced(null, null);
+    const implicit = await priced(15, null);
+    const jpy = await priced(1500, 'JPY');
+    const free = await priced(null, null);
 
     await budget.rebaseTripCurrency(trip.id, 'JPY');
 
-    const placeRow = (id: number) =>
-      testDb.prepare('SELECT price, currency FROM places WHERE id = ?')
-        .get(id) as { price: number | null; currency: string | null };
+    const placeRow = async (id: number) => {
+      const place = await findRow(await orm(), Places, { id });
+      if (!place) throw new Error(`no place ${id}`);
+      return { price: place.price, currency: place.currency };
+    };
 
     // The implicit place really held euros, so it is stamped EUR rather than silently
     // becoming ¥15 — the amount the user typed is never rewritten.
-    expect(placeRow(implicit)).toEqual({ price: 15, currency: 'EUR' });
-    expect(placeRow(jpy)).toEqual({ price: 1500, currency: 'JPY' });
+    expect(await placeRow(implicit)).toEqual({ price: 15, currency: 'EUR' });
+    expect(await placeRow(jpy)).toEqual({ price: 1500, currency: 'JPY' });
     // Nothing to denominate without a price: leave it inheriting the trip's currency.
-    expect(placeRow(free)).toEqual({ price: null, currency: null });
+    expect(await placeRow(free)).toEqual({ price: null, currency: null });
   });
 
   it('BUDGET-SVC-DB-010: re-freezes a budget_settlements row against the new base (BudgetSettlements.listDistinctCurrencies / setExchangeRateForCurrency)', async () => {
@@ -519,29 +560,32 @@ describe('rebaseTripCurrency', () => {
     const { user: bob } = createUser(testDb, { username: 'bob' });
     const trip = createTrip(testDb, alice.id, { title: 'Trip' });
     addTripMember(testDb, trip.id, bob.id);
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'EUR' });
 
     const settlement = await budget.createSettlement(trip.id, { from_user_id: bob.id, to_user_id: alice.id, amount: 50, currency: 'USD' }, alice.id) as { id: number };
-    const settlementRow = () =>
-      testDb.prepare('SELECT currency, exchange_rate FROM budget_settlements WHERE id = ?').get(settlement.id) as { currency: string | null; exchange_rate: number };
-    expect(settlementRow().currency).toBe('USD');
+    const settlementRow = async () => {
+      const row = await findRow(await orm(), BudgetSettlements, { id: settlement.id });
+      if (!row) throw new Error(`no settlement ${settlement.id}`);
+      return { currency: row.currency, exchange_rate: row.exchange_rate };
+    };
+    expect((await settlementRow()).currency).toBe('USD');
 
     await budget.rebaseTripCurrency(trip.id, 'RUB');
 
     // USD isn't the incoming base, so the settlement's frozen rate is re-anchored
     // against RUB rather than left pointing at the trip's old EUR base.
-    expect(settlementRow()).toEqual({ currency: 'USD', exchange_rate: RATES.RUB.USD });
+    expect(await settlementRow()).toEqual({ currency: 'USD', exchange_rate: RATES.RUB.USD });
   });
 
   it('BUDGET-SVC-DB-008: is a no-op when the currency is unchanged', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'EUR' });
     const item = await budget.createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members: [{ user_id: user.id }] }) as { id: number };
 
     await budget.rebaseTripCurrency(trip.id, 'EUR');
 
-    expect(itemRow(item.id)).toEqual({ currency: null, exchange_rate: 1 });
+    expect(await itemRow(item.id)).toEqual({ currency: null, exchange_rate: 1 });
   });
 });
 
@@ -568,19 +612,19 @@ describe('composite service paths (ex budget.bridge delegation)', () => {
 
     await budget.removeUserFromBudgetItems(other.id);
 
-    const row = testDb.prepare('SELECT persons FROM budget_items WHERE id = ?').get(item.id) as { persons: number | null };
+    const row = await budgetItemRow(item.id);
     expect(row.persons).toBe(1);
   });
 
   it('BUDGET-SVC-DB-017: rebaseTripCurrency pins the implicit currency', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'EUR' });
     const item = await budget.createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members: [{ user_id: user.id }] });
 
     await budget.rebaseTripCurrency(trip.id, 'RUB');
 
-    const row = testDb.prepare('SELECT currency, exchange_rate FROM budget_items WHERE id = ?').get(item.id) as { currency: string | null; exchange_rate: number };
+    const row = await budgetItemRow(item.id);
     expect(row).toEqual({ currency: 'EUR', exchange_rate: RATES.RUB.EUR });
   });
 
@@ -612,29 +656,25 @@ describe('composite service paths (ex budget.bridge delegation)', () => {
   it('BUDGET-SVC-DB-018: linkBudgetItemToReservation stamps the reservation id', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const reservationId = Number(testDb
-      .prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Flight', 'flight')")
-      .run(trip.id).lastInsertRowid);
+    const reservationId = await insertRow(await orm(), Reservations, { trip: trip.id, title: 'Flight', type: 'flight' });
 
     const item = await budget.linkBudgetItemToReservation(trip.id, reservationId, { name: 'Flight', total_price: 200 });
 
     expect(item.reservation_id).toBe(reservationId);
-    const row = testDb.prepare('SELECT reservation_id FROM budget_items WHERE id = ?').get(item.id) as { reservation_id: number | null };
+    const row = await budgetItemRow(item.id);
     expect(row.reservation_id).toBe(reservationId);
   });
 
   it('BUDGET-SVC-DB-018b: an expense can be created against a place (#1298)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const placeId = Number(testDb
-      .prepare("INSERT INTO places (trip_id, name) VALUES (?, 'Louvre')")
-      .run(trip.id).lastInsertRowid);
+    const placeId = await addPlace(trip.id, 'Louvre');
 
     const item = await budget.createBudgetItem(trip.id, { name: 'Louvre tickets', total_price: 34, place_id: placeId });
 
     expect(item.place_id).toBe(placeId);
     expect(item.reservation_id).toBeNull();
-    const row = testDb.prepare('SELECT place_id FROM budget_items WHERE id = ?').get(item.id) as { place_id: number | null };
+    const row = await budgetItemRow(item.id);
     expect(row.place_id).toBe(placeId);
   });
 
@@ -732,7 +772,7 @@ describe('negative amounts persist end-to-end (#2176)', () => {
 
     expect(item.total_price).toBe(-100);
     expect(item.payers).toEqual([expect.objectContaining({ user_id: alice.id, amount: -100 })]);
-    const row = testDb.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(item.id) as { total_price: number };
+    const row = await budgetItemRow(item.id);
     expect(row.total_price).toBe(-100);
   });
 
@@ -817,18 +857,17 @@ describe('deleting an expense takes its price off the booking (#2233)', () => {
     // Without this the card would show a price with nothing behind it, for good.
     const { user } = createUser(testDb, { username: 'owner' });
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
-    const res = testDb.prepare(
-      "INSERT INTO reservations (trip_id, title, type, metadata) VALUES (?, 'Flight', 'flight', ?)",
-    ).run(trip.id, JSON.stringify({ airline: 'CZ', seat: '12A', price: '2040', priceCurrency: 'CNY' }));
-    const reservationId = Number(res.lastInsertRowid);
+    const reservationId = await insertRow(await orm(), Reservations, {
+      trip: trip.id, title: 'Flight', type: 'flight', metadata: JSON.stringify({ airline: 'CZ', seat: '12A', price: '2040', priceCurrency: 'CNY' }),
+    });
 
     const item = await budget.createBudgetItem(trip.id, { name: 'Flight', total_price: 2040 });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id = ?').run(reservationId, item.id);
+    await linkItems(reservationId, [item.id]);
 
     expect(await budget.deleteBudgetItem(item.id, trip.id)).toBe(true);
 
-    const after = testDb.prepare('SELECT metadata FROM reservations WHERE id = ?').get(reservationId) as { metadata: string };
-    expect(JSON.parse(after.metadata)).toEqual({ airline: 'CZ', seat: '12A' });
+    const after = await findRow(await orm(), Reservations, { id: reservationId });
+    expect(JSON.parse(after!.metadata!)).toEqual({ airline: 'CZ', seat: '12A' });
   });
 
   it('BUDGET-SVC-DB-041: an expense that was never linked to a booking deletes as before', async () => {
@@ -837,66 +876,65 @@ describe('deleting an expense takes its price off the booking (#2233)', () => {
     const item = await budget.createBudgetItem(trip.id, { name: 'Coffee', total_price: 4 });
 
     expect(await budget.deleteBudgetItem(item.id, trip.id)).toBe(true);
-    expect(testDb.prepare('SELECT id FROM budget_items WHERE id = ?').get(item.id)).toBeUndefined();
+    expect(await findRow(await orm(), BudgetItems, { id: item.id })).toBeNull();
   });
 });
 
 describe('linking existing expenses to bookings and places (#2084)', () => {
-  function tripWithBooking(metadata: Record<string, unknown> | null = null) {
+  async function tripWithBooking(metadata: Record<string, unknown> | null = null) {
     const { user } = createUser(testDb, { username: 'owner' });
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
-    const reservationId = insertReservation(trip.id, 'Flight', metadata);
+    const reservationId = await insertReservation(trip.id, 'Flight', metadata);
     return { user, trip, reservationId };
   }
 
-  function insertReservation(tripId: number, title: string, metadata: Record<string, unknown> | null = null): number {
-    return Number(testDb
-      .prepare("INSERT INTO reservations (trip_id, title, type, metadata) VALUES (?, ?, 'flight', ?)")
-      .run(tripId, title, metadata ? JSON.stringify(metadata) : null).lastInsertRowid);
+  async function insertReservation(tripId: number, title: string, metadata: Record<string, unknown> | null = null): Promise<number> {
+    return insertRow(await orm(), Reservations, { trip: tripId, title, type: 'flight', metadata: metadata ? JSON.stringify(metadata) : null });
   }
 
-  function insertPlace(tripId: number, name = 'Louvre'): number {
-    return Number(testDb.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(tripId, name).lastInsertRowid);
+  async function insertPlace(tripId: number, name = 'Louvre'): Promise<number> {
+    return addPlace(tripId, name);
   }
 
-  function metadataOf(reservationId: number): Record<string, unknown> | null {
-    const row = testDb.prepare('SELECT metadata FROM reservations WHERE id = ?').get(reservationId) as { metadata: string | null };
+  async function metadataOf(reservationId: number): Promise<Record<string, unknown> | null> {
+    const row = await findRow(await orm(), Reservations, { id: reservationId });
+    if (!row) throw new Error(`no reservation ${reservationId}`);
     return row.metadata ? JSON.parse(row.metadata) : null;
   }
 
-  function linksOf(itemId: number) {
-    return testDb.prepare('SELECT reservation_id, place_id FROM budget_items WHERE id = ?').get(itemId) as {
-      reservation_id: number | null; place_id: number | null;
-    };
+  async function linksOf(itemId: number) {
+    const { reservation_id, place_id } = await budgetItemRow(itemId);
+    return { reservation_id, place_id };
   }
 
   it('BUDGET-SVC-DB-070: an update links an existing expense, leaves the link alone when omitted, and null lets go of it', async () => {
-    const { trip, reservationId } = tripWithBooking();
-    const placeId = insertPlace(trip.id);
+    const { trip, reservationId } = await tripWithBooking();
+    const placeId = await insertPlace(trip.id);
     const item = await budget.createBudgetItem(trip.id, { name: 'Tickets', total_price: 34 });
 
     const linked = await budget.updateBudgetItem(item.id, trip.id, { reservation_id: reservationId, place_id: placeId });
     expect(linked).toMatchObject({ reservation_id: reservationId, place_id: placeId });
-    expect(linksOf(item.id)).toEqual({ reservation_id: reservationId, place_id: placeId });
+    expect(await linksOf(item.id)).toEqual({ reservation_id: reservationId, place_id: placeId });
 
     // An edit that does not name the links keeps both.
     await budget.updateBudgetItem(item.id, trip.id, { name: 'Museum tickets' });
-    expect(linksOf(item.id)).toEqual({ reservation_id: reservationId, place_id: placeId });
+    expect(await linksOf(item.id)).toEqual({ reservation_id: reservationId, place_id: placeId });
 
     // null unlinks, one field at a time, and the expense itself stays.
     await budget.updateBudgetItem(item.id, trip.id, { reservation_id: null });
-    expect(linksOf(item.id)).toEqual({ reservation_id: null, place_id: placeId });
+    expect(await linksOf(item.id)).toEqual({ reservation_id: null, place_id: placeId });
     await budget.updateBudgetItem(item.id, trip.id, { place_id: null });
-    expect(linksOf(item.id)).toEqual({ reservation_id: null, place_id: null });
-    expect(testDb.prepare('SELECT name, total_price FROM budget_items WHERE id = ?').get(item.id)).toEqual({ name: 'Museum tickets', total_price: 34 });
+    expect(await linksOf(item.id)).toEqual({ reservation_id: null, place_id: null });
+    const { name, total_price } = await budgetItemRow(item.id);
+    expect({ name, total_price }).toEqual({ name: 'Museum tickets', total_price: 34 });
   });
 
   it('BUDGET-SVC-DB-071: linkRefusal passes this trip\'s ids and names the foreign or missing one', async () => {
-    const { user, trip, reservationId } = tripWithBooking();
-    const placeId = insertPlace(trip.id);
+    const { user, trip, reservationId } = await tripWithBooking();
+    const placeId = await insertPlace(trip.id);
     const elsewhere = createTrip(testDb, user.id, { title: 'Elsewhere' });
-    const foreignReservation = insertReservation(elsewhere.id, 'Other flight');
-    const foreignPlace = insertPlace(elsewhere.id, 'Elsewhere');
+    const foreignReservation = await insertReservation(elsewhere.id, 'Other flight');
+    const foreignPlace = await insertPlace(elsewhere.id, 'Elsewhere');
 
     expect(await budget.linkRefusal(trip.id, {})).toBeNull();
     expect(await budget.linkRefusal(trip.id, { reservation_id: null, place_id: null })).toBeNull();
@@ -915,157 +953,157 @@ describe('linking existing expenses to bookings and places (#2084)', () => {
   });
 
   it('BUDGET-SVC-DB-072: the booking mirrors the sum of its expenses while they share one currency', async () => {
-    const { trip, reservationId } = tripWithBooking({ seat: '12A' });
+    const { trip, reservationId } = await tripWithBooking({ seat: '12A' });
     const first = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 10.1, currency: 'usd' });
     const second = await budget.createBudgetItem(trip.id, { name: 'Luggage', total_price: 20.2, currency: 'usd' });
     // An expense on another booking of the same trip is not part of the sum.
-    const other = insertReservation(trip.id, 'Return');
+    const other = await insertReservation(trip.id, 'Return');
     const unrelated = await budget.createBudgetItem(trip.id, { name: 'Return fare', total_price: 99, currency: 'usd' });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservationId, first.id, second.id);
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id = ?').run(other, unrelated.id);
+    await linkItems(reservationId, [first.id, second.id]);
+    await linkItems(other, [unrelated.id]);
 
     await budget.resyncReservationPrice(trip.id, reservationId);
 
     // Cent-clean (10.1 + 20.2 is 30.299999... in floats), upper-cased currency,
     // and the rest of the metadata untouched.
-    expect(metadataOf(reservationId)).toEqual({ seat: '12A', price: '30.3', priceCurrency: 'USD' });
+    expect(await metadataOf(reservationId)).toEqual({ seat: '12A', price: '30.3', priceCurrency: 'USD' });
   });
 
   it('BUDGET-SVC-DB-052: an expense without a currency and one in the trip currency by code add up', async () => {
     // No currency means the trip's; the two rows are in the same money and the
     // booking shows their sum, not the first one alone.
-    const { trip, reservationId } = tripWithBooking();
-    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    const { trip, reservationId } = await tripWithBooking();
+    await setTrip(trip.id, { currency: 'EUR' });
     const implicit = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 40 });
     const explicit = await budget.createBudgetItem(trip.id, { name: 'Seat', total_price: 12, currency: 'eur' });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservationId, implicit.id, explicit.id);
+    await linkItems(reservationId, [implicit.id, explicit.id]);
 
     await budget.resyncReservationPrice(trip.id, reservationId);
 
     // Named by its code once one of them names it.
-    expect(metadataOf(reservationId)).toEqual({ price: '52', priceCurrency: 'EUR' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '52', priceCurrency: 'EUR' });
   });
 
   it('BUDGET-SVC-DB-053: a currency code is the same currency whatever its case', async () => {
-    const { trip, reservationId } = tripWithBooking();
+    const { trip, reservationId } = await tripWithBooking();
     const lower = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 100, currency: 'usd' });
     const upper = await budget.createBudgetItem(trip.id, { name: 'Seat', total_price: 25, currency: 'USD' });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservationId, lower.id, upper.id);
+    await linkItems(reservationId, [lower.id, upper.id]);
 
     await budget.resyncReservationPrice(trip.id, reservationId);
 
-    expect(metadataOf(reservationId)).toEqual({ price: '125', priceCurrency: 'USD' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '125', priceCurrency: 'USD' });
   });
 
   it('BUDGET-SVC-DB-054: a first expense in the trip currency, beside a foreign one, is named by the trip code', async () => {
-    const { trip, reservationId } = tripWithBooking();
-    testDb.prepare("UPDATE trips SET currency = 'eur' WHERE id = ?").run(trip.id);
+    const { trip, reservationId } = await tripWithBooking();
+    await setTrip(trip.id, { currency: 'eur' });
     const implicit = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 100 });
     const foreign = await budget.createBudgetItem(trip.id, { name: 'Seat', total_price: 20, currency: 'USD' });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservationId, implicit.id, foreign.id);
+    await linkItems(reservationId, [implicit.id, foreign.id]);
 
     await budget.resyncReservationPrice(trip.id, reservationId);
     // The currencies differ, so the first expense stands alone, and its implicit
     // currency is spelled out so the card does not read the figure as dollars.
-    expect(metadataOf(reservationId)).toEqual({ price: '100', priceCurrency: 'EUR' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '100', priceCurrency: 'EUR' });
 
     // A trip with no currency at all leaves nothing to spell out.
-    testDb.prepare('UPDATE trips SET currency = NULL WHERE id = ?').run(trip.id);
+    await setTrip(trip.id, { currency: null });
     await budget.resyncReservationPrice(trip.id, reservationId);
-    expect(metadataOf(reservationId)).toEqual({ price: '100' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '100' });
   });
 
   it('BUDGET-SVC-DB-073: expenses in different currencies mirror the first one alone, in its currency', async () => {
-    const { trip, reservationId } = tripWithBooking();
+    const { trip, reservationId } = await tripWithBooking();
     const first = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 120, currency: 'CHF' });
     const second = await budget.createBudgetItem(trip.id, { name: 'Seat', total_price: 15, currency: 'EUR' });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservationId, first.id, second.id);
+    await linkItems(reservationId, [first.id, second.id]);
 
     await budget.resyncReservationPrice(trip.id, reservationId);
 
-    expect(metadataOf(reservationId)).toEqual({ price: '120', priceCurrency: 'CHF' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '120', priceCurrency: 'CHF' });
   });
 
   it('BUDGET-SVC-DB-074: expenses in the trip currency sum up and carry no currency of their own', async () => {
     // An imported booking can carry a currency stamped by the importer; once the
     // mirror comes from expenses in the trip's own currency, that stamp goes.
-    const { trip, reservationId } = tripWithBooking({ price: '5', priceCurrency: 'CNY' });
+    const { trip, reservationId } = await tripWithBooking({ price: '5', priceCurrency: 'CNY' });
     const first = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 40 });
     const second = await budget.createBudgetItem(trip.id, { name: 'Seat', total_price: 2.5 });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservationId, first.id, second.id);
+    await linkItems(reservationId, [first.id, second.id]);
 
     await budget.resyncReservationPrice(trip.id, reservationId);
 
-    expect(metadataOf(reservationId)).toEqual({ price: '42.5' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '42.5' });
   });
 
   it('BUDGET-SVC-DB-075: a booking with nothing linked loses its price and currency, and nothing else', async () => {
-    const { trip, reservationId } = tripWithBooking({ seat: '12A', price: '30', priceCurrency: 'USD' });
+    const { trip, reservationId } = await tripWithBooking({ seat: '12A', price: '30', priceCurrency: 'USD' });
 
     await budget.resyncReservationPrice(trip.id, reservationId);
-    expect(metadataOf(reservationId)).toEqual({ seat: '12A' });
+    expect(await metadataOf(reservationId)).toEqual({ seat: '12A' });
 
     // A booking without a price, or without metadata at all, is not rewritten.
-    const bare = insertReservation(trip.id, 'Bare');
+    const bare = await insertReservation(trip.id, 'Bare');
     await budget.resyncReservationPrice(trip.id, bare);
-    expect(metadataOf(bare)).toBeNull();
+    expect(await metadataOf(bare)).toBeNull();
   });
 
   it('BUDGET-SVC-DB-076: deleting one of two expenses leaves the booking with the other one\'s total', async () => {
-    const { trip, reservationId } = tripWithBooking({ price: '30' });
+    const { trip, reservationId } = await tripWithBooking({ price: '30' });
     const first = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 25 });
     const second = await budget.createBudgetItem(trip.id, { name: 'Seat', total_price: 5 });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(reservationId, first.id, second.id);
+    await linkItems(reservationId, [first.id, second.id]);
 
     expect(await budget.deleteBudgetItem(first.id, trip.id)).toBe(true);
     // Before #2084 the price was dropped outright, though an expense still stood behind it.
-    expect(metadataOf(reservationId)).toEqual({ price: '5' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '5' });
 
     expect(await budget.deleteBudgetItem(second.id, trip.id)).toBe(true);
-    expect(metadataOf(reservationId)).toEqual({});
+    expect(await metadataOf(reservationId)).toEqual({});
   });
 
   it('BUDGET-SVC-DB-077: moving an expense to another booking moves its share of the price along', async () => {
-    const { trip, reservationId: from } = tripWithBooking();
-    const to = insertReservation(trip.id, 'Return');
+    const { trip, reservationId: from } = await tripWithBooking();
+    const to = await insertReservation(trip.id, 'Return');
     const stays = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 100 });
     const moves = await budget.createBudgetItem(trip.id, { name: 'Seat', total_price: 20 });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id IN (?, ?)').run(from, stays.id, moves.id);
+    await linkItems(from, [stays.id, moves.id]);
     await budget.resyncReservationPrice(trip.id, from);
-    expect(metadataOf(from)).toEqual({ price: '120' });
+    expect(await metadataOf(from)).toEqual({ price: '120' });
 
     const before = (await budget.getBudgetItem(moves.id, trip.id))!;
     const data = { reservation_id: to };
     const updated = (await budget.updateBudgetItem(moves.id, trip.id, data))!;
     await budget.resyncLinkedPrices(trip.id, before.reservation_id, updated, data);
 
-    expect(metadataOf(from)).toEqual({ price: '100' });
-    expect(metadataOf(to)).toEqual({ price: '20' });
+    expect(await metadataOf(from)).toEqual({ price: '100' });
+    expect(await metadataOf(to)).toEqual({ price: '20' });
 
     // And letting go of the link takes the price off the booking it left.
     const unlink = { reservation_id: null };
     const unlinked = (await budget.updateBudgetItem(moves.id, trip.id, unlink))!;
     await budget.resyncLinkedPrices(trip.id, to, unlinked, unlink);
-    expect(metadataOf(to)).toEqual({});
-    expect(testDb.prepare('SELECT id FROM budget_items WHERE id = ?').get(moves.id)).toEqual({ id: moves.id });
+    expect(await metadataOf(to)).toEqual({});
+    expect((await findRow(await orm(), BudgetItems, { id: moves.id }))?.id).toBe(moves.id);
   });
 
   it('BUDGET-SVC-DB-055: an edit that only changes the currency of a linked expense re-names the booking price', async () => {
-    const { trip, reservationId } = tripWithBooking();
+    const { trip, reservationId } = await tripWithBooking();
     const item = await budget.createBudgetItem(trip.id, { name: 'Fare', total_price: 80 });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id = ?').run(reservationId, item.id);
+    await linkItems(reservationId, [item.id]);
     await budget.resyncReservationPrice(trip.id, reservationId);
-    expect(metadataOf(reservationId)).toEqual({ price: '80' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '80' });
 
     // Shaped like the route body, which names neither the total nor the link here.
     type Body = { currency: string | null; total_price?: number; reservation_id?: number | null };
     const toChf: Body = { currency: 'chf' };
     await budget.resyncLinkedPrices(trip.id, undefined, (await budget.updateBudgetItem(item.id, trip.id, toChf))!, toChf);
-    expect(metadataOf(reservationId)).toEqual({ price: '80', priceCurrency: 'CHF' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '80', priceCurrency: 'CHF' });
 
     const back: Body = { currency: null };
     await budget.resyncLinkedPrices(trip.id, undefined, (await budget.updateBudgetItem(item.id, trip.id, back))!, back);
-    expect(metadataOf(reservationId)).toEqual({ price: '80' });
+    expect(await metadataOf(reservationId)).toEqual({ price: '80' });
   });
 });
 
@@ -1099,10 +1137,7 @@ describe('an expense nobody paid stays out of the ledger (#2225)', () => {
     }) as { payers: unknown[]; total_price: number };
     expect(resaved.payers).toEqual([]);
     expect(resaved.total_price).toBe(161.57);
-    const payerRows = testDb
-      .prepare('SELECT count(*) AS cnt FROM budget_item_payers WHERE budget_item_id = ?')
-      .get(unpaid.id) as { cnt: number };
-    expect(payerRows.cnt).toBe(0);
+    expect(await countRows(await orm(), BudgetItemPayers, { budgetItem: unpaid.id })).toBe(0);
 
     // 161.57 with no credit behind it used to push bob and carol 80.79/80.78 further
     // into the red and hand the whole of it to alice, who never fronted a rouble of it.
@@ -1117,7 +1152,7 @@ describe('post-fold quirk fixes', () => {
   it('BUDGET-SVC-DB-019: settlements prefer display_name over username (quirk fix)', async () => {
     const { user: alice } = createUser(testDb, { username: 'alice' });
     const { user: bob } = createUser(testDb, { username: 'bob' });
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Alice Displayed', alice.id);
+    await updateRows(await orm(), Users, { id: alice.id }, { display_name: 'Alice Displayed' });
     const trip = createTrip(testDb, alice.id);
 
     const created = await budget.insertSettlement(trip.id, { from_user_id: alice.id, to_user_id: bob.id, amount: 10 }, alice.id);
@@ -1164,7 +1199,7 @@ describe('post-fold quirk fixes', () => {
 
     await budget.applySettlementUpdate(dated!.id, trip.id, { ...parties, settled_at: '2026-01-05' });
     expect((await budget.applySettlementUpdate(dated!.id, trip.id, { ...parties, settled_at: '' }))!.settled_at).toBeNull();
-    const row = testDb.prepare('SELECT settled_at FROM budget_settlements WHERE id = ?').get(dated!.id) as { settled_at: string | null };
+    const row = (await findRow(await orm(), BudgetSettlements, { id: dated!.id }))!;
     expect(row.settled_at).toBeNull();
   });
 
@@ -1181,9 +1216,7 @@ describe('post-fold quirk fixes', () => {
       ticket_json: '{"items":[{"name":"Bread","price":"3","parts":[1]}]}',
     });
 
-    const row = testDb.prepare('SELECT note, ticket_json FROM budget_items WHERE id = ?').get(item!.id) as {
-      note: string | null; ticket_json: string | null;
-    };
+    const row = await budgetItemRow(item!.id);
     expect(row.note).toBe('Lisa pays half of this back');
     expect(JSON.parse(row.ticket_json!).items).toHaveLength(1);
   });
@@ -1197,7 +1230,7 @@ describe('post-fold quirk fixes', () => {
     // speaks about the field.
     await budget.updateBudgetItem(item!.id, trip.id, { total_price: 25 });
 
-    const row = testDb.prepare('SELECT note FROM budget_items WHERE id = ?').get(item!.id) as { note: string | null };
+    const row = await budgetItemRow(item!.id);
     expect(row.note).toBe('split with Ben');
   });
 
@@ -1208,7 +1241,7 @@ describe('post-fold quirk fixes', () => {
 
     await budget.updateBudgetItem(item!.id, trip.id, { note: null });
 
-    const row = testDb.prepare('SELECT note FROM budget_items WHERE id = ?').get(item!.id) as { note: string | null };
+    const row = await budgetItemRow(item!.id);
     expect(row.note).toBeNull();
   });
 
@@ -1222,9 +1255,7 @@ describe('post-fold quirk fixes', () => {
       note: 'TICKETJSON:{"items":[{"name":"Milk","price":"2","parts":[1]}]}',
     });
 
-    const row = testDb.prepare('SELECT note, ticket_json FROM budget_items WHERE id = ?').get(item!.id) as {
-      note: string | null; ticket_json: string | null;
-    };
+    const row = await budgetItemRow(item!.id);
     expect(row.note).toBe('reimburse from the kitty');
     expect(JSON.parse(row.ticket_json!).items[0].name).toBe('Milk');
   });
@@ -1239,9 +1270,7 @@ describe('post-fold quirk fixes', () => {
       note: 'TICKETJSON:{"items":[{"name":"Cheese","price":"9","parts":[1]}]}',
     });
 
-    const row = testDb.prepare('SELECT note, ticket_json FROM budget_items WHERE id = ?').get(item!.id) as {
-      note: string | null; ticket_json: string | null;
-    };
+    const row = await budgetItemRow(item!.id);
     expect(row.note).toBeNull();
     expect(JSON.parse(row.ticket_json!).items[0].name).toBe('Cheese');
   });
@@ -1254,8 +1283,7 @@ describe('post-fold quirk fixes', () => {
     // legacy non-transactional create leaked the budget_category_order row.
     await expect(budget.createBudgetItem(trip.id, { name: null as unknown as string, category: 'atomic-test' })).rejects.toThrow();
 
-    const cat = testDb.prepare("SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = 'atomic-test'").get(trip.id);
-    expect(cat).toBeUndefined();
+    expect(await findRow(await orm(), BudgetCategoryOrder, { trip: trip.id, category: 'atomic-test' })).toBeNull();
   });
 });
 
@@ -1272,8 +1300,7 @@ describe('post-fold quirk fixes', () => {
  * expense form showed it back the moment the item was reopened.
  */
 describe('an expense whose split leaves a remainder', () => {
-  const totalOf = (itemId: number) =>
-    (testDb.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(itemId) as { total_price: number }).total_price;
+  const totalOf = async (itemId: number) => (await budgetItemRow(itemId)).total_price;
 
   it('stores the total the parts add up to, not the float they land on', async () => {
     const { user: alice } = createUser(testDb);
@@ -1288,8 +1315,8 @@ describe('an expense whose split leaves a remainder', () => {
     });
 
     // The assertion that fails on the old code, with exactly the reported number.
-    expect(totalOf(item.id)).toBe(163.21);
-    expect(String(totalOf(item.id))).toBe('163.21');
+    expect(await totalOf(item.id)).toBe(163.21);
+    expect(String(await totalOf(item.id))).toBe('163.21');
   });
 
   it('does the same when the payers are replaced on an update', async () => {
@@ -1303,7 +1330,7 @@ describe('an expense whose split leaves a remainder', () => {
       payers: [{ user_id: alice.id, amount: 81.61 }, { user_id: bob.id, amount: 81.60 }],
     });
 
-    expect(totalOf(item.id)).toBe(163.21);
+    expect(await totalOf(item.id)).toBe(163.21);
   });
 
   /*
@@ -1328,7 +1355,7 @@ describe('an expense whose split leaves a remainder', () => {
       members: [{ user_id: alice.id }, { user_id: bob.id }, { user_id: carol.id }],
     });
 
-    expect(totalOf(item.id)).toBe(100);
+    expect(await totalOf(item.id)).toBe(100);
   });
 
   it('leaves a total that needs no cleaning exactly as it was', async () => {
@@ -1343,7 +1370,7 @@ describe('an expense whose split leaves a remainder', () => {
       members: [{ user_id: alice.id }, { user_id: bob.id }],
     });
 
-    expect(totalOf(item.id)).toBe(25);
+    expect(await totalOf(item.id)).toBe(25);
   });
 
   it('attaches receipts created with receipt_file_ids and lists them', async () => {
@@ -1351,10 +1378,9 @@ describe('an expense whose split leaves a remainder', () => {
     const trip = createTrip(testDb, alice.id);
 
     // Insert a file for this trip
-    const res = testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name, mime_type, file_size) VALUES (?, ?, ?, ?, ?)').run(
-      trip.id, 'receipt-123.jpg', 'receipt.jpg', 'image/jpeg', 1024
-    );
-    const fileId = Number(res.lastInsertRowid);
+    const fileId = await insertRow(await orm(), TripFiles, {
+      trip: trip.id, filename: 'receipt-123.jpg', original_name: 'receipt.jpg', mime_type: 'image/jpeg', file_size: 1024,
+    });
 
     const item = await budget.createBudgetItem(trip.id, {
       name: 'Restaurant with receipt',
@@ -1378,13 +1404,13 @@ describe('an expense whose split leaves a remainder', () => {
     const trip = createTrip(testDb, alice.id);
 
     // File 1: will be removed and is orphan -> should be trashed
-    const f1 = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'f1.jpg', 'f1.jpg').lastInsertRowid);
+    const f1 = await addFile(trip.id, 'f1.jpg');
     // File 2: will be kept
-    const f2 = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'f2.jpg', 'f2.jpg').lastInsertRowid);
+    const f2 = await addFile(trip.id, 'f2.jpg');
     // File 3: will be added
-    const f3 = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'f3.jpg', 'f3.jpg').lastInsertRowid);
+    const f3 = await addFile(trip.id, 'f3.jpg');
     // File 4: will be removed but is shared with another budget item -> should NOT be trashed
-    const f4 = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'f4.jpg', 'f4.jpg').lastInsertRowid);
+    const f4 = await addFile(trip.id, 'f4.jpg');
 
     await budget.createBudgetItem(trip.id, { name: 'Other', receipt_file_ids: [f4] });
     const item = await budget.createBudgetItem(trip.id, { name: 'Dinner', receipt_file_ids: [f1, f2, f4] });
@@ -1396,12 +1422,12 @@ describe('an expense whose split leaves a remainder', () => {
     // Removing a receipt removes the link and nothing else. The file stays on
     // the trip: deleting it needs file_delete, which this path never checks.
     for (const fid of [f1, f2, f3, f4]) {
-      const row = testDb.prepare('SELECT deleted_at FROM trip_files WHERE id = ?').get(fid) as { deleted_at: string | null };
+      const row = await fileRow(fid);
       expect(row.deleted_at).toBeNull();
     }
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE budget_item_id = ?').get(item.id)).toEqual({ c: 2 });
+    expect(await countRows(await orm(), FileLinks, { budgetItem: item.id })).toBe(2);
     // f4 keeps the link it has to the other expense.
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ?').get(f4)).toEqual({ c: 1 });
+    expect(await countRows(await orm(), FileLinks, { file: f4 })).toBe(1);
   });
 
   it('re-saving an expense whose receipt is also linked elsewhere twice does not 500', async () => {
@@ -1412,24 +1438,24 @@ describe('an expense whose split leaves a remainder', () => {
     // transaction, and the whole expense edit rolled back. Every time, for good.
     const { user: alice } = createUser(testDb);
     const trip = createTrip(testDb, alice.id);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'r.jpg', 'r.jpg').lastInsertRowid);
-    const place = testDb.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(trip.id, 'Osteria').lastInsertRowid;
-    const reservation = testDb.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Table', 'restaurant')").run(trip.id).lastInsertRowid;
-    testDb.prepare('INSERT INTO file_links (file_id, place_id) VALUES (?, ?)').run(file, place);
-    testDb.prepare('INSERT INTO file_links (file_id, reservation_id) VALUES (?, ?)').run(file, reservation);
+    const file = await addFile(trip.id, 'r.jpg');
+    const place = await addPlace(trip.id, 'Osteria');
+    const reservation = await insertRow(await orm(), Reservations, { trip: trip.id, title: 'Table', type: 'restaurant' });
+    await insertRow(await orm(), FileLinks, { file, place });
+    await insertRow(await orm(), FileLinks, { file, reservation });
 
     const item = await budget.createBudgetItem(trip.id, { name: 'Dinner', total_price: 40, receipt_file_ids: [file] });
     const again = await budget.updateBudgetItem(item.id, trip.id, { total_price: 42, receipt_file_ids: [file] });
 
     expect(again?.total_price).toBe(42);
     expect(again?.receipts?.map(r => r.id)).toEqual([file]);
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ? AND budget_item_id = ?').get(file, item.id)).toEqual({ c: 1 });
+    expect(await countRows(await orm(), FileLinks, { file: file, budgetItem: item.id })).toBe(1);
   });
 
   it('a receipt named twice in one save is linked once', async () => {
     const { user: alice } = createUser(testDb);
     const trip = createTrip(testDb, alice.id);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'dup.jpg', 'dup.jpg').lastInsertRowid);
+    const file = await addFile(trip.id, 'dup.jpg');
     const item = await budget.createBudgetItem(trip.id, { name: 'Taxi' });
 
     const updated = await budget.updateBudgetItem(item.id, trip.id, { receipt_file_ids: [file, file] });
@@ -1442,10 +1468,10 @@ describe('an expense whose split leaves a remainder', () => {
     const trip = createTrip(testDb, alice.id);
 
     // File 1: orphan receipt
-    const f1 = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'del1.jpg', 'del1.jpg').lastInsertRowid);
+    const f1 = await addFile(trip.id, 'del1.jpg');
     // File 2: linked to a place directly
-    const place = testDb.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(trip.id, 'Hotel').lastInsertRowid;
-    const f2 = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name, place_id) VALUES (?, ?, ?, ?)').run(trip.id, 'del2.jpg', 'del2.jpg', place).lastInsertRowid);
+    const place = await addPlace(trip.id, 'Hotel');
+    const f2 = await insertRow(await orm(), TripFiles, { trip: trip.id, filename: 'del2.jpg', original_name: 'del2.jpg', place });
 
     const item = await budget.createBudgetItem(trip.id, { name: 'Lunch', receipt_file_ids: [f1, f2] });
     const deleted = await budget.deleteBudgetItem(item.id, trip.id);
@@ -1453,10 +1479,10 @@ describe('an expense whose split leaves a remainder', () => {
 
     // Neither file is touched; only the links to the deleted expense go.
     for (const fid of [f1, f2]) {
-      const row = testDb.prepare('SELECT deleted_at FROM trip_files WHERE id = ?').get(fid) as { deleted_at: string | null };
+      const row = await fileRow(fid);
       expect(row.deleted_at).toBeNull();
     }
-    const linkRows = testDb.prepare('SELECT * FROM file_links WHERE budget_item_id = ?').all(item.id);
+    const linkRows = await findRows(await orm(), FileLinks, { budgetItem: item.id });
     expect(linkRows).toHaveLength(0);
   });
 
@@ -1466,45 +1492,45 @@ describe('an expense whose split leaves a remainder', () => {
 
     // budget_edit and file_delete are separate permissions and a receipt id is
     // any file on the trip, so the budget domain must never delete one.
-    const plain = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'r.pdf', 'r.pdf').lastInsertRowid);
+    const plain = await addFile(trip.id, 'r.pdf');
     const item = await budget.createBudgetItem(trip.id, { name: 'Dinner', receipt_file_ids: [plain] });
     await budget.deleteBudgetItem(item.id, trip.id);
-    expect((testDb.prepare('SELECT deleted_at FROM trip_files WHERE id = ?').get(plain) as { deleted_at: string | null }).deleted_at).toBeNull();
+    expect((await fileRow(plain)).deleted_at).toBeNull();
     // The link is gone, because it was all the row carried.
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ?').get(plain)).toEqual({ c: 0 });
+    expect(await countRows(await orm(), FileLinks, { file: plain })).toBe(0);
   });
 
   it('keeps a place link on a row that also carried the receipt link', async () => {
     const { user: alice } = createUser(testDb);
     const trip = createTrip(testDb, alice.id);
-    const place = Number(testDb.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(trip.id, 'Cafe').lastInsertRowid);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'menu.pdf', 'menu.pdf').lastInsertRowid);
-    testDb.prepare('INSERT INTO file_links (file_id, place_id) VALUES (?, ?)').run(file, place);
+    const place = await addPlace(trip.id, 'Cafe');
+    const file = await addFile(trip.id, 'menu.pdf');
+    await insertRow(await orm(), FileLinks, { file, place });
 
     const item = await budget.createBudgetItem(trip.id, { name: 'Lunch', receipt_file_ids: [file] });
     await budget.deleteBudgetItem(item.id, trip.id);
 
-    const row = testDb.prepare('SELECT place_id, budget_item_id FROM file_links WHERE file_id = ?').get(file) as { place_id: number | null; budget_item_id: number | null };
+    const row = await linkOfFile(file);
     expect(row.place_id).toBe(place);
     expect(row.budget_item_id).toBeNull();
-    expect((testDb.prepare('SELECT deleted_at FROM trip_files WHERE id = ?').get(file) as { deleted_at: string | null }).deleted_at).toBeNull();
+    expect((await fileRow(file)).deleted_at).toBeNull();
   });
 
   it('BUDGET-SVC-DB-046: unlinking a receipt that also carries a place link clears only the budget_item_id (BudgetItems.clearLinkBudgetRef)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const place = Number(testDb.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(trip.id, 'Cafe').lastInsertRowid);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'receipt.pdf', 'receipt.pdf').lastInsertRowid);
+    const place = await addPlace(trip.id, 'Cafe');
+    const file = await addFile(trip.id, 'receipt.pdf');
     const item = await budget.createBudgetItem(trip.id, { name: 'Lunch' }) as { id: number };
     // Seed a link row that carries BOTH the receipt tie and a place tie — the
     // shape unlinkReceipts's clearLinkBudgetRef branch exists for (row also
     // ties the file to a place, so it must survive with budget_item_id cleared
     // rather than be deleted outright).
-    testDb.prepare('INSERT INTO file_links (file_id, budget_item_id, place_id) VALUES (?, ?, ?)').run(file, item.id, place);
+    await insertRow(await orm(), FileLinks, { file, budgetItem: item.id, place });
 
     await budget.deleteBudgetItem(item.id, trip.id);
 
-    const row = testDb.prepare('SELECT place_id, budget_item_id FROM file_links WHERE file_id = ?').get(file) as { place_id: number | null; budget_item_id: number | null };
+    const row = await linkOfFile(file);
     expect(row.place_id).toBe(place);
     expect(row.budget_item_id).toBeNull();
   });
@@ -1512,13 +1538,13 @@ describe('an expense whose split leaves a remainder', () => {
   it('BUDGET-SVC-DB-047: updating receipts adopts a spare file_links row instead of inserting a duplicate (BudgetItems.adoptSpareLink)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'r.pdf', 'r.pdf').lastInsertRowid);
+    const file = await addFile(trip.id, 'r.pdf');
     const item = await budget.createBudgetItem(trip.id, { name: 'Lunch' }) as { id: number };
-    const linkId = Number(testDb.prepare('INSERT INTO file_links (file_id) VALUES (?)').run(file).lastInsertRowid);
+    const linkId = await insertRow(await orm(), FileLinks, { file });
 
     await budget.updateBudgetItem(item.id, trip.id, { receipt_file_ids: [file] });
 
-    const row = testDb.prepare('SELECT id, budget_item_id FROM file_links WHERE file_id = ?').get(file) as { id: number; budget_item_id: number | null };
+    const row = await linkOfFile(file);
     // The pre-existing spare row is re-parented rather than left orphaned
     // beside a freshly inserted duplicate.
     expect(row.id).toBe(linkId);
@@ -1528,24 +1554,24 @@ describe('an expense whose split leaves a remainder', () => {
   it('leaves a receipt already in the trash linked, so restoring it comes back attached', async () => {
     const { user: alice } = createUser(testDb);
     const trip = createTrip(testDb, alice.id);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'old.pdf', 'old.pdf').lastInsertRowid);
+    const file = await addFile(trip.id, 'old.pdf');
     const item = await budget.createBudgetItem(trip.id, { name: 'Taxi', receipt_file_ids: [file] });
-    testDb.prepare('UPDATE trip_files SET deleted_at = CURRENT_TIMESTAMP WHERE id = ?').run(file);
+    await updateRows(await orm(), TripFiles, { id: file }, { deleted_at: new Date().toISOString().slice(0, 19).replace('T', ' ') });
 
     // A save that no longer mentions the trashed receipt must not drop its link.
     await budget.updateBudgetItem(item.id, trip.id, { receipt_file_ids: [] });
-    expect(testDb.prepare('SELECT COUNT(*) c FROM file_links WHERE file_id = ? AND budget_item_id = ?').get(file, item.id)).toEqual({ c: 1 });
+    expect(await countRows(await orm(), FileLinks, { file: file, budgetItem: item.id })).toBe(1);
   });
 
   it('an edit that keeps a receipt does not churn its link row', async () => {
     const { user: alice } = createUser(testDb);
     const trip = createTrip(testDb, alice.id);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'keep.pdf', 'keep.pdf').lastInsertRowid);
+    const file = await addFile(trip.id, 'keep.pdf');
     const item = await budget.createBudgetItem(trip.id, { name: 'Hotel', receipt_file_ids: [file] });
-    const before = testDb.prepare('SELECT id FROM file_links WHERE file_id = ? AND budget_item_id = ?').get(file, item.id) as { id: number };
+    const before = (await findRow(await orm(), FileLinks, { file, budgetItem: item.id }))!;
 
     await budget.updateBudgetItem(item.id, trip.id, { name: 'Hotel 2', receipt_file_ids: [file] });
-    const after = testDb.prepare('SELECT id FROM file_links WHERE file_id = ? AND budget_item_id = ?').get(file, item.id) as { id: number };
+    const after = (await findRow(await orm(), FileLinks, { file, budgetItem: item.id }))!;
     expect(after.id).toBe(before.id);
   });
 });
@@ -1556,7 +1582,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     const trip = createTrip(testDb, user.id);
     // Two categories; only one has an explicit sort_order row, so the other
     // falls back to the 999999 COALESCE default and sorts after it.
-    testDb.prepare('INSERT INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)').run(trip.id, 'Food', 0);
+    await insertRow(await orm(), BudgetCategoryOrder, { trip: trip.id, category: 'Food', sort_order: 0 });
     // Creation order assigns bi.sort_order 0, 1, 2 in turn; 'Activities' has no
     // budget_category_order row, so it falls back to the 999999 COALESCE
     // default and sorts after every 'Food' item regardless of its own sort_order.
@@ -1565,6 +1591,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     await budget.createBudgetItem(trip.id, { name: 'Coffee', category: 'Food', total_price: 4 });
 
     const converted = await budgetItemsRepoDirect.listWithCategoryOrder(trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT bi.* FROM budget_items bi
       LEFT JOIN budget_category_order bco ON bco.trip_id = bi.trip_id AND bco.category = bi.category
@@ -1582,7 +1609,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     const { user: bob } = createUser(testDb, { username: 'bob' });
     const trip = createTrip(testDb, alice.id);
     addTripMember(testDb, trip.id, bob.id);
-    const file = Number(testDb.prepare('INSERT INTO trip_files (trip_id, filename, original_name) VALUES (?, ?, ?)').run(trip.id, 'r.pdf', 'r.pdf').lastInsertRowid);
+    const file = await addFile(trip.id, 'r.pdf');
 
     const item1 = await budget.createBudgetItem(trip.id, {
       name: 'Dinner', total_price: 40, members: [{ user_id: alice.id }, { user_id: bob.id }],
@@ -1592,6 +1619,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     const itemIds = [item1.id, item2.id];
 
     const convertedMembers = await budgetItemMembersRepoDirect.listForItems(itemIds);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyMembers = testDb.prepare(`
       SELECT bm.budget_item_id, bm.user_id, bm.paid, bm.amount, COALESCE(u.display_name, u.username) AS username, u.avatar
       FROM budget_item_members bm JOIN users u ON u.id = bm.user_id
@@ -1602,6 +1630,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     expect(convertedMembers).toHaveLength(3);
 
     const convertedPayers = await budgetItemPayersRepoDirect.listForItems(itemIds);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyPayers = testDb.prepare(`
       SELECT bp.budget_item_id, bp.user_id, bp.amount, COALESCE(u.display_name, u.username) AS username, u.avatar
       FROM budget_item_payers bp JOIN users u ON u.id = bp.user_id
@@ -1611,6 +1640,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     expect(convertedPayers).toHaveLength(1);
 
     const convertedReceipts = await budgetItemsRepoDirect.listReceiptsForItems(itemIds);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyReceipts = testDb.prepare(`
       SELECT f.id, f.filename, f.original_name, f.file_size, f.mime_type, f.trip_id, fl.budget_item_id
       FROM trip_files f JOIN file_links fl ON fl.file_id = f.id
@@ -1641,11 +1671,13 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     `;
 
     const convertedList = await budgetSettlementsRepoDirect.listForTrip(trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyList = testDb.prepare(`${SETTLEMENT_SELECT} WHERE s.trip_id = ? ORDER BY s.created_at DESC, s.id DESC`).all(trip.id);
     expect(convertedList).toEqual(legacyList);
     expect(convertedList.map(s => s.id).sort()).toEqual([s1.id, s2.id].sort());
 
     const convertedOne = await budgetSettlementsRepoDirect.findWithUsers(s1.id, trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacyOne = testDb.prepare(`${SETTLEMENT_SELECT} WHERE s.trip_id = ? AND s.id = ?`).get(trip.id, s1.id);
     expect(convertedOne).toEqual(legacyOne);
   });
@@ -1666,8 +1698,7 @@ describe('repository parity (rule 19 — full-key toEqual against the legacy sta
     // A second insert for the same (budget_item_id, user_id) hits the unique
     // index — onConflict(doNothing) swallows it instead of throwing.
     await expect(budgetItemMembersRepoDirect.insertIgnore({ budget_item_id: item.id, user_id: user.id })).resolves.toBeUndefined();
-    const rows = testDb.prepare('SELECT COUNT(*) c FROM budget_item_members WHERE budget_item_id = ? AND user_id = ?').get(item.id, user.id);
-    expect(rows).toEqual({ c: 1 });
+    expect(await countRows(await orm(), BudgetItemMembers, { budgetItem: item.id, user: user.id })).toBe(1);
   });
 });
 
@@ -1831,24 +1862,29 @@ describe('the settlement converts with the quote the entry rate was frozen from 
 // trip below is that server; a rate can only come from what the caller lends.
 describe('rows no rate can convert, and the rates that heal them', () => {
   const VND_FX = { base: 'AUD', rates: { VND: 18241.3 } };
-  const rateOf = (table: 'budget_items' | 'budget_settlements', id: number) =>
-    (testDb.prepare(`SELECT exchange_rate FROM ${table} WHERE id = ?`).get(id) as { exchange_rate: number }).exchange_rate;
+  const rateOf = async (table: 'budget_items' | 'budget_settlements', id: number) => {
+    const row = table === 'budget_items'
+      ? await findRow(await orm(), BudgetItems, { id })
+      : await findRow(await orm(), BudgetSettlements, { id });
+    if (!row) throw new Error(`no ${table} row ${id}`);
+    return row.exchange_rate;
+  };
   const exchangeRates = () => (budget as unknown as { exchangeRates: ExchangeRatesService }).exchangeRates;
 
-  function seedAudTrip() {
+  async function seedAudTrip() {
     const { user: me } = createUser(testDb);
     const { user: bob } = createUser(testDb);
     const { user: carol } = createUser(testDb);
     const { user: dave } = createUser(testDb);
     const trip = createTrip(testDb, me.id);
     for (const u of [bob, carol, dave]) addTripMember(testDb, trip.id, u.id);
-    testDb.prepare("UPDATE trips SET currency = 'AUD' WHERE id = ?").run(trip.id);
+    await setTrip(trip.id, { currency: 'AUD' });
     const members = [me, bob, carol, dave].map(u => ({ user_id: u.id }));
     return { trip, me, bob, carol, members };
   }
 
   it('BUDGET-SVC-DB-056: freezes fallback_fx when getRates is null', async () => {
-    const { trip, me, members } = seedAudTrip();
+    const { trip, me, members } = await seedAudTrip();
     const bill = await budget.create(String(trip.id), {
       name: 'Pho', currency: 'VND', payers: [{ user_id: me.id, amount: 8920000 }], members, fallback_fx: VND_FX,
     });
@@ -1867,7 +1903,7 @@ describe('rows no rate can convert, and the rates that heal them', () => {
   });
 
   it('BUDGET-SVC-DB-058: fallback_fx on another base is ignored', async () => {
-    const { trip } = seedAudTrip();
+    const { trip } = await seedAudTrip();
     // Quoted against euros, the figure would freeze the bill against the wrong currency.
     const bill = await budget.create(String(trip.id), {
       name: 'Pho', currency: 'VND', total_price: 100000, fallback_fx: { base: 'EUR', rates: { VND: 27000 } },
@@ -1876,7 +1912,7 @@ describe('rows no rate can convert, and the rates that heal them', () => {
   });
 
   it('BUDGET-SVC-DB-059: explicit exchange_rate wins, fallback_fx never reaches the row', async () => {
-    const { trip } = seedAudTrip();
+    const { trip } = await seedAudTrip();
     const data = { name: 'Pho', currency: 'VND', total_price: 100000, exchange_rate: 18000, fallback_fx: VND_FX };
     const bill = await budget.create(String(trip.id), data);
     expect(bill.exchange_rate).toBe(18000);
@@ -1884,7 +1920,7 @@ describe('rows no rate can convert, and the rates that heal them', () => {
   });
 
   it('BUDGET-SVC-DB-060: currency change without any rate drops the old rate (items)', async () => {
-    const { trip } = seedAudTrip();
+    const { trip } = await seedAudTrip();
     const item = await budget.createBudgetItem(trip.id, { name: 'Taxi', currency: 'USD', exchange_rate: 0.65, total_price: 20 });
     // The update SQL keeps the stored rate when none is sent: a USD rate on a VND bill.
     expect(await budget.update(item.id, trip.id, { currency: 'VND' })).toMatchObject({ currency: 'VND', exchange_rate: 1 });
@@ -1894,7 +1930,7 @@ describe('rows no rate can convert, and the rates that heal them', () => {
   });
 
   it('BUDGET-SVC-DB-061: same for settlements', async () => {
-    const { trip, me, bob } = seedAudTrip();
+    const { trip, me, bob } = await seedAudTrip();
     const transfer = await budget.createSettlement(trip.id, {
       from_user_id: bob.id, to_user_id: me.id, amount: 20, currency: 'USD', fallback_fx: { base: 'AUD', rates: { USD: 0.65 } },
     }, me.id);
@@ -1904,7 +1940,7 @@ describe('rows no rate can convert, and the rates that heal them', () => {
   });
 
   it('BUDGET-SVC-DB-062: unchanged currency never touches the rate', async () => {
-    const { trip } = seedAudTrip();
+    const { trip } = await seedAudTrip();
     const frozen = await budget.createBudgetItem(trip.id, { name: 'Pho', currency: 'VND', exchange_rate: 18241.3, total_price: 100000 });
     const open = await budget.createBudgetItem(trip.id, { name: 'Bus', currency: 'VND', total_price: 50000 });
     const fx = { base: 'AUD', rates: { VND: 20000 } };
@@ -1914,7 +1950,7 @@ describe('rows no rate can convert, and the rates that heal them', () => {
   });
 
   it('BUDGET-SVC-DB-063: freezeMissingRates heals items and transfers from fallback_fx', async () => {
-    const { trip, me, bob, carol, members } = seedAudTrip();
+    const { trip, me, bob, carol, members } = await seedAudTrip();
     const bill = await budget.createBudgetItem(trip.id, { name: 'Pho', currency: 'VND', payers: [{ user_id: me.id, amount: 8920000 }], members });
     const transfer = (await budget.insertSettlement(trip.id, { from_user_id: bob.id, to_user_id: me.id, amount: 2229963, currency: 'VND' }, bob.id))!;
     // Carol pays in baht. The rows are healed currency by currency, THB before VND, so her
@@ -1962,44 +1998,45 @@ describe('rows no rate can convert, and the rates that heal them', () => {
     expect(healed!.settlements.map(s => s.id)).toEqual([usdTransfer.id]);
     expect(healed!.unresolved).toEqual(['XAF']);
 
-    expect(rateOf('budget_items', usd)).toBe(RATES.EUR.USD);
-    expect(rateOf('budget_items', lower)).toBe(RATES.EUR.USD);
-    expect(rateOf('budget_items', gbp)).toBe(0.85);
-    expect(rateOf('budget_items', xaf)).toBe(1);
-    expect(rateOf('budget_items', rub)).toBe(90);
-    expect(rateOf('budget_items', eur)).toBe(1);
-    expect(rateOf('budget_items', implicit)).toBe(1);
-    expect(rateOf('budget_settlements', usdTransfer.id)).toBe(RATES.EUR.USD);
-    expect(rateOf('budget_settlements', plainTransfer.id)).toBe(1);
+    expect(await rateOf('budget_items', usd)).toBe(RATES.EUR.USD);
+    expect(await rateOf('budget_items', lower)).toBe(RATES.EUR.USD);
+    expect(await rateOf('budget_items', gbp)).toBe(0.85);
+    expect(await rateOf('budget_items', xaf)).toBe(1);
+    expect(await rateOf('budget_items', rub)).toBe(90);
+    expect(await rateOf('budget_items', eur)).toBe(1);
+    expect(await rateOf('budget_items', implicit)).toBe(1);
+    expect(await rateOf('budget_settlements', usdTransfer.id)).toBe(RATES.EUR.USD);
+    expect(await rateOf('budget_settlements', plainTransfer.id)).toBe(1);
   });
 
   it('BUDGET-SVC-DB-065: second call heals nothing even with another quote', async () => {
-    const { trip, me, members } = seedAudTrip();
+    const { trip, me, members } = await seedAudTrip();
     const bill = await budget.createBudgetItem(trip.id, { name: 'Pho', currency: 'VND', payers: [{ user_id: me.id, amount: 8920000 }], members });
     await budget.freezeMissingRates(trip.id, VND_FX);
     expect(await budget.freezeMissingRates(trip.id, { base: 'AUD', rates: { VND: 25000 } }))
       .toEqual({ items: [], settlements: [], unresolved: [] });
-    expect(rateOf('budget_items', bill.id)).toBe(18241.3);
+    expect(await rateOf('budget_items', bill.id)).toBe(18241.3);
   });
 
   it('BUDGET-SVC-DB-066: returns null and writes nothing when the trip currency changes during the fetch', async () => {
-    const { trip, me, members } = seedAudTrip();
+    const { trip, me, members } = await seedAudTrip();
     const bill = await budget.createBudgetItem(trip.id, { name: 'Pho', currency: 'VND', payers: [{ user_id: me.id, amount: 8920000 }], members });
     const spy = vi.spyOn(exchangeRates(), 'getRates').mockImplementation(async () => {
       // Someone switches the trip to euros while the rates are on their way.
+      // test-sql-allow: the trip changes underneath the service from inside its stubbed fetch, straight on the handle it holds.
       testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
       return null;
     });
     try {
       expect(await budget.freezeMissingRates(trip.id, VND_FX)).toBeNull();
-      expect(rateOf('budget_items', bill.id)).toBe(1);
+      expect(await rateOf('budget_items', bill.id)).toBe(1);
     } finally {
       spy.mockRestore();
     }
   });
 
   it('BUDGET-SVC-DB-067: returns without fetching when nothing is pending', async () => {
-    const { trip, me, bob, members } = seedAudTrip();
+    const { trip, me, bob, members } = await seedAudTrip();
     await budget.createBudgetItem(trip.id, { name: 'Dinner', currency: 'AUD', payers: [{ user_id: me.id, amount: 80 }], members });
     await budget.createBudgetItem(trip.id, { name: 'Implicit', total_price: 20, members });
     await budget.createBudgetItem(trip.id, { name: 'Pho', currency: 'VND', exchange_rate: 18241.3, total_price: 100000, members });
@@ -2014,7 +2051,7 @@ describe('rows no rate can convert, and the rates that heal them', () => {
   });
 
   it('BUDGET-SVC-DB-068: tripTotals and per-person leave the VND row out and tripTotals reports its id', async () => {
-    const { trip, me, bob, members } = seedAudTrip();
+    const { trip, me, bob, members } = await seedAudTrip();
     const bill = await budget.createBudgetItem(trip.id, {
       name: 'Pho', category: 'food', currency: 'VND', payers: [{ user_id: me.id, amount: 8920000 }], members,
     });
