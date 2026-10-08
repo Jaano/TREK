@@ -5,6 +5,7 @@ import { KitineraryExtractorService } from '../booking-import/kitinerary-extract
 import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
 import { Public } from '../auth/public.decorator';
+import { ReadinessService } from './readiness.service';
 
 /** Exposes the container probe and the server feature flags consumed by the
  *  frontend to show/hide optional UI. */
@@ -15,6 +16,7 @@ export class FeaturesController {
     private readonly extractor: KitineraryExtractorService,
     private readonly addons: AddonsService,
     private readonly maintenance: MaintenanceRepository,
+    private readonly readiness: ReadinessService,
   ) {}
 
   /** The container/uptime probe. The forced-HTTPS redirect and HSTS exempt this
@@ -28,13 +30,18 @@ export class FeaturesController {
 
   /**
    * The readiness probe: 503 while the database does not answer (a restore
-   * swapping it, a boot still migrating), so an orchestrator stops sending
-   * traffic without killing the process. Liveness stays on the plain probe
-   * above, which a long restore must not fail.
+   * swapping it, a boot still migrating) and once a shutdown has started, so
+   * an orchestrator stops sending traffic without killing the process.
+   * Liveness stays on the plain probe above, which a long restore must not
+   * fail.
    */
   @Get('ready')
   async ready(@Res() res: Response): Promise<void> {
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    if (this.readiness.isDraining()) {
+      res.status(503).json({ status: 'unavailable' });
+      return;
+    }
     try {
       await this.maintenance.ping();
       res.json({ status: 'ready' });

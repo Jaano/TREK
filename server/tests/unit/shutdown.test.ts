@@ -14,7 +14,7 @@
  * fires inside Docker's 10s grace rather than on top of it.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { runShutdown, SOCKET_DRAIN_MS, FORCED_EXIT_MS } from '../../src/shutdown';
+import { runShutdown, createFatalHandler, SOCKET_DRAIN_MS, FORCED_EXIT_MS } from '../../src/shutdown';
 
 type Deps = Parameters<typeof runShutdown>[1];
 
@@ -184,5 +184,78 @@ describe('runShutdown', () => {
     // A failing step is logged, never a reason to strand the process.
     expect(deps.logError).toHaveBeenCalled();
     expect(deps.exit).toHaveBeenCalledWith(0);
+  });
+});
+
+describe('runShutdown: readiness and the exit code', () => {
+  it('SHUTDOWN-020 marks the process as draining before anything else happens', async () => {
+    const order: string[] = [];
+    const deps = makeDeps({
+      markDraining: vi.fn(() => { order.push('draining'); }),
+      closeMcpSessions: vi.fn(() => { order.push('mcp'); }),
+      getWsClients: () => { order.push('ws'); return null; },
+    });
+    const run = runShutdown('SIGTERM', deps);
+    (deps.server as unknown as ReturnType<typeof makeServer>).finishClose();
+    await run;
+    expect(order[0]).toBe('draining');
+    expect(order).toEqual(['draining', 'mcp', 'ws']);
+  });
+
+  it('SHUTDOWN-021 a readiness flag that cannot be set is logged and the shutdown goes on', async () => {
+    const deps = makeDeps({ markDraining: () => { throw new Error('no app yet'); } });
+    const run = runShutdown('SIGTERM', deps);
+    (deps.server as unknown as ReturnType<typeof makeServer>).finishClose();
+    await run;
+    expect(deps.logError).toHaveBeenCalledWith('markDraining failed during shutdown: no app yet');
+    expect(deps.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('SHUTDOWN-022 a shutdown started by a fatal error exits with its code', async () => {
+    const deps = makeDeps({ exitCode: 1 });
+    const run = runShutdown('Uncaught exception', deps);
+    (deps.server as unknown as ReturnType<typeof makeServer>).finishClose();
+    await run;
+    expect(deps.closeDb).toHaveBeenCalledTimes(1);
+    expect(deps.exit).toHaveBeenCalledWith(1);
+  });
+});
+
+describe('createFatalHandler', () => {
+  function fatalDeps() {
+    return { logError: vi.fn(), shutdown: vi.fn(), exit: vi.fn() };
+  }
+
+  it('FATAL-001 logs the stack and starts the orderly shutdown with exit code 1', () => {
+    const deps = fatalDeps();
+    const onFatal = createFatalHandler(deps);
+    const error = new Error('boom');
+    onFatal('Uncaught exception', error);
+    expect(deps.logError).toHaveBeenCalledWith(`Uncaught exception: ${error.stack}`);
+    expect(deps.shutdown).toHaveBeenCalledWith('Uncaught exception', 1);
+    expect(deps.exit).not.toHaveBeenCalled();
+  });
+
+  it('FATAL-002 a rejection with a non-error reason is logged as text', () => {
+    const deps = fatalDeps();
+    createFatalHandler(deps)('Unhandled promise rejection', 'plain reason');
+    expect(deps.logError).toHaveBeenCalledWith('Unhandled promise rejection: plain reason');
+  });
+
+  it('FATAL-003 a second fatal error during the shutdown exits at once', () => {
+    const deps = fatalDeps();
+    const onFatal = createFatalHandler(deps);
+    onFatal('Uncaught exception', new Error('first'));
+    onFatal('Unhandled promise rejection', new Error('second'));
+    expect(deps.shutdown).toHaveBeenCalledTimes(1);
+    expect(deps.exit).toHaveBeenCalledWith(1);
+    expect(deps.logError).toHaveBeenCalledTimes(2);
+  });
+
+  it('FATAL-004 a logger that throws does not stop the shutdown', () => {
+    const deps = fatalDeps();
+    deps.logError.mockImplementation(() => { throw new Error('disk gone'); });
+    createFatalHandler(deps)('Uncaught exception', new Error('boom'));
+    expect(deps.shutdown).toHaveBeenCalledWith('Uncaught exception', 1);
   });
 });

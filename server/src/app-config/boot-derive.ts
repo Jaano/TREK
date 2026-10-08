@@ -8,7 +8,15 @@
  * each side touches. A value that pre-container code needs, or that tests
  * mutate mid-lifetime, belongs in derive.ts instead.
  */
-import { parseBool } from './parsers';
+import { parseBool, positiveIntOr } from './parsers';
+
+/**
+ * Longer than the idle timeout of the common reverse proxies and load
+ * balancers (60 s), so the proxy closes an idle upstream connection before
+ * Node does. The other way round the proxy reuses a socket Node just closed
+ * and answers that request with a 502.
+ */
+export const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 65_000;
 import type { RawEnv } from './derive';
 
 /** What the pre-init Express layer and the HTTP server freeze when buildApp() runs. */
@@ -20,6 +28,8 @@ export function deriveHttpBoot(raw: RawEnv) {
     trustProxyRaw: raw.TRUST_PROXY,
     trustProxy: Number.isFinite(trustProxyHops) ? trustProxyHops : 1,
     hstsIncludeSubdomains: parseBool(raw.HSTS_INCLUDE_SUBDOMAINS) === true,
+    /** How long the HTTP server keeps an idle keep-alive connection open. */
+    keepAliveTimeoutMs: positiveIntOr(raw.HTTP_KEEP_ALIVE_TIMEOUT_MS, DEFAULT_KEEP_ALIVE_TIMEOUT_MS),
   };
 }
 

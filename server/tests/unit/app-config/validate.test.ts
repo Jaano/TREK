@@ -207,6 +207,8 @@ describe('validateEnvAtBoot', () => {
   it.each([
     ['PORT', '70000'],
     ['TRUST_PROXY', '1.5'],
+    ['HTTP_KEEP_ALIVE_TIMEOUT_MS', '500'],
+    ['HTTP_KEEP_ALIVE_TIMEOUT_MS', '300000'],
     ['DEFAULT_LANGUAGE', 'klingon'],
     ['LOG_LEVEL', 'verbose'],
     ['SESSION_DURATION_REMEMBER', '-1d'],

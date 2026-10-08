@@ -79,6 +79,9 @@ export const envSchema = z.object({
   FORCE_HTTPS: boolStr,
   HSTS_INCLUDE_SUBDOMAINS: boolStr,
   TRUST_PROXY: integer(0, 2 ** 31, 'must be an integer (number of trusted proxy hops)'),
+  // Capped below Node's 300 s request timeout, which the headers timeout (one
+  // second above this) has to stay under.
+  HTTP_KEEP_ALIVE_TIMEOUT_MS: integer(1_000, 290_000, 'must be a whole number of milliseconds between 1000 and 290000'),
   ALLOW_INTERNAL_NETWORK: boolStr,
   ALLOW_LINK_LOCAL_IPS: optionalWith(
     (v) => parseLinkLocalAllowList(v).invalid.length === 0,

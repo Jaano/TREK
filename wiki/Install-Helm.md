@@ -202,7 +202,7 @@ Startup, liveness and readiness probes are configurable under `probes`:
 
 - **startup** hits `/api/health` and gives a first boot, a long migration or a restore at boot up to ten minutes (`failureThreshold: 60` × `periodSeconds: 10`) before liveness takes over.
 - **liveness** hits `/api/health`, which only says the process answers. A long restore does not fail it.
-- **readiness** hits `/api/health/ready`, which also asks the database. While the database does not answer, the pod stops getting traffic without being restarted.
+- **readiness** hits `/api/health/ready`, which also asks the database. While the database does not answer, the pod stops getting traffic without being restarted. It also answers 503 as soon as the pod starts shutting down, so traffic moves away for the whole drain.
 
 ```bash
 helm install trek trek/trek   --set probes.startup.failureThreshold=120   --set probes.readiness.periodSeconds=20

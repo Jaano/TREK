@@ -18,7 +18,9 @@ import type { DatabaseLifecycle } from './nest/database/database-lifecycle.servi
 import { getAppUrl, getMcpSafeUrl, readEnv } from './app-config';
 import { resolveDataPaths } from './app-config/data-paths';
 import { resolveDbPath } from './db/db-path';
-import { flushLogFileSync } from './nest/audit/audit-log.logger';
+import { flushLogFileSync, logError } from './nest/audit/audit-log.logger';
+import { ReadinessService } from './nest/health/readiness.service';
+import { createFatalHandler } from './shutdown';
 
 // data/tmp is the driver-agnostic global scratch dir (restore-upload spool,
 // mirror stream staging) and stays boot-created here. Driver-owned roots — the
@@ -171,9 +173,13 @@ bootstrap().catch((err) => {
 // in short, #2193: nothing here could ever release a WebSocket, so `docker
 // stop` always ended in SIGKILL and exit 137.
 let shuttingDown = false;
-function shutdown(signal: string): void {
-  // A second signal — the SIGINT that follows a Ctrl-C, or an impatient
-  // orchestrator sending SIGTERM twice — must not start a second teardown on
+// Raised by a fatal error even when a signal's shutdown is already running, so
+// the process still leaves with a failure code the orchestrator can see.
+let exitCode = 0;
+function shutdown(signal: string, code = 0): void {
+  exitCode = Math.max(exitCode, code);
+  // A second signal (the SIGINT that follows a Ctrl-C, or an impatient
+  // orchestrator sending SIGTERM twice) must not start a second teardown on
   // top of the first one.
   if (shuttingDown) return;
   shuttingDown = true;
@@ -198,7 +204,11 @@ function shutdown(signal: string): void {
     },
     logInfo: sLogInfo,
     logError: sLogError,
-    exit: (code: number) => process.exit(code),
+    // Readiness answers 503 from here on; strict: false because the provider
+    // lives in HealthModule, not in the root module.
+    markDraining: () => nestApp?.get(ReadinessService, { strict: false }).markDraining(),
+    exitCode,
+    exit: (code: number) => process.exit(Math.max(code, exitCode)),
   }).catch((err: unknown) => {
     // Fire-and-forget would make this an unhandled rejection, which on Node 22
     // is a crash — a worse ending than the one we are here to fix.
@@ -211,6 +221,17 @@ function shutdown(signal: string): void {
 // when the process ends, by any of the exits above or below, goes out
 // synchronously here: an 'exit' listener cannot wait for a promise.
 process.on('exit', () => flushLogFileSync());
+
+// Last-resort handlers. Node would crash on either anyway, printing the stack
+// to stderr only; this way it lands in trek.log first, and the process goes
+// through the same orderly shutdown as on SIGTERM before it exits with 1.
+const onFatal = createFatalHandler({
+  logError,
+  shutdown: (reason, code) => shutdown(reason, code),
+  exit: (code) => process.exit(code),
+});
+process.on('unhandledRejection', (reason) => onFatal('Unhandled promise rejection', reason));
+process.on('uncaughtException', (error) => onFatal('Uncaught exception', error));
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

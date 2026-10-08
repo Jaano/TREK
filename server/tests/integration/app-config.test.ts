@@ -24,7 +24,7 @@ vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.
 
 import { db as testDb } from '../../src/db/database';
 import { resetTestDb } from '../helpers/test-db';
-import { buildApp } from '../../src/bootstrap';
+import { buildApp, getHttpServer } from '../../src/bootstrap';
 import { httpConfig, RuntimeEnvService } from '../../src/nest/app-config';
 import type { ConfigType } from '@nestjs/config';
 
@@ -46,6 +46,19 @@ describe('AppConfigModule in the real buildApp()', () => {
     else process.env.HSTS_INCLUDE_SUBDOMAINS = prevHsts;
     if (prevDemo === undefined) delete process.env.DEMO_MODE;
     else process.env.DEMO_MODE = prevDemo;
+    delete process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS;
+  });
+
+  it("the HTTP server outlasts a proxy's idle timeout, with the headers timeout above it", async () => {
+    app = await buildApp();
+    expect(getHttpServer().keepAliveTimeout).toBe(65_000);
+    expect(getHttpServer().headersTimeout).toBe(66_000);
+    await app.close();
+
+    process.env.HTTP_KEEP_ALIVE_TIMEOUT_MS = '95000';
+    app = await buildApp();
+    expect(getHttpServer().keepAliveTimeout).toBe(95_000);
+    expect(getHttpServer().headersTimeout).toBe(96_000);
   });
 
   it('boot-stable snapshots re-derive per app build (mutate → rebuild → new value)', async () => {

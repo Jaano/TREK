@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { FeaturesController } from '../../../src/nest/health/features.controller';
+import { ReadinessService } from '../../../src/nest/health/readiness.service';
 import { HealthModule } from '../../../src/nest/health/health.module';
 import { KitineraryExtractorModule } from '../../../src/nest/booking-import/kitinerary-extractor.module';
 import { KitineraryExtractorService } from '../../../src/nest/booking-import/kitinerary-extractor.service';
@@ -18,7 +19,12 @@ function make(available: boolean, aiEnabled: boolean) {
   return {
     extractor,
     addons,
-    controller: new FeaturesController(extractor as Extractor as KitineraryExtractorService, addons as never, {} as never),
+    controller: new FeaturesController(
+      extractor as Extractor as KitineraryExtractorService,
+      addons as never,
+      {} as never,
+      new ReadinessService(),
+    ),
   };
 }
 
@@ -97,7 +103,12 @@ describe('FeaturesController (GET /api/health/features)', () => {
       const execute = vi.fn().mockResolvedValue([]);
       const em = { getConnection: () => ({ execute }), getContext: () => em };
       const extractor = { isAvailable: vi.fn(() => true) };
-      const controller = new FeaturesController(extractor as Extractor as KitineraryExtractorService, {} as never, new MaintenanceRepository(em as never));
+      const controller = new FeaturesController(
+        extractor as Extractor as KitineraryExtractorService,
+        {} as never,
+        new MaintenanceRepository(em as never),
+        new ReadinessService(),
+      );
 
       const ok = response();
       await controller.ready(ok as never);
@@ -110,6 +121,27 @@ describe('FeaturesController (GET /api/health/features)', () => {
       await controller.ready(down as never);
       expect(down.status).toHaveBeenCalledWith(503);
       expect(down.json).toHaveBeenCalledWith({ status: 'unavailable' });
+    });
+
+    it('FEAT-011: answers 503 once a shutdown has started, without asking the database', async () => {
+      const execute = vi.fn().mockResolvedValue([]);
+      const em = { getConnection: () => ({ execute }), getContext: () => em };
+      const readiness = new ReadinessService();
+      const controller = new FeaturesController({} as never, {} as never, new MaintenanceRepository(em as never), readiness);
+
+      readiness.markDraining();
+      const draining = response();
+      await controller.ready(draining as never);
+      expect(draining.status).toHaveBeenCalledWith(503);
+      expect(draining.json).toHaveBeenCalledWith({ status: 'unavailable' });
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('FEAT-012: Nest closing the app marks the process as draining too', () => {
+      const readiness = new ReadinessService();
+      expect(readiness.isDraining()).toBe(false);
+      readiness.beforeApplicationShutdown();
+      expect(readiness.isDraining()).toBe(true);
     });
   });
 });

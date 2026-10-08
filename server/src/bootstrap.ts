@@ -79,6 +79,19 @@ export function getHttpServer(): nodeHttp.Server {
   return boundHttpServer;
 }
 
+/**
+ * Keep-alive behind a reverse proxy. Node's default is to drop an idle
+ * keep-alive connection after 5 s, while proxies keep their upstream
+ * connections for about a minute: a proxy that reuses a socket Node has just
+ * closed answers that request with a 502, intermittently and with nothing in
+ * TREK's log. The headers timeout stays above the keep-alive one, so a
+ * connection waiting for its next request is never cut by the wrong timer.
+ */
+export function applyProxyTimeouts(server: nodeHttp.Server, keepAliveTimeoutMs: number): void {
+  server.keepAliveTimeout = keepAliveTimeoutMs;
+  server.headersTimeout = keepAliveTimeoutMs + 1_000;
+}
+
 export async function buildApp(): Promise<INestApplication> {
   // rawBody keeps the unparsed request bytes on req.rawBody so a plugin webhook
   // route can verify a provider's HMAC signature over the exact payload (the
@@ -106,12 +119,13 @@ export async function buildApp(): Promise<INestApplication> {
   // boot succeeds, the gateway logs as registered, every test passes, and no
   // browser can connect. Callers take the server from getHttpServer() below.
   boundHttpServer = nodeHttp.createServer(instance);
-  app.useWebSocketAdapter(new TrekWsAdapter(boundHttpServer, orm));
   // ConfigModule.forRoot's load factories already ran inside NestFactory.create,
-  // so the boot-stable snapshot is resolvable here, BEFORE app.init() — this is
+  // so the boot-stable snapshot is resolvable here, BEFORE app.init(); this is
   // the one bridge that lets the pre-init Express layer consume the validated
   // config instead of reading process.env itself.
   const http = app.get<ConfigType<typeof httpConfig>>(httpConfig.KEY);
+  applyProxyTimeouts(boundHttpServer, http.keepAliveTimeoutMs);
+  app.useWebSocketAdapter(new TrekWsAdapter(boundHttpServer, orm));
   // Same pre-init bridge: a self-hosted routing engine has to be named in connect-src, or
   // the browser blocks every request to it without an error the app could report. Both
   // engines go through the same door — the second one answers the avoidance questions
