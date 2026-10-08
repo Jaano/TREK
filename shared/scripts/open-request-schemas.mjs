@@ -13,6 +13,7 @@
  *            a catchall of unknown or any)
  *   record   a z.record whose values are unknown or any
  *   unknown  a z.unknown() or z.any() anywhere else, a field or the whole body
+ *   custom   a z.custom() or z.instanceof(), a predicate rather than a shape
  *
  * and compares the count per schema with scripts/open-request-schemas-baseline.json.
  * A schema over its entry fails, so does a new schema with any open shape;
@@ -42,42 +43,61 @@ const isOpenLeaf = (schema) => {
 
 /**
  * The open shapes inside one Zod schema, as a list of `kind@path` strings.
- * Each schema node is visited once, so a shared fragment reused through
- * `.and()` counts once per request schema.
+ * An open spot counts once per path it sits at: one z.unknown() instance
+ * reused across four fields is four open fields. The same `kind@path` is
+ * listed once, so both sides of an intersection naming one field do not
+ * count it twice. `ancestors` only stops the walk from looping through a
+ * recursive z.lazy().
  */
 export function openShapes(root) {
-  const found = [];
-  const seen = new Set();
+  const found = new Set();
+  const ancestors = new Set();
   const visit = (schema, path) => {
     const def = schema?._zod?.def;
-    if (!def || seen.has(schema)) return;
-    seen.add(schema);
+    if (!def || ancestors.has(schema)) return;
+    ancestors.add(schema);
+    try {
+      walk(def, schema, path);
+    } finally {
+      ancestors.delete(schema);
+    }
+  };
+  const walk = (def, schema, path) => {
     switch (def.type) {
       case 'unknown':
       case 'any':
-        found.push(`unknown@${path}`);
+        found.add(`unknown@${path}`);
+        return;
+      case 'custom':
+        // z.custom() and z.instanceof(): a predicate, not a shape, so nothing
+        // about the value is described.
+        found.add(`custom@${path}`);
         return;
       case 'record':
         if (isOpenLeaf(def.valueType)) {
-          found.push(`record@${path}`);
+          found.add(`record@${path}`);
           return;
         }
         visit(def.valueType, `${path}{}`);
         return;
+      case 'map':
+        visit(def.keyType, `${path}<key>`);
+        visit(def.valueType, `${path}{}`);
+        return;
       case 'object':
-        if (isOpenLeaf(def.catchall)) found.push(`loose@${path}`);
+        if (isOpenLeaf(def.catchall)) found.add(`loose@${path}`);
         else if (def.catchall && def.catchall._zod.def.type !== 'never') visit(def.catchall, `${path}.*`);
         for (const [key, value] of Object.entries(def.shape ?? {})) visit(value, `${path}.${key}`);
         return;
       case 'lazy':
-        visit(def.getter(), path);
+        visit(schema._zod.innerType ?? def.getter(), path);
         return;
       default:
         break;
     }
     // Wrappers and combinators: optional, nullable, default, catch, pipe,
-    // array, tuple, union, intersection, readonly and the like.
-    for (const key of ['innerType', 'in', 'out', 'element', 'left', 'right', 'rest']) {
+    // array, set, tuple, union, intersection, readonly and the like.
+    for (const key of ['innerType', 'in', 'out', 'element', 'valueType', 'left', 'right', 'rest']) {
       if (def[key]?._zod) visit(def[key], path);
     }
     for (const key of ['options', 'items']) {
@@ -85,7 +105,7 @@ export function openShapes(root) {
     }
   };
   visit(root, '$');
-  return found;
+  return [...found];
 }
 
 /** Open-shape counts for every exported *RequestSchema of a module namespace, sorted by name. */

@@ -35,6 +35,30 @@ describe('open request schemas', () => {
     expect(openShapes(z.array(z.object({ meta: z.record(z.string(), z.any()) })))).toEqual(['record@$.meta']);
     expect(openShapes(z.union([z.string(), z.object({ x: z.unknown() })]))).toEqual(['unknown@$|1.x']);
     expect(openShapes(z.object({ x: z.unknown() }).nullable().default(null))).toEqual(['unknown@$.x']);
+    expect(openShapes(z.object({ a: z.map(z.string(), z.unknown()), b: z.set(z.any()) }))).toEqual([
+      'unknown@$.a{}',
+      'unknown@$.b',
+    ]);
+    expect(openShapes(z.object({ a: z.custom<string>(), b: z.instanceof(Date) }))).toEqual([
+      'custom@$.a',
+      'custom@$.b',
+    ]);
+  });
+
+  it('OPEN-003b: one open node reused across fields counts at every path it sits at', () => {
+    const anything = z.unknown().optional();
+    expect(openShapes(z.object({ a: anything, b: anything, c: anything, d: anything }))).toHaveLength(4);
+    const meta = z.record(z.string(), z.unknown());
+    expect(openShapes(z.object({ x: meta, y: z.array(meta) }))).toEqual(['record@$.x', 'record@$.y']);
+    // Both sides of an intersection naming the same open field still count it once.
+    const left = z.object({ x: z.unknown() });
+    expect(openShapes(left.and(z.object({ x: z.unknown() })))).toEqual(['unknown@$.x']);
+  });
+
+  it('OPEN-003c: a recursive schema is walked once per level and terminates', () => {
+    type Node = { meta?: unknown; children: Node[] };
+    const node: z.ZodType<Node> = z.lazy(() => z.object({ meta: z.unknown().optional(), children: z.array(node) }));
+    expect(openShapes(node)).toEqual(['unknown@$.meta']);
   });
 
   it('OPEN-004: a closed schema counts nothing', () => {
