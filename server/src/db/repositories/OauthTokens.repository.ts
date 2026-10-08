@@ -352,6 +352,9 @@ export class OauthTokensRepository extends TrekRepository<OauthTokens> {
    * live chain is what replay detection walks. Each pass removes the current
    * leaves, so a whole expired chain goes over a few passes; `maxPasses`
    * bounds a chain that is still growing. Returns the number deleted.
+   *
+   * @txIndependent a retention sweep: every pass leaves a consistent table, and the
+   * next sweep picks up what a failed one left.
    */
   async deleteExpiredBefore(cutoffIso: string, maxPasses = 50): Promise<number> {
     let total = 0;

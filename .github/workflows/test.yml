@@ -260,6 +260,12 @@ jobs:
         # scripts/import-boundaries-baseline.json and may only shrink.
         run: cd server && npm run lint:boundaries
 
+      - name: Writes outside a transaction
+        # A method that writes twice does it inside one uow.transactional.
+        # Today's exceptions sit in scripts/tx-writes-baseline.json and may
+        # only shrink; @txStandalone/@txIndependent mark the deliberate ones.
+        run: cd server && npm run lint:tx
+
       - name: Open request schemas may only shrink
         # Needs the shared build above. Counts open shapes (records of
         # unknown, passthrough, any) in shared's request schemas.

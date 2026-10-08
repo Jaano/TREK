@@ -67,6 +67,10 @@ export class GoogleQuotaService {
     await this.usage.recordCall(todayUtc()); // GQ2
   }
 
+  /**
+   * The ceiling and today's count, after dropping days past retention.
+   * @txStandalone the retention purge stands on its own, whatever the caller wrote.
+   */
   async status(): Promise<GoogleQuotaStatus> {
     await this.usage.purgeExpired(RETENTION_DAYS); // GQ3
     const limit = await this.dailyLimit();

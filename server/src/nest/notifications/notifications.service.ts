@@ -599,6 +599,11 @@ export class NotificationsService {
     return await this.notificationsRepo.deleteAllForRecipient(userId);
   }
 
+  /**
+   * Run a notification's action for the recipient's answer.
+   * @txIndependent the claim commits on its own before the action runs, so a second
+   * submit sees it; a failing action releases it again.
+   */
   async respond(
     notificationId: number,
     userId: number,
@@ -655,6 +660,13 @@ export class NotificationsService {
 
   // ── Unified dispatcher (from services/notificationService.ts) ─────────────
 
+  /**
+   * Resolves the recipients of one event and delivers it on every active channel.
+   *
+   * @txStandalone a notification reports a change after it is written; email
+   * and webhook delivery are network I/O, which never runs inside a transaction.
+   * @txIndependent each recipient's row is written on its own, between deliveries.
+   */
   async send(payload: NotificationPayload): Promise<NotificationDelivery> {
     const { event, actorId, params, scope, targetId, inApp } = payload;
     const delivery: NotificationDelivery = { attempted: 0, delivered: 0 };

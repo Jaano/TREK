@@ -105,6 +105,9 @@ export class AuditService {
    * gets a message distinct from every other write failure (below), so an
    * unwrapped entrypoint stays visible in the log even though it never
    * throws.
+   *
+   * @txStandalone the row records a change that already happened and never
+   * fails it, so it is not part of the caller's transaction.
    */
   async writeAudit(entry: {
     userId: number | null;

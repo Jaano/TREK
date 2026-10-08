@@ -536,8 +536,7 @@ export class BudgetService {
    * otherwise a €15 museum on a trip switched to JPY starts reading as ¥15. They
    * carry no frozen rate, so pinning the currency is all they need.
    *
-   * Must run *before* the (synchronous) trip update, while the old currency is
-   * still in `trips`, and is a no-op when the currency isn't actually changing.
+   * Runs before the trip update, while the old currency is still in `trips`; a no-op without a change.
    */
   async rebaseTripCurrency(
     tripId: string | number,
@@ -910,6 +909,7 @@ export class BudgetService {
    * it (#2084): their sum while they share one currency, the first one's total
    * when they don't (a sum across currencies would be meaningless), and no
    * price at all once none is linked. One expense gives exactly the old mirror.
+   * @txStandalone a non-fatal mirror onto the booking, worked out again on every change.
    */
   async resyncReservationPrice(tripId: string | number, reservationId: number, socketId?: string): Promise<void> {
     const linked = await this.budgetItemsRepo.listLinkedToReservation(tripId, reservationId);

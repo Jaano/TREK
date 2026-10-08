@@ -132,6 +132,9 @@ export class AssignmentsService {
    * Re-mirror the trip's day-assigned places onto every linked journey's skeleton
    * suggestions. Called after any assignment mutation (create/delete/move/time) so
    * the journey stays in sync. Non-fatal, like the route's try/catch.
+   *
+   * @txStandalone a derived refresh that runs after the assignment write and
+   * never fails it.
    */
   async reconcile(tripId: string | number, socketId?: string): Promise<void> {
     try {
