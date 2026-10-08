@@ -21,6 +21,7 @@ import { PluginSettingsFields } from '../../../src/db/entities/PluginSettingsFie
 import { PluginErrorLog } from '../../../src/db/entities/PluginErrorLog.entity';
 import { discoverPlugins, type DiscoveryRepos } from '../../../src/nest/plugins/install/discovery';
 import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
+import { countRows, findRow, findRows, insertRow } from '../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -66,12 +67,12 @@ describe('discoverPlugins', () => {
     const res = await discoverPlugins(repos);
     expect(res.discovered).toEqual(['flight-tracker']);
 
-    const row = testDb.prepare("SELECT status, type, permissions FROM plugins WHERE id='flight-tracker'").get() as { status: string; type: string; permissions: string };
-    expect(row.status).toBe('inactive');
-    expect(row.type).toBe('widget');
-    expect(JSON.parse(row.permissions)).toEqual(['db:own']);
+    const row = await findRow(t, Plugins, { id: 'flight-tracker' });
+    expect(row?.status).toBe('inactive');
+    expect(row?.type).toBe('widget');
+    expect(JSON.parse(String(row?.permissions))).toEqual(['db:own']);
 
-    const field = testDb.prepare("SELECT field_key, secret FROM plugin_settings_fields WHERE plugin_id='flight-tracker'").get() as { field_key: string; secret: number };
+    const field = await findRow(t, PluginSettingsFields, { plugin_id: 'flight-tracker' });
     expect(field).toMatchObject({ field_key: 'api_key', secret: 1 });
   });
 
@@ -81,7 +82,8 @@ describe('discoverPlugins', () => {
       actions: [{ key: 'ping', label: 'Ping' }, { key: 'purge', label: 'Purge', scope: 'instance', danger: true }],
     });
     await discoverPlugins(repos);
-    const rows = testDb.prepare("SELECT action_key, scope, danger FROM plugin_actions WHERE plugin_id='acts' ORDER BY sort_order").all();
+    const rows = (await findRows(t, PluginActions, { plugin_id: 'acts' }, { sort_order: 'asc' }))
+      .map((r) => ({ action_key: r.action_key, scope: r.scope, danger: r.danger }));
     expect(rows).toEqual([
       { action_key: 'ping', scope: 'user', danger: 0 },
       { action_key: 'purge', scope: 'instance', danger: 1 },
@@ -89,13 +91,13 @@ describe('discoverPlugins', () => {
   });
 
   it('keeps an existing plugin status + granted permissions on re-discovery', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, status, granted_permissions) VALUES ('keep','Keep','page','active','[\"db:own\"]')").run();
+    await insertRow(t, Plugins, { id: 'keep', name: 'Keep', type: 'page', status: 'active', granted_permissions: '["db:own"]' });
     writePlugin('keep', { name: 'Keep v2', type: 'page', version: '2.0.0' });
     await discoverPlugins(repos);
-    const row = testDb.prepare("SELECT status, version, granted_permissions FROM plugins WHERE id='keep'").get() as { status: string; version: string; granted_permissions: string };
-    expect(row.status).toBe('active'); // not downgraded
-    expect(row.version).toBe('2.0.0'); // metadata refreshed
-    expect(JSON.parse(row.granted_permissions)).toEqual(['db:own']); // grants preserved
+    const row = await findRow(t, Plugins, { id: 'keep' });
+    expect(row?.status).toBe('active'); // not downgraded
+    expect(row?.version).toBe('2.0.0'); // metadata refreshed
+    expect(JSON.parse(String(row?.granted_permissions))).toEqual(['db:own']); // grants preserved
   });
 
   it('tolerates a UTF-8 BOM in trek-plugin.json (Windows-authored plugins)', async () => {
@@ -109,8 +111,8 @@ describe('discoverPlugins', () => {
     writePlugin('bad', { type: 'not-a-type' });
     const res = await discoverPlugins(repos);
     expect(res.skipped).toEqual(['bad']);
-    expect(testDb.prepare("SELECT COUNT(*) c FROM plugins WHERE id='bad'").get()).toMatchObject({ c: 0 });
-    expect((testDb.prepare("SELECT message FROM plugin_error_log WHERE plugin_id='bad'").get() as { message: string }).message).toContain('discovery');
+    expect(await countRows(t, Plugins, { id: 'bad' })).toBe(0);
+    expect((await findRow(t, PluginErrorLog, { plugin_id: 'bad' }))?.message).toContain('discovery');
   });
 
   it('skips a plugin that ships native binaries', async () => {
@@ -133,12 +135,12 @@ describe('discoverPlugins', () => {
       // Off (default): a stale dev-link symlink is not discovered or registered.
       delete process.env.TREK_PLUGINS_DEV_LINK;
       expect((await discoverPlugins(repos)).discovered).toEqual([]);
-      expect(testDb.prepare("SELECT status FROM plugins WHERE id='linked'").get()).toBeUndefined();
+      expect(await findRow(t, Plugins, { id: 'linked' })).toBeNull();
 
       // On: the dev-link is followed and registered inactive.
       process.env.TREK_PLUGINS_DEV_LINK = '1';
       expect((await discoverPlugins(repos)).discovered).toEqual(['linked']);
-      expect(testDb.prepare("SELECT status FROM plugins WHERE id='linked'").get()).toMatchObject({ status: 'inactive' });
+      expect(await findRow(t, Plugins, { id: 'linked' })).toMatchObject({ status: 'inactive' });
     } finally {
       if (prev === undefined) delete process.env.TREK_PLUGINS_DEV_LINK; else process.env.TREK_PLUGINS_DEV_LINK = prev;
       fs.rmSync(srcRoot, { recursive: true, force: true });
@@ -154,7 +156,7 @@ describe('discoverPlugins', () => {
     it('persists the range and its lower bound', async () => {
       writePlugin('ranged', { trek: '>=3.2.0 <4.0.0' });
       await discoverPlugins(repos);
-      expect(testDb.prepare("SELECT trek_range, min_trek_version FROM plugins WHERE id='ranged'").get())
+      expect(await findRow(t, Plugins, { id: 'ranged' }))
         .toMatchObject({ trek_range: '>=3.2.0 <4.0.0', min_trek_version: '3.2.0' });
     });
 
@@ -165,7 +167,7 @@ describe('discoverPlugins', () => {
       // registered with a null range and the activation gate refuses it (TREK_VERSION_UNKNOWN).
       writePlugin('rangeless', {});
       expect((await discoverPlugins(repos)).discovered).toEqual(['rangeless']);
-      expect(testDb.prepare("SELECT trek_range FROM plugins WHERE id='rangeless'").get()).toMatchObject({ trek_range: null });
+      expect(await findRow(t, Plugins, { id: 'rangeless' })).toMatchObject({ trek_range: null });
     });
 
     it('refreshes the range on re-discovery, so a plugin that narrowed its support is caught', async () => {
@@ -173,7 +175,7 @@ describe('discoverPlugins', () => {
       await discoverPlugins(repos);
       writePlugin('shrink', { trek: '>=3.0.0 <3.1.0' });
       await discoverPlugins(repos);
-      expect(testDb.prepare("SELECT trek_range FROM plugins WHERE id='shrink'").get()).toMatchObject({ trek_range: '>=3.0.0 <3.1.0' });
+      expect(await findRow(t, Plugins, { id: 'shrink' })).toMatchObject({ trek_range: '>=3.0.0 <3.1.0' });
     });
   });
 });
