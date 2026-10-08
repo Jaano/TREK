@@ -97,6 +97,7 @@ import { PluginUserSettingsService } from '../../../src/nest/plugins/plugin-user
 import { createTestAddonsService } from '../../helpers/test-addons';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow, insertRow } from '../../helpers/factories/rows';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
@@ -297,12 +298,10 @@ describe('PluginRuntimeService scheduler sweep — registered through CronRegist
     // disk — a real installed plugin always has (at least) a `plugins` row, so this
     // fixture needs one too, or the erasure row would be reaped before ever
     // reaching the ACK-gated delivery path this test is actually proving.
-    testDb.prepare("INSERT INTO plugins (id, name) VALUES (?, ?)").run(pluginId, pluginId);
-    testDb.prepare('INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at, payload, every_ms) VALUES (?,?,?,?,?)')
-      .run(pluginId, 'oneshot', oneShotSeedDueAt, 'null', null);
-    testDb.prepare('INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at, payload, every_ms) VALUES (?,?,?,?,?)')
-      .run(pluginId, 'recurring', recurringSeedDueAt, 'null', 60_000);
-    testDb.prepare('INSERT INTO plugin_user_erasure_queue (plugin_id, user_id) VALUES (?,?)').run(pluginId, 4242);
+    await insertRow(t, Plugins, { id: pluginId, name: pluginId });
+    await insertRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'oneshot', due_at: oneShotSeedDueAt, payload: 'null', every_ms: null });
+    await insertRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'recurring', due_at: recurringSeedDueAt, payload: 'null', every_ms: 60_000 });
+    await insertRow(t, PluginUserErasureQueue, { plugin_id: pluginId, user_id: 4242 });
 
     // Mark the plugin active without a real child spawn — the same technique
     // tests/unit/plugins/supervisor-lifecycle.test.ts already uses to drive
@@ -321,9 +320,11 @@ describe('PluginRuntimeService scheduler sweep — registered through CronRegist
         // the row's disposition write must already have landed by the moment
         // delivery is attempted, since a crash here must never double-fire.
         if (name === 'oneshot') {
+          // test-sql-allow: read synchronously inside the delivery call, so it sees the row at that very moment.
           const row = testDb.prepare('SELECT id FROM plugin_scheduled_tasks WHERE plugin_id=? AND name=?').get(id, 'oneshot');
           expect(row).toBeUndefined(); // already deleted before delivery
         } else if (name === 'recurring') {
+          // test-sql-allow: read synchronously inside the delivery call, so it sees the row at that very moment.
           const row = testDb.prepare('SELECT due_at FROM plugin_scheduled_tasks WHERE plugin_id=? AND name=?').get(id, 'recurring') as { due_at: number } | undefined;
           expect(row).toBeDefined();
           expect(row!.due_at).toBeGreaterThan(recurringSeedDueAt); // already re-armed before delivery
@@ -341,17 +342,17 @@ describe('PluginRuntimeService scheduler sweep — registered through CronRegist
         .toEqual(['oneshot', 'recurring']);
       expect(invokeCalls).toContainEqual({ method: 'invoke.deleteUserData', payload: { userId: 4242 } });
 
-      const oneShotRow = testDb.prepare('SELECT id FROM plugin_scheduled_tasks WHERE plugin_id=? AND name=?').get(pluginId, 'oneshot');
-      expect(oneShotRow).toBeUndefined();
-      const recurringRow = testDb.prepare('SELECT due_at FROM plugin_scheduled_tasks WHERE plugin_id=? AND name=?').get(pluginId, 'recurring') as { due_at: number } | undefined;
-      expect(recurringRow).toBeDefined();
+      const oneShotRow = await findRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'oneshot' });
+      expect(oneShotRow).toBeNull();
+      const recurringRow = await findRow(t, PluginScheduledTasks, { plugin_id: pluginId, name: 'recurring' });
+      expect(recurringRow).not.toBeNull();
       // Re-armed to Date.now() (read fresh, at fire time — not the seed timestamp)
       // + every_ms: bounded rather than exact, since real wall-clock time elapses
       // between seeding the row and the tick firing it.
       expect(recurringRow!.due_at).toBeGreaterThanOrEqual(now + 60_000);
       expect(recurringRow!.due_at).toBeLessThan(now + 60_000 + 30_000);
-      const erasureRow = testDb.prepare('SELECT id FROM plugin_user_erasure_queue WHERE plugin_id=? AND user_id=?').get(pluginId, 4242);
-      expect(erasureRow).toBeUndefined(); // drained on ACK
+      const erasureRow = await findRow(t, PluginUserErasureQueue, { plugin_id: pluginId, user_id: 4242 });
+      expect(erasureRow).toBeNull(); // drained on ACK
     } finally {
       invokeSpy.mockRestore();
       supervisor.running.delete(pluginId);

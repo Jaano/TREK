@@ -19,6 +19,7 @@ import { Trips } from '../../../../src/db/entities/Trips.entity';
 import type { TripsRepository } from '../../../../src/db/repositories/Trips.repository';
 import { TripMembers } from '../../../../src/db/entities/TripMembers.entity';
 import type { TripMembersRepository } from '../../../../src/db/repositories/TripMembers.repository';
+import { countRows, findRow, insertRow, updateRows } from '../../../helpers/factories/rows';
 import { TripMembershipService } from '../../../../src/nest/trip-membership/trip-membership.service';
 
 const testDb = createSnapshotTestDb();
@@ -37,7 +38,7 @@ beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
 function memberRow(tripId: number, userId: number) {
-  return testDb.prepare('SELECT * FROM trip_members WHERE trip_id = ? AND user_id = ?').get(tripId, userId);
+  return findRow(t, TripMembers, { trip: tripId, user: userId });
 }
 
 describe('joinTripAsMember', () => {
@@ -48,7 +49,7 @@ describe('joinTripAsMember', () => {
 
     const r = await svc.joinTripAsMember(trip.id, joiner.id, null);
     expect(r).toEqual({ joined: true, tripId: trip.id });
-    expect(memberRow(trip.id, joiner.id)).toBeTruthy();
+    expect(await memberRow(trip.id, joiner.id)).toBeTruthy();
   });
 
   it('TRIP-JOIN-002: never adds the trip owner as a member', async () => {
@@ -57,7 +58,7 @@ describe('joinTripAsMember', () => {
 
     const r = await svc.joinTripAsMember(trip.id, owner.id, null);
     expect(r.joined).toBe(false);
-    expect(memberRow(trip.id, owner.id)).toBeUndefined();
+    expect(await memberRow(trip.id, owner.id)).toBeNull();
   });
 
   it('TRIP-JOIN-003: is idempotent for an existing member (no duplicate row)', async () => {
@@ -67,8 +68,7 @@ describe('joinTripAsMember', () => {
 
     expect((await svc.joinTripAsMember(trip.id, joiner.id, owner.id)).joined).toBe(true);
     expect((await svc.joinTripAsMember(trip.id, joiner.id, owner.id)).joined).toBe(false);
-    const count = testDb.prepare('SELECT COUNT(*) as n FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, joiner.id) as { n: number };
-    expect(count.n).toBe(1);
+    expect(await countRows(t, TripMembers, { trip: trip.id, user: joiner.id })).toBe(1);
   });
 
   it('TRIP-JOIN-004: no-ops for a missing trip', async () => {
@@ -113,8 +113,7 @@ describe('joinTripAsMember', () => {
     // Exactly one membership row exists afterwards either way — the UNIQUE
     // constraint on (trip_id, user_id) is the actual safety net today, not
     // application-level locking.
-    const count = testDb.prepare('SELECT COUNT(*) as n FROM trip_members WHERE trip_id = ? AND user_id = ?').get(trip.id, joiner.id) as { n: number };
-    expect(count.n).toBe(1);
+    expect(await countRows(t, TripMembers, { trip: trip.id, user: joiner.id })).toBe(1);
   });
 });
 
@@ -133,8 +132,8 @@ describe('leaf membership reads', () => {
     const { user: m1 } = createUser(testDb);
     const { user: m2 } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare("INSERT INTO trip_members (trip_id, user_id, added_at) VALUES (?, ?, '2026-01-02')").run(trip.id, m2.id);
-    testDb.prepare("INSERT INTO trip_members (trip_id, user_id, added_at) VALUES (?, ?, '2026-01-01')").run(trip.id, m1.id);
+    await insertRow(t, TripMembers, { trip: trip.id, user: m2.id, added_at: '2026-01-02' });
+    await insertRow(t, TripMembers, { trip: trip.id, user: m1.id, added_at: '2026-01-01' });
     expect(await svc.listMemberUserIds(trip.id)).toEqual([m1.id, m2.id]);
     expect(await svc.listMemberUserIds(999999)).toEqual([]);
   });
@@ -145,10 +144,10 @@ describe('leaf membership reads', () => {
     const owned = createTrip(testDb, user.id);
     const memberOf = createTrip(testDb, other.id);
     const foreign = createTrip(testDb, other.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(memberOf.id, user.id);
+    await insertRow(t, TripMembers, { trip: memberOf.id, user: user.id });
     // Distinct created_at so the ORDER BY is actually asserted, not assumed.
-    testDb.prepare("UPDATE trips SET created_at = '2026-01-01' WHERE id = ?").run(owned.id);
-    testDb.prepare("UPDATE trips SET created_at = '2026-01-02' WHERE id = ?").run(memberOf.id);
+    await updateRows(t, Trips, { id: owned.id }, { created_at: '2026-01-01' });
+    await updateRows(t, Trips, { id: memberOf.id }, { created_at: '2026-01-02' });
     const ids = await svc.listAccessibleTripIds(user.id);
     expect(ids).toEqual([memberOf.id, owned.id]);
     expect(ids).not.toContain(foreign.id);

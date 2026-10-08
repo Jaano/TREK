@@ -40,7 +40,11 @@ import type { FilesService } from '../../../../src/nest/files/files.service';
 import type { StorageService } from '../../../../src/nest/storage/storage.service';
 import type { RealtimeService } from '../../../../src/nest/realtime/realtime.service';
 import { createTrip, createUser } from '../../../helpers/factories';
-import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo } from '../../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, sharedTestOrm } from '../../../helpers/test-uow';
+import { findRow, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { DocumentConnections } from '../../../../src/db/entities/DocumentConnections.entity';
+import { DocumentProviders } from '../../../../src/db/entities/DocumentProviders.entity';
+import { TripDocumentLinks } from '../../../../src/db/entities/TripDocumentLinks.entity';
 import {
   createTestDocumentConnectionsRepo,
   createTestDocumentProviderFieldsRepo,
@@ -443,9 +447,9 @@ describe('DocSyncJob and a provider switched off in the admin panel', () => {
   /** A job of its own per pass, so the interval never decides whether a tick runs. */
   const tick = () => new DocSyncJob(appSettingsRepo, service, config, addons, registrar).tick();
 
-  const switchProvider = (id: string, on: boolean) =>
-    testDb.prepare('UPDATE document_providers SET enabled = ? WHERE id = ?').run(on ? 1 : 0, id);
-  const linkRow = (id: number) => testDb.prepare('SELECT * FROM trip_document_links WHERE id = ?').get(id);
+  const switchProvider = async (id: string, on: boolean) =>
+    updateRows(await sharedTestOrm(testDb), DocumentProviders, { id }, { enabled: on ? 1 : 0 });
+  const linkRow = async (id: number) => findRow(await sharedTestOrm(testDb), TripDocumentLinks, { id });
 
   beforeAll(async () => {
     appSettingsRepo = await createTestAppSettingsRepo(testDb);
@@ -474,53 +478,60 @@ describe('DocSyncJob and a provider switched off in the admin panel', () => {
     );
     const ownerId = createUser(testDb, { username: 'owner', email: 'owner@docsync-job.test' }).user.id;
     const tripId = createTrip(testDb, ownerId, { title: 'Japan' }).id;
-    const bind = (providerId: string) => {
-      const conn = testDb
-        .prepare(
-          `INSERT INTO document_connections (trip_id, provider_id, owner_user_id, base_url, secrets, settings)
-           VALUES (?, ?, ?, 'https://docs.example.com', NULL, '{}')`,
-        )
-        .run(tripId, providerId, ownerId);
-      return Number(testDb
-        .prepare(
-          `INSERT INTO trip_document_links
-             (trip_id, connection_id, provider_id, remote_scope_key, remote_label, direction, delete_policy,
-              conflict_policy, sync_enabled, created_by)
-           VALUES (?, ?, ?, 'tag:1', 'Japan', 'both', 'unlink', 'manual', 1, ?)`,
-        )
-        .run(tripId, conn.lastInsertRowid, providerId, ownerId).lastInsertRowid);
+    const orm = await sharedTestOrm(testDb);
+    const bind = async (providerId: string) => {
+      const connectionId = await insertRow(orm, DocumentConnections, {
+        trip: tripId,
+        provider: providerId,
+        ownerUser: ownerId,
+        base_url: 'https://docs.example.com',
+        secrets: null,
+        settings: '{}',
+      });
+      return insertRow(orm, TripDocumentLinks, {
+        trip: tripId,
+        connection: connectionId,
+        provider_id: providerId,
+        remote_scope_key: 'tag:1',
+        remote_label: 'Japan',
+        direction: 'both',
+        delete_policy: 'unlink',
+        conflict_policy: 'manual',
+        sync_enabled: 1,
+        createdByRef: ownerId,
+      });
     };
-    paperlessLink = bind('paperless');
-    nextcloudLink = bind('nextcloud');
+    paperlessLink = await bind('paperless');
+    nextcloudLink = await bind('nextcloud');
   });
 
   afterAll(() => testDb.close());
 
-  beforeEach(() => {
-    switchProvider('paperless', false);
-    switchProvider('nextcloud', true);
+  beforeEach(async () => {
+    await switchProvider('paperless', false);
+    await switchProvider('nextcloud', true);
   });
 
   it('runs the bindings that may run and leaves the switched-off one exactly as it was', async () => {
-    const before = linkRow(paperlessLink);
+    const before = await linkRow(paperlessLink);
 
     await tick();
 
     expect(nextcloud.list).toHaveBeenCalledTimes(1);
     expect(paperless.resolveScope).not.toHaveBeenCalled();
     expect(paperless.list).not.toHaveBeenCalled();
-    expect(linkRow(paperlessLink)).toEqual(before);
-    expect(linkRow(nextcloudLink)).toMatchObject({ last_sync_state: 'ok' });
+    expect(await linkRow(paperlessLink)).toEqual(before);
+    expect(await linkRow(nextcloudLink)).toMatchObject({ last_sync_state: 'ok' });
   });
 
   it('picks the binding up again on the next tick once the provider is back on', async () => {
     await tick();
     expect(paperless.list).not.toHaveBeenCalled();
 
-    switchProvider('paperless', true);
+    await switchProvider('paperless', true);
     await tick();
 
     expect(paperless.list).toHaveBeenCalledTimes(1);
-    expect(linkRow(paperlessLink)).toMatchObject({ last_sync_state: 'ok', failure_count: 0 });
+    expect(await linkRow(paperlessLink)).toMatchObject({ last_sync_state: 'ok', failure_count: 0 });
   });
 });

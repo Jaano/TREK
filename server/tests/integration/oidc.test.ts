@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } 
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 // ── DB mock (async vi.mock factory over the migrated schema snapshot) ────────
 
@@ -37,6 +38,12 @@ import type { MockInstance } from 'vitest';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser } from '../helpers/factories';
+import { findRow, findRows } from '../helpers/factories/rows';
+import { readUser } from '../helpers/factories/users';
+import { setAppSetting } from '../helpers/factories/settings';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { Users } from '../../src/db/entities/Users.entity';
 import { OidcService } from '../../src/nest/oidc/oidc.service';
 
 /** Read one cookie's value out of a response's Set-Cookie header, as a browser would. */
@@ -57,6 +64,8 @@ const MOCK_DISCOVERY_DOC = {
 
 let nestApp: INestApplication;
 let app: Application;
+/** The app's own ORM, which the factories seed and read through. */
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
 let oidcSvc: OidcService;
 let mockDiscover: MockInstance<OidcService['discover']>;
 let mockExchangeCode: MockInstance<OidcService['exchangeCodeForToken']>;
@@ -183,13 +192,11 @@ describe('GET /api/auth/oidc/callback', () => {
 
     expect(res.status).toBe(302);
     // The query from the report, against the same table.
-    const rows = testDb.prepare('SELECT user_id, action, details FROM audit_log WHERE user_id = ? ORDER BY id DESC').all(user.id) as
-      { user_id: number; action: string; details: string | null }[];
+    const rows = await findRows(orm(), AuditLog, { user: user.id }, { id: 'desc' });
     expect(rows.map(r => r.action)).toContain('user.login');
     const login = rows.find(r => r.action === 'user.login')!;
     expect(JSON.parse(login.details || '{}')).toEqual({ method: 'oidc' });
-    const counted = testDb.prepare('SELECT login_count FROM users WHERE id = ?').get(user.id) as { login_count: number };
-    expect(counted.login_count).toBe(1);
+    expect((await readUser(orm(), user.id)).login_count).toBe(1);
   });
 
   it('OIDC-005: new user gets created when registration is open', async () => {
@@ -210,12 +217,11 @@ describe('GET /api/auth/oidc/callback', () => {
     expect(res.headers.location).toContain('/login?oidc_code=');
 
     // Verify user was created in DB
-    const newUser = testDb.prepare("SELECT * FROM users WHERE email = 'newuser@example.com'").get() as { id: number; username: string; role: string } | undefined;
-    expect(newUser).toBeDefined();
+    const newUser = await findRow(orm(), Users, { email: 'newuser@example.com' });
+    expect(newUser).not.toBeNull();
     // Registered, the way the audit log reports a password signup, and then logged in:
     // an admin reading user.register for who got an account sees the SSO ones too.
-    const rows = testDb.prepare('SELECT action, details FROM audit_log WHERE user_id = ? ORDER BY id').all(newUser!.id) as
-      { action: string; details: string | null }[];
+    const rows = await findRows(orm(), AuditLog, { user: newUser!.id }, { id: 'asc' });
     expect(rows.map(r => r.action)).toEqual(['user.register', 'user.login']);
     expect(JSON.parse(rows[0].details || '{}')).toEqual({ username: newUser!.username, email: 'newuser@example.com', role: newUser!.role, method: 'oidc' });
   });
@@ -300,7 +306,7 @@ describe('GET /api/auth/oidc/callback', () => {
     // Need at least one existing user so isFirstUser=false
     createUser(testDb, { email: 'existing@example.com' });
     // Disable registration
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allow_registration', 'false')").run();
+    await setAppSetting(orm(), 'allow_registration', 'false');
 
     mockDiscover.mockResolvedValueOnce(MOCK_DISCOVERY_DOC);
     mockExchangeCode.mockResolvedValueOnce({ access_token: 'tok', id_token: 'fake.id.token', _ok: true, _status: 200 });

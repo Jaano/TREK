@@ -84,11 +84,15 @@ import { FilesModule } from '../../src/nest/files/files.module';
 import { PhotosModule } from '../../src/nest/photos/photos.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { deleteRows, insertRow, updateRows } from '../helpers/factories/rows';
+import { Trips } from '../../src/db/entities/Trips.entity';
+import { TripFiles } from '../../src/db/entities/TripFiles.entity';
 
 describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
+  let orm: TestOrm;
 
   async function build() {
     const moduleRef = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, FilesModule, PhotosModule] }).compile();
@@ -101,9 +105,10 @@ describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
 
   beforeAll(async () => {
     seedUser(db as never, { id: 1 });
-    db.prepare('INSERT INTO trips (id, user_id, title) VALUES (5, 1, ?)').run('Trip');
-    db.prepare("INSERT INTO trip_files (id, trip_id, filename, original_name, uploaded_by) VALUES (1, 5, 'stored-a.pdf', 'a.pdf', 1)").run();
-    db.prepare("INSERT INTO trip_files (id, trip_id, filename, original_name, uploaded_by, starred) VALUES (9, 5, 'stored-b.pdf', 'b.pdf', 1, 0)").run();
+    orm = await createTestOrm(db);
+    await insertRow(orm, Trips, { id: 5, user: 1, title: 'Trip' });
+    await insertRow(orm, TripFiles, { id: 1, trip: 5, filename: 'stored-a.pdf', original_name: 'a.pdf', uploadedByRef: 1 });
+    await insertRow(orm, TripFiles, { id: 9, trip: 5, filename: 'stored-b.pdf', original_name: 'b.pdf', uploadedByRef: 1, starred: 0 });
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
@@ -118,6 +123,7 @@ describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   it('401 listing files without a session cookie', async () => {
@@ -140,13 +146,13 @@ describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
     // longer intercepts it. Trip 5 is a persistent row seeded once in
     // `beforeAll` (not re-seeded per test), so it is removed and restored
     // around this one assertion instead.
-    db.prepare('DELETE FROM trips WHERE id = 5').run();
+    await deleteRows(orm, Trips, { id: 5 });
     try {
       const res = await request(server).get('/api/trips/5/files').set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
     } finally {
-      db.prepare("INSERT INTO trips (id, user_id, title) VALUES (5, 1, 'Trip')").run();
+      await insertRow(orm, Trips, { id: 5, user: 1, title: 'Trip' });
     }
   });
 
@@ -156,7 +162,7 @@ describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
     expect(res.body.file.id).toBe(9);
     expect(res.body.file.starred).toBe(1);
     // put it back so the case is order-independent
-    db.prepare('UPDATE trip_files SET starred = 0 WHERE id = 9').run();
+    await updateRows(orm, TripFiles, { id: 9 }, { starred: 0 });
   });
 
   it('403 deleting without file_delete permission', async () => {

@@ -29,6 +29,12 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createTodoItem } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 import { ADDON_IDS } from '../../../src/addons';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow, insertRow } from '../../helpers/factories/rows';
+import { makeTodoItem } from '../../helpers/factories/todos';
+import { setAddonEnabled } from '../../helpers/factories/settings';
+import { TodoItems } from '../../../src/db/entities/TodoItems.entity';
+import { TodoCategoryAssignees } from '../../../src/db/entities/TodoCategoryAssignees.entity';
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -36,7 +42,14 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -180,8 +193,7 @@ describe('Tool: update_todo', () => {
   it('clears due_date when passed null', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare("INSERT INTO todo_items (trip_id, name, checked, sort_order, due_date) VALUES (?, 'Task', 0, 0, '2025-01-01')").run(trip.id);
-    const item = testDb.prepare('SELECT * FROM todo_items WHERE trip_id = ? ORDER BY id DESC LIMIT 1').get(trip.id) as any;
+    const item = await makeTodoItem(orm, trip.id, { name: 'Task', checked: 0, sort_order: 0, due_date: '2025-01-01' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_todo',
@@ -289,7 +301,7 @@ describe('Tool: delete_todo', () => {
       const result = await h.client.callTool({ name: 'delete_todo', arguments: { tripId: trip.id, itemId: item.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM todo_items WHERE id = ?').get(item.id)).toBeUndefined();
+      expect(await findRow(orm, TodoItems, { id: item.id })).toBeNull();
     });
   });
 
@@ -342,8 +354,8 @@ describe('Tool: reorder_todos', () => {
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
       // item2 should now have sort_order 0
-      const updated = testDb.prepare('SELECT sort_order FROM todo_items WHERE id = ?').get(item2.id) as any;
-      expect(updated.sort_order).toBe(0);
+      const updated = await findRow(orm, TodoItems, { id: item2.id });
+      expect(updated?.sort_order).toBe(0);
     });
   });
 
@@ -397,7 +409,7 @@ describe('Tool: set_todo_category_assignees', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     // Set then clear
-    testDb.prepare('INSERT INTO todo_category_assignees (trip_id, category_name, user_id) VALUES (?, ?, ?)').run(trip.id, 'Booking', user.id);
+    await insertRow(orm, TodoCategoryAssignees, { trip: trip.id, category_name: 'Booking', user: user.id });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'set_todo_category_assignees',
@@ -468,7 +480,7 @@ describe('Todo tools — packing addon gating', () => {
   it('registers nothing (tools or resource) when the packing addon is disabled', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare('UPDATE addons SET enabled = 0 WHERE id = ?').run(ADDON_IDS.PACKING);
+    await setAddonEnabled(orm, ADDON_IDS.PACKING, false);
     try {
       await withHarness(user.id, async (h) => {
         const names = (await h.client.listTools()).tools.map((t) => t.name);
@@ -477,7 +489,7 @@ describe('Todo tools — packing addon gating', () => {
         await expect(h.client.readResource({ uri: `trek://trips/${trip.id}/todos` })).rejects.toThrow();
       });
     } finally {
-      testDb.prepare('UPDATE addons SET enabled = 1 WHERE id = ?').run(ADDON_IDS.PACKING);
+      await setAddonEnabled(orm, ADDON_IDS.PACKING, true);
     }
   });
 });

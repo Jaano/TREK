@@ -27,6 +27,7 @@ import { Users } from '../../../src/db/entities/Users.entity';
 import type { AuditLogRepository } from '../../../src/db/repositories/AuditLog.repository';
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import { AuditService } from '../../../src/nest/audit/audit.service';
+import { deleteRows, findRow, insertRow } from '../../helpers/factories/rows';
 import { getClientIp } from '../../../src/nest/audit/client-ip';
 import { logInfo, logDebug, logError } from '../../../src/nest/audit/audit-log.logger';
 
@@ -44,10 +45,10 @@ beforeAll(async () => {
   svc = new AuditService(auditLogRepo, usersRepo);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
-  testDb.prepare('DELETE FROM audit_log').run();
-  testDb.prepare('DELETE FROM users').run();
+  await deleteRows(t, AuditLog);
+  await deleteRows(t, Users);
   t.clear();
 });
 
@@ -109,37 +110,48 @@ describe('getClientIp', () => {
 
 // ── writeAudit (real DB, through the repositories) ────────────────────────────
 
-function seedUser(id: number, email: string): void {
-  testDb.prepare(
-    "INSERT INTO users (id, username, email, password_hash, role) VALUES (?, ?, ?, 'x', 'user')"
-  ).run(id, `u${id}`, email);
+async function seedUser(id: number, email: string): Promise<void> {
+  await insertRow(t, Users, { id, username: `u${id}`, email, password_hash: 'x', role: 'user' });
+}
+
+/** The one audit row the case wrote. */
+async function auditRow() {
+  const row = await findRow(t, AuditLog, {});
+  if (!row) throw new Error('no audit row was written');
+  return row;
 }
 
 describe('writeAudit', () => {
   it('AUDIT-SVC-008: inserts the row and logs the labeled summary line', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     await svc.writeAudit({ userId: 1, action: 'trip.create', resource: 'trip', details: { title: 'Rome' }, ip: '1.2.3.4' });
-    const row = testDb.prepare('SELECT user_id, action, resource, details, ip FROM audit_log').get();
-    expect(row).toEqual({ user_id: 1, action: 'trip.create', resource: 'trip', details: '{"title":"Rome"}', ip: '1.2.3.4' });
+    const row = await auditRow();
+    expect({ user_id: row.user_id, action: row.action, resource: row.resource, details: row.details, ip: row.ip }).toEqual({
+      user_id: 1,
+      action: 'trip.create',
+      resource: 'trip',
+      details: '{"title":"Rome"}',
+      ip: '1.2.3.4',
+    });
     expect(logInfo).toHaveBeenCalledWith('a@b.c created trip "Rome" ip=1.2.3.4');
   });
 
   it('AUDIT-SVC-009: empty details object stores NULL details and skips the debug fallback', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     await svc.writeAudit({ userId: 1, action: 'user.login', details: {}, ip: '1.2.3.4' });
-    const row = testDb.prepare('SELECT details FROM audit_log').get() as { details: string | null };
+    const row = await auditRow();
     expect(row.details).toBeNull();
     expect(logDebug).not.toHaveBeenCalled();
   });
 
   it('AUDIT-SVC-010: unknown action keeps the raw key; empty-email/zero/null userIds resolve', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     await svc.writeAudit({ userId: 1, action: 'custom.thing', ip: '9.9.9.9' });
     expect(logInfo).toHaveBeenLastCalledWith('a@b.c custom.thing ip=9.9.9.9');
-    seedUser(42, ''); // falsy email → the `row?.email || uid:N` fallback
+    await seedUser(42, ''); // falsy email → the `row?.email || uid:N` fallback
     await svc.writeAudit({ userId: 42, action: 'user.login', ip: '9.9.9.9' });
     expect(logInfo).toHaveBeenLastCalledWith('uid:42 logged in ip=9.9.9.9');
-    seedUser(0, 'zero@b.c'); // since the quirk fix, a real id 0 resolves via the DB
+    await seedUser(0, 'zero@b.c'); // since the quirk fix, a real id 0 resolves via the DB
     await svc.writeAudit({ userId: 0, action: 'user.login', ip: '9.9.9.9' });
     expect(logInfo).toHaveBeenLastCalledWith('zero@b.c logged in ip=9.9.9.9');
     await svc.writeAudit({ userId: null, action: 'user.login', ip: '9.9.9.9' });
@@ -147,7 +159,7 @@ describe('writeAudit', () => {
   });
 
   it('AUDIT-SVC-019: a trip title with a line break cannot forge a second log line', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     await svc.writeAudit({
       userId: 1,
       action: 'trip.create',
@@ -160,15 +172,15 @@ describe('writeAudit', () => {
   });
 
   it('AUDIT-SVC-011: omitted resource/ip store NULL and the log line ends ip=-', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     await svc.writeAudit({ userId: 1, action: 'user.login' });
-    const row = testDb.prepare('SELECT resource, ip FROM audit_log').get();
-    expect(row).toEqual({ resource: null, ip: null });
+    const row = await auditRow();
+    expect({ resource: row.resource, ip: row.ip }).toEqual({ resource: null, ip: null });
     expect(logInfo).toHaveBeenCalledWith('a@b.c logged in ip=-');
   });
 
   it('AUDIT-SVC-012: debugDetails wins the debug line; detailsJson is the fallback', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     await svc.writeAudit({ userId: 1, action: 'settings.app_update', details: { require_mfa: true }, debugDetails: { raw: 1 } });
     expect(logDebug).toHaveBeenLastCalledWith('AUDIT settings.app_update userId=1 {"raw":1}');
     await svc.writeAudit({ userId: 1, action: 'settings.app_update', details: { require_mfa: true } });
@@ -191,7 +203,7 @@ describe('writeAudit', () => {
   });
 
   it('AUDIT-SVC-021: a MikroORM ValidationError from the email lookup still resolves to uid:<id>, but is logged with a distinct message', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     const spy = vi.spyOn(usersRepo, 'getEmail').mockRejectedValueOnce(ValidationError.cannotUseGlobalContext());
     await svc.writeAudit({ userId: 1, action: 'user.login' });
     expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('uid:1 logged in'));
@@ -200,7 +212,7 @@ describe('writeAudit', () => {
   });
 
   it('AUDIT-SVC-018: settings.api_keys_update names the changed keys and nothing else (#1939)', async () => {
-    seedUser(1, 'admin@b.c');
+    await seedUser(1, 'admin@b.c');
     await svc.writeAudit({
       userId: 1,
       action: 'settings.api_keys_update',
@@ -218,7 +230,7 @@ describe('writeAudit', () => {
   });
 
   it('AUDIT-SVC-014: buildInfoSummary variants (settings parts, login empty brief)', async () => {
-    seedUser(1, 'a@b.c');
+    await seedUser(1, 'a@b.c');
     await svc.writeAudit({ userId: 1, action: 'settings.app_update', details: { notification_channel: 'smtp', require_mfa: false }, ip: '1.1.1.1' });
     expect(logInfo).toHaveBeenLastCalledWith('a@b.c updated settings (channel=smtp, mfa=false) ip=1.1.1.1');
     await svc.writeAudit({ userId: 1, action: 'user.login', details: { anything: true }, ip: '1.1.1.1' });

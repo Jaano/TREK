@@ -22,6 +22,10 @@ vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, createDayAssignment } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow, updateRows } from '../../helpers/factories/rows';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -29,7 +33,14 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -52,7 +63,7 @@ describe('Tool: set_assignment_route_excluded (#2532)', () => {
     await withHarness(user.id, async (h) => {
       const out = parseToolResult(await h.client.callTool({ name: 'set_assignment_route_excluded', arguments: { tripId: trip.id, assignmentId: assignment.id, excluded: true } })) as any;
       expect(out.assignment.route_excluded).toBe(true);
-      expect(testDb.prepare('SELECT route_excluded FROM day_assignments WHERE id = ?').get(assignment.id)).toEqual({ route_excluded: 1 });
+      expect((await findRow(orm, DayAssignments, { id: assignment.id }))?.route_excluded).toBe(1);
       const back = parseToolResult(await h.client.callTool({ name: 'set_assignment_route_excluded', arguments: { tripId: trip.id, assignmentId: assignment.id, excluded: false } })) as any;
       expect(back.assignment.route_excluded).toBe(false);
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'assignment:updated', expect.any(Object));
@@ -82,7 +93,7 @@ describe('Tool: set_leg_transport_mode', () => {
     const assignment = createDayAssignment(testDb, day.id, place.id);
     // Seed the incoming column so the assertion below proves it survives; the factory
     // leaves it NULL, so without this it would pass whether or not the tool touched it.
-    testDb.prepare('UPDATE day_assignments SET incoming_leg_transport_mode = ? WHERE id = ?').run('walking', assignment.id);
+    await updateRows(orm, DayAssignments, { id: assignment.id }, { incoming_leg_transport_mode: 'walking' });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
@@ -103,7 +114,7 @@ describe('Tool: set_leg_transport_mode', () => {
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
     // Seed the outgoing column so we prove incoming does NOT touch it (panel item 4).
-    testDb.prepare('UPDATE day_assignments SET leg_transport_mode = ? WHERE id = ?').run('driving', assignment.id);
+    await updateRows(orm, DayAssignments, { id: assignment.id }, { leg_transport_mode: 'driving' });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
@@ -139,7 +150,7 @@ describe('Tool: set_leg_transport_mode', () => {
     const day = createDay(testDb, trip.id);
     const place = createPlace(testDb, trip.id);
     const assignment = createDayAssignment(testDb, day.id, place.id);
-    testDb.prepare('UPDATE day_assignments SET leg_transport_mode = ? WHERE id = ?').run('cycling', assignment.id);
+    await updateRows(orm, DayAssignments, { id: assignment.id }, { leg_transport_mode: 'cycling' });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
@@ -221,7 +232,7 @@ describe('Tool: set_day_default_transport_mode', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const day = createDay(testDb, trip.id);
-    testDb.prepare('UPDATE days SET default_transport_mode = ? WHERE id = ?').run('driving', day.id);
+    await updateRows(orm, Days, { id: day.id }, { default_transport_mode: 'driving' });
 
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({

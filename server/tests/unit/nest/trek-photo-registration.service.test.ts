@@ -20,6 +20,8 @@ import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
 import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
 import { JourneyPhotos } from '../../../src/db/entities/JourneyPhotos.entity';
 import { TripAlbumLinks } from '../../../src/db/entities/TripAlbumLinks.entity';
+import { Journeys } from '../../../src/db/entities/Journeys.entity';
+import { countRows, findRow, insertRow } from '../../helpers/factories/rows';
 import { decrypt_api_key } from '../../../src/nest/common/crypto/apiKeyCrypto';
 
 const testDb = createSnapshotTestDb();
@@ -41,14 +43,13 @@ async function makePhoto(): Promise<number> {
   return await repo.getOrCreateLocal(`/uploads/journey/${++seq}.jpg`, null, null, null, 'image', null);
 }
 
-function rawRow(id: number): unknown {
-  return testDb.prepare('SELECT * FROM trek_photos WHERE id = ?').get(id);
+function rawRow(id: number) {
+  return findRow(t, TrekPhotos, { id });
 }
 
-function read(id: number) {
-  return testDb.prepare('SELECT taken_at, lat, lng FROM trek_photos WHERE id = ?').get(id) as {
-    taken_at: string | null; lat: number | null; lng: number | null;
-  };
+async function read(id: number) {
+  const row = await rawRow(id);
+  return { taken_at: row?.taken_at, lat: row?.lat, lng: row?.lng };
 }
 
 describe('TrekPhotoRegistrationService.recordCaptureMetadata', () => {
@@ -56,7 +57,7 @@ describe('TrekPhotoRegistrationService.recordCaptureMetadata', () => {
     const id = await makePhoto();
     await repo.recordCaptureMetadata(id, { takenAt: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
 
-    expect(read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
+    expect(await read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
   });
 
   it('TREKPHOTO-002: a later, emptier answer does not erase what is known', async () => {
@@ -65,7 +66,7 @@ describe('TrekPhotoRegistrationService.recordCaptureMetadata', () => {
     // The album listing knows the date but not the place.
     await repo.recordCaptureMetadata(id, { takenAt: '2020-01-01T00:00:00Z', lat: null, lng: null });
 
-    expect(read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
+    expect(await read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
   });
 
   it('TREKPHOTO-003: fills only the half that was still missing', async () => {
@@ -73,14 +74,14 @@ describe('TrekPhotoRegistrationService.recordCaptureMetadata', () => {
     await repo.recordCaptureMetadata(id, { takenAt: '2026-03-15T10:20:00Z' });
     await repo.recordCaptureMetadata(id, { lat: 48.8584, lng: 2.2945 });
 
-    expect(read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
+    expect(await read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
   });
 
   it('TREKPHOTO-004: refuses half a coordinate pair rather than landing on null island', async () => {
     const id = await makePhoto();
     await repo.recordCaptureMetadata(id, { takenAt: '2026-03-15T10:20:00Z', lat: 48.8584, lng: null });
 
-    expect(read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: null, lng: null });
+    expect(await read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: null, lng: null });
   });
 
   it('TREKPHOTO-005: an answer with nothing in it touches no row', async () => {
@@ -88,7 +89,7 @@ describe('TrekPhotoRegistrationService.recordCaptureMetadata', () => {
     await repo.recordCaptureMetadata(id, { takenAt: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
     await repo.recordCaptureMetadata(id, {});
 
-    expect(read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
+    expect(await read(id)).toEqual({ taken_at: '2026-03-15T10:20:00Z', lat: 48.8584, lng: 2.2945 });
   });
 
   it('TREKPHOTO-006: says whether the row learned anything, so a refresh is only sent for news', async () => {
@@ -109,7 +110,7 @@ describe('TrekPhotoRegistrationService.getOrCreate (PH1-3)', () => {
   it('TREKPHOTO-010: registers a new remote asset', async () => {
     const { user } = createUser(testDb);
     const id = await repo.getOrCreate('immich', 'asset-1', user.id, undefined, 'video');
-    expect(rawRow(id)).toMatchObject({ provider: 'immich', asset_id: 'asset-1', owner_id: user.id, media_type: 'video' });
+    expect(await rawRow(id)).toMatchObject({ provider: 'immich', asset_id: 'asset-1', owner_id: user.id, media_type: 'video' });
   });
 
   it('TREKPHOTO-011: a repeat lookup returns the same id rather than inserting a duplicate row', async () => {
@@ -117,7 +118,7 @@ describe('TrekPhotoRegistrationService.getOrCreate (PH1-3)', () => {
     const first = await repo.getOrCreate('immich', 'asset-2', user.id);
     const second = await repo.getOrCreate('immich', 'asset-2', user.id);
     expect(second).toBe(first);
-    expect(testDb.prepare('SELECT COUNT(*) as c FROM trek_photos WHERE asset_id = ?').get('asset-2')).toEqual({ c: 1 });
+    expect(await countRows(t, TrekPhotos, { asset_id: 'asset-2' })).toBe(1);
   });
 
   it('TREKPHOTO-012 (PH2): a passphrase on an already-registered asset re-encrypts and replaces it', async () => {
@@ -125,7 +126,7 @@ describe('TrekPhotoRegistrationService.getOrCreate (PH1-3)', () => {
     const id = await repo.getOrCreate('synologyphotos', 'asset-3', user.id, 'first-pass');
     await repo.getOrCreate('synologyphotos', 'asset-3', user.id, 'second-pass');
 
-    const row = rawRow(id) as { passphrase: string };
+    const row = (await rawRow(id)) as { passphrase: string };
     expect(decrypt_api_key(row.passphrase)).toBe('second-pass');
   });
 
@@ -134,7 +135,7 @@ describe('TrekPhotoRegistrationService.getOrCreate (PH1-3)', () => {
     const id = await repo.getOrCreate('synologyphotos', 'asset-4', user.id, 'keep-me');
     await repo.getOrCreate('synologyphotos', 'asset-4', user.id);
 
-    const row = rawRow(id) as { passphrase: string };
+    const row = (await rawRow(id)) as { passphrase: string };
     expect(decrypt_api_key(row.passphrase)).toBe('keep-me');
   });
 });
@@ -142,7 +143,7 @@ describe('TrekPhotoRegistrationService.getOrCreate (PH1-3)', () => {
 describe('TrekPhotoRegistrationService.getOrCreateLocal (PH4-5)', () => {
   it('TREKPHOTO-020: registers a new local photo', async () => {
     const id = await repo.getOrCreateLocal('journey/a.jpg', 'journey/thumbs/a.jpg', 800, 600, 'image', null);
-    expect(rawRow(id)).toMatchObject({
+    expect(await rawRow(id)).toMatchObject({
       provider: 'local', file_path: 'journey/a.jpg', thumbnail_path: 'journey/thumbs/a.jpg', width: 800, height: 600,
     });
   });
@@ -152,7 +153,7 @@ describe('TrekPhotoRegistrationService.getOrCreateLocal (PH4-5)', () => {
     const second = await repo.getOrCreateLocal('journey/b.jpg', 'ignored-thumb.jpg', 1, 1);
     expect(second).toBe(first);
     // The second call's fields never reach the row — getOrCreateLocal only inserts once.
-    expect(rawRow(first)).toMatchObject({ thumbnail_path: null, width: null, height: null });
+    expect(await rawRow(first)).toMatchObject({ thumbnail_path: null, width: null, height: null });
   });
 });
 
@@ -162,6 +163,7 @@ describe('TrekPhotoRegistrationService.resolve (PH6) — parity with the legacy 
     const id = await repo.getOrCreate('immich', 'asset-parity', user.id, 'a-passphrase', 'video');
     await repo.recordCaptureMetadata(id, { takenAt: '2026-05-01T00:00:00Z', lat: null, lng: null });
 
+    // test-sql-allow: the row as SELECT * returns it is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM trek_photos WHERE id = ?').get(id);
     const resolved = await repo.resolve(id);
 
@@ -172,6 +174,7 @@ describe('TrekPhotoRegistrationService.resolve (PH6) — parity with the legacy 
     const id = await repo.getOrCreateLocal('journey/parity.jpg', 'journey/thumbs/parity.jpg', 800, 600, 'image', null);
     await repo.recordCaptureMetadata(id, { takenAt: '2026-05-02T00:00:00Z', lat: 48.1, lng: 11.6 });
 
+    // test-sql-allow: the row as SELECT * returns it is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM trek_photos WHERE id = ?').get(id);
     const resolved = await repo.resolve(id);
 
@@ -189,7 +192,7 @@ describe('TrekPhotoRegistrationService.setProvider (PH7)', () => {
     const id = await repo.getOrCreateLocal('journey/retarget.jpg');
     await repo.setProvider(id, 'immich', 'new-asset', user.id);
 
-    expect(rawRow(id)).toMatchObject({ provider: 'immich', asset_id: 'new-asset', owner_id: user.id });
+    expect(await rawRow(id)).toMatchObject({ provider: 'immich', asset_id: 'new-asset', owner_id: user.id });
   });
 });
 
@@ -198,7 +201,7 @@ describe('TrekPhotoRegistrationService.recordLocalThumbnail (PH8)', () => {
     const id = await repo.getOrCreateLocal('journey/thumb-src.jpg');
     await repo.recordLocalThumbnail(id, 'journey/thumbs/thumb-src.jpg', 800, 600);
 
-    expect(rawRow(id)).toMatchObject({ thumbnail_path: 'journey/thumbs/thumb-src.jpg', width: 800, height: 600 });
+    expect(await rawRow(id)).toMatchObject({ thumbnail_path: 'journey/thumbs/thumb-src.jpg', width: 800, height: 600 });
   });
 
   it('TREKPHOTO-051: a re-generated thumbnail does not blank dimensions already known', async () => {
@@ -206,7 +209,7 @@ describe('TrekPhotoRegistrationService.recordLocalThumbnail (PH8)', () => {
     await repo.recordLocalThumbnail(id, 'journey/thumbs/thumb-keep.jpg', 400, 300);
 
     // COALESCE(width, ?) keeps the already-known 1200x900, not the new 400x300.
-    expect(rawRow(id)).toMatchObject({ thumbnail_path: 'journey/thumbs/thumb-keep.jpg', width: 1200, height: 900 });
+    expect(await rawRow(id)).toMatchObject({ thumbnail_path: 'journey/thumbs/thumb-keep.jpg', width: 1200, height: 900 });
   });
 });
 
@@ -215,34 +218,33 @@ describe('TrekPhotoRegistrationService.deleteIfOrphan (PH10-11)', () => {
     const { user } = createUser(testDb);
     const id = await repo.getOrCreate('immich', 'orphan-1', user.id);
     await repo.deleteIfOrphan(id);
-    expect(rawRow(id)).toBeUndefined();
+    expect(await rawRow(id)).toBeNull();
   });
 
   it('TREKPHOTO-061: a photo still referenced by trip_photos (3e-owned) is kept', async () => {
     const { user } = createUser(testDb);
     const id = await repo.getOrCreate('immich', 'referenced-1', user.id);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare('INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 1)').run(trip.id, user.id, id);
+    await insertRow(t, TripPhotos, { trip: trip.id, user: user.id, photo: id, shared: 1 });
 
     await repo.deleteIfOrphan(id);
-    expect(rawRow(id)).toBeDefined();
+    expect(await rawRow(id)).not.toBeNull();
   });
 
   it('TREKPHOTO-062: a photo still referenced by journey_photos (Plan 3g, converted onto JourneyPhotosRepository.existsForPhoto) is kept', async () => {
     const { user } = createUser(testDb);
     const id = await repo.getOrCreate('immich', 'referenced-2', user.id);
-    testDb.prepare("INSERT INTO journeys (user_id, title, status, created_at, updated_at) VALUES (?, 'J', 'draft', 0, 0)").run(user.id);
-    const journeyId = testDb.prepare('SELECT id FROM journeys WHERE user_id = ?').get(user.id) as { id: number };
-    testDb.prepare('INSERT INTO journey_photos (journey_id, photo_id, created_at) VALUES (?, ?, 0)').run(journeyId.id, id);
+    const journeyId = await insertRow(t, Journeys, { user: user.id, title: 'J', status: 'draft', created_at: 0, updated_at: 0 });
+    await insertRow(t, JourneyPhotos, { journey: journeyId, photo: id, created_at: 0 });
 
     await repo.deleteIfOrphan(id);
-    expect(rawRow(id)).toBeDefined();
+    expect(await rawRow(id)).not.toBeNull();
   });
 
   it('TREKPHOTO-063: an unreferenced LOCAL photo is never reclaimed here — its bytes are ours', async () => {
     const id = await repo.getOrCreateLocal('journey/never-reclaimed.jpg');
     await repo.deleteIfOrphan(id);
-    expect(rawRow(id)).toBeDefined();
+    expect(await rawRow(id)).not.toBeNull();
   });
 });
 

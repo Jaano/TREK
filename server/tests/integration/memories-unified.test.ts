@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 // ── Hoisted DB mock ──────────────────────────────────────────────────────────
 
@@ -41,6 +42,11 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits, setAddonEnabled } from '../helpers/test-db';
 import { createUser, createTrip, addTripMember, addTripPhoto, addAlbumLink } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { findRow, findRows, updateRows } from '../helpers/factories/rows';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { PhotoProviders } from '../../src/db/entities/PhotoProviders.entity';
+import { TrekPhotos } from '../../src/db/entities/TrekPhotos.entity';
+import { TripPhotos } from '../../src/db/entities/TripPhotos.entity';
 
 let nestApp: INestApplication;
 let app: Application;
@@ -52,6 +58,22 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
+/** The app's own ORM, which the factories seed and read through. */
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
+
+/** The trip_photos row pointing at the registered photo `assetId`, on `tripId` when given. */
+async function tripPhotoOf(assetId: string, tripId?: number) {
+  const photoIds = (await findRows(orm(), TrekPhotos, { asset_id: assetId })).map((p) => p.id);
+  return findRow(orm(), TripPhotos, { photo: { $in: photoIds }, ...(tripId !== undefined ? { trip: tripId } : {}) });
+}
+
+/** The trip_photos row for `assetId` on `tripId`; fails the case when there is none. */
+async function requireTripPhoto(assetId: string, tripId: number) {
+  const row = await tripPhotoOf(assetId, tripId);
+  if (!row) throw new Error(`no trip photo ${assetId} on trip ${tripId}`);
+  return row;
+}
+
 beforeEach(async () => {
   resetTestDb(testDb);
   await resetRateLimits(nestApp);
@@ -61,7 +83,7 @@ beforeEach(async () => {
   // configure it before it's usable in production); the legacy test helper always
   // seeded it enabled, which is what these tests assume. Same convention
   // memories-synology.test.ts already uses for its own provider.
-  testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'immich'").run();
+  await updateRows(orm(), PhotoProviders, { id: 'immich' }, { enabled: 1 });
 });
 
 afterAll(async () => {
@@ -143,12 +165,9 @@ describe('Unified photo management', () => {
     expect(res.status).toBe(200);
     expect(res.body.added).toBe(2);
 
-    const rows = testDb.prepare(`
-      SELECT tkp.asset_id FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ?
-    `).all(trip.id) as any[];
-    expect(rows.map((r: any) => r.asset_id)).toEqual(expect.arrayContaining(['asset-a', 'asset-b']));
+    const photoIds = (await findRows(orm(), TripPhotos, { trip: trip.id })).map((r) => r.photo_id);
+    const rows = await findRows(orm(), TrekPhotos, { id: { $in: photoIds } });
+    expect(rows.map((r) => r.asset_id)).toEqual(expect.arrayContaining(['asset-a', 'asset-b']));
   });
 
   it('UNIFIED-005 — POST photos with empty selections returns 400', async () => {
@@ -179,11 +198,7 @@ describe('Unified photo management', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     addTripPhoto(testDb, trip.id, user.id, 'asset-tog', 'immich', { shared: false });
-    const trekRef = testDb.prepare(`
-      SELECT tp.photo_id FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ? AND tkp.asset_id = ?
-    `).get(trip.id, 'asset-tog') as any;
+    const trekRef = await requireTripPhoto('asset-tog', trip.id);
 
     const res = await request(app)
       .put(`${photosUrl(trip.id)}/sharing`)
@@ -191,12 +206,8 @@ describe('Unified photo management', () => {
       .send({ photo_id: trekRef.photo_id, shared: true });
 
     expect(res.status).toBe(200);
-    const row = testDb.prepare(`
-      SELECT tp.shared FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tkp.asset_id = ?
-    `).get('asset-tog') as any;
-    expect(row.shared).toBe(1);
+    const row = await tripPhotoOf('asset-tog');
+    expect(row?.shared).toBe(1);
   });
 
   it('UNIFIED-008 — PUT photos/sharing on non-member trip returns 404', async () => {
@@ -216,11 +227,7 @@ describe('Unified photo management', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     addTripPhoto(testDb, trip.id, user.id, 'asset-del', 'immich');
-    const trekRef = testDb.prepare(`
-      SELECT tp.photo_id FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ? AND tkp.asset_id = ?
-    `).get(trip.id, 'asset-del') as any;
+    const trekRef = await requireTripPhoto('asset-del', trip.id);
 
     const res = await request(app)
       .delete(photosUrl(trip.id))
@@ -228,23 +235,14 @@ describe('Unified photo management', () => {
       .send({ photo_id: trekRef.photo_id });
 
     expect(res.status).toBe(200);
-    const row = testDb.prepare(`
-      SELECT tp.* FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tkp.asset_id = ?
-    `).get('asset-del');
-    expect(row).toBeUndefined();
+    expect(await tripPhotoOf('asset-del')).toBeNull();
   });
 
   it('UNIFIED-009a — DELETE photos is held to the body contract, and still takes a numeric string', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     addTripPhoto(testDb, trip.id, user.id, 'asset-contract', 'immich');
-    const trekRef = testDb.prepare(`
-      SELECT tp.photo_id FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ? AND tkp.asset_id = ?
-    `).get(trip.id, 'asset-contract') as any;
+    const trekRef = await requireTripPhoto('asset-contract', trip.id);
 
     // A DELETE that reads a body validates it like any other write, so a
     // photo_id that is neither a number nor a string never reaches the handler.
@@ -264,12 +262,7 @@ describe('Unified photo management', () => {
       .send({ photo_id: String(trekRef.photo_id) });
 
     expect(ok.status).toBe(200);
-    const row = testDb.prepare(`
-      SELECT tp.* FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tkp.asset_id = ?
-    `).get('asset-contract');
-    expect(row).toBeUndefined();
+    expect(await tripPhotoOf('asset-contract')).toBeNull();
   });
 
   it('UNIFIED-010 — DELETE photos on non-member trip returns 404', async () => {
@@ -336,14 +329,14 @@ describe('Unified album-link management', () => {
     addAlbumLink(testDb, trip.id, user.id, 'immich', 'album-enabled');
 
     // Disable the immich provider
-    testDb.prepare('UPDATE photo_providers SET enabled = 0 WHERE id = ?').run('immich');
+    await updateRows(orm(), PhotoProviders, { id: 'immich' }, { enabled: 0 });
 
     const res = await request(app)
       .get(albumLinksUrl(trip.id))
       .set('Cookie', authCookie(user.id));
 
     // Re-enable for future tests
-    testDb.prepare('UPDATE photo_providers SET enabled = 1 WHERE id = ?').run('immich');
+    await updateRows(orm(), PhotoProviders, { id: 'immich' }, { enabled: 1 });
 
     expect(res.status).toBe(400); // no providers enabled → error
   });

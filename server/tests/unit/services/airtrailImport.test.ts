@@ -22,9 +22,13 @@ import type { AirtrailClient } from '../../../src/nest/integrations/airtrail.cli
 import type { AirtrailService } from '../../../src/nest/integrations/airtrail.service';
 import { notificationsStub } from '../../helpers/notifications';
 import { accommodationsOver } from '../../helpers/accommodations-service';
-import { createTestUnitOfWork, createTestAppSettingsRepo, createTestReservationsRepo, createTestReservationEndpointsRepo, createTestReservationTravelersRepo, createTestReservationDayPositionsRepo, createTestDayAccommodationsRepo, createTestDaysRepo, createTestPlacesRepo, createTestDayAssignmentsRepo, createTestTripMembersRepo, createTestUsersRepo, createTestTripsRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestReservationsRepo, createTestReservationEndpointsRepo, createTestReservationTravelersRepo, createTestReservationDayPositionsRepo, createTestDayAccommodationsRepo, createTestDaysRepo, createTestPlacesRepo, createTestDayAssignmentsRepo, createTestTripMembersRepo, createTestUsersRepo, createTestTripsRepo, sharedTestOrm } from '../../helpers/test-uow';
 import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
 import { budgetRepoArgs } from '../../helpers/budget-repos';
+import { findRow, findRows } from '../../helpers/factories/rows';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { ReservationEndpoints } from '../../../src/db/entities/ReservationEndpoints.entity';
 
 // The client and the per-user credentials are the only stubs; the reservation
 // writes go through the real service against the real test DB, as before. They
@@ -113,14 +117,19 @@ const legLhrJfk = () =>
     flightNumber: 'BA117',
   });
 
-function tripReservations(tripId: number) {
-  return db.prepare('SELECT * FROM reservations WHERE trip_id = ? ORDER BY id').all(tripId) as any[];
+async function tripReservations(tripId: number) {
+  return findRows(await sharedTestOrm(db), Reservations, { trip: tripId }, { id: 'asc' });
 }
 
-function endpointsOf(reservationId: number) {
-  return db
-    .prepare('SELECT role, code, sequence FROM reservation_endpoints WHERE reservation_id = ? ORDER BY sequence')
-    .all(reservationId) as { role: string; code: string | null; sequence: number }[];
+async function endpointsOf(reservationId: number) {
+  return findRows(await sharedTestOrm(db), ReservationEndpoints, { reservation: reservationId }, { sequence: 'asc' });
+}
+
+/** The id of the trip's day on `date`. */
+async function dayIdOn(tripId: number, date: string): Promise<number> {
+  const day = await findRow(await sharedTestOrm(db), Days, { trip: tripId, date });
+  if (!day) throw new Error(`no day on ${date} for trip ${tripId}`);
+  return day.id;
 }
 
 let tripId: number;
@@ -142,7 +151,7 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     expect([...result.imported].sort()).toEqual(['101', '102']);
     expect(result.skipped).toEqual([]);
 
-    const rows = tripReservations(tripId);
+    const rows = await tripReservations(tripId);
     expect(rows).toHaveLength(1);
     const r = rows[0];
     expect(r.type).toBe('flight');
@@ -150,10 +159,10 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     expect(r.external_id).toBe('101');
     expect(r.sync_enabled).toBe(0); // AirTrail has no multi-leg entity to round-trip to
 
-    const meta = JSON.parse(r.metadata);
+    const meta = JSON.parse(String(r.metadata));
     expect(meta.airtrail_ids).toEqual(['101', '102']);
     expect(meta.legs).toHaveLength(2);
-    expect(endpointsOf(r.id).map(e => [e.role, e.code])).toEqual([
+    expect((await endpointsOf(r.id)).map(e => [e.role, e.code])).toEqual([
       ['from', 'BRU'],
       ['stop', 'HEL'],
       ['to', 'JFK'],
@@ -161,9 +170,9 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
 
     // Each leg is filed on its own trip day so the day planner renders the
     // legs where they belong (both flights are on Aug 1 here).
-    const day1 = db.prepare("SELECT id FROM days WHERE trip_id = ? AND date = '2026-08-01'").get(tripId) as { id: number };
-    expect(meta.legs[0]).toMatchObject({ dep_day_id: day1.id, arr_day_id: day1.id });
-    expect(meta.legs[1]).toMatchObject({ dep_day_id: day1.id, arr_day_id: day1.id });
+    const day1 = await dayIdOn(tripId, '2026-08-01');
+    expect(meta.legs[0]).toMatchObject({ dep_day_id: day1, arr_day_id: day1 });
+    expect(meta.legs[1]).toMatchObject({ dep_day_id: day1, arr_day_id: day1 });
   });
 
   it('resolves overnight-connection legs to their own days', async () => {
@@ -176,12 +185,11 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     listFlights.mockResolvedValue([legBruHel(), overnightLeg2]);
 
     await importAirtrailFlights(tripId, userId, ['101', '102'], undefined, [['101', '102']]);
-    const [r] = tripReservations(tripId);
-    const dayId = (d: string) => (db.prepare('SELECT id FROM days WHERE trip_id = ? AND date = ?').get(tripId, d) as { id: number }).id;
-    const legs = JSON.parse(r.metadata).legs;
-    expect(legs[0].dep_day_id).toBe(dayId('2026-08-01'));
-    expect(legs[1].dep_day_id).toBe(dayId('2026-08-02'));
-    expect(legs[1].arr_day_id).toBe(dayId('2026-08-02'));
+    const [r] = await tripReservations(tripId);
+    const legs = JSON.parse(String(r.metadata)).legs;
+    expect(legs[0].dep_day_id).toBe(await dayIdOn(tripId, '2026-08-01'));
+    expect(legs[1].dep_day_id).toBe(await dayIdOn(tripId, '2026-08-02'));
+    expect(legs[1].arr_day_id).toBe(await dayIdOn(tripId, '2026-08-02'));
   });
 
   it('refuses to join an out-and-back return as a connection', async () => {
@@ -198,7 +206,7 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
 
     const result = await importAirtrailFlights(tripId, userId, ['101', '104'], undefined, [['101', '104']]);
     expect([...result.imported].sort()).toEqual(['101', '104']);
-    expect(tripReservations(tripId)).toHaveLength(2); // two singles, no bogus BRU→HEL→BRU booking
+    expect(await tripReservations(tripId)).toHaveLength(2); // two singles, no bogus BRU→HEL→BRU booking
   });
 
   it('skips every member of a joined booking on a later import attempt', async () => {
@@ -210,7 +218,7 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     const again = await importAirtrailFlights(tripId, userId, ['102'], undefined);
     expect(again.imported).toEqual([]);
     expect(again.skipped).toEqual([{ flightId: '102', reason: 'already-imported' }]);
-    expect(tripReservations(tripId)).toHaveLength(1);
+    expect(await tripReservations(tripId)).toHaveLength(1);
   });
 
   it('recognizes a joined leg imported by another member via its per-leg signature', async () => {
@@ -224,7 +232,7 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     const result = await importAirtrailFlights(tripId, other.id, ['999'], undefined);
     expect(result.imported).toEqual([]);
     expect(result.skipped).toEqual([{ flightId: '999', reason: 'already-in-trip', detail: expect.any(String) }]);
-    expect(tripReservations(tripId)).toHaveLength(1);
+    expect(await tripReservations(tripId)).toHaveLength(1);
   });
 
   it('falls back to individual imports when the requested join does not chain', async () => {
@@ -233,11 +241,11 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     const result = await importAirtrailFlights(tripId, userId, ['101', '103'], undefined, [['101', '103']]);
     expect([...result.imported].sort()).toEqual(['101', '103']);
 
-    const rows = tripReservations(tripId);
+    const rows = await tripReservations(tripId);
     expect(rows).toHaveLength(2);
     for (const r of rows) {
       expect(r.sync_enabled).toBe(1); // plain imports keep live sync
-      expect(endpointsOf(r.id)).toHaveLength(2);
+      expect(await endpointsOf(r.id)).toHaveLength(2);
     }
   });
 
@@ -247,7 +255,7 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
 
     const result = await importAirtrailFlights(tripId, userId, ['101', '102'], undefined, [['101', '102']]);
     expect([...result.imported].sort()).toEqual(['101', '102']);
-    expect(tripReservations(tripId)).toHaveLength(2);
+    expect(await tripReservations(tripId)).toHaveLength(2);
   });
 
   it('imports singles exactly as before when no join is requested', async () => {
@@ -256,11 +264,11 @@ describe('importAirtrailFlights connection joining (#1535)', () => {
     const result = await importAirtrailFlights(tripId, userId, ['101'], undefined);
     expect(result.imported).toEqual(['101']);
 
-    const [r] = tripReservations(tripId);
+    const [r] = await tripReservations(tripId);
     expect(r.external_id).toBe('101');
     expect(r.sync_enabled).toBe(1);
     expect(r.external_hash).toBeTruthy();
-    expect(JSON.parse(r.metadata).airtrail_ids).toBeUndefined();
+    expect(JSON.parse(String(r.metadata)).airtrail_ids).toBeUndefined();
   });
 });
 

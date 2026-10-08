@@ -6,6 +6,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 vi.mock('../../src/db/database', async () => {
   const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
@@ -27,10 +28,16 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { makePlace } from '../helpers/factories/places';
+import { findRow } from '../helpers/factories/rows';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { PlaceRegions } from '../../src/db/entities/PlaceRegions.entity';
 import { getRegionGeo } from '../../src/nest/atlas/atlas-geo';
 
 let nestApp: INestApplication;
 let app: Application;
+/** The app's own ORM, which the factories seed and read through. */
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
 
 beforeAll(async () => {
   // Stub the admin-1 GeoJSON download so /regions/geo is deterministic and never
@@ -93,9 +100,10 @@ describe('Atlas stats', () => {
     const iso = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
     const past = createTrip(testDb, user.id, { title: 'Rome, last month', start_date: iso(-40), end_date: iso(-30) });
     const future = createTrip(testDb, user.id, { title: 'Tokyo, next month', start_date: iso(30), end_date: iso(40) });
-    const insertPlace = testDb.prepare('INSERT INTO places (trip_id, name, address) VALUES (?, ?, ?)');
-    insertPlace.run(past.id, 'Colosseum', 'Piazza del Colosseo, Rome, Italy');
-    insertPlace.run(future.id, 'Senso-ji', 'Asakusa, Tokyo, Japan');
+    // No coordinates and no category: the country has to come from the address.
+    const unplaced = { lat: null, lng: null, category: null };
+    await makePlace(orm(), past.id, { ...unplaced, name: 'Colosseum', address: 'Piazza del Colosseo, Rome, Italy' });
+    await makePlace(orm(), future.id, { ...unplaced, name: 'Senso-ji', address: 'Asakusa, Tokyo, Japan' });
 
     const res = await request(app)
       .get('/api/addons/atlas/stats')
@@ -516,11 +524,14 @@ describe('Regions geo', () => {
 describe('A place that moves takes its Atlas country with it (#2527)', () => {
   // The region cache is filled by a background task that GET /regions only starts,
   // so wait for the row the way the next Atlas load would find it.
+  async function readRegion(placeId: number): Promise<{ country_code: string; region_code: string } | undefined> {
+    const row = await findRow(orm(), PlaceRegions, { place: placeId });
+    return row ? { country_code: row.country_code, region_code: row.region_code } : undefined;
+  }
+
   async function regionRowOf(placeId: number): Promise<{ country_code: string; region_code: string } | undefined> {
     for (let i = 0; i < 100; i++) {
-      const row = testDb.prepare('SELECT country_code, region_code FROM place_regions WHERE place_id = ?').get(placeId) as
-        | { country_code: string; region_code: string }
-        | undefined;
+      const row = await readRegion(placeId);
       if (row) return row;
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
@@ -536,9 +547,13 @@ describe('A place that moves takes its Atlas country with it (#2527)', () => {
   it('ATLAS-015: correcting a place from France to Germany moves it on the Atlas', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Wrongly imported', start_date: '2025-05-01', end_date: '2025-05-05' });
-    const place = testDb
-      .prepare('INSERT INTO places (trip_id, name, lat, lng, address) VALUES (?, ?, ?, ?, ?) RETURNING id')
-      .get(trip.id, 'Hotel', 48.8566, 2.3522, 'Rue de Rivoli, Paris, France') as { id: number };
+    const place = await makePlace(orm(), trip.id, {
+      name: 'Hotel',
+      lat: 48.8566,
+      lng: 2.3522,
+      address: 'Rue de Rivoli, Paris, France',
+      category: null,
+    });
 
     // The place is seen on the Atlas once, which caches France for it.
     await request(app).get('/api/addons/atlas/regions').set('Cookie', authCookie(user.id));
@@ -565,9 +580,13 @@ describe('A place that moves takes its Atlas country with it (#2527)', () => {
   it('ATLAS-015: an edit that leaves the location alone keeps the cached country', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris', start_date: '2025-05-01', end_date: '2025-05-05' });
-    const place = testDb
-      .prepare('INSERT INTO places (trip_id, name, lat, lng, address) VALUES (?, ?, ?, ?, ?) RETURNING id')
-      .get(trip.id, 'Louvre', 48.8606, 2.3376, 'Rue de Rivoli, Paris, France') as { id: number };
+    const place = await makePlace(orm(), trip.id, {
+      name: 'Louvre',
+      lat: 48.8606,
+      lng: 2.3376,
+      address: 'Rue de Rivoli, Paris, France',
+      category: null,
+    });
     await request(app).get('/api/addons/atlas/regions').set('Cookie', authCookie(user.id));
     const cached = await regionRowOf(place.id);
     expect(cached?.country_code).toBe('FR');
@@ -579,6 +598,6 @@ describe('A place that moves takes its Atlas country with it (#2527)', () => {
       .send({ notes: 'Closed on Tuesdays', lat: 48.8606, lng: 2.3376, address: 'Rue de Rivoli, Paris, France' });
     expect(put.status).toBe(200);
 
-    expect(testDb.prepare('SELECT country_code, region_code FROM place_regions WHERE place_id = ?').get(place.id)).toEqual(cached);
+    expect(await readRegion(place.id)).toEqual(cached);
   });
 });

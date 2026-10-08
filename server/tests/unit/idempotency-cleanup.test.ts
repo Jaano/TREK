@@ -12,6 +12,7 @@ import { createTestOrm, type TestOrm } from '../helpers/test-orm';
 import { purgeExpiredIdempotencyKeys } from '../../src/nest/common/idempotency-cleanup';
 import { IdempotencyCleanupJob } from '../../src/nest/common/idempotency-cleanup.job';
 import { IdempotencyKeys } from '../../src/db/entities/IdempotencyKeys.entity';
+import { countRows, deleteRows, findRows, insertRow } from '../helpers/factories/rows';
 import type { IdempotencyKeysRepository } from '../../src/db/repositories/IdempotencyKeys.repository';
 import type { CronRegistrarService } from '../../src/nest/scheduling/cron-registrar.service';
 
@@ -29,46 +30,55 @@ beforeAll(async () => {
 });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function insertKey(key: string, ageSeconds: number, nowSec = NOW_SEC): void {
-  testDb.prepare(
-    `INSERT INTO idempotency_keys (key, user_id, method, path, status_code, response_body, created_at)
-     VALUES (?, 1, 'POST', '/x', 200, '{}', ?)`,
-  ).run(key, nowSec - ageSeconds);
+async function insertKey(key: string, ageSeconds: number, nowSec = NOW_SEC): Promise<void> {
+  await insertRow(t, IdempotencyKeys, {
+    key,
+    user: 1,
+    method: 'POST',
+    path: '/x',
+    status_code: 200,
+    response_body: '{}',
+    created_at: nowSec - ageSeconds,
+  });
 }
 
-beforeEach(() => {
+/** The keys left in the table. */
+async function remainingKeys(): Promise<string[]> {
+  return (await findRows(t, IdempotencyKeys)).map((r) => r.key);
+}
+
+beforeEach(async () => {
   testDb.pragma('foreign_keys = OFF'); // fixtures reference a user we don't seed here
-  testDb.prepare('DELETE FROM idempotency_keys').run();
+  await deleteRows(t, IdempotencyKeys);
   t.clear();
 });
 
-afterEach(() => {
-  testDb.prepare('DELETE FROM idempotency_keys').run();
+afterEach(async () => {
+  await deleteRows(t, IdempotencyKeys);
   testDb.pragma('foreign_keys = ON');
   delete process.env.IDEMPOTENCY_TTL_SECONDS;
 });
 
 describe('purgeExpiredIdempotencyKeys', () => {
   it('removes keys older than the 30-day default, keeps recent ones', async () => {
-    insertKey('old', 31 * DAY);
-    insertKey('fresh', 5 * DAY);
+    await insertKey('old', 31 * DAY);
+    await insertKey('fresh', 5 * DAY);
 
     const removed = await purgeExpiredIdempotencyKeys(NOW, undefined, idempotencyKeys);
 
     expect(removed).toBe(1);
-    const keys = testDb.prepare('SELECT key FROM idempotency_keys').all().map((r: { key: string }) => r.key);
-    expect(keys).toEqual(['fresh']);
+    expect(await remainingKeys()).toEqual(['fresh']);
   });
 
   it('keeps a 25-day-old key that the old 24h TTL would have dropped', async () => {
-    insertKey('offline-trip', 25 * DAY);
+    await insertKey('offline-trip', 25 * DAY);
     expect(await purgeExpiredIdempotencyKeys(NOW, undefined, idempotencyKeys)).toBe(0);
-    expect(testDb.prepare('SELECT COUNT(*) c FROM idempotency_keys').get()).toMatchObject({ c: 1 });
+    expect(await countRows(t, IdempotencyKeys)).toBe(1);
   });
 
   it('respects the IDEMPOTENCY_TTL_SECONDS override', async () => {
     process.env.IDEMPOTENCY_TTL_SECONDS = String(DAY);
-    insertKey('twoDays', 2 * DAY);
+    await insertKey('twoDays', 2 * DAY);
     expect(await purgeExpiredIdempotencyKeys(NOW, undefined, idempotencyKeys)).toBe(1);
   });
 });
@@ -106,13 +116,12 @@ describe('IdempotencyCleanupJob', () => {
     // The tick uses the live clock, so these fixtures age against Date.now()
     // (the pure-function cases above pin their own fixed NOW instead).
     const liveNowSec = Math.floor(Date.now() / 1000);
-    insertKey('old', 31 * DAY, liveNowSec);
-    insertKey('fresh', 5 * DAY, liveNowSec);
+    await insertKey('old', 31 * DAY, liveNowSec);
+    await insertKey('fresh', 5 * DAY, liveNowSec);
 
     const { job } = makeJob();
     await job.tick();
-    const keys = testDb.prepare('SELECT key FROM idempotency_keys').all().map((r: { key: string }) => r.key);
-    expect(keys).toEqual(['fresh']);
+    expect(await remainingKeys()).toEqual(['fresh']);
   });
 
   it('a failing purge is contained to the Idempotency cleanup log line', async () => {

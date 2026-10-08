@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 
 vi.mock('../../src/db/database', async () => {
   const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
@@ -43,9 +44,17 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, disableNotificationPref } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { findRow, updateRows } from '../helpers/factories/rows';
+import { makeNotification } from '../helpers/factories/notifications';
+import { setUserSetting } from '../helpers/factories/settings';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { NotificationChannelPreferences } from '../../src/db/entities/NotificationChannelPreferences.entity';
+import { Notifications } from '../../src/db/entities/Notifications.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+/** The app's own ORM, which the factories seed and read through. */
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
 
 beforeAll(async () => {
   nestApp = await buildApp();
@@ -249,10 +258,8 @@ describe('PUT /api/notifications/preferences — matrix format', () => {
     expect(res.status).toBe(200);
     expect(res.body.preferences['trip_invite']['email']).toBe(true);
 
-    const row = testDb.prepare(
-      'SELECT enabled FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?'
-    ).get(user.id, 'trip_invite', 'email');
-    expect(row).toBeUndefined();
+    const row = await findRow(orm(), NotificationChannelPreferences, { user: user.id, event_type: 'trip_invite', channel: 'email' });
+    expect(row).toBeNull();
   });
 
   it('NROUTE-009 — partial update does not affect other preferences', async () => {
@@ -375,7 +382,7 @@ describe('Notification test endpoints', () => {
 
   it('NOTIF-009 — POST /api/notifications/test-ntfy falls back to user saved topic', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'ntfy_topic', 'saved-user-topic')").run(user.id);
+    await setUserSetting(orm(), user.id, 'ntfy_topic', 'saved-user-topic');
 
     const res = await request(app)
       .post('/api/notifications/test-ntfy')
@@ -391,28 +398,34 @@ describe('Notification test endpoints', () => {
 // Helper: insert a boolean notification directly into the DB
 // ─────────────────────────────────────────────────────────────────────────────
 
-function insertBooleanNotification(recipientId: number): number {
-  const result = testDb.prepare(`
-    INSERT INTO notifications (
-      type, scope, target, sender_id, recipient_id,
-      title_key, title_params, text_key, text_params,
-      positive_text_key, negative_text_key, positive_callback, negative_callback
-    ) VALUES ('boolean', 'user', ?, NULL, ?, 'notif.test.title', '{}', 'notif.test.text', '{}',
-      'notif.action.accept', 'notif.action.decline',
-      '{"action":"test_approve","payload":{}}', '{"action":"test_deny","payload":{}}'
-    )
-  `).run(recipientId, recipientId);
-  return result.lastInsertRowid as number;
+async function insertBooleanNotification(recipientId: number): Promise<number> {
+  const row = await makeNotification(orm(), recipientId, {
+    type: 'boolean',
+    target: recipientId,
+    sender: null,
+    title_key: 'notif.test.title',
+    title_params: '{}',
+    text_key: 'notif.test.text',
+    text_params: '{}',
+    positive_text_key: 'notif.action.accept',
+    negative_text_key: 'notif.action.decline',
+    positive_callback: '{"action":"test_approve","payload":{}}',
+    negative_callback: '{"action":"test_deny","payload":{}}',
+  });
+  return row.id;
 }
 
-function insertSimpleNotification(recipientId: number): number {
-  const result = testDb.prepare(`
-    INSERT INTO notifications (
-      type, scope, target, sender_id, recipient_id,
-      title_key, title_params, text_key, text_params
-    ) VALUES ('simple', 'user', ?, NULL, ?, 'notif.test.title', '{}', 'notif.test.text', '{}')
-  `).run(recipientId, recipientId);
-  return result.lastInsertRowid as number;
+async function insertSimpleNotification(recipientId: number): Promise<number> {
+  const row = await makeNotification(orm(), recipientId, {
+    type: 'simple',
+    target: recipientId,
+    sender: null,
+    title_key: 'notif.test.title',
+    title_params: '{}',
+    text_key: 'notif.test.text',
+    text_params: '{}',
+  });
+  return row.id;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -422,7 +435,7 @@ function insertSimpleNotification(recipientId: number): number {
 describe('POST /api/notifications/in-app/:id/respond', () => {
   it('NROUTE-011 — valid positive response returns success and updated notification', async () => {
     const { user } = createUser(testDb);
-    const id = insertBooleanNotification(user.id);
+    const id = await insertBooleanNotification(user.id);
 
     const res = await request(app)
       .post(`/api/notifications/in-app/${id}/respond`)
@@ -437,7 +450,7 @@ describe('POST /api/notifications/in-app/:id/respond', () => {
 
   it('NROUTE-012 — invalid response value returns 400', async () => {
     const { user } = createUser(testDb);
-    const id = insertBooleanNotification(user.id);
+    const id = await insertBooleanNotification(user.id);
 
     const res = await request(app)
       .post(`/api/notifications/in-app/${id}/respond`)
@@ -460,7 +473,7 @@ describe('POST /api/notifications/in-app/:id/respond', () => {
 
   it('NROUTE-014 — double response returns 400', async () => {
     const { user } = createUser(testDb);
-    const id = insertBooleanNotification(user.id);
+    const id = await insertBooleanNotification(user.id);
 
     await request(app)
       .post(`/api/notifications/in-app/${id}/respond`)
@@ -519,8 +532,8 @@ describe('PUT /api/admin/notification-preferences', () => {
 describe('In-app notifications — CRUD with data', () => {
   it('NROUTE-017 — GET /in-app returns created notifications', async () => {
     const { user } = createUser(testDb);
-    insertSimpleNotification(user.id);
-    insertSimpleNotification(user.id);
+    await insertSimpleNotification(user.id);
+    await insertSimpleNotification(user.id);
 
     const res = await request(app)
       .get('/api/notifications/in-app')
@@ -534,8 +547,8 @@ describe('In-app notifications — CRUD with data', () => {
 
   it('NROUTE-018 — unread count reflects actual unread notifications', async () => {
     const { user } = createUser(testDb);
-    insertSimpleNotification(user.id);
-    insertSimpleNotification(user.id);
+    await insertSimpleNotification(user.id);
+    await insertSimpleNotification(user.id);
 
     const res = await request(app)
       .get('/api/notifications/in-app/unread-count')
@@ -547,7 +560,7 @@ describe('In-app notifications — CRUD with data', () => {
 
   it('NROUTE-019 — mark-read on existing notification succeeds and decrements unread count', async () => {
     const { user } = createUser(testDb);
-    const id = insertSimpleNotification(user.id);
+    const id = await insertSimpleNotification(user.id);
 
     const markRes = await request(app)
       .put(`/api/notifications/in-app/${id}/read`)
@@ -563,9 +576,9 @@ describe('In-app notifications — CRUD with data', () => {
 
   it('NROUTE-020 — mark-unread on a read notification succeeds', async () => {
     const { user } = createUser(testDb);
-    const id = insertSimpleNotification(user.id);
+    const id = await insertSimpleNotification(user.id);
     // Mark read first
-    testDb.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(id);
+    await updateRows(orm(), Notifications, { id }, { is_read: 1 });
 
     const res = await request(app)
       .put(`/api/notifications/in-app/${id}/unread`)
@@ -573,13 +586,13 @@ describe('In-app notifications — CRUD with data', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    const row = testDb.prepare('SELECT is_read FROM notifications WHERE id = ?').get(id) as { is_read: number };
-    expect(row.is_read).toBe(0);
+    const row = await findRow(orm(), Notifications, { id });
+    expect(row?.is_read).toBe(0);
   });
 
   it('NROUTE-021 — DELETE on existing notification removes it', async () => {
     const { user } = createUser(testDb);
-    const id = insertSimpleNotification(user.id);
+    const id = await insertSimpleNotification(user.id);
 
     const res = await request(app)
       .delete(`/api/notifications/in-app/${id}`)
@@ -587,16 +600,15 @@ describe('In-app notifications — CRUD with data', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    const row = testDb.prepare('SELECT id FROM notifications WHERE id = ?').get(id);
-    expect(row).toBeUndefined();
+    expect(await findRow(orm(), Notifications, { id })).toBeNull();
   });
 
   it('NROUTE-022 — unread_only=true filter returns only unread notifications', async () => {
     const { user } = createUser(testDb);
-    const id1 = insertSimpleNotification(user.id);
-    insertSimpleNotification(user.id);
+    const id1 = await insertSimpleNotification(user.id);
+    await insertSimpleNotification(user.id);
     // Mark first one read
-    testDb.prepare('UPDATE notifications SET is_read = 1 WHERE id = ?').run(id1);
+    await updateRows(orm(), Notifications, { id: id1 }, { is_read: 1 });
 
     const res = await request(app)
       .get('/api/notifications/in-app?unread_only=true')

@@ -50,7 +50,12 @@ import { SessionRenewalInterceptor } from '../../src/nest/auth/session-renewal.i
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { countRows, deleteRows, findRow, findRows, updateRows } from '../helpers/factories/rows';
+import { readAppSetting, setAppSetting } from '../helpers/factories/settings';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { Users } from '../../src/db/entities/Users.entity';
 
 describe('Auth e2e (real auth guard + real service + real cookie service + temp SQLite)', () => {
   let server: Server;
@@ -79,10 +84,11 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
     return nest;
   }
 
-  const auditRows = (action: string) =>
-    (db.prepare('SELECT COUNT(*) AS n FROM audit_log WHERE action = ?').get(action) as { n: number }).n;
+  let orm: TestOrm;
+  const auditRows = (action: string) => countRows(orm, AuditLog, { action });
 
   beforeAll(async () => {
+    orm = await createTestOrm(db);
     const seeded = createUser(db as never, { username: 'auth-e2e', email: 'u@example.test' });
     userId = seeded.user.id;
     userEmail = seeded.user.email;
@@ -93,6 +99,7 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   it('GET /app-config is optional-auth (200 without a cookie, real toggles)', async () => {
@@ -119,22 +126,22 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
   });
 
   it('POST /login sets the httpOnly trek_session cookie and audits user.login', async () => {
-    const before = auditRows('user.login');
+    const before = await auditRows('user.login');
     const res = await request(server).post('/api/auth/login').send({ email: userEmail, password: userPassword });
     expect(res.status).toBe(200);
     expect(typeof res.body.token).toBe('string');
     expect(res.body.user.id).toBe(userId);
     const setCookie = res.headers['set-cookie'] as unknown as string[];
     expect(setCookie.some((c) => c.startsWith('trek_session=') && /HttpOnly/i.test(c))).toBe(true);
-    expect(auditRows('user.login')).toBe(before + 1);
+    expect(await auditRows('user.login')).toBe(before + 1);
   }, 10000);
 
   it('POST /login with a wrong password answers the generic 401 and audits user.login_failed', async () => {
-    const before = auditRows('user.login_failed');
+    const before = await auditRows('user.login_failed');
     const res = await request(server).post('/api/auth/login').send({ email: userEmail, password: 'wrong-password' });
     expect(res.status).toBe(401);
     expect(res.body).toEqual({ error: 'Invalid email or password' });
-    expect(auditRows('user.login_failed')).toBe(before + 1);
+    expect(await auditRows('user.login_failed')).toBe(before + 1);
   }, 10000);
 
   it('POST /login with remember_me sets a persistent cookie (Max-Age present)', async () => {
@@ -227,7 +234,7 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
   }, 10000);
 
   it('POST /register creates the user, sets the cookie and audits user.register', async () => {
-    const before = auditRows('user.register');
+    const before = await auditRows('user.register');
     const res = await request(server)
       .post('/api/auth/register')
       .send({ username: 'fresh-e2e', email: 'fresh-e2e@example.test', password: 'Str0ng!Pass1' });
@@ -236,9 +243,9 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
     expect(res.body.user.username).toBe('fresh-e2e');
     const setCookie = res.headers['set-cookie'] as unknown as string[];
     expect(setCookie.some((c) => c.startsWith('trek_session=') && /HttpOnly/i.test(c))).toBe(true);
-    expect(auditRows('user.register')).toBe(before + 1);
-    const row = db.prepare('SELECT id FROM users WHERE email = ?').get('fresh-e2e@example.test');
-    expect(row).toBeDefined();
+    expect(await auditRows('user.register')).toBe(before + 1);
+    const row = await findRow(orm, Users, { email: 'fresh-e2e@example.test' });
+    expect(row).not.toBeNull();
   });
 
   it('POST /login with a shapeless body answers the pipe 400 envelope', async () => {
@@ -250,7 +257,7 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
 
   it('PUT /me/api-keys stores the key instance-wide and audits it once (#1939)', async () => {
     const admin = createUser(db as never, { username: 'keys-admin', email: 'keys-admin@example.test', role: 'admin' });
-    const before = auditRows('settings.api_keys_update');
+    const before = await auditRows('settings.api_keys_update');
 
     const res = await request(server)
       .put('/api/auth/me/api-keys')
@@ -263,16 +270,14 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
     expect(res.body).not.toHaveProperty('changedKeys');
 
     // What every member's search will now resolve to, encrypted at rest.
-    const stored = db.prepare("SELECT value FROM app_settings WHERE key = 'maps_api_key'").get() as { value: string };
-    expect(stored.value).toMatch(/^enc:v1:/);
+    const stored = await readAppSetting(orm, 'maps_api_key');
+    expect(stored).toMatch(/^enc:v1:/);
     // And the admin panel reads back what the search uses.
     const settings = await request(server).get('/api/auth/me/settings').set('Cookie', sessionCookie(admin.user.id));
     expect(settings.body.settings.maps_api_key).toBe('e2e-google-key');
 
-    expect(auditRows('settings.api_keys_update')).toBe(before + 1);
-    const row = db
-      .prepare("SELECT resource, details FROM audit_log WHERE action = 'settings.api_keys_update' ORDER BY id DESC LIMIT 1")
-      .get() as { resource: string; details: string };
+    expect(await auditRows('settings.api_keys_update')).toBe(before + 1);
+    const [row] = await findRows(orm, AuditLog, { action: 'settings.api_keys_update' }, { id: 'desc' });
     expect(row.resource).toBe('api_keys');
     expect(row.details).toContain('maps_api_key');
     expect(row.details).not.toContain('e2e-google-key');
@@ -282,7 +287,7 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
       .put('/api/auth/me/api-keys')
       .set('Cookie', sessionCookie(admin.user.id))
       .send({ maps_api_key: 'e2e-google-key' });
-    expect(auditRows('settings.api_keys_update')).toBe(before + 1);
+    expect(await auditRows('settings.api_keys_update')).toBe(before + 1);
   }, 10000);
 
   it('GET /me/settings names the variable behind a key set in the environment, never its value (#1881)', async () => {
@@ -306,15 +311,12 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
     const admin = createUser(db as never, { username: 'keys-cfg-admin', email: 'keys-cfg-admin@example.test', role: 'admin' });
     // Seeded here instead of riding on the save above, so running this case on
     // its own asserts the same thing.
-    const setInstanceKey = (value: string | null) => {
+    const setInstanceKey = async (value: string | null) => {
       if (value === null) {
-        db.prepare("DELETE FROM app_settings WHERE key = 'maps_api_key'").run();
+        await deleteRows(orm, AppSettings, { key: 'maps_api_key' });
         return;
       }
-      db.prepare(
-        `INSERT INTO app_settings (key, value) VALUES ('maps_api_key', ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value`
-      ).run(encrypt_api_key(value));
+      await setAppSetting(orm, 'maps_api_key', encrypt_api_key(value));
     };
     const hasMapsKey = async (userId: number) => {
       const res = await request(server).get('/api/auth/app-config').set('Cookie', sessionCookie(userId));
@@ -322,8 +324,8 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
       return res.body.has_maps_key;
     };
 
-    setInstanceKey('instance-configured-key');
-    db.prepare('UPDATE users SET maps_api_key = NULL WHERE id = ?').run(admin.user.id);
+    await setInstanceKey('instance-configured-key');
+    await updateRows(orm, Users, { id: admin.user.id }, { maps_api_key: null });
     // Instance key, no column anywhere: the member searches with it, so the
     // client is told the feature is there.
     expect(await hasMapsKey(member.user.id)).toBe(true);
@@ -331,22 +333,22 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
     // The reported half of #1939: the key exists only in one admin's column.
     // It is not the member's to spend, so they are told there is none instead
     // of being offered a Google search that answers 403.
-    setInstanceKey(null);
-    db.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run(encrypt_api_key('admins-own-key'), admin.user.id);
+    await setInstanceKey(null);
+    await updateRows(orm, Users, { id: admin.user.id }, { maps_api_key: encrypt_api_key('admins-own-key') });
     expect(await hasMapsKey(member.user.id)).toBe(false);
     // That same column still counts for the admin themselves.
     expect(await hasMapsKey(admin.user.id)).toBe(true);
   });
 
   describe('passkey origin gate (#2147)', () => {
-    beforeAll(() => {
-      db.prepare("INSERT INTO app_settings (key, value) VALUES ('passkey_login', 'true') ON CONFLICT(key) DO UPDATE SET value = 'true'").run();
+    beforeAll(async () => {
+      await setAppSetting(orm, 'passkey_login', 'true');
       // What getAppUrl() really yields with APP_URL unset — the phantom config.
       appUrlRef.value = 'http://localhost:3001';
     });
 
-    afterAll(() => {
-      db.prepare("DELETE FROM app_settings WHERE key = 'passkey_login'").run();
+    afterAll(async () => {
+      await deleteRows(orm, AppSettings, { key: 'passkey_login' });
       appUrlRef.value = 'https://x';
     });
 

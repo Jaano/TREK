@@ -34,6 +34,8 @@ import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
 import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
 import { JourneyPhotos } from '../../../src/db/entities/JourneyPhotos.entity';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { deleteRows, findRow, insertRow, insertRowIgnoringConflict } from '../../helpers/factories/rows';
+import { Users } from '../../../src/db/entities/Users.entity';
 import { PhotoResolverService } from '../../../src/nest/memories/photo-resolver.service';
 import type { ImmichService } from '../../../src/nest/memories/immich.service';
 import type { SynologyService } from '../../../src/nest/memories/synology.service';
@@ -83,12 +85,17 @@ function makeRes() {
 }
 
 /** Insert a trek_photos row directly so each case controls the exact shape. */
-function insertPhoto(cols: Record<string, unknown>): number {
-  const keys = Object.keys(cols);
-  const res = testDb.prepare(
-    `INSERT INTO trek_photos (${keys.join(', ')}) VALUES (${keys.map(() => '?').join(', ')})`
-  ).run(...keys.map(k => cols[k] as never));
-  return Number(res.lastInsertRowid);
+async function insertPhoto(cols: {
+  provider: string;
+  file_path?: string;
+  thumbnail_path?: string;
+  media_type?: string;
+  asset_id?: string;
+  owner_id?: number;
+  passphrase?: string;
+}): Promise<number> {
+  const { owner_id, ...rest } = cols;
+  return insertRow(t, TrekPhotos, { ...rest, ...(owner_id !== undefined ? { owner: owner_id } : {}) });
 }
 
 beforeAll(async () => {
@@ -103,13 +110,12 @@ beforeAll(async () => {
   );
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   // owner_id carries a FK to users; the cases pick fixed ids, so seed them.
-  testDb.prepare('DELETE FROM trek_photos').run();
+  await deleteRows(t, TrekPhotos);
   for (const id of [2, 3, 4, 5, 9]) {
-    testDb.prepare("INSERT OR IGNORE INTO users (id, username, email, password_hash) VALUES (?, ?, ?, 'x')")
-      .run(id, `u${id}`, `u${id}@example.test`);
+    await insertRowIgnoringConflict(t, Users, { id, username: `u${id}`, email: `u${id}@example.test`, password_hash: 'x' });
   }
   cache.serveFresh.mockReturnValue(false);
   cache.getInFlight.mockReturnValue(undefined);
@@ -132,7 +138,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-002: a local row whose file is gone answers "File not found", not a provider call', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'nope/missing.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'nope/missing.jpg' });
     const res = makeRes();
 
     await svc.streamPhoto(res as never, 1, id, 'original');
@@ -145,7 +151,7 @@ describe('streamPhoto — dispatch', () => {
 
   it('RESOLVE-003: a poster-less video 404s instead of streaming the whole file as a thumbnail', async () => {
     // #823: falling through here would push a full video down a thumbnail request.
-    const id = insertPhoto({ provider: 'local', file_path: 'nope/clip.mp4', media_type: 'video' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'nope/clip.mp4', media_type: 'video' });
     const res = makeRes();
 
     await svc.streamPhoto(res as never, 1, id, 'thumbnail');
@@ -156,7 +162,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-004: a local image with no thumbnail asks for one to be generated', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'nope/photo.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'nope/photo.jpg' });
     thumbnails.ensureLocalThumbnail.mockResolvedValue(null);
     const res = makeRes();
 
@@ -166,18 +172,22 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-005: a generated thumbnail is recorded on the row', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'nope/photo.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'nope/photo.jpg' });
     thumbnails.ensureLocalThumbnail.mockResolvedValue({ thumbnailRelPath: 'journey/thumbs/abc.jpg', width: 800, height: 600 });
     const res = makeRes();
 
     await svc.streamPhoto(res as never, 1, id, 'thumbnail');
 
-    const row = testDb.prepare('SELECT thumbnail_path, width, height FROM trek_photos WHERE id = ?').get(id) as { thumbnail_path: string; width: number; height: number };
-    expect(row).toEqual({ thumbnail_path: 'journey/thumbs/abc.jpg', width: 800, height: 600 });
+    const row = await findRow(t, TrekPhotos, { id });
+    expect({ thumbnail_path: row?.thumbnail_path, width: row?.width, height: row?.height }).toEqual({
+      thumbnail_path: 'journey/thumbs/abc.jpg',
+      width: 800,
+      height: 600,
+    });
   });
 
   it('RESOLVE-014: a local thumbnail hit streams through storage with the immutable headers', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'journey/x.jpg', thumbnail_path: 'journey/thumbs/h.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'journey/x.jpg', thumbnail_path: 'journey/thumbs/h.jpg' });
     storage.exists.mockResolvedValue(true);
     const res = makeRes();
 
@@ -190,7 +200,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-015: a local original hit streams through storage with the day-long cache header', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'journey/x.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'journey/x.jpg' });
     storage.exists.mockResolvedValue(true);
     const res = makeRes();
 
@@ -202,7 +212,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-016: a missing thumbnail falls through to the original for images', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'journey/x.jpg', thumbnail_path: 'journey/thumbs/h.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'journey/x.jpg', thumbnail_path: 'journey/thumbs/h.jpg' });
     storage.exists.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     const res = makeRes();
 
@@ -212,7 +222,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-017: a video whose recorded poster is gone 404s instead of falling through (#823)', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'journey/clip.mp4', thumbnail_path: 'journey/thumbs/t.jpg', media_type: 'video' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'journey/clip.mp4', thumbnail_path: 'journey/thumbs/t.jpg', media_type: 'video' });
     storage.exists.mockResolvedValue(false);
     const res = makeRes();
 
@@ -224,7 +234,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-019: a rejecting exists check (invalid key) reads as a local miss for thumb and original', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'journey/x.jpg', thumbnail_path: 'journey/thumbs/h.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'journey/x.jpg', thumbnail_path: 'journey/thumbs/h.jpg' });
     storage.exists.mockRejectedValue(new Error('invalid storage key'));
     const res = makeRes();
 
@@ -236,7 +246,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-018: a file_path outside journey/ reads as a local miss without touching storage', async () => {
-    const id = insertPhoto({ provider: 'local', file_path: 'nope/other.jpg' });
+    const id = await insertPhoto({ provider: 'local', file_path: 'nope/other.jpg' });
     const res = makeRes();
 
     await svc.streamPhoto(res as never, 1, id, 'original');
@@ -247,7 +257,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-006: an immich original goes straight to the provider with the range header', async () => {
-    const id = insertPhoto({ provider: 'immich', asset_id: 'a1', owner_id: 5 });
+    const id = await insertPhoto({ provider: 'immich', asset_id: 'a1', owner_id: 5 });
     const res = makeRes();
 
     await svc.streamPhoto(res as never, 3, id, 'original', 'bytes=0-99');
@@ -256,7 +266,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-007: an immich thumbnail served from cache never reaches the provider', async () => {
-    const id = insertPhoto({ provider: 'immich', asset_id: 'a1', owner_id: 5 });
+    const id = await insertPhoto({ provider: 'immich', asset_id: 'a1', owner_id: 5 });
     cache.serveFresh.mockReturnValue(true);
     const res = makeRes();
 
@@ -267,7 +277,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-008: a synology original forwards the decrypted passphrase', async () => {
-    const id = insertPhoto({ provider: 'synologyphotos', asset_id: 's1', owner_id: 9, passphrase: 'secret' });
+    const id = await insertPhoto({ provider: 'synologyphotos', asset_id: 's1', owner_id: 9, passphrase: 'secret' });
     const res = makeRes();
 
     await svc.streamPhoto(res as never, 4, id, 'original');
@@ -276,7 +286,7 @@ describe('streamPhoto — dispatch', () => {
   });
 
   it('RESOLVE-009: a synology row without a passphrase forwards undefined, not an empty string', async () => {
-    const id = insertPhoto({ provider: 'synologyphotos', asset_id: 's2', owner_id: 9 });
+    const id = await insertPhoto({ provider: 'synologyphotos', asset_id: 's2', owner_id: 9 });
     const res = makeRes();
 
     await svc.streamPhoto(res as never, 4, id, 'original');
@@ -292,7 +302,7 @@ describe('getPhotoInfo — dispatch', () => {
   });
 
   it('RESOLVE-011: asks immich for an immich asset', async () => {
-    const id = insertPhoto({ provider: 'immich', asset_id: 'a1', owner_id: 5 });
+    const id = await insertPhoto({ provider: 'immich', asset_id: 'a1', owner_id: 5 });
     immich.getAssetInfo.mockResolvedValue({ success: true, data: { id: 'a1' } });
 
     await svc.getPhotoInfo(3, id);
@@ -302,7 +312,7 @@ describe('getPhotoInfo — dispatch', () => {
   });
 
   it('RESOLVE-012: asks synology for a synology asset', async () => {
-    const id = insertPhoto({ provider: 'synologyphotos', asset_id: 's1', owner_id: 9 });
+    const id = await insertPhoto({ provider: 'synologyphotos', asset_id: 's1', owner_id: 9 });
     synology.getSynologyAssetInfo.mockResolvedValue({ success: true, data: { id: 's1' } });
 
     await svc.getPhotoInfo(4, id);
@@ -312,7 +322,7 @@ describe('getPhotoInfo — dispatch', () => {
   });
 
   it('RESOLVE-013: an unknown provider is an error, not a crash', async () => {
-    const id = insertPhoto({ provider: 'picasa', asset_id: 'p1', owner_id: 2 });
+    const id = await insertPhoto({ provider: 'picasa', asset_id: 'p1', owner_id: 2 });
     const result = await svc.getPhotoInfo(1, id);
     expect(result.success).toBe(false);
   });

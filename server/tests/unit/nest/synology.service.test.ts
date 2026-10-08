@@ -48,20 +48,35 @@ import { db as testDb } from '../../../src/db/database';
 import { SynologyService } from '../../../src/nest/memories/synology.service';
 import type { MemoriesAccessService } from '../../../src/nest/memories/memories-access.service';
 import { notificationsStub } from '../../helpers/notifications';
-import { createTestUsersRepo } from '../../helpers/test-uow';
+import { createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { deleteRows, upsertRow } from '../../helpers/factories/rows';
+import { readUser } from '../../helpers/factories/users';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 const access = { getAlbumLinkForSync: vi.fn(), updateSyncTimeForAlbumLink: vi.fn() };
 let svc: SynologyService;
 
 const USER = 1;
 
-function seedUser(id: number, cols: Partial<Record<string, unknown>> = {}): void {
-  const base = { synology_url: 'https://nas.test', synology_username: 'ada', synology_password: 'pw', synology_sid: 'sid-1', synology_did: null, synology_skip_ssl: 1 };
-  const row = { ...base, ...cols };
-  testDb.prepare(
-    `INSERT OR REPLACE INTO users (id, username, email, password_hash, synology_url, synology_username, synology_password, synology_sid, synology_did, synology_skip_ssl)
-     VALUES (?, ?, ?, 'x', ?, ?, ?, ?, ?, ?)`
-  ).run(id, `u${id}`, `u${id}@example.test`, row.synology_url, row.synology_username, row.synology_password, row.synology_sid, row.synology_did, row.synology_skip_ssl);
+interface SynologyCols {
+  synology_url: string | null;
+  synology_username: string | null;
+  synology_password: string | null;
+  synology_sid: string | null;
+  synology_did: string | null;
+  synology_skip_ssl: number;
+}
+
+async function seedUser(id: number, cols: Partial<SynologyCols> = {}): Promise<void> {
+  const base: SynologyCols = { synology_url: 'https://nas.test', synology_username: 'ada', synology_password: 'pw', synology_sid: 'sid-1', synology_did: null, synology_skip_ssl: 1 };
+  await upsertRow(await sharedTestOrm(testDb), Users, {
+    id,
+    username: `u${id}`,
+    email: `u${id}@example.test`,
+    password_hash: 'x',
+    ...base,
+    ...cols,
+  });
 }
 
 /** A Synology API envelope: { success, data } or { success:false, error:{ code } }. */
@@ -80,13 +95,13 @@ beforeAll(async () => {
   svc = new SynologyService(access as unknown as MemoriesAccessService, notificationsStub(), users);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   decryptMock.mockImplementation((v: string) => v);
   maybeEncryptMock.mockImplementation((v: string) => v);
   checkSsrf.mockResolvedValue({ allowed: true, isPrivate: false, resolvedIp: '1.2.3.4' });
-  testDb.prepare('DELETE FROM users').run();
-  seedUser(USER);
+  await deleteRows(await sharedTestOrm(testDb), Users);
+  await seedUser(USER);
 });
 
 afterAll(() => testDb.close());
@@ -98,7 +113,7 @@ describe('credentials', () => {
   });
 
   it('SYNO-U002: a half-filled row is "Synology not configured"', async () => {
-    seedUser(2, { synology_password: null });
+    await seedUser(2, { synology_password: null });
     const result = await svc.getSynologySettings(2);
     expect(result).toEqual({ success: false, error: { message: 'Synology not configured', status: 400 } });
   });
@@ -110,7 +125,7 @@ describe('credentials', () => {
   });
 
   it('SYNO-U004: skip_ssl is read as a boolean, 0 meaning verify', async () => {
-    seedUser(3, { synology_skip_ssl: 0 });
+    await seedUser(3, { synology_skip_ssl: 0 });
     const result = await svc.getSynologySettings(3);
     expect(result.success && result.data.synology_skip_ssl).toBe(false);
   });
@@ -140,14 +155,14 @@ describe('the session', () => {
   });
 
   it('SYNO-U012: a login that returns no sid is a 500', async () => {
-    seedUser(4, { synology_sid: null });
+    await seedUser(4, { synology_sid: null });
     safeFetch.mockResolvedValue(api({}));
     const result = await svc.searchSynologyPhotos(4);
     expect(result).toEqual({ success: false, error: { message: 'Failed to get session ID from Synology', status: 500 } });
   });
 
   it('SYNO-U013: a stored device id rides along so a trusted device skips OTP', async () => {
-    seedUser(5, { synology_sid: null, synology_did: 'device-1' });
+    await seedUser(5, { synology_sid: null, synology_did: 'device-1' });
     safeFetch.mockResolvedValueOnce(api({ sid: 's' })).mockResolvedValueOnce(api({ list: [] }));
 
     await svc.searchSynologyPhotos(5);
@@ -219,7 +234,7 @@ describe('updateSynologySettings', () => {
   it('SYNO-U031: keeps the stored password when none is supplied', async () => {
     safeFetch.mockResolvedValue(api({ sid: 's' }));
     await svc.updateSynologySettings(USER, 'https://nas2.test', 'ada');
-    const row = testDb.prepare('SELECT synology_password, synology_url FROM users WHERE id = ?').get(USER) as { synology_password: string; synology_url: string };
+    const row = await readUser(await sharedTestOrm(testDb), USER);
     expect(row.synology_password).toBe('pw');
     expect(row.synology_url).toBe('https://nas2.test');
   });
@@ -240,9 +255,9 @@ describe('updateSynologySettings', () => {
     const plaintext = 'synthetic-test-synology-pw-001';
     await svc.updateSynologySettings(USER, 'https://nas3.test', 'ada', plaintext);
 
-    const row = testDb.prepare('SELECT synology_password FROM users WHERE id = ?').get(USER) as { synology_password: string };
+    const row = await readUser(await sharedTestOrm(testDb), USER);
     expect(row.synology_password).not.toBe(plaintext);
-    expect(row.synology_password.startsWith('enc:v1:')).toBe(true);
+    expect(row.synology_password?.startsWith('enc:v1:')).toBe(true);
   });
 });
 
@@ -453,14 +468,14 @@ describe('the search window', () => {
 
 describe('fetchSynologyThumbnailBytes', () => {
   it('SYNO-U080: fails without credentials rather than fetching', async () => {
-    seedUser(6, { synology_url: null });
+    await seedUser(6, { synology_url: null });
     const result = await svc.fetchSynologyThumbnailBytes(6, 6, 'a1');
     expect(result).toHaveProperty('error');
     expect(safeFetch).not.toHaveBeenCalled();
   });
 
   it('SYNO-U081: bounds the thumbnail read in time and size, on a host the user configured', async () => {
-    seedUser(7);
+    await seedUser(7);
     safeFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,

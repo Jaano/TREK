@@ -42,6 +42,12 @@ vi.mock('../../../../src/utils/ssrfGuard', () => {
 
 import { db as testDb } from '../../../../src/db/database';
 import { resetTestDb } from '../../../helpers/test-db';
+import { sharedTestOrm } from '../../../helpers/test-uow';
+import { countRows, deleteRows, findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { readAppSetting } from '../../../helpers/factories/settings';
+import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
+import { Notifications } from '../../../../src/db/entities/Notifications.entity';
+import { Settings } from '../../../../src/db/entities/Settings.entity';
 import { createAdmin, createUser, disableNotificationPref, setNotificationChannels } from '../../../helpers/factories';
 import {
   makeNotificationPreferencesService,
@@ -94,15 +100,17 @@ const pushedTo = () => safeFetchFollow.mock.calls.map((c) => c[0] as string);
 /** What a restore under a different ENCRYPTION_KEY leaves behind: a private key that no longer opens. */
 const UNREADABLE = 'enc:v1:bm90IGEgY2lwaGVydGV4dA';
 
-function breakStoredPrivateKey(): void {
-  testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+async function breakStoredPrivateKey(): Promise<void> {
+  await updateRows(await sharedTestOrm(testDb), AppSettings, { key: VAPID_PRIVATE_KEY_SETTING }, { value: UNREADABLE });
 }
 
 const pushColumn = async (userId: number) =>
   (await prefs.getPreferencesMatrix(userId, 'user')).channels.find((c) => c.id === 'push');
 
-const storedKeyRows = () =>
-  testDb.prepare("SELECT key, value FROM app_settings WHERE key LIKE 'web_push_vapid_%' ORDER BY key").all();
+const storedKeyRows = async () =>
+  (await findRows(await sharedTestOrm(testDb), AppSettings, { key: { $like: 'web_push_vapid_%' } }, { key: 'asc' })).map(
+    (r) => ({ key: r.key, value: r.value }),
+  );
 
 beforeAll(async () => {
   notifications = await makeNotificationsService(testDb);
@@ -216,20 +224,15 @@ describe('Web Push while the stored key pair cannot be used', () => {
     const { user } = createUser(testDb);
     const { user: actor } = createUser(testDb);
     const endpoint = await addDevice(user.id);
-    testDb
-      .prepare("INSERT INTO settings (user_id, key, value) VALUES (?, 'webhook_url', ?)")
-      .run(user.id, 'https://hooks.example.test/trek');
+    await insertRow(await sharedTestOrm(testDb), Settings, { user: user.id, key: 'webhook_url', value: 'https://hooks.example.test/trek' });
     setNotificationChannels(testDb, 'webhook,push');
-    breakStoredPrivateKey();
+    await breakStoredPrivateKey();
 
     // In-app and the webhook go out; the skipped push is no failed delivery.
     await expect(invite(user.id, actor.id)).resolves.toEqual({ attempted: 2, delivered: 2 });
 
     expect(pushedTo()).toEqual(['https://hooks.example.test/trek']);
-    const inApp = testDb.prepare('SELECT COUNT(*) AS n FROM notifications WHERE recipient_id = ?').get(user.id) as {
-      n: number;
-    };
-    expect(inApp.n).toBe(1);
+    expect(await countRows(await sharedTestOrm(testDb), Notifications, { recipient: user.id })).toBe(1);
     // The device is kept for when the key is back, and nothing failed on the way.
     expect((await subscriptions.listForUser(user.id)).map((r) => r.endpoint)).toEqual([endpoint]);
     expect(logError).not.toHaveBeenCalledWith(expect.stringContaining('dispatch failed'));
@@ -240,16 +243,15 @@ describe('Web Push while the stored key pair cannot be used', () => {
     const { user } = createUser(testDb);
     setNotificationChannels(testDb, 'email,push');
     await addDevice(user.id);
-    const ciphertext = (
-      testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(VAPID_PRIVATE_KEY_SETTING) as { value: string }
-    ).value;
-    breakStoredPrivateKey();
+    const ciphertext = await readAppSetting(await sharedTestOrm(testDb), VAPID_PRIVATE_KEY_SETTING);
+    if (ciphertext === null) throw new Error('the private key should be stored by now');
+    await breakStoredPrivateKey();
 
     expect(await pushColumn(user.id)).toMatchObject({ active: false, configured: true });
     // Only push: email keeps its column, SMTP or not, as it always has.
     expect((await prefs.getPreferencesMatrix(user.id, 'user')).channels.find((c) => c.id === 'email')?.active).toBe(true);
 
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(ciphertext, VAPID_PRIVATE_KEY_SETTING);
+    await updateRows(await sharedTestOrm(testDb), AppSettings, { key: VAPID_PRIVATE_KEY_SETTING }, { value: ciphertext });
     expect(await pushColumn(user.id)).toMatchObject({ active: true, configured: true });
   });
 
@@ -258,16 +260,16 @@ describe('Web Push while the stored key pair cannot be used', () => {
     setNotificationChannels(testDb, 'email,push');
     await addDevice(user.id);
     // What deleting both rows to start over leaves under a running server.
-    testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'web_push_vapid_%'").run();
+    await deleteRows(await sharedTestOrm(testDb), AppSettings, { key: { $like: 'web_push_vapid_%' } });
 
     expect(await pushColumn(user.id)).toMatchObject({ active: true, configured: true });
-    expect(storedKeyRows()).toEqual([]);
+    expect(await storedKeyRows()).toEqual([]);
   });
 
   it('WPDISP-010: the test send says push is unavailable and sends nothing', async () => {
     const { user } = createUser(testDb);
     await addDevice(user.id);
-    breakStoredPrivateKey();
+    await breakStoredPrivateKey();
     await expect(notifications.testChannel(user.id, 'push')).resolves.toEqual({
       success: false,
       error: PUSH_UNAVAILABLE_ERROR,
@@ -283,7 +285,7 @@ describe('Web Push while the VAPID_* pair is broken and an older pair is stored'
     setNotificationChannels(testDb, 'push');
     // The first start without VAPID_* stored a pair; the operator then brought their own.
     await keys.getPublicKey();
-    const stored = storedKeyRows();
+    const stored = await storedKeyRows();
     const pair = generateVapidKeyPair();
     vi.stubEnv('VAPID_PUBLIC_KEY', pair.publicKey);
     vi.stubEnv('VAPID_PRIVATE_KEY', pair.privateKey);
@@ -298,7 +300,7 @@ describe('Web Push while the VAPID_* pair is broken and an older pair is stored'
     expect((await subscriptions.listForUser(user.id)).map((r) => [r.endpoint, r.vapid_public_key])).toEqual([
       [endpoint, pair.publicKey],
     ]);
-    expect(storedKeyRows()).toEqual(stored);
+    expect(await storedKeyRows()).toEqual(stored);
     expect(await pushColumn(user.id)).toMatchObject({ active: false, configured: true });
 
     vi.stubEnv('VAPID_PRIVATE_KEY', pair.privateKey);

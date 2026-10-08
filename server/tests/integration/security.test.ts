@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vites
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
+import { MikroORM } from '@mikro-orm/core';
 import path from 'path';
 import fs from 'fs';
 
@@ -34,9 +35,17 @@ import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip } from '../helpers/factories';
 import { authCookie, authHeader, generateToken } from '../helpers/auth';
+import { findRows, updateRows } from '../helpers/factories/rows';
+import { readUser } from '../helpers/factories/users';
+import { setAppSetting } from '../helpers/factories/settings';
+import type { FactoryOrm } from '../helpers/factories/context';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { TripFiles } from '../../src/db/entities/TripFiles.entity';
 
 let nestApp: INestApplication;
 let app: Application;
+/** The app's own ORM, which the factories seed and read through. */
+const orm = (): FactoryOrm => nestApp.get(MikroORM);
 const FIXTURE_IMG = path.join(__dirname, '../fixtures/small-image.jpg');
 const uploadsDir = path.join(__dirname, '../../uploads/files');
 
@@ -44,13 +53,13 @@ beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-  testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allowed_file_types', '*')").run();
+  await setAppSetting(orm(), 'allowed_file_types', '*');
 });
 
 beforeEach(async () => {
   resetTestDb(testDb);
   await resetRateLimits(nestApp);
-  testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allowed_file_types', '*')").run();
+  await setAppSetting(orm(), 'allowed_file_types', '*');
 });
 
 afterAll(async () => {
@@ -108,7 +117,7 @@ describe('API key encryption', () => {
       .set('Cookie', authCookie(user.id))
       .send({ openweather_api_key: 'test-api-key-12345' });
 
-    const row = testDb.prepare('SELECT openweather_api_key FROM users WHERE id = ?').get(user.id) as any;
+    const row = await readUser(orm(), user.id);
     expect(row.openweather_api_key).toMatch(/^enc:v1:/);
   });
 
@@ -126,19 +135,16 @@ describe('API key encryption', () => {
     // changedKeys is internal: the client body is what it always was.
     expect(first.body).not.toHaveProperty('changedKeys');
 
-    const rows = () =>
-      testDb
-        .prepare("SELECT details FROM audit_log WHERE action = 'settings.api_keys_update'")
-        .all() as { details: string | null }[];
-    expect(rows()).toHaveLength(1);
-    expect(rows()[0].details).toContain('openweather_api_key');
-    expect(rows()[0].details).not.toContain('test-api-key-12345');
+    const rows = () => findRows(orm(), AuditLog, { action: 'settings.api_keys_update' });
+    expect(await rows()).toHaveLength(1);
+    expect((await rows())[0].details).toContain('openweather_api_key');
+    expect((await rows())[0].details).not.toContain('test-api-key-12345');
 
     // The same value again writes no second row. This is the real test of the
     // cleartext comparison: encryption uses a random IV, so the stored blob
     // differs on every save even when the key does not.
     await save();
-    expect(rows()).toHaveLength(1);
+    expect(await rows()).toHaveLength(1);
   });
 
   it('SEC-008 — GET /api/auth/me does not return plaintext API key', async () => {
@@ -192,7 +198,7 @@ describe('File download path traversal', () => {
     expect(upload.status).toBe(201);
     const fileId = upload.body.file.id;
 
-    testDb.prepare('UPDATE trip_files SET filename = ? WHERE id = ?').run('../../etc/passwd', fileId);
+    await updateRows(orm(), TripFiles, { id: fileId }, { filename: '../../etc/passwd' });
 
     const res = await request(app)
       .get(`/api/trips/${trip.id}/files/${fileId}/download`)

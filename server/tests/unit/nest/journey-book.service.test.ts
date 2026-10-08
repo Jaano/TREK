@@ -46,6 +46,9 @@ import {
   createTestJourneyPhotosRepo, createTestJourneyEntryPhotosRepo,
 } from '../../helpers/journey-repos';
 import { createTestJourneyBooksRepo } from '../../helpers/journey-share-repos';
+import { countRows, deleteRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { JourneyBooks } from '../../../src/db/entities/JourneyBooks.entity';
+import { Journeys } from '../../../src/db/entities/Journeys.entity';
 
 let domain: JourneyDomainService;
 let books: JourneyBookService;
@@ -190,11 +193,7 @@ describe('creating and reading', () => {
   it('opens a book whose stored JSON is broken, rather than throwing', async () => {
     const { user } = createUser(testDb);
     const journey = createJourney(testDb, user.id);
-    testDb
-      .prepare(
-        "INSERT INTO journey_books (journey_id, title, document, version) VALUES (?, 'T', '{not json', 1)",
-      )
-      .run(journey.id);
+    await insertRow(await sharedTestOrm(testDb), JourneyBooks, { journey: journey.id, title: 'T', document: '{not json', version: 1 });
 
     const read = await books.getBook(journey.id, user.id);
     expect(read).not.toBeNull();
@@ -334,14 +333,18 @@ describe('concurrency', () => {
     const stale = await books.saveBook(journey.id, user.id, { title: 'T', document: doc('three'), baseVersion: 1 });
     expect(stale && 'conflict' in stale).toBe(true);
 
-    // The same statement with the `AND version = ?` guard stripped — proving
+    // The same write with the `AND version = ?` guard stripped — proving
     // that guard, not something else, is what makes the refusal above real.
-    const row = testDb.prepare('SELECT id FROM journey_books WHERE journey_id = ?').get(journey.id) as { id: number };
-    testDb
-      .prepare('UPDATE journey_books SET title = ?, document = ?, version = version + 1 WHERE id = ?')
-      .run('Clobbered', JSON.stringify(doc('clobbered')), row.id);
-    const afterMutation = testDb.prepare('SELECT title FROM journey_books WHERE id = ?').get(row.id) as { title: string };
-    expect(afterMutation.title).toBe('Clobbered');
+    const orm = await sharedTestOrm(testDb);
+    const row = await findRow(orm, JourneyBooks, { journey: journey.id });
+    if (!row) throw new Error('the save above should have left a book');
+    await updateRows(orm, JourneyBooks, { id: row.id }, {
+      title: 'Clobbered',
+      document: JSON.stringify(doc('clobbered')),
+      version: row.version + 1,
+    });
+    const afterMutation = await findRow(orm, JourneyBooks, { id: row.id });
+    expect(afterMutation?.title).toBe('Clobbered');
   });
 
   // M1 (task-5-review.md) — JB3's existing-link read and JB4's insert used
@@ -368,10 +371,10 @@ describe('concurrency', () => {
     // other either also lands as {record} (version 2, having taken the
     // update branch against baseVersion undefined -> existing.version) or
     // sees a stale conflict — either way, never a second inserted row.
-    const rows = testDb.prepare('SELECT COUNT(*) AS n FROM journey_books WHERE journey_id = ?').get(journey.id) as { n: number };
-    expect(rows.n).toBe(1);
+    const orm = await sharedTestOrm(testDb);
+    expect(await countRows(orm, JourneyBooks, { journey: journey.id })).toBe(1);
 
-    const finalVersion = (testDb.prepare('SELECT version FROM journey_books WHERE journey_id = ?').get(journey.id) as { version: number }).version;
+    const finalVersion = (await findRow(orm, JourneyBooks, { journey: journey.id }))?.version;
     expect(finalVersion).toBe(2);
   });
 });
@@ -421,11 +424,9 @@ describe('deleting', () => {
     const journey = createJourney(testDb, user.id);
     await books.saveBook(journey.id, user.id, { title: 'T', document: doc() });
 
-    testDb.prepare('DELETE FROM journeys WHERE id = ?').run(journey.id);
+    const orm = await sharedTestOrm(testDb);
+    await deleteRows(orm, Journeys, { id: journey.id });
 
-    const left = testDb
-      .prepare('SELECT COUNT(*) AS n FROM journey_books WHERE journey_id = ?')
-      .get(journey.id) as { n: number };
-    expect(left.n).toBe(0);
+    expect(await countRows(orm, JourneyBooks, { journey: journey.id })).toBe(0);
   });
 });

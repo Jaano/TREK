@@ -5,6 +5,7 @@ import type { RouteUsageEntry } from '@trek/shared';
 import { createTestUnitOfWork, sharedTestOrm } from '../../helpers/test-uow';
 import { RouteUsageDaily } from '../../../src/db/entities/RouteUsageDaily.entity';
 import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
+import { countRows, insertRow } from '../../helpers/factories/rows';
 
 /**
  * SRV-ROUTEUSAGE-001..010 — the counters behind "could TREK host a router".
@@ -40,6 +41,31 @@ async function serviceOver(db: Database.Database): Promise<RouteUsageService> {
   return new RouteUsageService(t.repo(RouteUsageDaily), t.repo(AppSettings), await createTestUnitOfWork(db));
 }
 
+/** One counter row, written as the table holds it: (day, profile, surface, self_hosted, requests, waypoints, km, failed). */
+async function insertDay(
+  db: Database.Database,
+  day: string,
+  selfHosted: number,
+  requests: number,
+  waypoints: number,
+  km: number,
+  failed: number,
+): Promise<void> {
+  await insertRow(await sharedTestOrm(db), RouteUsageDaily, {
+    day,
+    profile: 'driving',
+    surface: 'legs',
+    self_hosted: selfHosted,
+    requests,
+    waypoints,
+    km,
+    failed,
+  });
+}
+
+/** The UTC calendar date `days` days back, as SQLite's `date('now', '-N days')` renders it. */
+const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+
 const entry = (over: Partial<RouteUsageEntry> = {}): RouteUsageEntry => ({
   profile: 'driving', surface: 'legs', selfHosted: false,
   requests: 1, waypoints: 3, km: 100, failed: 0, ...over,
@@ -56,14 +82,14 @@ describe('RouteUsageService', () => {
 
   it('SRV-ROUTEUSAGE-001: counting is on unless an operator turned it off', async () => {
     expect(await svc.enabled()).toBe(true);
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('route_usage_enabled', 'false')").run();
+    await insertRow(await sharedTestOrm(db), AppSettings, { key: 'route_usage_enabled', value: 'false' });
     expect(await svc.enabled()).toBe(false);
   });
 
   it('SRV-ROUTEUSAGE-002: a switched-off instance records nothing and says so', async () => {
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('route_usage_enabled', 'false')").run();
+    await insertRow(await sharedTestOrm(db), AppSettings, { key: 'route_usage_enabled', value: 'false' });
     expect(await svc.record({ entries: [entry()] })).toBe(false);
-    expect(db.prepare('SELECT COUNT(*) c FROM route_usage_daily').get()).toEqual({ c: 0 });
+    expect(await countRows(await sharedTestOrm(db), RouteUsageDaily)).toBe(0);
   });
 
   it('SRV-ROUTEUSAGE-003: a batch adds onto one row per day, profile, kind and engine', async () => {
@@ -96,8 +122,8 @@ describe('RouteUsageService', () => {
 
   it('SRV-ROUTEUSAGE-006: the summary carries the per-day average and the busiest day', async () => {
     // Two days by hand: the service always writes "today", so the spread is set here.
-    db.prepare(`INSERT INTO route_usage_daily VALUES ('2026-09-01','driving','legs',0,10,30,900,0)`).run();
-    db.prepare(`INSERT INTO route_usage_daily VALUES ('2026-09-02','driving','legs',0,30,60,1800,2)`).run();
+    await insertDay(db, '2026-09-01', 0, 10, 30, 900, 0);
+    await insertDay(db, '2026-09-02', 0, 30, 60, 1800, 2);
 
     const s = await svc.summary();
     expect(s.totalRequests).toBe(40);
@@ -111,21 +137,21 @@ describe('RouteUsageService', () => {
   });
 
   it('SRV-ROUTEUSAGE-007: mean waypoints and kilometres are per request, not per row', async () => {
-    db.prepare(`INSERT INTO route_usage_daily VALUES ('2026-09-01','driving','legs',0,4,20,400,0)`).run();
+    await insertDay(db, '2026-09-01', 0, 4, 20, 400, 0);
     const s = await svc.summary();
     expect(s.waypointsPerRequest).toBe(5);
     expect(s.kmPerRequest).toBe(100);
   });
 
   it('SRV-ROUTEUSAGE-008: the self-hosted share is the part already off the public hosts', async () => {
-    db.prepare(`INSERT INTO route_usage_daily VALUES ('2026-09-01','driving','legs',0,30,0,0,0)`).run();
-    db.prepare(`INSERT INTO route_usage_daily VALUES ('2026-09-01','driving','legs',1,10,0,0,0)`).run();
+    await insertDay(db, '2026-09-01', 0, 30, 0, 0, 0);
+    await insertDay(db, '2026-09-01', 1, 10, 0, 0, 0);
     expect((await svc.summary()).selfHostedShare).toBe(0.25);
   });
 
   it('SRV-ROUTEUSAGE-009: retention drops days past the window and keeps the rest', async () => {
-    db.prepare(`INSERT INTO route_usage_daily VALUES (date('now','-1 day'),'driving','legs',0,1,0,0,0)`).run();
-    db.prepare(`INSERT INTO route_usage_daily VALUES (date('now','-${RETENTION_DAYS + 5} days'),'driving','legs',0,1,0,0,0)`).run();
+    await insertDay(db, daysAgo(1), 0, 1, 0, 0, 0);
+    await insertDay(db, daysAgo(RETENTION_DAYS + 5), 0, 1, 0, 0, 0);
 
     expect(await svc.purgeExpired()).toBe(1);
     expect(await svc.rows()).toHaveLength(1);

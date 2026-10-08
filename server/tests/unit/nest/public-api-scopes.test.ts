@@ -64,7 +64,9 @@ import { createUser } from '../../helpers/factories';
 import { TokenService } from '../../../src/nest/tokens/token.service';
 import type { McpTokensRepository } from '../../../src/db/repositories/McpTokens.repository';
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
-import { createTestMcpTokensRepo, createTestUsersRepo } from '../../helpers/test-uow';
+import { createTestMcpTokensRepo, createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { findRow, updateRows } from '../../helpers/factories/rows';
+import { McpTokens } from '../../../src/db/entities/McpTokens.entity';
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 import { ApiTokenGuard } from '../../../src/nest/public-api/api-token.guard';
 import { PublicApiController } from '../../../src/nest/public-api/public-api.controller';
@@ -402,12 +404,15 @@ describe('TokenService — storing and resolving a grant', () => {
     testDb.close();
   });
 
-  const rowFor = (id: number) =>
-    testDb.prepare('SELECT kind, scope_mode, api_scopes FROM mcp_tokens WHERE id = ?').get(id) as {
-      kind: string;
-      scope_mode: string | null;
-      api_scopes: string | null;
-    };
+  /** The grant columns of the stored token row. */
+  const rowFor = async (id: number) => {
+    const row = await findRow(await sharedTestOrm(testDb), McpTokens, { id });
+    if (!row) throw new Error(`no token ${id}`);
+    return { kind: row.kind, scope_mode: row.scope_mode, api_scopes: row.api_scopes };
+  };
+  const setApiScopes = async (id: number, apiScopes: string) =>
+    updateRows(await sharedTestOrm(testDb), McpTokens, { id }, { api_scopes: apiScopes });
+  const lastUsedAt = async (id: number) => (await findRow(await sharedTestOrm(testDb), McpTokens, { id }))?.last_used_at;
 
   const mint = async (userId: number, name: string, scopes?: readonly string[]) =>
     (await tokens.createApiToken(userId, name, scopes)).token as {
@@ -422,7 +427,7 @@ describe('TokenService — storing and resolving a grant', () => {
     const created = await mint(user.id, 'Dawarich');
     // 'all' is written explicitly: a NULL sentinel here would mean a bug that
     // drops the column silently grants everything.
-    expect(rowFor(created.id)).toEqual({ kind: 'api', scope_mode: 'all', api_scopes: null });
+    expect(await rowFor(created.id)).toEqual({ kind: 'api', scope_mode: 'all', api_scopes: null });
     expect(created.scope_mode).toBe('all');
     expect(created.scopes).toEqual([...PUBLIC_API_SCOPES]);
   });
@@ -463,7 +468,7 @@ describe('TokenService — storing and resolving a grant', () => {
   it('PUBAPI-SCOPE-U043: a narrowed key stores exactly the chosen sections, in the canonical order', async () => {
     const { user } = createUser(testDb);
     const created = await mint(user.id, 'Dawarich', ['stats', 'trips']);
-    expect(rowFor(created.id)).toEqual({
+    expect(await rowFor(created.id)).toEqual({
       kind: 'api',
       scope_mode: 'limited',
       // Canonical order, not the caller's: two keys with the same access must
@@ -485,7 +490,7 @@ describe('TokenService — storing and resolving a grant', () => {
   it('PUBAPI-SCOPE-U045: an unknown scope name is dropped rather than stored', async () => {
     const { user } = createUser(testDb);
     const created = await mint(user.id, 'Dawarich', ['trips', 'passwords', 'trips']);
-    expect(rowFor(created.id).api_scopes).toBe(JSON.stringify(['trips']));
+    expect((await rowFor(created.id)).api_scopes).toBe(JSON.stringify(['trips']));
   });
 
   it('PUBAPI-SCOPE-U046: a list of nothing but unknown names is no narrowing at all', async () => {
@@ -493,12 +498,12 @@ describe('TokenService — storing and resolving a grant', () => {
     // Not an empty limited grant: that would mint a key that can read nothing,
     // which nobody asked for and which fails hours later at the integration.
     const created = await mint(user.id, 'Dawarich', ['everything']);
-    expect(rowFor(created.id)).toMatchObject({ scope_mode: 'all', api_scopes: null });
+    expect(await rowFor(created.id)).toMatchObject({ scope_mode: 'all', api_scopes: null });
   });
 
   it('PUBAPI-SCOPE-U047: an empty scopes array means the caller did not narrow anything', async () => {
     const { user } = createUser(testDb);
-    expect(rowFor((await mint(user.id, 'Dawarich', [])).id)).toMatchObject({ scope_mode: 'all', api_scopes: null });
+    expect(await rowFor((await mint(user.id, 'Dawarich', [])).id)).toMatchObject({ scope_mode: 'all', api_scopes: null });
   });
 
   it('PUBAPI-SCOPE-U048: a key that says it is narrowed and cannot say how reads nothing', async () => {
@@ -510,7 +515,7 @@ describe('TokenService — storing and resolving a grant', () => {
     const { user } = createUser(testDb);
     const created = await mint(user.id, 'Dawarich', ['trips']);
     for (const broken of ['{"not":"a list"', 'null', '"trips"', '{}', '[]', '[42, null]']) {
-      testDb.prepare('UPDATE mcp_tokens SET api_scopes = ? WHERE id = ?').run(broken, created.id);
+      await setApiScopes(created.id, broken);
       expect((await tokens.verifyApiTokenWithGrant(created.raw_token))?.grant).toEqual({
         mode: 'limited',
         scopes: [],
@@ -522,9 +527,7 @@ describe('TokenService — storing and resolving a grant', () => {
     const { user } = createUser(testDb);
     const created = await mint(user.id, 'Dawarich', ['trips']);
     // What a future version dropping or renaming a scope constant leaves behind.
-    testDb
-      .prepare('UPDATE mcp_tokens SET api_scopes = ? WHERE id = ?')
-      .run(JSON.stringify(['itineraries']), created.id);
+    await setApiScopes(created.id, JSON.stringify(['itineraries']));
     expect((await tokens.verifyApiTokenWithGrant(created.raw_token))?.grant).toEqual({
       mode: 'limited',
       scopes: [],
@@ -534,9 +537,7 @@ describe('TokenService — storing and resolving a grant', () => {
   it('PUBAPI-SCOPE-U049: a partly unreadable list keeps the names it can read', async () => {
     const { user } = createUser(testDb);
     const created = await mint(user.id, 'Dawarich', ['trips']);
-    testDb
-      .prepare('UPDATE mcp_tokens SET api_scopes = ? WHERE id = ?')
-      .run(JSON.stringify(['trips', 42, 'nope', 'stats']), created.id);
+    await setApiScopes(created.id, JSON.stringify(['trips', 42, 'nope', 'stats']));
     expect((await tokens.verifyApiTokenWithGrant(created.raw_token))?.grant).toEqual({
       mode: 'limited',
       scopes: ['trips', 'stats'],
@@ -564,7 +565,7 @@ describe('TokenService — storing and resolving a grant', () => {
     const mcp = (await tokens.createMcpToken(user.id, 'Assistant')).token as { id: number };
     // Stored as the column default, because an MCP token carries no read scopes
     // and must not look as if it did.
-    expect(rowFor(mcp.id)).toEqual({ kind: 'mcp', scope_mode: 'all', api_scopes: null });
+    expect(await rowFor(mcp.id)).toEqual({ kind: 'mcp', scope_mode: 'all', api_scopes: null });
     const listed = await tokens.listMcpTokens(user.id) as Array<Record<string, unknown>>;
     expect(listed).toHaveLength(1);
     // The MCP panel cannot act on scopes, so it is not shown two columns that
@@ -586,17 +587,9 @@ describe('TokenService — storing and resolving a grant', () => {
   it('PUBAPI-SCOPE-U053: presenting a narrowed key stamps last_used_at like any other', async () => {
     const { user } = createUser(testDb);
     const created = await mint(user.id, 'Dawarich', ['trips']);
-    expect(
-      (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(created.id) as {
-        last_used_at: string | null;
-      }).last_used_at,
-    ).toBeNull();
+    expect(await lastUsedAt(created.id)).toBeNull();
     await tokens.verifyApiTokenWithGrant(created.raw_token);
-    expect(
-      (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(created.id) as {
-        last_used_at: string | null;
-      }).last_used_at,
-    ).not.toBeNull();
+    expect(await lastUsedAt(created.id)).not.toBeNull();
   });
 
   // -------------------------------------------------------------------------
@@ -624,7 +617,7 @@ describe('TokenService — storing and resolving a grant', () => {
       httpReq,
     )).token as { id: number; scope_mode: string; scopes: string[]; raw_token: string };
 
-    expect(rowFor(created.id)).toMatchObject({
+    expect(await rowFor(created.id)).toMatchObject({
       scope_mode: 'limited',
       api_scopes: JSON.stringify(['trips', 'days']),
     });
@@ -648,7 +641,7 @@ describe('TokenService — storing and resolving a grant', () => {
     const created = (await ctl.createApiToken({ id: user.id } as User, { name: 'Legacy' }, httpReq)).token as {
       id: number;
     };
-    expect(rowFor(created.id)).toMatchObject({ scope_mode: 'all', api_scopes: null });
+    expect(await rowFor(created.id)).toMatchObject({ scope_mode: 'all', api_scopes: null });
     expect(await ctl.listApiTokens({ id: user.id } as User)).toEqual({
       tokens: [expect.objectContaining({ scope_mode: 'all', scopes: [...PUBLIC_API_SCOPES] })],
     });
@@ -665,7 +658,7 @@ describe('TokenService — storing and resolving a grant', () => {
       httpReq,
     )).token as Record<string, unknown>;
 
-    expect(rowFor(created.id as number)).toEqual({ kind: 'mcp', scope_mode: 'all', api_scopes: null });
+    expect(await rowFor(created.id as number)).toEqual({ kind: 'mcp', scope_mode: 'all', api_scopes: null });
     expect(created).not.toHaveProperty('scope_mode');
     expect(created).not.toHaveProperty('scopes');
     expect((await ctl.listMcpTokens({ id: user.id } as User)).tokens[0]).not.toHaveProperty('scope_mode');

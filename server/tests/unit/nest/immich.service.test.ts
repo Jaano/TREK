@@ -48,6 +48,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeStorageFixture } from '../../helpers/storage-fixture';
 import { createTestUnitOfWork, createTestUsersRepo } from '../../helpers/test-uow';
+import { createTestUsersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { deleteRows, upsertRow } from '../../helpers/factories/rows';
+import { readUser } from '../../helpers/factories/users';
+import { Users } from '../../../src/db/entities/Users.entity';
 import { PROVIDER_SELECT_ALL_MAX_PAGES } from '@trek/shared';
 
 const audit = { writeAudit: vi.fn() };
@@ -57,9 +61,23 @@ let svc: ImmichService;
 
 const USER = 1;
 
-function seedUser(id: number, url: string | null, key: string | null, autoUpload = 0, allowInsecureTls = 0): void {
-  testDb.prepare("INSERT OR REPLACE INTO users (id, username, email, password_hash, immich_url, immich_api_key, immich_auto_upload, immich_allow_insecure_tls) VALUES (?, ?, ?, 'x', ?, ?, ?, ?)")
-    .run(id, `u${id}`, `u${id}@example.test`, url, key, autoUpload, allowInsecureTls);
+async function seedUser(id: number, url: string | null, key: string | null, autoUpload = 0, allowInsecureTls = 0): Promise<void> {
+  await upsertRow(await sharedTestOrm(testDb), Users, {
+    id,
+    username: `u${id}`,
+    email: `u${id}@example.test`,
+    password_hash: 'x',
+    immich_url: url,
+    immich_api_key: key,
+    immich_auto_upload: autoUpload,
+    immich_allow_insecure_tls: allowInsecureTls,
+  });
+}
+
+/** The user's stored Immich URL and TLS switch, as the settings page round-trips them. */
+async function storedConnection(id: number): Promise<{ immich_url: string | null | undefined; immich_allow_insecure_tls: number }> {
+  const row = await readUser(await sharedTestOrm(testDb), id);
+  return { immich_url: row.immich_url, immich_allow_insecure_tls: row.immich_allow_insecure_tls };
 }
 
 /** A Response-ish object with only what the service reads. */
@@ -79,13 +97,13 @@ beforeAll(async () => {
   svc = new ImmichService(audit as unknown as AuditService, access as unknown as MemoriesAccessService, journeyFx.storage, users, await createTestUnitOfWork(testDb));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   decryptMock.mockImplementation((v: string) => v);
   maybeEncryptMock.mockImplementation((v: string) => v);
   checkSsrf.mockResolvedValue({ allowed: true, isPrivate: false, resolvedIp: '1.2.3.4' });
-  testDb.prepare('DELETE FROM users').run();
-  seedUser(USER, 'https://immich.test', 'key-1');
+  await deleteRows(await sharedTestOrm(testDb), Users);
+  await seedUser(USER, 'https://immich.test', 'key-1');
 });
 
 afterAll(() => testDb.close());
@@ -96,12 +114,12 @@ describe('getImmichCredentials', () => {
   });
 
   it('IMMICH-002: returns null without a URL', async () => {
-    seedUser(2, null, 'key');
+    await seedUser(2, null, 'key');
     expect(await svc.getImmichCredentials(2)).toBeNull();
   });
 
   it('IMMICH-003: returns null without an API key', async () => {
-    seedUser(3, 'https://immich.test', null);
+    await seedUser(3, 'https://immich.test', null);
     expect(await svc.getImmichCredentials(3)).toBeNull();
   });
 
@@ -129,7 +147,7 @@ describe('getConnectionSettings / setImmichAutoUpload', () => {
   });
 
   it('IMMICH-008: reports an empty URL and not connected when it is not', async () => {
-    seedUser(4, null, null);
+    await seedUser(4, null, null);
     expect(await svc.getConnectionSettings(4)).toEqual({ immich_url: '', connected: false, auto_upload: false, allow_insecure_tls: false });
   });
 
@@ -220,9 +238,9 @@ describe('saveImmichSettings', () => {
     const plaintext = 'synthetic-test-immich-key-001';
     await svc.saveImmichSettings(USER, 'https://immich.test', plaintext, null);
 
-    const row = testDb.prepare('SELECT immich_api_key FROM users WHERE id = ?').get(USER) as { immich_api_key: string };
+    const row = await readUser(await sharedTestOrm(testDb), USER);
     expect(row.immich_api_key).not.toBe(plaintext);
-    expect(row.immich_api_key.startsWith('enc:v1:')).toBe(true);
+    expect(row.immich_api_key?.startsWith('enc:v1:')).toBe(true);
   });
 });
 
@@ -275,7 +293,7 @@ describe('testConnection', () => {
 
 describe('getConnectionStatus', () => {
   it('IMMICH-022: says "Not configured" without credentials', async () => {
-    seedUser(5, null, null);
+    await seedUser(5, null, null);
     expect(await svc.getConnectionStatus(5)).toEqual({ connected: false, error: 'Not configured' });
   });
 
@@ -293,7 +311,7 @@ describe('getConnectionStatus', () => {
 
 describe('browseTimeline', () => {
   it('IMMICH-024: 400s without credentials', async () => {
-    seedUser(6, null, null);
+    await seedUser(6, null, null);
     expect(await svc.browseTimeline(6)).toEqual({ error: 'Immich not configured', status: 400 });
   });
 
@@ -331,7 +349,7 @@ const DAY_TAIL = [
 
 describe('searchPhotos', () => {
   it('IMMICH-027: 400s without credentials and 502s when the server is unreachable', async () => {
-    seedUser(7, null, null);
+    await seedUser(7, null, null);
     expect(await svc.searchPhotos(7)).toEqual({ error: 'Immich not configured', status: 400 });
 
     safeFetch.mockRejectedValue(new Error('down'));
@@ -622,12 +640,12 @@ describe('searchPhotos', () => {
 
 describe('getAssetInfo', () => {
   it('IMMICH-033: 404s when the owner has no credentials', async () => {
-    seedUser(8, null, null);
+    await seedUser(8, null, null);
     expect(await svc.getAssetInfo(USER, 'a1', 8)).toEqual({ error: 'Not found', status: 404 });
   });
 
   it('IMMICH-034: reads the OWNER\'s credentials, not the requester\'s', async () => {
-    seedUser(9, 'https://owner.test', 'owner-key');
+    await seedUser(9, 'https://owner.test', 'owner-key');
     safeFetch.mockResolvedValue(upstream({ json: { id: 'a1' } }));
 
     await svc.getAssetInfo(USER, 'a1', 9);
@@ -677,7 +695,7 @@ describe('getAssetInfo', () => {
 
 describe('getAlbumPhotos', () => {
   it('IMMICH-037c: 400s without credentials', async () => {
-    seedUser(11, null, null);
+    await seedUser(11, null, null);
     expect(await svc.getAlbumPhotos(11, 'alb-1')).toEqual({ error: 'Immich not configured', status: 400 });
   });
 
@@ -707,7 +725,7 @@ describe('getAlbumPhotos', () => {
 
 describe('fetchImmichThumbnailBytes', () => {
   it('IMMICH-038: 404s without credentials for the owner', async () => {
-    seedUser(10, null, null);
+    await seedUser(10, null, null);
     expect(await svc.fetchImmichThumbnailBytes(USER, 'a1', 10)).toEqual({ error: 'Not found', status: 404 });
   });
 
@@ -741,7 +759,7 @@ describe('streamImmichAsset', () => {
     // It used to return { error, status } and touch nothing. All four callers
     // ignored that return, so the client got no status line at all and waited
     // out its own timeout. Synology's counterpart always wrote; this matches.
-    seedUser(11, null, null);
+    await seedUser(11, null, null);
     const res = makeRes();
 
     await svc.streamImmichAsset(res as never, USER, 'a1', 'thumbnail', 11);
@@ -755,8 +773,8 @@ describe('streamImmichAsset', () => {
     // A shared album is proxied with the owner's key on the viewer's behalf, so
     // a viewer who happens to have Immich configured must not paper over an
     // owner who does not.
-    seedUser(USER, 'https://immich.example', 'viewer-key');
-    seedUser(12, null, null);
+    await seedUser(USER, 'https://immich.example', 'viewer-key');
+    await seedUser(12, null, null);
     const res = makeRes();
 
     await svc.streamImmichAsset(res as never, USER, 'a1', 'original', 12);
@@ -766,7 +784,7 @@ describe('streamImmichAsset', () => {
   });
 
   it('IMMICH-041d: proxies with the owner key once a connection exists', async () => {
-    seedUser(13, 'https://immich.example', 'owner-key');
+    await seedUser(13, 'https://immich.example', 'owner-key');
     safeFetch.mockResolvedValue(upstream({ contentType: 'image/jpeg', body: 'bytes' }));
     const res = makeRes();
 
@@ -787,7 +805,7 @@ describe('collectAlbumSelection', () => {
 
   it('IMMICH-043: 400s when the user has no Immich credentials', async () => {
     access.getAlbumIdFromLink.mockReturnValue({ success: true, data: 'album-1' });
-    seedUser(11, null, null);
+    await seedUser(11, null, null);
     expect(await svc.collectAlbumSelection('1', 'l1', 11)).toEqual({ error: 'Immich not configured', status: 400 });
   });
 
@@ -827,19 +845,19 @@ describe('uploadToImmich', () => {
   });
 
   it('IMMICH-UP-002: returns null for a path outside the journey category', async () => {
-    seedUser(USER, 'https://immich.test', 'key-1');
+    await seedUser(USER, 'https://immich.test', 'key-1');
     expect(await svc.uploadToImmich(USER, 'files/doc.pdf', 'doc.pdf')).toBeNull();
     expect(safeFetch).not.toHaveBeenCalled();
   });
 
   it('IMMICH-UP-003: returns null when the object is missing (old existsSync guard)', async () => {
-    seedUser(USER, 'https://immich.test', 'key-1');
+    await seedUser(USER, 'https://immich.test', 'key-1');
     expect(await svc.uploadToImmich(USER, 'journey/gone.jpg', 'gone.jpg')).toBeNull();
     expect(safeFetch).not.toHaveBeenCalled();
   });
 
   it('IMMICH-UP-004: posts the bytes as multipart and answers the created asset id', async () => {
-    seedUser(USER, 'https://immich.test', 'key-1');
+    await seedUser(USER, 'https://immich.test', 'key-1');
     writeJourneyObject('up.jpg', 'jpeg-bytes-here');
     safeFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ id: 'immich-42' }) });
 
@@ -853,7 +871,7 @@ describe('uploadToImmich', () => {
   });
 
   it('IMMICH-UP-005: a rejected upstream answers null, not a throw', async () => {
-    seedUser(USER, 'https://immich.test', 'key-1');
+    await seedUser(USER, 'https://immich.test', 'key-1');
     writeJourneyObject('rej.jpg', 'bytes');
     safeFetch.mockResolvedValueOnce({ ok: false, status: 500 });
     expect(await svc.uploadToImmich(USER, 'journey/rej.jpg', 'rej.jpg')).toBeNull();
@@ -910,19 +928,19 @@ describe('self-signed certificates', () => {
   const EVERY_PATH_CALLS = 13;
 
   it('IMMICH-TLS-001: only a stored 1 turns the switch on', async () => {
-    seedUser(USER, 'https://immich.test', 'key-1', 0, 1);
+    await seedUser(USER, 'https://immich.test', 'key-1', 0, 1);
     expect((await svc.getImmichCredentials(USER))!.allow_insecure_tls).toBe(true);
 
-    seedUser(USER, 'https://immich.test', 'key-1', 0, 0);
+    await seedUser(USER, 'https://immich.test', 'key-1', 0, 0);
     expect((await svc.getImmichCredentials(USER))!.allow_insecure_tls).toBe(false);
 
     // Anything the column should never hold reads as off, not as truthy.
-    seedUser(USER, 'https://immich.test', 'key-1', 0, 2);
+    await seedUser(USER, 'https://immich.test', 'key-1', 0, 2);
     expect((await svc.getImmichCredentials(USER))!.allow_insecure_tls).toBe(false);
   });
 
   it('IMMICH-TLS-002: with the switch on, every request to the server skips the certificate check', async () => {
-    seedUser(USER, 'https://immich.test', 'key-1', 0, 1);
+    await seedUser(USER, 'https://immich.test', 'key-1', 0, 1);
 
     await exerciseEveryPath(USER);
 
@@ -940,8 +958,8 @@ describe('self-signed certificates', () => {
   it('IMMICH-TLS-004: a shared photo follows the switch of its owner, not of the viewer', async () => {
     // The request goes to the owner's server with the owner's key, so the
     // owner decided whether that server's certificate is trusted.
-    seedUser(USER, 'https://viewer.test', 'viewer-key', 0, 0);
-    seedUser(20, 'https://owner.test', 'owner-key', 0, 1);
+    await seedUser(USER, 'https://viewer.test', 'viewer-key', 0, 0);
+    await seedUser(20, 'https://owner.test', 'owner-key', 0, 1);
     safeFetch.mockResolvedValue(upstream({ json: { id: 'a1' } }));
 
     await svc.getAssetInfo(USER, 'a1', 20);
@@ -955,8 +973,8 @@ describe('self-signed certificates', () => {
     }
 
     safeFetch.mockClear();
-    seedUser(USER, 'https://viewer.test', 'viewer-key', 0, 1);
-    seedUser(20, 'https://owner.test', 'owner-key', 0, 0);
+    await seedUser(USER, 'https://viewer.test', 'viewer-key', 0, 1);
+    await seedUser(20, 'https://owner.test', 'owner-key', 0, 0);
     await svc.getAssetInfo(USER, 'a1', 20);
     expect(safeFetch.mock.calls[0][2]).toMatchObject(STRICT);
   });
@@ -974,19 +992,18 @@ describe('self-signed certificates', () => {
 
     await svc.saveImmichSettings(USER, 'https://immich.test', 'key-1', null, true);
     await svc.saveImmichSettings(USER, undefined, undefined, null, true);
-    const row = testDb.prepare('SELECT immich_url, immich_allow_insecure_tls FROM users WHERE id = ?').get(USER);
-    expect(row).toEqual({ immich_url: null, immich_allow_insecure_tls: 0 });
+    expect(await storedConnection(USER)).toEqual({ immich_url: null, immich_allow_insecure_tls: 0 });
   });
 
   it('IMMICH-TLS-010: the switch trusts one server, so a new URL saved without it starts off', async () => {
-    seedUser(USER, 'https://nas.local', 'key-1', 0, 1);
+    await seedUser(USER, 'https://nas.local', 'key-1', 0, 1);
 
     // Same server with a trailing slash: still the same connection, the switch stays.
     await svc.saveImmichSettings(USER, 'https://nas.local/', 'key-1', null);
     expect((await svc.getConnectionSettings(USER)).allow_insecure_tls).toBe(true);
 
     await svc.saveImmichSettings(USER, 'https://photos.example.com', 'key-2', null);
-    expect(testDb.prepare('SELECT immich_url, immich_allow_insecure_tls FROM users WHERE id = ?').get(USER)).toEqual({
+    expect(await storedConnection(USER)).toEqual({
       immich_url: 'https://photos.example.com', immich_allow_insecure_tls: 0,
     });
 
@@ -996,7 +1013,7 @@ describe('self-signed certificates', () => {
   });
 
   it('IMMICH-TLS-006: a URL the guard refuses leaves the stored switch alone', async () => {
-    seedUser(USER, 'https://immich.test', 'key-1', 0, 1);
+    await seedUser(USER, 'https://immich.test', 'key-1', 0, 1);
     checkSsrf.mockResolvedValue({ allowed: false, error: 'blocked host' });
 
     await svc.saveImmichSettings(USER, 'http://169.254.169.254', 'k', null, false);

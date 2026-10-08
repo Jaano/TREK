@@ -13,21 +13,8 @@ vi.mock('../../../src/db/database', async () => {
 
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-    return mock;
+  // Trip access reads through TripsRepository now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
 
@@ -44,7 +31,11 @@ import { createUser, createTrip, addTripMember } from '../../helpers/factories';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { TodoService } from '../../../src/nest/todo/todo.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
-import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, createTestTripMembersRepo } from '../../helpers/test-uow';
+import { createTestUnitOfWork, createTestAppSettingsRepo, createTestTripsRepo, createTestTripMembersRepo, sharedTestOrm } from '../../helpers/test-uow';
+import { countRows, findRows, updateRows } from '../../helpers/factories/rows';
+import { TodoItems } from '../../../src/db/entities/TodoItems.entity';
+import { TodoCategoryAssignees } from '../../../src/db/entities/TodoCategoryAssignees.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 import { createTestTodoItemsRepo, createTestTodoCategoryAssigneesRepo } from '../../helpers/todo-repos';
 
 let svc: TodoService;
@@ -250,7 +241,7 @@ describe('reorderItems', () => {
 
     await svc.reorderItems(trip.id, [c.id, a.id, b.id]);
 
-    const rows = testDb.prepare('SELECT id, sort_order FROM todo_items WHERE trip_id = ? ORDER BY sort_order').all(trip.id) as any[];
+    const rows = await findRows(await sharedTestOrm(testDb), TodoItems, { trip: trip.id }, { sort_order: 'asc' });
     expect(rows[0].id).toBe(c.id);
     expect(rows[1].id).toBe(a.id);
     expect(rows[2].id).toBe(b.id);
@@ -321,13 +312,13 @@ describe('getCategoryAssignees / updateCategoryAssignees', () => {
 
     expect(rows.map(r => r.user_id).sort()).toEqual([owner.id, member.id].sort());
     expect(JSON.stringify(rows)).not.toContain(stranger.username);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM todo_category_assignees WHERE user_id = ?').get(stranger.id)).toEqual({ n: 0 });
+    expect(await countRows(await sharedTestOrm(testDb), TodoCategoryAssignees, { user: stranger.id })).toBe(0);
   });
 
   it('TODO-SVC-017b: keeps a guest, who is a trip member like any other', async () => {
     const { user: owner } = createUser(testDb);
     const { user: guest } = createUser(testDb);
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(await sharedTestOrm(testDb), Users, { id: guest.id }, { is_guest: 1 });
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, guest.id);
 
@@ -368,6 +359,7 @@ describe('TodoItemsRepository / TodoCategoryAssigneesRepository — parity', () 
     await svc.createItem(trip.id, { name: 'Bare item' });
 
     const converted = await svc.listItems(trip.id);
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM todo_items WHERE trip_id = ? ORDER BY sort_order ASC, created_at ASC').all(trip.id);
     expect(converted).toEqual(legacy);
     expect(converted).toHaveLength(2);
@@ -382,6 +374,7 @@ describe('TodoItemsRepository / TodoCategoryAssigneesRepository — parity', () 
 
     const converted = await svc.updateCategoryAssignees(trip.id, 'Packing', [owner.id, stranger.id, member.id]);
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(`
       SELECT tca.user_id, u.username, u.avatar
       FROM todo_category_assignees tca
