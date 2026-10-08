@@ -7,7 +7,8 @@ import { MikroORM } from '@mikro-orm/core';
 import { readEnv } from '../../app-config';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import { withRequestContext } from '../database/request-context';
-import { logDebug, logError } from '../audit/audit-log.logger';
+import { UnitOfWork } from '../database/unit-of-work';
+import { logError } from '../audit/audit-log.logger';
 import { traceEntry, wasTraced } from '../audit/entry-trace.logger';
 import { SchedulerLeases } from '../../db/entities/SchedulerLeases.entity';
 
@@ -115,9 +116,10 @@ export class CronRegistrarService implements OnApplicationShutdown {
       }
       // Each tick is its own unit of work: one correlation id for every line
       // the job writes, and one line for the tick itself.
-      return traceEntry('cron', name, () => withRequestContext(orm, () => this.runLeased(orm, name, onTick)), {
+      await traceEntry('cron', name, () => withRequestContext(orm, () => this.runLeased(orm, name, onTick)), {
         failureLevel: 'error',
         failureMessage: failed,
+        skipped: (outcome) => (outcome === 'skipped' ? 'lease held by another process' : null),
       });
     };
     // waitForCompletion: a tick still running when the next one is due is not
@@ -150,13 +152,25 @@ export class CronRegistrarService implements OnApplicationShutdown {
    * and held for LEASE_SETTLE_MS afterwards, so a peer whose timer fires late
    * for the same tick does not run it again. A process that dies holding it
    * frees the job after LEASE_TTL_MS.
+   *
+   * Says whether the tick ran here, so the trace line names the process that
+   * did the work instead of reporting `ok` from both.
    */
-  private async runLeased(orm: Pick<MikroORM, 'em'>, name: string, onTick: () => void | Promise<void>): Promise<void> {
+  private async runLeased(
+    orm: Pick<MikroORM, 'em'>,
+    name: string,
+    onTick: () => void | Promise<void>,
+  ): Promise<'ran' | 'skipped'> {
     const leases = orm.em.getRepository(SchedulerLeases);
-    if (!(await leases.acquire(name, LEASE_OWNER, Date.now(), Date.now() + LEASE_TTL_MS))) {
-      logDebug(`Cron job "${name}" skipped: another process holds this tick`);
-      return;
-    }
+    // acquire() is two statements (make sure the row exists, then the
+    // conditional UPDATE that decides the race), so it runs as one unit of
+    // work like every other multi-statement write. A UnitOfWork over the ORM
+    // this tick already has, rather than an injected one: the partial e2e
+    // graphs build this service without the global OrmModule.
+    const acquired = await new UnitOfWork(orm.em).transactional(() =>
+      leases.acquire(name, LEASE_OWNER, Date.now(), Date.now() + LEASE_TTL_MS),
+    );
+    if (!acquired) return 'skipped';
     const leaseFailed = (err: unknown) =>
       logError(`Cron job "${name}": lease update failed: ${err instanceof Error ? err.message : String(err)}`);
     const heartbeat = setInterval(() => {
@@ -170,6 +184,7 @@ export class CronRegistrarService implements OnApplicationShutdown {
       // Never let the bookkeeping replace the tick's own error.
       await leases.extend(name, LEASE_OWNER, Date.now() + LEASE_SETTLE_MS).catch(leaseFailed);
     }
+    return 'ran';
   }
 
   /**

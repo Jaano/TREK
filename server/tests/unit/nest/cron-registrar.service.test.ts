@@ -43,9 +43,10 @@ vi.mock('cron', () => ({
 }));
 
 const logErrorMock = vi.hoisted(() => vi.fn());
+const logDebugMock = vi.hoisted(() => vi.fn());
 vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
   logInfo: vi.fn(),
-  logDebug: vi.fn(),
+  logDebug: logDebugMock,
   logError: logErrorMock,
   logWarn: vi.fn(),
 }));
@@ -62,6 +63,7 @@ import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { Users } from '../../../src/db/entities/Users.entity';
+import { SchedulerLeasesRepository } from '../../../src/db/repositories/SchedulerLeases.repository';
 import { currentCorrelation, type Correlation } from '../../../src/nest/common/request-correlation';
 
 function makeRegistrar(isTest: boolean) {
@@ -315,6 +317,52 @@ describe('CronRegistrarService', () => {
       await h.jobs[0].onTick();
       expect(ran).toBe(false);
       expect(holder(name)!.owner).toBe('other-host:1:peer');
+    });
+
+    it('CRONREG-021: a tick lost to another process is traced as skipped, and a tick run here as ok', async () => {
+      const name = 'lease-trace-line';
+      testDb
+        .prepare('INSERT INTO scheduler_leases (name, owner, expires_at) VALUES (?, ?, ?)')
+        .run(name, 'other-host:1:peer', Date.now() + 60_000);
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      registrar.register(name, '* * * * *', () => undefined);
+      logDebugMock.mockClear();
+      await h.jobs[0].onTick();
+      await vi.waitFor(() => expect(logDebugMock).toHaveBeenCalled());
+      const lines = () => logDebugMock.mock.calls.map((call) => String(call[0])).filter((line) => line.startsWith(`cron ${name} `));
+      expect(lines()).toHaveLength(1);
+      expect(lines()[0]).toMatch(new RegExp(`^cron ${name} skipped \\d+ms: lease held by another process$`));
+
+      testDb.prepare('UPDATE scheduler_leases SET expires_at = 1 WHERE name = ?').run(name);
+      logDebugMock.mockClear();
+      await h.jobs[0].onTick();
+      await vi.waitFor(() => expect(lines()).toHaveLength(1));
+      expect(lines()[0]).toMatch(new RegExp(`^cron ${name} ok \\d+ms$`));
+    });
+
+    it('CRONREG-022: the lease is taken inside one transaction', async () => {
+      const name = 'lease-in-a-transaction';
+      const original = SchedulerLeasesRepository.prototype.acquire;
+      const inTransaction: boolean[] = [];
+      const spy = vi
+        .spyOn(SchedulerLeasesRepository.prototype, 'acquire')
+        .mockImplementation(function (this: SchedulerLeasesRepository, ...args: Parameters<typeof original>) {
+          inTransaction.push(t.orm.em.getContext().isInTransaction());
+          return original.apply(this, args);
+        });
+      try {
+        const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+        let ran = false;
+        registrar.register(name, '* * * * *', () => {
+          ran = true;
+        });
+        await h.jobs[0].onTick();
+        expect(inTransaction).toEqual([true]);
+        expect(ran).toBe(true);
+        expect(holder(name)!.owner).toBe(LEASE_OWNER);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
     it('CRONREG-018: a lapsed lease is taken over, and held for the settle window after the tick', async () => {

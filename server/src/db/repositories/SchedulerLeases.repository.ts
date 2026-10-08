@@ -12,7 +12,8 @@ export class SchedulerLeasesRepository extends TrekRepository<SchedulerLeases> {
    * free at `now`. The decision is one conditional UPDATE, so of two
    * processes asking at the same moment exactly one gets a changed row; the
    * insert before it only makes sure there is a row to race on. True when
-   * `owner` holds the lease afterwards.
+   * `owner` holds the lease afterwards. Two statements, so the caller runs it
+   * inside `UnitOfWork.transactional` (CronRegistrarService does).
    */
   async acquire(name: string, owner: string, now: number, until: number): Promise<boolean> {
     await this.upsert(

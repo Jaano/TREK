@@ -15,6 +15,13 @@ export interface TraceOptions<T = unknown> {
    * failure, null when it is not. A failure found this way is logged at warn.
    */
   refusal?: (result: Awaited<T>) => string | null;
+  /**
+   * For entry points that may decline to do their work on purpose (a cron tick
+   * whose lease another process holds): the reason when `result` says the call
+   * did nothing, null when it ran. A skip is logged at debug, as `skipped`
+   * rather than `ok`, so the line says which process actually did the work.
+   */
+  skipped?: (result: Awaited<T>) => string | null;
 }
 
 function messageOf(error: unknown): string {
@@ -36,8 +43,8 @@ function isThenable(value: unknown): value is PromiseLike<unknown> {
 /**
  * Run one call of a non-HTTP entry point (an MCP tool, a WebSocket message, a
  * plugin RPC, a cron tick) under its own correlation id, and log one line for
- * it: at debug when it succeeds, mirroring the HTTP access log, and at warn
- * (or error) with the reason when it fails. Every line the call writes in
+ * it: at debug when it succeeds or skips its work on purpose, mirroring the
+ * HTTP access log, and at warn (or error) with the reason when it fails. Every line the call writes in
  * between carries the same id.
  *
  * The call's own result comes back untouched, a plain value as a plain value
@@ -57,8 +64,13 @@ export function traceEntry<T>(
 
   const succeeded = (value: Awaited<T>): void => {
     const refused = options.refusal?.(value) ?? null;
-    if (refused === null) logDebug(`${kind} ${label} ok ${elapsed()}`);
-    else logWarn(`${kind} ${label} refused ${elapsed()}: ${refused}`);
+    if (refused !== null) {
+      logWarn(`${kind} ${label} refused ${elapsed()}: ${refused}`);
+      return;
+    }
+    const skipped = options.skipped?.(value) ?? null;
+    if (skipped !== null) logDebug(`${kind} ${label} skipped ${elapsed()}: ${skipped}`);
+    else logDebug(`${kind} ${label} ok ${elapsed()}`);
   };
   const failed = (error: unknown): void => {
     const line = options.failureMessage?.(error) ?? `${kind} ${label} failed ${elapsed()}: ${messageOf(error)}`;

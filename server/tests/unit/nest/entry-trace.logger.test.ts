@@ -1,7 +1,7 @@
 /**
  * traceEntry (nest/audit/entry-trace.logger.ts): one correlation id and one
  * log line per call of a non-HTTP entry point, without changing what the call
- * returns or when it runs. TRACE-001 through TRACE-008.
+ * returns or when it runs. TRACE-001 through TRACE-009.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -101,5 +101,15 @@ describe('traceEntry', () => {
   it('TRACE-008: two calls never share an id', () => {
     const ids = [1, 2].map(() => traceEntry('ws', 'leave', () => currentCorrelation()?.id));
     expect(ids[0]).not.toBe(ids[1]);
+  });
+
+  it('TRACE-009: a call that skips its work on purpose is logged at debug as skipped, not ok', async () => {
+    const skipped = (outcome: string) => (outcome === 'skipped' ? 'lease held by another process' : null);
+    await traceEntry('cron', 'auto-backup', () => Promise.resolve('skipped'), { skipped });
+    await traceEntry('cron', 'auto-backup', () => Promise.resolve('ran'), { skipped });
+    await vi.waitFor(() => expect(log.logDebug).toHaveBeenCalledTimes(2));
+    expect(log.logDebug.mock.calls[0][0]).toMatch(/^cron auto-backup skipped \d+ms: lease held by another process$/);
+    expect(log.logDebug.mock.calls[1][0]).toMatch(/^cron auto-backup ok \d+ms$/);
+    expect(log.logWarn).not.toHaveBeenCalled();
   });
 });
