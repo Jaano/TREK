@@ -5,8 +5,11 @@
  * with the real JwtAuthGuard, the real cookie service and the real
  * renewal interceptor, then drives the flows a browser would: sign in on two
  * devices, list the sessions, end one, end the others, log out, change the
- * password. A token from before sessions were tracked (the harness's
- * `sessionCookie`, which carries no `jti`) must keep working throughout.
+ * password, reset it by email, turn two-factor off, delete the account, and
+ * run the nightly purge against the real table. A token from before sessions
+ * were tracked (the harness's `sessionCookie`, which carries no `jti`) must
+ * keep working throughout. The admin paths that end sessions boot the whole
+ * app and live in session-revocation.e2e.test.ts.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
@@ -14,6 +17,8 @@ import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
 import jwt from 'jsonwebtoken';
+import { authenticator } from 'otplib';
+import { MikroORM } from '@mikro-orm/core';
 import { sessionCookie } from './harness';
 
 vi.mock('../../src/db/database', async () => {
@@ -38,22 +43,30 @@ import { createUser } from '../helpers/factories';
 import { resetRateLimits } from '../helpers/test-db';
 import { AuthModule } from '../../src/nest/auth/auth.module';
 import { SessionsService } from '../../src/nest/sessions/sessions.service';
+import { SessionPurgeJob } from '../../src/nest/sessions/session-purge.job';
+import { withRequestContext } from '../../src/nest/database/request-context';
+import { encryptMfaSecret } from '../../src/nest/common/crypto/mfaCrypto';
+import { sessionRows } from '../helpers/sessions';
 import { SessionRenewalInterceptor } from '../../src/nest/auth/session-renewal.interceptor';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
 import { createTestMikroOrmModule } from '../helpers/test-orm';
 
+/** The reset mail the forgot-password route sends; the link in it carries the token. */
+const sendPasswordResetEmail = vi.fn().mockResolvedValue({ delivered: 'email' });
+
 describe('Sessions e2e (sign-in sessions that can be ended)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
+  let moduleRef: Awaited<ReturnType<ReturnType<typeof Test.createTestingModule>['compile']>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), AuthModule],
     })
       .overrideProvider(MailerService)
-      .useValue({ sendPasswordResetEmail: vi.fn().mockResolvedValue({ delivered: 'email' }) })
+      .useValue({ sendPasswordResetEmail })
       .compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
@@ -259,5 +272,85 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  }, 15000);
+
+  /** The rows of the user's sessions that still let a token in. */
+  const liveRows = (userId: number) => sessionRows(db as never, userId).filter((row) => row.revoked_at === null);
+
+  it('a password reset by email ends every session of the account', async () => {
+    const { user, password } = freshUser('sess-reset');
+    const laptop = await signIn(user.email, password, 'Laptop');
+    const phone = await signIn(user.email, password, 'Phone');
+    sendPasswordResetEmail.mockClear();
+
+    const forgot = await request(server).post('/api/auth/forgot-password').send({ email: user.email });
+    expect(forgot.status).toBe(200);
+    expect(sendPasswordResetEmail).toHaveBeenCalledTimes(1);
+    const link = sendPasswordResetEmail.mock.calls[0][1] as string;
+    const resetToken = decodeURIComponent(/[?&]token=([^&]+)/.exec(link)![1]);
+
+    const reset = await request(server).post('/api/auth/reset-password').send({ token: resetToken, new_password: 'Reset1234!x' });
+    expect(reset.status).toBe(200);
+    expect(reset.body).toEqual({ success: true });
+
+    expect((await me(laptop)).status).toBe(401);
+    expect((await me(phone)).status).toBe(401);
+    expect(sessionRows(db as never, user.id).map((row) => row.id).sort()).toEqual([sessionIdOf(laptop), sessionIdOf(phone)].sort());
+    expect(liveRows(user.id)).toEqual([]);
+    // The new password signs in again, as a new session.
+    const after = await signIn(user.email, 'Reset1234!x', 'Laptop');
+    expect((await me(after)).status).toBe(200);
+  }, 20000);
+
+  it('turning two-factor off ends every other session and keeps this one', async () => {
+    const { user, password } = freshUser('sess-mfa-off');
+    const here = await signIn(user.email, password, 'Here');
+    const there = await signIn(user.email, password, 'There');
+    // Two-factor turned on after both sign-ins, as the factory does it.
+    const secret = 'JBSWY3DPEHPK3PXP';
+    db.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ? WHERE id = ?').run(encryptMfaSecret(secret), user.id);
+
+    const off = await request(server)
+      .post('/api/auth/mfa/disable')
+      .set('Cookie', here)
+      .send({ password, code: authenticator.generate(secret) });
+    expect(off.status).toBe(200);
+    expect(off.body).toEqual({ success: true, mfa_enabled: false });
+
+    expect((await me(there)).status).toBe(401);
+    expect((await me(here)).status).toBe(200);
+    expect(liveRows(user.id).map((row) => row.id)).toEqual([sessionIdOf(here)]);
+  }, 15000);
+
+  it('deleting the account takes its sessions with it', async () => {
+    const { user, password } = freshUser('sess-delete');
+    const here = await signIn(user.email, password, 'Here');
+    const there = await signIn(user.email, password, 'There');
+    expect(sessionRows(db as never, user.id)).toHaveLength(2);
+
+    const res = await request(server).delete('/api/auth/me').set('Cookie', here);
+    expect(res.status).toBe(200);
+
+    expect(sessionRows(db as never, user.id)).toEqual([]);
+    expect((await me(here)).status).toBe(401);
+    expect((await me(there)).status).toBe(401);
+  }, 15000);
+
+  it('the nightly purge removes the ended and expired rows and leaves the live session working', async () => {
+    const { user, password } = freshUser('sess-purge');
+    const live = await signIn(user.email, password, 'Live');
+    const ended = await signIn(user.email, password, 'Ended');
+    expect((await request(server).delete(`/api/auth/sessions/${sessionIdOf(ended)}`).set('Cookie', live)).status).toBe(200);
+    db.prepare(
+      "INSERT INTO user_sessions (id, user_id, created_at, last_seen_at, expires_at) VALUES ('0b7c6f3e-2a51-4c8e-9d43-5f1e2b7a9c10', ?, '2020-01-01 00:00:00', '2020-01-01 00:00:00', '2020-01-02 00:00:00')",
+    ).run(user.id);
+    expect(sessionRows(db as never, user.id)).toHaveLength(3);
+
+    const job = moduleRef.get(SessionPurgeJob);
+    await withRequestContext(moduleRef.get(MikroORM), () => job.tick());
+
+    expect(sessionRows(db as never, user.id).map((row) => row.id)).toEqual([sessionIdOf(live)]);
+    expect((await me(live)).status).toBe(200);
+    expect((await me(ended)).status).toBe(401);
   }, 15000);
 });
