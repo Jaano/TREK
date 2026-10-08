@@ -108,12 +108,24 @@ export default defineConfig({
         'src/nest/feeds/**/*.ts': { statements: 91, branches: 83, functions: 83, lines: 91 },
         'src/nest/files/**/*.ts': { statements: 97, branches: 95, functions: 99, lines: 98 },
         'src/nest/geo/**/*.ts': { statements: 99, branches: 95, functions: 99, lines: 99 },
+        // google-quota, managed, mcp-shared, mcp-transport, public-api,
+        // receipt-scan, route-usage, scheduling, school-holidays, tokens and tours
+        // sat on the 80 catch-all until 2026-10-08. Each is pinned at
+        // floor(measured) - 1 over the unit, integration and e2e suites that load
+        // it, a subset a full run can only measure higher. managed holds an empty
+        // module and nothing to count. mcp-shared and route-usage measure below
+        // the 80 floor on branches and functions and are pinned where they are.
+        // tests/unit/coverage-thresholds.test.ts fails on a domain without an entry.
+        'src/nest/google-quota/**/*.ts': { statements: 99, branches: 99, functions: 99, lines: 99 },
         'src/nest/health/**/*.ts': { statements: 99, branches: 65, functions: 99, lines: 99 },
         'src/nest/help/**/*.ts': { statements: 81, branches: 70, functions: 99, lines: 86 },
         'src/nest/integrations/**/*.ts': { statements: 78, branches: 68, functions: 78, lines: 80 },
         'src/nest/journey/**/*.ts': { statements: 91, branches: 84, functions: 88, lines: 93 },
         'src/nest/llm-parse/**/*.ts': { statements: 91, branches: 85, functions: 85, lines: 94 },
+        'src/nest/managed/**/*.ts': { statements: 100, branches: 100, functions: 100, lines: 100 },
         'src/nest/maps/**/*.ts': { statements: 93, branches: 86, functions: 97, lines: 96 },
+        'src/nest/mcp-shared/**/*.ts': { statements: 84, branches: 59, functions: 99, lines: 88 },
+        'src/nest/mcp-transport/**/*.ts': { statements: 89, branches: 79, functions: 87, lines: 90 },
         'src/nest/memories/**/*.ts': { statements: 92, branches: 83, functions: 97, lines: 94 },
         'src/nest/notifications/**/*.ts': { statements: 83, branches: 72, functions: 85, lines: 87 },
         'src/nest/oauth/**/*.ts': { statements: 96, branches: 95, functions: 97, lines: 97 },
@@ -137,8 +149,10 @@ export default defineConfig({
         'src/nest/places/**/*.ts': { statements: 91, branches: 82, functions: 96, lines: 94 },
         'src/nest/platform/**/*.ts': { statements: 99, branches: 99, functions: 99, lines: 99 },
         'src/nest/plugins/**/*.ts': { statements: 86, branches: 81, functions: 78, lines: 89 },
+        'src/nest/public-api/**/*.ts': { statements: 97, branches: 86, functions: 99, lines: 99 },
         'src/nest/query-helpers/**/*.ts': { statements: 90, branches: 75, functions: 99, lines: 92 },
         'src/nest/realtime/**/*.ts': { statements: 99, branches: 100, functions: 99, lines: 99 },
+        'src/nest/receipt-scan/**/*.ts': { statements: 99, branches: 99, functions: 99, lines: 99 },
         'src/nest/reservation-import/**/*.ts': { statements: 61, branches: 55, functions: 41, lines: 61 },
         'src/nest/reservations/**/*.ts': { statements: 92, branches: 83, functions: 96, lines: 96 },
         // New domain in this change. Measured over its own suites at
@@ -149,12 +163,17 @@ export default defineConfig({
         // hiding in the 80 catch-all, where 557 new lines could shed twenty
         // points against the headroom of the domains beside them.
         'src/nest/roadtrip/**/*.ts': { statements: 88, branches: 80, functions: 95, lines: 95 },
+        'src/nest/route-usage/**/*.ts': { statements: 84, branches: 66, functions: 77, lines: 83 },
+        'src/nest/scheduling/**/*.ts': { statements: 99, branches: 92, functions: 99, lines: 99 },
+        'src/nest/school-holidays/**/*.ts': { statements: 97, branches: 95, functions: 99, lines: 97 },
         'src/nest/settings/**/*.ts': { statements: 87, branches: 71, functions: 99, lines: 88 },
         'src/nest/share/**/*.ts': { statements: 97, branches: 87, functions: 99, lines: 99 },
         'src/nest/storage/**/*.ts': { statements: 94, branches: 84, functions: 97, lines: 94 },
         'src/nest/system-notices/**/*.ts': { statements: 99, branches: 99, functions: 99, lines: 99 },
         'src/nest/tags/**/*.ts': { statements: 97, branches: 89, functions: 99, lines: 99 },
         'src/nest/todo/**/*.ts': { statements: 90, branches: 82, functions: 99, lines: 99 },
+        'src/nest/tokens/**/*.ts': { statements: 99, branches: 97, functions: 99, lines: 99 },
+        'src/nest/tours/**/*.ts': { statements: 95, branches: 92, functions: 99, lines: 97 },
         'src/nest/transit/**/*.ts': { statements: 92, branches: 83, functions: 97, lines: 94 },
         'src/nest/trip-invite/**/*.ts': { statements: 91, branches: 93, functions: 93, lines: 89 },
         'src/nest/trip-membership/**/*.ts': { statements: 99, branches: 86, functions: 99, lines: 99 },
