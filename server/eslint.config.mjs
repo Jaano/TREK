@@ -348,6 +348,9 @@ export default tseslint.config(
     // documented escape hatch for the demo seed data, and every seeder but
     // DatabaseSeeder writes its rows as SQL text (four of them with the
     // SQLite-only INSERT OR IGNORE). A new seeder starts on the query builder.
+    // tests/unit/eslint-rules/restricted-syntax-selectors.test.ts pins how many
+    // SQL strings each of them holds, so new SQL text in an exempt file fails
+    // there, and a file with none left has to leave this list.
     files: ['src/db/repositories/**/*.ts', 'src/db/seeders/**/*.ts'],
     ignores: [
       'src/db/repositories/MaintenanceRepository.ts',

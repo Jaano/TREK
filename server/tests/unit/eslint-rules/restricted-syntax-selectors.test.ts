@@ -1,6 +1,7 @@
 import tsParser from '@typescript-eslint/parser';
 
 import { ESLint, Linter } from 'eslint';
+import fs from 'fs';
 import path from 'path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -134,21 +135,57 @@ declare const repo: { run(sql: string, params?: unknown[]): Promise<unknown>; ge
     expect(found.some((m) => m.startsWith('Dialect SQL goes through'))).toBe(true);
   });
 
-  it('leaves the named adapters alone, and only them', async () => {
-    for (const file of [
-      'src/db/repositories/MaintenanceRepository.ts',
-      'src/db/repositories/DemoRepository.ts',
-      'src/db/seeders/AddonSeeder.ts',
-      'src/db/seeders/AdminSeeder.ts',
-      'src/db/seeders/CategorySeeder.ts',
-      'src/db/seeders/DocumentProviderSeeder.ts',
-      'src/db/seeders/PhotoProviderSeeder.ts',
-      'src/db/seeders/SchemaVersionSeeder.ts',
-    ]) {
+  // The files eslint.config.mjs exempts from the SQL string rule, with the SQL
+  // strings each holds today. A count may only go down: a higher one is new SQL
+  // text slipping in under the exemption, a lower one means the pin (and at 0
+  // the ignores entry) has to follow.
+  const EXEMPT_SQL_STRINGS: Record<string, number> = {
+    'src/db/repositories/MaintenanceRepository.ts': 4,
+    'src/db/repositories/DemoRepository.ts': 9,
+    'src/db/seeders/AddonSeeder.ts': 1,
+    'src/db/seeders/AdminSeeder.ts': 2,
+    'src/db/seeders/CategorySeeder.ts': 2,
+    'src/db/seeders/DocumentProviderSeeder.ts': 2,
+    'src/db/seeders/PhotoProviderSeeder.ts': 2,
+    'src/db/seeders/SchemaVersionSeeder.ts': 1,
+  };
+  const SQL_MESSAGE_PREFIX = 'A SQL string handed to the connection';
+
+  function filesUnder(dir: string): string[] {
+    return fs
+      .readdirSync(path.join(serverRoot, dir), { recursive: true, encoding: 'utf8' })
+      .filter((name) => name.endsWith('.ts'))
+      .map((name) => `${dir}/${name.split(path.sep).join('/')}`);
+  }
+
+  it('exempts exactly the pinned files and keeps the rest of the guard on them', async () => {
+    const exempt: string[] = [];
+    for (const file of [...filesUnder('src/db/repositories'), ...filesUnder('src/db/seeders')]) {
+      const options = (await selectorsFor(file)) as { message?: string }[];
+      if (!options.some((o) => o.message?.startsWith(SQL_MESSAGE_PREFIX))) exempt.push(file);
+    }
+    expect(exempt.sort()).toEqual(Object.keys(EXEMPT_SQL_STRINGS).sort());
+    for (const file of exempt) {
       const options = await selectorsFor(file);
       expect(hits(options, "void connection.execute('PRAGMA wal_checkpoint(TRUNCATE)');"), file).toEqual([]);
-      // The rest of the guard still applies to them.
-      expect(messages(options, `${PRELUDE}\nvoid safeFetch(url);`), file).toContain(TIMEOUT);
+      expect(messages(options, `${PRELUDE}
+void safeFetch(url);`), file).toContain(TIMEOUT);
+    }
+  });
+
+  it('holds each exempt file to the SQL strings it has today', async () => {
+    // The selectors of a file the rule does apply to, run over the exempt file's source.
+    const options = await selectorsFor('src/db/repositories/Probe.repository.ts');
+    const counts: Record<string, number> = {};
+    for (const file of Object.keys(EXEMPT_SQL_STRINGS)) {
+      const source = fs.readFileSync(path.join(serverRoot, file), 'utf8');
+      counts[file] = messages(options, source).filter((m) => m.startsWith(SQL_MESSAGE_PREFIX)).length;
+    }
+    expect(counts, 'new SQL text in an exempt file fails; after removing some, lower its pin').toEqual(
+      EXEMPT_SQL_STRINGS,
+    );
+    for (const [file, n] of Object.entries(counts)) {
+      expect(n, `${file} holds no SQL string any more: drop it from the ignores in eslint.config.mjs`).toBeGreaterThan(0);
     }
   });
 
