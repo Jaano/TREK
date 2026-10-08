@@ -1,3 +1,6 @@
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   countMap,
@@ -78,5 +81,21 @@ describe('scripts/lib/ratchet', () => {
 
   it('RATCHET-008: a file list only loses the files that stopped offending', () => {
     expect(lowerList(['a', 'b', 'c'], ['c', 'a', 'new'])).toEqual(['a', 'c']);
+  });
+
+  it('RATCHET-009: a command exits with what its check returns, and 1 when the check itself fails', () => {
+    const lib = pathToFileURL(resolve('scripts/lib/ratchet.mjs')).href;
+    const command = (body: string) =>
+      spawnSync(
+        process.execPath,
+        ['--input-type=module', '-e', `import { runCli, RatchetError } from '${lib}'; await runCli('lint:x', ${body})`],
+        { encoding: 'utf8' }
+      );
+    expect(command('() => 0').status).toBe(0);
+    expect(command('async () => 1').status).toBe(1);
+    const broken = command("() => { throw new RatchetError('baseline gone') }");
+    expect(broken.status).toBe(1);
+    expect(broken.stderr).toContain('FAIL  lint:x: baseline gone');
+    expect(command("() => { throw new Error('bug') }").status).not.toBe(0);
   });
 });
