@@ -7,7 +7,7 @@
  * src/nest/storage/storage.module.ts), and every new reach into another
  * domain's internals is one more place a split has to untangle later. Both
  * were held only by review. This walks every .ts file under src/ with the
- * TypeScript parser and checks four rules against scripts/import-boundaries-baseline.json:
+ * TypeScript parser and checks five rules against scripts/import-boundaries-baseline.json:
  *
  *   fileCycles      a runtime import edge between two files that sit on the
  *                   same cycle. Type-only imports and lazy ones (import(),
