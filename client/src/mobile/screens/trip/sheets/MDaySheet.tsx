@@ -14,7 +14,7 @@ import { RES_ICONS, getNoteIcon } from '../../../../components/Planner/DayPlanSi
 import { getDayBookendHotels, isDayInAccommodationRange } from '../../../../utils/dayOrder'
 import { getTransportForDay, hasCarrierEndpointOnDay } from '../../../../utils/dayMerge'
 import { splitReservationDateTime } from '../../../../utils/formatters'
-import { dayCoMapsUrl, dayGoogleMapsUrl, optimizeDayOrder } from '../lib/dayRoute'
+import { dayCoMapsUrl, dayGoogleMapsUrl, optimizeDayOrder } from '../../../../components/Planner/dayRoute'
 import GoogleMapsIcon from '../../../../components/shared/GoogleMapsIcon'
 import { BlurredCode } from '../../../../components/shared/BookingCode'
 import { splitNoteTime } from '../lib/dayNotes'

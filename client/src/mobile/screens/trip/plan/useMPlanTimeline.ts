@@ -6,7 +6,7 @@ import { useRouteModeOptions } from '../../../../components/Planner/routeModes'
 import { getDayBookendHotels } from '../../../../utils/dayOrder'
 import { dayWeatherAnchor } from '../../../../utils/dayWeather'
 import { getDisplayTimeForDay, getMergedItems, getTransportForDay, hasCarrierEndpointOnDay, isCarrierTransport } from '../../../../utils/dayMerge'
-import { dayCoMapsUrl, dayExportStops, dayGoogleMapsUrl, optimizeDayOrder, type DayCarrier } from '../lib/dayRoute'
+import { dayCoMapsUrl, dayExportStops, dayGoogleMapsUrl, optimizeDayOrder, type DayCarrier } from '../../../../components/Planner/dayRoute'
 import { buildTransitLeg, buildTransitNameIndex, type TransitLeg } from '../../../../components/Planner/transitLeg'
 import {
   buildPlanRows, breaksChronology, findUpNext, hotelChipsForDay, hotelLegsForDay, itemHasTime,

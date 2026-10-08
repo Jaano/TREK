@@ -11,7 +11,7 @@ import { ChevronDown, ChevronRight, ChevronUp, Compass, RotateCcw, ExternalLink,
 import { type PickedPlace } from './TransitSearchPanel'
 import { buildTransitLeg, buildTransitNameIndex } from './transitLeg'
 import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
-import { calculateRouteWithLegs, optimizeRoute, generateGoogleMapsUrl, generateCoMapsUrl, type NamedWaypoint } from '../Map/RouteCalculator'
+import { calculateRouteWithLegs, optimizeRoute, generateGoogleMapsUrl, generateCoMapsUrl } from '../Map/RouteCalculator'
 import GoogleMapsIcon from '../shared/GoogleMapsIcon'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import ConfirmDialog from '../shared/ConfirmDialog'
@@ -61,6 +61,7 @@ import { findTodayDayId } from './today'
 import { markdownLinkComponents } from '../shared/markdownLink'
 import { RouteConnector, HotelRouteConnector } from './DayPlanSidebarRouteConnector'
 import { resolveLegMode } from './legMode'
+import { dayExportStops, fillAroundLocked } from './dayRoute'
 import { projectDayItinerary } from '../Map/dayTourProjection'
 import { usePluginDaySchedule, usePluginDayTints, dayTintBackground, dayTinted, PluginDayScheduleRow, formatScheduleMinutes } from '../Plugins/PluginDaySchedule'
 import { MobileAddPlaceButton } from './DayPlanSidebarMobileAddPlaceButton'
@@ -1161,12 +1162,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     const optimizedQueue = [...optimizedAssignments, ...unlockedNoCoords]
 
     // Merge: locked stay at their index, fill gaps with optimized
-    const result = new Array(da.length)
-    locked.forEach((a, i) => { result[i] = a })
-    let qi = 0
-    for (let i = 0; i < result.length; i++) {
-      if (!result[i]) result[i] = optimizedQueue[qi++]
-    }
+    const result = fillAroundLocked(da.length, locked, optimizedQueue)
 
     await onReorder(dayId, result.map(a => a.id))
     const usedHotel = !!(anchors.start || anchors.end)
@@ -1753,39 +1749,17 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
             (dayCarriers.length === 0 || dayHasLocatedCarrier)
           )
           const routeToolsRoutable = da.length >= 2 || (loc != null && hasRouteBookend) || hasHotelTransfer
-          /**
-           * The day's located stops in planned order, bookended by the accommodation
-           * the same way the drawn map route is (routeBookends is null when "optimize
-           * from accommodation" is off), so hotels aren't dropped from an exported
-           * route (#1372) — but only when the leg is real: no hotel prepended before an
-           * early check-in-day stop, none appended after a post-check-out stop (#1465).
-           * Names ride along for the deep links that can label a pin with one.
-           */
-          const dayExportStops = (): NamedWaypoint[] => {
-            const dayStops = getDayAssignments(day.id).filter(a => a.place?.lat != null && a.place?.lng != null)
-            // A flight, train, ferry or coach on a day without stops is the move itself,
-            // located or not: the hotels at either end are joined by it, not by a road
-            // worth handing to a map app (#2476).
-            if (dayStops.length === 0 && dayCarriers.length > 0) return []
-            const stops = dayStops.map(a => ({ lat: a.place!.lat!, lng: a.place!.lng!, name: a.place!.name }))
-            const first = dayStops[0] ? { isPlace: true, time: dayStops[0].place?.place_time ?? null, lat: dayStops[0].place!.lat!, lng: dayStops[0].place!.lng! } : undefined
-            const lastAssignment = dayStops[dayStops.length - 1]
-            const last = lastAssignment ? { isPlace: true, time: lastAssignment.place?.place_time ?? null, lat: lastAssignment.place!.lat!, lng: lastAssignment.place!.lng! } : undefined
-            // Same carrier gate as the drawn route (#2157): the exported link must not
-            // start at a hotel you only reach tonight or lead back to one you left.
-            const drawMorning = !!routeBookends && shouldDrawMorningLeg(routeBookends, day, first, dayHasLocatedCarrier)
-            const drawEvening = !!routeBookends && shouldDrawEveningLeg(routeBookends, day, last, dayHasLocatedCarrier)
-            const morning = drawMorning && routeBookends?.morning?.place_lat != null && routeBookends?.morning?.place_lng != null
-              ? { lat: routeBookends.morning.place_lat, lng: routeBookends.morning.place_lng, name: routeBookends.morning.place_name } : null
-            const evening = drawEvening && routeBookends?.evening?.place_lat != null && routeBookends?.evening?.place_lng != null
-              ? { lat: routeBookends.evening.place_lat, lng: routeBookends.evening.place_lng, name: routeBookends.evening.place_name } : null
-            return [...(morning ? [morning] : []), ...stops, ...(evening ? [evening] : [])]
-          }
           const showRouteTools = (isSelected || (showRouteToolsWhenExpanded && isExpanded)) && routeToolsRoutable
-          // Built once, for the day the tools show on. With no stop to hand over the
-          // hand-offs would open nothing, so they are left out; a single stop still
-          // opens as a pin (#2476).
-          const exportStops = showRouteTools ? dayExportStops() : []
+          // Built once, for the day the tools show on: the day's located stops in planned
+          // order, bookended the way the drawn route is (#1372, #1465), with the same
+          // carrier gate (#2157). With no stop to hand over the hand-offs would open
+          // nothing, so they are left out; a single stop still opens as a pin (#2476).
+          const exportStops = showRouteTools
+            ? dayExportStops(day, days, getDayAssignments(day.id), accommodations, optimizeFromAccommodation !== false, {
+                located: dayHasLocatedCarrier,
+                booked: dayCarriers.length > 0,
+              })
+            : []
           // Is this day's inline route currently on? Mobile toggles it per day (its
           // own expandedRouteDayIds entry); desktop uses the global Route toggle on
           // the selected day (#1374).
