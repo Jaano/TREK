@@ -44,6 +44,12 @@ export const NOTE_ICONS = [
 const NOTE_ICON_MAP = Object.fromEntries(NOTE_ICONS.map(({ id, Icon }) => [id, Icon]))
 export function getNoteIcon(iconId) { return NOTE_ICON_MAP[iconId] || FileText }
 
+/** The most a day note's detail line may hold, in the desktop dialog and the phone sheet alike. */
+export const DAY_NOTE_DETAIL_MAX = 2000
+
+/** Whether a detail line is close enough to the limit for the counter to warn. */
+export const dayNoteNearLimit = (length: number): boolean => length >= DAY_NOTE_DETAIL_MAX - 100
+
 export const TYPE_ICONS = {
   flight: '✈️', hotel: '🏨', restaurant: '🍽️', train: '🚆',
   car: '🚗', cruise: '🚢', bus: '🚌', ferry: '⛴️', cable_car: '🚡', bicycle: '🚲', taxi: '🚕',

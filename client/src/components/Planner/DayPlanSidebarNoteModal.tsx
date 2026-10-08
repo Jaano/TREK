@@ -2,7 +2,7 @@ import { useId, useRef } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
-import { NOTE_ICONS, getNoteIcon } from './DayPlanSidebar.constants'
+import { DAY_NOTE_DETAIL_MAX, NOTE_ICONS, dayNoteNearLimit, getNoteIcon } from './DayPlanSidebar.constants'
 import NoteFormatToolbar from '../shared/NoteFormatToolbar'
 import NoteColorPicker from '../shared/NoteColorPicker'
 import { noteSurface } from './noteSurface'
@@ -41,8 +41,6 @@ interface DayPlanSidebarNoteModalProps {
 }
 
 type NoteDialogProps = Omit<DayPlanSidebarNoteModalProps, 'noteUi' | 'noteInputRef'> & { dayId: string; ui: NoteModalUi | undefined }
-
-const BODY_MAX = 2000
 
 /**
  * Add/edit dialog for a day note (#1629), one per day whose note is open.
@@ -166,7 +164,7 @@ function OpenNoteDialog({ dayId, ui, setNoteUi, cancelNote, saveNote, onRequestD
               id={bodyId}
               ref={bodyRef}
               value={ui.time}
-              maxLength={BODY_MAX}
+              maxLength={DAY_NOTE_DETAIL_MAX}
               rows={6}
               onChange={e => patch({ time: e.target.value })}
               placeholder={t('notes.bodyPlaceholder')}
@@ -174,7 +172,7 @@ function OpenNoteDialog({ dayId, ui, setNoteUi, cancelNote, saveNote, onRequestD
             />
             <div className="mt-1 flex justify-between gap-2" style={fs(10.5)}>
               <span className="text-content-faint">{t('notes.markdownHint')}</span>
-              <span className={`tabular-nums ${bodyLen >= BODY_MAX - 100 ? 'text-warning' : 'text-content-faint'}`}>{bodyLen}/{BODY_MAX}</span>
+              <span className={`tabular-nums ${dayNoteNearLimit(bodyLen) ? 'text-warning' : 'text-content-faint'}`}>{bodyLen}/{DAY_NOTE_DETAIL_MAX}</span>
             </div>
           </div>
 
