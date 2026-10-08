@@ -196,7 +196,13 @@ function initialDbName(): string {
   }
 }
 
-class TrekOfflineDb extends Dexie {
+/**
+ * Exported for the upgrade tests (tests/unit/db/offlineDb.upgrade.test.ts),
+ * which open an older schema and upgrade it with this class. Every new
+ * version() needs a case there; a guard in that file fails without one.
+ * App code goes through `offlineDb`.
+ */
+export class TrekOfflineDb extends Dexie {
   roadtripPreferences!: Table<{ tripId: number; preferences: RoadtripPreferences }, number>;
   trips!: Table<Trip, number>;
   days!: Table<Day, number>;
