@@ -5,11 +5,7 @@ import { UnitOfWork } from '../database/unit-of-work';
 import { logError } from '../audit/audit-log.logger';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
-import {
-  getPermissionsCache,
-  setPermissionsCache,
-  invalidatePermissionsCache as invalidateSharedCache,
-} from './permissions-cache';
+import { PermissionsCacheStore, processPermissionsCache } from './permissions-cache';
 
 /**
  * Permission levels (hierarchical, higher includes lower):
@@ -67,24 +63,23 @@ export const PERMISSION_ACTIONS: PermissionAction[] = [
 
 const ACTIONS_MAP = new Map(PERMISSION_ACTIONS.map(a => [a.key, a]));
 
-// The in-memory cache is deliberately MODULE-scoped, not instance state, and
-// lives in ./permissions-cache: the container's PermissionsService singleton
-// is not the only reader — the backup restore path (backup.impl.ts) is plain
-// functions, no DI, and must flush the same cache the request path reads.
-// Both reach the same shared connection, so a single cache is also the
-// correct data shape. (permissions.bridge, once a second out-of-container
-// instance, was replaced by injection — see auth.service.ts:116 — and no
-// longer exists.)
+// The cache is a PermissionsCacheStore (./permissions-cache), injected so a
+// store shared between processes can be plugged in later. PermissionsModule
+// provides the process-wide instance, which a hand-built service defaults to
+// as well: the backup restore path (backup.impl.ts) is plain functions, no
+// DI, and must flush the same cache the request path reads.
+
 
 @Injectable()
 export class PermissionsService {
   constructor(
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
     private readonly uow: UnitOfWork,
+    private readonly cacheStore: PermissionsCacheStore = processPermissionsCache,
   ) {}
 
   private async loadPermissions(): Promise<Map<string, PermissionLevel>> {
-    const cached = getPermissionsCache();
+    const cached = this.cacheStore.get();
     if (cached) return cached;
     const cache = new Map<string, PermissionLevel>();
     try {
@@ -136,11 +131,11 @@ export class PermissionsService {
       return cache;
     }
     // Only a completed read becomes the shared cache.
-    return setPermissionsCache(cache);
+    return this.cacheStore.set(cache);
   }
 
   invalidatePermissionsCache(): void {
-    invalidateSharedCache();
+    this.cacheStore.invalidate();
   }
 
   async getPermissionLevel(actionKey: string): Promise<PermissionLevel> {

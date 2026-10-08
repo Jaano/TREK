@@ -60,7 +60,12 @@ import { AuditService } from '../../../src/nest/audit/audit.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import { getMcpSafeUrl } from '../../../src/app-config';
 import { ADDON_IDS } from '../../../src/addons';
-import { MAX_PENDING_CODES, sweepPendingCodes } from '../../../src/nest/oauth/oauth.pending-codes';
+import {
+  MAX_PENDING_CODES,
+  PendingCodeStore,
+  processPendingCodes,
+  sweepPendingCodes,
+} from '../../../src/nest/oauth/oauth.pending-codes';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import type { AuditLogRepository } from '../../../src/db/repositories/AuditLog.repository';
@@ -1323,7 +1328,13 @@ describe('OauthModule', () => {
     expect(controllers).toEqual([OauthPublicController, OauthApiController]);
     // RateLimitService is deliberately absent: it comes from the global
     // RateLimitModule so all consumers share one set of counters.
-    expect(providers).toEqual([Svc, TrekClientsStore, TrekOAuthProvider, OauthTokenRetentionJob]);
+    expect(providers).toEqual([
+      Svc,
+      TrekClientsStore,
+      TrekOAuthProvider,
+      OauthTokenRetentionJob,
+      { provide: PendingCodeStore, useValue: processPendingCodes },
+    ]);
   });
 });
 

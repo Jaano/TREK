@@ -6,13 +6,14 @@
  */
 import { describe, it, expect } from 'vitest';
 import { RateLimitService } from '../../../src/nest/common/rate-limit.service';
+import { InMemoryRateLimitStore } from '../../../src/nest/common/rate-limit.store';
 
 const WINDOW = 15 * 60 * 1000;
 
-/** The private bucket map, which is the only place the housekeeping is visible. */
+/** The in-memory store's bucket size, which is the only place the housekeeping is visible. */
 function bucketSize(service: RateLimitService, bucket: string): number {
-  const buckets = (service as unknown as { buckets: Map<string, Map<string, unknown>> }).buckets;
-  return buckets.get(bucket)?.size ?? 0;
+  const store = (service as unknown as { store: InMemoryRateLimitStore }).store;
+  return store.size(bucket);
 }
 
 describe('RateLimitService', () => {

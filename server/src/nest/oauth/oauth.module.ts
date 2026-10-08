@@ -18,6 +18,7 @@ import { OauthClients } from '../../db/entities/OauthClients.entity';
 import { OauthTokens } from '../../db/entities/OauthTokens.entity';
 import { OauthConsents } from '../../db/entities/OauthConsents.entity';
 import { Users } from '../../db/entities/Users.entity';
+import { PendingCodeStore, processPendingCodes } from './oauth.pending-codes';
 
 /**
  * OAuth 2.1 server (MCP). Public token/userinfo/revoke endpoints + the SPA's
@@ -36,9 +37,10 @@ import { Users } from '../../db/entities/Users.entity';
  * body now parse with qs (extended:true) rather than querystring — the SDK
  * zod-rejects such bodies either way.
  *
- * Pending authorization codes live module-scoped in oauth.pending-codes.ts:
- * the consent controller (container singleton) writes them, the SDK exchange
- * path reads them back through the same injected singleton.
+ * Pending authorization codes live behind the PendingCodeStore port
+ * (oauth.pending-codes.ts), provided here as the process-wide in-memory
+ * instance: the consent controller (container singleton) writes them, the
+ * SDK exchange path reads them back through the same injected singleton.
  *
  * Exports OauthService for AdminController (admin OAuth-session panel) and the
  * MCP transport's token verification.
@@ -56,7 +58,13 @@ import { Users } from '../../db/entities/Users.entity';
 @Module({
   imports: [RateLimitModule, AuditModule, AddonsModule, SchedulingModule, MikroOrmModule.forFeature([OauthClients, OauthTokens, OauthConsents, Users])],
   controllers: [OauthPublicController, OauthApiController],
-  providers: [OauthService, TrekClientsStore, TrekOAuthProvider, OauthTokenRetentionJob],
+  providers: [
+    OauthService,
+    TrekClientsStore,
+    TrekOAuthProvider,
+    OauthTokenRetentionJob,
+    { provide: PendingCodeStore, useValue: processPendingCodes },
+  ],
   exports: [OauthService],
 })
 export class OauthModule implements NestModule {

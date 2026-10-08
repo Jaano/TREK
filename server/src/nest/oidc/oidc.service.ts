@@ -21,6 +21,7 @@ import { InviteTokens } from '../../db/entities/InviteTokens.entity';
 import type { InviteTokensRepository, InviteTokenRow } from '../../db/repositories/InviteTokens.repository';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
+import { InMemoryOidcFlowStore, OidcFlowStore } from './oidc-flow.store';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -220,21 +221,9 @@ function toClientUser(row: UserRow): User {
  */
 @Injectable()
 export class OidcService implements OnModuleDestroy {
-  // -------------------------------------------------------------------------
-  // State management – pending OIDC states
-  // -------------------------------------------------------------------------
-
-  private readonly pendingStates = new Map<string, { createdAt: number; redirectUri: string; inviteToken?: string; codeVerifier: string; remember?: boolean }>();
-
-  // -------------------------------------------------------------------------
-  // Auth code management – short-lived codes exchanged for JWT
-  // -------------------------------------------------------------------------
-
-  // `bindingHash` is the sha256 of a secret that only the browser which finished
-  // the callback holds, in a cookie. The code itself travels in a URL — through
-  // history, referrers and any log in between — so on its own it is not a
-  // credential, and /exchange must not accept it as one.
-  private readonly authCodes = new Map<string, { token: string; created: number; remember?: boolean; bindingHash: string }>();
+  // The pending login states and the one-time login codes live in the injected
+  // OidcFlowStore (oidc-flow.store.ts): in memory today, swappable for a store
+  // shared between processes.
 
   // Discovery document cache (1 h TTL), keyed by discovery URL so two
   // configured issuers no longer thrash a single slot.
@@ -256,19 +245,10 @@ export class OidcService implements OnModuleDestroy {
     @InjectRepository(Users) private readonly usersRepo: UsersRepository,
     @InjectRepository(InviteTokens) private readonly inviteTokens: InviteTokensRepository,
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+    private readonly flows: OidcFlowStore = new InMemoryOidcFlowStore(),
   ) {
-    this.stateSweeper = setInterval(() => {
-      const now = Date.now();
-      for (const [state, data] of this.pendingStates) {
-        if (now - data.createdAt > STATE_TTL) this.pendingStates.delete(state);
-      }
-    }, STATE_CLEANUP);
-    this.codeSweeper = setInterval(() => {
-      const now = Date.now();
-      for (const [code, entry] of this.authCodes) {
-        if (now - entry.created > AUTH_CODE_TTL) this.authCodes.delete(code);
-      }
-    }, AUTH_CODE_CLEANUP);
+    this.stateSweeper = setInterval(() => this.flows.sweepStates(Date.now(), STATE_TTL), STATE_CLEANUP);
+    this.codeSweeper = setInterval(() => this.flows.sweepCodes(Date.now(), AUTH_CODE_TTL), AUTH_CODE_CLEANUP);
   }
 
   onModuleDestroy(): void {
@@ -283,21 +263,18 @@ export class OidcService implements OnModuleDestroy {
   setAuthCookie(res: Response, token: string, req: Request, remember?: RememberOption) { setAuthCookie(res, token, req, remember); }
 
   // Creates the login state and a matching PKCE pair. The verifier stays server
-  // side (in pendingStates); the S256 challenge goes to the provider so PKCE-
+  // side (in the flow store); the S256 challenge goes to the provider so PKCE-
   // required setups (e.g. Pocket ID with PKCE = required) work.
   createState(redirectUri: string, inviteToken?: string, remember?: boolean): { state: string; codeChallenge: string } {
     const state = crypto.randomBytes(32).toString('hex');
     const codeVerifier = base64url(crypto.randomBytes(32));
     const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
-    this.pendingStates.set(state, { createdAt: Date.now(), redirectUri, inviteToken, codeVerifier, remember });
+    this.flows.putState(state, { createdAt: Date.now(), redirectUri, inviteToken, codeVerifier, remember });
     return { state, codeChallenge };
   }
 
   consumeState(state: string) {
-    const pending = this.pendingStates.get(state);
-    if (!pending) return null;
-    this.pendingStates.delete(state);
-    return pending;
+    return this.flows.takeState(state);
   }
 
   /**
@@ -310,17 +287,16 @@ export class OidcService implements OnModuleDestroy {
   createAuthCode(token: string, remember?: boolean): { code: string; binding: string } {
     const authCode: string = uuidv4();
     const binding = crypto.randomBytes(32).toString('base64url');
-    this.authCodes.set(authCode, { token, created: Date.now(), remember, bindingHash: sha256Hex(binding) });
+    this.flows.putCode(authCode, { token, created: Date.now(), remember, bindingHash: sha256Hex(binding) });
     return { code: authCode, binding };
   }
 
   consumeAuthCode(code: string, binding?: string): { token: string; remember?: boolean } | { error: string } {
-    const entry = this.authCodes.get(code);
-    if (!entry) return { error: 'Invalid or expired code' };
     // Single use, burnt on every outcome: a code seen by someone else must not
     // survive their attempt for a second guess, and the browser that owns it can
     // simply log in again.
-    this.authCodes.delete(code);
+    const entry = this.flows.takeCode(code);
+    if (!entry) return { error: 'Invalid or expired code' };
     if (Date.now() - entry.created > AUTH_CODE_TTL) return { error: 'Code expired' };
     // Same wording as the unknown-code case on purpose — whoever presents a code
     // without its binding learns nothing about whether the code was real.

@@ -4,6 +4,7 @@ import { PermissionsService } from './permissions.service';
 import { TripAccessGuard } from './trip-access.guard';
 import { TripOwnerGuard } from './trip-owner.guard';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
+import { PermissionsCacheStore, processPermissionsCache } from './permissions-cache';
 
 /** Cross-cutting permissions domain (Wave 2). No controller/MCP surface of its
  *  own — the admin HTTP surface stays with AdminModule. Exports
@@ -15,7 +16,14 @@ import { AppSettings } from '../../db/entities/AppSettings.entity';
  *  canAccessTrip (Plan 3c), unaffected by this. */
 @Module({
   imports: [MikroOrmModule.forFeature([AppSettings])],
-  providers: [PermissionsService, TripAccessGuard, TripOwnerGuard],
+  // The cache store is the process-wide in-memory one, the same instance the
+  // backup restore flushes; a shared store replaces it here.
+  providers: [
+    PermissionsService,
+    TripAccessGuard,
+    TripOwnerGuard,
+    { provide: PermissionsCacheStore, useValue: processPermissionsCache },
+  ],
   exports: [PermissionsService, TripAccessGuard, TripOwnerGuard],
 })
 export class PermissionsModule {}

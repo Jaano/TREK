@@ -23,13 +23,9 @@ import { logError } from '../audit/audit-log.logger';
 import {
   bookPeers,
   broadcastToBook,
-  joinBook,
-  joinRoom,
-  leaveAllBooks,
-  leaveAllRooms,
-  leaveBook,
-  leaveRoom,
+  processRooms,
   registerSocket,
+  RoomRegistry,
   socketIdOf,
   userOf,
   type TrekWebSocket,
@@ -48,10 +44,10 @@ const HEARTBEAT_INTERVAL = 30_000;
  * singleton and the token store, and the heartbeat is a lifecycle hook rather
  * than an interval nobody stops.
  *
- * What did NOT move is the socket registry. It stays module-scoped in
- * ws-state.ts because out-of-container code (the no-Nest test harnesses,
- * the vi.mock'd src/websocket seam) must see the same rooms; see the note
- * there.
+ * What did NOT move is the socket registry. It stays one process-wide
+ * instance in ws-state.ts (`processRooms`, injected here as the RoomRegistry
+ * port) because out-of-container code (the no-Nest test harnesses, the
+ * vi.mock'd src/websocket seam) must see the same rooms; see the note there.
  *
  * The wire protocol is unchanged, down to the frame names. TrekWsAdapter maps
  * `{ type }` onto @SubscribeMessage, because the stock adapter dispatches on
@@ -78,6 +74,9 @@ export class RealtimeGateway
     private readonly journeys: JourneyDomainService,
     @InjectRepository(Users) private readonly users: UsersRepository,
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
+    // Room membership, behind its port. The process-wide registry by default:
+    // the broadcast functions in ws-state.ts read the same instance.
+    private readonly rooms: RoomRegistry = processRooms,
   ) {}
 
   afterInit(server: WebSocketServer): void {
@@ -166,10 +165,10 @@ export class RealtimeGateway
   }
 
   handleDisconnect(socket: TrekWebSocket): void {
-    leaveAllRooms(socket);
+    this.rooms.leaveAll(socket);
     // Tell the books this socket was in, or its pointer stays on everyone
     // else's page forever.
-    for (const journeyId of leaveAllBooks(socket)) this.announcePeers(journeyId);
+    for (const journeyId of this.rooms.leaveAllBooks(socket)) this.announcePeers(journeyId);
   }
 
   @SubscribeMessage('join')
@@ -192,7 +191,7 @@ export class RealtimeGateway
     if (!Number.isFinite(tripId) || !(await this.trips.findAccessible(tripId, user.id))) {
       return { type: 'error', message: 'Access denied' };
     }
-    joinRoom(socket, tripId);
+    this.rooms.join(socket, tripId);
     return { type: 'joined', tripId };
   }
 
@@ -217,7 +216,7 @@ export class RealtimeGateway
       return { type: 'error', message: 'Access denied' };
     }
 
-    joinBook(socket, journeyId);
+    this.rooms.joinBook(socket, journeyId);
     this.announcePeers(journeyId);
     return { type: 'book:joined', journeyId };
   }
@@ -229,7 +228,7 @@ export class RealtimeGateway
   ): { type: string; journeyId?: number } | undefined {
     if (!message?.journeyId) return undefined;
     const journeyId = Number(message.journeyId);
-    leaveBook(socket, journeyId);
+    this.rooms.leaveBook(socket, journeyId);
     this.announcePeers(journeyId);
     return { type: 'book:left', journeyId };
   }
@@ -291,7 +290,7 @@ export class RealtimeGateway
   ): { type: string; tripId?: number; message?: string } | undefined {
     if (!message?.tripId) return undefined;
     const tripId = Number(message.tripId);
-    leaveRoom(socket, tripId);
+    this.rooms.leave(socket, tripId);
     return { type: 'left', tripId };
   }
 }

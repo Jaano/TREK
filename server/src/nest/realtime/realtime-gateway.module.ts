@@ -6,6 +6,7 @@ import { JourneyDomainModule } from '../journey/journey-domain.module';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import { Users } from '../../db/entities/Users.entity';
 import { Trips } from '../../db/entities/Trips.entity';
+import { processRooms, RoomRegistry } from './ws-state';
 
 /**
  * The transport, kept out of RealtimeModule on purpose.
@@ -29,6 +30,8 @@ import { Trips } from '../../db/entities/Trips.entity';
   // Task 2 — handleJoin's own canAccessTrip delegate, now TripsRepository
   // directly.
   imports: [EphemeralTokenModule, JourneyDomainModule, MikroOrmModule.forFeature([Users, AppSettings, Trips])],
-  providers: [RealtimeGateway],
+  // The room registry is the process-wide in-memory one the broadcast
+  // functions read too; see RoomRegistry in ws-state.ts.
+  providers: [RealtimeGateway, { provide: RoomRegistry, useValue: processRooms }],
 })
 export class RealtimeGatewayModule {}
