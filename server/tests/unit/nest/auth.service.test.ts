@@ -528,6 +528,19 @@ describe('changePassword — session invalidation', () => {
     expect(await verifyJwtAndLoadUser(stolen, await createTestUsersRepo(testDb), await createTestUserSessionsRepo(testDb))).toBeNull(); // invalidated by the pv bump
   });
 
+  it('AUTH-DB-036g: without issueSession it ends every session and starts none (a Bearer caller)', async () => {
+    const { user, password } = createUser(testDb);
+    await svc.generateToken({ id: user.id });
+
+    const result = await svc.changePassword(user.id, user.email, { current_password: password, new_password: 'New1234!' }, undefined, {}, false);
+
+    expect(result).toEqual({ success: true });
+    expect(pvOf(user.id)).toBe(1);
+    const rows = sessionRows(testDb, user.id);
+    expect(rows).toHaveLength(1);
+    expect(rows.every((row) => row.revoked_at !== null)).toBe(true);
+  });
+
   it('AUTH-DB-036d: preserves the remember choice in the re-issued session (#1927)', async () => {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const jwt = require('jsonwebtoken');

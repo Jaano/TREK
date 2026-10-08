@@ -111,10 +111,14 @@ export class AuthController {
   async changePassword(@CurrentUser() user: User, @Body() body: ChangePasswordDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.limit('login', req, 5);
     // Carry the session's remember choice into the re-issued token/cookie so a
-    // "remember me" login survives a password change (#1927). Bearer callers
-    // have no cookie → undefined → the historical default duration.
-    const remember = decodeSessionClaims((req.cookies as Record<string, string> | undefined)?.trek_session)?.remember;
-    const result = await this.auth.changePassword(user.id, user.email, body, remember, sessionClientFrom(req));
+    // "remember me" login survives a password change (#1927). The guard
+    // verified the cookie whenever there is one (extractToken prefers it), the
+    // same check the renewal interceptor makes. A Bearer caller has none: it
+    // would never see a re-issued token, so no new session is started for it.
+    const cookie = (req.cookies as Record<string, string> | undefined)?.trek_session;
+    const remember = decodeSessionClaims(cookie)?.remember;
+    const cookieSession = typeof cookie === 'string' && cookie.length > 0;
+    const result = await this.auth.changePassword(user.id, user.email, body, remember, sessionClientFrom(req), cookieSession);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }

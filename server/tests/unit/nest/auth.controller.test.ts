@@ -352,8 +352,18 @@ describe('AuthController (authenticated)', () => {
     const changePassword = vi.fn().mockReturnValue({ token: 'tk3' });
     const c = ac(asvc({ changePassword, setAuthCookie } as Partial<AuthService>), rl());
     expect(await c.changePassword(user, anyBody(), reqCookie, res)).toEqual({ success: true });
-    expect(changePassword).toHaveBeenCalledWith(1, 'u@example.test', anyBody(), true, { userAgent: null });
+    expect(changePassword).toHaveBeenCalledWith(1, 'u@example.test', anyBody(), true, { userAgent: null }, true);
     expect(setAuthCookie).toHaveBeenCalledWith(res, 'tk3', reqCookie, true);
+  });
+
+  it('change-password starts no new session for a Bearer caller, who has no cookie to receive it', async () => {
+    const setAuthCookie = vi.fn();
+    const changePassword = vi.fn().mockReturnValue({ success: true });
+    const bearer = { ip: '9.9.9.9', headers: { authorization: 'Bearer abc' } } as unknown as Request;
+    const c = ac(asvc({ changePassword, setAuthCookie } as Partial<AuthService>), rl());
+    expect(await c.changePassword(user, anyBody(), bearer, res)).toEqual({ success: true });
+    expect(changePassword).toHaveBeenCalledWith(1, 'u@example.test', anyBody(), undefined, { userAgent: null }, false);
+    expect(setAuthCookie).not.toHaveBeenCalled();
   });
 
   it('delete-account maps error, else audits and succeeds', async () => {

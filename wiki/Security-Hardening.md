@@ -42,7 +42,7 @@ A session ends when:
 | **Log out** (`POST /api/auth/logout`) | The one it is called with. Clearing the cookie alone used to leave the token valid. |
 | `DELETE /api/auth/sessions/{id}` | That one session of your own account. |
 | `POST /api/auth/sessions/revoke-others` | Every session of your account but the current one. |
-| Password change | Every session; the device the change was made on gets a new one. |
+| Password change | Every session. A browser that made the change with its session cookie gets a new one; an API client calling it with a Bearer token gets none, since it would never receive it. |
 | Password reset by email | Every session. |
 | Admin sets a new password for a user | Every session of that user. |
 | Recovery script `reset-admin.js` | Every session of the account it resets. |

@@ -624,6 +624,7 @@ export class AuthService {
     rawBody: unknown,
     remember?: boolean,
     client?: SessionClient,
+    issueSession = true,
   ): Promise<{ error?: string; status?: number; success?: boolean; token?: string }> {
     const body = rawBody as { current_password?: string; new_password?: string };
     if (await this.isOidcOnlyMode()) {
@@ -654,9 +655,7 @@ export class AuthService {
       // before sessions were tracked) and prunes the MCP static token and OAuth
       // bearer-token stores to match, the same set the password reset revokes.
       await this.mcpTokens.deleteAllForUser(userId);
-      try {
-        await this.oauthTokens.revokeAllForUser(userId);
-      } catch { /* oauth_tokens table may not exist in very old installs */ }
+      try { await this.oauthTokens.revokeAllForUser(userId); } catch { /* no oauth_tokens in very old installs */ }
       // Push devices keep receiving notifications without any session, so they
       // go too. The device the change was made on registers again right away:
       // the client reloads the user after the change, and that re-syncs its
@@ -667,8 +666,9 @@ export class AuthService {
 
     try { revokeUserSessions?.(userId); } catch { /* best-effort */ }
 
-    // Re-issue a session for the current device only, keeping the login's remember
-    // choice instead of downgrading it to the default duration (#1927).
+    // Re-issue a session for the current device only, with the login's remember choice (#1927).
+    // Not for a Bearer caller (`issueSession` false): it never receives the token (see the controller).
+    if (!issueSession) return { success: true };
     const token = await this.generateToken({ id: userId, password_version: newPv }, remember, client);
     return { success: true, token };
   }

@@ -213,6 +213,23 @@ describe('Sessions e2e (sign-in sessions that can be ended)', () => {
     expect(list.body.sessions).toEqual([expect.objectContaining({ id: sessionIdOf(next), user_agent: 'Here', current: true })]);
   }, 15000);
 
+  it('a password change over a Bearer token ends every session and starts none, since no cookie carries it', async () => {
+    const { user, password } = freshUser('sess-password-bearer');
+    const cookie = await signIn(user.email, password, 'Api client');
+    const bearer = cookie.slice('trek_session='.length);
+
+    const change = await request(server)
+      .put('/api/auth/me/password')
+      .set('Authorization', `Bearer ${bearer}`)
+      .send({ current_password: password, new_password: 'New1234!x' });
+    expect(change.status).toBe(200);
+    expect(change.body).toEqual({ success: true });
+    expect(((change.headers['set-cookie'] ?? []) as unknown as string[]).some((c) => c.startsWith('trek_session='))).toBe(false);
+
+    const rows = sessionRows(db as never, user.id);
+    expect(rows).toEqual([expect.objectContaining({ id: sessionIdOf(cookie), revoked_at: expect.any(String) })]);
+  }, 15000);
+
   it('a token from before sessions were tracked keeps working, is listed as untracked, and survives "sign out others"', async () => {
     const { user, password } = freshUser('sess-legacy');
     const legacy = sessionCookie(user.id);
