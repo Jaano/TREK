@@ -10,7 +10,6 @@
   "components/Planner/PlaceFormModal.tsx": 1633,
   "components/Planner/PlaceInspector.tsx": 1273,
   "components/Planner/TransportModal.tsx": 1199,
-  "components/Roadtrip/RoadtripSidebar.tsx": 2287,
   "components/Studio/autoLayout.ts": 1676,
   "components/Studio/bookTemplates.data.ts": 1279,
   "components/Studio/TravelElements.tsx": 1745,
@@ -21,6 +20,5 @@
   "mobile/screens/trip/tabs/MPackingListTab.tsx": 1017,
   "pages/atlas/useAtlas.ts": 1246,
   "pages/LoginPage.tsx": 1340,
-  "pages/tripPlanner/useTripPlanner.ts": 3095,
-  "pages/TripPlannerPage.tsx": 1427
+  "pages/TripPlannerPage.tsx": 1081
 }
