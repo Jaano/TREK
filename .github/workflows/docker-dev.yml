@@ -37,27 +37,20 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Every check run named ci-ok on this commit has to have finished green.
-      # A run still going counts as not green: wait for it and dispatch again.
+      # The dev push, the main push and any manual run each leave a ci-ok on
+      # this commit. scripts/ci/ci-ok-verdict.mjs counts the newest attempt of
+      # each, refuses while one is still going, and requires the one that
+      # finished last to be green, so a later green run supersedes a flaky or
+      # cancelled one. It prints the link of every run it counted.
       - name: Require a green ci-ok on the commit being built
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           sha="$(git rev-parse HEAD)"
-          conclusions="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?check_name=ci-ok&per_page=100" \
-            --jq '[.check_runs[] | .conclusion // "pending"] | join(" ")')"
-          echo "ci-ok on $sha: ${conclusions:-none}"
-          if [ -z "$conclusions" ]; then
-            echo "::error::ci-ok never ran on $sha. Run Tests & SonarQube on this branch and dispatch again."
-            exit 1
-          fi
-          for c in $conclusions; do
-            if [ "$c" != "success" ]; then
-              echo "::error::ci-ok on $sha is not green ($conclusions)."
-              exit 1
-            fi
-          done
+          runs="$RUNNER_TEMP/ci-ok-runs.json"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?check_name=ci-ok&filter=all&per_page=100" > "$runs"
+          node scripts/ci/ci-ok-verdict.mjs "$runs" "$sha"
 
       - name: Determine prerelease version
         id: bump
