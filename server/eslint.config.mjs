@@ -25,7 +25,7 @@ const ENV_SELECTORS = [
       'Read configuration via src/app-config (readEnv()/derive/tokens), not process.env. Exemptions: eslint.config.mjs + src/app-config/README.md.',
   },
   {
-    // Bracket-notation variant (process['env']) — property is a Literal
+    // Bracket-notation variant (process['env']): the property is a Literal
     // node (.value), so the selector above can't match it.
     selector: "MemberExpression[object.name='process'][property.value='env']",
     message:

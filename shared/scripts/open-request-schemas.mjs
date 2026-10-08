@@ -24,7 +24,7 @@
  *                                       raises or adds an entry
  *
  * It reads the built dist/, so run `npm run build` first. The same check runs
- * against src/ in `npm test` (scripts/open-request-schemas.spec.ts).
+ * against src/ in `npm test` (src/open-request-schemas.spec.ts).
  */
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
