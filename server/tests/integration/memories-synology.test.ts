@@ -181,20 +181,41 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
 });
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits, setAddonEnabled } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createTrip, addTripMember, addTripPhoto, setSynologyCredentials } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { createRow, deleteRows, findRow, findRows, insertRow, insertRowIgnoringConflict, updateRows } from '../helpers/factories/rows';
+import { readUser } from '../helpers/factories/users';
+import { PhotoProviders } from '../../src/db/entities/PhotoProviders.entity';
+import { TrekPhotos } from '../../src/db/entities/TrekPhotos.entity';
+import { TripAlbumLinks } from '../../src/db/entities/TripAlbumLinks.entity';
+import { TripPhotos } from '../../src/db/entities/TripPhotos.entity';
+import { Users } from '../../src/db/entities/Users.entity';
 import { safeFetch } from '../../src/utils/ssrfGuard';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 
 const SYNO = '/api/integrations/memories/synologyphotos';
+
+/** The user's photo rows on the trip, each with the provider and passphrase of the photo it points at. */
+async function tripPhotoRows(tripId: number, userId: number) {
+  const rows = [];
+  for (const tp of await findRows(orm, TripPhotos, { trip: tripId, user: userId })) {
+    const tkp = await findRow(orm, TrekPhotos, { id: tp.photo_id });
+    if (tkp) rows.push({ ...tp, provider: tkp.provider, passphrase: tkp.passphrase });
+  }
+  return rows;
+}
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -234,7 +255,7 @@ describe('Synology settings', () => {
 
     expect(res.status).toBe(200);
 
-    const row = testDb.prepare('SELECT synology_url, synology_username FROM users WHERE id = ?').get(user.id) as any;
+    const row = await readUser(orm, user.id);
     expect(row.synology_url).toBe('https://synology.example.com');
     expect(row.synology_username).toBe('admin');
   });
@@ -559,10 +580,7 @@ describe('Synology asset access', () => {
     const { user } = createUser(testDb);
     setSynologyCredentials(testDb, user.id, 'https://synology.example.com', 'admin', 'pass');
 
-    const insert = testDb.prepare(
-      'INSERT INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)'
-    ).run('synologyphotos', '101_cachekey', user.id);
-    const trekPhotoId = Number(insert.lastInsertRowid);
+    const trekPhotoId = await insertRow(orm, TrekPhotos, { provider: 'synologyphotos', asset_id: '101_cachekey', owner: user.id });
 
     vi.mocked(safeFetch).mockClear();
 
@@ -606,11 +624,9 @@ describe('Synology asset access', () => {
     const { user: member } = createUser(testDb);
     // Insert a shared photo referencing a trip that doesn't exist (FK disabled temporarily)
     testDb.exec('PRAGMA foreign_keys = OFF');
-    testDb.prepare('INSERT OR IGNORE INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)').run('synologyphotos', '101_cachekey', owner.id);
-    const tkpSyno35 = testDb.prepare('SELECT id FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?').get('synologyphotos', '101_cachekey', owner.id) as any;
-    testDb.prepare(
-      'INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, ?)'
-    ).run(9999, owner.id, tkpSyno35.id, 1);
+    const known = await findRow(orm, TrekPhotos, { provider: 'synologyphotos', asset_id: '101_cachekey', owner: owner.id });
+    const tkpSyno35 = known?.id ?? (await insertRow(orm, TrekPhotos, { provider: 'synologyphotos', asset_id: '101_cachekey', owner: owner.id }));
+    await insertRow(orm, TripPhotos, { trip: 9999, user: owner.id, photo: tkpSyno35, shared: 1 });
     testDb.exec('PRAGMA foreign_keys = ON');
 
     const res = await request(app)
@@ -694,7 +710,7 @@ describe('Synology syncSynologyAlbumLink', () => {
     setSynologyCredentials(testDb, user.id, 'https://synology.example.com', 'admin', 'pass');
     // The migration inserts synologyphotos with enabled=0; ensure it is enabled for this test.
     // A provider only counts as enabled under an enabled journey addon (also seeded off).
-    testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'synologyphotos'").run();
+    await updateRows(orm, PhotoProviders, { id: 'synologyphotos' }, { enabled: 1 });
     setAddonEnabled(testDb, 'journey', true);
     // album_id must be a numeric string so getAlbumIdFromLink returns it and
     // syncSynologyAlbumLink passes Number(album_id) to the API.
@@ -709,11 +725,7 @@ describe('Synology syncSynologyAlbumLink', () => {
     expect(typeof res.body.total).toBe('number');
 
     // Verify photos were inserted into the DB
-    const photos = testDb.prepare(`
-      SELECT tp.*, tkp.provider FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ? AND tp.user_id = ?
-    `).all(trip.id, user.id) as any[];
+    const photos = await tripPhotoRows(trip.id, user.id);
     expect(photos.length).toBeGreaterThan(0);
     expect(photos[0].provider).toBe('synologyphotos');
   });
@@ -754,15 +766,14 @@ describe('Synology syncSynologyAlbumLink', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     setSynologyCredentials(testDb, user.id, 'https://synology.example.com', 'admin', 'pass');
-    testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'synologyphotos'").run();
+    await updateRows(orm, PhotoProviders, { id: 'synologyphotos' }, { enabled: 1 });
     setAddonEnabled(testDb, 'journey', true);
 
     // Insert a link with an encrypted passphrase directly into the DB.
     const rawPassphrase = 'syno-share-pass-abc';
-    const result = testDb.prepare(
-      'INSERT INTO trip_album_links (trip_id, user_id, provider, album_id, album_name, passphrase) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(trip.id, user.id, 'synologyphotos', '99', 'Shared Album', encrypt_api_key(rawPassphrase));
-    const link = testDb.prepare('SELECT * FROM trip_album_links WHERE id = ?').get(result.lastInsertRowid) as any;
+    const link = await createRow(orm, TripAlbumLinks, {
+      trip: trip.id, user: user.id, provider: 'synologyphotos', album_id: '99', album_name: 'Shared Album', passphrase: encrypt_api_key(rawPassphrase),
+    });
 
     // Override safeFetch so browse-item only succeeds when called with the passphrase param.
     vi.mocked(safeFetch).mockImplementation(async (url: any, init?: any) => {
@@ -804,12 +815,7 @@ describe('Synology syncSynologyAlbumLink', () => {
     expect(res.body.added).toBeGreaterThan(0);
 
     // The trek_photos row for the synced photo must have a non-null passphrase.
-    const photo = testDb.prepare(`
-      SELECT tkp.passphrase FROM trip_photos tp
-      JOIN trek_photos tkp ON tkp.id = tp.photo_id
-      WHERE tp.trip_id = ? AND tp.user_id = ?
-      LIMIT 1
-    `).get(trip.id, user.id) as { passphrase: string | null } | undefined;
+    const [photo] = await tripPhotoRows(trip.id, user.id);
 
     expect(photo).toBeDefined();
     expect(photo!.passphrase).not.toBeNull();
@@ -1170,7 +1176,6 @@ describe('Synology SSRF blocked error handling', () => {
 
 // ── Passphrase persistence fixes ─────────────────────────────────────────────
 
-import { MikroORM } from '@mikro-orm/core';
 import { withRequestContext } from '../../src/nest/database/request-context';
 import { TrekPhotoRegistrationService } from '../../src/nest/photos/trek-photo-registration.service';
 
@@ -1184,10 +1189,8 @@ import { TrekPhotoRegistrationService } from '../../src/nest/photos/trek-photo-r
 // `withRequestContext` supplies the same per-call EntityManager fork a real
 // request's `mikroOrmRequestContext` middleware (bootstrap.ts) would.
 let trekPhotos: TrekPhotoRegistrationService;
-let orm: MikroORM;
 beforeAll(() => {
   trekPhotos = nestApp.get(TrekPhotoRegistrationService);
-  orm = nestApp.get(MikroORM);
 });
 const getOrCreateTrekPhoto = (...a: Parameters<TrekPhotoRegistrationService['getOrCreate']>) => withRequestContext(orm, () => trekPhotos.getOrCreate(...a));
 const deleteTrekPhotoIfOrphan = (id: number) => withRequestContext(orm, () => trekPhotos.deleteIfOrphan(id));
@@ -1201,13 +1204,13 @@ describe('trek_photos passphrase healing (SYNO-090)', () => {
     const correctPass = 'correct-passphrase';
 
     const id1 = await getOrCreateTrekPhoto('synologyphotos', 'asset-heal-test', user.id, wrongPass);
-    const row1 = testDb.prepare('SELECT passphrase FROM trek_photos WHERE id = ?').get(id1) as { passphrase: string };
-    expect(decrypt_api_key(row1.passphrase)).toBe(wrongPass);
+    const row1 = (await findRow(orm, TrekPhotos, { id: id1 }));
+    expect(decrypt_api_key(String(row1?.passphrase))).toBe(wrongPass);
 
     const id2 = await getOrCreateTrekPhoto('synologyphotos', 'asset-heal-test', user.id, correctPass);
     expect(id2).toBe(id1);
-    const row2 = testDb.prepare('SELECT passphrase FROM trek_photos WHERE id = ?').get(id2) as { passphrase: string };
-    expect(decrypt_api_key(row2.passphrase)).toBe(correctPass);
+    const row2 = (await findRow(orm, TrekPhotos, { id: id2 }));
+    expect(decrypt_api_key(String(row2?.passphrase))).toBe(correctPass);
   });
 });
 
@@ -1215,47 +1218,43 @@ describe('trek_photos orphan cleanup (SYNO-091)', () => {
   it('SYNO-091 — deleteTrekPhotoIfOrphan removes the trek_photos row when no trip_photos or journey_photos reference it', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'synologyphotos'").run();
+    await updateRows(orm, PhotoProviders, { id: 'synologyphotos' }, { enabled: 1 });
 
     const trekPhotoId = await getOrCreateTrekPhoto('synologyphotos', 'asset-orphan-test', user.id, 'pass-A');
 
-    testDb.prepare(
-      'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 1)'
-    ).run(trip.id, user.id, trekPhotoId);
+    await insertRowIgnoringConflict(orm, TripPhotos, { trip: trip.id, user: user.id, photo: trekPhotoId, shared: 1 });
 
     // Still referenced — must not be deleted.
     await deleteTrekPhotoIfOrphan(trekPhotoId);
-    expect(testDb.prepare('SELECT id FROM trek_photos WHERE id = ?').get(trekPhotoId)).toBeDefined();
+    expect((await findRow(orm, TrekPhotos, { id: trekPhotoId }))).not.toBeNull();
 
     // Remove the reference, then orphan-cleanup should delete the trek_photos row.
-    testDb.prepare('DELETE FROM trip_photos WHERE photo_id = ?').run(trekPhotoId);
+    await deleteRows(orm, TripPhotos, { photo: trekPhotoId });
     await deleteTrekPhotoIfOrphan(trekPhotoId);
-    expect(testDb.prepare('SELECT id FROM trek_photos WHERE id = ?').get(trekPhotoId)).toBeUndefined();
+    expect((await findRow(orm, TrekPhotos, { id: trekPhotoId }))).toBeNull();
   });
 
   it('SYNO-092 — re-adding a previously removed Synology photo stores the new passphrase correctly', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    testDb.prepare("UPDATE photo_providers SET enabled = 1 WHERE id = 'synologyphotos'").run();
+    await updateRows(orm, PhotoProviders, { id: 'synologyphotos' }, { enabled: 1 });
 
     const firstPass = 'first-passphrase';
     const secondPass = 'second-passphrase';
 
     // Add with wrong passphrase, then remove (simulating the bug scenario).
     const id1 = await getOrCreateTrekPhoto('synologyphotos', 'asset-readd-test', user.id, firstPass);
-    testDb.prepare(
-      'INSERT OR IGNORE INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 1)'
-    ).run(trip.id, user.id, id1);
-    testDb.prepare('DELETE FROM trip_photos WHERE photo_id = ?').run(id1);
+    await insertRowIgnoringConflict(orm, TripPhotos, { trip: trip.id, user: user.id, photo: id1, shared: 1 });
+    await deleteRows(orm, TripPhotos, { photo: id1 });
     await deleteTrekPhotoIfOrphan(id1);
 
     // trek_photos row should be gone.
-    expect(testDb.prepare('SELECT id FROM trek_photos WHERE id = ?').get(id1)).toBeUndefined();
+    expect((await findRow(orm, TrekPhotos, { id: id1 }))).toBeNull();
 
     // Re-add with the correct passphrase.
     const id2 = await getOrCreateTrekPhoto('synologyphotos', 'asset-readd-test', user.id, secondPass);
-    const row = testDb.prepare('SELECT passphrase FROM trek_photos WHERE id = ?').get(id2) as { passphrase: string };
-    expect(decrypt_api_key(row.passphrase)).toBe(secondPass);
+    const row = (await findRow(orm, TrekPhotos, { id: id2 }));
+    expect(decrypt_api_key(String(row?.passphrase))).toBe(secondPass);
   });
 });
 
@@ -1276,15 +1275,13 @@ describe('Synology skip-SSL forwarding to image fetches (#1611)', () => {
   let assetSeq = 0;
   const uniqueAssetId = () => `${Date.now()}${++assetSeq}_test1611`;
 
-  function createSynologyTrekPhoto(skipSsl: 0 | 1) {
+  async function createSynologyTrekPhoto(skipSsl: 0 | 1) {
     const { user } = createUser(testDb);
     setSynologyCredentials(testDb, user.id, 'https://synology.example.com', 'admin', 'pass');
-    testDb.prepare('UPDATE users SET synology_skip_ssl = ? WHERE id = ?').run(skipSsl, user.id);
+    await updateRows(orm, Users, { id: user.id }, { synology_skip_ssl: skipSsl });
     const assetId = uniqueAssetId();
-    const insert = testDb.prepare(
-      'INSERT INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)'
-    ).run('synologyphotos', assetId, user.id);
-    return { user, trekPhotoId: Number(insert.lastInsertRowid) };
+    const trekPhotoId = await insertRow(orm, TrekPhotos, { provider: 'synologyphotos', asset_id: assetId, owner: user.id });
+    return { user, trekPhotoId };
   }
 
   function thumbnailFetchCalls() {
@@ -1292,7 +1289,7 @@ describe('Synology skip-SSL forwarding to image fetches (#1611)', () => {
   }
 
   it('SYNO-100 — thumbnail fetch passes rejectUnauthorized: false when skip-SSL is enabled', async () => {
-    const { user, trekPhotoId } = createSynologyTrekPhoto(1);
+    const { user, trekPhotoId } = await createSynologyTrekPhoto(1);
     vi.mocked(safeFetch).mockClear();
 
     const res = await request(app)
@@ -1308,7 +1305,7 @@ describe('Synology skip-SSL forwarding to image fetches (#1611)', () => {
   });
 
   it('SYNO-101 — original fetch passes rejectUnauthorized: false when skip-SSL is enabled', async () => {
-    const { user, trekPhotoId } = createSynologyTrekPhoto(1);
+    const { user, trekPhotoId } = await createSynologyTrekPhoto(1);
     vi.mocked(safeFetch).mockClear();
 
     const res = await request(app)
@@ -1324,7 +1321,7 @@ describe('Synology skip-SSL forwarding to image fetches (#1611)', () => {
   });
 
   it('SYNO-102 — image fetches verify TLS when skip-SSL is disabled', async () => {
-    const { user, trekPhotoId } = createSynologyTrekPhoto(0);
+    const { user, trekPhotoId } = await createSynologyTrekPhoto(0);
     vi.mocked(safeFetch).mockClear();
 
     const res = await request(app)

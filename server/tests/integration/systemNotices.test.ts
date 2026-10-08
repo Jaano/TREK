@@ -26,10 +26,17 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createAdmin } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { insertRow, updateRows } from '../helpers/factories/rows';
+import { setAppSetting } from '../helpers/factories/settings';
+import { Addons } from '../../src/db/entities/Addons.entity';
+import { UserNoticeDismissals } from '../../src/db/entities/UserNoticeDismissals.entity';
+import { Users } from '../../src/db/entities/Users.entity';
 import { SYSTEM_NOTICES } from '../../src/systemNotices/registry';
 import { getCurrentAppVersion } from '../../src/systemNotices/service';
 import type { SystemNotice } from '../../src/systemNotices/types';
@@ -37,6 +44,7 @@ import { ADDON_IDS } from '../../src/addons';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 
 // Test notice injected into the registry for notice-specific tests
 const TEST_NOTICE: SystemNotice = {
@@ -69,6 +77,7 @@ const TEST_NOTICE_ADDON: SystemNotice = {
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(() => {
@@ -97,7 +106,7 @@ describe('GET /api/system-notices/active', () => {
     // nothing but the install being self-hosted still apply, and which ones those are
     // changes every release (the thank-you modal handed over to the release notes at 4.0.0).
     // Read the set out of the registry rather than naming them, or this ages out again.
-    testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
+    await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.0' });
     const alwaysOn = new Set(
       SYSTEM_NOTICES
         .filter(n => (n.conditions ?? []).every(c => c.kind === 'managed'))
@@ -115,7 +124,7 @@ describe('GET /api/system-notices/active', () => {
     try {
       const { user } = createUser(testDb);
       // Set login_count to 1 (first login)
-      testDb.prepare('UPDATE users SET login_count = 1 WHERE id = ?').run(user.id);
+      await updateRows(orm, Users, { id: user.id }, { login_count: 1 });
 
       const res = await request(app)
         .get('/api/system-notices/active')
@@ -139,7 +148,7 @@ describe('GET /api/system-notices/active', () => {
     SYSTEM_NOTICES.push(TEST_NOTICE_ADDON);
     try {
       const { user } = createUser(testDb);
-      testDb.prepare('UPDATE addons SET enabled = 0 WHERE id = ?').run(ADDON_IDS.JOURNEY);
+      await updateRows(orm, Addons, { id: ADDON_IDS.JOURNEY }, { enabled: false });
 
       const off = await request(app)
         .get('/api/system-notices/active')
@@ -147,7 +156,7 @@ describe('GET /api/system-notices/active', () => {
       expect(off.status).toBe(200);
       expect(off.body.find((n: { id: string }) => n.id === TEST_NOTICE_ADDON.id)).toBeUndefined();
 
-      testDb.prepare('UPDATE addons SET enabled = 1 WHERE id = ?').run(ADDON_IDS.JOURNEY);
+      await updateRows(orm, Addons, { id: ADDON_IDS.JOURNEY }, { enabled: true });
 
       const on = await request(app)
         .get('/api/system-notices/active')
@@ -164,7 +173,7 @@ describe('GET /api/system-notices/active', () => {
     SYSTEM_NOTICES.push(TEST_NOTICE);
     try {
       const { user } = createUser(testDb);
-      testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
+      await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.0' });
 
       const res = await request(app)
         .get('/api/system-notices/active')
@@ -181,12 +190,10 @@ describe('GET /api/system-notices/active', () => {
     SYSTEM_NOTICES.push(TEST_NOTICE);
     try {
       const { user } = createUser(testDb);
-      testDb.prepare('UPDATE users SET login_count = 1 WHERE id = ?').run(user.id);
+      await updateRows(orm, Users, { id: user.id }, { login_count: 1 });
 
       // Dismiss the notice directly in DB
-      testDb.prepare(
-        'INSERT INTO user_notice_dismissals (user_id, notice_id, dismissed_at) VALUES (?, ?, ?)'
-      ).run(user.id, TEST_NOTICE.id, Date.now());
+      await insertRow(orm, UserNoticeDismissals, { user: user.id, notice_id: TEST_NOTICE.id, dismissed_at: Date.now() });
 
       const res = await request(app)
         .get('/api/system-notices/active')
@@ -220,7 +227,7 @@ describe('GET /api/system-notices/active', () => {
     SYSTEM_NOTICES.push(RECURRING);
     try {
       const { user } = createUser(testDb);
-      testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
+      await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.0' });
 
       const shows = async () => {
         const res = await request(app)
@@ -234,15 +241,13 @@ describe('GET /api/system-notices/active', () => {
       expect(await shows()).toBe(true);
 
       // Dismissed at an old version → it returns once the running version is newer.
-      testDb.prepare(
-        'INSERT INTO user_notice_dismissals (user_id, notice_id, dismissed_at, dismissed_app_version) VALUES (?, ?, ?, ?)'
-      ).run(user.id, RECURRING.id, Date.now(), '0.0.1');
+      await insertRow(orm, UserNoticeDismissals, {
+        user: user.id, notice_id: RECURRING.id, dismissed_at: Date.now(), dismissed_app_version: '0.0.1',
+      });
       expect(await shows()).toBe(true);
 
       // Dismissed at a version >= the running one → stays hidden until the next upgrade.
-      testDb.prepare(
-        'UPDATE user_notice_dismissals SET dismissed_app_version = ? WHERE user_id = ? AND notice_id = ?'
-      ).run('99.0.0', user.id, RECURRING.id);
+      await updateRows(orm, UserNoticeDismissals, { user: user.id, notice_id: RECURRING.id }, { dismissed_app_version: '99.0.0' });
       expect(await shows()).toBe(false);
     } finally {
       const idx = SYSTEM_NOTICES.indexOf(RECURRING);
@@ -256,7 +261,7 @@ describe('GET /api/system-notices/active', () => {
   // dismiss route, so neither half can drift away from the other unnoticed.
   it('shows the release notes once per update, however often they were closed before', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
+    await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.0' });
 
     // The client announces the release layout and the version it was built as; a
     // bundle that predates that, or one built for another version, never gets the
@@ -284,9 +289,7 @@ describe('GET /api/system-notices/active', () => {
     expect(await shows()).toBe(false);
 
     // The next update brings it back, although it was closed before...
-    testDb.prepare(
-      'UPDATE user_notice_dismissals SET dismissed_app_version = ? WHERE user_id = ? AND notice_id = ?'
-    ).run('4.0.0', user.id, 'release-notes');
+    await updateRows(orm, UserNoticeDismissals, { user: user.id, notice_id: 'release-notes' }, { dismissed_app_version: '4.0.0' });
     expect(await shows()).toBe(true);
     expect(await shows()).toBe(true);
 
@@ -302,7 +305,7 @@ describe('GET /api/system-notices/active', () => {
   // was built for the version now running; the reload brings one.
   it('keeps the release notes from a client that does not announce the release layout for this version', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
+    await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.0' });
 
     const fetchActive = (query: Record<string, string>) => request(app)
       .get('/api/system-notices/active')
@@ -382,7 +385,7 @@ describe('POST /api/system-notices/:id/dismiss', () => {
     SYSTEM_NOTICES.push(TEST_NOTICE);
     try {
       const { user } = createUser(testDb);
-      testDb.prepare('UPDATE users SET login_count = 1 WHERE id = ?').run(user.id);
+      await updateRows(orm, Users, { id: user.id }, { login_count: 1 });
 
       // Confirm TEST_NOTICE is visible before dismiss
       const before = await request(app)
@@ -417,9 +420,9 @@ describe('POST /api/system-notices/:id/dismiss', () => {
  * (so existingUserBeforeVersion('3.0.14') passes) and whose login_count is
  * high enough to suppress the firstLogin and v3-upgrade notice conditions.
  */
-function setupCollisionAdmin() {
+async function setupCollisionAdmin() {
   const { user } = createAdmin(testDb);
-  testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
+  await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.0' });
   return user;
 }
 
@@ -440,8 +443,8 @@ describe('v3014-whitespace-collision notice', () => {
   });
 
   it('SN-COLLISION-1 — shown to admin when collision flag is set and user predates 3.0.14', async () => {
-    const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    const user = await setupCollisionAdmin();
+    await setAppSetting(orm, 'whitespace_migration_collision', 'true');
 
     const res = await request(app)
       .get('/api/system-notices/active')
@@ -452,7 +455,7 @@ describe('v3014-whitespace-collision notice', () => {
   });
 
   it('SN-COLLISION-2 — hidden when collision flag is absent', async () => {
-    const user = setupCollisionAdmin();
+    const user = await setupCollisionAdmin();
 
     const res = await request(app)
       .get('/api/system-notices/active')
@@ -463,8 +466,8 @@ describe('v3014-whitespace-collision notice', () => {
   });
 
   it('SN-COLLISION-3 — hidden when collision flag is explicitly false', async () => {
-    const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'false')").run();
+    const user = await setupCollisionAdmin();
+    await setAppSetting(orm, 'whitespace_migration_collision', 'false');
 
     const res = await request(app)
       .get('/api/system-notices/active')
@@ -476,8 +479,8 @@ describe('v3014-whitespace-collision notice', () => {
 
   it('SN-COLLISION-4 — hidden for non-admin user even when collision flag is set', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.0' });
+    await setAppSetting(orm, 'whitespace_migration_collision', 'true');
 
     const res = await request(app)
       .get('/api/system-notices/active')
@@ -489,8 +492,8 @@ describe('v3014-whitespace-collision notice', () => {
 
   it('SN-COLLISION-5 — hidden for user whose first_seen_version is >= 3.0.14 (new account)', async () => {
     const { user } = createAdmin(testDb);
-    testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.14', user.id);
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    await updateRows(orm, Users, { id: user.id }, { login_count: 5, first_seen_version: '3.0.14' });
+    await setAppSetting(orm, 'whitespace_migration_collision', 'true');
 
     const res = await request(app)
       .get('/api/system-notices/active')
@@ -502,8 +505,8 @@ describe('v3014-whitespace-collision notice', () => {
 
   it('SN-COLLISION-6 — hidden when app version is below 3.0.14', async () => {
     process.env.APP_VERSION = '3.0.13';
-    const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    const user = await setupCollisionAdmin();
+    await setAppSetting(orm, 'whitespace_migration_collision', 'true');
 
     const res = await request(app)
       .get('/api/system-notices/active')
@@ -514,8 +517,8 @@ describe('v3014-whitespace-collision notice', () => {
   });
 
   it('SN-COLLISION-7 — hidden after admin dismisses it', async () => {
-    const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    const user = await setupCollisionAdmin();
+    await setAppSetting(orm, 'whitespace_migration_collision', 'true');
 
     const before = await request(app)
       .get('/api/system-notices/active')
