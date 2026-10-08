@@ -18,9 +18,11 @@
  * To format a file: npx prettier --write <file>. The comparison lives in
  * scripts/lib/format.mjs.
  */
-import { fileURLToPath } from 'node:url'
-import { check } from './lib/format.mjs'
-import { runCli } from './lib/ratchet.mjs'
+import { fileURLToPath } from 'node:url';
+import { check } from './lib/format.mjs';
+import { runCli } from './lib/ratchet.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-await runCli('lint:format', (args) => check({ root, update: args.includes('--update'), list: args.includes('--list') }))
+const root = fileURLToPath(new URL('..', import.meta.url));
+await runCli('lint:format', (args) =>
+  check({ root, update: args.includes('--update'), list: args.includes('--list') })
+);

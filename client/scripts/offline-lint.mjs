@@ -15,9 +15,11 @@
  *   npm run lint:offline -- --update  take the files that stopped off the list;
  *                                     it never adds one
  */
-import { fileURLToPath } from 'node:url'
-import { check } from './lib/offline.mjs'
-import { runCli } from './lib/ratchet.mjs'
+import { fileURLToPath } from 'node:url';
+import { check } from './lib/offline.mjs';
+import { runCli } from './lib/ratchet.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-await runCli('lint:offline', (args) => check({ root, update: args.includes('--update'), list: args.includes('--list') }))
+const root = fileURLToPath(new URL('..', import.meta.url));
+await runCli('lint:offline', (args) =>
+  check({ root, update: args.includes('--update'), list: args.includes('--list') })
+);

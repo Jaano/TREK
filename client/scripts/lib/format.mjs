@@ -3,13 +3,22 @@
  * Prettier would rewrite, against the list of files that were unformatted
  * when the check came in.
  */
-import { join } from 'node:path'
-import * as prettier from 'prettier'
-import { fileList, listFiles, lowerList, RatchetError, readBaseline, readText, toKey, writeBaseline } from './ratchet.mjs'
+import { join } from 'node:path';
+import * as prettier from 'prettier';
+import {
+  fileList,
+  listFiles,
+  lowerList,
+  RatchetError,
+  readBaseline,
+  readText,
+  toKey,
+  writeBaseline,
+} from './ratchet.mjs';
 
-export const DIRS = ['src', 'tests']
+export const DIRS = ['src', 'tests'];
 
-export const accepts = (key) => /\.(?:tsx?|css)$/.test(key)
+export const accepts = (key) => /\.(?:tsx?|css)$/.test(key);
 
 /**
  * Whether Prettier leaves the file as it is, with the config that applies to
@@ -17,20 +26,20 @@ export const accepts = (key) => /\.(?:tsx?|css)$/.test(key)
  * about endOfLine. A file Prettier cannot parse is not formatted.
  */
 export async function isFormatted(path) {
-  const options = await prettier.resolveConfig(path)
-  if (!options) throw new RatchetError(`no Prettier config applies to ${path}`)
+  const options = await prettier.resolveConfig(path);
+  if (!options) throw new RatchetError(`no Prettier config applies to ${path}`);
   try {
-    return await prettier.check(readText(path), { ...options, filepath: path })
+    return await prettier.check(readText(path), { ...options, filepath: path });
   } catch {
-    return false
+    return false;
   }
 }
 
 /** The files under root that Prettier would rewrite, keyed by their path from root. */
 export async function unformatted(root) {
-  const found = []
-  for (const path of listFiles(root, DIRS, accepts)) if (!(await isFormatted(path))) found.push(toKey(root, path))
-  return found
+  const found = [];
+  for (const path of listFiles(root, DIRS, accepts)) if (!(await isFormatted(path))) found.push(toKey(root, path));
+  return found;
 }
 
 /**
@@ -48,27 +57,27 @@ export async function check({
   log = console.log,
   error = console.error,
 }) {
-  const found = await unformatted(root)
-  let baseline = readBaseline(baselinePath, fileList)
+  const found = await unformatted(root);
+  let baseline = readBaseline(baselinePath, fileList);
 
   if (update) {
-    baseline = lowerList(baseline, found)
-    writeBaseline(baselinePath, baseline)
+    baseline = lowerList(baseline, found);
+    writeBaseline(baselinePath, baseline);
   }
 
-  const allowed = new Set(baseline)
-  const fresh = found.filter((key) => !allowed.has(key))
-  const now = new Set(found)
-  const stale = baseline.filter((key) => !now.has(key))
+  const allowed = new Set(baseline);
+  const fresh = found.filter((key) => !allowed.has(key));
+  const now = new Set(found);
+  const stale = baseline.filter((key) => !now.has(key));
 
-  if (list) for (const key of found) log(`${allowed.has(key) ? 'listed' : 'new   '}  ${key}`)
+  if (list) for (const key of found) log(`${allowed.has(key) ? 'listed' : 'new   '}  ${key}`);
   for (const key of fresh) {
-    error(`FAIL  ${key} is not formatted. Run: npx prettier --write ${key}`)
+    error(`FAIL  ${key} is not formatted. Run: npx prettier --write ${key}`);
   }
   for (const key of stale) {
-    error(`FAIL  ${key} is listed in scripts/format-baseline.json but is formatted now or gone.`)
+    error(`FAIL  ${key} is listed in scripts/format-baseline.json but is formatted now or gone.`);
   }
-  if (stale.length) error('Run npm run lint:format -- --update to take the formatted files off the list.')
-  log(`format: ${found.length} unformatted file(s), ${baseline.length} listed in the baseline`)
-  return fresh.length || stale.length ? 1 : 0
+  if (stale.length) error('Run npm run lint:format -- --update to take the formatted files off the list.');
+  log(`format: ${found.length} unformatted file(s), ${baseline.length} listed in the baseline`);
+  return fresh.length || stale.length ? 1 : 0;
 }

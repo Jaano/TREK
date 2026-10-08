@@ -26,9 +26,9 @@
  *
  * The matching lives in scripts/lib/rtl.mjs.
  */
-import { fileURLToPath } from 'node:url'
-import { runCli } from './lib/ratchet.mjs'
-import { check } from './lib/rtl.mjs'
+import { fileURLToPath } from 'node:url';
+import { runCli } from './lib/ratchet.mjs';
+import { check } from './lib/rtl.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-await runCli('lint:rtl', (args) => check({ root, update: args.includes('--update'), list: args.includes('--list') }))
+const root = fileURLToPath(new URL('..', import.meta.url));
+await runCli('lint:rtl', (args) => check({ root, update: args.includes('--update'), list: args.includes('--list') }));

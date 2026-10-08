@@ -17,9 +17,11 @@
  *   npm run lint:layers -- --update  lower the baseline to what the files hold now;
  *                                    it never raises an entry
  */
-import { fileURLToPath } from 'node:url'
-import { check } from './lib/layers.mjs'
-import { runCli } from './lib/ratchet.mjs'
+import { fileURLToPath } from 'node:url';
+import { check } from './lib/layers.mjs';
+import { runCli } from './lib/ratchet.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-await runCli('lint:layers', (args) => check({ root, update: args.includes('--update'), list: args.includes('--list') }))
+const root = fileURLToPath(new URL('..', import.meta.url));
+await runCli('lint:layers', (args) =>
+  check({ root, update: args.includes('--update'), list: args.includes('--list') })
+);

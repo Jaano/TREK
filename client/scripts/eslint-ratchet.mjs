@@ -15,9 +15,9 @@
  *   npm run lint:warnings -- --update  lower the baseline to today's counts;
  *                                      it never raises an entry
  */
-import { fileURLToPath } from 'node:url'
-import { check } from './lib/eslint-warnings.mjs'
-import { runCli } from './lib/ratchet.mjs'
+import { fileURLToPath } from 'node:url';
+import { check } from './lib/eslint-warnings.mjs';
+import { runCli } from './lib/ratchet.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-await runCli('lint:warnings', (args) => check({ root, update: args.includes('--update') }))
+const root = fileURLToPath(new URL('..', import.meta.url));
+await runCli('lint:warnings', (args) => check({ root, update: args.includes('--update') }));

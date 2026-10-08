@@ -1,11 +1,11 @@
 /*
  * The rules and the comparison behind lint:layers (scripts/layer-lint.mjs).
  */
-import { join } from 'node:path'
-import { countMap, lowerCounts, readBaseline, writeBaseline } from './ratchet.mjs'
-import { sourceGraph } from './imports.mjs'
+import { join } from 'node:path';
+import { sourceGraph } from './imports.mjs';
+import { countMap, lowerCounts, readBaseline, writeBaseline } from './ratchet.mjs';
 
-const VIEW = ['components', 'mobile', 'pages', 'hooks']
+const VIEW = ['components', 'mobile', 'pages', 'hooks'];
 
 /**
  * For each directory under src/, the directories its files may not import
@@ -36,21 +36,22 @@ export const RULES = {
   vacay: VIEW,
   repo: [...VIEW, 'store'],
   db: [...VIEW, 'store', 'repo', 'sync', 'api'],
-}
+};
 
 /**
  * Every import that crosses a boundary the wrong way, per file. A type-only
  * import counts too: a type the lower layer needs belongs below it.
  */
 export function violations(root, rules = RULES) {
-  const found = {}
+  const found = {};
   for (const file of sourceGraph(root)) {
-    const banned = rules[file.layer]
-    if (!banned) continue
-    const wrong = file.imports.filter((imp) => imp.layer && banned.includes(imp.layer))
-    if (wrong.length) found[file.key] = wrong.map((imp) => `${imp.line}: '${imp.specifier}' (${file.layer} into ${imp.layer})`)
+    const banned = rules[file.layer];
+    if (!banned) continue;
+    const wrong = file.imports.filter((imp) => imp.layer && banned.includes(imp.layer));
+    if (wrong.length)
+      found[file.key] = wrong.map((imp) => `${imp.line}: '${imp.specifier}' (${file.layer} into ${imp.layer})`);
   }
-  return found
+  return found;
 }
 
 /** Runs the check against the baseline at baselinePath and returns the exit code. */
@@ -63,39 +64,41 @@ export function check({
   log = console.log,
   error = console.error,
 }) {
-  const found = violations(root, rules)
-  const counts = Object.fromEntries(Object.entries(found).map(([key, list]) => [key, list.length]))
-  let baseline = readBaseline(baselinePath, countMap)
+  const found = violations(root, rules);
+  const counts = Object.fromEntries(Object.entries(found).map(([key, list]) => [key, list.length]));
+  let baseline = readBaseline(baselinePath, countMap);
 
   if (list) {
     for (const [key, wrong] of Object.entries(found)) {
-      log(`${key} (${wrong.length}, baseline ${baseline[key] ?? 0})`)
-      for (const line of wrong) log(`  ${line}`)
+      log(`${key} (${wrong.length}, baseline ${baseline[key] ?? 0})`);
+      for (const line of wrong) log(`  ${line}`);
     }
   }
 
   if (update) {
-    baseline = lowerCounts(baseline, counts)
-    writeBaseline(baselinePath, baseline)
+    baseline = lowerCounts(baseline, counts);
+    writeBaseline(baselinePath, baseline);
   }
 
-  const grown = Object.entries(counts).filter(([key, n]) => n > (baseline[key] ?? 0))
-  const lowerable = Object.entries(baseline).filter(([key, n]) => (counts[key] ?? 0) < n)
+  const grown = Object.entries(counts).filter(([key, n]) => n > (baseline[key] ?? 0));
+  const lowerable = Object.entries(baseline).filter(([key, n]) => (counts[key] ?? 0) < n);
 
   for (const [key, n] of grown) {
-    error(`FAIL  ${key}: ${n} import(s) against the layering, baseline ${baseline[key] ?? 0}:`)
-    for (const line of found[key]) error(`        ${line}`)
+    error(`FAIL  ${key}: ${n} import(s) against the layering, baseline ${baseline[key] ?? 0}:`);
+    for (const line of found[key]) error(`        ${line}`);
   }
   if (grown.length) {
     error(
       'Move what both sides need down into a layer they may share (a model or helper under utils/, ' +
-        'a hook under hooks/, a type under types/) instead of importing upwards.',
-    )
+        'a hook under hooks/, a type under types/) instead of importing upwards.'
+    );
   }
   if (lowerable.length && !update) {
-    log(`${lowerable.length} file(s) hold fewer of these imports than the baseline: run with --update to lower it.`)
+    log(`${lowerable.length} file(s) hold fewer of these imports than the baseline: run with --update to lower it.`);
   }
-  const sum = (map) => Object.values(map).reduce((a, b) => a + b, 0)
-  log(`layers: ${sum(counts)} import(s) against the layering in ${Object.keys(counts).length} file(s), baseline allows ${sum(baseline)}`)
-  return grown.length ? 1 : 0
+  const sum = (map) => Object.values(map).reduce((a, b) => a + b, 0);
+  log(
+    `layers: ${sum(counts)} import(s) against the layering in ${Object.keys(counts).length} file(s), baseline allows ${sum(baseline)}`
+  );
+  return grown.length ? 1 : 0;
 }

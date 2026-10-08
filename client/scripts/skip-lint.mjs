@@ -17,9 +17,9 @@
  *   npm run lint:skips -- --update  lower the baseline to what the files hold now;
  *                                   it never raises an entry
  */
-import { fileURLToPath } from 'node:url'
-import { runCli } from './lib/ratchet.mjs'
-import { check } from './lib/skips.mjs'
+import { fileURLToPath } from 'node:url';
+import { runCli } from './lib/ratchet.mjs';
+import { check } from './lib/skips.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-await runCli('lint:skips', (args) => check({ root, update: args.includes('--update') }))
+const root = fileURLToPath(new URL('..', import.meta.url));
+await runCli('lint:skips', (args) => check({ root, update: args.includes('--update') }));

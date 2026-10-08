@@ -19,9 +19,9 @@
  *
  * The measuring lives in scripts/lib/size.mjs.
  */
-import { fileURLToPath } from 'node:url'
-import { runCli } from './lib/ratchet.mjs'
-import { check } from './lib/size.mjs'
+import { fileURLToPath } from 'node:url';
+import { runCli } from './lib/ratchet.mjs';
+import { check } from './lib/size.mjs';
 
-const root = fileURLToPath(new URL('..', import.meta.url))
-await runCli('lint:size', (args) => check({ root, update: args.includes('--update') }))
+const root = fileURLToPath(new URL('..', import.meta.url));
+await runCli('lint:size', (args) => check({ root, update: args.includes('--update') }));

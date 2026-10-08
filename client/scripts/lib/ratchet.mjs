@@ -10,39 +10,39 @@
  * scanned and is not there, or a scan that finds no file at all, stops it too:
  * a check that looked at nothing must not report green.
  */
-import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { basename, join, relative } from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { basename, join, relative } from 'node:path';
 
 /** A problem with the check itself rather than a violation it found. */
 export class RatchetError extends Error {}
 
-export const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/
+export const TEST_FILE = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 
 /** Every file under root/<dir> for each dir whose path passes accept, as absolute paths. */
 export function listFiles(root, dirs, accept) {
-  const files = []
+  const files = [];
   const walk = (dir) => {
     for (const name of readdirSync(dir)) {
-      if (name === 'node_modules') continue
-      const path = join(dir, name)
-      if (statSync(path).isDirectory()) walk(path)
-      else if (accept(toKey(root, path))) files.push(path)
+      if (name === 'node_modules') continue;
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) walk(path);
+      else if (accept(toKey(root, path))) files.push(path);
     }
-  }
+  };
   for (const dir of dirs) {
-    const path = join(root, dir)
+    const path = join(root, dir);
     if (!existsSync(path) || !statSync(path).isDirectory()) {
-      throw new RatchetError(`${dir}/ does not exist under ${root}, so there is nothing to check`)
+      throw new RatchetError(`${dir}/ does not exist under ${root}, so there is nothing to check`);
     }
-    walk(path)
+    walk(path);
   }
-  if (!files.length) throw new RatchetError(`no file to check under ${dirs.map((d) => `${d}/`).join(', ')}`)
-  return files.sort()
+  if (!files.length) throw new RatchetError(`no file to check under ${dirs.map((d) => `${d}/`).join(', ')}`);
+  return files.sort();
 }
 
 /** A path relative to root with forward slashes, the form every baseline uses. */
 export function toKey(root, path) {
-  return relative(root, path).split('\\').join('/')
+  return relative(root, path).split('\\').join('/');
 }
 
 /**
@@ -50,29 +50,30 @@ export function toKey(root, path) {
  * LF line ends, so a Windows checkout with CRLF counts the same as CI.
  */
 export function readText(path) {
-  const text = readFileSync(path, 'utf8')
-  return (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).replace(/\r\n?/g, '\n')
+  const text = readFileSync(path, 'utf8');
+  return (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text).replace(/\r\n?/g, '\n');
 }
 
-const isCount = (n) => Number.isInteger(n) && n > 0
+const isCount = (n) => Number.isInteger(n) && n > 0;
 
 /** A JSON object of file → positive count. */
 export function countMap(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'it is not an object of file → count'
-  for (const [key, n] of Object.entries(value)) if (!isCount(n)) return `"${key}" holds ${JSON.stringify(n)}, not a positive whole number`
-  return null
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'it is not an object of file → count';
+  for (const [key, n] of Object.entries(value))
+    if (!isCount(n)) return `"${key}" holds ${JSON.stringify(n)}, not a positive whole number`;
+  return null;
 }
 
 /** A JSON array of distinct file paths. */
 export function fileList(value) {
-  if (!Array.isArray(value)) return 'it is not an array of file paths'
-  const seen = new Set()
+  if (!Array.isArray(value)) return 'it is not an array of file paths';
+  const seen = new Set();
   for (const entry of value) {
-    if (typeof entry !== 'string' || !entry) return `${JSON.stringify(entry)} is not a file path`
-    if (seen.has(entry)) return `"${entry}" is listed twice`
-    seen.add(entry)
+    if (typeof entry !== 'string' || !entry) return `${JSON.stringify(entry)} is not a file path`;
+    if (seen.has(entry)) return `"${entry}" is listed twice`;
+    seen.add(entry);
   }
-  return null
+  return null;
 }
 
 /**
@@ -80,30 +81,30 @@ export function fileList(value) {
  * above, which returns null when the value fits and the reason otherwise).
  */
 export function readBaseline(path, shape) {
-  const name = basename(path)
-  let text
+  const name = basename(path);
+  let text;
   try {
-    text = readFileSync(path, 'utf8')
+    text = readFileSync(path, 'utf8');
   } catch (err) {
-    throw new RatchetError(`scripts/${name} cannot be read (${err.code ?? err.message}); restore it from git`)
+    throw new RatchetError(`scripts/${name} cannot be read (${err.code ?? err.message}); restore it from git`);
   }
-  let value
+  let value;
   try {
-    value = JSON.parse(text)
+    value = JSON.parse(text);
   } catch (err) {
-    throw new RatchetError(`scripts/${name} is not valid JSON (${err.message}); restore it from git`)
+    throw new RatchetError(`scripts/${name} is not valid JSON (${err.message}); restore it from git`);
   }
-  const problem = shape(value)
-  if (problem) throw new RatchetError(`scripts/${name} has the wrong shape: ${problem}; restore it from git`)
-  return value
+  const problem = shape(value);
+  if (problem) throw new RatchetError(`scripts/${name} has the wrong shape: ${problem}; restore it from git`);
+  return value;
 }
 
 /** Writes value as sorted, two-space JSON with a final newline. */
 export function writeBaseline(path, value) {
   const sorted = Array.isArray(value)
     ? [...value].sort()
-    : Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
-  writeFileSync(path, JSON.stringify(sorted, null, 2) + '\n')
+    : Object.fromEntries(Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  writeFileSync(path, JSON.stringify(sorted, null, 2) + '\n');
 }
 
 /**
@@ -117,18 +118,18 @@ export function writeBaseline(path, value) {
  * @param {number | ((key: string) => number)} [floor]
  */
 export function lowerCounts(baseline, counts, floor = 0) {
-  const lowered = {}
+  const lowered = {};
   for (const [key, allowed] of Object.entries(baseline)) {
-    const now = counts[key] ?? 0
-    if (now > (typeof floor === 'function' ? floor(key) : floor)) lowered[key] = Math.min(allowed, now)
+    const now = counts[key] ?? 0;
+    if (now > (typeof floor === 'function' ? floor(key) : floor)) lowered[key] = Math.min(allowed, now);
   }
-  return lowered
+  return lowered;
 }
 
 /** The baseline entries that are still offenders: a list only ever loses files. */
 export function lowerList(baseline, offenders) {
-  const now = new Set(offenders)
-  return baseline.filter((file) => now.has(file))
+  const now = new Set(offenders);
+  return baseline.filter((file) => now.has(file));
 }
 
 /**
@@ -139,10 +140,10 @@ export function lowerList(baseline, offenders) {
  */
 export async function runCli(name, main) {
   try {
-    process.exitCode = await main(process.argv.slice(2))
+    process.exitCode = await main(process.argv.slice(2));
   } catch (err) {
-    if (!(err instanceof RatchetError)) throw err
-    console.error(`FAIL  ${name}: ${err.message}`)
-    process.exitCode = 1
+    if (!(err instanceof RatchetError)) throw err;
+    console.error(`FAIL  ${name}: ${err.message}`);
+    process.exitCode = 1;
   }
 }
