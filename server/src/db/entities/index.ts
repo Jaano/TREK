@@ -92,6 +92,7 @@ import { RoadtripDayTracksSchema } from './RoadtripDayTracks.entity';
 import { RoadtripPreferencesSchema } from './RoadtripPreferences.entity';
 import { RoadtripViasSchema } from './RoadtripVias.entity';
 import { RouteUsageDailySchema } from './RouteUsageDaily.entity';
+import { SchedulerLeasesSchema } from './SchedulerLeases.entity';
 import { SchemaVersionSchema } from './SchemaVersion.entity';
 import { SchoolHolidayCountriesSchema } from './SchoolHolidayCountries.entity';
 import { SchoolHolidayPeriodsSchema } from './SchoolHolidayPeriods.entity';
@@ -224,6 +225,7 @@ export const ALL_ENTITIES: readonly EntitySchema[] = [
   RoadtripPreferencesSchema,
   RoadtripViasSchema,
   RouteUsageDailySchema,
+  SchedulerLeasesSchema,
   SchemaVersionSchema,
   SchoolHolidayCountriesSchema,
   SchoolHolidayPeriodsSchema,

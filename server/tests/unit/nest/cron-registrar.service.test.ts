@@ -51,7 +51,13 @@ vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
 }));
 
 import { SchedulerRegistry } from '@nestjs/schedule';
-import { CronRegistrarService } from '../../../src/nest/scheduling/cron-registrar.service';
+import {
+  CronRegistrarService,
+  LEASE_HEARTBEAT_MS,
+  LEASE_OWNER,
+  LEASE_SETTLE_MS,
+  LEASE_TTL_MS,
+} from '../../../src/nest/scheduling/cron-registrar.service';
 import type { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
@@ -275,6 +281,95 @@ describe('CronRegistrarService', () => {
       expect(logErrorMock).toHaveBeenCalledWith('Cron job "job" failed: kaput');
       h.jobs[0].errorHandler!(boom);
       expect(logErrorMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('the lease (one process per tick)', () => {
+    const testDb = createSnapshotTestDb();
+    let t: TestOrm;
+
+    beforeEach(async () => {
+      t = await createTestOrm(testDb, { allowGlobalContext: false });
+    });
+
+    afterEach(async () => {
+      vi.useRealTimers();
+      await t.close();
+    });
+
+    const holder = (name: string) =>
+      testDb.prepare('SELECT owner, expires_at FROM scheduler_leases WHERE name = ?').get(name) as
+        | { owner: string; expires_at: number }
+        | undefined;
+
+    it('CRONREG-017: a tick another process holds does not run here', async () => {
+      const name = 'lease-held-elsewhere';
+      testDb
+        .prepare('INSERT INTO scheduler_leases (name, owner, expires_at) VALUES (?, ?, ?)')
+        .run(name, 'other-host:1:peer', Date.now() + 60_000);
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      let ran = false;
+      registrar.register(name, '* * * * *', () => {
+        ran = true;
+      });
+      await h.jobs[0].onTick();
+      expect(ran).toBe(false);
+      expect(holder(name)!.owner).toBe('other-host:1:peer');
+    });
+
+    it('CRONREG-018: a lapsed lease is taken over, and held for the settle window after the tick', async () => {
+      const name = 'lease-lapsed';
+      testDb
+        .prepare('INSERT INTO scheduler_leases (name, owner, expires_at) VALUES (?, ?, ?)')
+        .run(name, 'crashed-host:9:gone', Date.now() - 1);
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      let ran = false;
+      registrar.register(name, '* * * * *', () => {
+        ran = true;
+      });
+      const before = Date.now();
+      await h.jobs[0].onTick();
+      expect(ran).toBe(true);
+      const row = holder(name)!;
+      expect(row.owner).toBe(LEASE_OWNER);
+      expect(row.expires_at).toBeGreaterThanOrEqual(before + LEASE_SETTLE_MS);
+      expect(row.expires_at).toBeLessThan(before + LEASE_TTL_MS);
+    });
+
+    it('CRONREG-019: this process runs its own next tick even while it still holds the lease', async () => {
+      const name = 'lease-own-next-tick';
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      let runs = 0;
+      registrar.register(name, '* * * * *', () => {
+        runs++;
+      });
+      await h.jobs[0].onTick();
+      await h.jobs[0].onTick();
+      expect(runs).toBe(2);
+    });
+
+    it('CRONREG-020: a long tick renews its lease while it runs', async () => {
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const name = 'lease-long-tick';
+      const registrar = new CronRegistrarService(new SchedulerRegistry(), { isTest: () => false } as RuntimeEnvService, t.orm);
+      let finish!: () => void;
+      let started!: () => void;
+      const running = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      registrar.register(name, '* * * * *', () => {
+        started();
+        return new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      });
+      const tick = h.jobs[0].onTick();
+      await running;
+      testDb.prepare('UPDATE scheduler_leases SET expires_at = 1 WHERE name = ?').run(name);
+      vi.advanceTimersByTime(LEASE_HEARTBEAT_MS);
+      await vi.waitFor(() => expect(holder(name)!.expires_at).toBeGreaterThan(Date.now()));
+      finish();
+      await tick;
     });
   });
 

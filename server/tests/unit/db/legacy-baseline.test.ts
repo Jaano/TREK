@@ -36,6 +36,7 @@ const UNNUMBERED = [
   'Migration20200101042200_an_index_on_every_foreign_key',
   'Migration20200101042300_every_tour_type_the_contract_names',
   'Migration20200101042400_one_account_per_email_whatever_its_case',
+  'Migration20200101042500_a_cron_tick_runs_in_one_process',
 ];
 // The last step the positional runner ever had; planLegacyBaseline refuses a
 // schema_version past it.

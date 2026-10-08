@@ -1,3 +1,5 @@
+import { hostname } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { Injectable, Optional, type OnApplicationShutdown } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
@@ -5,8 +7,28 @@ import { MikroORM } from '@mikro-orm/core';
 import { readEnv } from '../../app-config';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import { withRequestContext } from '../database/request-context';
-import { logError } from '../audit/audit-log.logger';
+import { logDebug, logError } from '../audit/audit-log.logger';
 import { traceEntry, wasTraced } from '../audit/entry-trace.logger';
+import { SchedulerLeases } from '../../db/entities/SchedulerLeases.entity';
+
+/**
+ * Who holds a lease: this process. Every registrar in one process shares it,
+ * so a job re-registered (or a second app built in the same process, as the
+ * test harness does) keeps the lease it already had, while another process on
+ * the same database is a different owner.
+ */
+export const LEASE_OWNER = `${hostname()}:${process.pid}:${randomUUID()}`;
+
+/** How long a lease lasts without a heartbeat; a crashed holder frees its jobs after this. */
+export const LEASE_TTL_MS = 60_000;
+/** How often a running tick renews its lease. */
+export const LEASE_HEARTBEAT_MS = 20_000;
+/**
+ * How long a finished tick keeps its lease. Long enough that another process
+ * whose timer fires a little late for the same tick finds it taken, short
+ * enough that the next tick of a minutely job is free for whoever fires it.
+ */
+export const LEASE_SETTLE_MS = 30_000;
 
 /**
  * The one way TREK code schedules a cron. Job providers register here from
@@ -93,7 +115,7 @@ export class CronRegistrarService implements OnApplicationShutdown {
       }
       // Each tick is its own unit of work: one correlation id for every line
       // the job writes, and one line for the tick itself.
-      return traceEntry('cron', name, () => withRequestContext(orm, () => onTick()), {
+      return traceEntry('cron', name, () => withRequestContext(orm, () => this.runLeased(orm, name, onTick)), {
         failureLevel: 'error',
         failureMessage: failed,
       });
@@ -116,6 +138,38 @@ export class CronRegistrarService implements OnApplicationShutdown {
     this.registry.addCronJob(name, job);
     this.names.add(name);
     return true;
+  }
+
+  /**
+   * Run one tick only if this process holds the job's lease.
+   *
+   * waitForCompletion keeps a tick from overlapping itself inside one process;
+   * the lease does the same across processes sharing the database (a rolling
+   * update's overlap, a second replica, a dev container pointed at the same
+   * file). The lease is renewed while the tick runs, so a long backup keeps it,
+   * and held for LEASE_SETTLE_MS afterwards, so a peer whose timer fires late
+   * for the same tick does not run it again. A process that dies holding it
+   * frees the job after LEASE_TTL_MS.
+   */
+  private async runLeased(orm: Pick<MikroORM, 'em'>, name: string, onTick: () => void | Promise<void>): Promise<void> {
+    const leases = orm.em.getRepository(SchedulerLeases);
+    if (!(await leases.acquire(name, LEASE_OWNER, Date.now(), Date.now() + LEASE_TTL_MS))) {
+      logDebug(`Cron job "${name}" skipped: another process holds this tick`);
+      return;
+    }
+    const leaseFailed = (err: unknown) =>
+      logError(`Cron job "${name}": lease update failed: ${err instanceof Error ? err.message : String(err)}`);
+    const heartbeat = setInterval(() => {
+      withRequestContext(orm, () => leases.extend(name, LEASE_OWNER, Date.now() + LEASE_TTL_MS)).catch(leaseFailed);
+    }, LEASE_HEARTBEAT_MS);
+    heartbeat.unref();
+    try {
+      await onTick();
+    } finally {
+      clearInterval(heartbeat);
+      // Never let the bookkeeping replace the tick's own error.
+      await leases.extend(name, LEASE_OWNER, Date.now() + LEASE_SETTLE_MS).catch(leaseFailed);
+    }
   }
 
   /**
