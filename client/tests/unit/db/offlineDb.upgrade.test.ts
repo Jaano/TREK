@@ -238,10 +238,11 @@ const UPGRADE_CASES: Record<number, UpgradeCase> = {
     },
   },
   6: {
-    intent: 'adds the driving settings and drops the area cache that predates per-trip keys',
+    intent: 'adds the driving settings',
     check: async (db) => {
       await db.table('roadtripPreferences').put({ tripId: 2, preferences: {} });
       expect(await db.roadtripPreferences.count()).toBe(1);
+      // The empty area cache comes from v7 and v8 on the way to the current version.
       expect(await db.areaPlaces.count()).toBe(0);
       expect(await db.syncMeta.get(1)).not.toHaveProperty('areaPlacesKey');
     },
