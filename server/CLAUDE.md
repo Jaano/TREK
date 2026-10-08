@@ -61,6 +61,22 @@ Nest owns everything. Every domain is a DI module under `src/nest/<domain>/` (`c
 - **Don't fork canonical paths.** Auth verification is `verifyJwtAndLoadUser` (with the `password_version` gate) — reuse it.
 - **Money**: integer cents; largest-remainder splits (`BudgetService.splitEqualShares` is the reference); FX frozen at entry; explicit flags, never sentinel values; custom splits must reconcile to zero before persisting.
 
+## SQL dialect
+
+SQLite is the engine today and Postgres is the planned second one. Code under `src/` is written so that a Postgres port only adds a branch to the dialect layer, never a sweep through the repositories:
+
+- **Build statements, don't spell them.** Use the MikroORM QueryBuilder or entity methods, or `this.kysely<Pick<DB, ...>>()` on the generated table types. Repositories and seeders may not hold SQL text at all (ESLint), and `lint:dialect` holds every other file to its baseline.
+- **Insert or ignore / upsert**: `.onConflict((oc) => oc.columns([...]).doNothing())` or `.doUpdateSet({...})`, or `em.upsert`. Name the conflict target where there is one. Never `INSERT OR IGNORE`/`INSERT OR REPLACE`.
+- **The new id**: `.returning('id').executeTakeFirstOrThrow()`. Never `InsertResult.insertId` or `last_insert_rowid()`; both are SQLite's rowid and undefined on Postgres.
+- **Time**: `currentTimestamp`/`currentTimestampKysely`, `nowMinusDays`, `nowMinusHours`, `nowPlusSeconds`/`nowPlusSecondsKysely`, `nowDateOffset`, `dateOf`, `dateAdd`, `unixEpochToIsoKysely` from `src/db/dialect/sql-functions.ts`. Never `datetime('now')`, `strftime` or `julianday`.
+- **Strings and casts**: `concat`/`concatKysely` instead of `||`, `substring`/`substringKysely`, `lower`/`lowerTrim`, `collateNoCase`, `castInteger`/`castIntegerKysely`, and `startsWithIsoDate`/`startsWithIsoDateKysely` instead of `GLOB`.
+- **JSON columns** are read whole and parsed in the service; no `json_extract` in SQL.
+- **PRAGMA** belongs to the `src/db/` lifecycle files (`database.ts`, `connection.ts`, `durability.ts`, the migrations). `MaintenanceRepository` is the baselined SQLite maintenance adapter (`wal_checkpoint`, `VACUUM INTO`).
+- **A missing helper** goes into `sql-functions.ts`, dispatching on the live platform: a SQLite branch now, `unsupported(platform)` for the rest until the second engine lands. That file is the only one allowed to spell an engine's own SQL.
+- **Migrations** that have shipped are frozen as they are. A new migration's data statements follow the rules above; its DDL is written for the engine it runs on.
+- **Storage model**: the generated Kysely types describe what SQLite stores (0/1 integers for flags, TEXT timestamps, JSON in TEXT). Convert at the service boundary, as the contracts already require.
+- **MySQL/MariaDB are out of scope.** The repositories rely on `INSERT ... ON CONFLICT` (Kysely's `onConflict`, often a target-less `doNothing()`) and on `RETURNING`, and MySQL has neither: it would need an insert-ignore/upsert wrapper in the dialect layer and a different way to read new ids before it could be considered.
+
 ## Configuration (app-config)
 
 **Never read `process.env` in `src/**`** — ESLint errors on it. All env access goes through `src/app-config/`:
