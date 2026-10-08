@@ -95,6 +95,7 @@ interface PlannerActions {
   loadFiles: ReturnType<typeof vi.fn>
   refreshDays: ReturnType<typeof vi.fn>
   setAssignmentTimes: ReturnType<typeof vi.fn>
+  setAssignmentNotes: ReturnType<typeof vi.fn>
   addPlace: ReturnType<typeof vi.fn>
   updatePlace: ReturnType<typeof vi.fn>
   deletePlace: ReturnType<typeof vi.fn>
@@ -125,6 +126,7 @@ function makeActions(): PlannerActions {
     loadFiles: vi.fn(async () => undefined),
     refreshDays: vi.fn(async () => undefined),
     setAssignmentTimes: vi.fn(async () => undefined),
+    setAssignmentNotes: vi.fn(async () => undefined),
     addPlace: vi.fn(async () => ({ id: 900, name: 'New' })),
     updatePlace: vi.fn(async () => undefined),
     deletePlace: vi.fn(async () => undefined),
@@ -203,10 +205,6 @@ beforeEach(() => {
   vi.spyOn(tripsApi, 'getMembers').mockResolvedValue({ owner: null, members: [] })
   vi.spyOn(accommodationsApi, 'list').mockResolvedValue({ accommodations: [] })
   vi.spyOn(assignmentsApi, 'updateTime').mockResolvedValue({})
-  // The note route answers with the saved visit, which the repo caches on the day.
-  vi.spyOn(assignmentsApi, 'updateNotes').mockImplementation(async (_tripId, id, { notes }) => ({
-    assignment: buildAssignment({ id, day_id: 7, place: buildPlace({ id: 1, lat: 1, lng: 2 }), notes }),
-  }))
   vi.spyOn(airtrailApi, 'sync').mockResolvedValue({ changed: 0 })
   vi.spyOn(mapsApi, 'reverse').mockResolvedValue({ name: '', address: '' } as never)
   vi.spyOn(mapsApi, 'search').mockResolvedValue({ places: [] } as never)
@@ -1245,8 +1243,7 @@ describe('useTripPlanner — place CRUD', () => {
     })
 
     expect(actions.updatePlace).toHaveBeenCalledWith(42, 1, { name: 'Nara' })
-    expect(assignmentsApi.updateNotes).toHaveBeenCalledWith(42, 10, { notes: 'Book the 10:00 entry' })
-    expect(useTripStore.getState().assignments['7'][0].notes).toBe('Book the 10:00 entry')
+    expect(actions.setAssignmentNotes).toHaveBeenCalledWith(42, 7, 10, 'Book the 10:00 entry')
   })
 
   it('FE-TP-HOOK-053c: without assignment_notes in the payload no notes write happens; an empty string clears (#2163)', async () => {
@@ -1263,13 +1260,13 @@ describe('useTripPlanner — place CRUD', () => {
     await act(async () => {
       await result.current.handleSavePlace({ name: 'Nara' })
     })
-    expect(assignmentsApi.updateNotes).not.toHaveBeenCalled()
+    expect(actions.setAssignmentNotes).not.toHaveBeenCalled()
 
     // An empty string is an explicit clear and goes out as null.
     await act(async () => {
       await result.current.handleSavePlace({ name: 'Nara', assignment_notes: '' })
     })
-    expect(assignmentsApi.updateNotes).toHaveBeenCalledWith(42, 10, { notes: null })
+    expect(actions.setAssignmentNotes).toHaveBeenCalledWith(42, 7, 10, null)
   })
 
   it('FE-TP-HOOK-054: editing an unassigned place skips the per-assignment time write', async () => {
