@@ -21,14 +21,6 @@ vi.mock('../../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
     return mock;
 });
@@ -76,6 +68,10 @@ import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.s
 import { TrekPhotoRegistrationService } from '../../../src/nest/photos/trek-photo-registration.service';
 import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
 import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { PackingItems } from '../../../src/db/entities/PackingItems.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
+import { insertRow, updateRows } from '../../helpers/factories/rows';
 import type { TripsRepository } from '../../../src/db/repositories/Trips.repository';
 import {
   createTestUnitOfWork, createTestAppSettingsRepo, createTestUsersRepo, sharedTestOrm,
@@ -245,13 +241,13 @@ afterAll(() => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const addBudgetItem = (tripId: number, name: string, totalPrice: number) =>
-  testDb.prepare("INSERT INTO budget_items (trip_id, category, name, total_price) VALUES (?, 'food', ?, ?)")
-    .run(tripId, name, totalPrice);
+const orm = () => sharedTestOrm(testDb);
 
-const addPackingItem = (tripId: number, name: string, checked: number) =>
-  testDb.prepare('INSERT INTO packing_items (trip_id, name, checked) VALUES (?, ?, ?)')
-    .run(tripId, name, checked);
+const addBudgetItem = async (tripId: number, name: string, totalPrice: number) =>
+  insertRow(await orm(), BudgetItems, { trip: tripId, category: 'food', name, total_price: totalPrice });
+
+const addPackingItem = async (tripId: number, name: string, checked: number) =>
+  insertRow(await orm(), PackingItems, { trip: tripId, name, checked });
 
 // R8 (Plan 3c program brief item 8): the SQL-text-keyed Proxy fault injection
 // this file used to build (`ownerlessDbs`, keyed on the literal
@@ -297,7 +293,7 @@ describe('getTripSummary — feed_token never reaches the wire (TR-B)', () => {
   it('TRIP-READ-002b: withoutFeedToken strips feed_token even though findRaw hands it back intact', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('UPDATE trips SET feed_token = ? WHERE id = ?').run('secret-anon-feed-credential', trip.id);
+    await updateRows(await orm(), Trips, { id: trip.id }, { feed_token: 'secret-anon-feed-credential' });
 
     // TripsRepository.findRaw is a plain `SELECT *` — it hands feed_token back
     // intact (proven directly, bypassing the service, so this test would fail
@@ -317,13 +313,13 @@ describe('getTripSummary shaping', () => {
   it('TRIP-READ-003: folds a falsy total_price into the budget total instead of poisoning it', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    addBudgetItem(trip.id, 'Dinner', 40);
+    await addBudgetItem(trip.id, 'Dinner', 40);
     // total_price is NOT NULL DEFAULT 0, so 0 is the reachable falsy price: a free
     // entry someone logged to keep it on the list. The `|| 0` in the reduce is what
     // keeps any such value out of the sum — drop it and a price that arrives
     // non-numeric turns the whole trip total into NaN, which the MCP summary and
     // the offline clients both render as an empty budget.
-    addBudgetItem(trip.id, 'Free walking tour', 0);
+    await addBudgetItem(trip.id, 'Free walking tour', 0);
 
     const summary = (await svc.getTripSummary(trip.id, owner.id))!;
     expect(summary.budget.item_count).toBe(2);
@@ -334,11 +330,12 @@ describe('getTripSummary shaping', () => {
   it('TRIP-READ-008: totals a foreign-currency bill in the trip currency, at its booked rate (#2525)', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    addBudgetItem(trip.id, 'Dinner', 100);
+    await addBudgetItem(trip.id, 'Dinner', 100);
     // 801.76 USD booked when a euro bought 1.17 dollars: 685.26 EUR of trip money. The
     // summary used to add the 801.76 to the euros and report 901.76 EUR.
-    testDb.prepare("INSERT INTO budget_items (trip_id, category, name, total_price, currency, exchange_rate) VALUES (?, 'accommodation', 'Aparthotel Silver', 801.76, 'USD', 1.17)")
-      .run(trip.id);
+    await insertRow(await orm(), BudgetItems, {
+      trip: trip.id, category: 'accommodation', name: 'Aparthotel Silver', total_price: 801.76, currency: 'USD', exchange_rate: 1.17,
+    });
 
     const summary = (await svc.getTripSummary(trip.id, owner.id))!;
     expect(summary.budget.total).toBe(785.26);
@@ -351,11 +348,12 @@ describe('getTripSummary shaping', () => {
   it('TRIP-READ-009: totals a trip saved without a currency in euros, the default the rest of the app reads it in (#2525)', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    testDb.prepare('UPDATE trips SET currency = NULL WHERE id = ?').run(trip.id);
-    addBudgetItem(trip.id, 'Dinner', 100);
+    await updateRows(await orm(), Trips, { id: trip.id }, { currency: null });
+    await addBudgetItem(trip.id, 'Dinner', 100);
     // 117.33 USD booked at 1.1733 dollars to the euro is 100 EUR of trip money.
-    testDb.prepare("INSERT INTO budget_items (trip_id, category, name, total_price, currency, exchange_rate) VALUES (?, 'transport', 'Taxi', 117.33, 'USD', 1.1733)")
-      .run(trip.id);
+    await insertRow(await orm(), BudgetItems, {
+      trip: trip.id, category: 'transport', name: 'Taxi', total_price: 117.33, currency: 'USD', exchange_rate: 1.1733,
+    });
 
     const summary = (await svc.getTripSummary(trip.id, owner.id))!;
     expect(summary.budget.total).toBe(200);
@@ -366,9 +364,9 @@ describe('getTripSummary shaping', () => {
   it('TRIP-READ-004: counts only checked packing items, not the whole list', async () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    addPackingItem(trip.id, 'Socks', 1);
-    addPackingItem(trip.id, 'Charger', 1);
-    addPackingItem(trip.id, 'Passport', 0);
+    await addPackingItem(trip.id, 'Socks', 1);
+    await addPackingItem(trip.id, 'Charger', 1);
+    await addPackingItem(trip.id, 'Passport', 0);
 
     // total and checked come from the same array; if the filter is ever widened the
     // packing progress the summary reports jumps to 100% while items are still open.
@@ -423,9 +421,8 @@ describe('private packing items stay viewer-scoped (#858)', () => {
     const { user: viewer } = createUser(testDb);
     const trip = createTrip(testDb, owner.id, { start_date: '2025-06-01', end_date: '2025-06-02' });
     addTripMember(testDb, trip.id, viewer.id);
-    testDb.prepare("INSERT INTO packing_items (trip_id, name, is_private, owner_id) VALUES (?, 'Ring', 1, ?)")
-      .run(trip.id, owner.id);
-    testDb.prepare("INSERT INTO packing_items (trip_id, name) VALUES (?, 'Tent')").run(trip.id);
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Ring', is_private: 1, owner: owner.id });
+    await insertRow(await orm(), PackingItems, { trip: trip.id, name: 'Tent' });
 
     // Both read paths pass the viewer into packing.listItems; that argument is the
     // ONLY thing filtering the list. If either call site loses it, listItems falls

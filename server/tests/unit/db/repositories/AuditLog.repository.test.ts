@@ -7,6 +7,8 @@ import { AuditLog } from '../../../../src/db/entities/AuditLog.entity';
 import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
 import type { AuditLogRepository } from '../../../../src/db/repositories/AuditLog.repository';
 import { DB_TIMESTAMP_RE } from '../../../../src/db/types';
+import { Users } from '../../../../src/db/entities/Users.entity';
+import { countRows, deleteRows, findRow } from '../../../helpers/factories/rows';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;
@@ -23,6 +25,7 @@ describe('AuditLogRepository', () => {
   it('AUDITREPO-001: insert writes the legacy column set, matching the SELECT * row exactly', async () => {
     const { user } = createUser(testDb);
     await auditLog.insertEntry({ user_id: user.id, action: 'trip.create', resource: 'trip', details: '{"title":"Rome"}', ip: '1.2.3.4' });
+    // test-sql-allow: the stored SELECT * row is the oracle for the legacy column set the insert must write.
     const row = testDb.prepare('SELECT * FROM audit_log').get() as { id: number; created_at: string };
     expect(row).toStrictEqual({
       id: expect.any(Number),
@@ -38,6 +41,7 @@ describe('AuditLogRepository', () => {
   it('AUDITREPO-002: created_at is left to the column default, as text, in the YYYY-MM-DD HH:MM:SS shape', async () => {
     const { user } = createUser(testDb);
     await auditLog.insertEntry({ user_id: user.id, action: 'user.login', resource: null, details: null, ip: null });
+    // test-sql-allow: typeof() reports the storage class SQLite holds, which no entity maps.
     const stored = testDb.prepare('SELECT created_at, typeof(created_at) AS kind FROM audit_log').get() as { created_at: string; kind: string };
     expect(stored.kind).toBe('text');
     expect(stored.created_at).toMatch(DB_TIMESTAMP_RE);
@@ -45,15 +49,15 @@ describe('AuditLogRepository', () => {
 
   it('AUDITREPO-003: a null user writes a null user_id twin, not a foreign-key value', async () => {
     await auditLog.insertEntry({ user_id: null, action: 'user.login', resource: null, details: null, ip: null });
-    const row = testDb.prepare('SELECT user_id FROM audit_log').get() as { user_id: number | null };
-    expect(row.user_id).toBeNull();
+    const row = await findRow(t, AuditLog, {});
+    expect(row?.user_id).toBeNull();
   });
 
   it('AUDITREPO-004: null resource/details/ip are stored as NULL, not the string "null"', async () => {
     const { user } = createUser(testDb);
     await auditLog.insertEntry({ user_id: user.id, action: 'user.login', resource: null, details: null, ip: null });
-    const row = testDb.prepare('SELECT resource, details, ip FROM audit_log').get();
-    expect(row).toEqual({ resource: null, details: null, ip: null });
+    const row = await findRow(t, AuditLog, {});
+    expect(row).toMatchObject({ resource: null, details: null, ip: null });
   });
 
   it('AUDITREPO-005: resolves without returning a value — no id or row is read back', async () => {
@@ -69,11 +73,11 @@ describe('AuditLogRepository', () => {
     t.em.create(AppSettings, { key: 'pending-during-audit-insert', value: 'should-not-be-written' });
     await auditLog.insertEntry({ user_id: user.id, action: 'trip.create', resource: 'trip', details: null, ip: null });
 
-    const pendingCount = (testDb.prepare('SELECT COUNT(*) AS n FROM app_settings WHERE key = ?').get('pending-during-audit-insert') as { n: number }).n;
+    const pendingCount = await countRows(t, AppSettings, { key: 'pending-during-audit-insert' });
     expect(pendingCount).toBe(0);
 
-    const auditRow = testDb.prepare('SELECT action FROM audit_log').get() as { action: string };
-    expect(auditRow.action).toBe('trip.create');
+    const auditRow = await findRow(t, AuditLog, {});
+    expect(auditRow?.action).toBe('trip.create');
   });
 
   // ── Plan 3i Task 0 — listPage/count (AD22/AD23) ────────────────────────────
@@ -98,8 +102,9 @@ describe('AuditLogRepository', () => {
     // bob is deleted after the fact; `audit_log.user_id REFERENCES users(id)
     // ON DELETE SET NULL` fires — this row's own user_id becomes NULL, the
     // same shape a NULL-user_id row has, reached a different way.
-    testDb.prepare('DELETE FROM users WHERE id = ?').run(bob.id);
+    await deleteRows(t, Users, { id: bob.id });
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(LEGACY_PAGE_SQL).all(10, 0);
     const result = await auditLog.listPage(10, 0);
     expect(result).toEqual(legacy);
@@ -118,6 +123,7 @@ describe('AuditLogRepository', () => {
     for (let i = 0; i < 5; i++) {
       await auditLog.insertEntry({ user_id: user.id, action: `action.${i}`, resource: null, details: null, ip: null });
     }
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyPage = testDb.prepare(LEGACY_PAGE_SQL).all(2, 1);
     const result = await auditLog.listPage(2, 1);
     expect(result).toEqual(legacyPage);
@@ -129,6 +135,7 @@ describe('AuditLogRepository', () => {
     await auditLog.insertEntry({ user_id: user.id, action: 'a', resource: null, details: null, ip: null });
     await auditLog.insertEntry({ user_id: null, action: 'b', resource: null, details: null, ip: null });
 
+    // test-sql-allow: the raw COUNT is the legacy oracle this parity test holds the repository to.
     const legacyCount = (testDb.prepare('SELECT COUNT(*) as c FROM audit_log').get() as { c: number }).c;
     const result = await auditLog.count();
     expect(result).toBe(legacyCount);
