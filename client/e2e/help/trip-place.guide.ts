@@ -459,12 +459,12 @@ const SCRIPTS: Record<string, GuideScript> = {
         target: p => card(p).getByText('Upload', { exact: true }),
         act: async p => {
           await card(p).locator('input[type="file"][multiple]').setInputFiles(await coverFixture())
-          await expect(card(p).getByRole('button', { name: '1 files' })).toBeVisible({ timeout: 30_000 })
+          await expect(card(p).getByRole('button', { name: '1 file', exact: true })).toBeVisible({ timeout: 30_000 })
           await settle(p)
         },
       },
       // The list opens itself once the upload lands.
-      only(p => card(p).getByRole('button', { name: '1 files' })),
+      only(p => card(p).getByRole('button', { name: '1 file', exact: true })),
       // No click: openFile hands the browser a download.
       only(p => card(p).getByRole('button', { name: UPLOADED })),
     ],

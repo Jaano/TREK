@@ -650,7 +650,7 @@ const SCRIPTS: Record<string, GuideScript> = {
           await importCta(p).click()
           await expect(p.getByText('Import from AirTrail', { exact: true })).toHaveCount(0, { timeout: 30_000 })
           // The toast counts flight ids, so the joined pair reports two.
-          const toast = p.getByText('2 flight(s) imported', { exact: true })
+          const toast = p.getByText('2 flights imported', { exact: true })
           await expect(toast).toBeVisible({ timeout: 15_000 })
           await expect(card(p, JOINED.title)).toBeVisible({ timeout: 20_000 })
           // The toast fades after three seconds; the card's picture and the

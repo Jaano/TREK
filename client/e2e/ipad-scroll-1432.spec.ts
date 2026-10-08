@@ -61,8 +61,13 @@ test('#1432 iPad: the places list scrolls under a swipe', async ({ page }) => {
   expect(env.coarse, 'iPad reports a coarse primary pointer').toBe(true)
   expect(env.width, 'iPad sits above the 768px "mobile" breakpoint').toBeGreaterThanOrEqual(768)
 
-  // 1. A swipe must not become a drag: a row is either not draggable, or draggable
-  //    only behind the long-press bridge (#1616).
+  // 1. A swipe must not become a drag. What turned it into one in #1432 was the
+  //    drag-drop-touch polyfill; it belongs to hybrid laptops only now
+  //    (utils/touchDragPolyfill.ts), so a tablet must never load it. A row may be
+  //    draggable, but only behind the long-press bridge (#1616).
+  const polyfillLoaded = await page.evaluate(() =>
+    performance.getEntriesByType('resource').some(e => /drag-?drop-?touch/i.test(e.name)))
+  expect(polyfillLoaded, 'the drag-drop-touch polyfill stays off a tablet').toBe(false)
   const row = page.locator('div[draggable]').filter({ hasText: 'Place 1' }).first()
   await expect(row).toBeVisible()
   const swipeSafe = await row.evaluate(el => el.getAttribute('draggable') !== 'true' || !!el.closest('[data-touch-drag]'))
