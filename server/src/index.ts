@@ -2,16 +2,19 @@ import 'reflect-metadata';
 import 'dotenv/config';
 // Fail-fast env validation — must stay directly after dotenv so a malformed
 // variable aborts before any other module runs its import-time side effects
-// (config.ts key resolution, db/database.ts initDb, ...).
+// (config.ts key resolution, ...).
 import './app-config/boot-validate';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
 import type { INestApplication } from '@nestjs/common';
-// bootstrap is required inside bootstrap() below, not imported here: importing
-// it opens the database, and a first-start restore (#1089) has to put the
-// backup's database in place before that happens.
+// bootstrap is required inside bootstrap() below, not imported here. Importing
+// it no longer opens the database (the ORM's first connect inside buildApp()
+// does, through DatabaseLifecycle), but a first-start restore (#1089) has to
+// put the backup's database in place before anything near it loads, and
+// keeping the require after the restore keeps that true by construction.
 import type * as Bootstrap from './bootstrap';
+import type { DatabaseLifecycle } from './nest/database/database-lifecycle.service';
 
 // data/tmp is the driver-agnostic global scratch dir (restore-upload spool,
 // mirror stream staging) and stays boot-created here. Driver-owned roots — the
@@ -84,6 +87,7 @@ const onListen = () => {
 
 let server: http.Server;
 let nestApp: INestApplication;
+let database: DatabaseLifecycle | undefined;
 
 // Strangler toggle: prefixes served by Nest (env-overridable, instant rollback).
 async function bootstrap(): Promise<void> {
@@ -92,8 +96,9 @@ async function bootstrap(): Promise<void> {
   // (/mcp, /.well-known, OAuth SDK, SPA catch-all). buildApp() owns the composition
   // order; it is shared with the integration-test harness so they can't drift.
   const restore = await restoreBeforeTheDatabaseOpens();
-  const { buildApp, getHttpServer } = require('./bootstrap') as typeof Bootstrap;
+  const { buildApp, getHttpServer, DatabaseLifecycle: Lifecycle } = require('./bootstrap') as typeof Bootstrap;
   nestApp = await buildApp();
+  database = nestApp.get(Lifecycle);
   if (restore.restored) await finishFirstBootRestore(nestApp, restore);
   // The server buildApp created and bound /ws to. Creating a second one here
   // would serve the REST API fine and leave the gateway attached to a socket
@@ -185,7 +190,12 @@ function shutdown(signal: string): void {
     closeNestApp: async () => { await nestApp?.close(); },
     getWsClients: () => getServer()?.clients ?? null,
     closeMcpSessions,
-    closeDb: () => { require('./db/database').closeDb(); },
+    // Through the lifecycle provider once the app is up; before that (a signal
+    // that beat bootstrap()) the module function is all there is.
+    closeDb: () => {
+      if (database) database.close();
+      else (require('./db/database') as typeof import('./db/database')).closeDb();
+    },
     logInfo: sLogInfo,
     logError: sLogError,
     exit: (code: number) => process.exit(code),

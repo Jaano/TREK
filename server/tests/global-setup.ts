@@ -6,7 +6,7 @@ import path from 'node:path';
  *
  * `src/db/database.ts` used to build the schema itself at module load, so merely
  * importing it handed a suite a migrated database. That is MikroORM's job now
- * and its migrator is async, which the synchronous `initDb()` cannot await. This
+ * and its migrator is async, which the synchronous `openDb()` cannot await. This
  * is the only hook in the test lifecycle that can: setup files are side-effect
  * imports and every other hook is per-file.
  *

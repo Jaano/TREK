@@ -12,7 +12,7 @@
  * own mock for that exact module gets handed the REAL, unmocked module for
  * that one import — Vitest can't give a still-building mock to its own
  * re-entrant importer. The real module's test-mode singleton then opens its
- * OWN copy of the schema snapshot (`initDb()` → `readSchemaSnapshot()`), so
+ * OWN copy of the schema snapshot on first use (`openDb()` → `readSchemaSnapshot()`), so
  * whichever code path captured `db` this way sees a pristine, never-reset
  * database (the snapshot's seeded `admin@trek.local`) instead of the mock
  * `buildDbMock` builds — while everything that imports `db/database` AFTER
@@ -135,6 +135,7 @@ export function buildDbMock(testDb: Database.Database) {
       return !!testDb.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId);
     },
     getRawConnection: () => testDb,
+    openDb: () => {},
     registerReinitializeHook: () => {},
     runDemoSeed: () => {},
   };

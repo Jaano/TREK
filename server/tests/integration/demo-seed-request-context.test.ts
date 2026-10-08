@@ -8,7 +8,7 @@
  * `withRequestContext` then." `runSchemaBootstrap` (Plan 3c Task 0b) now
  * wraps the call in `withRequestContext(orm, …)`, the one place it already
  * has `orm` in scope — covering both of `runDemoSeed`'s real call sites
- * (`bootstrap.ts`'s initial boot and `attachOrm`'s restore hook) with no
+ * (`DatabaseLifecycle.open()` at boot and its restore hook) with no
  * second wrapper to keep in sync.
  *
  * This is a real `DEMO_MODE` boot proving that wrap doesn't change what the

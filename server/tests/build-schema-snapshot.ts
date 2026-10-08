@@ -10,19 +10,19 @@ import { schemaSnapshotPath, writeSchemaSnapshot } from '../src/db/schema-snapsh
 import fs from 'node:fs';
 
 async function main(): Promise<void> {
-  // Delete first, and load database.ts only afterwards — in test mode `initDb()`
+  // Delete first, and open the database only afterwards: in test mode `openDb()`
   // opens a copy of this snapshot when one exists, so a leftover from the last
   // run would have this process migrating an already-migrated database and
-  // seeding it twice. Static imports are evaluated before any of this runs,
-  // hence the dynamic ones below.
+  // seeding it twice. The modules are loaded dynamically below so nothing of
+  // them runs before the delete.
   fs.rmSync(schemaSnapshotPath(), { force: true });
 
   const { getRawConnection } = await import('../src/db/database');
   const { createStandaloneOrm, runSchemaBootstrap } = await import('../src/db/orm');
 
-  // The shared driver binds to the connection database.ts opened on import, so
-  // this migrates that in-memory database and it can be serialised straight
-  // after.
+  // The shared driver binds to the connection database.ts opens on the ORM's
+  // first connect, so this migrates that in-memory database and it can be
+  // serialised straight after.
   const orm = await createStandaloneOrm();
   try {
     await runSchemaBootstrap(orm);

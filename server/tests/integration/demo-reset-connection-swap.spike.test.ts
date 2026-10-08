@@ -6,8 +6,8 @@
  * fork (`cron-registrar.service.ts:87-92`, `wrappedTick`). INSIDE that one
  * fork, the function reads credentials, calls `closeDb()` then
  * `await reinitialize()` (which closes the process's one better-sqlite3
- * handle, opens a new one, and — via `orm.ts#attachOrm`'s
- * `registerReinitializeHook` — closes and reconnects the ORM's own
+ * handle, opens a new one, and (through the hook `DatabaseLifecycle.open()`
+ * registers with `registerReinitializeHook`) closes and reconnects the ORM's own
  * Kysely-bound `Connection`, then re-runs `runSchemaBootstrap`), and only
  * THEN writes the preserved credentials back through a freshly re-required
  * `db` reference.
@@ -28,7 +28,7 @@
  * instance's `Configuration`, shared by every fork. `orm-driver.ts`'s
  * `BoundSqliteConnection.createKyselyDialect()` reads `getRawConnection()`
  * (the CURRENT `db/database.ts` handle) on every `connect()`, and
- * `attachOrm`'s hook calls `connection.close(true)` then
+ * that hook calls `connection.close(true)` then
  * `connection.connect()` on that ONE shared `Connection` object — it never
  * replaces the object itself, only rebinds its internal Kysely client. So
  * any EM fork — pre-swap or fresh — that resolves a query calls
@@ -37,7 +37,7 @@
  * this file is what turns that into a measured answer with real evidence
  * rather than an assumption.
  *
- * Test-mode nuance: `NODE_ENV=test` makes `db/database.ts#initDb()` reopen a
+ * Test-mode nuance: `NODE_ENV=test` makes `db/database.ts#openDb()` reopen a
  * PRISTINE copy of the migrated schema snapshot on every call (a fresh
  * `better-sqlite3` instance deserialised from a fixed buffer), not the same
  * on-disk file demo-reset.ts restores in production — so a row inserted

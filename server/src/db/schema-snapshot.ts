@@ -6,10 +6,10 @@ import path from 'path';
 /**
  * A migrated-but-empty database, serialised once per test run.
  *
- * Migrations are async and `database.ts::initDb()` is not — it runs at module
- * load, long before anything can await. Most suites do not care (they mock the
- * module or build their own database), but a handful use the singleton directly
- * and need a schema to be there the moment they import it.
+ * Migrations are async and `database.ts::openDb()` is not: it runs on the
+ * connection's first read, which cannot await. Most suites do not care (they
+ * mock the module or build their own database), but a handful use the
+ * singleton directly and need a schema to be there the moment they touch it.
  *
  * So the vitest global setup migrates one database for the whole run and writes
  * it here; every worker opens a copy. `better-sqlite3` deserialises a 1.5 MiB

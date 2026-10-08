@@ -31,6 +31,7 @@ import { TrekExceptionFilter } from './common/trek-exception.filter';
 import { ZodValidationPipe } from './common/zod-validation.pipe';
 import { ConfigModule } from './config/config.module';
 import { OrmModule } from './database/orm.module';
+import { DatabaseLifecycleModule } from './database/database-lifecycle.module';
 import { DayNotesModule } from './day-notes/day-notes.module';
 import { DaysModule } from './days/days.module';
 import { DocSyncModule } from './doc-sync/doc-sync.module';
@@ -170,6 +171,8 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
     // facade) is gone — Plan 4 Task 4 deleted it once every domain moved onto
     // repositories/`UnitOfWork`. `OrmModule` is the module that survives.
     OrmModule,
+    // The connection's open/close/reopen, resolved by buildApp() and index.ts.
+    DatabaseLifecycleModule,
     // MfaPolicyGuard (Plan 3b Task 1) is registered directly below as this
     // module's own APP_GUARD, never per-controller — so it is the one place
     // that needs `forFeature` for its three repositories; `Users` is not

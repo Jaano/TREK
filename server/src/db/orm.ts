@@ -1,5 +1,5 @@
 import mikroOrmConfig from '../mikro-orm.config';
-import { registerReinitializeHook, runDemoSeed } from './database';
+import { runDemoSeed } from './database';
 import { ensureEmailCaseIndex } from './email-case-index';
 import { migrateToHead, NO_SAFETY_NET } from './legacy-baseline';
 import { preMigrateSnapshot } from './pre-migrate-snapshot';
@@ -25,7 +25,7 @@ import { MikroORM as SqliteMikroORM } from '@mikro-orm/sqlite';
  * class's own `readonly` form while a direct `init()` yields the mutable one;
  * nothing here reads that parameter.
  */
-type AnyOrm = MikroORM<
+export type AnyOrm = MikroORM<
   IDatabaseDriver,
   EntityManager<IDatabaseDriver>,
   readonly (string | EntityClass<AnyEntity> | EntitySchema)[]
@@ -57,8 +57,8 @@ export async function runSchemaBootstrap(orm: AnyOrm, { snapshot = true }: { sna
   //
   // Plan 3c Task 0b (R9): wrapping the call HERE, the one place
   // `runSchemaBootstrap` already has `orm` in scope, covers BOTH of
-  // `runDemoSeed`'s real call sites at once (`bootstrap.ts`'s initial boot
-  // and `attachOrm`'s restore hook below, both of which only ever reach
+  // `runDemoSeed`'s real call sites at once (`DatabaseLifecycle.open()` at
+  // boot and its restore hook in `reopen()`, both of which only ever reach
   // `runDemoSeed` through this function) with no second wrapper to keep in
   // sync.
   //
@@ -70,26 +70,6 @@ export async function runSchemaBootstrap(orm: AnyOrm, { snapshot = true }: { sna
   // restore path) returns to its caller, the same completion guarantee the
   // fully-synchronous version had by construction.
   await withRequestContext(orm, () => runDemoSeed());
-}
-
-/**
- * Binds the ORM to this process's connection lifecycle.
- *
- * A restore swaps the SQLite file and reopens the raw handle; Kysely caches
- * whatever handle it was given, so without this the ORM would keep talking to a
- * closed connection. Closing and reconnecting sends the driver back through
- * `createKyselyDialect()`, which picks up the new handle — and the restored file
- * may be an older backup, so it gets migrated forward too.
- */
-export function attachOrm(orm: AnyOrm): void {
-  registerReinitializeHook(async () => {
-    const connection = orm.em.getConnection();
-    // The handle is owned and closed by `database.ts`; the bound driver's
-    // `destroy()` is a no-op (see `orm-driver.ts`), so this close never reaches it.
-    await connection.close(true);
-    await connection.connect();
-    await runSchemaBootstrap(orm, { snapshot: false });
-  });
 }
 
 /**

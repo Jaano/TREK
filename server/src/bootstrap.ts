@@ -1,4 +1,3 @@
-import { attachOrm, runSchemaBootstrap } from './db/orm';
 import { applyGlobalMiddleware, routingCspOrigins } from './middleware/globalMiddleware';
 import { readEnv } from './app-config';
 import { nestLogLevels } from './app-config/nest-log-levels';
@@ -16,6 +15,7 @@ import { SettingsService } from './nest/settings/settings.service';
 import { StorageService } from './nest/storage/storage.service';
 import { MikroORM } from '@mikro-orm/core';
 import { withRequestContext } from './nest/database/request-context';
+import { DatabaseLifecycle } from './nest/database/database-lifecycle.service';
 import type { INestApplication } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
@@ -61,6 +61,13 @@ import nodeHttp from 'node:http';
 let boundHttpServer: nodeHttp.Server | null = null;
 
 /**
+ * The provider that owns the database connection, for index.ts to close it on
+ * shutdown. Re-exported so index.ts reaches it through the one module it loads
+ * after a first-boot restore.
+ */
+export { DatabaseLifecycle };
+
+/**
  * The http server buildApp created and bound the ws gateway to.
  *
  * index.ts listens on it; the websocket suites connect to it. Anyone creating a
@@ -82,13 +89,14 @@ export async function buildApp(): Promise<INestApplication> {
     rawBody: true,
     logger: nestLogLevels(readEnv().app.logLevel),
   });
-  // Schema first, before ANY consumer reads it. `database.ts` only opens the
-  // connection now; migrating and seeding is MikroORM's job and it is async, so
-  // this is the earliest point it can happen. It has to stay above the
-  // SettingsService resolution below, which is the boot's first DB read.
+  // Schema first, before ANY consumer reads it. The connection lifecycle is the
+  // DatabaseLifecycle provider's: it opens the connection (the ORM's first
+  // connect usually already has), binds the ORM to later swaps, and runs the
+  // legacy baseline, the migrations and the seeders. That is async, so this is
+  // the earliest point it can happen. It has to stay above the SettingsService
+  // resolution below, which is the boot's first DB read.
   const orm = app.get(MikroORM);
-  attachOrm(orm);
-  await runSchemaBootstrap(orm);
+  await app.get(DatabaseLifecycle).open();
   const instance = app.getHttpAdapter().getInstance();
   // The http server is created HERE, not by the caller after buildApp returns,
   // and that ordering is the whole point: Nest binds gateways during app.init(),
