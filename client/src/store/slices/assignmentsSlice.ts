@@ -13,6 +13,7 @@ export interface AssignmentsSlice {
   setAssignmentEndDay: (tripId: number | string, dayId: number, assignmentId: number, endDay: boolean) => Promise<void>
   setAssignmentRouteExcluded: (tripId: number | string, dayId: number, assignmentId: number, excluded: boolean) => Promise<void>
   setAssignmentTimes: (tripId: number | string, dayId: number, assignmentId: number, times: AssignmentTimes) => Promise<void>
+  setAssignmentNotes: (tripId: number | string, dayId: number, assignmentId: number, notes: string | null) => Promise<void>
   assignPlaceToDay: (tripId: number | string, dayId: number | string, placeId: number | string, position?: number | null) => Promise<Assignment | undefined>
   removeAssignment: (tripId: number | string, dayId: number | string, assignmentId: number) => Promise<void>
   clearDayAssignments: (tripId: number | string, dayId: number) => Promise<void>
@@ -74,6 +75,25 @@ export const createAssignmentsSlice = (set: SetState, get: GetState): Assignment
       replace(merge({ ...draft, ...await assignmentRepo.setTimes(tripId, draft, times) }))
     } catch (err: unknown) {
       replace(assignment)
+      throw err
+    }
+  },
+  setAssignmentNotes: async (tripId, dayId, assignmentId, notes) => {
+    const assignment = get().assignments[String(dayId)]?.find(a => a.id === assignmentId)
+    if (!assignment || assignmentId < 0) return
+    // Only the note is patched: the saved row carries the place as the server has it,
+    // and the visit's times may still wait in the queue ahead of this write.
+    const apply = (value: string | null) => set(state => ({
+      assignments: Object.fromEntries(Object.entries(state.assignments).map(([key, items]) => [
+        key, items.map(a => a.id === assignmentId ? { ...a, notes: value } : a),
+      ])),
+    }))
+    apply(notes)
+    try {
+      const saved = await assignmentRepo.setNotes(tripId, assignment, notes)
+      apply(saved.notes ?? null)
+    } catch (err: unknown) {
+      apply(assignment.notes ?? null)
       throw err
     }
   },

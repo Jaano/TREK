@@ -11,7 +11,7 @@ import type { Assignment, Day } from '../types'
 vi.mock('../api/assignmentEndDay', () => ({ saveAssignmentEndDay: vi.fn() }))
 vi.mock('../sync/networkMode', () => ({ isEffectivelyOffline: vi.fn(() => true) }))
 vi.mock('../sync/authGate', () => ({ isAuthed: () => true }))
-vi.mock('../api/client', () => ({ apiClient: { request: vi.fn() }, assignmentsApi: { updateTime: vi.fn(), clearDay: vi.fn() } }))
+vi.mock('../api/client', () => ({ apiClient: { request: vi.fn() }, assignmentsApi: { updateTime: vi.fn(), updateNotes: vi.fn(), clearDay: vi.fn() } }))
 const assignment = { id: 7, day_id: 1, place_id: 2, order_index: 0, assignment_time: '07:00', place: { id: 2, name: 'Berlin' } } as Assignment
 
 beforeEach(async () => {
@@ -76,6 +76,34 @@ describe('assignment time persistence', () => {
     vi.mocked(isEffectivelyOffline).mockReturnValue(false)
     vi.mocked(assignmentsApi.updateTime).mockRejectedValue(new Error('Denied'))
     await expect(assignmentRepo.setTimes(9, assignment, times)).rejects.toThrow('Denied')
+    expect((await offlineDb.days.get(1))?.assignments?.[0]).toEqual(assignment)
+  })
+})
+
+describe('assignment note persistence', () => {
+  it('saves through the note route online and caches the saved row on the day', async () => {
+    vi.mocked(isEffectivelyOffline).mockReturnValue(false)
+    vi.mocked(assignmentsApi.updateNotes).mockResolvedValue({ assignment: { ...assignment, notes: 'Bring cash' } })
+    const saved = await assignmentRepo.setNotes(9, assignment, 'Bring cash')
+    expect(assignmentsApi.updateNotes).toHaveBeenCalledWith(9, 7, { notes: 'Bring cash' })
+    expect(saved.notes).toBe('Bring cash')
+    expect((await offlineDb.days.get(1))?.assignments?.[0]).toMatchObject({ notes: 'Bring cash', assignment_time: '07:00' })
+    expect(await offlineDb.mutationQueue.count()).toBe(0)
+  })
+
+  it('stores the offline note with a replayable write', async () => {
+    const saved = await assignmentRepo.setNotes(9, assignment, null)
+    expect(saved.notes).toBeNull()
+    expect((await offlineDb.days.get(1))?.assignments?.[0].notes).toBeNull()
+    expect(await offlineDb.mutationQueue.toArray()).toEqual([expect.objectContaining({
+      url: '/trips/9/assignments/7/notes', method: 'PUT', body: { notes: null }, resource: 'assignments', entityId: 7,
+    })])
+  })
+
+  it('keeps the cached visit unchanged after a refused save', async () => {
+    vi.mocked(isEffectivelyOffline).mockReturnValue(false)
+    vi.mocked(assignmentsApi.updateNotes).mockRejectedValue(new Error('Denied'))
+    await expect(assignmentRepo.setNotes(9, assignment, 'x')).rejects.toThrow('Denied')
     expect((await offlineDb.days.get(1))?.assignments?.[0]).toEqual(assignment)
   })
 })

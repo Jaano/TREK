@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react'
-import { assignmentsApi } from '../../api/client'
 import { roadtripInsertion } from '../../components/Roadtrip/dayWindow'
 import { reanchorAfterInsert } from '../../components/Roadtrip/roadtripModel'
 import type { usePlaceSelection } from '../../hooks/usePlaceSelection'
@@ -110,19 +109,12 @@ export function usePlaceEdits(options: PlaceEditsOptions) {
           await tripActions.setAssignmentTimes(tripId, Number(dayKey), editingAssignmentId, {
             place_time: place_time || null, end_time: end_time || null,
           })
-        }
-        // The form only includes assignment_notes when the user changed it, so
-        // an untouched note never produces a PUT (#2163). '' clears like null.
-        // The note is set on the visit in place: reloading the days would show
-        // the server's time while the new one still waits in the queue.
-        if (assignment_notes !== undefined) {
-          const notes = assignment_notes || null
-          await assignmentsApi.updateNotes(tripId, editingAssignmentId, { notes })
-          useTripStore.setState(state => ({
-            assignments: Object.fromEntries(Object.entries(state.assignments).map(([key, items]) => [
-              key, items.map(a => (a.id === editingAssignmentId ? { ...a, notes } : a)),
-            ])),
-          }))
+          // The form only includes assignment_notes when the user changed it, so
+          // an untouched note never produces a PUT (#2163). '' clears like null.
+          // Through the visit's repo as well, so the cached day keeps the new note.
+          if (assignment_notes !== undefined) {
+            await tripActions.setAssignmentNotes(tripId, Number(dayKey), editingAssignmentId, assignment_notes || null)
+          }
         }
       }
       // Upload pending files with place_id

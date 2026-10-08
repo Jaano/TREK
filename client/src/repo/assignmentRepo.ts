@@ -98,4 +98,28 @@ export const assignmentRepo = {
     mutationQueue.sendSoon()
     return updated
   },
+  /**
+   * The note a visit carries on its day (#2163). Saved through here rather than straight
+   * to the API so the cached day holds the new note too: the tab never sees its own
+   * `assignment:updated` echo, and a trip reopened offline reads its days from the cache.
+   * A write of the same visit still waiting in the queue keeps this one behind it.
+   */
+  async setNotes(tripId: number | string, assignment: Assignment, notes: string | null): Promise<Assignment> {
+    if (!(await mutationQueue.mustQueue('assignments', assignment.id))) {
+      const saved = assignmentSchema.parse((await assignmentsApi.updateNotes(tripId, assignment.id, { notes })).assignment)
+      await cacheAssignment(saved)
+      return saved
+    }
+    const updated = { ...assignment, notes }
+    await offlineDb.transaction('rw', offlineDb.days, offlineDb.mutationQueue, async () => {
+      await mutationQueue.enqueue({
+        id: generateUUID(), tripId: Number(tripId), method: 'PUT',
+        url: `/trips/${tripId}/assignments/${assignment.id}/notes`,
+        body: { notes }, resource: 'assignments', entityId: assignment.id,
+      })
+      await cacheAssignment(updated)
+    })
+    mutationQueue.sendSoon()
+    return updated
+  },
 }

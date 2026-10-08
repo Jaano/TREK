@@ -41,6 +41,7 @@ function makeActions() {
     assignPlaceToDay: vi.fn(async () => ({ id: 555 })),
     refreshDays: vi.fn(async () => undefined),
     setAssignmentTimes: vi.fn(async () => undefined),
+    setAssignmentNotes: vi.fn(async () => undefined),
     addFile: vi.fn(async () => undefined),
     deletePlace: vi.fn(async (): Promise<{ tourPlaceIds?: number[] } | undefined> => undefined),
     deletePlacesMany: vi.fn(async (): Promise<{ tourPlaceIds?: number[] } | undefined> => undefined),
@@ -191,9 +192,10 @@ describe('usePlaceEdits', () => {
     // The times go through the store and the visit's repo, never straight to the API.
     expect(actions.setAssignmentTimes).toHaveBeenCalledWith(42, 10, 101, { place_time: '09:00', end_time: null })
     expect(updateTime).not.toHaveBeenCalled()
-    expect(updateNotes).toHaveBeenCalledWith(42, 101, { notes: null })
-    // The note lands on the visit without reloading the days over a queued time.
-    expect(useTripStore.getState().assignments[10][0].notes).toBeNull()
+    // The note goes through the store and the visit's repo too, which caches it on the day,
+    // and the days are not reloaded over a queued time.
+    expect(actions.setAssignmentNotes).toHaveBeenCalledWith(42, 10, 101, null)
+    expect(updateNotes).not.toHaveBeenCalled()
     expect(actions.refreshDays).not.toHaveBeenCalled()
     expect(actions.addFile).toHaveBeenCalledTimes(2)
     expect(toast.error).toHaveBeenCalledWith('files.uploadError')
@@ -208,6 +210,7 @@ describe('usePlaceEdits', () => {
 
     expect(actions.updatePlace).toHaveBeenCalledWith(42, 2, { name: 'Castle' })
     expect(actions.setAssignmentTimes).not.toHaveBeenCalled()
+    expect(actions.setAssignmentNotes).not.toHaveBeenCalled()
     expect(updateTime).not.toHaveBeenCalled()
     expect(actions.refreshDays).not.toHaveBeenCalled()
   })

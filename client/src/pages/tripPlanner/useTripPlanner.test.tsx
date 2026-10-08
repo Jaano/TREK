@@ -203,7 +203,10 @@ beforeEach(() => {
   vi.spyOn(tripsApi, 'getMembers').mockResolvedValue({ owner: null, members: [] })
   vi.spyOn(accommodationsApi, 'list').mockResolvedValue({ accommodations: [] })
   vi.spyOn(assignmentsApi, 'updateTime').mockResolvedValue({})
-  vi.spyOn(assignmentsApi, 'updateNotes').mockResolvedValue({})
+  // The note route answers with the saved visit, which the repo caches on the day.
+  vi.spyOn(assignmentsApi, 'updateNotes').mockImplementation(async (_tripId, id, { notes }) => ({
+    assignment: buildAssignment({ id, day_id: 7, place: buildPlace({ id: 1, lat: 1, lng: 2 }), notes }),
+  }))
   vi.spyOn(airtrailApi, 'sync').mockResolvedValue({ changed: 0 })
   vi.spyOn(mapsApi, 'reverse').mockResolvedValue({ name: '', address: '' } as never)
   vi.spyOn(mapsApi, 'search').mockResolvedValue({ places: [] } as never)
