@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@mikro-orm/nestjs';
-import { EntityManager } from '@mikro-orm/core';
 import { MaintenanceRepository } from '../../db/repositories/MaintenanceRepository';
 // Injected since BudgetModule dropped its AuthModule import (BudgetMcp's demo
 // guard reads RuntimeEnvService + the users table now), which un-closed the
@@ -48,11 +47,11 @@ import { enqueueHookUserDataErasures } from '../plugins/user-erasure-enqueue';
 @Injectable()
 export class UserCleanupService {
   constructor(
-    // Plan 4 Task 4: `DatabaseService` dropped — UC1 (below) now goes
-    // through `MaintenanceRepository`, the rule-4-permitted raw-connection
-    // home, constructed from this directly-injected `EntityManager`
+    // Plan 4 Task 4: `DatabaseService` dropped. UC1 (below) goes through
+    // `MaintenanceRepository`, the rule-4-permitted raw-connection home,
+    // injected over the context-resolving EntityManager
     // (`uow.transactional` below always leaves a request context active).
-    private readonly em: EntityManager,
+    private readonly maintenance: MaintenanceRepository,
     private readonly budget: BudgetService,
     private readonly uow: UnitOfWork,
     @InjectRepository(Users) private readonly usersRepo: UsersRepository,
@@ -92,8 +91,9 @@ export class UserCleanupService {
    * deleted `DatabaseService` onto `MaintenanceRepository.deletePluginUserData`
    * (rule 4's `connection.execute()` escape hatch), not onto a repository
    * this domain would otherwise own. This method always runs inside
-   * `deleteUserCompletely`'s `uow.transactional(...)` — `this.em` is safe to
-   * pass as-is (MikroORM resolves the active transactional fork through
+   * `deleteUserCompletely`'s `uow.transactional(...)`. The injected
+   * repository's EntityManager is safe as-is (MikroORM resolves the active
+   * transactional fork through
    * `EntityManager#getContext()`/`#getTransactionContext()` regardless of
    * which EM instance you call them on, via its own `TransactionContext`
    * async-local storage); `MaintenanceRepository.deletePluginUserData` is the
@@ -116,7 +116,7 @@ export class UserCleanupService {
    * here, now via the same repository.
    */
   async erasePluginUserData(userId: number): Promise<void> {
-    await new MaintenanceRepository(this.em).deletePluginUserData(userId); // UC1 — Plan 4 Task 4
+    await this.maintenance.deletePluginUserData(userId); // UC1, Plan 4 Task 4
     try {
       const rows = await this.pluginsRepo.listIdsAndPermissions(); // UC2 — Plan 4 Task 8a
       const installed = new Set(rows.map((r) => r.id));

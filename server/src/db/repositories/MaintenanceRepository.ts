@@ -15,15 +15,13 @@ import type { EntityManager } from '@mikro-orm/core';
  * all — so `connection.execute()` (the last tier in the program's query-API
  * order) is the correct tool, not a shortcut around it.
  *
- * Constructed directly (`new MaintenanceRepository(em)`), never through Nest
- * DI: its only two callers — `backup.impl.ts#createBackup` and
- * `demo/demo-reset.ts` (`resetDemoUser`/`saveBaseline`) — are plain function
- * modules, not Nest providers, and obtain the `EntityManager` via
- * `RequestContext.getEntityManager()` (the same static accessor MikroORM's
- * own per-request middleware and `CronRegistrarService`'s `wrappedTick`
- * populate) rather than constructor injection. No module registers this
- * class as a provider — nothing today asks Nest's DI container to resolve
- * it.
+ * Provided through Nest DI by `MaintenanceModule` (`nest/database/`), a
+ * factory over the context-resolving global `EntityManager`; the readiness
+ * probe and `UserCleanupService` inject it. `backup.impl.ts` and
+ * `demo/demo-reset.ts` still build one over the request's EntityManager until
+ * they move behind an injected provider of their own. The class stays free of
+ * Nest decorators like every other file under `db/`, so a test can still
+ * build one over its own `EntityManager`.
  */
 export class MaintenanceRepository {
   constructor(private readonly em: EntityManager) {}

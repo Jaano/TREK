@@ -71,6 +71,7 @@ import type { TripsRepository } from '../../../src/db/repositories/Trips.reposit
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import type { TripMembersRepository } from '../../../src/db/repositories/TripMembers.repository';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
+import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
 
 // Plan 3c Task 0b: `dbsEm` is resolved once, at the top of the `beforeAll`
 // below — `canAccessTrip`/`isOwner`/`rosterUserIds`/`getPlaceWithTags`
@@ -97,7 +98,7 @@ beforeAll(async () => {
   budgetSvc = new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb)));
   roster = new TripMembersService(
     budgetSvc,
-    new UserCleanupService(dbsEm!, budgetSvc, await createTestUnitOfWork(testDb), usersRepo, await createTestTripMembersRepo(testDb), await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb), await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb), await createTestShareTokensRepo(testDb), await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb)),
+    new UserCleanupService(new MaintenanceRepository(dbsEm!), budgetSvc, await createTestUnitOfWork(testDb), usersRepo, await createTestTripMembersRepo(testDb), await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb), await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb), await createTestShareTokensRepo(testDb), await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb)),
     new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)),
     new RealtimeService(), notificationsStub(notifySend), await createTestUnitOfWork(testDb),
     tripsRepo, tripMembersRepo, usersRepo,

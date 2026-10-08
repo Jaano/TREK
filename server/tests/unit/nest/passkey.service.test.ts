@@ -106,6 +106,7 @@ import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourney
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
 import { createTestPushSubscriptionsRepo } from '../../helpers/notifications-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
+import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
 
 // MailerService is injected since the notifications fold — a stub instead of a
 // module mock. sendPasswordResetEmail is the only thing auth reaches for.
@@ -134,7 +135,7 @@ beforeAll(async () => {
   new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)),
   new TripMembershipService(await createTestTripsRepo(testDb), await createTestTripMembersRepo(testDb)),
   new WebauthnConfigService(await createTestAppSettingsRepo(testDb)),
-  new UserCleanupService((await sharedTestOrm(testDb)).em, new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb))), await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestTripMembersRepo(testDb), await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb), await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb), await createTestShareTokensRepo(testDb), await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb)),
+  new UserCleanupService(new MaintenanceRepository((await sharedTestOrm(testDb)).em), new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb))), await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestTripMembersRepo(testDb), await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb), await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb), await createTestJourneyEntriesRepo(testDb), await createTestJourneyContributorsRepo(testDb), await createTestShareTokensRepo(testDb), await createTestPluginsRepo(testDb), await createTestPluginUserErasureQueueRepo(testDb)),
   mailerStub,
   new EphemeralTokenService(),
   new AllowedFileTypesService(await createTestAppSettingsRepo(testDb)), await createTestUnitOfWork(testDb),

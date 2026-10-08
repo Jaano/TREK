@@ -142,6 +142,7 @@ import { createTestJourneyShareTokensRepo } from './journey-share-repos';
 import { noGoogleQuota } from './google-quota';
 import { createTestToursRepo } from './tours-repos';
 import { createTestBudgetSettlementsRepo } from './budget-repos';
+import { MaintenanceRepository } from '../../src/db/repositories/MaintenanceRepository';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -302,7 +303,7 @@ export async function createPluginRpcHostFactory(db: Database.Database): Promise
   const trips = new TripsService(reservations, days, permissions, budget, vacay, realtime, unsplash, generalStorage, await createTestUnitOfWork(db), (await sharedTestOrm(db)).em, new SettingsService(await createTestUnitOfWork(db), appSettings, await createTestSettingsRepo(db)));
   // Plan 4 Task 4: UserCleanupService's UC1 now goes through a directly-injected
   // EntityManager (MaintenanceRepository.deletePluginUserData), not DatabaseService.
-  const members = new TripMembersService(budget, new UserCleanupService((await sharedTestOrm(db)).em, budget, await createTestUnitOfWork(db), usersRepo, await createTestTripMembersRepo(db), await createTestBudgetItemsRepo(db), await createTestBudgetSettlementsRepo(db), await createTestJourneyShareTokensRepo(db), await createTestJourneysRepo(db), await createTestJourneyEntriesRepo(db), await createTestJourneyContributorsRepo(db), await createTestShareTokensRepo(db), await createTestPluginsRepo(db), await createTestPluginUserErasureQueueRepo(db)), permissions, realtime, notificationsStub(), await createTestUnitOfWork(db), await createTestTripsRepo(db), await createTestTripMembersRepo(db), usersRepo);
+  const members = new TripMembersService(budget, new UserCleanupService(new MaintenanceRepository((await sharedTestOrm(db)).em), budget, await createTestUnitOfWork(db), usersRepo, await createTestTripMembersRepo(db), await createTestBudgetItemsRepo(db), await createTestBudgetSettlementsRepo(db), await createTestJourneyShareTokensRepo(db), await createTestJourneysRepo(db), await createTestJourneyEntriesRepo(db), await createTestJourneyContributorsRepo(db), await createTestShareTokensRepo(db), await createTestPluginsRepo(db), await createTestPluginUserErasureQueueRepo(db)), permissions, realtime, notificationsStub(), await createTestUnitOfWork(db), await createTestTripsRepo(db), await createTestTripMembersRepo(db), usersRepo);
   // Plan 3j Task 1 — PluginGuards' own role lookup (PG3/PG4) now goes
   // through UsersRepository.getRole; `usersRepo` above is the same
   // sharedTestOrm-backed repository every other service in this file uses.

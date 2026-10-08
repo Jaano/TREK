@@ -34,6 +34,7 @@ import { UserCleanupService } from './user-cleanup.service';
 import { WebauthnConfigService } from './webauthn-config.service';
 import { AppConfigModule } from '../app-config/app-config.module';
 import { BudgetModule } from '../budget/budget.module';
+import { MaintenanceModule } from '../database/maintenance.module';
 import { AuditModule } from '../audit/audit.module';
 import { MailerModule } from '../notifications/mailer/mailer.module';
 import { PermissionsModule } from '../permissions/permissions.module';
@@ -84,6 +85,8 @@ import { AllowedFileTypesModule } from '../files/allowed-file-types.module';
     StorageModule,
     AllowedFileTypesModule,
     EphemeralTokenModule, RateLimitModule, AuditModule, PermissionsModule, TripMembershipModule, MailerModule, AppConfigModule, TokensModule, BudgetModule,
+    // MaintenanceRepository: UserCleanupService's UC1 plugin-table erasure.
+    MaintenanceModule,
     // AppSettings/Users: AuthService/UserProfileService each pass their own
     // AppSettingsRepository/UsersRepository to instance-api-keys.ts's
     // resolveApiKey/readInstanceApiKey/writeInstanceApiKey now (Plan 3a Task

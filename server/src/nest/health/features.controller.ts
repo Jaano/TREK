@@ -1,5 +1,4 @@
 import { Controller, Get, Res } from '@nestjs/common';
-import { EntityManager } from '@mikro-orm/core';
 import type { Response } from 'express';
 import { MaintenanceRepository } from '../../db/repositories/MaintenanceRepository';
 import { KitineraryExtractorService } from '../booking-import/kitinerary-extractor.service';
@@ -15,7 +14,7 @@ export class FeaturesController {
   constructor(
     private readonly extractor: KitineraryExtractorService,
     private readonly addons: AddonsService,
-    private readonly em: EntityManager,
+    private readonly maintenance: MaintenanceRepository,
   ) {}
 
   /** The container/uptime probe. The forced-HTTPS redirect and HSTS exempt this
@@ -37,7 +36,7 @@ export class FeaturesController {
   async ready(@Res() res: Response): Promise<void> {
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
     try {
-      await new MaintenanceRepository(this.em).ping();
+      await this.maintenance.ping();
       res.json({ status: 'ready' });
     } catch {
       res.status(503).json({ status: 'unavailable' });

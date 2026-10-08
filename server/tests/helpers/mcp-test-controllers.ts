@@ -188,6 +188,7 @@ import { noGoogleQuota } from './google-quota';
 import { createTestPushSubscriptionsRepo } from './notifications-repos';
 import { createTestToursRepo } from './tours-repos';
 import { createTestBudgetSettlementsRepo } from './budget-repos';
+import { MaintenanceRepository } from '../../src/db/repositories/MaintenanceRepository';
 
 /**
  * Hand-wired counterpart of the boot-time discovery in McpRegistryService,
@@ -232,7 +233,7 @@ export async function createMcpTestRegistry(): Promise<McpRegistry> {
     permissionsService,
     new TripMembershipService(await createTestTripsRepo(db), await createTestTripMembersRepo(db)),
     new WebauthnConfigService(appSettings),
-    new UserCleanupService(mcpOrm.em, budgetService, await createTestUnitOfWork(db), usersRepo, await createTestTripMembersRepo(db), await createTestBudgetItemsRepo(db), await createTestBudgetSettlementsRepo(db), await createTestJourneyShareTokensRepo(db), await createTestJourneysRepo(db), await createTestJourneyEntriesRepo(db), await createTestJourneyContributorsRepo(db), await createTestShareTokensRepo(db), await createTestPluginsRepo(db), await createTestPluginUserErasureQueueRepo(db)),
+    new UserCleanupService(new MaintenanceRepository(mcpOrm.em), budgetService, await createTestUnitOfWork(db), usersRepo, await createTestTripMembersRepo(db), await createTestBudgetItemsRepo(db), await createTestBudgetSettlementsRepo(db), await createTestJourneyShareTokensRepo(db), await createTestJourneysRepo(db), await createTestJourneyEntriesRepo(db), await createTestJourneyContributorsRepo(db), await createTestShareTokensRepo(db), await createTestPluginsRepo(db), await createTestPluginUserErasureQueueRepo(db)),
     new MailerService(usersRepo, settingsRepo, appSettings),
     new EphemeralTokenService(),
     new AllowedFileTypesService(appSettings), await createTestUnitOfWork(db),
@@ -340,7 +341,7 @@ export async function createMcpTestRegistry(): Promise<McpRegistry> {
     daysService, accommodationsService, assignmentsService, await createTestUnitOfWork(db),
     await createTestDaysRepo(db), await createTestDayAccommodationsRepo(db), await createTestRoadtripDayBoundariesRepo(db), await createTestTripsRepo(db),
   );
-  const membersService = new TripMembersService(budgetService, new UserCleanupService(mcpOrm.em, budgetService, await createTestUnitOfWork(db), usersRepo, await createTestTripMembersRepo(db), await createTestBudgetItemsRepo(db), await createTestBudgetSettlementsRepo(db), await createTestJourneyShareTokensRepo(db), await createTestJourneysRepo(db), await createTestJourneyEntriesRepo(db), await createTestJourneyContributorsRepo(db), await createTestShareTokensRepo(db), await createTestPluginsRepo(db), await createTestPluginUserErasureQueueRepo(db)), permissionsService, realtimeService, notificationsStub(), await createTestUnitOfWork(db), await createTestTripsRepo(db), await createTestTripMembersRepo(db), usersRepo);
+  const membersService = new TripMembersService(budgetService, new UserCleanupService(new MaintenanceRepository(mcpOrm.em), budgetService, await createTestUnitOfWork(db), usersRepo, await createTestTripMembersRepo(db), await createTestBudgetItemsRepo(db), await createTestBudgetSettlementsRepo(db), await createTestJourneyShareTokensRepo(db), await createTestJourneysRepo(db), await createTestJourneyEntriesRepo(db), await createTestJourneyContributorsRepo(db), await createTestShareTokensRepo(db), await createTestPluginsRepo(db), await createTestPluginUserErasureQueueRepo(db)), permissionsService, realtimeService, notificationsStub(), await createTestUnitOfWork(db), await createTestTripsRepo(db), await createTestTripMembersRepo(db), usersRepo);
   const tripsService = new TripsService(
     reservationsService,
     daysService,

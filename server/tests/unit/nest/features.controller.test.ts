@@ -6,6 +6,8 @@ import { KitineraryExtractorService } from '../../../src/nest/booking-import/kit
 import { BookingImportModule } from '../../../src/nest/booking-import/booking-import.module';
 import { expectRegisteredController, expectRegisteredProvider } from '../../helpers/module-providers';
 import { ADDON_IDS } from '../../../src/addons';
+import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
+import { MaintenanceModule } from '../../../src/nest/database/maintenance.module';
 
 type Extractor = Pick<KitineraryExtractorService, 'isAvailable'>;
 type Addons = { isAddonEnabled: (id: string) => boolean };
@@ -62,7 +64,7 @@ describe('FeaturesController (GET /api/health/features)', () => {
     expectRegisteredProvider(KitineraryExtractorModule, KitineraryExtractorService);
     const healthImports = Reflect.getMetadata('imports', HealthModule) as unknown[];
     expect(Array.isArray(healthImports)).toBe(true);
-    expect(healthImports).toEqual(expect.arrayContaining([KitineraryExtractorModule]));
+    expect(healthImports).toEqual(expect.arrayContaining([KitineraryExtractorModule, MaintenanceModule]));
     expect(healthImports).not.toContain(BookingImportModule);
   });
 
@@ -95,7 +97,7 @@ describe('FeaturesController (GET /api/health/features)', () => {
       const execute = vi.fn().mockResolvedValue([]);
       const em = { getConnection: () => ({ execute }), getContext: () => em };
       const extractor = { isAvailable: vi.fn(() => true) };
-      const controller = new FeaturesController(extractor as Extractor as KitineraryExtractorService, {} as never, em as never);
+      const controller = new FeaturesController(extractor as Extractor as KitineraryExtractorService, {} as never, new MaintenanceRepository(em as never));
 
       const ok = response();
       await controller.ready(ok as never);

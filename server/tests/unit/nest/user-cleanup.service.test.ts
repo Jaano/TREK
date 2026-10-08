@@ -58,18 +58,19 @@ import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourney
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
 import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
 import { createTestBudgetSettlementsRepo } from '../../helpers/budget-repos';
+import { MaintenanceRepository } from '../../../src/db/repositories/MaintenanceRepository';
 
 let em: EntityManager;
 let budget: BudgetService;
 let svc: UserCleanupService;
 beforeAll(async () => {
-  // Plan 4 Task 4: UserCleanupService's own DatabaseService param is gone —
-  // UC1 goes through MaintenanceRepository, built from a directly-injected
-  // EntityManager instead.
+  // Plan 4 Task 4: UserCleanupService's own DatabaseService param is gone.
+  // UC1 goes through MaintenanceRepository, which Nest injects (built here
+  // over the test ORM's EntityManager, as MaintenanceModule's factory does).
   em = (await sharedTestOrm(testDb)).em;
   budget = new BudgetService(new PermissionsService(await createTestAppSettingsRepo(testDb), await createTestUnitOfWork(testDb)), new ExchangeRatesService(), new RealtimeService(), await createTestUnitOfWork(testDb), ...(await budgetRepoArgs(testDb)));
   svc = new UserCleanupService(
-    em, budget, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb),
+    new MaintenanceRepository(em), budget, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb),
     // Plan 4 Task 1 constructor-ripple: UC4's repository.
     await createTestTripMembersRepo(testDb),
     await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb),
@@ -181,7 +182,7 @@ describe('erasePluginUserData', () => {
     // journey repositories (UC7-10) still never reach their tables from this
     // call — stubs are enough for those.
     const slimSvc = new UserCleanupService(
-      (await sharedTestOrm(slim)).em, budget, await createTestUnitOfWork(slim), await createTestUsersRepo(slim),
+      new MaintenanceRepository((await sharedTestOrm(slim)).em), budget, await createTestUnitOfWork(slim), await createTestUsersRepo(slim),
       {} as unknown as TripMembersRepository, {} as unknown as BudgetItemsRepository, {} as unknown as BudgetSettlementsRepository,
       {} as unknown as JourneyShareTokensRepository, {} as unknown as JourneysRepository,
       {} as unknown as JourneyEntriesRepository, {} as unknown as JourneyContributorsRepository,
@@ -342,7 +343,7 @@ describe('deleteUserCompletely', () => {
     const deleteByIdSpy = vi.spyOn(usersRepo, 'deleteById').mockRejectedValue(new Error('boom'));
     try {
       await expect(new UserCleanupService(
-        em, budget, await createTestUnitOfWork(testDb), usersRepo,
+        new MaintenanceRepository(em), budget, await createTestUnitOfWork(testDb), usersRepo,
         await createTestTripMembersRepo(testDb),
         await createTestBudgetItemsRepo(testDb), await createTestBudgetSettlementsRepo(testDb),
         await createTestJourneyShareTokensRepo(testDb), await createTestJourneysRepo(testDb),
