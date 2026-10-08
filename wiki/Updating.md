@@ -12,9 +12,11 @@ Back up your data first. Go to Admin Panel → **Backup** and create a manual ba
 |---|---|---|
 | `latest` | `mauriceboe/trek:latest` | Always the newest release across all major versions |
 | Major version | `mauriceboe/trek:4` | Latest release pinned to that major version |
+| Minor version | `mauriceboe/trek:4.3` | Latest patch of that minor version; never moves to the next minor (published for releases after 4.3.3) |
 | Full version | `mauriceboe/trek:4.0.0` | Exact release; never changes |
+| Prerelease | `mauriceboe/trek:latest-pre` | The newest test build of the next version. For trying it out on a copy of your data, not for the instance you rely on |
 
-Use `latest` or a major-version tag if you want updates on each redeploy. Use a full version tag for explicit control — update by changing the tag, not by re-pulling.
+Use `latest` or a major-version tag if you want updates on each redeploy. A minor-version tag still brings fixes but waits for you to move to the next minor, which is where larger changes and database upgrades usually land. Use a full version tag for explicit control: update by changing the tag, not by re-pulling.
 
 ## Docker Compose (Recommended)
 

@@ -1,5 +1,11 @@
 name: Build & Push Docker Image (Prerelease)
 
+# The canary. Dispatched by hand, usually on dev, it builds the dispatched
+# commit as <next minor or major>-pre.N, publishes :VERSION, :MAJOR-pre and
+# :latest-pre, and tags the commit. Nothing moves :latest. Like the stable
+# release it refuses a commit whose ci-ok is not green. docker.yml with
+# bump=auto later finalizes the line once main carries it.
+
 on:
   workflow_dispatch:
     inputs:
@@ -11,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  checks: read
 
 concurrency:
   group: prerelease-build
@@ -30,13 +37,37 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Every check run named ci-ok on this commit has to have finished green.
+      # A run still going counts as not green: wait for it and dispatch again.
+      - name: Require a green ci-ok on the commit being built
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          conclusions="$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?check_name=ci-ok&per_page=100" \
+            --jq '[.check_runs[] | .conclusion // "pending"] | join(" ")')"
+          echo "ci-ok on $sha: ${conclusions:-none}"
+          if [ -z "$conclusions" ]; then
+            echo "::error::ci-ok never ran on $sha. Run Tests & SonarQube on this branch and dispatch again."
+            exit 1
+          fi
+          for c in $conclusions; do
+            if [ "$c" != "success" ]; then
+              echo "::error::ci-ok on $sha is not green ($conclusions)."
+              exit 1
+            fi
+          done
+
       - name: Determine prerelease version
         id: bump
+        env:
+          BUMP_INPUT: ${{ inputs.bump || 'auto' }}
         run: |
           git fetch --tags
 
           # Capture the exact commit we're building so build/merge jobs are pinned to it
-          echo "SHA=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "SHA=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
           # Get latest stable tag (exclude prerelease tags)
           STABLE_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -v '\-pre\.' | sort -V | tail -1)
@@ -44,13 +75,11 @@ jobs:
           STABLE="${STABLE:-0.0.0}"
           echo "Latest stable: $STABLE"
 
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$STABLE"
+          IFS='.' read -r MAJOR MINOR _ <<< "$STABLE"
 
           # Detect any in-flight major prerelease (v(MAJOR+1).0.0-pre.*). Stay on that line if found.
           NEXT_MAJOR="$((MAJOR + 1)).0.0"
           MAJOR_PRE_EXISTS=$(git tag -l "v${NEXT_MAJOR}-pre.*" | head -1)
-
-          BUMP_INPUT="${{ github.event.inputs.bump || 'auto' }}"
 
           if [ "$BUMP_INPUT" = "major" ] || { [ "$BUMP_INPUT" = "auto" ] && [ -n "$MAJOR_PRE_EXISTS" ]; }; then
             TARGET="$NEXT_MAJOR"
@@ -64,8 +93,8 @@ jobs:
           N=$(( ${LAST_N:-0} + 1 ))
 
           NEW_VERSION="${TARGET}-pre.${N}"
-          echo "VERSION=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "$STABLE → $NEW_VERSION"
+          echo "VERSION=$NEW_VERSION" >> "$GITHUB_OUTPUT"
+          echo "$STABLE to $NEW_VERSION"
 
   build:
     runs-on: ${{ matrix.runner }}
@@ -81,7 +110,9 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: Prepare platform tag-safe name
-        run: echo "PLATFORM_PAIR=$(echo ${{ matrix.platform }} | sed 's|/|-|g')" >> $GITHUB_ENV
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@v6
         with:
@@ -203,7 +234,7 @@ jobs:
         run: |
           KEEP=20
           VERSION="${{ needs.version-bump.outputs.version }}"
-          BASE_VERSION="$(echo "$VERSION" | sed 's/-pre\..*//')"
+          BASE_VERSION="${VERSION%%-pre.*}"
           git fetch --tags
           # Sort by numeric prerelease N (field after -pre.) to get correct ascending order
           mapfile -t ALL_TAGS < <(git tag -l "v${BASE_VERSION}-pre.*" | awk -F'-pre\\.' '{print $2" "$0}' | sort -n | awk '{print $2}')
