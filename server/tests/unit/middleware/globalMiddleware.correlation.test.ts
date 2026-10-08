@@ -2,7 +2,7 @@
  * Request correlation in the global middleware: every response says which id
  * its request ran under, a well-formed X-Request-Id from the proxy is kept,
  * and the access log writes a 5xx with that id and the stack the exception
- * filter left behind, as one entry. REQID-001 through REQID-006.
+ * filter left behind, as one entry. REQID-001 through REQID-008.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -16,6 +16,8 @@ const log = vi.hoisted(() => ({
 vi.mock('../../../src/nest/audit/audit-log.logger', () => log);
 
 import express, { type Request, type Response } from 'express';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { applyGlobalMiddleware } from '../../../src/middleware/globalMiddleware';
 import { httpConfig } from '../../../src/nest/app-config/tokens';
@@ -39,6 +41,13 @@ function app() {
   a.get('/api/after-await', async (_req: Request, res: Response) => {
     await new Promise((resolve) => setTimeout(resolve, 1));
     res.json({ id: currentCorrelation()?.id ?? null });
+  });
+  // bootstrap.ts registers the body parsers after the global middleware, so a
+  // handler with a body is reached from the parser's stream callback.
+  a.use(express.json());
+  a.use(express.urlencoded({ extended: true }));
+  a.post('/api/with-body', (req: Request, res: Response) => {
+    res.json({ id: currentCorrelation()?.id ?? null, body: req.body as unknown });
   });
   a.get('/api/boom', (_req: Request, res: Response) => {
     // What TrekExceptionFilter does for a 5xx when the access log watches the response.
@@ -84,6 +93,59 @@ describe('X-Request-Id', () => {
     const a = app();
     const [one, two] = await Promise.all([request(a).get('/api/echo'), request(a).get('/api/echo')]);
     expect(one.headers['x-request-id']).not.toBe(two.headers['x-request-id']);
+  });
+});
+
+describe('requests with a body', () => {
+  it('REQID-007: a JSON body parsed by express.json() keeps the id in the handler', async () => {
+    const res = await request(app()).post('/api/with-body').send({ a: 1 });
+    expect(res.body).toEqual({ id: res.headers['x-request-id'], body: { a: 1 } });
+  });
+
+  it('REQID-008: so does a body that arrives in several chunks after the middleware returned', async () => {
+    const server = app().listen(0);
+    try {
+      const { port } = server.address() as AddressInfo;
+      const answer = await new Promise<{ header: unknown; payload: { id: string | null; body: unknown } }>(
+        (resolve, reject) => {
+          const req = http.request(
+            {
+              port,
+              path: '/api/with-body',
+              method: 'POST',
+              headers: { 'content-type': 'application/json', 'transfer-encoding': 'chunked' },
+            },
+            (res) => {
+              let raw = '';
+              res.setEncoding('utf8');
+              res.on('data', (chunk: string) => (raw += chunk));
+              res.on('end', () =>
+                resolve({
+                  header: res.headers['x-request-id'],
+                  payload: JSON.parse(raw) as { id: string | null; body: unknown },
+                }),
+              );
+            },
+          );
+          req.on('error', reject);
+          const chunks = ['{"a":', '1,"b"', ':2}'];
+          const writeNext = () => {
+            const chunk = chunks.shift();
+            if (chunk === undefined) {
+              req.end();
+              return;
+            }
+            req.write(chunk);
+            setTimeout(writeNext, 10);
+          };
+          writeNext();
+        },
+      );
+      expect(answer.header).toMatch(UUID);
+      expect(answer.payload).toEqual({ id: answer.header, body: { a: 1, b: 2 } });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 });
 

@@ -158,7 +158,10 @@ export function applyGlobalMiddleware(
   // Request correlation comes first, so the whole pipeline and every line the
   // request logs run under its id. An X-Request-Id set by the proxy in front is
   // kept when it looks like an id, so its logs and ours line up; anything else
-  // is replaced. The response always says which id it got.
+  // is replaced. The response always says which id it got. The body parsers
+  // bootstrap.ts registers later resume from stream events, but raw-body and
+  // multer bind their callbacks with AsyncResource, so a handler reached after
+  // a body still runs under this id (REQID-007, REQID-008).
   app.use((req: Request, res: Response, next: NextFunction) => {
     const id = acceptRequestId(req.headers['x-request-id']) ?? newCorrelationId();
     res.setHeader(REQUEST_ID_HEADER, id);
