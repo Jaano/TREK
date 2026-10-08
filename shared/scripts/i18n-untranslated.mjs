@@ -10,8 +10,10 @@
  *              translator leaves on a string they could not translate yet
  *   identical  an unmarked value equal to en's, unless the rule in
  *              `isInvariant` says the text reads the same in every language,
- *              or a translator confirmed it with `// same-as-en` in a
- *              Latin-script locale (`isExcused`)
+ *              or a translator confirmed a single word with `// same-as-en`
+ *              in a Latin-script locale (`isExcused`). A plural form en has
+ *              no key for (a Russian `.few` or `.many`) is compared with
+ *              every form en spells out for its group (`enReference`).
  *
  * Both counts are held at scripts/i18n-untranslated-baseline.json. The check
  * fails when either grows past its entry (a file without one may hold none),
@@ -30,6 +32,7 @@
  * files, or a value the catalogue reader cannot parse is an error, never a
  * pass.
  */
+import { pluralFormOf, pluralGroups } from '../src/i18n/plural.ts';
 import { asPath, I18N_ROOT, listDomainFiles, listLocales, readCatalog } from './i18n-catalog.mjs';
 
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
@@ -134,8 +137,13 @@ export const isPlainWord = (word) => word.length >= 2 && !/\p{Lu}/u.test(word.sl
  * and that is for a translator to confirm, not for the rule to assume.
  */
 export function isInvariant(value) {
+  return plainWords(value).length === 0;
+}
+
+/** The plain words `value` holds once placeholders, markup, addresses, names and units are dropped. */
+export function plainWords(value) {
   const text = value.replace(PLACEHOLDER_RE, ' ').replace(TAG_RE, ' ').replace(ADDRESS_RE, ' ').replace(NAME_RE, ' ');
-  return !(text.match(WORD_RE) ?? []).some(isPlainWord);
+  return (text.match(WORD_RE) ?? []).filter(isPlainWord);
 }
 
 /** Whether `locale` is written in Latin script. Throws for a locale on neither list. */
@@ -149,9 +157,46 @@ export function isLatinLocale(locale) {
 
 /**
  * Whether an unmarked value equal to en's is excused: it is invariant, or a
- * translator marked it `// same-as-en` in a Latin-script locale.
+ * translator marked it `// same-as-en` in a Latin-script locale and it holds
+ * one plain word. The marker is for a word that really is the locale's own
+ * (German "Status"); a phrase that reads the same as en's is a copy, and the
+ * marker on it is ignored rather than trusted.
  */
-export const isExcused = (value, same, locale) => isInvariant(value) || (same && isLatinLocale(locale));
+export const isExcused = (value, same, locale) => {
+  const words = plainWords(value);
+  return words.length === 0 || (same && isLatinLocale(locale) && words.length === 1);
+};
+
+/**
+ * Every en value a locale's `key` may not repeat. A key en declares has its
+ * en value. A form of a plural group that en does not declare (Russian
+ * `.few`, Arabic `.two`) has every form en spells out for the group, since
+ * it has no en counterpart of its own and a copy of any of them is English.
+ * A form en declares keeps the exact comparison: Italian "{count} file" for
+ * en's general "{count} files" is the Italian plural, not en's `.one`.
+ */
+export function enReference(en, groups) {
+  const forms = new Map();
+  for (const [key, value] of en) {
+    const base = groupOf(key, groups);
+    if (base !== null) {
+      if (!forms.has(base)) forms.set(base, new Set());
+      forms.get(base).add(value);
+    }
+  }
+  return (key) => {
+    if (en.has(key)) return new Set([en.get(key)]);
+    const base = groupOf(key, groups);
+    return base === null ? new Set() : (forms.get(base) ?? new Set());
+  };
+}
+
+/** The plural group `key` belongs to (its base, `key.other` or a category form), else null. */
+function groupOf(key, groups) {
+  if (groups.has(key)) return key;
+  if (key.endsWith('.other') && groups.has(key.slice(0, -'.other'.length))) return key.slice(0, -'.other'.length);
+  return pluralFormOf(key, groups)?.base ?? null;
+}
 
 /**
  * Today's counts: `{ [locale]: { [file]: { marked, identical } } }`, only
@@ -162,7 +207,12 @@ export function countUntranslated(root = I18N_ROOT) {
   const locales = listLocales(root);
   if (!locales.includes('en')) throw new Error(`${asPath(root)}/en is required as the reference locale`);
   const enFiles = listDomainFiles('en', root);
-  const enValues = new Map(enFiles.map((f) => [f, new Map(readCatalog('en', f, root).map((e) => [e.key, e.value]))]));
+  const enValues = new Map(
+    enFiles.map((f) => {
+      const en = new Map(readCatalog('en', f, root).map((e) => [e.key, e.value]));
+      return [f, enReference(en, pluralGroups(en.keys()))];
+    }),
+  );
   const counts = {};
   for (const locale of locales) {
     // Classify every folder first: an unlisted locale is an error, not a pass.
@@ -171,12 +221,12 @@ export function countUntranslated(root = I18N_ROOT) {
     const files = new Set(listDomainFiles(locale, root));
     for (const file of enFiles) {
       if (!files.has(file)) throw new Error(`${locale}/${file} is missing; run i18n-parity for the file report`);
-      const en = enValues.get(file);
+      const enValuesOf = enValues.get(file);
       let marked = 0;
       let identical = 0;
       for (const { key, value, marked: isMarked, same } of readCatalog(locale, file, root)) {
         if (isMarked) marked++;
-        else if (en.get(key) === value && !isExcused(value, same, locale)) identical++;
+        else if (enValuesOf(key).has(value) && !isExcused(value, same, locale)) identical++;
       }
       if (marked || identical) (counts[locale] ??= {})[file] = { marked, identical };
     }

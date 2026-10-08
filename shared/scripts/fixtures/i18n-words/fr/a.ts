@@ -5,5 +5,6 @@ const a = {
   'a.status': 'Status',
   'a.addon': 'Atlas',
   'a.distance': '{count} km',
+  'a.delete': 'Supprimer définitivement ce voyage et tous ses lieux',
 };
 export default a;

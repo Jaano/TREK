@@ -5,5 +5,6 @@ const a = {
   'a.status': 'Status', // same-as-en
   'a.addon': 'Atlas',
   'a.distance': '{count} km',
+  'a.delete': 'この旅行とすべての場所を完全に削除',
 };
 export default a;
