@@ -211,20 +211,29 @@ export interface PrepareProgress {
 
 let _syncing = false
 
+/** Ids of the user's archived trips, or null when the list could not be read. */
+function archivedTripIds(): Promise<Set<number> | null> {
+  return (tripsApi.list({ archived: 1 }) as Promise<{ trips: Trip[] }>)
+    .then(r => new Set(r.trips.map(t => t.id)))
+    .catch(() => null)
+}
+
 /**
  * Decide which trips to cache and which to drop, honouring both the date rule
  * and the user's per-trip offline choices (#1135 ask 2). Returns the trips to
  * sync; clears Dexie for stale or user-disabled trips as a side effect.
  */
-async function reconcileTrips(trips: Trip[]): Promise<Trip[]> {
-  // A cached trip the server no longer lists was deleted, or this user was
-  // removed from it. Its data has no business staying on the device.
-  const listed = new Set(trips.map(t => t.id))
-  const gone = (await offlineDb.trips.toArray()).filter(t => t.id > 0 && !listed.has(t.id))
-  await Promise.all(gone.map(async t => {
-    await clearTripData(t.id).catch(console.error)
-    await offlineDb.trips.delete(t.id)
-  }))
+async function reconcileTrips(trips: Trip[], archivedIds: Set<number> | null): Promise<Trip[]> {
+  // A cached trip the server lists neither as active nor as archived was
+  // deleted, or this user was removed from it. Its data has no business staying
+  // on the device. The plain list leaves archived trips out, so without the
+  // archived ids every archived trip would read as gone; when that list could
+  // not be read, nothing is treated as gone this round.
+  if (archivedIds) {
+    const listed = new Set([...trips.map(t => t.id), ...archivedIds])
+    const gone = (await offlineDb.trips.toArray()).filter(t => t.id > 0 && !listed.has(t.id))
+    await Promise.all(gone.map(t => clearTripData(t.id).catch(console.error)))
+  }
 
   const stale = trips.filter(isStale)
   // Trips the user turned off explicitly are evicted regardless of date.
@@ -265,8 +274,8 @@ export const tripSyncManager = {
     if (skipped) return skipped
     _syncing = true
     try {
-      const { trips } = await tripsApi.list() as { trips: Trip[] }
-      const toSync = await reconcileTrips(trips)
+      const [{ trips }, archivedIds] = await Promise.all([tripsApi.list() as Promise<{ trips: Trip[] }>, archivedTripIds()])
+      const toSync = await reconcileTrips(trips, archivedIds)
 
       for (const trip of toSync) {
         // The gate is re-read per trip: a logout halfway through must not keep
@@ -338,8 +347,8 @@ export const tripSyncManager = {
     if (skipped) return skipped
     _syncing = true
     try {
-      const { trips } = await tripsApi.list() as { trips: Trip[] }
-      const toSync = await reconcileTrips(trips)
+      const [{ trips }, archivedIds] = await Promise.all([tripsApi.list() as Promise<{ trips: Trip[] }>, archivedTripIds()])
+      const toSync = await reconcileTrips(trips, archivedIds)
       const total = toSync.length
 
       // 1) Trip bundles (structured data).

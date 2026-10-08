@@ -519,14 +519,16 @@ export async function enforceBlobBudget(
 // ── Eviction / cleanup ────────────────────────────────────────────────────────
 
 /**
- * Delete one trip's cached READ data (eviction, per-trip opt-out). The offline
- * write queue is deliberately preserved except for already-dropped 'failed' rows:
- * a trip can be evicted for being stale, or turned off in the storage settings,
- * while it still holds unsynced offline edits (pending/syncing) or unresolved
- * conflicts — those must survive so the user's work is not silently lost (#1135).
- * The replay only needs the queued REST request, not the cached entities, and a
- * successful flush re-adds the canonical row. The full "Clear cache" wipe goes
- * through clearAll(), which intentionally drops everything.
+ * Delete one trip's cached READ data (eviction, per-trip opt-out, a trip the
+ * server no longer lists). The offline write queue is left alone entirely: a
+ * trip can be evicted for being stale, turned off in the storage settings, or
+ * deleted elsewhere while it still holds unsynced offline edits (pending/syncing),
+ * unresolved conflicts or parked 'failed' changes. Those must survive so the
+ * user's work is not silently lost (#1135); a parked change only goes when the
+ * user discards it in Settings > Offline. The replay only needs the queued REST
+ * request, not the cached entities, and a successful flush re-adds the
+ * canonical row. The full "Clear cache" wipe goes through clearAll(), which
+ * intentionally drops everything.
  */
 export async function clearTripData(tripId: number): Promise<void> {
   await offlineDb.transaction(
@@ -541,7 +543,6 @@ export async function clearTripData(tripId: number): Promise<void> {
       offlineDb.tripFiles,
       offlineDb.accommodations,
       offlineDb.tripMembers,
-      offlineDb.mutationQueue,
       offlineDb.syncMeta,
       offlineDb.blobCache,
       offlineDb.areaPlaces,
@@ -560,8 +561,6 @@ export async function clearTripData(tripId: number): Promise<void> {
       await offlineDb.accommodations.where('trip_id').equals(tripId).delete();
       await offlineDb.tours.where('trip_id').equals(tripId).delete();
       await offlineDb.tripMembers.where('tripId').equals(tripId).delete();
-      // Keep pending/syncing/conflict mutations — only purge dead 'failed' rows.
-      await offlineDb.mutationQueue.where('tripId').equals(tripId).and(m => m.status === 'failed').delete();
       await offlineDb.syncMeta.where('tripId').equals(tripId).delete();
       await offlineDb.blobCache.where('tripId').equals(tripId).delete();
       // The cached places around this trip's area go with it. They are searched

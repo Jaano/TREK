@@ -521,4 +521,72 @@ describe('tripSyncManager.syncAll: deletions made elsewhere', () => {
     expect(await offlineDb.trips.get(500)).toBeUndefined();
     expect(await offlineDb.places.where('trip_id').equals(500).count()).toBe(0);
   });
+
+  it('keeps an archived trip: the plain list leaves it out, the archived list does not', async () => {
+    const active = buildTrip({ id: 600, end_date: dateOffset(5) });
+    const archived = buildTrip({ id: 601, end_date: dateOffset(-400), is_archived: 1 });
+    await upsertTrip(archived);
+    setTripPinned(601, true);
+    await offlineDb.places.put(buildPlace({ trip_id: 601, id: 8101 }));
+    await offlineDb.mutationQueue.put({
+      id: 'parked-601', tripId: 601, method: 'PUT', url: '/trips/601/places/8101', body: { name: 'X' },
+      createdAt: 1, status: 'failed', attempts: 8, lastError: 'boom', resource: 'places', entityId: 8101,
+    });
+
+    server.use(
+      http.get('/api/trips', ({ request }) => HttpResponse.json({
+        trips: new URL(request.url).searchParams.get('archived') === '1' ? [archived] : [active],
+      })),
+      http.get('/api/trips/600/bundle', () => HttpResponse.json({ ...makeBundle(600), trip: active })),
+    );
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(601)).toBeDefined();
+    expect(await offlineDb.places.get(8101)).toBeDefined();
+    expect(await offlineDb.mutationQueue.get('parked-601')).toBeDefined();
+  });
+
+  it('treats nothing as gone when the archived list cannot be read', async () => {
+    const archived = buildTrip({ id: 602, end_date: dateOffset(5) });
+    await upsertTrip(archived);
+
+    server.use(
+      http.get('/api/trips', ({ request }) => new URL(request.url).searchParams.get('archived') === '1'
+        ? HttpResponse.json({ error: 'boom' }, { status: 500 })
+        : HttpResponse.json({ trips: [] })),
+    );
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(602)).toBeDefined();
+  });
+
+  it('keeps the parked and queued changes of a trip that is really gone, for the user to discard', async () => {
+    await upsertTrip(buildTrip({ id: 603, end_date: dateOffset(5) }));
+    await offlineDb.mutationQueue.bulkPut([
+      { id: 'parked-603', tripId: 603, method: 'PUT', url: '/trips/603/places/1', body: {}, createdAt: 1, status: 'failed', attempts: 8, lastError: 'boom', resource: 'places', entityId: 1 },
+      { id: 'conflict-603', tripId: 603, method: 'PUT', url: '/trips/603/places/2', body: {}, createdAt: 2, status: 'conflict', attempts: 1, lastError: 'conflict', resource: 'places', entityId: 2 },
+      { id: 'pending-603', tripId: 603, method: 'PUT', url: '/trips/603/places/3', body: {}, createdAt: 3, status: 'pending', attempts: 0, lastError: null, resource: 'places', entityId: 3 },
+    ]);
+
+    server.use(http.get('/api/trips', () => HttpResponse.json({ trips: [] })));
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(603)).toBeUndefined();
+    expect((await offlineDb.mutationQueue.toArray()).map(m => m.id).sort()).toEqual(['conflict-603', 'parked-603', 'pending-603']);
+  });
+
+  it('a stale or switched-off trip keeps its parked changes too', async () => {
+    const stale = buildTrip({ id: 604, end_date: dateOffset(-30) });
+    await upsertTrip(stale);
+    await offlineDb.mutationQueue.put({
+      id: 'parked-604', tripId: 604, method: 'PUT', url: '/trips/604/places/1', body: {}, createdAt: 1,
+      status: 'failed', attempts: 8, lastError: 'boom', resource: 'places', entityId: 1,
+    });
+
+    server.use(http.get('/api/trips', () => HttpResponse.json({ trips: [stale] })));
+    await tripSyncManager.syncAll();
+
+    expect(await offlineDb.trips.get(604)).toBeUndefined();
+    expect(await offlineDb.mutationQueue.get('parked-604')).toBeDefined();
+  });
 });
