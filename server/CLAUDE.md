@@ -17,7 +17,10 @@ npm run gen:plugin-facts  # regenerate the plugin-protocol tables into plugin-sd
 npm run check:plugin-facts # CI gate — fails if the generated copies drifted
 node scripts/coverage-thresholds.mjs  # after test:coverage — prints the ratchet block for vitest.config.ts
 npm run db:call-graph -- --sync --tx [--domains nest/days,…]  # sync DB-touching methods + transaction sites (exit 1 if any)
+npm run lint:size         # no file in src/ or scripts/ past 1000 lines, longer ones only shrink (CI gate)
 ```
+
+**`lint:size`** (`scripts/size-lint.mjs`) counts a line longer than 120 columns once per 120 columns it spans, so joining lines does not make room. Files that were already longer are held at their length in `scripts/size-baseline.json`; a file that needs to grow past its entry is split by concern instead. After a split, `npm run lint:size -- --update` lowers the baseline (it never raises or adds an entry).
 
 Single test: `npx vitest run tests/unit/nest/weather.controller.test.ts`, or `npx vitest run -t "returns 401 without cookie"`.
 
