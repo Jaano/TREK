@@ -16,7 +16,7 @@
     "react-hooks/exhaustive-deps": 64
   },
   "tests": {
-    "@typescript-eslint/no-explicit-any": 494,
+    "@typescript-eslint/no-explicit-any": 492,
     "@typescript-eslint/no-this-alias": 1,
     "@typescript-eslint/no-unsafe-function-type": 2,
     "@typescript-eslint/no-unused-vars": 53,
