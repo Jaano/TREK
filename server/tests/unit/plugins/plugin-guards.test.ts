@@ -16,6 +16,7 @@ import { UnitOfWork } from '../../../src/nest/database/unit-of-work';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createUser } from '../../helpers/factories';
+import { updateRows } from '../../helpers/factories/rows';
 import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
 
@@ -38,7 +39,7 @@ const ctx = (actingUserId: number | undefined): PluginRpcContext => ({
  * Trip 1 belongs to user 42 and only user 42 may reach it, mirroring rpc-host.test.ts.
  *
  * `overrides.role` drives the stubbed `UsersRepository.getRole` (PG3/PG4, Plan 3j
- * Task 1) the same way it used to drive `db.prepare(...).get()`: omitted means a
+ * Task 1) the same way it used to drive the raw `db.prepare` stub: omitted means a
  * normal row with role 'user'; explicitly `undefined` (or `null`) means "no row",
  * which `getRole`'s own `string | null` contract folds into a single `null` — the
  * `users` column is `NOT NULL DEFAULT 'user'`, so a present row can never actually
@@ -222,7 +223,7 @@ describe('PluginGuards — canEditAs/canCreateAs against a real UsersRepository 
   });
 
   it('PGUARD-025 mutation proof: promoting that SAME member to admin in the real users table flips PGUARD-024 to pass', async () => {
-    testDb.prepare('UPDATE users SET role = ? WHERE id = ?').run('admin', memberId);
+    await updateRows(orm, Users, { id: memberId }, { role: 'admin' });
     expect(await guards.canEditAs('trip_delete', 1, memberId)).toBe(true);
   });
 

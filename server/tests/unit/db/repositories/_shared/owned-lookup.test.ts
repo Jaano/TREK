@@ -3,6 +3,7 @@ import { createSnapshotTestDb } from '../../../../helpers/db-mock';
 import { resetTestDb } from '../../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../../helpers/test-orm';
 import { createTag, createUser } from '../../../../helpers/factories';
+import { updateRows } from '../../../../helpers/factories/rows';
 import { Tags } from '../../../../../src/db/entities/Tags.entity';
 import type { TagsRepository } from '../../../../../src/db/repositories/Tags.repository';
 import { findOwnedByUser, listForOwner } from '../../../../../src/db/repositories/_shared/owned-lookup';
@@ -69,7 +70,7 @@ describe('findOwnedByUser', () => {
     const { user: owner } = createUser(testDb);
     const tag = createTag(testDb, owner.id, { name: 'Old' });
     expect((await findOwnedByUser<Tags, 'user'>(tags, tag.id, 'user', owner.id))?.name).toBe('Old');
-    testDb.prepare('UPDATE tags SET name = ? WHERE id = ?').run('New', tag.id);
+    await updateRows(t, Tags, { id: tag.id }, { name: 'New' });
     const connection = t.orm.em.getConnection();
     const spy = vi.spyOn(connection, 'execute');
     const found = await findOwnedByUser<Tags, 'user'>(tags, tag.id, 'user', owner.id);

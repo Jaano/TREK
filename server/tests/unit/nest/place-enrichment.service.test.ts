@@ -6,7 +6,7 @@
  * the test. The SSRF guard is mocked the same way maps.service.test.ts mocks it.
  *
  * Rebuilt on PlaceDetailsCacheRepository/AppSettingsRepository (Plan 3c Task
- * 1, R8's rewrite list): the legacy version stubbed `db.prepare(sql).{get,run}`
+ * 1, R8's rewrite list): the legacy version stubbed the raw `db.prepare` handle (`get`, `run`)
  * and branched on whether the SQL text contained `'place_details_cache'` to
  * tell the settings read (PE1) apart from the cache read (PE2)/write (PE3).
  * That coupling cannot survive the service calling two named repository

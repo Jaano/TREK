@@ -46,7 +46,7 @@ function guardsFor() {
     prepare: vi.fn(() => ({ get: () => ({ role: 'user' }), all: () => [] })),
   } as unknown as TripsRepository;
   // Plan 3c Task 7: TripsRpc's RP1-RP6 resolve `EntityManager.getRepository(...)`
-  // now, not `db.prepare(...)` — a generic fake repository (same shape regardless
+  // now, not a raw `db.prepare` stub — a generic fake repository (same shape regardless
   // of which entity class was requested) covers every RP method these fallback
   // cases exercise, none of which assert on the repository's specific return value.
   const em = {

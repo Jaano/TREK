@@ -24,6 +24,7 @@ import { TrekPhotos } from '../../../src/db/entities/TrekPhotos.entity';
 import { TripPhotos } from '../../../src/db/entities/TripPhotos.entity';
 import { JourneyPhotos } from '../../../src/db/entities/JourneyPhotos.entity';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { deleteRows } from '../../helpers/factories/rows';
 
 // Was photos.bridge, deleted with the other three that had no consumer outside
 // the container. These call the repository directly now.
@@ -38,8 +39,8 @@ beforeAll(async () => {
   trekPhotos = new TrekPhotoRegistrationService(t.repo(TrekPhotos), t.repo(TripPhotos), t.repo(JourneyPhotos));
 });
 
-beforeEach(() => {
-  testDb.prepare('DELETE FROM trek_photos').run();
+beforeEach(async () => {
+  await deleteRows(t, TrekPhotos);
 });
 
 afterAll(async () => {
@@ -49,6 +50,7 @@ afterAll(async () => {
 
 describe('trek_photos media_type', () => {
   it('migration added media_type (default image) and duration_ms', () => {
+    // test-sql-allow: the column list comes from PRAGMA table_info, which no entity or repository maps.
     const cols = (testDb.prepare("PRAGMA table_info('trek_photos')").all() as { name: string }[]).map(c => c.name);
     expect(cols).toContain('media_type');
     expect(cols).toContain('duration_ms');

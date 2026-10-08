@@ -23,18 +23,24 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createTrip, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
+import { findRows } from '../helpers/factories/rows';
+import { TodoItems } from '../../src/db/entities/TodoItems.entity';
 import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions-cache';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
 });
 
 beforeEach(async () => {
@@ -199,7 +205,7 @@ describe('Todo items', () => {
     expect(res.body.success).toBe(true);
 
     // Verify the new order in the DB
-    const items = testDb.prepare('SELECT id, sort_order FROM todo_items WHERE trip_id = ? ORDER BY sort_order').all(trip.id) as any[];
+    const items = await findRows(orm, TodoItems, { trip: trip.id }, { sort_order: 'asc' });
     expect(items[0].id).toBe(id3);
     expect(items[1].id).toBe(id2);
     expect(items[2].id).toBe(id1);

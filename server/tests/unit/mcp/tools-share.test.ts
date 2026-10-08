@@ -22,13 +22,23 @@ vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow } from '../../helpers/factories/rows';
+import { ShareTokens } from '../../../src/db/entities/ShareTokens.entity';
 
 beforeEach(() => {
   resetTestDb(testDb);
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -78,8 +88,8 @@ describe('Tool: create_share_link', () => {
     await withHarness(user.id, async (h) => {
       const first = parseToolResult(await h.client.callTool({ name: 'create_share_link', arguments: { tripId: trip.id } })) as any;
       expect(first.created).toBe(true);
-      const row = testDb.prepare('SELECT share_map, share_bookings, share_packing, share_budget, share_collab FROM share_tokens WHERE trip_id = ?').get(trip.id) as any;
-      expect(row).toEqual({ share_map: 1, share_bookings: 1, share_packing: 0, share_budget: 0, share_collab: 0 });
+      const row = await findRow(orm, ShareTokens, { trip: trip.id });
+      expect(row).toMatchObject({ share_map: 1, share_bookings: 1, share_packing: 0, share_budget: 0, share_collab: 0 });
       const second = parseToolResult(await h.client.callTool({ name: 'create_share_link', arguments: { tripId: trip.id, share_budget: true } })) as any;
       expect(second.created).toBe(false);
       expect(second.token).toBe(first.token);
@@ -110,7 +120,7 @@ describe('Tool: delete_share_link', () => {
       await h.client.callTool({ name: 'create_share_link', arguments: { tripId: trip.id } });
       const result = parseToolResult(await h.client.callTool({ name: 'delete_share_link', arguments: { tripId: trip.id } })) as any;
       expect(result.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM share_tokens WHERE trip_id = ?').get(trip.id)).toBeUndefined();
+      expect(await findRow(orm, ShareTokens, { trip: trip.id })).toBeNull();
     });
     const { user: stranger } = createUser(testDb);
     await withHarness(stranger.id, async (h) => {

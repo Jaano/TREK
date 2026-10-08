@@ -30,13 +30,17 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { db as testDb } from '../../src/db/database';
+import { MikroORM } from '@mikro-orm/core';
 import { buildApp } from '../../src/bootstrap';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
+import type { FactoryOrm } from '../helpers/factories/context';
 import { createUser, createTrip, createReservation, createPlace, addTripMember } from '../helpers/factories';
 import { authCookie, generateToken } from '../helpers/auth';
+import { setAppSetting } from '../helpers/factories/settings';
 
 let nestApp: INestApplication;
 let app: Application;
+let orm: FactoryOrm;
 const FIXTURE_PDF = path.join(__dirname, '../fixtures/test.pdf');
 const FIXTURE_IMG = path.join(__dirname, '../fixtures/small-image.jpg');
 
@@ -46,16 +50,17 @@ const uploadsDir = path.join(__dirname, '../../uploads/files');
 beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
+  orm = nestApp.get(MikroORM);
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   // Seed allowed_file_types to include common types (wildcard)
-  testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allowed_file_types', '*')").run();
+  await setAppSetting(orm, 'allowed_file_types', '*');
 });
 
 beforeEach(async () => {
   resetTestDb(testDb);
   await resetRateLimits(nestApp);
   // Re-seed allowed_file_types after reset
-  testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allowed_file_types', '*')").run();
+  await setAppSetting(orm, 'allowed_file_types', '*');
 });
 
 afterAll(async () => {

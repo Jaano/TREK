@@ -77,7 +77,7 @@ export function build(opts: { allow?: (action: string) => boolean; updateThrows?
   // Plan 3c Task 7: RP1-RP6's SQL-text-keyed `db.prepare` stub is gone —
   // every raw statement moved to a repository method, so this is a
   // repository-level stub, keyed on the entity CLASS `em.getRepository(...)`
-  // was asked for, matching the shape the legacy `db.prepare(sql)` branch
+  // was asked for, matching the shape the legacy raw `db.prepare` branch
   // covered: `Trips.findRaw` (RP1/getById), `Places.listForTripOrdered`
   // (RP2/getPlaces), `TripMembers.listRawUsernameAndDisplayName`
   // (RP3/members), `Users.getRole` (RP4/update) and `.findIdAndEmail`

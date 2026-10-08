@@ -32,7 +32,7 @@ function controller(invoke: () => unknown, providers = ['ev-plug']) {
   } as unknown as PluginHooks;
   // Plan 3j Task 3: `declaredProfiles` now takes `PluginsRepository`, not the raw
   // connection — `findCapabilities` reads the same `capabilitiesRow` fixture the
-  // old `connection.prepare(...).get()` stub above read.
+  // old raw `connection.prepare` stub above read.
   const plugins = {
     findCapabilities: vi.fn(async () => (capabilitiesRow.value === undefined ? null : capabilitiesRow.value)),
   } as unknown as PluginsRepository;

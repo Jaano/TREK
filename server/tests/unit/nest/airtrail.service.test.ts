@@ -24,6 +24,7 @@ vi.mock('../../../src/utils/ssrfGuard', () => ({
 import { resetTestDb } from '../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
 import { createUser } from '../../helpers/factories';
+import { readUser } from '../../helpers/factories/users';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
@@ -50,8 +51,8 @@ beforeEach(() => {
 });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function rawAirtrailKey(userId: number): string | null {
-  return (testDb.prepare('SELECT airtrail_api_key FROM users WHERE id = ?').get(userId) as { airtrail_api_key: string | null }).airtrail_api_key;
+async function rawAirtrailKey(userId: number): Promise<string | null> {
+  return (await readUser(t, userId)).airtrail_api_key ?? null;
 }
 
 describe('AirtrailService — at-rest encryption (3h L3)', () => {
@@ -60,7 +61,7 @@ describe('AirtrailService — at-rest encryption (3h L3)', () => {
 
     await svc.saveSettings(user.id, 'https://airtrail.example.test', 'super-secret-key', false, false, null);
 
-    const stored = rawAirtrailKey(user.id);
+    const stored = await rawAirtrailKey(user.id);
     expect(stored).toMatch(/^enc:v1:/);
     expect(stored).not.toContain('super-secret-key');
 
@@ -71,10 +72,10 @@ describe('AirtrailService — at-rest encryption (3h L3)', () => {
   it('AIRTRAIL-SVC-ENC-002: a second save with a new key re-encrypts to a different ciphertext that still round-trips', async () => {
     const { user } = createUser(testDb);
     await svc.saveSettings(user.id, 'https://airtrail.example.test', 'first-key', false, false, null);
-    const first = rawAirtrailKey(user.id);
+    const first = await rawAirtrailKey(user.id);
 
     await svc.saveSettings(user.id, 'https://airtrail.example.test', 'second-key', false, false, null);
-    const second = rawAirtrailKey(user.id);
+    const second = await rawAirtrailKey(user.id);
 
     expect(second).toMatch(/^enc:v1:/);
     expect(second).not.toBe(first);

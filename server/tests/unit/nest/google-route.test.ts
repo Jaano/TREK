@@ -104,12 +104,14 @@ describe('Google route import', () => {
     const { service, places, assignments } = await setup();
     routeTestDb.exec('CREATE TABLE stops (name TEXT)');
     places.create.mockImplementation((_trip, stop) => {
+      // test-sql-allow: the stops probe table exists only for this test; no entity maps it.
       routeTestDb.prepare('INSERT INTO stops VALUES (?)').run(stop.name);
       return { id: stop.name };
     });
     assignments.createAssignment.mockImplementationOnce(() => ({ dayId: 3, placeId: 'Munich' })).mockImplementationOnce(() => { throw new Error('write failed'); });
     try {
       await expect(service.import(1, 7, input)).rejects.toThrow('write failed');
+      // test-sql-allow: reads back the unmapped stops probe table on the same handle.
       expect(routeTestDb.prepare('SELECT * FROM stops').all()).toEqual([]);
       expect(places.broadcast).not.toHaveBeenCalled();
       expect(assignments.broadcast).not.toHaveBeenCalled();

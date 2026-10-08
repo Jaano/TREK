@@ -22,6 +22,10 @@ vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: 
 
 import { PluginRuntimeService } from '../../../src/nest/plugins/plugin-runtime.service';
 import { createPluginRuntime } from '../../helpers/plugin-host';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { findRow } from '../../helpers/factories/rows';
+import { makePlugin } from '../../helpers/factories/plugins';
+import { Plugins } from '../../../src/db/entities/Plugins.entity';
 
 const testDb = createSnapshotTestDb();
 const dbConn = testDb;
@@ -77,9 +81,7 @@ describe('PluginRuntimeService dev-link', () => {
     expect(fs.existsSync(path.join(dest, 'server', 'index.js'))).toBe(true);
     expect(fs.realpathSync(dest)).toBe(fs.realpathSync(dir));
 
-    const row = testDb.prepare("SELECT source_repo, status, enabled FROM plugins WHERE id = 'linkplug'").get() as {
-      source_repo: string; status: string; enabled: number;
-    };
+    const row = await findRow(await sharedTestOrm(dbConn), Plugins, { id: 'linkplug' });
     expect(row).toMatchObject({ source_repo: 'local:link', status: 'inactive', enabled: 0 });
   });
 
@@ -132,7 +134,9 @@ describe('PluginRuntimeService dev-link', () => {
   });
 
   it('refuses to clobber a real (non-linked) installed plugin of the same id', async () => {
-    testDb.prepare("INSERT INTO plugins (id, name, type, version, status, source_repo) VALUES ('installed','X','integration','1.0.0','inactive','local:upload')").run();
+    await makePlugin(await sharedTestOrm(dbConn), 'installed', {
+      name: 'X', type: 'integration', version: '1.0.0', status: 'inactive', source_repo: 'local:upload',
+    });
     await expect(runtime.link(writeSource('installed'))).rejects.toThrow(/already installed/);
   });
 

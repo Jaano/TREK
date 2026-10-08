@@ -33,6 +33,10 @@ import { AirtrailClient, AirtrailRequestError, type AirtrailFlightRaw } from '..
 import { AirtrailImportService } from '../../../src/nest/integrations/airtrail-import.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { createTestUnitOfWork, createTestAppSettingsRepo } from '../../helpers/test-uow';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRows, updateRows } from '../../helpers/factories/rows';
+import { Users } from '../../../src/db/entities/Users.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
 
 // The permissions cache is module-scoped, so a write through any instance is
 // what the tool's own checkPermission call reads back.
@@ -60,7 +64,13 @@ beforeEach(async () => {
   await savePermissions({ reservation_edit: 'trip_member' });
 });
 
-afterAll(() => {
+let orm: TestOrm;
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -70,8 +80,8 @@ async function withHarness(userId: number, fn: (h: McpHarness) => Promise<void>,
 }
 
 /** The stored connection, plaintext key: decrypt_api_key passes legacy plaintext straight through. */
-function connectAirtrail(userId: number, url = 'https://airtrail.example.com') {
-  testDb.prepare('UPDATE users SET airtrail_url = ?, airtrail_api_key = ? WHERE id = ?').run(url, 'plain-test-key', userId);
+async function connectAirtrail(userId: number, url = 'https://airtrail.example.com'): Promise<void> {
+  await updateRows(orm, Users, { id: userId }, { airtrail_url: url, airtrail_api_key: 'plain-test-key' });
 }
 
 const ZRH = { id: 1, icao: 'LSZH', iata: 'ZRH', name: 'Zurich', lat: 47.458, lon: 8.548, tz: 'Europe/Zurich', country: 'CH' };
@@ -99,12 +109,7 @@ function flight(overrides: Partial<AirtrailFlightRaw> & { id: number }): Airtrai
 }
 
 function reservationRows(tripId: number) {
-  return testDb.prepare(
-    'SELECT id, title, type, external_source, external_id, external_owner_user_id, sync_enabled, metadata FROM reservations WHERE trip_id = ? ORDER BY id',
-  ).all(tripId) as {
-    id: number; title: string; type: string; external_source: string | null; external_id: string | null;
-    external_owner_user_id: number | null; sync_enabled: number | null; metadata: string | null;
-  }[];
+  return findRows(orm, Reservations, { trip: tripId }, { id: 'asc' });
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +119,7 @@ function reservationRows(tripId: number) {
 describe('Tool: list_airtrail_flights', () => {
   it('returns the caller flights, normalized and oldest departure first', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     listFlightsMock.mockResolvedValue([
       flight({ id: 22, date: '2026-09-20', departure: '2026-09-20T06:00:00Z', flightNumber: 'LH400', from: FRA, to: JFK }),
       flight({ id: 11 }),
@@ -141,7 +146,7 @@ describe('Tool: list_airtrail_flights', () => {
 
   it('narrows to a date window and keeps undated flights', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     listFlightsMock.mockResolvedValue([
       flight({ id: 1, date: '2026-08-01', departure: '2026-08-01T06:00:00Z' }),
       flight({ id: 2, date: '2026-09-10', departure: null }),
@@ -167,7 +172,7 @@ describe('Tool: list_airtrail_flights', () => {
 
   it('falls back to its own wording when AirTrail fails without a message', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     listFlightsMock.mockRejectedValue(new Error(''));
 
     await withHarness(user.id, async (h) => {
@@ -179,7 +184,7 @@ describe('Tool: list_airtrail_flights', () => {
 
   it('caps the result and says it was truncated', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     listFlightsMock.mockResolvedValue(
       Array.from({ length: 5 }, (_, i) => flight({ id: i + 1, departure: `2026-09-1${i}T06:00:00Z` })),
     );
@@ -206,7 +211,7 @@ describe('Tool: list_airtrail_flights', () => {
 
   it('passes an upstream failure through as the tool error', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     listFlightsMock.mockRejectedValue(new AirtrailRequestError('AirTrail list failed (HTTP 500)', 500));
 
     await withHarness(user.id, async (h) => {
@@ -218,7 +223,7 @@ describe('Tool: list_airtrail_flights', () => {
 
   it('is hidden while the airtrail addon is off', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     setAddonEnabled(testDb, ADDON_IDS.AIRTRAIL, false);
 
     await withHarness(user.id, async (h) => {
@@ -232,7 +237,7 @@ describe('Tool: list_airtrail_flights', () => {
 
   it('rides reservations:read and is hidden from a token without it', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
 
     await withHarness(user.id, async (h) => {
       expect((await h.client.listTools()).tools.map(t => t.name)).toContain('list_airtrail_flights');
@@ -251,7 +256,7 @@ describe('Tool: list_airtrail_flights', () => {
 describe('Tool: import_airtrail_flights', () => {
   it('imports the listed flights as linked flight bookings', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
     listFlightsMock.mockResolvedValue([flight({ id: 11 }), flight({ id: 12, flightNumber: 'LH1202' })]);
 
@@ -268,7 +273,7 @@ describe('Tool: import_airtrail_flights', () => {
       expect(data.skipped).toEqual([]);
     });
 
-    const rows = reservationRows(trip.id);
+    const rows = await reservationRows(trip.id);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toMatchObject({
       title: 'LH1201', type: 'flight', external_source: 'airtrail', external_id: '11',
@@ -280,7 +285,7 @@ describe('Tool: import_airtrail_flights', () => {
 
   it('skips a flight that is already linked to the trip', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
     listFlightsMock.mockResolvedValue([flight({ id: 11 })]);
 
@@ -291,12 +296,12 @@ describe('Tool: import_airtrail_flights', () => {
       expect(data.imported).toEqual([]);
       expect(data.skipped).toEqual([{ flightId: '11', reason: 'already-imported' }]);
     });
-    expect(reservationRows(trip.id)).toHaveLength(1);
+    expect(await reservationRows(trip.id)).toHaveLength(1);
   });
 
   it('joins a connection into one multi-leg booking detached from sync', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
     listFlightsMock.mockResolvedValue([
       flight({ id: 11 }),
@@ -315,7 +320,7 @@ describe('Tool: import_airtrail_flights', () => {
       expect(data.imported).toEqual(['11', '12']);
     });
 
-    const rows = reservationRows(trip.id);
+    const rows = await reservationRows(trip.id);
     expect(rows).toHaveLength(1);
     expect(rows[0].sync_enabled).toBe(0);
     expect(JSON.parse(rows[0].metadata ?? '{}').airtrail_ids).toEqual(['11', '12']);
@@ -323,7 +328,7 @@ describe('Tool: import_airtrail_flights', () => {
 
   it('refuses a connection naming a flight that is not being imported', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
     listFlightsMock.mockResolvedValue([flight({ id: 11 })]);
 
@@ -335,13 +340,13 @@ describe('Tool: import_airtrail_flights', () => {
       expect(result.isError).toBe(true);
       expect((result.content as any)[0].text).toContain('flight 99');
     });
-    expect(reservationRows(trip.id)).toHaveLength(0);
+    expect(await reservationRows(trip.id)).toHaveLength(0);
     expect(listFlightsMock).not.toHaveBeenCalled();
   });
 
   it('refuses more than fifty flights in one call', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
 
     await withHarness(user.id, async (h) => {
@@ -352,7 +357,7 @@ describe('Tool: import_airtrail_flights', () => {
       expect(result.isError).toBe(true);
       expect((result.content as any)[0].text).toContain('at most 50');
     });
-    expect(reservationRows(trip.id)).toHaveLength(0);
+    expect(await reservationRows(trip.id)).toHaveLength(0);
     expect(listFlightsMock).not.toHaveBeenCalled();
   });
 
@@ -368,12 +373,12 @@ describe('Tool: import_airtrail_flights', () => {
       expect(result.isError).toBe(true);
       expect((result.content as any)[0].text).toContain('AirTrail is not connected');
     });
-    expect(reservationRows(trip.id)).toHaveLength(0);
+    expect(await reservationRows(trip.id)).toHaveLength(0);
   });
 
   it('falls back to its own wording when the import fails without a message', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
     const importMock = vi.spyOn(AirtrailImportService.prototype, 'importAirtrailFlights')
       .mockRejectedValue(new Error(''));
@@ -402,7 +407,7 @@ describe('Tool: import_airtrail_flights', () => {
     const trip = createTrip(testDb, owner.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
     addTripMember(testDb, trip.id, demo.id);
     addTripMember(testDb, trip.id, member.id);
-    for (const u of [owner, demo, stranger, member]) connectAirtrail(u.id);
+    for (const u of [owner, demo, stranger, member]) await connectAirtrail(u.id);
     listFlightsMock.mockResolvedValue([flight({ id: 11 })]);
 
     process.env.DEMO_MODE = 'true';
@@ -426,14 +431,14 @@ describe('Tool: import_airtrail_flights', () => {
       expect((result.content as any)[0].text).toContain('permission');
     });
 
-    expect(reservationRows(trip.id)).toHaveLength(0);
+    expect(await reservationRows(trip.id)).toHaveLength(0);
     expect(broadcastMock).not.toHaveBeenCalled();
     expect(listFlightsMock).not.toHaveBeenCalled();
   });
 
   it('is hidden while the airtrail addon is off', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
     const trip = createTrip(testDb, user.id, { start_date: '2026-09-10', end_date: '2026-09-12' });
     setAddonEnabled(testDb, ADDON_IDS.AIRTRAIL, false);
 
@@ -447,12 +452,12 @@ describe('Tool: import_airtrail_flights', () => {
       expect(result.isError).toBe(true);
       expect((result.content as any)[0].text).toContain('not found');
     });
-    expect(reservationRows(trip.id)).toHaveLength(0);
+    expect(await reservationRows(trip.id)).toHaveLength(0);
   });
 
   it('rides reservations:write and is hidden from a read-only token', async () => {
     const { user } = createUser(testDb);
-    connectAirtrail(user.id);
+    await connectAirtrail(user.id);
 
     await withHarness(user.id, async (h) => {
       expect((await h.client.listTools()).tools.map(t => t.name)).toContain('import_airtrail_flights');

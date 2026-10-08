@@ -10,6 +10,8 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createDay, createDayAssignment, createPlace, createTrip, createUser } from '../../../helpers/factories';
 import { createTour } from '../../../helpers/tours-repos';
 import { Tours } from '../../../../src/db/entities/Tours.entity';
+import { TourWaypoints } from '../../../../src/db/entities/TourWaypoints.entity';
+import { insertRow, updateRows } from '../../../helpers/factories/rows';
 import type { ToursRepository } from '../../../../src/db/repositories/Tours.repository';
 
 const testDb = createSnapshotTestDb();
@@ -30,8 +32,8 @@ function fixture() {
   return { trip, other };
 }
 
-function addWaypoint(placeId: number, sequence: number): void {
-  testDb.prepare("INSERT INTO tour_waypoints (place_id, lat, lng, role, sequence) VALUES (?, 47, 11, 'via', ?)").run(placeId, sequence);
+async function addWaypoint(placeId: number, sequence: number): Promise<void> {
+  await insertRow(t, TourWaypoints, { place: placeId, lat: 47, lng: 11, role: 'via', sequence });
 }
 
 const METRICS = {
@@ -55,7 +57,7 @@ describe('ToursRepository reads', () => {
     createTour(testDb, newer.id, { created_at: '2026-01-02 10:00:00', max_hiking_difficulty: 5 });
     createTour(testDb, foreign.id);
     createDayAssignment(testDb, createDay(testDb, trip.id).id, older.id);
-    addWaypoint(newer.id, 0);
+    await addWaypoint(newer.id, 0);
 
     expect(await repo.listForTrip(trip.id)).toEqual([
       {
@@ -149,7 +151,7 @@ describe('ToursRepository writes', () => {
     const { trip, other } = fixture();
     const source = createPlace(testDb, trip.id);
     createTour(testDb, source.id, { created_at: '2026-03-04 05:06:07', distance: 3.5, max_hiking_difficulty: 4 });
-    testDb.prepare("UPDATE tours SET difficulty = 'T3', wanderer_ref = 'w-1' WHERE place_id = ?").run(source.id);
+    await updateRows(t, Tours, { place: source.id }, { difficulty: 'T3', wanderer_ref: 'w-1' });
 
     const rows = await repo.listRowsForTrip(trip.id);
     expect(rows).toEqual([{

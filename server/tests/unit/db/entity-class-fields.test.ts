@@ -163,6 +163,7 @@ describe('insert probes (task-4-review-shape.md, the reviewer\'s exact repro)', 
     });
     await t.em.persist(created).flush();
 
+    // test-sql-allow: reads the stored columns behind the ORM to prove what its own insert wrote.
     const row = testDb.prepare('SELECT persons, days, place_id, reservation_id FROM budget_items WHERE id = ?').get(created.id);
     expect(row).toEqual({ persons: null, days: null, place_id: null, reservation_id: null });
   });
@@ -181,6 +182,7 @@ describe('insert probes (task-4-review-shape.md, the reviewer\'s exact repro)', 
     await t.em.persist(created).flush();
 
     const row = testDb
+      // test-sql-allow: reads the stored column behind the ORM to prove the database default filled it.
       .prepare('SELECT created_at FROM idempotency_keys WHERE key = ? AND user_id = ? AND method = ? AND path = ?')
       .get('idem-key-probe-1', user.id, 'POST', '/api/trips') as { created_at: number };
     // The DB's own defaultRaw (strftime('%s','now')) filled it in — never NaN, never null.

@@ -3,6 +3,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createTrip, createUser } from '../../../helpers/factories';
+import { countRows } from '../../../helpers/factories/rows';
 import { Days } from '../../../../src/db/entities/Days.entity';
 import type { DaysRepository } from '../../../../src/db/repositories/Days.repository';
 import { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
@@ -29,8 +30,7 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-const countDays = (tripId: number) =>
-  (testDb.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(tripId) as { n: number }).n;
+const countDays = (tripId: number): Promise<number> => countRows(t, Days, { trip: tripId });
 
 describe('UnitOfWork.transactional', () => {
   it('UOW-001: a throw rolls every statement back', async () => {
@@ -42,7 +42,7 @@ describe('UnitOfWork.transactional', () => {
         throw new Error('boom');
       }),
     ).rejects.toThrow('boom');
-    expect(countDays(trip.id)).toBe(0);
+    expect(await countDays(trip.id)).toBe(0);
   });
 
   it('UOW-002: an inner transaction is a savepoint — its failure leaves the outer writes intact', async () => {
@@ -57,7 +57,7 @@ describe('UnitOfWork.transactional', () => {
         })
         .catch(() => undefined);
     });
-    expect(countDays(trip.id)).toBe(1);
+    expect(await countDays(trip.id)).toBe(1);
   });
 
   it('UOW-003: concurrent transactions serialise on the one connection instead of throwing', async () => {
@@ -72,7 +72,7 @@ describe('UnitOfWork.transactional', () => {
         order.push(`${label}:out`);
       });
     await Promise.all([tx('a', 1), tx('b', 2)]);
-    expect(countDays(trip.id)).toBe(2);
+    expect(await countDays(trip.id)).toBe(2);
     // The second never enters before the first leaves.
     expect(order.indexOf('b:in')).toBeGreaterThan(order.indexOf('a:out'));
   });
