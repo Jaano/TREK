@@ -8,11 +8,11 @@
  * violation, that what the rules deliberately ignore stays ignored, and that a
  * broken setup stops the run instead of passing it.
  */
-import { afterEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 
 const SCRIPT = path.join(__dirname, '../../../scripts/import-boundaries.mjs');
 
@@ -140,7 +140,10 @@ describe('import-boundaries.mjs', () => {
     expect(run(ok).status).toBe(0);
 
     // Type-only still counts: it couples A to B's private shapes all the same.
-    const bad = serverRoot({ ...files, 'nest/a/sub/a.thing.ts': "import type { h } from '../../b/b.helpers';\nexport type X = typeof h;\n" });
+    const bad = serverRoot({
+      ...files,
+      'nest/a/sub/a.thing.ts': "import type { h } from '../../b/b.helpers';\nexport type X = typeof h;\n",
+    });
     const { status, out } = run(bad);
     expect(status).toBe(1);
     expect(out).toContain('FAIL  domainInternals: a -> b/b.helpers.ts');
@@ -149,7 +152,8 @@ describe('import-boundaries.mjs', () => {
   it('BOUND-006: fails when a shared-kernel file imports a domain', () => {
     const dir = serverRoot({
       'nest/auth/jwt-auth.guard.ts': 'export class JwtAuthGuard {}\n',
-      'nest/common/validate.ts': "import { JwtAuthGuard } from '../auth/jwt-auth.guard';\nexport const g = JwtAuthGuard;\n",
+      'nest/common/validate.ts':
+        "import { JwtAuthGuard } from '../auth/jwt-auth.guard';\nexport const g = JwtAuthGuard;\n",
     });
     const { status, out } = run(dir);
     expect(status).toBe(1);
@@ -181,7 +185,9 @@ describe('import-boundaries.mjs', () => {
     expect(check.out).toContain('1 baseline entry no longer occurs');
 
     expect(run(dir, '--update').status).toBe(1);
-    const written: unknown = JSON.parse(readFileSync(path.join(dir, 'scripts/import-boundaries-baseline.json'), 'utf8'));
+    const written: unknown = JSON.parse(
+      readFileSync(path.join(dir, 'scripts/import-boundaries-baseline.json'), 'utf8'),
+    );
     expect(written).toEqual({ ...EMPTY, domainInternals: ['a -> b/b.helpers.ts'] });
   });
 

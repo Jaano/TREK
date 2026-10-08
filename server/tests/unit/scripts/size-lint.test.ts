@@ -6,11 +6,11 @@
  * fails on a violation and that it refuses to run on a broken setup instead
  * of passing silently.
  */
-import { afterEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
 
 const SCRIPT = path.join(__dirname, '../../../scripts/size-lint.mjs');
 
@@ -130,7 +130,12 @@ describe('size-lint.mjs', () => {
 
   it('SIZE-009: --update only lowers, drops files back under the limit, and never adds one', () => {
     const dir = serverRoot(
-      { 'src/shrunk.ts': lines(1100), 'src/fixed.ts': lines(50), 'src/grown.ts': lines(1500), 'src/new.ts': lines(1300) },
+      {
+        'src/shrunk.ts': lines(1100),
+        'src/fixed.ts': lines(50),
+        'src/grown.ts': lines(1500),
+        'src/new.ts': lines(1300),
+      },
       { 'src/shrunk.ts': 1200, 'src/fixed.ts': 1300, 'src/grown.ts': 1400, 'src/gone.ts': 1100 },
     );
     const { status } = run(dir, '--update');

@@ -1,7 +1,6 @@
 import { readdirSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
-import config from '../../vitest.config';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * The coverage gate is a ratchet per src/nest domain (vitest.config.ts). A
@@ -14,6 +13,17 @@ import config from '../../vitest.config';
 
 const NEST = path.resolve(__dirname, '../../src/nest');
 
+// Loaded at runtime rather than imported: an import would pull vitest.config.ts
+// into the tests' tsc program, which compiles it as CommonJS and rejects its
+// import.meta.
+const CONFIG_PATH = '../../vitest.config';
+let thresholds: Record<string, Record<string, number>> = {};
+
+beforeAll(async () => {
+  const config = ((await import(CONFIG_PATH)) as { default: { test?: { coverage?: unknown } } }).default;
+  thresholds = (config.test?.coverage as { thresholds?: typeof thresholds } | undefined)?.thresholds ?? {};
+});
+
 function domains(): string[] {
   return readdirSync(NEST, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
@@ -22,7 +32,6 @@ function domains(): string[] {
 }
 
 function domainKeys(): string[] {
-  const thresholds = (config.test?.coverage as { thresholds?: Record<string, unknown> } | undefined)?.thresholds ?? {};
   return Object.keys(thresholds)
     .map((key) => key.match(/^src\/nest\/([^/*]+)\/\*\*\/\*\.ts$/)?.[1])
     .filter((name): name is string => Boolean(name))
@@ -49,7 +58,6 @@ describe('per-domain coverage thresholds', () => {
   });
 
   it('COVT-004: no domain entry sits above 100 or below 0', () => {
-    const thresholds = (config.test?.coverage as { thresholds?: Record<string, Record<string, number>> }).thresholds ?? {};
     for (const domain of domainKeys()) {
       const entry = thresholds[`src/nest/${domain}/**/*.ts`];
       for (const metric of ['statements', 'branches', 'functions', 'lines']) {

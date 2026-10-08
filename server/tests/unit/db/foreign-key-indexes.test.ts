@@ -1,6 +1,7 @@
+import { createSnapshotTestDb } from '../../helpers/db-mock';
+
 import type Database from 'better-sqlite3';
 import { afterAll, describe, expect, it } from 'vitest';
-import { createSnapshotTestDb } from '../../helpers/db-mock';
 
 /**
  * Migration20200101042200 added 86 indexes by hand so that deleting a trip or a
