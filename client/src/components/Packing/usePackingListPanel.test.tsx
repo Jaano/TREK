@@ -495,6 +495,20 @@ describe('usePackingList — bags', () => {
     expect(result.current.showAddBag).toBe(false)
   })
 
+  it('FE-W5HOOK-059: a create that answers without a bag still clears the form', async () => {
+    server.use(http.post('/api/trips/1/packing/bags', () => HttpResponse.json({})))
+    const { result } = renderPanel()
+    await settled()
+
+    act(() => { result.current.setNewBagName('Duffel'); result.current.setShowAddBag(true) })
+    await act(async () => { await result.current.handleCreateBag() })
+
+    expect(result.current.bags).toEqual([undefined])
+    expect(result.current.newBagName).toBe('')
+    expect(result.current.showAddBag).toBe(false)
+    expect(toastSpy).not.toHaveBeenCalled()
+  })
+
   it('FE-W5HOOK-031: a failing bag create surfaces a save error', async () => {
     server.use(http.post('/api/trips/1/packing/bags', () => new HttpResponse(null, { status: 500 })))
     const { result } = renderPanel()

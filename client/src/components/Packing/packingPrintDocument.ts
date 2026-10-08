@@ -1,6 +1,6 @@
 import { escapeHtml } from '@trek/shared'
 import type { PackingItem } from '../../types'
-import { formatWeight, packingItemWeight } from '../../mobile/screens/trip/tabs/listsModel'
+import { formatWeight, packingItemWeight } from './packingListModel'
 import { katColor } from './packingListPanel.helpers'
 import { groupByCategory, type PackingBagInfo, type PackingBagLookup } from './packingExport'
 

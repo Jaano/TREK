@@ -1,17 +1,21 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import type { ChangeEvent } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
-import { packingApi, tripsApi } from '../../api/client'
+import { tripsApi } from '../../api/client'
 import { useAddonStore } from '../../store/addonStore'
-import { useNetworkMode } from '../../hooks/useNetworkMode'
-import { useBagTotalsPing } from './useBagTotalsPing'
-import type { PackingItem, PackingBag } from '../../types'
-import { BAG_COLORS, PACKING_PLACEHOLDER_NAME } from './packingListPanel.constants'
-import { newItemSharing, parseImportLines, sortItemsByName } from './packingListPanel.helpers'
+import type { PackingItem } from '../../types'
+import { parseImportLines, sortItemsByName } from './packingListPanel.helpers'
+import { groupPackingItems, packingCategoryOrder, packingProgress, packingViewItems } from './packingListModel'
+import { usePackingBags } from './usePackingBags'
+import { usePackingCategoryAssignees } from './usePackingCategoryAssignees'
+import { usePackingImport } from './usePackingImport'
+import { usePackingItemActions } from './usePackingItemActions'
+import { usePackingTemplates } from './usePackingTemplates'
+
+export type { CategoryAssignee } from './usePackingCategoryAssignees'
 
 const PACKING_SORT_KEY = 'trek:packing-sort'
 
@@ -22,13 +26,6 @@ export interface TripMember {
   username: string
   avatar?: string | null
   avatar_url?: string | null
-  is_guest?: boolean
-}
-
-export interface CategoryAssignee {
-  user_id: number
-  username: string
-  avatar?: string | null
   is_guest?: boolean
 }
 
@@ -68,8 +65,6 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
   const [ownView, setOwnView] = useState<'common' | 'personal'>('common')
   const view = viewProp ?? ownView
   const setView = onViewChange ?? setOwnView
-  const [addingCategory, setAddingCategory] = useState(false)
-  const [newCatName, setNewCatName] = useState('')
   const { addPackingItem, updatePackingItem, deletePackingItem, togglePackingItem, reorderPackingItems,
     setPackingItemSharing, clonePackingItem, addPackingContributor, removePackingContributor } = useTripStore()
   const can = useCanDo()
@@ -82,7 +77,6 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
 
   // Trip members & category assignees
   const [tripMembers, setTripMembers] = useState<TripMember[]>([])
-  const [categoryAssignees, setCategoryAssignees] = useState<Record<string, CategoryAssignee[]>>({})
 
   useEffect(() => {
     tripsApi.getMembers(tripId).then(data => {
@@ -91,136 +85,39 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
       if (data.members) all.push(...data.members.map((m: any) => ({ id: m.id, username: m.username, avatar: m.avatar_url, is_guest: !!m.is_guest })))
       setTripMembers(all)
     }).catch(() => {})
-    packingApi.getCategoryAssignees(tripId).then(data => {
-      setCategoryAssignees(data.assignees || {})
-    }).catch(() => {})
   }, [tripId])
 
-  const handleSetAssignees = async (category: string, userIds: number[]) => {
-    try {
-      const data = await packingApi.setCategoryAssignees(tripId, category, userIds)
-      setCategoryAssignees(prev => ({ ...prev, [category]: data.assignees || [] }))
-    } catch {
-      toast.error(t('packing.toast.saveError'))
-    }
-  }
+  const { categoryAssignees, setAssignees: handleSetAssignees } = usePackingCategoryAssignees({ tripId, t, toast })
 
   // Split by the active view (#858): Common = group pool (is_private 0), Personal =
   // my own + shared-to-me (is_private 1, already filtered to me by the server).
-  const viewItems = useMemo(
-    () => items.filter(i => (view === 'common' ? !i.is_private : !!i.is_private)),
-    [items, view],
-  )
+  const viewItems = useMemo(() => packingViewItems(items, view), [items, view])
 
-  const allCategories = useMemo(() => {
-    const seen: string[] = []
-    for (const item of viewItems) {
-      const cat = item.category || t('packing.defaultCategory')
-      if (!seen.includes(cat)) seen.push(cat)
-    }
-    return seen
-  }, [viewItems, t])
+  const allCategories = useMemo(() => packingCategoryOrder(viewItems, t('packing.defaultCategory')), [viewItems, t])
 
   const gruppiert = useMemo(() => {
-    const filtered = viewItems.filter(i => {
-      if (filter === 'offen') return !i.checked
-      if (filter === 'erledigt') return i.checked
-      return true
-    })
+    const status = filter === 'offen' ? 'open' : filter === 'erledigt' ? 'done' : 'all'
     const groups: Record<string, PackingItem[]> = {}
-    for (const item of filtered) {
-      const kat = item.category || t('packing.defaultCategory')
-      if (!groups[kat]) groups[kat] = []
-      groups[kat].push(item)
-    }
-    if (sort === 'name') {
-      for (const kat of Object.keys(groups)) groups[kat] = sortItemsByName(groups[kat], locale)
+    for (const group of groupPackingItems(viewItems, status, t('packing.defaultCategory'))) {
+      groups[group.category] = sort === 'name' ? sortItemsByName(group.items, locale) : group.items
     }
     return groups
   }, [viewItems, filter, sort, locale, t])
 
-  const abgehakt = viewItems.filter(i => i.checked).length
-  const fortschritt = viewItems.length > 0 ? Math.round((abgehakt / viewItems.length) * 100) : 0
+  const { checked: abgehakt, pct: fortschritt } = packingProgress(viewItems)
 
-  const handleAddItemToCategory = async (category: string, name: string) => {
-    try {
-      // Reuse the '...' placeholder slot when the category already has one, so a
-      // freshly-emptied category keeps its position (and therefore its colour)
-      // instead of the new item being appended to the end of the list.
-      const placeholder = useTripStore.getState().packingItems.find(
-        i => i.category === category && i.name === PACKING_PLACEHOLDER_NAME
-      )
-      if (placeholder) {
-        await updatePackingItem(tripId, placeholder.id, { name })
-      } else {
-        // New items inherit the active view's tier, and in "my list" the sharing the
-        // category's own items agree on (#2241).
-        await addPackingItem(tripId, { name, category, ...newItemSharing(items, category, view, currentUserId) } as Parameters<typeof addPackingItem>[1])
-      }
-    } catch { toast.error(t('packing.toast.addError')) }
-  }
-
-  // Deleting an item from a row. When it is the last item of a user-created
-  // category, turn that row back into the '...' placeholder in place rather than
-  // deleting it (#1289). Updating the row keeps its id, list position and colour,
-  // so the category neither disappears nor jumps to the end. The default
-  // (uncategorized) group and the placeholder row itself are deleted normally —
-  // removing the placeholder is how an empty category is dismissed.
-  const handleDeleteItem = async (item: PackingItem) => {
-    const category = item.category
-    const isLastInCategory = !!category
-      && item.name !== PACKING_PLACEHOLDER_NAME
-      && !items.some(i => i.id !== item.id && i.category === category)
-    try {
-      if (isLastInCategory) {
-        if (item.checked) await togglePackingItem(tripId, item.id, false)
-        await updatePackingItem(tripId, item.id, {
-          name: PACKING_PLACEHOLDER_NAME, weight_grams: null, bag_id: null, quantity: 1,
-        })
-      } else {
-        await deletePackingItem(tripId, item.id)
-      }
-    } catch {
-      toast.error(t('packing.toast.deleteError'))
-    }
-  }
-
-  const handleAddNewCategory = async () => {
-    if (!newCatName.trim()) return
-    let catName = newCatName.trim()
-    // Allow duplicate display names — append invisible zero-width spaces to make unique internally
-    while (allCategories.includes(catName)) {
-      catName += '​'
-    }
-    try {
-      await addPackingItem(tripId, { name: '...', category: catName, visibility: view === 'personal' ? 'personal' : 'common' } as Parameters<typeof addPackingItem>[1])
-      setNewCatName('')
-      setAddingCategory(false)
-    } catch { toast.error(t('packing.toast.addError')) }
-  }
-
-  const handleRenameCategory = async (oldName: string, newName: string) => {
-    const toUpdate = items.filter(i => (i.category || t('packing.defaultCategory')) === oldName)
-    for (const item of toUpdate) {
-      await updatePackingItem(tripId, item.id, { category: newName })
-    }
-  }
-
-  const handleDeleteCategory = async (catItems: PackingItem[]) => {
-    let failed = false
-    for (const item of catItems) {
-      try { await deletePackingItem(tripId, item.id) } catch { failed = true }
-    }
-    if (failed) toast.error(t('packing.toast.deleteError'))
-  }
+  const {
+    addingCategory, setAddingCategory, newCategoryName: newCatName, setNewCategoryName: setNewCatName,
+    addItemToCategory: handleAddItemToCategory, deleteItem: handleDeleteItem, addNewCategory: handleAddNewCategory,
+    renameCategory: handleRenameCategory, deleteCategoryItems: handleDeleteCategory, clearChecked,
+  } = usePackingItemActions({
+    tripId, items, view, currentUserId, categories: allCategories, defaultCategory: t('packing.defaultCategory'),
+    actions: { addPackingItem, updatePackingItem, deletePackingItem, togglePackingItem }, t, toast, placeholderFrom: 'store',
+  })
 
   const handleClearChecked = async () => {
     if (!confirm(t('packing.confirm.clearChecked', { count: abgehakt }))) return
-    let failed = false
-    for (const item of items.filter(i => i.checked)) {
-      try { await deletePackingItem(tripId, item.id) } catch { failed = true }
-    }
-    if (failed) toast.error(t('packing.toast.deleteError'))
+    await clearChecked()
   }
 
   // Bag tracking — the global toggle is a packing sub-flag surfaced to every
@@ -229,9 +126,6 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
   const bagTrackingEnabled = useAddonStore(s => s.bagTracking)
   const addonsLoaded = useAddonStore(s => s.loaded)
   const loadAddons = useAddonStore(s => s.loadAddons)
-  const [bags, setBags] = useState<PackingBag[]>([])
-  /** Server-summed weight of everything in no bag (#2191); null until the first load. */
-  const [unassignedWeightGrams, setUnassignedWeightGrams] = useState<number | null>(null)
   const [newBagName, setNewBagName] = useState('')
   const [showAddBag, setShowAddBag] = useState(false)
   const [showBagModal, setShowBagModal] = useState(false)
@@ -240,81 +134,22 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
     if (!addonsLoaded) loadAddons()
   }, [addonsLoaded, loadAddons])
 
-  const reloadBags = useCallback(async () => {
-    if (!bagTrackingEnabled) return
-    try {
-      const r = await packingApi.listBags(tripId)
-      setBags(r.bags || [])
-      setUnassignedWeightGrams(r.unassigned_weight_grams ?? null)
-    } catch {
-      // Offline or a failed read: the surfaces fall back to the local sum
-      // (see `serverWeightsFresh` below), so there is nothing to roll back.
-    }
-  }, [tripId, bagTrackingEnabled])
-
-  useEffect(() => { void reloadBags() }, [reloadBags])
-
-  // Bag weights are summed server-side across every member (#2191), so an item
-  // this viewer may not even see still moves them. The item events cannot carry
-  // that — a private item is delivered only to its owner, which is the very rule
-  // that made the totals wrong — so the server pings the room content-free and
-  // we re-read the numbers.
-  useBagTotalsPing(bagTrackingEnabled, reloadBags)
-
-  // Bags are not part of the offline cache (no repo, no Dexie table), so while
-  // offline the server totals are frozen at the last online read and cannot see
-  // the optimistic item writes the mutation queue is holding. A stale absolute
-  // number measured against an airline limit is worse than an honest partial
-  // one, so offline the surfaces sum what they can see instead (#2191).
-  const { offline } = useNetworkMode()
-  const serverWeightsFresh = !offline
+  const {
+    bags, unassignedWeightGrams, serverWeightsFresh, tryCreateBag, createBag: handleCreateBagByName,
+    deleteBag: handleDeleteBag, updateBag: handleUpdateBag, setBagMembers: handleSetBagMembers,
+  } = usePackingBags({ tripId, bagTrackingEnabled, t, toast })
 
   const handleCreateBag = async () => {
     if (!newBagName.trim()) return
-    try {
-      const data = await packingApi.createBag(tripId, { name: newBagName.trim(), color: BAG_COLORS[bags.length % BAG_COLORS.length] })
-      setBags(prev => [...prev, data.bag])
+    if (await tryCreateBag(newBagName.trim())) {
       setNewBagName(''); setShowAddBag(false)
-    } catch { toast.error(t('packing.toast.saveError')) }
-  }
-
-  const handleCreateBagByName = async (name: string): Promise<PackingBag | undefined> => {
-    try {
-      const data = await packingApi.createBag(tripId, { name, color: BAG_COLORS[bags.length % BAG_COLORS.length] })
-      setBags(prev => [...prev, data.bag])
-      return data.bag
-    } catch { toast.error(t('packing.toast.saveError')); return undefined }
-  }
-
-  const handleDeleteBag = async (bagId: number) => {
-    try {
-      await packingApi.deleteBag(tripId, bagId)
-      setBags(prev => prev.filter(b => b.id !== bagId))
-    } catch { toast.error(t('packing.toast.deleteError')) }
-  }
-
-  const handleUpdateBag = async (bagId: number, data: Record<string, any>) => {
-    try {
-      const result = await packingApi.updateBag(tripId, bagId, data)
-      setBags(prev => prev.map(b => b.id === bagId ? { ...b, ...result.bag } : b))
-    } catch { toast.error(t('common.error')) }
-  }
-
-  const handleSetBagMembers = async (bagId: number, userIds: number[]) => {
-    try {
-      const result = await packingApi.setBagMembers(tripId, bagId, userIds)
-      setBags(prev => prev.map(b => b.id === bagId ? { ...b, members: result.members } : b))
-    } catch { toast.error(t('common.error')) }
+    }
   }
 
   // Templates
-  const [availableTemplates, setAvailableTemplates] = useState<{ id: number; name: string; item_count: number }[]>([])
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false)
-  const [applyingTemplate, setApplyingTemplate] = useState(false)
   const [showSaveTemplate, setShowSaveTemplate] = useState(false)
-  const [saveTemplateName, setSaveTemplateName] = useState('')
   const [showImportModal, setShowImportModal] = useState(false)
-  const [importText, setImportText] = useState('')
   const lastHandledImportSignal = useRef(openImportSignal)
   const lastHandledAddCategorySignal = useRef(addCategorySignal)
   const lastHandledSaveSignal = useRef(saveTemplateSignal)
@@ -331,7 +166,7 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
       setAddingCategory(true)
     }
     lastHandledAddCategorySignal.current = addCategorySignal
-  }, [addCategorySignal])
+  }, [addCategorySignal, setAddingCategory])
 
   useEffect(() => {
     if (saveTemplateSignal !== lastHandledSaveSignal.current && saveTemplateSignal > 0) {
@@ -342,9 +177,14 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
   const csvInputRef = useRef<HTMLInputElement>(null)
   const templateDropdownRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    packingApi.listTemplates(tripId).then(d => setAvailableTemplates(d.templates || [])).catch(() => {})
-  }, [tripId])
+  const {
+    templates: availableTemplates, applyingTemplate, applyTemplate: handleApplyTemplate,
+    saveTemplateName, setSaveTemplateName, saveAsTemplate: handleSaveAsTemplate,
+  } = usePackingTemplates({
+    tripId, view, t, toast,
+    onApplied: () => setShowTemplateDropdown(false),
+    onSaved: () => setShowSaveTemplate(false),
+  })
 
   useEffect(() => {
     if (!showTemplateDropdown) return
@@ -355,53 +195,9 @@ export function usePackingList({ tripId, items, openImportSignal = 0, addCategor
     return () => document.removeEventListener('mousedown', handler)
   }, [showTemplateDropdown])
 
-  const handleApplyTemplate = async (templateId: number) => {
-    setApplyingTemplate(true)
-    try {
-      const data = await packingApi.applyTemplate(tripId, templateId, view)
-      useTripStore.setState(s => ({ packingItems: [...s.packingItems, ...(data.items || [])] }))
-      toast.success(t('packing.templateApplied', { count: data.count }))
-      setShowTemplateDropdown(false)
-    } catch {
-      toast.error(t('packing.templateError'))
-    } finally {
-      setApplyingTemplate(false)
-    }
-  }
-
-  const handleSaveAsTemplate = async () => {
-    if (!saveTemplateName.trim()) return
-    try {
-      await packingApi.saveAsTemplate(tripId, saveTemplateName.trim())
-      toast.success(t('packing.templateSaved'))
-      setShowSaveTemplate(false)
-      setSaveTemplateName('')
-      packingApi.listTemplates(tripId).then(d => setAvailableTemplates(d.templates || [])).catch(() => {})
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }
-
-  const handleBulkImport = async () => {
-    const parsed = parseImportLines(importText)
-    if (parsed.length === 0) { toast.error(t('packing.importEmpty')); return }
-    try {
-      const result = await packingApi.bulkImport(tripId, parsed)
-      useTripStore.setState(s => ({ packingItems: [...s.packingItems, ...(result.items || [])] }))
-      toast.success(t('packing.importSuccess', { count: result.count }))
-      setImportText('')
-      setShowImportModal(false)
-    } catch { toast.error(t('packing.importError')) }
-  }
-
-  const handleCsvFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-    const reader = new FileReader()
-    reader.onload = () => { if (typeof reader.result === 'string') setImportText(reader.result) }
-    reader.readAsText(file)
-  }
+  const {
+    text: importText, setText: setImportText, readFile: handleCsvFile, runImport: handleBulkImport,
+  } = usePackingImport({ tripId, t, toast, onImported: () => setShowImportModal(false), reportEmpty: true })
 
   const font = { fontFamily: "var(--font-system)" }
 

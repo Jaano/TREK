@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { packingApi } from '../../api/client'
 import { useTranslation } from '../../i18n'
-import { packingViewItems, type PackingView } from '../../mobile/screens/trip/tabs/listsModel'
+import { packingViewItems, type PackingView } from './packingListModel'
 import { useAddonStore } from '../../store/addonStore'
 import { useTripStore } from '../../store/tripStore'
 import { isEffectivelyOffline } from '../../sync/networkMode'

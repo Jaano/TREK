@@ -1,8 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { PRIORITY_COLOR, PRIORITY_LABEL, PRIORITY_LEVELS } from '../../../../src/mobile/screens/trip/tabs/listsModel';
 import {
-  PRIORITY_COLOR,
-  PRIORITY_LABEL,
-  PRIORITY_LEVELS,
   formatWeight,
   groupPackingItems,
   isLastCustomItemInCategory,
@@ -12,7 +10,7 @@ import {
   packingProgress,
   packingStatusFiltered,
   packingViewItems,
-} from '../../../../src/mobile/screens/trip/tabs/listsModel';
+} from '../../../../src/components/Packing/packingListModel';
 import {
   filterTodoItems,
   isTodoOverdue,

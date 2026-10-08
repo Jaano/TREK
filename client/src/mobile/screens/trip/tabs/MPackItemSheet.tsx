@@ -5,7 +5,7 @@ import { Eyebrow, FIELD_CLS, FormSheetFooter, FormSheetHeader } from '../sheets/
 import { avatarSrc } from '../../../../utils/avatarSrc'
 import type { PackingItem, TripMember } from '../../../../types'
 import type { TripPlanner } from '../MTripShell'
-import { isPackingPlaceholder } from './listsModel'
+import { isPackingPlaceholder } from '../../../../components/Packing/packingListModel'
 
 export interface MPackItemSheetProps {
   planner: TripPlanner

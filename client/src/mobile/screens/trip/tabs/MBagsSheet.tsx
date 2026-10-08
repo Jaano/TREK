@@ -6,7 +6,7 @@ import { FIELD_CLS, FormSheetHeader } from '../sheets/PlSheetChrome'
 import { avatarSrc } from '../../../../utils/avatarSrc'
 import type { PackingBag, PackingItem, TripMember } from '../../../../types'
 import type { TripPlanner } from '../MTripShell'
-import { formatWeight } from './listsModel'
+import { formatWeight } from '../../../../components/Packing/packingListModel'
 import { bagFillPct, bagTotalWeight, countsTowardsMyLoad, unassignedTotalWeight } from '../../../../components/Packing/packingListPanel.helpers'
 
 export interface MBagsSheetProps {

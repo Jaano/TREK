@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
   Briefcase, Check, CheckCheck, ChevronDown, ChevronUp, HandHelping, Minus,
@@ -8,23 +8,21 @@ import {
 import MDancingTrek from '../../../components/MDancingTrek'
 import { useAuthStore } from '../../../../store/authStore'
 import { useAddonStore } from '../../../../store/addonStore'
-import { useTripStore } from '../../../../store/tripStore'
-import { packingApi } from '../../../../api/client'
-import { useNetworkMode } from '../../../../hooks/useNetworkMode'
-import { useBagTotalsPing } from '../../../../components/Packing/useBagTotalsPing'
-import type { PackingUpdateBagRequest } from '@trek/shared'
 import type { PackingBag, PackingItem, TripMember } from '../../../../types'
 import type { TripPlanner } from '../MTripShell'
 import MConfirmSheet from '../../settings/MConfirmSheet'
 import { FIELD_CLS } from '../sheets/PlSheetChrome'
 import { TabScroller } from './tabChrome'
-import { katColor, newItemSharing, packedOf } from '../../../../components/Packing/packingListPanel.helpers'
-import { BAG_COLORS, PACKING_PLACEHOLDER_NAME } from '../../../../components/Packing/packingListPanel.constants'
+import { katColor, packedOf } from '../../../../components/Packing/packingListPanel.helpers'
 import {
-  formatWeight, groupPackingItems, isLastCustomItemInCategory, isPackingPlaceholder,
+  formatWeight, groupPackingItems, isPackingPlaceholder,
   packingCategoryOrder, packingProgress, packingViewItems,
   type PackingCategoryGroup, type PackingStatusFilter, type PackingView,
-} from './listsModel'
+} from '../../../../components/Packing/packingListModel'
+import { usePackingBags } from '../../../../components/Packing/usePackingBags'
+import { usePackingTemplates } from '../../../../components/Packing/usePackingTemplates'
+import { usePackingCategoryAssignees, type CategoryAssignee } from '../../../../components/Packing/usePackingCategoryAssignees'
+import { usePackingItemActions } from '../../../../components/Packing/usePackingItemActions'
 import MBagsSheet from './MBagsSheet'
 import MPackItemSheet from './MPackItemSheet'
 import MPackingImportSheet from './MPackingImportSheet'
@@ -32,8 +30,6 @@ import PackingPrintPreview from '../../../../components/Packing/PackingPrintPrev
 import { usePackingExport } from '../../../../components/Packing/usePackingExport'
 
 type ActionView = 'menu' | 'apply' | 'save'
-interface CategoryAssignee { user_id: number; username: string }
-interface PackingTemplate { id: number; name: string; item_count: number }
 
 /**
  * Packing sub-tab (spec 03 §4.1-4.4): progress card, action menu (remove
@@ -59,50 +55,22 @@ export default function MPackingListTab({ planner }: { planner: TripPlanner }) {
   const [editMode, setEditMode] = useState(false)
   const [actionsOpen, setActionsOpen] = useState(false)
   const [actionView, setActionView] = useState<ActionView>('menu')
-  const [saveTemplateName, setSaveTemplateName] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const [addingCategory, setAddingCategory] = useState(false)
-  const [newCategoryName, setNewCategoryName] = useState('')
   const [editingItemId, setEditingItemId] = useState<number | null>(null)
   const [showBagsSheet, setShowBagsSheet] = useState(false)
   const [showImportSheet, setShowImportSheet] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ name: string; items: PackingItem[] } | null>(null)
 
-  const [bags, setBags] = useState<PackingBag[]>([])
-  /** Server-summed weight of everything in no bag (#2191); null until first load. */
-  const [unassignedWeightGrams, setUnassignedWeightGrams] = useState<number | null>(null)
-  const [templates, setTemplates] = useState<PackingTemplate[]>([])
-  const [categoryAssignees, setCategoryAssignees] = useState<Record<string, CategoryAssignee[]>>({})
-
-  const reloadBags = useCallback(async () => {
-    if (!bagTrackingEnabled) return
-    try {
-      const r = await packingApi.listBags(tripId)
-      setBags(r.bags || [])
-      setUnassignedWeightGrams(r.unassigned_weight_grams ?? null)
-    } catch {
-      // Offline or a failed read: the sheet falls back to the local sum.
-    }
-  }, [tripId, bagTrackingEnabled])
-
-  useEffect(() => { void reloadBags() }, [reloadBags])
-
-  // Bag weights are server-summed across every member (#2191), so an item this
-  // viewer cannot see still moves them; the server pings the room content-free.
-  useBagTotalsPing(bagTrackingEnabled, reloadBags)
-
-  // Bags have no offline cache, so their totals go stale the moment the device
-  // does; offline the sheet sums what it can see instead (#2191).
-  const { offline } = useNetworkMode()
-
-  useEffect(() => {
-    packingApi.listTemplates(tripId).then(r => setTemplates(r.templates || [])).catch(() => {})
-  }, [tripId])
-
-  useEffect(() => {
-    packingApi.getCategoryAssignees(tripId).then(r => setCategoryAssignees(r.assignees || {})).catch(() => {})
-  }, [tripId])
+  const closeActions = () => {
+    setActionsOpen(false)
+    setActionView('menu')
+  }
+  const { bags, unassignedWeightGrams, serverWeightsFresh, createBag, updateBag, deleteBag, setBagMembers } =
+    usePackingBags({ tripId, bagTrackingEnabled, t, toast })
+  const { templates, applyTemplate, saveTemplateName, setSaveTemplateName, saveAsTemplate } =
+    usePackingTemplates({ tripId, view, t, toast, onApplied: closeActions, onSaved: closeActions })
+  const { categoryAssignees, setAssignees: setCategoryAssigneesFor } = usePackingCategoryAssignees({ tripId, t, toast })
 
   const defaultCategory = t('packing.defaultCategory')
   const viewItems = useMemo(() => packingViewItems(items, view), [items, view])
@@ -111,56 +79,15 @@ export default function MPackingListTab({ planner }: { planner: TripPlanner }) {
   const progress = packingProgress(viewItems)
   const checkedCount = viewItems.filter(i => i.checked).length
 
+  const {
+    addingCategory, setAddingCategory, newCategoryName, setNewCategoryName, addItemToCategory, deleteItem,
+    renameCategoryReporting: renameCategory, deleteCategoryItems, clearChecked, addNewCategory,
+  } = usePackingItemActions({
+    tripId, items, view, currentUserId, categories: categoryOrder, defaultCategory,
+    actions: tripActions, t, toast, placeholderFrom: 'items',
+  })
+
   const toggleCategory = (cat: string) => setCollapsed(c => ({ ...c, [cat]: !c[cat] }))
-
-  const addItemToCategory = async (category: string, name: string) => {
-    try {
-      const placeholder = items.find(i => i.category === category && isPackingPlaceholder(i))
-      if (placeholder) {
-        await tripActions.updatePackingItem(tripId, placeholder.id, { name })
-      } else {
-        await tripActions.addPackingItem(
-          tripId,
-          // In "my list", shared the way the category's own items all are (#2241).
-          { name, category, ...newItemSharing(items, category, view, currentUserId) } as Parameters<typeof tripActions.addPackingItem>[1],
-        )
-      }
-    } catch {
-      toast.error(t('packing.toast.addError'))
-    }
-  }
-
-  const deleteItem = async (item: PackingItem) => {
-    try {
-      if (isLastCustomItemInCategory(item, items)) {
-        if (item.checked) await tripActions.togglePackingItem(tripId, item.id, false)
-        await tripActions.updatePackingItem(tripId, item.id, {
-          name: PACKING_PLACEHOLDER_NAME, weight_grams: null, bag_id: null, quantity: 1,
-        })
-      } else {
-        await tripActions.deletePackingItem(tripId, item.id)
-      }
-    } catch {
-      toast.error(t('packing.toast.deleteError'))
-    }
-  }
-
-  const renameCategory = async (oldName: string, newName: string) => {
-    const toUpdate = items.filter(i => (i.category || defaultCategory) === oldName)
-    try {
-      for (const item of toUpdate) await tripActions.updatePackingItem(tripId, item.id, { category: newName })
-    } catch {
-      toast.error(t('packing.toast.renameError'))
-    }
-  }
-
-  const deleteCategoryItems = async (catItems: PackingItem[]) => {
-    let failed = false
-    for (const item of catItems) {
-      try { await tripActions.deletePackingItem(tripId, item.id) } catch { failed = true }
-    }
-    if (failed) toast.error(t('packing.toast.deleteError'))
-  }
 
   const checkAllInCategory = async (catItems: PackingItem[]) => {
     try {
@@ -174,103 +101,6 @@ export default function MPackingListTab({ planner }: { planner: TripPlanner }) {
       for (const item of catItems) if (item.checked) await tripActions.togglePackingItem(tripId, item.id, false)
     } catch {
       toast.error(t('packing.toast.saveError'))
-    }
-  }
-
-  const addNewCategory = async () => {
-    const trimmed = newCategoryName.trim()
-    if (!trimmed) return
-    let catName = trimmed
-    while (categoryOrder.includes(catName)) catName += '​'
-    try {
-      await tripActions.addPackingItem(
-        tripId,
-        { name: PACKING_PLACEHOLDER_NAME, category: catName, visibility: view === 'personal' ? 'personal' : 'common' } as Parameters<typeof tripActions.addPackingItem>[1],
-      )
-      setNewCategoryName('')
-      setAddingCategory(false)
-    } catch {
-      toast.error(t('packing.toast.addError'))
-    }
-  }
-
-  const clearChecked = async () => {
-    let failed = false
-    for (const item of items.filter(i => i.checked)) {
-      try { await tripActions.deletePackingItem(tripId, item.id) } catch { failed = true }
-    }
-    if (failed) toast.error(t('packing.toast.deleteError'))
-  }
-
-  const createBag = async (name: string): Promise<PackingBag | undefined> => {
-    try {
-      const data = await packingApi.createBag(tripId, { name, color: BAG_COLORS[bags.length % BAG_COLORS.length] })
-      setBags(prev => [...prev, data.bag])
-      return data.bag
-    } catch {
-      toast.error(t('packing.toast.saveError'))
-      return undefined
-    }
-  }
-  const updateBag = async (bagId: number, data: PackingUpdateBagRequest) => {
-    try {
-      const result = await packingApi.updateBag(tripId, bagId, data)
-      setBags(prev => prev.map(b => (b.id === bagId ? { ...b, ...result.bag } : b)))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }
-  const deleteBag = async (bagId: number) => {
-    try {
-      await packingApi.deleteBag(tripId, bagId)
-      setBags(prev => prev.filter(b => b.id !== bagId))
-    } catch {
-      toast.error(t('packing.toast.deleteError'))
-    }
-  }
-  const setBagMembers = async (bagId: number, userIds: number[]) => {
-    try {
-      const result = await packingApi.setBagMembers(tripId, bagId, userIds)
-      setBags(prev => prev.map(b => (b.id === bagId ? { ...b, members: result.members } : b)))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }
-
-  const setCategoryAssigneesFor = async (category: string, userIds: number[]) => {
-    try {
-      const data = await packingApi.setCategoryAssignees(tripId, category, userIds)
-      setCategoryAssignees(prev => ({ ...prev, [category]: data.assignees || [] }))
-    } catch {
-      toast.error(t('packing.toast.saveError'))
-    }
-  }
-
-  const applyTemplate = async (templateId: number) => {
-    try {
-      // Land the items in the list the user is looking at — without the
-      // visibility the API defaults to 'common' and they vanish from My list.
-      const data = await packingApi.applyTemplate(tripId, templateId, view)
-      useTripStore.setState(s => ({ packingItems: [...s.packingItems, ...(data.items || [])] }))
-      toast.success(t('packing.templateApplied', { count: data.count }))
-      setActionsOpen(false)
-      setActionView('menu')
-    } catch {
-      toast.error(t('packing.templateError'))
-    }
-  }
-
-  const saveAsTemplate = async () => {
-    if (!saveTemplateName.trim()) return
-    try {
-      await packingApi.saveAsTemplate(tripId, saveTemplateName.trim())
-      toast.success(t('packing.templateSaved'))
-      setSaveTemplateName('')
-      setActionsOpen(false)
-      setActionView('menu')
-      packingApi.listTemplates(tripId).then(r => setTemplates(r.templates || [])).catch(() => {})
-    } catch {
-      toast.error(t('common.error'))
     }
   }
 
@@ -507,7 +337,7 @@ export default function MPackingListTab({ planner }: { planner: TripPlanner }) {
         bags={bags}
         items={items}
         unassignedWeightGrams={unassignedWeightGrams}
-        serverWeightsFresh={!offline}
+        serverWeightsFresh={serverWeightsFresh}
         tripMembers={tripMembers}
         canEdit={canEdit}
         currentUserId={currentUserId}
