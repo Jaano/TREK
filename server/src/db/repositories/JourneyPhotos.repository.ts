@@ -2,7 +2,7 @@ import type { Platform } from '@mikro-orm/core';
 import type { ExpressionBuilder } from 'kysely';
 import type { GalleryPhoto } from '../../types';
 import type { JourneyPhotos } from '../entities/JourneyPhotos.entity';
-import { concatKysely, unixEpochToIsoKysely } from '../dialect/sql-functions';
+import { concatKysely, unixEpochToIsoKysely } from '../dialect/kysely-functions';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import type { DB } from '../kysely/db';

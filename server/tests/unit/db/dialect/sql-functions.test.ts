@@ -11,7 +11,6 @@ import {
   caseWhenEquals,
   caseWhenNotNull,
   castInteger,
-  castIntegerKysely,
   coalesce,
   coalesceOverride,
   coalesceOverrideWhileSame,
@@ -20,11 +19,9 @@ import {
   columnIncrementedBy,
   columnRef,
   concat,
-  concatKysely,
   countAll,
   countAllRef,
   currentTimestamp,
-  currentTimestampKysely,
   dateAdd,
   dateOf,
   dayDistance,
@@ -39,14 +36,19 @@ import {
   nowMinusDays,
   nowMinusHours,
   nowPlusSeconds,
-  nowPlusSecondsKysely,
   startsWithIsoDate,
-  startsWithIsoDateKysely,
   substring,
-  substringKysely,
   trim,
-  unixEpochToIsoKysely,
 } from '../../../../src/db/dialect/sql-functions';
+import {
+  castIntegerKysely,
+  concatKysely,
+  currentTimestampKysely,
+  nowPlusSecondsKysely,
+  startsWithIsoDateKysely,
+  substringKysely,
+  unixEpochToIsoKysely,
+} from '../../../../src/db/dialect/kysely-functions';
 import { createJourney, createJourneyEntry } from '../../../helpers/factories';
 
 /** The `users` columns the Kysely-expression tests below read/write, narrowed the same way every other Kysely-typed repository method in this program declares its own `TDB`. */

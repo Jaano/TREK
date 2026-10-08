@@ -1,5 +1,5 @@
 import type { PluginOauthTokens } from '../entities/PluginOauthTokens.entity';
-import { currentTimestampKysely } from '../dialect/sql-functions';
+import { currentTimestampKysely } from '../dialect/kysely-functions';
 import { TrekRepository } from './_shared/trek-repository';
 import type { DB } from '../kysely/db';
 

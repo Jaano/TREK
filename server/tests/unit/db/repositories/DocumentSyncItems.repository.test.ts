@@ -12,7 +12,7 @@ import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createTrip, createUser } from '../../../helpers/factories';
 import { DocumentSyncItems } from '../../../../src/db/entities/DocumentSyncItems.entity';
 import type { DocumentSyncItemsRepository } from '../../../../src/db/repositories/DocumentSyncItems.repository';
-import { currentTimestampKysely } from '../../../../src/db/dialect/sql-functions';
+import { currentTimestampKysely } from '../../../../src/db/dialect/kysely-functions';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;

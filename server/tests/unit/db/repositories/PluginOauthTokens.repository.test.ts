@@ -16,7 +16,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { PluginOauthTokens } from '../../../../src/db/entities/PluginOauthTokens.entity';
 import type { PluginOauthTokensRepository } from '../../../../src/db/repositories/PluginOauthTokens.repository';
-import { currentTimestampKysely } from '../../../../src/db/dialect/sql-functions';
+import { currentTimestampKysely } from '../../../../src/db/dialect/kysely-functions';
 
 const testDb = createSnapshotTestDb();
 let t: TestOrm;

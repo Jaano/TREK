@@ -106,6 +106,7 @@ describe('dialect-lint.mjs', () => {
   it('DIALECT-004: never scans the dialect layer or a migration that has shipped', () => {
     const dir = serverRoot({
       'src/db/dialect/sql-functions.ts': "export const now = `datetime('now')`;\nexport const s = 'strftime';\n",
+      'src/db/dialect/kysely-functions.ts': "export const g = 'glob';\nexport const s = 'strftime';\n",
       'src/db/migrations/Migration20200101000000_baseline_schema.ts':
         "export const t = 'CREATE TABLE t (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT DEFAULT (datetime(\\'now\\')))';\n",
     });

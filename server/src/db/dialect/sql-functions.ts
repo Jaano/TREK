@@ -1,6 +1,5 @@
 import { raw, type Platform, type RawQueryFragment } from '@mikro-orm/core';
-import { SqlitePlatform } from '@mikro-orm/sql';
-import { sql, type Expression, type ExpressionBuilder, type ExpressionWrapper, type RawBuilder, type ReferenceExpression, type SqlBool, type StringReference } from 'kysely';
+import { isSqlite, unsupported } from './platform';
 
 /**
  * The only place a repository may spell a database function.
@@ -12,6 +11,8 @@ import { sql, type Expression, type ExpressionBuilder, type ExpressionWrapper, t
  * runtime property of the live connection, not a build-time swap: when the
  * Postgres driver arrives this file grows a second branch and no repository
  * changes. An unknown platform fails closed rather than guessing a spelling.
+ * The Kysely-expression twins live in `kysely-functions.ts`, the platform
+ * checks in `platform.ts`.
  *
  * Values are never interpolated — the day count in `dateAdd` is checked to be
  * an integer before it is spelled.
@@ -24,20 +25,16 @@ function column(ref: string): string {
   return ref;
 }
 
-function unsupported(platform: Platform): never {
-  throw new Error(`sql-functions: no implementation for platform ${platform.constructor.name}`);
-}
-
 /** The calendar date (`YYYY-MM-DD`) of a timestamp column. */
 export function dateOf(platform: Platform, ref: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`date(${column(ref)})`);
+  if (isSqlite(platform)) return raw(`date(${column(ref)})`);
   return unsupported(platform);
 }
 
 /** The timestamp column shifted by whole days, as a calendar date. */
 export function dateAdd(platform: Platform, ref: string, days: number): RawQueryFragment {
   if (!Number.isInteger(days)) throw new Error(`sql-functions: dateAdd needs an integer day count, got ${days}`);
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     const sign = days < 0 ? '-' : '+';
     return raw(`date(${column(ref)}, '${sign}${Math.abs(days)} days')`);
   }
@@ -46,7 +43,7 @@ export function dateAdd(platform: Platform, ref: string, days: number): RawQuery
 
 /** The database clock, in the same text the column defaults produce. */
 export function currentTimestamp(platform: Platform): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw('CURRENT_TIMESTAMP');
+  if (isSqlite(platform)) return raw('CURRENT_TIMESTAMP');
   return unsupported(platform);
 }
 
@@ -60,7 +57,7 @@ export function currentTimestamp(platform: Platform): RawQueryFragment {
  * `no-restricted-syntax` rule for `src/db/repositories/**` can enforce.
  */
 export function columnRef(platform: Platform, ref: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(column(ref));
+  if (isSqlite(platform)) return raw(column(ref));
   return unsupported(platform);
 }
 
@@ -69,7 +66,7 @@ export function columnIncrementedBy(platform: Platform, ref: string, amount: num
   if (!Number.isInteger(amount)) {
     throw new Error(`sql-functions: columnIncrementedBy needs an integer amount, got ${amount}`);
   }
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     const sign = amount < 0 ? '-' : '+';
     return raw(`${column(ref)} ${sign} ${Math.abs(amount)}`);
   }
@@ -107,7 +104,7 @@ export function columnIncrementedBy(platform: Platform, ref: string, amount: num
  * helpers here are only ever used as VALUES, where that brand isn't needed.
  */
 export function lower(platform: Platform, ref: string): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`LOWER(${column(ref)})`);
+  if (isSqlite(platform)) return raw(`LOWER(${column(ref)})`);
   return unsupported(platform);
 }
 
@@ -124,7 +121,7 @@ export function lower(platform: Platform, ref: string): RawQueryFragment & symbo
  * the mixed-engine bug this helper exists to close.
  */
 export function lowerParam(platform: Platform, value: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw('LOWER(?)', [value]);
+  if (isSqlite(platform)) return raw('LOWER(?)', [value]);
   return unsupported(platform);
 }
 
@@ -154,7 +151,7 @@ export function nowMinusDays(platform: Platform, days: number): RawQueryFragment
   if (!Number.isInteger(days) || days < 0) {
     throw new Error(`sql-functions: nowMinusDays needs a non-negative integer day count, got ${days}`);
   }
-  if (platform instanceof SqlitePlatform) return raw(`datetime('now', '-${days} days')`);
+  if (isSqlite(platform)) return raw(`datetime('now', '-${days} days')`);
   return unsupported(platform);
 }
 
@@ -170,7 +167,7 @@ export function nowMinusDays(platform: Platform, days: number): RawQueryFragment
  * `lowerTrim()` below for the composed shape.
  */
 export function trim(platform: Platform, ref: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`TRIM(${column(ref)})`);
+  if (isSqlite(platform)) return raw(`TRIM(${column(ref)})`);
   return unsupported(platform);
 }
 
@@ -184,7 +181,7 @@ export function trim(platform: Platform, ref: string): RawQueryFragment {
  * `TRIM()`.
  */
 export function lowerTrim(platform: Platform, ref: string): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`LOWER(TRIM(${column(ref)}))`);
+  if (isSqlite(platform)) return raw(`LOWER(TRIM(${column(ref)}))`);
   return unsupported(platform);
 }
 
@@ -205,7 +202,7 @@ export function lowerTrim(platform: Platform, ref: string): RawQueryFragment & s
  * are different shapes).
  */
 export function coalesce(platform: Platform, ref: string, fallbackRef: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`COALESCE(${column(ref)}, ${column(fallbackRef)})`);
+  if (isSqlite(platform)) return raw(`COALESCE(${column(ref)}, ${column(fallbackRef)})`);
   return unsupported(platform);
 }
 
@@ -226,7 +223,7 @@ export function coalesce(platform: Platform, ref: string, fallbackRef: string): 
  * behaviour change (the function body is untouched).
  */
 export function coalesceParam(platform: Platform, ref: string, value: string | number | null): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`COALESCE(${column(ref)}, ?)`, [value]);
+  if (isSqlite(platform)) return raw(`COALESCE(${column(ref)}, ?)`, [value]);
   return unsupported(platform);
 }
 
@@ -250,7 +247,7 @@ export function coalesceParam(platform: Platform, ref: string, value: string | n
  * ?)` always preferred the non-null existing value).
  */
 export function coalesceOverride(platform: Platform, value: string | number | null, ref: string): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`COALESCE(?, ${column(ref)})`, [value]);
+  if (isSqlite(platform)) return raw(`COALESCE(?, ${column(ref)})`, [value]);
   return unsupported(platform);
 }
 
@@ -265,7 +262,7 @@ export function coalesceOverride(platform: Platform, value: string | number | nu
  * brand only lives on that typing for values meant to be used as a key.
  */
 export function absDifference(platform: Platform, ref: string, value: number): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`ABS(${column(ref)} - ?)`, [value]);
+  if (isSqlite(platform)) return raw(`ABS(${column(ref)} - ?)`, [value]);
   return unsupported(platform);
 }
 
@@ -286,19 +283,19 @@ function alias(name: string): string {
 
 /** `COUNT(*) as <alias>`, for a single-row totals read or a `GROUP BY` count column. */
 export function countAll(platform: Platform, aliasName: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`COUNT(*) as ${alias(aliasName)}`);
+  if (isSqlite(platform)) return raw(`COUNT(*) as ${alias(aliasName)}`);
   return unsupported(platform);
 }
 
 /** `MIN(<col>) as <alias>`. */
 export function minOf(platform: Platform, ref: string, aliasName: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`MIN(${column(ref)}) as ${alias(aliasName)}`);
+  if (isSqlite(platform)) return raw(`MIN(${column(ref)}) as ${alias(aliasName)}`);
   return unsupported(platform);
 }
 
 /** `MAX(<col>) as <alias>`. */
 export function maxOf(platform: Platform, ref: string, aliasName: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`MAX(${column(ref)}) as ${alias(aliasName)}`);
+  if (isSqlite(platform)) return raw(`MAX(${column(ref)}) as ${alias(aliasName)}`);
   return unsupported(platform);
 }
 
@@ -328,7 +325,7 @@ export function maxOf(platform: Platform, ref: string, aliasName: string): RawQu
  * non-finite `value` before calling.)
  */
 export function caseWhenEquals(platform: Platform, ref: string, value: number, whenTrue: string, whenFalse: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`CASE WHEN ${column(ref)} = ? THEN ? ELSE ? END`, [value, whenTrue, whenFalse]);
+  if (isSqlite(platform)) return raw(`CASE WHEN ${column(ref)} = ? THEN ? ELSE ? END`, [value, whenTrue, whenFalse]);
   return unsupported(platform);
 }
 
@@ -352,7 +349,7 @@ export function caseWhenEquals(platform: Platform, ref: string, value: number, w
  * `.orderBy({ [countAllRef(platform)]: 'desc' })`.
  */
 export function countAllRef(platform: Platform): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw('COUNT(*)');
+  if (isSqlite(platform)) return raw('COUNT(*)');
   return unsupported(platform);
 }
 
@@ -388,7 +385,7 @@ export function countAllRef(platform: Platform): RawQueryFragment & symbol {
  * for this shape until a second platform is added.
  */
 export function startsWithIsoDate(platform: Platform, ref: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     return raw(`${column(ref)} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'`);
   }
   return unsupported(platform);
@@ -416,7 +413,7 @@ export function substring(platform: Platform, ref: string, start: number, length
   if (length !== undefined && (!Number.isInteger(length) || length < 0)) {
     throw new Error(`sql-functions: substring needs a non-negative integer length, got ${length}`);
   }
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     if (length === undefined) return raw(`substr(${column(ref)}, ${start})`);
     return raw(`substr(${column(ref)}, ${start}, ${length})`);
   }
@@ -462,7 +459,7 @@ export function concat(platform: Platform, ...parts: readonly ConcatPart[]): Raw
   if (parts.length < 2) {
     throw new Error(`sql-functions: concat needs at least two parts, got ${parts.length}`);
   }
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     const bindings: string[] = [];
     const sql = parts
       .map((part) => {
@@ -498,7 +495,7 @@ export function concat(platform: Platform, ...parts: readonly ConcatPart[]): Raw
  * precedent) for a caller that only needs the cast INTEGER value itself.
  */
 export function castInteger(platform: Platform, ref: string): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`CAST(${column(ref)} AS INTEGER)`);
+  if (isSqlite(platform)) return raw(`CAST(${column(ref)} AS INTEGER)`);
   return unsupported(platform);
 }
 
@@ -521,135 +518,7 @@ export function castInteger(platform: Platform, ref: string): RawQueryFragment &
  * comment documents; ordering by the EXPRESSION itself is what works).
  */
 export function dayDistance(platform: Platform, ref: string, isoDate: string): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`ABS(JULIANDAY(${column(ref)}) - JULIANDAY(?))`, [isoDate]);
-  return unsupported(platform);
-}
-
-// ---------------------------------------------------------------------------
-// Plan 3d Task 0 review (H1/L1) — the five helpers above return a MikroORM
-// `RawQueryFragment`. Handed into a Kysely statement, a `RawQueryFragment`
-// stringifies through its own `[Symbol.toPrimitive]('string')` coercion into
-// the literal text `?` (its parameter-placeholder marker, meant for the
-// MikroORM QueryBuilder's OWN parameter interpolation, not Kysely's) — Kysely
-// binds it as an actual `?` value parameter and the statement fails at
-// execution (verified directly, not assumed: `db.selectFrom(...).where(...,
-// startsWithIsoDate(platform, 'col'))` throws `SqliteError: near "?": syntax
-// error` the first time it runs). Task 2 absorbed this finding (its report,
-// H1/L1) — these are genuinely separate functions, not a wrapper over the
-// ones above, because a Kysely `Expression` and a MikroORM `RawQueryFragment`
-// are different types with no conversion between them. Each takes the
-// caller's own `ExpressionBuilder<DB, TB>` (the same "no consumer-facing
-// generic DB" shape `_shared/reservation-visibility.ts`'s `publicStayExists`
-// documents is the only one that survives `tsc` for a shared Kysely helper —
-// unlike that one, these ARE fully generic over `<DB, TB>`, because they only
-// ever call `eb.fn`/`eb.cast`/`eb(...)`, none of which hit the QueryBuilder
-// method-chaining inference limit that forced `publicStayExists` to fix its
-// shape). Platform-dispatched and fail-closed like every helper above; each
-// has an SQLF-0xx test pinning its compiled `{sql, parameters}` AND a
-// raw-statement equivalence on seeded rows (`tests/unit/db/dialect/sql-functions.test.ts`).
-// ---------------------------------------------------------------------------
-
-/**
- * The Kysely-expression twin of {@link startsWithIsoDate}: `<ref> GLOB
- * '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'`, spelled through SQLite's
- * function form (`glob(X, Y)` is exactly `Y GLOB X` — the inventory's own
- * §19 finding, since Kysely's `ComparisonOperator` union has no `GLOB`
- * entry). Returns a boolean `Expression<SqlBool>`, usable in a `.where()`
- * or inside a `CASE WHEN` condition. Same digit-class pattern as the
- * MikroORM version — NOT the wider `'????-??-??*'` shorthand (a `?` in
- * SQLite GLOB matches any character, letters included).
- */
-export function startsWithIsoDateKysely<DB, TB extends keyof DB>(
-  platform: Platform,
-  eb: ExpressionBuilder<DB, TB>,
-  ref: ReferenceExpression<DB, TB>,
-): ExpressionWrapper<DB, TB, SqlBool> {
-  if (platform instanceof SqlitePlatform) {
-    return eb.fn<SqlBool>('glob', [eb.val('[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]*'), ref]);
-  }
-  return unsupported(platform);
-}
-
-/**
- * The Kysely-expression twin of {@link substring}: `substr(<ref>,
- * <start>[, <length>])`, 1-based on both ends. `start`/`length` are
- * validated integers, the same guard `substring()` above applies, and bound
- * as genuine parameters here (`eb.val`) rather than spelled into the SQL
- * text — Kysely's `fn()` takes `ReferenceExpression`s, not a raw text
- * fragment, so there is no equivalent "spell a constant into the SQL"
- * shape to match; a bound integer literal renders identically.
- */
-export function substringKysely<DB, TB extends keyof DB>(
-  platform: Platform,
-  eb: ExpressionBuilder<DB, TB>,
-  ref: ReferenceExpression<DB, TB>,
-  start: number,
-  length?: number,
-): ExpressionWrapper<DB, TB, string> {
-  if (!Number.isInteger(start) || start < 1) {
-    throw new Error(`sql-functions: substringKysely needs a 1-based integer start, got ${start}`);
-  }
-  if (length !== undefined && (!Number.isInteger(length) || length < 0)) {
-    throw new Error(`sql-functions: substringKysely needs a non-negative integer length, got ${length}`);
-  }
-  if (platform instanceof SqlitePlatform) {
-    const args: ReferenceExpression<DB, TB>[] = length === undefined
-      ? [ref, eb.val(start)]
-      : [ref, eb.val(start), eb.val(length)];
-    return eb.fn<string>('substr', args);
-  }
-  return unsupported(platform);
-}
-
-/** A part of a `concatKysely()` expression — a column reference, a bound value, or a nested Kysely `Expression<string>` (composes freely, unlike `concat()`'s MikroORM `RawQueryFragment` form). */
-export type KyselyConcatPart<DB, TB extends keyof DB> =
-  | { column: StringReference<DB, TB> }
-  | { value: string }
-  | { expression: Expression<string> };
-
-/**
- * The Kysely-expression twin of {@link concat}: `<part> || <part> || …`,
- * SQLite's/Postgres's string concatenation operator, built through the
- * expression builder's own binary-operator call (`eb(lhs, '||', rhs)`) so
- * it composes with {@link substringKysely}/{@link castIntegerKysely} —
- * exactly the composition `concat()`'s MikroORM form cannot do (its
- * docstring explains why).
- */
-export function concatKysely<DB, TB extends keyof DB>(
-  platform: Platform,
-  eb: ExpressionBuilder<DB, TB>,
-  ...parts: readonly KyselyConcatPart<DB, TB>[]
-): ExpressionWrapper<DB, TB, string> {
-  if (parts.length < 2) {
-    throw new Error(`sql-functions: concatKysely needs at least two parts, got ${parts.length}`);
-  }
-  if (!(platform instanceof SqlitePlatform)) return unsupported(platform);
-  const operand = (part: KyselyConcatPart<DB, TB>): Expression<string> =>
-    'column' in part ? eb.ref(part.column).$castTo<string>() : 'value' in part ? eb.val(part.value) : part.expression;
-  let acc: Expression<string> = operand(parts[0]!);
-  for (const part of parts.slice(1)) {
-    acc = eb(acc, '||', operand(part));
-  }
-  // The loop above always runs at least once (the `parts.length < 2` guard
-  // above throws otherwise), so `acc` is always the result of the `eb(...)`
-  // binary-operator call — a real `ExpressionWrapper`, not the bare
-  // `Expression` interface `operand()`'s own return type declares.
-  return acc as ExpressionWrapper<DB, TB, string>;
-}
-
-/**
- * The Kysely-expression twin of {@link castInteger}: `CAST(<ref> AS
- * INTEGER)`, for `reservations.accommodation_id` (TEXT) compared against an
- * INTEGER column inside a Kysely statement (RS20/RV2's join shape — a
- * correlated `EXISTS`/scalar-subquery context the MikroORM QueryBuilder
- * cannot express, per the inventory's own T6 ruling).
- */
-export function castIntegerKysely<DB, TB extends keyof DB>(
-  platform: Platform,
-  eb: ExpressionBuilder<DB, TB>,
-  ref: ReferenceExpression<DB, TB>,
-): ExpressionWrapper<DB, TB, number> {
-  if (platform instanceof SqlitePlatform) return eb.cast<number>(ref, 'integer');
+  if (isSqlite(platform)) return raw(`ABS(JULIANDAY(${column(ref)}) - JULIANDAY(?))`, [isoDate]);
   return unsupported(platform);
 }
 
@@ -694,7 +563,7 @@ export function castIntegerKysely<DB, TB extends keyof DB>(
  * difference between the two shapes.
  */
 export function collateNoCase(platform: Platform, ref: string): RawQueryFragment & symbol {
-  if (platform instanceof SqlitePlatform) return raw(`${column(ref)} COLLATE NOCASE`);
+  if (isSqlite(platform)) return raw(`${column(ref)} COLLATE NOCASE`);
   return unsupported(platform);
 }
 
@@ -712,7 +581,7 @@ export function nowMinusHours(platform: Platform, hours: number): RawQueryFragme
   if (!Number.isInteger(hours) || hours < 0) {
     throw new Error(`sql-functions: nowMinusHours needs a non-negative integer hour count, got ${hours}`);
   }
-  if (platform instanceof SqlitePlatform) return raw(`datetime('now', '-${hours} hours')`);
+  if (isSqlite(platform)) return raw(`datetime('now', '-${hours} hours')`);
   return unsupported(platform);
 }
 
@@ -729,53 +598,7 @@ export function nowMinusHours(platform: Platform, hours: number): RawQueryFragme
  * rule 18: mixing engines is the bug this pairing exists to avoid).
  */
 export function lowerTrimParam(platform: Platform, value: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw('LOWER(TRIM(?))', [value]);
-  return unsupported(platform);
-}
-
-// ---------------------------------------------------------------------------
-// Plan 3g Task 0 (R1) — no consumer yet: Task 1 (`getJourneyFull`'s gallery
-// read) and Task 3 (`getPublicJourney`'s gallery read) each fold this into
-// their own rebuild of the legacy `GALLERY_CHRONOLOGICAL_ORDER` (tests/helpers/)
-// text (a `COALESCE(NULLIF(tp.taken_at, ''), <correlated MIN+concat subquery>,
-// <this>)` ORDER BY, worked out in full in Task 0's report for both to paste
-// in verbatim, neither re-deriving it). Added here, Kysely-only (no MikroORM
-// `raw()` sibling): the shape it exists for is genuinely Kysely-only (a
-// correlated scalar subquery cannot be expressed through the MikroORM
-// QueryBuilder — the same "T6 ruling" `castIntegerKysely`'s own docstring
-// cites for RS20/RV2), and nothing else in this plan's inventory needs a
-// MikroORM-form epoch-to-ISO conversion (§6: "no other strftime/julianday
-// sites found elsewhere in this cluster"). A raw twin can be added later,
-// same as every other helper here, the moment a real consumer needs one.
-// ---------------------------------------------------------------------------
-
-/**
- * `strftime('%Y-%m-%dT%H:%M:%SZ', <ref> / 1000, 'unixepoch')` — the last of
- * `GALLERY_CHRONOLOGICAL_ORDER`'s three fallback tiers (R1): when a gallery
- * photo has neither a capture time (`tp.taken_at`) nor a linked entry to
- * borrow a date from, the moment it was added is what is left to order by.
- * `<ref>` is an epoch-MILLISECONDS column (`journey_photos.created_at`, like
- * every other `*_at` epoch column in this codebase) — SQLite's `unixepoch`
- * modifier expects whole SECONDS, so the division is load-bearing, not
- * decorative, and matches the legacy text's own `gp.created_at / 1000`
- * exactly. SQLite's `/` on two integers truncates instead of rounding; that
- * sub-second loss is the legacy statement's own behaviour, preserved here
- * rather than "fixed" into a float divide that would render a different ISO
- * string for any timestamp not an exact multiple of 1000ms.
- *
- * Named for what it computes, not the SQL function it spells — matching
- * every other `*Kysely` twin in this file (`castIntegerKysely`, not
- * `castKysely`; `startsWithIsoDateKysely`, not `globKysely`).
- */
-export function unixEpochToIsoKysely<DB, TB extends keyof DB>(
-  platform: Platform,
-  eb: ExpressionBuilder<DB, TB>,
-  ref: ReferenceExpression<DB, TB>,
-): ExpressionWrapper<DB, TB, string> {
-  if (platform instanceof SqlitePlatform) {
-    const seconds = eb(ref, '/', eb.val(1000));
-    return eb.fn<string>('strftime', [eb.val('%Y-%m-%dT%H:%M:%SZ'), seconds, eb.val('unixepoch')]);
-  }
+  if (isSqlite(platform)) return raw('LOWER(TRIM(?))', [value]);
   return unsupported(platform);
 }
 
@@ -837,7 +660,7 @@ export function nowDateOffset(platform: Platform, days: number): RawQueryFragmen
   if (!Number.isInteger(days)) {
     throw new Error(`sql-functions: nowDateOffset needs an integer day count, got ${days}`);
   }
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     const sign = days < 0 ? '-' : '+';
     return raw(`date('now', '${sign}${Math.abs(days)} days')`);
   }
@@ -866,32 +689,7 @@ export function nowPlusSeconds(platform: Platform, seconds: number): RawQueryFra
   if (!Number.isInteger(seconds) || seconds < 0) {
     throw new Error(`sql-functions: nowPlusSeconds needs a non-negative integer second count, got ${seconds}`);
   }
-  if (platform instanceof SqlitePlatform) return raw(`datetime('now', '+${seconds} seconds')`);
-  return unsupported(platform);
-}
-
-/**
- * The Kysely-expression twin of {@link nowPlusSeconds}: DS23/DS24's
- * `ON CONFLICT ... DO UPDATE` / `INSERT ... VALUES` (R3) is a hand-typed
- * Kysely statement — MikroORM's `em.upsert` cannot express a
- * partial-unique-index conflict target (R3's own ruling) — so the
- * `next_attempt_at` computation inside its `CASE WHEN` needs a Kysely
- * `Expression`, not a MikroORM `RawQueryFragment` (SQLF-048: a
- * `RawQueryFragment` throws when handed into a Kysely statement). Same
- * validation, same always-non-negative-integer trust boundary as the
- * MikroORM form above.
- */
-export function nowPlusSecondsKysely<DB, TB extends keyof DB>(
-  platform: Platform,
-  eb: ExpressionBuilder<DB, TB>,
-  seconds: number,
-): ExpressionWrapper<DB, TB, string> {
-  if (!Number.isInteger(seconds) || seconds < 0) {
-    throw new Error(`sql-functions: nowPlusSecondsKysely needs a non-negative integer second count, got ${seconds}`);
-  }
-  if (platform instanceof SqlitePlatform) {
-    return eb.fn<string>('datetime', [eb.val('now'), eb.val(`+${seconds} seconds`)]);
-  }
+  if (isSqlite(platform)) return raw(`datetime('now', '+${seconds} seconds')`);
   return unsupported(platform);
 }
 
@@ -922,33 +720,11 @@ export function nowPlusSecondsKysely<DB, TB extends keyof DB>(
  * part of this fragment — the caller sets it alongside).
  */
 export function foundAgainState(platform: Platform, stateRef: string, fileIdRef: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     return raw(
       `CASE WHEN ${column(stateRef)} = 'remote_missing' AND ${column(fileIdRef)} IS NOT NULL THEN 'synced' ELSE ${column(stateRef)} END`,
     );
   }
-  return unsupported(platform);
-}
-
-/**
- * The Kysely-expression twin of {@link currentTimestamp}: the bare
- * `CURRENT_TIMESTAMP` keyword, for a value position inside a hand-typed
- * Kysely statement (DS24's `ON CONFLICT ... DO UPDATE SET last_seen_at =
- * CURRENT_TIMESTAMP` — R3's partial-index upsert). Verified directly against
- * `better-sqlite3` that SQLite accepts the bare keyword (`SELECT
- * CURRENT_TIMESTAMP`) but rejects it called as a function
- * (`SELECT CURRENT_TIMESTAMP()` → `near "(": syntax error`), so
- * `eb.fn('current_timestamp', [])` — every other helper in this file's
- * usual Kysely shape — is not an option here; the whole point of a keyword
- * literal is that it takes no parentheses. This is this file's one
- * Kysely-side use of the `sql` template tag — confined here, the sanctioned
- * escape hatch this file already is for every raw-SQL spelling in the
- * codebase (the MikroORM helpers above use `raw()` for the identical
- * reason), never inline in a repository (the TRAP list's "Kysely `sql`
- * banned under repositories" is about repository FILES, not this one).
- */
-export function currentTimestampKysely(platform: Platform): RawBuilder<string> {
-  if (platform instanceof SqlitePlatform) return sql<string>`CURRENT_TIMESTAMP`;
   return unsupported(platform);
 }
 
@@ -973,7 +749,7 @@ export function currentTimestampKysely(platform: Platform): RawBuilder<string> {
  * the fragment has two value slots and `raw()` binds positionally.
  */
 export function coalesceOverrideWhileSame(platform: Platform, value: number | null, ref: string, keyRef: string, keyValue: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) {
+  if (isSqlite(platform)) {
     return raw(`CASE WHEN ${column(keyRef)} IS ? THEN COALESCE(?, ${column(ref)}) ELSE COALESCE(?, 0) END`, [keyValue, value, value]);
   }
   return unsupported(platform);
@@ -992,6 +768,6 @@ export function coalesceOverrideWhileSame(platform: Platform, value: number | nu
  * ELSE is deliberate: a null test column yields SQL NULL.
  */
 export function caseWhenNotNull(platform: Platform, testRef: string, thenRef: string): RawQueryFragment {
-  if (platform instanceof SqlitePlatform) return raw(`CASE WHEN ${column(testRef)} IS NOT NULL THEN ${column(thenRef)} END`);
+  if (isSqlite(platform)) return raw(`CASE WHEN ${column(testRef)} IS NOT NULL THEN ${column(thenRef)} END`);
   return unsupported(platform);
 }

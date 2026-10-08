@@ -1,7 +1,8 @@
 import type { Reservations } from '../entities/Reservations.entity';
 import { DayAssignments } from '../entities/DayAssignments.entity';
 import { Days } from '../entities/Days.entity';
-import { castIntegerKysely, coalesceOverride, columnRef, concatKysely, dayDistance, startsWithIsoDateKysely, substringKysely } from '../dialect/sql-functions';
+import { coalesceOverride, columnRef, dayDistance } from '../dialect/sql-functions';
+import { castIntegerKysely, concatKysely, startsWithIsoDateKysely, substringKysely } from '../dialect/kysely-functions';
 import { publicReservationExpr, publicStayExists, type ReservationVisibilityKyselyDB } from './_shared/reservation-visibility';
 import type { DayAssignmentRow } from './DayAssignments.repository';
 import { TrekRepository } from './_shared/trek-repository';
@@ -697,7 +698,7 @@ export class ReservationsRepository extends TrekRepository<Reservations> {
    * 11) END WHERE accommodation_id = :accId AND type = 'hotel'`. Kysely (the
    * `CASE WHEN … ELSE … || SUBSTR(...)` shape has no typed-filter
    * equivalent — the T6 tier per the inventory's own ruling), through
-   * `concatKysely`/`substringKysely` (`sql-functions.ts`'s Kysely-expression
+   * `concatKysely`/`substringKysely` (`kysely-functions.ts`, the Kysely-expression
    * twins of `concat`/`substring` — the MikroORM `RawQueryFragment` forms
    * render as a literal `?` token inside a Kysely statement and throw at
    * execution, Task 0 review H1). `accommodation_id` (TEXT) compared against

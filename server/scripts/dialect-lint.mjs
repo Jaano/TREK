@@ -7,9 +7,9 @@
  * INSERT OR IGNORE, datetime('now'), strftime, json_extract, GLOB,
  * last_insert_rowid, PRAGMA, AUTOINCREMENT and `||` string concatenation.
  * Each of them has a dialect-neutral form: the query builder's onConflict(),
- * returning('id'), or a helper in src/db/dialect/sql-functions.ts, which
- * dispatches on the live platform and is the one file allowed to spell the
- * SQLite forms.
+ * returning('id'), or a helper in src/db/dialect/ (sql-functions.ts and its
+ * Kysely twin kysely-functions.ts), which dispatches on the live platform
+ * and is the one place allowed to spell an engine's own forms.
  *
  * The check reads every string and template literal under src/ (comments
  * never count) and every `.insertId` read, counts the hits per file and rule,
@@ -17,7 +17,7 @@
  * does a baseline entry above what its file holds now, so the change that
  * removes one lowers the baseline with --update in the same commit.
  *
- * Not scanned: src/db/dialect/sql-functions.ts (the dialect layer itself) and
+ * Not scanned: src/db/dialect/ (the dialect layer itself) and
  * the migrations that have shipped (append-only, never edited again; the last
  * one is FROZEN_MIGRATIONS_THROUGH). A newer migration is scanned for the
  * DML rules; its DDL may still be engine specific. PRAGMA is allowed in the
@@ -40,8 +40,8 @@ const ts = require('typescript');
 /** The last migration that shipped before this check existed. Later ones are scanned. */
 export const FROZEN_MIGRATIONS_THROUGH = 'Migration20200101042400';
 
-/** The dialect layer: the one file that may spell SQLite's own SQL. */
-const DIALECT_LAYER = 'src/db/dialect/sql-functions.ts';
+/** The dialect layer: the one place that may spell an engine's own SQL. */
+const DIALECT_LAYER = 'src/db/dialect/';
 
 const SQL_KEYWORDS = /\b(SELECT|UPDATE|INSERT|DELETE|WHERE|SET|CASE|WHEN|COALESCE|CAST|VALUES|FROM)\b/i;
 
@@ -117,7 +117,7 @@ const TEST = /\.(?:test|spec)\./;
 
 /** 'skip', 'migration' (a newer one, DML rules only) or 'source'. */
 export function classify(file) {
-  if (file === DIALECT_LAYER) return 'skip';
+  if (file.startsWith(DIALECT_LAYER)) return 'skip';
   const migration = /^src\/db\/migrations\/(Migration\d+)_/.exec(file);
   if (migration) return migration[1] <= FROZEN_MIGRATIONS_THROUGH ? 'skip' : 'migration';
   if (file.startsWith('src/db/migrations/')) return 'skip';

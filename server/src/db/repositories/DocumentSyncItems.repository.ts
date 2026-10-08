@@ -1,5 +1,6 @@
 import type { EntityData } from '@mikro-orm/core';
-import { coalesceOverride, currentTimestamp, currentTimestampKysely, foundAgainState, nowPlusSeconds, nowPlusSecondsKysely } from '../dialect/sql-functions';
+import { coalesceOverride, currentTimestamp, foundAgainState, nowPlusSeconds } from '../dialect/sql-functions';
+import { currentTimestampKysely, nowPlusSecondsKysely } from '../dialect/kysely-functions';
 import type { DocumentSyncItems } from '../entities/DocumentSyncItems.entity';
 import { type AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';

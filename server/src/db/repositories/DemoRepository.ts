@@ -4,7 +4,7 @@ import { Users } from '../entities/Users.entity';
 import type { NewAdminUserRow } from './Users.repository';
 import { AppSettings } from '../entities/AppSettings.entity';
 import { Trips } from '../entities/Trips.entity';
-import { currentTimestampKysely } from '../dialect/sql-functions';
+import { currentTimestampKysely } from '../dialect/kysely-functions';
 import type { DB } from '../kysely/db';
 
 /** The tables the example-trip seed writes through Kysely. */

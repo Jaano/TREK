@@ -1,5 +1,6 @@
 import type { PushSubscriptions } from '../entities/PushSubscriptions.entity';
-import { columnIncrementedBy, currentTimestamp, currentTimestampKysely } from '../dialect/sql-functions';
+import { columnIncrementedBy, currentTimestamp } from '../dialect/sql-functions';
+import { currentTimestampKysely } from '../dialect/kysely-functions';
 import type { AssertRowKeys } from './_shared/rows';
 import { TrekRepository } from './_shared/trek-repository';
 import type { DB } from '../kysely/db';
