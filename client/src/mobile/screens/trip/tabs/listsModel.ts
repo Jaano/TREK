@@ -1,4 +1,4 @@
-import type { PackingItem, TodoItem } from '../../../../types'
+import type { PackingItem } from '../../../../types'
 import { PACKING_PLACEHOLDER_NAME } from '../../../../components/Packing/packingListPanel.constants'
 import { STATUS_COLOR } from './tabModel'
 
@@ -104,89 +104,6 @@ export function isPackingPlaceholder(item: Pick<PackingItem, 'name'>): boolean {
 }
 
 // ── To-do ────────────────────────────────────────────────────────────────
-
-export type TodoSmartFilter = 'all' | 'my' | 'overdue' | 'done'
-export type TodoFilter = TodoSmartFilter | string
-
-export function isTodoOverdue(item: TodoItem, today: string): boolean {
-  return !!item.due_date && !item.checked && item.due_date < today
-}
-
-/** Same four smart filters + per-category buckets as the desktop sidebar. */
-export function filterTodoItems(
-  items: TodoItem[],
-  filter: TodoFilter,
-  currentUserId: number | null,
-  today: string,
-): TodoItem[] {
-  if (filter === 'all') return items.filter(i => !i.checked)
-  if (filter === 'done') return items.filter(i => !!i.checked)
-  // No resolved user means nothing is "mine" — matching the todoCounts badge.
-  if (filter === 'my') return currentUserId ? items.filter(i => !i.checked && i.assigned_user_id === currentUserId) : []
-  if (filter === 'overdue') return items.filter(i => isTodoOverdue(i, today))
-  return items.filter(i => i.category === filter)
-}
-
-/**
- * Category bucket, addressed by name instead of through `filterTodoItems` — a
- * category literally called 'all'/'my'/'overdue'/'done' keeps its own rows
- * rather than collapsing into the smart filter of the same id.
- */
-export function filterTodoItemsByCategory(items: TodoItem[], category: string): TodoItem[] {
-  return items.filter(i => i.category === category)
-}
-
-/**
- * Row order (spec 03 §4.7): done sinks to the end, open-overdue floats to the
- * top. Ties break by the active sort toggle: ascending priority (0/undefined
- * last within its bucket), or nearest due date first with undated tasks after
- * all dated ones (#2205). With no toggle the manual order stands.
- */
-export function sortTodoRows(items: TodoItem[], sortBy: 'priority' | 'due' | null, today: string): TodoItem[] {
-  const rank = (i: TodoItem) => (i.checked ? 2 : isTodoOverdue(i, today) ? 0 : 1)
-  return [...items].sort((a, b) => {
-    const byRank = rank(a) - rank(b)
-    if (byRank !== 0) return byRank
-    if (sortBy === 'priority') return (a.priority || 99) - (b.priority || 99)
-    if (sortBy === 'due') {
-      if (!a.due_date) return b.due_date ? 1 : 0
-      if (!b.due_date) return -1
-      return a.due_date < b.due_date ? -1 : a.due_date > b.due_date ? 1 : 0
-    }
-    return 0
-  })
-}
-
-export function todoCategories(items: TodoItem[]): string[] {
-  const cats = new Set<string>()
-  items.forEach(i => { if (i.category) cats.add(i.category) })
-  // Same locale collation as the desktop hook (useTodoList) — a bare .sort() is
-  // byte order and files every accented name behind the whole ASCII range.
-  return Array.from(cats).sort((a, b) => a.localeCompare(b))
-}
-
-/** Open (non-done) item count for a given category — matches the desktop sidebar badge. */
-export function todoCategoryOpenCount(items: TodoItem[], category: string): number {
-  return items.filter(i => i.category === category && !i.checked).length
-}
-
-export interface TodoCounts {
-  total: number
-  open: number
-  done: number
-  overdue: number
-  my: number
-}
-
-export function todoCounts(items: TodoItem[], currentUserId: number | null, today: string): TodoCounts {
-  return {
-    total: items.length,
-    open: items.filter(i => !i.checked).length,
-    done: items.filter(i => !!i.checked).length,
-    overdue: items.filter(i => isTodoOverdue(i, today)).length,
-    my: currentUserId ? items.filter(i => !i.checked && i.assigned_user_id === currentUserId).length : 0,
-  }
-}
 
 /** P1/P2/P3 colours (spec 03 §4.7) reuse the shared status-dot tokens so priority and status stay one palette. */
 export const PRIORITY_COLOR: Record<number, string> = {

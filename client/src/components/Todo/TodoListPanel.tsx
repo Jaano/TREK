@@ -1,4 +1,4 @@
-import { Fragment, useId, useState, useEffect, type CSSProperties } from 'react'
+import { Fragment, useId, useState, useEffect, useEffectEvent, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
@@ -7,8 +7,9 @@ import { useTranslation } from '../../i18n'
 import { Check, Plus, Flag, X, Calendar, User, AlertCircle, Inbox, CheckCheck, Trash2, ListPlus, ListTodo } from 'lucide-react'
 import type { TodoItem } from '../../types'
 
-import { katColor, taskInputStyle, type FilterType, type Member, type TaskFieldValues } from './todoListModel'
+import { katColor, taskInputStyle, taskUpdatePayload, type FilterType, type Member, type TaskFieldValues } from './todoListModel'
 import { useTodoList } from './useTodoList'
+import { useTaskForm } from './useTaskForm'
 import TodoRow from './TodoRow'
 import TodoTaskFields from './TodoTaskFields'
 import { usePluginViewContributions, PluginCardFooter } from '../Plugins/PluginContributions'
@@ -85,7 +86,7 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
   const {
     canEdit, t, formatDate, toggleTodoItem, reorderTodoItems,
     isMobile, filter, setFilter, selectedId, setSelectedId,
-    isAddingNew, setIsAddingNew, sortByPrio, setSortByPrio, sortByDue, setSortByDue,
+    isAddingNew, setIsAddingNew, sortByPrio, sortByDue, toggleSort,
     addingCategory, setAddingCategory, newCategoryName, setNewCategoryName,
     members, categories, today, filtered, selectedItem,
     totalCount, doneCount, overdueCount, myCount,
@@ -208,10 +209,10 @@ export default function TodoListPanel({ tripId, items, addItemSignal = 0 }: { tr
           <span style={{ flex: 1 }} />
           {/* Sort order: priority or due date, neither means the manual order */}
           <div role="group" aria-label={t('todo.sidebar.sortBy')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: 3, borderRadius: 99, background: 'var(--bg-card)', flexShrink: 0 }}>
-            <button type="button" aria-pressed={sortByPrio} title={t('todo.priority')} onClick={() => { setSortByDue(false); setSortByPrio(v => !v) }} style={sortSegment(sortByPrio)}>
+            <button type="button" aria-pressed={sortByPrio} title={t('todo.priority')} onClick={() => toggleSort('priority')} style={sortSegment(sortByPrio)}>
               <Flag size={12} />{!isMobile && t('todo.priority')}
             </button>
-            <button type="button" aria-pressed={sortByDue} title={t('todo.detail.dueDate')} onClick={() => { setSortByPrio(false); setSortByDue(v => !v) }} style={sortSegment(sortByDue)}>
+            <button type="button" aria-pressed={sortByDue} title={t('todo.detail.dueDate')} onClick={() => toggleSort('due')} style={sortSegment(sortByDue)}>
               <Calendar size={12} />{!isMobile && t('todo.detail.dueDate')}
             </button>
           </div>
@@ -346,14 +347,6 @@ const primaryButton = (enabled: boolean): CSSProperties => ({
 
 // ── Detail Pane (right side) ──────────────────────────────────────────────
 
-/** A task's editable fields as the form holds them: empty strings where the task has nothing. */
-function fieldsOf(item: TodoItem): TaskFieldValues {
-  return {
-    desc: item.description || '', priority: item.priority || 0, category: item.category || '',
-    dueDate: item.due_date || '', assignedUserId: item.assigned_user_id,
-  }
-}
-
 function DetailPane({ item, tripId, categories, members, onClose, variant = 'side' }: {
   item: TodoItem; tripId: number; categories: string[]; members: Member[];
   onClose: () => void; variant?: PaneVariant;
@@ -365,17 +358,12 @@ function DetailPane({ item, tripId, categories, members, onClose, variant = 'sid
   const toast = useToast()
   const { t } = useTranslation()
 
-  const [name, setName] = useState(item.name)
-  const [fields, setFields] = useState<TaskFieldValues>(() => fieldsOf(item))
-  const [saving, setSaving] = useState(false)
+  const { name, setName, fields, patchFields, saving, load, saveWith } = useTaskForm(item)
 
   // Sync when selected item changes
+  const syncFromItem = useEffectEvent(() => load(item))
   useEffect(() => {
-    setName(item.name)
-    setFields({
-      desc: item.description || '', priority: item.priority || 0, category: item.category || '',
-      dueDate: item.due_date || '', assignedUserId: item.assigned_user_id,
-    })
+    syncFromItem()
   }, [item.id, item.name, item.description, item.due_date, item.category, item.assigned_user_id, item.priority])
 
   const hasChanges = name !== item.name || fields.desc !== (item.description || '') ||
@@ -384,15 +372,10 @@ function DetailPane({ item, tripId, categories, members, onClose, variant = 'sid
 
   const save = async () => {
     if (!name.trim() || !hasChanges) return
-    setSaving(true)
-    try {
-      await updateTodoItem(tripId, item.id, {
-        name: name.trim(), description: fields.desc || null,
-        due_date: fields.dueDate || null, category: fields.category || null,
-        assigned_user_id: fields.assignedUserId, priority: fields.priority,
-      })
-    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.error')) }
-    setSaving(false)
+    await saveWith(
+      () => updateTodoItem(tripId, item.id, taskUpdatePayload(name, fields)),
+      (err: unknown) => toast.error(err instanceof Error ? err.message : t('common.error')),
+    )
   }
 
   const handleDelete = async () => {
@@ -421,7 +404,7 @@ function DetailPane({ item, tripId, categories, members, onClose, variant = 'sid
         <input value={name} onChange={e => setName(e.target.value)} disabled={!canEdit}
           style={{ ...nameFieldStyle, textDecoration: done ? 'line-through' : 'none', color: done ? 'var(--text-faint)' : 'var(--text-primary)' }}
           placeholder={t('todo.namePlaceholder')} />
-        <TodoTaskFields values={fields} onChange={patch => setFields(f => ({ ...f, ...patch }))} categories={categories} members={members} canEdit={canEdit} />
+        <TodoTaskFields values={fields} onChange={patchFields} categories={categories} members={members} canEdit={canEdit} />
       </div>
 
       {/* Always in sight: the pane scrolls between its head and this foot. */}
@@ -455,14 +438,11 @@ function NewTaskPane({ tripId, categories, members, defaultCategory, onCreated, 
   const toast = useToast()
   const { t } = useTranslation()
 
-  const [name, setName] = useState('')
-  const [fields, setFields] = useState<TaskFieldValues>({ desc: '', priority: 0, category: defaultCategory || '', dueDate: '', assignedUserId: null })
-  const [saving, setSaving] = useState(false)
+  const { name, setName, fields, patchFields, saving, saveWith } = useTaskForm(null, defaultCategory)
 
   const create = async () => {
     if (!name.trim()) return
-    setSaving(true)
-    try {
+    await saveWith(async () => {
       const trimmedCategory = fields.category.trim()
       const item = await addTodoItem(tripId, {
         name: name.trim(), description: fields.desc || null, priority: fields.priority,
@@ -470,12 +450,11 @@ function NewTaskPane({ tripId, categories, members, defaultCategory, onCreated, 
         assigned_user_id: fields.assignedUserId,
       })
       if (item?.id) onCreated(item.id)
-    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.error')) }
-    setSaving(false)
+    }, (err: unknown) => toast.error(err instanceof Error ? err.message : t('common.error')))
   }
 
   if (variant === 'dialog') return (
-    <NewTaskDialog name={name} onName={setName} fields={fields} onFields={patch => setFields(f => ({ ...f, ...patch }))}
+    <NewTaskDialog name={name} onName={setName} fields={fields} onFields={patchFields}
       categories={categories} members={members} saving={saving} onCreate={create} onClose={onClose} />
   )
 
@@ -488,7 +467,7 @@ function NewTaskPane({ tripId, categories, members, defaultCategory, onCreated, 
           onKeyDown={e => { if (e.key === 'Enter' && name.trim()) void create() }}
           style={{ ...taskInputStyle, fontSize: 'calc(15px * var(--fs-scale-subtitle, 1))', fontWeight: 600 }}
           placeholder={t('todo.namePlaceholder')} />
-        <TodoTaskFields values={fields} onChange={patch => setFields(f => ({ ...f, ...patch }))} categories={categories} members={members} />
+        <TodoTaskFields values={fields} onChange={patchFields} categories={categories} members={members} />
       </div>
 
       <div style={FOOTER}>
