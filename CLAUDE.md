@@ -54,7 +54,7 @@ npm run i18n:parity --workspace=shared            # audit (exit 0)
 npm run i18n:parity:strict --workspace=shared     # CI gate (exit 1 on drift)
 ```
 
-Dev ports: the server listens on **3001**; the Vite dev server proxies the API, websocket, uploads, MCP and OAuth paths to it (see `client/vite.config.js`). There is no Node version pin — the CI workflows and the Dockerfile define what is tested. `server/.env.example` is the env-var reference.
+Dev ports: the server listens on **3001**; the Vite dev server proxies the API, websocket, uploads, MCP and OAuth paths to it (see `client/vite.config.js`). `.nvmrc` pins the Node major the Docker image runs and every CI job reads; `engines` in each package.json states the range that installs (npm only warns outside it). `server/.env.example` is the env-var reference.
 
 ## Server invariants
 
