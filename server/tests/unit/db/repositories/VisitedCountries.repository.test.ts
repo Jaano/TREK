@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { insertRows } from '../../../helpers/factories/rows';
 import { createUser } from '../../../helpers/factories';
 import { VisitedCountries } from '../../../../src/db/entities/VisitedCountries.entity';
 import type { VisitedCountriesRepository } from '../../../../src/db/repositories/VisitedCountries.repository';
@@ -29,13 +30,13 @@ describe('VisitedCountriesRepository.listForUser (AT10)', () => {
   it('VISCOUNTRYREPO-001: matches SELECT country_code, created_at, source FROM visited_countries WHERE user_id = ? ORDER BY created_at DESC run raw, scoped to the user', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
-    testDb.prepare('INSERT INTO visited_countries (user_id, country_code, source, created_at) VALUES (?, ?, ?, ?)')
-      .run(user.id, 'DE', 'manual', '2026-01-01T00:00:00.000Z');
-    testDb.prepare('INSERT INTO visited_countries (user_id, country_code, source, created_at) VALUES (?, ?, ?, ?)')
-      .run(user.id, 'FR', 'dawarich', '2026-02-01T00:00:00.000Z');
-    testDb.prepare('INSERT INTO visited_countries (user_id, country_code, source, created_at) VALUES (?, ?, ?, ?)')
-      .run(other.id, 'JP', 'manual', '2026-03-01T00:00:00.000Z');
+    await insertRows(t, VisitedCountries, [
+      { user: user.id, country_code: 'DE', source: 'manual', created_at: '2026-01-01T00:00:00.000Z' },
+      { user: user.id, country_code: 'FR', source: 'dawarich', created_at: '2026-02-01T00:00:00.000Z' },
+      { user: other.id, country_code: 'JP', source: 'manual', created_at: '2026-03-01T00:00:00.000Z' },
+    ]);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare('SELECT country_code, created_at, source FROM visited_countries WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
     const rows = await repo.listForUser(user.id);
 
@@ -52,9 +53,12 @@ describe('VisitedCountriesRepository.listForUser (AT10)', () => {
 describe('VisitedCountriesRepository.listCodesForUser (AT5/AT7/AT43)', () => {
   it('VISCOUNTRYREPO-003: matches SELECT country_code FROM visited_countries WHERE user_id = ? run raw', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO visited_countries (user_id, country_code, source) VALUES (?, ?, ?)').run(user.id, 'DE', 'manual');
-    testDb.prepare('INSERT INTO visited_countries (user_id, country_code, source) VALUES (?, ?, ?)').run(user.id, 'FR', 'manual');
+    await insertRows(t, VisitedCountries, [
+      { user: user.id, country_code: 'DE', source: 'manual' },
+      { user: user.id, country_code: 'FR', source: 'manual' },
+    ]);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare('SELECT country_code FROM visited_countries WHERE user_id = ?').all(user.id);
     const codes = await repo.listCodesForUser(user.id);
 

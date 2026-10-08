@@ -1,7 +1,7 @@
 /**
  * Storage admin e2e — exercises the migrated /api/admin/storage surface
  * (StorageAdminController) through the real JwtAuthGuard + AdminGuard +
- * ManagedGuard against a temp SQLite db. DI-native: no service mock, so the
+ * ManagedGuard against a migrated temp SQLite db. DI-native: no service mock, so the
  * registry's real boot/seed/reload pipeline and StorageAdminService run for
  * real. Covers auth (401), the admin gate (403), managed-mode refusal (403,
  * the first e2e to assert it — ManagedGuard is otherwise only wired in
@@ -20,29 +20,12 @@ import { APP_GUARD } from '@nestjs/core';
 import { StorageModule } from '../../src/nest/storage/storage.module';
 import { ManagedGuard } from '../../src/nest/common/managed.guard';
 import { Test } from '@nestjs/testing';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  // `users` carries the columns listUsers/createUser/updateUser select, plus the
-  // is_guest flag the #1362 COALESCE guards read (admin.e2e.test.ts DDL).
-  tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
-    password_hash TEXT, avatar TEXT, is_guest INTEGER DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    last_login DATETIME);`);
-  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  // Slim audit_log mirror (no FKs), same shape as admin.e2e.test.ts.
-  tmp.exec(`CREATE TABLE audit_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    user_id INTEGER, action TEXT NOT NULL, resource TEXT, details TEXT, ip TEXT);`);
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: () => {} }));
 // The audit domain is DI-native: writeAudit runs for real against the temp db's
 // audit_log table; only the file logger is silenced.
 vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
@@ -57,9 +40,16 @@ vi.mock('../../src/config', () => ({ ENCRYPTION_KEY: 'e2e-storage-key', JWT_SECR
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { db } from '../../src/db/database';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { makeAdmin, makeUser } from '../helpers/factories/users';
+import { countRows, findRow } from '../helpers/factories/rows';
 
-describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLite)', () => {
+let orm: TestOrm;
+
+describe('Storage admin e2e (real auth + admin guard + managed guard + migrated temp SQLite)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
   let adminCookie: string;
@@ -80,8 +70,10 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
 
   beforeAll(async () => {
     process.env.ENCRYPTION_KEY = 'e2e-storage-key';
-    seedUser(db as never, { id: 1 });
-    seedUser(db as never, { id: 2, role: 'admin', email: 'e2e-storage-admin@example.test' });
+    orm = await createTestOrm(db);
+    // Pinned ids: sessionCookie(1) and (2) sign for exactly these users.
+    await makeUser(orm, { id: 1, email: 'e2e@example.test' });
+    await makeAdmin(orm, { id: 2, email: 'e2e-storage-admin@example.test' });
     userCookie = sessionCookie(1);
     adminCookie = sessionCookie(2);
     app = await build();
@@ -101,6 +93,7 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
     delete process.env.ENCRYPTION_KEY;
   });
 
@@ -154,13 +147,13 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
     expect(offBox.options.secretAccessKey).toBe('••••••••'); // masked, never echoed
     expect(res.body.categories.backups).toEqual({ backend: 'nas-backups', source: 'settings' });
 
-    const row = db.prepare("SELECT value FROM app_settings WHERE key = 'storage.backends'").get() as { value: string };
-    expect(row.value).toContain('enc:v1:');
-    expect(row.value).not.toContain('sk-e2e');
+    const row = await findRow(orm, AppSettings, { key: 'storage.backends' });
+    expect(row?.value).toContain('enc:v1:');
+    expect(row?.value).not.toContain('sk-e2e');
 
-    const audit = db.prepare("SELECT details FROM audit_log WHERE action = 'admin.storage_update'").get() as { details: string };
-    expect(audit.details).toContain('***');
-    expect(audit.details).not.toContain('sk-e2e');
+    const audit = await findRow(orm, AuditLog, { action: 'admin.storage_update' });
+    expect(audit?.details).toContain('***');
+    expect(audit?.details).not.toContain('sk-e2e');
   });
 
   it('STORE2E-005 PUT with a semantic violation → 400 with the registry message verbatim', async () => {
@@ -204,9 +197,9 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
         (b) => b.name === 'off-box',
       )!;
       expect(offBox.options.secretAccessKey).not.toBe('sk');
-      const row = db.prepare("SELECT value FROM app_settings WHERE key = 'storage.backends'").get() as { value: string };
-      expect(row.value).not.toContain('"sk"');
-      expect(row.value).toContain('enc:v1:');
+      const row = await findRow(orm, AppSettings, { key: 'storage.backends' });
+      expect(row?.value).not.toContain('"sk"');
+      expect(row?.value).toContain('enc:v1:');
     } finally {
       process.env.ENCRYPTION_KEY = 'e2e-storage-key';
     }
@@ -234,8 +227,8 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
       .send({ backend: { name: 'cand', type: 'local', options: { root } } });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true, targets: [{ name: 'cand', ok: true }] });
-    const audit = db.prepare("SELECT details FROM audit_log WHERE action = 'admin.storage_test'").get() as { details: string };
-    expect(JSON.parse(audit.details)).toMatchObject({ backend: 'cand', type: 'local', ok: true });
+    const audit = await findRow(orm, AuditLog, { action: 'admin.storage_test' });
+    expect(JSON.parse(String(audit?.details))).toMatchObject({ backend: 'cand', type: 'local', ok: true });
   });
 
   it('STORE2E-010 migration moves a category end to end', async () => {
@@ -267,8 +260,8 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
     }
     expect(status).toMatchObject({ status: 'done' });
     expect(stateBody!.categories.journey).toEqual({ backend: 'dest', source: 'settings' });
-    const audit = db.prepare("SELECT details FROM audit_log WHERE action = 'admin.storage_migration'").get() as { details: string };
-    expect(JSON.parse(audit.details)).toEqual({ category: 'journey', to: 'dest' });
+    const audit = await findRow(orm, AuditLog, { action: 'admin.storage_migration' });
+    expect(JSON.parse(String(audit?.details))).toEqual({ category: 'journey', to: 'dest' });
   });
 
   it('STORE2E-011 backfill guards: 401 anon, 404 non-mirror, 409 while running is covered by unit — here the 404', async () => {
@@ -314,8 +307,8 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
     }
     expect(status).toMatchObject({ status: 'done' });
     expect(fs.existsSync(path.join(nasRoot, 'pre-mirror.zip'))).toBe(true);
-    const audit = db.prepare("SELECT details FROM audit_log WHERE action = 'admin.storage_backfill'").get() as { details: string };
-    expect(JSON.parse(audit.details)).toMatchObject({ backend: 'm' });
+    const audit = await findRow(orm, AuditLog, { action: 'admin.storage_backfill' });
+    expect(JSON.parse(String(audit?.details))).toMatchObject({ backend: 'm' });
   });
 
   it('STORE2E-013 cancel 404s with no active run; stats refresh returns real numbers and audits', async () => {
@@ -324,8 +317,7 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + temp SQLi
     expect(res.status).toBe(200);
     expect(res.body.computedAt).toBeGreaterThan(0);
     expect(res.body.categories.backups.objects).toBeGreaterThanOrEqual(1); // pre-mirror.zip at least
-    const audit = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action = 'admin.storage_stats_refresh'").get() as { n: number };
-    expect(audit.n).toBe(1);
+    expect(await countRows(orm, AuditLog, { action: 'admin.storage_stats_refresh' })).toBe(1);
   });
 
   it('STORE2E-014 regression (audit #7): a migration flip while the admin form is open makes the stale save 409, and the flip survives', async () => {

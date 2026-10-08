@@ -10,6 +10,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { insertRow } from '../../../helpers/factories/rows';
 import { createPlace, createTrip, createUser, addTripMember } from '../../../helpers/factories';
 import { PlaceRegions } from '../../../../src/db/entities/PlaceRegions.entity';
 import type { PlaceRegionsRepository } from '../../../../src/db/repositories/PlaceRegions.repository';
@@ -25,9 +26,8 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function insertPlaceRegion(placeId: number, countryCode: string, regionCode: string, regionName: string): void {
-  testDb.prepare('INSERT INTO place_regions (place_id, country_code, region_code, region_name) VALUES (?, ?, ?, ?)')
-    .run(placeId, countryCode, regionCode, regionName);
+async function insertPlaceRegion(placeId: number, countryCode: string, regionCode: string, regionName: string): Promise<void> {
+  await insertRow(t, PlaceRegions, { place: placeId, country_code: countryCode, region_code: regionCode, region_name: regionName });
 }
 
 describe('PlaceRegionsRepository.listCountryCodesForPlaceIds (AT3)', () => {
@@ -37,9 +37,10 @@ describe('PlaceRegionsRepository.listCountryCodesForPlaceIds (AT3)', () => {
     const p1 = createPlace(testDb, trip.id, { name: 'Eiffel Tower' });
     const p2 = createPlace(testDb, trip.id, { name: 'Louvre' });
     const p3 = createPlace(testDb, trip.id, { name: 'Not geocoded' });
-    insertPlaceRegion(p1.id, 'FR', 'FR-IDF', 'Île-de-France');
-    insertPlaceRegion(p2.id, 'FR', 'FR-IDF', 'Île-de-France');
+    await insertPlaceRegion(p1.id, 'FR', 'FR-IDF', 'Île-de-France');
+    await insertPlaceRegion(p2.id, 'FR', 'FR-IDF', 'Île-de-France');
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`SELECT place_id, country_code FROM place_regions WHERE place_id IN (${[p1.id, p2.id, p3.id].join(',')})`).all();
     const typed = await repo.listCountryCodesForPlaceIds([p1.id, p2.id, p3.id]);
     expect(typed).toEqual(legacy);
@@ -57,9 +58,10 @@ describe('PlaceRegionsRepository.listForPlaceIds (AT28)', () => {
     const trip = createTrip(testDb, user.id);
     const p1 = createPlace(testDb, trip.id);
     const p2 = createPlace(testDb, trip.id);
-    insertPlaceRegion(p1.id, 'US', 'US-NY', 'New York');
-    insertPlaceRegion(p2.id, 'US', 'US-CA', 'California');
+    await insertPlaceRegion(p1.id, 'US', 'US-NY', 'New York');
+    await insertPlaceRegion(p2.id, 'US', 'US-CA', 'California');
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`SELECT * FROM place_regions WHERE place_id IN (${[p1.id, p2.id].join(',')})`).all();
     const typed = await repo.listForPlaceIds([p1.id, p2.id]);
     expect(typed).toEqual(legacy);
@@ -77,10 +79,11 @@ describe('PlaceRegionsRepository.listDistinctRegionCodesForCountryAndPlaces (AT2
     const p1 = createPlace(testDb, trip.id);
     const p2 = createPlace(testDb, trip.id);
     const p3 = createPlace(testDb, trip.id);
-    insertPlaceRegion(p1.id, 'FR', 'FR-IDF', 'Île-de-France');
-    insertPlaceRegion(p2.id, 'FR', 'FR-IDF', 'Île-de-France'); // same region, dedup target
-    insertPlaceRegion(p3.id, 'DE', 'DE-BY', 'Bavaria'); // different country, excluded
+    await insertPlaceRegion(p1.id, 'FR', 'FR-IDF', 'Île-de-France');
+    await insertPlaceRegion(p2.id, 'FR', 'FR-IDF', 'Île-de-France'); // same region, dedup target
+    await insertPlaceRegion(p3.id, 'DE', 'DE-BY', 'Bavaria'); // different country, excluded
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(
       `SELECT DISTINCT region_code FROM place_regions WHERE country_code = ? AND place_id IN (${[p1.id, p2.id, p3.id].join(',')})`,
     ).all('FR');
@@ -103,14 +106,15 @@ describe('PlaceRegionsRepository.countPlacesByCountryForTrip (AT40)', () => {
     const fr2 = createPlace(testDb, trip.id);
     const de1 = createPlace(testDb, trip.id);
     const noRegion = createPlace(testDb, trip.id);
-    insertPlaceRegion(fr1.id, 'FR', 'FR-IDF', 'Île-de-France');
-    insertPlaceRegion(fr2.id, 'FR', 'FR-PAC', 'Provence');
-    insertPlaceRegion(de1.id, 'DE', 'DE-BY', 'Bavaria');
+    await insertPlaceRegion(fr1.id, 'FR', 'FR-IDF', 'Île-de-France');
+    await insertPlaceRegion(fr2.id, 'FR', 'FR-PAC', 'Provence');
+    await insertPlaceRegion(de1.id, 'DE', 'DE-BY', 'Bavaria');
     // A different trip's place must not leak in.
     const foreign = createPlace(testDb, other.id);
-    insertPlaceRegion(foreign.id, 'FR', 'FR-IDF', 'Île-de-France');
+    await insertPlaceRegion(foreign.id, 'FR', 'FR-IDF', 'Île-de-France');
     void noRegion;
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`
       SELECT pr.country_code, COUNT(DISTINCT p.id) AS places
       FROM place_regions pr JOIN places p ON p.id = pr.place_id
@@ -138,13 +142,14 @@ describe('PlaceRegionsRepository.listVisitedCountryCodesForUser (AT44)', () => {
     addTripMember(testDb, started.id, member.id);
 
     const startedPlace = createPlace(testDb, started.id);
-    insertPlaceRegion(startedPlace.id, 'FR', 'FR-IDF', 'Île-de-France');
+    await insertPlaceRegion(startedPlace.id, 'FR', 'FR-IDF', 'Île-de-France');
     const startedPlace2 = createPlace(testDb, started.id);
-    insertPlaceRegion(startedPlace2.id, 'FR', 'FR-PAC', 'Provence'); // same country, dedup target
+    await insertPlaceRegion(startedPlace2.id, 'FR', 'FR-PAC', 'Provence'); // same country, dedup target
     const notStartedPlace = createPlace(testDb, notStarted.id);
-    insertPlaceRegion(notStartedPlace.id, 'DE', 'DE-BY', 'Bavaria'); // not started, excluded
+    await insertPlaceRegion(notStartedPlace.id, 'DE', 'DE-BY', 'Bavaria'); // not started, excluded
 
     const today = '2026-01-01';
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`
       SELECT DISTINCT pr.country_code
       FROM place_regions pr
@@ -160,6 +165,7 @@ describe('PlaceRegionsRepository.listVisitedCountryCodesForUser (AT44)', () => {
     expect(typedOwner).toEqual(legacy.map((r: unknown) => (r as { country_code: string }).country_code));
     expect(typedOwner).toEqual(['FR']);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacyMember = testDb.prepare(`
       SELECT DISTINCT pr.country_code
       FROM place_regions pr
