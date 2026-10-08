@@ -41,6 +41,7 @@ import { bookingClock, bookingIcon, dayBookings } from './stopBookings'
 import type { Reservation } from '../../types'
 import type { StayDraft } from './RoadtripStayModal'
 import { missedLeaveOf, readStay, shownStay, stayDraftOf, type StayReading } from './stayReading'
+import { DAY_BADGE, DISC, RAIL_DASH, RAIL_GRID, STAT_LABEL } from './RoadtripSidebar.constants'
 
 interface RoadtripSidebarProps {
   onFocusPoint?: (lat: number, lng: number) => void
@@ -142,52 +143,17 @@ const MODE_ICON: Record<string, LucideIcon> = {
 // own copy of each, and its rest_area icon had drifted away from the popup's.
 
 
-/** The column the markers and the line share, and the gap to the content beside it. */
-const RAIL_GRID: React.CSSProperties = { gridTemplateColumns: '24px 1fr', columnGap: 10 }
-
-/**
- * The line between two stops.
- *
- * A repeating gradient rather than a dashed border: a 1px dashed border renders as a
- * smear at this width, and the gradient keeps the dash length exact.
- */
-const RAIL_DASH: React.CSSProperties = {
-  width: 1.5,
-  backgroundImage: 'repeating-linear-gradient(var(--border-primary) 0 4px, transparent 4px 8px)',
-}
-
 /** The rail's dash laid on its side: the ride between two terminals, drawn like a leg. */
 const RIDE_DASH: React.CSSProperties = {
   height: 1.5,
   backgroundImage: 'repeating-linear-gradient(90deg, var(--border-primary) 0 4px, transparent 4px 8px)',
 }
 
-/** A 24px disc — a stop's number, or a service stop's icon. */
-const DISC = 'grid h-6 w-6 shrink-0 place-items-center rounded-full'
-
-/**
- * The small capitalised caption over a number, and the badges in a day's header.
- *
- * Wide letter-spacing and uppercase rather than a size change: the labels have to stay
- * legible at a third of the column's width in 23 languages, and shrinking them further
- * was what made "Driving time" unreadable before it was ever clipped.
- */
-const STAT_LABEL = 'font-geist font-semibold uppercase tracking-[0.15em] text-content-faint'
-
 /**
  * Below this width the rail stops counting stops: the trip head drops its third figure and
  * the day headers their count, rather than squeezing every badge onto a line too short.
  */
 const RAIL_NARROW_PX = 330
-
-/**
- * A day-header badge: the date, the drive, the count.
- *
- * Medium weight in the quiet ink, not semibold in the strong one. Three uppercase badges
- * with wide tracking already carry as much emphasis as a line can take; adding weight and
- * contrast on top made the day's supporting facts shout louder than the day's own name.
- */
-const DAY_BADGE = 'inline-flex h-[20px] items-center rounded-lg px-2 font-geist font-medium uppercase tracking-[0.09em] text-content-muted'
 
 /**
  * How long the traveller stays here, and the way to change it.
