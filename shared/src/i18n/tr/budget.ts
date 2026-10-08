@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Kategori Oluştur',
   'budget.category': 'Kategori',
   'budget.categoryName': 'Kategori Adı',
+  'budget.addCategory': 'Kategori ekle',
   'budget.table.name': 'İsim',
   'budget.table.total': 'Toplam',
   'budget.table.persons': 'Kişiler',

@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Vytvořit kategorii',
   'budget.category': 'Kategorie',
   'budget.categoryName': 'Název kategorie',
+  'budget.addCategory': 'Přidat kategorii',
   'budget.table.name': 'Název',
   'budget.table.total': 'Celkem',
   'budget.table.persons': 'Osoby',

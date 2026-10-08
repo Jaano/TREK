@@ -10,6 +10,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Utwórz kategorię',
   'budget.category': 'Kategoria',
   'budget.categoryName': 'Nazwa kategorii',
+  'budget.addCategory': 'Dodaj kategorię',
   'budget.table.name': 'Nazwa',
   'budget.table.total': 'Łącznie',
   'budget.table.persons': 'Osoby',

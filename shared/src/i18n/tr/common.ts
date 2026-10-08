@@ -7,6 +7,7 @@ const common: TranslationStrings = {
   'common.cancel': 'İptal',
   'common.clear': 'Temizle',
   'common.delete': 'Sil',
+  'common.remove': 'Kaldır',
   'common.preview': 'Önizleme',
   'common.edit': 'Düzenle',
   'common.add': 'Ekle',

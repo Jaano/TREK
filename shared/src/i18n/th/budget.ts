@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'สร้างหมวดหมู่',
   'budget.category': 'หมวดหมู่',
   'budget.categoryName': 'ชื่อหมวดหมู่',
+  'budget.addCategory': 'เพิ่มหมวดหมู่',
   'budget.table.name': 'ชื่อ',
   'budget.table.total': 'รวม',
   'budget.table.persons': 'บุคคล',

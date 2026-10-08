@@ -7,6 +7,7 @@ const common: TranslationStrings = {
   'common.cancel': 'Ακύρωση',
   'common.clear': 'Εκκαθάριση',
   'common.delete': 'Διαγραφή',
+  'common.remove': 'Αφαίρεση',
   'common.preview': 'Προεπισκόπηση',
   'common.edit': 'Επεξεργασία',
   'common.add': 'Προσθήκη',

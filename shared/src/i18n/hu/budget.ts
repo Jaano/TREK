@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Kategória létrehozása',
   'budget.category': 'Kategória',
   'budget.categoryName': 'Kategória neve',
+  'budget.addCategory': 'Kategória hozzáadása',
   'budget.table.name': 'Név',
   'budget.table.total': 'Összesen',
   'budget.table.persons': 'Személyek',

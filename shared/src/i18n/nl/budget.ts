@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Categorie aanmaken',
   'budget.category': 'Categorie',
   'budget.categoryName': 'Categorienaam',
+  'budget.addCategory': 'Categorie toevoegen',
   'budget.table.name': 'Naam',
   'budget.table.total': 'Totaal',
   'budget.table.persons': 'Personen',

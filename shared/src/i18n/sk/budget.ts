@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Vytvoriť kategóriu',
   'budget.category': 'Kategória',
   'budget.categoryName': 'Názov kategórie',
+  'budget.addCategory': 'Pridať kategóriu',
   'budget.table.name': 'Názov',
   'budget.table.total': 'Spolu',
   'budget.table.persons': 'Osoby',

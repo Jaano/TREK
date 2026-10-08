@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Loo kategooria',
   'budget.category': 'Kategooria',
   'budget.categoryName': 'Kategooria nimi',
+  'budget.addCategory': 'Lisa kategooria',
   'budget.table.name': 'Nimi',
   'budget.table.total': 'Kokku',
   'budget.table.persons': 'Inimesi',

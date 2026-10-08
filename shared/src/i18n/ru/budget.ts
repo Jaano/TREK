@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Создать категорию',
   'budget.category': 'Категория',
   'budget.categoryName': 'Название категории',
+  'budget.addCategory': 'Добавить категорию',
   'budget.table.name': 'Название',
   'budget.table.total': 'Итого',
   'budget.table.persons': 'Человек',

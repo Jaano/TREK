@@ -7,6 +7,7 @@ const common: TranslationStrings = {
   'common.cancel': 'Batal',
   'common.clear': 'Hapus',
   'common.delete': 'Hapus',
+  'common.remove': 'Hapus',
   'common.preview': 'Pratinjau',
   'common.edit': 'Sunting',
   'common.add': 'Tambah',

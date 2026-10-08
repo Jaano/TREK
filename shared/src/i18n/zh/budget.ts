@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': '创建分类',
   'budget.category': '分类',
   'budget.categoryName': '分类名称',
+  'budget.addCategory': '添加分类',
   'budget.table.name': '名称',
   'budget.table.total': '合计',
   'budget.table.persons': '人数',

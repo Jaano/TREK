@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'إنشاء فئة',
   'budget.category': 'الفئة',
   'budget.categoryName': 'اسم الفئة',
+  'budget.addCategory': 'إضافة فئة',
   'budget.table.name': 'الاسم',
   'budget.table.total': 'الإجمالي',
   'budget.table.persons': 'الأشخاص',

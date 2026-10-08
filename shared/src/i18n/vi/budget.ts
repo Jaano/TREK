@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Tạo danh mục',
   'budget.category': 'Loại',
   'budget.categoryName': 'Tên danh mục',
+  'budget.addCategory': 'Thêm danh mục',
   'budget.table.name': 'Tên',
   'budget.table.total': 'Tổng cộng',
   'budget.table.persons': 'Người',

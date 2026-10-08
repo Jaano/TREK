@@ -7,6 +7,7 @@ const common: TranslationStrings = {
   'common.cancel': 'إلغاء',
   'common.clear': 'مسح',
   'common.delete': 'حذف',
+  'common.remove': 'إزالة',
   'common.preview': 'معاينة',
   'common.edit': 'تعديل',
   'common.add': 'إضافة',

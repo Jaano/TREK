@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Δημιουργία Κατηγορίας',
   'budget.category': 'Κατηγορία',
   'budget.categoryName': 'Όνομα Κατηγορίας',
+  'budget.addCategory': 'Προσθήκη κατηγορίας',
   'budget.table.name': 'Όνομα',
   'budget.table.total': 'Σύνολο',
   'budget.table.persons': 'Άτομα',

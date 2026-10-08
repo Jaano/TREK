@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': '카테고리 만들기',
   'budget.category': '카테고리',
   'budget.categoryName': '카테고리 이름',
+  'budget.addCategory': '카테고리 추가',
   'budget.table.name': '이름',
   'budget.table.total': '합계',
   'budget.table.persons': '인원',

@@ -11,6 +11,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Skapa kategori',
   'budget.category': 'Kategori',
   'budget.categoryName': 'Kategorinamn',
+  'budget.addCategory': 'Lägg till kategori',
   'budget.table.name': 'Namn',
   'budget.table.total': 'Totalt',
   'budget.table.persons': 'Personer',

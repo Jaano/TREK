@@ -12,6 +12,7 @@ const budget: TranslationStrings = {
   'budget.createCategory': 'Kateqoriya yarat',
   'budget.category': 'Kateqoriya',
   'budget.categoryName': 'Kateqoriyanın adı',
+  'budget.addCategory': 'Kateqoriya əlavə et',
 
   'budget.table.name': 'Ad',
   'budget.table.total': 'Ümumi',
