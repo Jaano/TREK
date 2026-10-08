@@ -4,6 +4,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   DYNAMIC_ALLOWED,
+  MAX_IMPLICIT_MATCHES,
+  countMatches,
   evaluate,
   firstArgument,
   readEnKeys,
@@ -12,7 +14,7 @@ import {
   templatePattern,
 } from '../../../scripts/i18n-keys.mjs'
 
-// FE-I18N-KEYS-001 to FE-I18N-KEYS-010: the client key check (scripts/i18n-keys.mjs).
+// FE-I18N-KEYS-001 to FE-I18N-KEYS-013: the client key check (scripts/i18n-keys.mjs).
 
 const EN = new Set(['budget.title', 'places.count', 'places.count.one', 'trips.total.other', 'trips.total.one', 'costs.filter.all'])
 
@@ -52,6 +54,8 @@ describe('i18n key check', () => {
     expect(dynamic.map((d) => d.template)).toEqual(['costs.filter.${f}', 'costs.filter.${…}', 'help.guide.${id}.title'])
     expect(templatePattern('costs.filter.${f}')!.test('costs.filter.all')).toBe(true)
     expect(templatePattern('${opt.label}Hint')).toBeNull()
+    // An interpolation is one key segment: costs.filter.${f} does not reach a nested costs.filter.x.y.
+    expect(templatePattern('costs.filter.${f}')!.test('costs.filter.x.y')).toBe(false)
   })
 
   it('FE-I18N-KEYS-004: fails a literal key en lacks and accepts a plural group by its general form', () => {
@@ -63,7 +67,7 @@ describe('i18n key check', () => {
   it('FE-I18N-KEYS-005: fails a template no en key matches unless it is allowed with the keys it resolves to', () => {
     const scan = scanSource('t(`costs.filter.${f}`); t(`gone.prefix.${x}`); t(`${opt.label}Hint`)')
     expect(evaluate(scan, EN, []).unmatched.map((u) => u.template)).toEqual(['gone.prefix.${x}', '${opt.label}Hint'])
-    const allowed = [{ template: '${opt.label}Hint', because: 'test', resolves: ['budget.title'] }]
+    const allowed = [{ file: '<source>', template: '${opt.label}Hint', because: 'test', resolves: ['budget.title'] }]
     const result = evaluate(scan, EN, allowed)
     expect(result.unmatched.map((u) => u.template)).toEqual(['gone.prefix.${x}'])
     expect(result.stale).toEqual([])
@@ -71,10 +75,13 @@ describe('i18n key check', () => {
 
   it('FE-I18N-KEYS-006: refuses an allow-list entry nothing uses or whose keys en lacks', () => {
     const scan = scanSource('t(`${opt.label}Hint`)')
-    const unused = [{ template: '${gone}', because: 'test', resolves: ['budget.title'] }]
+    const unused = [{ file: '<source>', template: '${gone}', because: 'test', resolves: ['budget.title'] }]
     expect(evaluate(scan, EN, unused).stale).toEqual(unused)
-    const wrong = [{ template: '${opt.label}Hint', because: 'test', resolves: ['share.nope'] }]
+    const wrong = [{ file: '<source>', template: '${opt.label}Hint', because: 'test', resolves: ['share.nope'] }]
     expect(evaluate(scan, EN, wrong).stale).toEqual(wrong)
+    const elsewhere = [{ file: 'other.tsx', template: '${opt.label}Hint', because: 'test', resolves: ['budget.title'] }]
+    expect(evaluate(scan, EN, elsewhere).stale).toEqual(elsewhere)
+    expect(evaluate(scan, EN, elsewhere).unmatched.map((u) => u.template)).toEqual(['${opt.label}Hint'])
   })
 
   it('FE-I18N-KEYS-007: reports en keys neither a literal nor a pattern reaches', () => {
@@ -82,10 +89,11 @@ describe('i18n key check', () => {
     expect(evaluate(scan, EN, []).unused).toEqual(['trips.total.other', 'trips.total.one'])
   })
 
-  it('FE-I18N-KEYS-008: every allow-list entry carries a reason and the keys it resolves to', () => {
+  it('FE-I18N-KEYS-008: every allow-list entry names its file and a reason, and a prefix-less one its keys', () => {
     for (const entry of DYNAMIC_ALLOWED) {
+      expect(entry.file).toMatch(/\.tsx?$/)
       expect(entry.because.length).toBeGreaterThan(20)
-      expect(entry.resolves.length).toBeGreaterThan(0)
+      if (templatePattern(entry.template) === null) expect('resolves' in entry && entry.resolves.length).toBeGreaterThan(0)
     }
   })
 
@@ -101,9 +109,37 @@ describe('i18n key check', () => {
 
   it('FE-I18N-KEYS-010: the client source names no key en lacks today', async () => {
     const enKeys = await readEnKeys()
-    const { missing, unmatched, stale } = evaluate(scanTree(), enKeys)
+    const { missing, unmatched, broad, stale } = evaluate(scanTree(), enKeys)
     expect(missing).toEqual([])
     expect(unmatched).toEqual([])
+    expect(broad).toEqual([])
     expect(stale).toEqual([])
+  })
+
+  // A table of en keys wider than the implicit bound: wide.k0 to wide.k<MAX>.
+  const WIDE = new Set([...EN, ...Array.from({ length: MAX_IMPLICIT_MATCHES + 1 }, (_, i) => `wide.k${i}`)])
+
+  it('FE-I18N-KEYS-011: counts a plural group once when measuring what a template reaches', () => {
+    expect(countMatches(templatePattern('trips.${x}')!, EN)).toBe(1)
+    expect(countMatches(templatePattern('wide.${x}')!, WIDE)).toBe(MAX_IMPLICIT_MATCHES + 1)
+  })
+
+  it('FE-I18N-KEYS-012: fails a template wider than the bound unless its file has an entry for it', () => {
+    const scan = scanSource('t(`wide.${x}`); t(`costs.filter.${f}`)', 'a.tsx')
+    const { broad, unmatched } = evaluate(scan, WIDE, [])
+    expect(broad.map((b) => [b.template, b.matches])).toEqual([['wide.${x}', MAX_IMPLICIT_MATCHES + 1]])
+    expect(unmatched).toEqual([])
+    const otherFile = [{ file: 'b.tsx', template: 'wide.${x}', because: 'test' }]
+    expect(evaluate(scan, WIDE, otherFile).broad).toHaveLength(1)
+    const ownFile = [{ file: 'a.tsx', template: 'wide.${x}', because: 'test' }]
+    expect(evaluate(scan, WIDE, ownFile)).toMatchObject({ broad: [], stale: [] })
+  })
+
+  it('FE-I18N-KEYS-013: refuses an entry for a narrow template, and an allowed template that matches nothing', () => {
+    const scan = scanSource('t(`costs.filter.${f}`); t(`gone.prefix.${x}`)', 'a.tsx')
+    const narrow = [{ file: 'a.tsx', template: 'costs.filter.${f}', because: 'test' }]
+    expect(evaluate(scan, EN, narrow).stale).toEqual(narrow)
+    const gone = [{ file: 'a.tsx', template: 'gone.prefix.${x}', because: 'test' }]
+    expect(evaluate(scan, EN, gone).unmatched.map((u) => u.template)).toEqual(['gone.prefix.${x}'])
   })
 })

@@ -22,8 +22,16 @@
  * A key exists when en declares it, or declares `key.other` (a plural group
  * whose general form is spelled out). A template literal key such as
  * t(`budget.category.${id}`), or a prefix with the rest appended
- * (t('costs.filter.' + f)), cannot be resolved; it passes when its fixed
- * parts match at least one en key, and otherwise only through DYNAMIC_ALLOWED.
+ * (t('costs.filter.' + f)), cannot be resolved. It is read as a pattern in
+ * which each interpolation stands for one key segment (no dot), and it passes
+ * on its own only when that pattern is narrow: it matches at least one en key
+ * and at most MAX_IMPLICIT_MATCHES of them, the size of an enum such as the
+ * docsync error codes. A pattern that matches nothing fails. A wider one
+ * (`settings.${mode}` reaches every settings key, so a wrong suffix would
+ * pass unseen) and one without a fixed dotted prefix need an entry in
+ * DYNAMIC_ALLOWED, keyed by file and template, saying what bounds the value.
+ * Listing every narrow template instead would be a hundred entries restating
+ * their own prefix; the bound is what keeps those honest.
  * A key held in a variable (`t(opt.label)`) is out of reach unless the table
  * names it in a *Key property.
  *
@@ -44,18 +52,76 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const SRC = join(HERE, '..', 'src')
 const SHARED_SCRIPTS = join(HERE, '..', '..', 'shared', 'scripts')
 
+/** How many en keys a template may reach and still pass without an entry below. */
+export const MAX_IMPLICIT_MATCHES = 30
+
 /**
- * Template literal keys whose fixed parts match no en key, each with the
- * reason it still resolves and the keys it resolves to, which must exist.
- * Keep this short: every entry is a key the check cannot follow.
+ * Template keys the check cannot bound by itself: wider than
+ * MAX_IMPLICIT_MATCHES, or without a fixed dotted prefix. Each names the file
+ * it sits in and why the interpolated value can only be a real key; one with
+ * no fixed prefix also lists the keys it resolves to, which must exist. An
+ * entry nothing uses any more fails, so the list cannot rot.
  */
 export const DYNAMIC_ALLOWED = [
   {
+    file: 'components/Trips/TripShareDialog.tsx',
     template: '${opt.label}Hint',
     because:
       'TripShareDialog appends Hint to each SHARE_OPTIONS label (useTripShare.ts); share.optTravelOnlyHint ' +
       'and share.optHideImagesHint exist, and the template has no fixed part to match them by',
     resolves: ['share.optTravelOnlyHint', 'share.optHideImagesHint'],
+  },
+  ...[
+    'help.ctx.${id}.${part}',
+    'help.ctx.${id}.bullet.${n}',
+    'help.guide.${id}.${part}',
+    'help.guide.${id}.step.${n}',
+    'help.guide.${id}.tip.${n}',
+  ].map((template) => ({
+    file: 'help/registry.ts',
+    template,
+    because:
+      'a key builder over the registered help contexts and guides; src/help/registry.test.ts resolves every ' +
+      'key of every registered entry against en',
+  })),
+  {
+    file: 'mobile/screens/dashboard/MUserMenu.tsx',
+    template: 'settings.${mode}',
+    because: "mode is a ThemeMode from resolveMode(), 'light' | 'dark' | 'auto', and settings.light/dark/auto exist",
+  },
+  ...['components/Studio/StudioElementsPanel.tsx', 'components/Studio/StudioInspector.tsx'].map((file) => ({
+    file,
+    template: 'journey.studio.${key}',
+    because: 'key comes from an `as const` tuple of frame and stroke styles written beside the call, typed literals',
+  })),
+  ...['mobile/screens/trip/sheets/MReservationSheet.tsx', 'mobile/screens/trip/sheets/MTransportFormSheet.tsx'].map(
+    (file) => ({
+      file,
+      template: 'reservations.${s}',
+      because: "s iterates the literal ['pending', 'confirmed'] as const; reservations.pending/confirmed exist",
+    }),
+  ),
+  ...['components/Admin/AdminPluginsPanel.tsx', 'mobile/screens/admin/MAdminPluginsPanel.tsx'].map((file) => ({
+    file,
+    template: 'admin.plugins.perm.${perm}',
+    because:
+      'PermLabel translates a permission only when PERM_KEYS (generated PLUGIN_PERMISSIONS) holds it and shows ' +
+      'the raw code otherwise; the plugin-facts gate keeps the permission keys in step with en',
+  })),
+  ...['components/Settings/PhotoProvidersSection.tsx', 'mobile/screens/settings/MPhotoProvidersSection.tsx'].flatMap(
+    (file) =>
+      ['memories.${field.label}', 'memories.${field.hint}'].map((template) => ({
+        file,
+        template,
+        because:
+          'field label and hint names come from the provider field rows PhotoProviderSeeder writes, each a ' +
+          'memories.* key in en',
+      })),
+  ),
+  {
+    file: 'components/Tours/planner/TourPlannerPanels.tsx',
+    template: 'tours.planner.${role}',
+    because: "roleLabel takes role: 'start' | 'via' | 'end', and tours.planner.start/via/end exist",
   },
 ]
 
@@ -121,12 +187,15 @@ export function literalsIn(arg) {
   return { quoted, templates }
 }
 
-/** A template literal's key pattern: its fixed parts, anything in between. Null when it has no fixed dotted prefix. */
+/**
+ * A template literal's key pattern: its fixed parts, one key segment (no dot)
+ * for each interpolation. Null when it has no fixed dotted prefix.
+ */
 export function templatePattern(template) {
   const parts = template.split(/\$\{[^}]*\}/)
   if (!/^[a-z][a-zA-Z0-9_]*\./.test(parts[0] ?? '')) return null
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`^${parts.map(escape).join('.+')}$`)
+  return new RegExp(`^${parts.map(escape).join('[^.]+')}$`)
 }
 
 /** Every key reference in one file's source. */
@@ -174,27 +243,55 @@ export async function readEnKeys() {
 
 export const hasKey = (enKeys, key) => enKeys.has(key) || enKeys.has(`${key}.other`)
 
+const base = (k) => k.replace(/\.(?:zero|one|two|few|many|other)$/, '')
+
+/** How many en keys a pattern reaches, a plural group counted once. */
+export function countMatches(pattern, enKeys) {
+  const reached = new Set()
+  for (const k of enKeys) {
+    if (pattern.test(k)) reached.add(k)
+    else if (pattern.test(base(k))) reached.add(base(k))
+  }
+  return reached.size
+}
+
 /**
  * The verdict over a scan: literal keys en lacks, template keys no en key
- * matches (unless allowed), allow-list entries nothing uses any more, and
- * the en keys nothing reaches.
+ * matches, templates too wide to pass without an allow-list entry,
+ * allow-list entries that no file uses any more or that the check no longer
+ * needs, and the en keys nothing reaches.
  */
 export function evaluate(scan, enKeys, allowed = DYNAMIC_ALLOWED) {
   const missing = scan.literal.filter(({ key }) => !hasKey(enKeys, key))
-  const allowedTemplates = new Set(allowed.map((a) => a.template))
-  const unmatched = scan.dynamic.filter(
-    ({ template, pattern }) =>
-      !allowedTemplates.has(template) && !(pattern && [...enKeys].some((k) => pattern.test(k))),
-  )
-  const usedTemplates = new Set(scan.dynamic.map((d) => d.template))
-  const stale = allowed.filter((a) => !usedTemplates.has(a.template) || a.resolves.some((k) => !hasKey(enKeys, k)))
-  const reached = new Set([...scan.literal.map((l) => l.key), ...allowed.flatMap((a) => a.resolves)])
+  const site = (file, template) => `${file}\n${template}`
+  const allowedSites = new Set(allowed.map((a) => site(a.file, a.template)))
+  const counts = new Map()
+  const reach = (template, pattern) => {
+    if (!counts.has(template)) counts.set(template, pattern ? countMatches(pattern, enKeys) : null)
+    return counts.get(template)
+  }
+  const unmatched = []
+  const broad = []
+  for (const d of scan.dynamic) {
+    const n = reach(d.template, d.pattern)
+    const isAllowed = allowedSites.has(site(d.file, d.template))
+    if (n === 0 || (n === null && !isAllowed)) unmatched.push(d)
+    else if (n > MAX_IMPLICIT_MATCHES && !isAllowed) broad.push({ ...d, matches: n })
+  }
+  const usedSites = new Set(scan.dynamic.map((d) => site(d.file, d.template)))
+  const stale = allowed.filter((a) => {
+    if (!usedSites.has(site(a.file, a.template))) return true
+    if ((a.resolves ?? []).some((k) => !hasKey(enKeys, k))) return true
+    // An entry for a template narrow enough to pass by itself only lengthens the list.
+    const n = reach(a.template, templatePattern(a.template))
+    return n !== null && n <= MAX_IMPLICIT_MATCHES
+  })
+  const reached = new Set([...scan.literal.map((l) => l.key), ...allowed.flatMap((a) => a.resolves ?? [])])
   const patterns = scan.dynamic.map((d) => d.pattern).filter(Boolean)
-  const base = (k) => k.replace(/\.(?:zero|one|two|few|many|other)$/, '')
   const unused = [...enKeys].filter(
     (k) => !reached.has(k) && !reached.has(base(k)) && !patterns.some((p) => p.test(k) || p.test(base(k))),
   )
-  return { missing, unmatched, stale, unused }
+  return { missing, unmatched, broad, stale, unused }
 }
 
 export function scanTree(root = SRC) {
@@ -216,15 +313,24 @@ if (isCli) {
   try {
     const scan = scanTree()
     const enKeys = await readEnKeys()
-    const { missing, unmatched, stale, unused } = evaluate(scan, enKeys)
+    const { missing, unmatched, broad, stale, unused } = evaluate(scan, enKeys)
     for (const { file, line, key } of missing) {
       console.error(`FAIL  ${file}:${line}: '${key}' is not a key in shared/src/i18n/en`)
     }
     for (const { file, line, template } of unmatched) {
       console.error(`FAIL  ${file}:${line}: \`${template}\` matches no key in shared/src/i18n/en`)
     }
-    for (const { template } of stale) {
-      console.error(`FAIL  DYNAMIC_ALLOWED lists \`${template}\`, which no file uses any more: remove the entry`)
+    for (const { file, line, template, matches } of broad) {
+      console.error(
+        `FAIL  ${file}:${line}: \`${template}\` reaches ${matches} en keys, more than ${MAX_IMPLICIT_MATCHES}: ` +
+          'narrow the prefix, or add a DYNAMIC_ALLOWED entry saying what bounds the value',
+      )
+    }
+    for (const { file, template } of stale) {
+      console.error(
+        `FAIL  DYNAMIC_ALLOWED lists \`${template}\` in ${file}, which that file no longer uses, whose keys en ` +
+          'lacks, or which is narrow enough to pass without it: remove or fix the entry',
+      )
     }
     if (process.argv.includes('--unused')) for (const key of unused.sort()) console.log(`unused  ${key}`)
     console.log(
@@ -232,7 +338,7 @@ if (isCli) {
         `reference(s) checked against ${enKeys.size} en keys; ${unused.length} en key(s) reached by neither ` +
         '(information, --unused lists them)',
     )
-    if (missing.length || unmatched.length || stale.length) process.exit(1)
+    if (missing.length || unmatched.length || broad.length || stale.length) process.exit(1)
   } catch (err) {
     console.error(`FAIL  ${err.message}`)
     process.exit(1)
