@@ -76,9 +76,9 @@ describe('deriveHttp', () => {
     expect(deriveHttpBoot({}).trustProxy).toBe(1);
   });
 
-  it("HTTP_KEEP_ALIVE_TIMEOUT_MS: 65 s unless set (above the common proxies' 60 s idle timeout)", () => {
-    expect(deriveHttpBoot({}).keepAliveTimeoutMs).toBe(65_000);
-    expect(deriveHttpBoot({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '95000' }).keepAliveTimeoutMs).toBe(95_000);
+  it("HTTP_KEEP_ALIVE_TIMEOUT_MS: 95 s unless set (above nginx's 60 s and Traefik's 90 s idle timeout)", () => {
+    expect(deriveHttpBoot({}).keepAliveTimeoutMs).toBe(95_000);
+    expect(deriveHttpBoot({ HTTP_KEEP_ALIVE_TIMEOUT_MS: '120000' }).keepAliveTimeoutMs).toBe(120_000);
   });
 
   it('boolean switches accept the whole boolean-like family (unified semantics)', () => {

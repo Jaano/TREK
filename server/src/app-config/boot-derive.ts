@@ -8,16 +8,18 @@
  * each side touches. A value that pre-container code needs, or that tests
  * mutate mid-lifetime, belongs in derive.ts instead.
  */
+import type { RawEnv } from './derive';
 import { parseBool, positiveIntOr } from './parsers';
 
 /**
- * Longer than the idle timeout of the common reverse proxies and load
- * balancers (60 s), so the proxy closes an idle upstream connection before
- * Node does. The other way round the proxy reuses a socket Node just closed
- * and answers that request with a 502.
+ * Longer than the upstream idle timeout of the common reverse proxies and load
+ * balancers (60 s for nginx and most load balancers, 90 s for Traefik), so the
+ * proxy closes an idle upstream connection before Node does. The other way
+ * round the proxy reuses a socket Node just closed and answers that request
+ * with a 502. The headers timeout follows one second above, still well under
+ * Node's 300 s request timeout.
  */
-export const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 65_000;
-import type { RawEnv } from './derive';
+export const DEFAULT_KEEP_ALIVE_TIMEOUT_MS = 95_000;
 
 /** What the pre-init Express layer and the HTTP server freeze when buildApp() runs. */
 export function deriveHttpBoot(raw: RawEnv) {
