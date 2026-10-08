@@ -70,7 +70,8 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "lint": "eslint --fix \"src/**/*.ts\"",
     "i18n:parity": "node scripts/i18n-parity.mjs",
-    "i18n:parity:strict": "node scripts/i18n-parity.mjs --strict"
+    "i18n:parity:strict": "node scripts/i18n-parity.mjs --strict",
+    "contracts:open": "node scripts/open-request-schemas.mjs"
   },
   "dependencies": {
     "isomorphic-dompurify": "^3.23.0",

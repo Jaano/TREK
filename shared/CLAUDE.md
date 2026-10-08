@@ -12,6 +12,7 @@ npm run lint               # eslint --fix (rewrites files)
 npm run test               # vitest run — co-located *.spec.ts files
 npm run i18n:parity        # audit locale drift, exits 0
 npm run i18n:parity:strict # CI gate — exits 1 on any drift
+npm run contracts:open     # CI gate (after build): open shapes in request schemas may only shrink
 ```
 
 Single test: `npx vitest run src/i18n/i18n-parity.spec.ts`, or `npx vitest run -t "rejects extra keys"`.
@@ -35,7 +36,7 @@ One folder per domain exporting Zod schemas plus inferred types (`export type X 
 The parity rule governs **existing** routes; it is not a license to mint new debt:
 
 - **The contract describes the wire, not the storage engine.** New booleans are `z.boolean()` — convert SQLite 0/1 at the service boundary, never add a `z.union([z.boolean(), z.number()])`. New ids use `idSchema`/`idParamSchema`, never `number | string`. Request and response types for a field must agree.
-- **Use the shared primitives** instead of re-declaring bare `z.number()`/`z.string()` per domain. Narrow an existing open object rather than adding a new `z.record(...)`/passthrough body — "any object" gives zero drift protection.
+- **Use the shared primitives** instead of re-declaring bare `z.number()`/`z.string()` per domain. Narrow an existing open object rather than adding a new `z.record(...)`/passthrough body — "any object" gives zero drift protection. `contracts:open` (`scripts/open-request-schemas.mjs`) counts the open shapes in every exported `*RequestSchema` (a loose object, a record of unknown, a `z.unknown()`/`z.any()` field or body) against `scripts/open-request-schemas-baseline.json`: a new request schema may hold none, an existing one no more than its entry. It reads the built `dist/`; `src/open-request-schemas.spec.ts` runs the same check over `src/` in `npm test`. After narrowing a schema, `npm run contracts:open -- --update` lowers the baseline (it never raises or adds an entry).
 - **Add a schema, add a spec** — especially for lenient parsers fed by untrusted or LLM input.
 - **Stay lean and isomorphic**: zero imports from client/server, no `node:` APIs, effectively no new runtime dependencies (the contract layer approaches `zod`-only; i18n is a separable concern — don't couple new contract code to it).
 - **Never hand-copy a locale list.** `SUPPORTED_LANGUAGES` in `src/i18n/languages.ts` is the one registry — derive barrels, loaders and spec maps from it.
