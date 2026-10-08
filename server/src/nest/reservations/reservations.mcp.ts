@@ -103,6 +103,11 @@ function parseId(value: string | string[]): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+/** The linked cost a tool's price becomes: the entry the booking form sends for one. */
+function linkedCost(price: number | null | undefined, category: string | undefined) {
+  return price != null && price > 0 ? { total_price: price, category } : undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Multi-leg bookings (#1914)
 //
@@ -384,25 +389,18 @@ export class ReservationsMcp {
 
     const metadata = price != null ? { price: String(price) } : undefined;
 
-    const { reservation, accommodationCreated } = await this.reservations.create(tripId, {
+    // The booking and its linked cost are one write, the same service path REST takes.
+    const { reservation, accommodationCreated, costEvents } = await this.reservations.createWithCost(String(tripId), {
       title, type, reservation_time, reservation_end_time, url, location, confirmation_number,
       notes, day_id, place_id, assignment_id,
       create_accommodation: createAccommodation,
       metadata,
-    });
+    }, linkedCost(price, budget_category || type));
 
     if (accommodationCreated) {
       this.guards.safeBroadcast(tripId, 'accommodation:created', {});
     }
-
-    if (price != null && price > 0) {
-      const item = await this.budget.linkBudgetItemToReservation(tripId, reservation.id, {
-        name: title,
-        category: budget_category || type,
-        total_price: price,
-      });
-      this.guards.safeBroadcast(tripId, 'budget:created', { item });
-    }
+    for (const { event, payload } of costEvents) this.guards.safeBroadcast(tripId, event, payload);
 
     this.guards.safeBroadcast(tripId, 'reservation:created', { reservation });
     return ok({ reservation });
@@ -741,7 +739,7 @@ export class ReservationsMcp {
 
     if (price != null) meta.price = String(price);
 
-    const { reservation } = await this.reservations.create(tripId, {
+    const { reservation, costEvents } = await this.reservations.createWithCost(String(tripId), {
       title,
       type,
       reservation_time: departureTime,
@@ -756,16 +754,8 @@ export class ReservationsMcp {
       metadata: Object.keys(meta).length > 0 ? meta : undefined,
       endpoints: transportEndpoints,
       needs_review,
-    });
-
-    if (price != null && price > 0) {
-      const item = await this.budget.linkBudgetItemToReservation(tripId, reservation.id, {
-        name: title,
-        category: budget_category || type,
-        total_price: price,
-      });
-      this.guards.safeBroadcast(tripId, 'budget:created', { item });
-    }
+    }, linkedCost(price, budget_category || type));
+    for (const { event, payload } of costEvents) this.guards.safeBroadcast(tripId, event, payload);
 
     this.guards.safeBroadcast(tripId, 'reservation:created', { reservation });
     return ok({ reservation });

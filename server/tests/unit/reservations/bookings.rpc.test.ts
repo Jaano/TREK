@@ -36,16 +36,15 @@ function build(opts: { canEdit?: boolean; cascade?: boolean; stop?: boolean; see
   // The expenses a delete takes with it: one with `cascade`, any number with `expenses` (#2084).
   const expenses = opts.expenses ?? (opts.cascade ? [7] : []);
   const reservations = {
-    create: vi.fn(() => ({ reservation: { id: 40 }, accommodationCreated: !!opts.cascade })),
+    createWithCost: vi.fn(() => ({ reservation: { id: 40 }, accommodationCreated: !!opts.cascade, costEvents: [] })),
     getReservation: vi.fn((id: string) => (id === '5' ? { id: 5, title: 'Hotel', type: 'lodging' } : undefined)),
-    update: vi.fn(() => ({ reservation: { id: 5 }, accommodationChanged: !!opts.cascade })),
+    updateWithCost: vi.fn(() => ({ reservation: { id: 5 }, accommodationChanged: !!opts.cascade, costEvents: [] })),
     remove: vi.fn((id: string) =>
       id === '5'
         ? { deleted: { title: 'Hotel', type: 'lodging', accommodation_id: opts.cascade ? 11 : null }, accommodationDeleted: !!opts.cascade, deletedBudgetItemId: expenses[0] ?? null, deletedBudgetItemIds: expenses }
         : { deleted: null, accommodationDeleted: false, deletedBudgetItemId: null, deletedBudgetItemIds: [] },
     ),
-    syncBudgetOnCreate: vi.fn(),
-    syncBudgetOnUpdate: vi.fn(),
+    announceCost: vi.fn(),
     // The price's currency and rate are the service's to resolve; here it passes through.
     withFrozenRate: vi.fn(async (_tripId: number, entry: unknown) => entry),
     notifyBookingChange: vi.fn(),
@@ -122,7 +121,7 @@ describe('ReservationsRpc', () => {
     )) as RpcError;
     expect(res.error.code).toBe('BAD_PARAMS');
     // Otherwise it fails deep in the service mid-transaction, or is silently dropped.
-    expect(f.reservations.create).not.toHaveBeenCalled();
+    expect(f.reservations.createWithCost).not.toHaveBeenCalled();
   });
 
   it('BOOK-RPC-003 an absent endpoints field stays absent, which means "keep"', async () => {
@@ -160,10 +159,11 @@ describe('ReservationsRpc', () => {
     ]);
   });
 
-  it('BOOK-RPC-007 the budget sync and the booking notification both run', async () => {
+  it('BOOK-RPC-007 the booking and its cost are one service write, and the booking notification runs', async () => {
     const f = build();
     await f.host().dispatch(req('reservations.create', { tripId: 1, input: { title: 'Hotel', type: 'lodging' } }), 42);
-    expect(f.reservations.syncBudgetOnCreate).toHaveBeenCalled();
+    expect(f.reservations.createWithCost).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Hotel' }), undefined);
+    expect(f.reservations.announceCost).toHaveBeenCalledWith(1, [], undefined);
     expect(f.reservations.notifyBookingChange).toHaveBeenCalledWith(1, 42, 'Hotel', 'lodging');
   });
 
@@ -180,7 +180,7 @@ describe('ReservationsRpc', () => {
     // defence in depth, but the schema is what a plugin actually hits first.
     const res = (await f.host().dispatch(req('reservations.create', { tripId: 1, input: {} }), 42)) as RpcError;
     expect(res.error.code).toBe('BAD_PARAMS');
-    expect(f.reservations.create).not.toHaveBeenCalled();
+    expect(f.reservations.createWithCost).not.toHaveBeenCalled();
   });
 
   it('BOOK-RPC-008c an update without a title keeps the current one', async () => {
@@ -208,7 +208,7 @@ describe('ReservationsRpc', () => {
       req('reservations.update', { tripId: 1, reservationId: 5, input: { title: 'x', type: 'lodging', endpoints: [{ nonsense: true }] } }), 42,
     )) as RpcError;
     expect(res.error.code).toBe('BAD_PARAMS');
-    expect(f.reservations.update).not.toHaveBeenCalled();
+    expect(f.reservations.updateWithCost).not.toHaveBeenCalled();
   });
 
   it('BOOK-RPC-018 an id that resolves to nothing is BAD_PARAMS, not a constraint failure', async () => {
@@ -218,7 +218,7 @@ describe('ReservationsRpc', () => {
     )) as RpcError;
     expect(res.error.code).toBe('BAD_PARAMS');
     expect(res.error.message).toBe('unknown reference: place_id');
-    expect(f.reservations.create).not.toHaveBeenCalled();
+    expect(f.reservations.createWithCost).not.toHaveBeenCalled();
   });
 
   it('BOOK-RPC-019 the same on update', async () => {
@@ -227,7 +227,7 @@ describe('ReservationsRpc', () => {
       req('reservations.update', { tripId: 1, reservationId: 5, input: { title: 'x', type: 'lodging', day_id: 999999 } }), 42,
     )) as RpcError;
     expect(res.error.code).toBe('BAD_PARAMS');
-    expect(f.reservations.update).not.toHaveBeenCalled();
+    expect(f.reservations.updateWithCost).not.toHaveBeenCalled();
   });
 
   it('BOOK-RPC-020 an id from another trip is RESOURCE_FORBIDDEN before the write, on create and update', async () => {
@@ -240,13 +240,13 @@ describe('ReservationsRpc', () => {
     const created = (await f.host().dispatch(req('reservations.create', { tripId: 1, input: stay }), 42)) as RpcError;
     expect(created.error.code).toBe('RESOURCE_FORBIDDEN');
     expect(created.error.message).toBe('not part of trip 1: create_accommodation.start_day_id');
-    expect(f.reservations.create).not.toHaveBeenCalled();
+    expect(f.reservations.createWithCost).not.toHaveBeenCalled();
 
     const g = build({ foreign: ['day_id'] });
     const updated = (await g.host().dispatch(req('reservations.update', { tripId: 1, reservationId: 5, input: { title: 'x', type: 'lodging', day_id: 4711 } }), 42)) as RpcError;
     expect(updated.error.code).toBe('RESOURCE_FORBIDDEN');
     expect(updated.error.message).toBe('not part of trip 1: day_id');
-    expect(g.reservations.update).not.toHaveBeenCalled();
+    expect(g.reservations.updateWithCost).not.toHaveBeenCalled();
     expect(g.realtime.broadcast).not.toHaveBeenCalled();
 
     // The same body with this trip's ids goes through.

@@ -42,9 +42,9 @@ export class ReservationsRpc {
     const i = input as { title?: string; type?: string; create_budget_entry?: unknown };
     // Same as the REST route: the price keeps its currency, at a rate frozen now (#2525).
     const budgetEntry = await this.reservations.withFrozenRate(tripId, i.create_budget_entry as never);
-    const { reservation, accommodationCreated } = await this.reservations.create(String(tripId), input as never);
+    const { reservation, accommodationCreated, costEvents } = await this.reservations.createWithCost(String(tripId), input as never, budgetEntry);
     if (accommodationCreated) this.realtime.broadcast(tripId, 'accommodation:created', {}, undefined);
-    await this.reservations.syncBudgetOnCreate(String(tripId), reservation.id, i.title ?? '', i.type, budgetEntry, undefined);
+    this.reservations.announceCost(tripId, costEvents, undefined);
     this.realtime.broadcast(tripId, 'reservation:created', { reservation }, undefined);
     await this.notifyBooking(actor, tripId, i.title ?? '', i.type ?? '');
     return reservation;
@@ -63,11 +63,11 @@ export class ReservationsRpc {
     const current = await this.reservations.getReservation(String(reservationId), String(tripId));
     if (!current) throw new ForbiddenResource(`no reservation ${reservationId} on trip ${tripId}`);
     await this.requireOwnReferences(tripId, input);
-    const { reservation, accommodationChanged } = await this.reservations.update(String(reservationId), String(tripId), input as never, current as never);
+    const i = input as { title?: string; type?: string; create_budget_entry?: unknown };
+    const { reservation, accommodationChanged, costEvents } = await this.reservations.updateWithCost(String(reservationId), String(tripId), input as never, current, i.create_budget_entry as never);
     if (accommodationChanged) this.realtime.broadcast(tripId, 'accommodation:updated', {}, undefined);
     const cur = current as { title: string; type?: string };
-    const i = input as { title?: string; type?: string; create_budget_entry?: unknown };
-    await this.reservations.syncBudgetOnUpdate(String(tripId), String(reservationId), i.title ?? '', i.type, cur.title, cur.type, i.create_budget_entry as never, undefined);
+    this.reservations.announceCost(tripId, costEvents, undefined);
     this.realtime.broadcast(tripId, 'reservation:updated', { reservation }, undefined);
     await this.notifyBooking(actor, tripId, i.title || cur.title, i.type || cur.type || '');
     return reservation;

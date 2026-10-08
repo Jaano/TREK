@@ -18,8 +18,7 @@ function makeService(overrides: Partial<ReservationsService> = {}): Reservations
     referencesOutsideTrip: vi.fn().mockReturnValue([]),
     unresolvedReferences: vi.fn().mockReturnValue([]),
     broadcast: vi.fn(),
-    syncBudgetOnCreate: vi.fn(),
-    syncBudgetOnUpdate: vi.fn(),
+    announceCost: vi.fn(),
     notifyBookingChange: vi.fn(),
     // Hands the entry back as it came: what freezing does to it is the service's test.
     withFrozenRate: vi.fn(async (_tripId: string, entry: unknown) => entry),
@@ -48,34 +47,40 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
     // The bespoke 'Title is required' 400 moved to the global ZodValidationPipe
     // (ReservationCreateDto) — covered by the e2e suite.
 
-    it('creates, runs budget sync, broadcasts accommodation + reservation, notifies', async () => {
-      const create = vi.fn().mockReturnValue({ reservation: { id: 9 }, accommodationCreated: true });
-      const broadcast = vi.fn(); const syncBudgetOnCreate = vi.fn(); const notifyBookingChange = vi.fn();
-      const svc = makeService({ create, broadcast, syncBudgetOnCreate, notifyBookingChange } as Partial<ReservationsService>);
+    it('creates the booking and its cost in one write, broadcasts accommodation, cost and reservation in order, notifies', async () => {
+      const costEvents = [{ event: 'budget:created', payload: { item: { id: 3 } } }];
+      const createWithCost = vi.fn().mockReturnValue({ reservation: { id: 9 }, accommodationCreated: true, costEvents });
+      const order: string[] = [];
+      const broadcast = vi.fn((_tripId: string, event: string) => { order.push(event); });
+      const announceCost = vi.fn(() => { order.push('cost'); });
+      const notifyBookingChange = vi.fn();
+      const svc = makeService({ createWithCost, broadcast, announceCost, notifyBookingChange } as Partial<ReservationsService>);
       const body = { title: 'Hotel', type: 'lodging', create_budget_entry: { total_price: 200 } };
       expect(await new ReservationsController(svc, airtrailLink).create(user, '5', body, 'sock')).toEqual({ reservation: { id: 9 } });
+      expect(createWithCost).toHaveBeenCalledWith('5', body, { total_price: 200 });
+      expect(announceCost).toHaveBeenCalledWith('5', costEvents, 'sock');
       expect(broadcast).toHaveBeenCalledWith('5', 'accommodation:created', {}, 'sock');
-      expect(syncBudgetOnCreate).toHaveBeenCalledWith('5', 9, 'Hotel', 'lodging', { total_price: 200 }, 'sock');
       expect(broadcast).toHaveBeenCalledWith('5', 'reservation:created', { reservation: { id: 9 } }, 'sock');
+      expect(order).toEqual(['accommodation:created', 'cost', 'reservation:created']);
       expect(notifyBookingChange).toHaveBeenCalledWith('5', user.id, 'Hotel', 'lodging');
     });
 
     it('400s on a body id belonging to another trip, without writing', async () => {
-      const create = vi.fn();
+      const createWithCost = vi.fn();
       const svc = makeService({
-        create,
+        createWithCost,
         referencesOutsideTrip: vi.fn().mockReturnValue(['accommodation_id']),
       } as Partial<ReservationsService>);
       const body = { title: 'Hotel', accommodation_id: 4711 };
       expect(await thrown(() => new ReservationsController(svc, airtrailLink).create(user, '5', body)))
         .toEqual({ status: 400, body: { error: 'Not part of this trip: accommodation_id' } });
-      expect(create).not.toHaveBeenCalled();
+      expect(createWithCost).not.toHaveBeenCalled();
     });
 
     it('400s on a body id that exists nowhere, in its own words, without writing', async () => {
-      const create = vi.fn();
+      const createWithCost = vi.fn();
       const svc = makeService({
-        create,
+        createWithCost,
         unresolvedReferences: vi.fn().mockReturnValue(['place_id']),
       } as Partial<ReservationsService>);
       const body = { title: 'Hotel', place_id: 4711 };
@@ -83,12 +88,12 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
       // the caller looking for it on another trip.
       expect(await thrown(() => new ReservationsController(svc, airtrailLink).create(user, '5', body)))
         .toEqual({ status: 400, body: { error: 'Unknown reference: place_id' } });
-      expect(create).not.toHaveBeenCalled();
+      expect(createWithCost).not.toHaveBeenCalled();
     });
 
     it('answers a foreign id with the older message when it is both', async () => {
       const svc = makeService({
-        create: vi.fn(),
+        createWithCost: vi.fn(),
         referencesOutsideTrip: vi.fn().mockReturnValue(['place_id']),
         unresolvedReferences: vi.fn().mockReturnValue(['place_id']),
       } as Partial<ReservationsService>);
@@ -98,18 +103,17 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
 
     // #2525: an imported booking quoted in dollars. The price has to reach the linked
     // cost in dollars, at a rate frozen before anything is written.
-    it('hands the budget sync the entry with its currency and frozen rate', async () => {
-      const create = vi.fn().mockReturnValue({ reservation: { id: 9 }, accommodationCreated: false });
-      const syncBudgetOnCreate = vi.fn();
+    it('hands the write the entry with its currency and frozen rate', async () => {
+      const createWithCost = vi.fn().mockReturnValue({ reservation: { id: 9 }, accommodationCreated: false, costEvents: [] });
       const withFrozenRate = vi.fn(async () => {
-        expect(create).not.toHaveBeenCalled();
+        expect(createWithCost).not.toHaveBeenCalled();
         return { total_price: 801.76, currency: 'USD', exchange_rate: 1.17 };
       });
-      const svc = makeService({ create, syncBudgetOnCreate, withFrozenRate } as Partial<ReservationsService>);
+      const svc = makeService({ createWithCost, withFrozenRate } as Partial<ReservationsService>);
       const body = { title: 'Aparthotel Silver', type: 'hotel', create_budget_entry: { total_price: 801.76, currency: 'usd' } };
       await new ReservationsController(svc, airtrailLink).create(user, '5', body, 'sock');
       expect(withFrozenRate).toHaveBeenCalledWith('5', { total_price: 801.76, currency: 'usd' });
-      expect(syncBudgetOnCreate).toHaveBeenCalledWith('5', 9, 'Aparthotel Silver', 'hotel', { total_price: 801.76, currency: 'USD', exchange_rate: 1.17 }, 'sock');
+      expect(createWithCost).toHaveBeenCalledWith('5', body, { total_price: 801.76, currency: 'USD', exchange_rate: 1.17 });
     });
   });
 
@@ -133,14 +137,18 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
       expect(await thrown(() => new ReservationsController(svc, airtrailLink).update(user, '5', '9', { title: 'X' }))).toEqual({ status: 404, body: { error: 'Reservation not found' } });
     });
 
-    it('updates, syncs budget with current fallbacks, broadcasts + notifies', async () => {
-      const getReservation = vi.fn().mockReturnValue({ title: 'Old', type: 'lodging' });
-      const update = vi.fn().mockReturnValue({ reservation: { id: 9 }, accommodationChanged: true });
-      const broadcast = vi.fn(); const syncBudgetOnUpdate = vi.fn(); const notifyBookingChange = vi.fn();
-      const svc = makeService({ getReservation, update, broadcast, syncBudgetOnUpdate, notifyBookingChange } as Partial<ReservationsService>);
-      await new ReservationsController(svc, airtrailLink).update(user, '5', '9', { create_budget_entry: { total_price: 50 } }, 'sock');
+    it('updates the booking and its cost in one write, broadcasts + notifies with current fallbacks', async () => {
+      const current = { title: 'Old', type: 'lodging' };
+      const getReservation = vi.fn().mockReturnValue(current);
+      const costEvents = [{ event: 'budget:updated', payload: { item: { id: 3 } } }];
+      const updateWithCost = vi.fn().mockReturnValue({ reservation: { id: 9 }, accommodationChanged: true, costEvents });
+      const broadcast = vi.fn(); const announceCost = vi.fn(); const notifyBookingChange = vi.fn();
+      const svc = makeService({ getReservation, updateWithCost, broadcast, announceCost, notifyBookingChange } as Partial<ReservationsService>);
+      const body = { create_budget_entry: { total_price: 50 } };
+      await new ReservationsController(svc, airtrailLink).update(user, '5', '9', body, 'sock');
+      expect(updateWithCost).toHaveBeenCalledWith('9', '5', body, current, { total_price: 50 });
       expect(broadcast).toHaveBeenCalledWith('5', 'accommodation:updated', {}, 'sock');
-      expect(syncBudgetOnUpdate).toHaveBeenCalledWith('5', '9', '', undefined, 'Old', 'lodging', { total_price: 50 }, 'sock');
+      expect(announceCost).toHaveBeenCalledWith('5', costEvents, 'sock');
       expect(notifyBookingChange).toHaveBeenCalledWith('5', user.id, 'Old', 'lodging');
     });
 
@@ -148,7 +156,7 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
       const update = vi.fn();
       const svc = makeService({
         getReservation: vi.fn().mockReturnValue({ title: 'Old', type: 'lodging' }),
-        update,
+        updateWithCost: update,
         referencesOutsideTrip: vi.fn().mockReturnValue(['day_id', 'place_id']),
       } as Partial<ReservationsService>);
       expect(await thrown(() => new ReservationsController(svc, airtrailLink).update(user, '5', '9', { day_id: 1, place_id: 2 })))
@@ -160,7 +168,7 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
       const update = vi.fn();
       const svc = makeService({
         getReservation: vi.fn().mockReturnValue({ title: 'Old', type: 'lodging' }),
-        update,
+        updateWithCost: update,
         unresolvedReferences: vi.fn().mockReturnValue(['day_id', 'place_id']),
       } as Partial<ReservationsService>);
       // The reporter's request: a foreign-key error used to reach the caller as

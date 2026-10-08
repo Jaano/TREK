@@ -72,11 +72,12 @@ export class ReservationsController {
     // Before the writes: the price keeps the currency it was quoted in,
     // at a rate frozen now (#2525).
     const budgetEntry = await this.reservations.withFrozenRate(tripId, body.create_budget_entry);
-    const { reservation, accommodationCreated } = await this.reservations.create(tripId, body as never);
+    // The booking and its linked cost are one write.
+    const { reservation, accommodationCreated, costEvents } = await this.reservations.createWithCost(tripId, body as never, budgetEntry);
     if (accommodationCreated) {
       this.reservations.broadcast(tripId, 'accommodation:created', {}, socketId);
     }
-    await this.reservations.syncBudgetOnCreate(tripId, reservation.id, body.title, body.type, budgetEntry, socketId);
+    this.reservations.announceCost(tripId, costEvents, socketId);
     this.reservations.broadcast(tripId, 'reservation:created', { reservation }, socketId);
     await this.reservations.notifyBookingChange(tripId, user.id, body.title, body.type ?? '');
     return { reservation };
@@ -112,12 +113,13 @@ export class ReservationsController {
       throw new HttpException({ error: 'Reservation not found' }, 404);
     }
     await this.rejectForeignReferences(tripId, body);
-    const { reservation, accommodationChanged } = await this.reservations.update(id, tripId, body as never, current as never);
+    // The booking and its linked cost are one write.
+    const { reservation, accommodationChanged, costEvents } = await this.reservations.updateWithCost(id, tripId, body as never, current, body.create_budget_entry);
     if (accommodationChanged) {
       this.reservations.broadcast(tripId, 'accommodation:updated', {}, socketId);
     }
     const cur = current as { title: string; type?: string };
-    await this.reservations.syncBudgetOnUpdate(tripId, id, body.title ?? '', body.type, cur.title, cur.type, body.create_budget_entry, socketId);
+    this.reservations.announceCost(tripId, costEvents, socketId);
     this.reservations.broadcast(tripId, 'reservation:updated', { reservation }, socketId);
     // Push a locally-edited AirTrail flight back to AirTrail (fire-and-forget,
     // under the importer's credentials — see airtrailSync). #214

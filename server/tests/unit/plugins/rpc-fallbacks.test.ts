@@ -211,8 +211,8 @@ describe('service errors are translated into the RPC taxonomy', () => {
     const notifyBookingChange = vi.fn();
     const reservations = {
       getReservation: vi.fn(() => ({ id: 5, title: 'Hotel', type: 'lodging' })),
-      update: vi.fn(() => ({ reservation: { id: 5 }, accommodationChanged: false })),
-      syncBudgetOnUpdate: vi.fn(),
+      updateWithCost: vi.fn(() => ({ reservation: { id: 5 }, accommodationChanged: false, costEvents: [] })),
+      announceCost: vi.fn(),
       referencesOutsideTrip: vi.fn(() => []),
       unresolvedReferences: vi.fn(() => []),
       notifyBookingChange,

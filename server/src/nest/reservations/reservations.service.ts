@@ -42,6 +42,12 @@ import { appClock } from '../common/timezoneService';
 type Trip = TripAccess;
 type BudgetEntry = { total_price?: number; category?: string; currency?: string | null; exchange_rate?: number } | undefined;
 
+/** What a booking write did to its linked costs, for the caller to send once the write has committed. */
+export type CostEvent =
+  | { event: 'budget:created'; payload: TrekWsPayload<'budget:created'> }
+  | { event: 'budget:updated'; payload: TrekWsPayload<'budget:updated'> }
+  | { event: 'budget:deleted'; payload: TrekWsPayload<'budget:deleted'> };
+
 export interface ReservationEndpoint {
   id?: number;
   reservation_id?: number;
@@ -135,12 +141,6 @@ export interface UpdateReservationData {
   needs_review?: boolean;
 }
 
-// The "does reservation_time actually carry a date, not just a bare HH:MM"
-// question (#1934) that RS20's legacy `DATED` constant used to answer here
-// now lives as `startsWithIsoDateKysely` inside
-// `ReservationsRepository.listUpcomingForUser` (Plan 3d Task 4) — RS20 was
-// this constant's only caller.
-
 type AccommodationTimesMeta = {
   check_in_time?: string | null;
   check_in_end_time?: string | null;
@@ -148,21 +148,10 @@ type AccommodationTimesMeta = {
 };
 
 /**
- * Reservations domain service — owns the reservation SQL (moved 1:1 from the
- * legacy services/reservationService.ts: identical statements, the `||`
- * falsy-coercion defaults, the COALESCE update semantics and the post-write
- * re-selects; the multi-statement writes gained db.transaction() wrappers in
- * the post-fold quirk-fix commit, and the accommodation metadata sync now
- * keys off the resolved accommodation id so auto-created accommodations get
- * their check-in/out times too). Trip access,
- * the 'reservation_edit' permission and the WebSocket broadcast keep their
- * legacy call paths. The legacy route's budget side effects (auto-create /
- * update / delete a linked budget item) and the booking notification are
- * encapsulated here so the controller stays thin — behaviour is 1:1.
- * Every consumer injects this class now. reservations.bridge.ts existed for
- * the legacy tripService, airtrail import/sync and the transit/transports MCP
- * registrars, all of which have folded in; the plugin RPC host reaches it
- * through ReservationsRpc.
+ * Reservations domain service: the reservation SQL with the legacy `||`
+ * defaults and COALESCE update semantics, every multi-statement write in one
+ * transaction, the linked-cost side effects and the booking notification, so
+ * REST, MCP and the plugin RPC (ReservationsRpc) stay thin.
  */
 @Injectable()
 export class ReservationsService {
@@ -185,14 +174,10 @@ export class ReservationsService {
     @InjectRepository(TripMembers) private readonly tripMembersRepo: TripMembersRepository,
     @InjectRepository(Users) private readonly usersRepo: UsersRepository,
     @InjectRepository(Trips) private readonly tripsRepo: TripsRepository,
-    // Plan 3e Task 2 (budget) — additive, RS48/49/51-54 only.
     @InjectRepository(BudgetItems) private readonly budgetItemsRepo: BudgetItemsRepository,
   ) {}
 
   async verifyTripAccess(tripId: string | number, userId: number) {
-    // Plan 4 Task 2 — canAccessTrip's own DatabaseService delegation is
-    // gone: this reuses the TripsRepository already injected for other
-    // reads and calls findAccessible.
     return await this.tripsRepo.findAccessible(tripId, userId);
   }
 
@@ -245,10 +230,8 @@ export class ReservationsService {
     // reaches nothing in this direction — and it hid the edge while handing the
     // send a second NotificationsService built outside the container.
     try {
-      // RS1
       const actorEmail = await this.usersRepo.getEmail(actorId);
       if (!actorEmail) return;
-      // RS2
       const tripTitle = await this.tripsRepo.getTitle(tripId);
       this.notifications.send({
         event: 'booking_change',
@@ -269,7 +252,6 @@ export class ReservationsService {
   }
 
   async loadEndpointsByTrip(tripId: string | number): Promise<Map<number, ReservationEndpoint[]>> {
-    // RS3
     const rows: ReservationEndpointRow[] = await this.endpointsRepo.listForTrip(this.rowIdNum(tripId));
     const map = new Map<number, ReservationEndpoint[]>();
     for (const r of rows) {
@@ -295,7 +277,6 @@ export class ReservationsService {
   }
 
   async loadTravelersByTrip(tripId: string | number): Promise<Map<number, ReservationTraveler[]>> {
-    // RS6
     const rows = await this.travelersRepo.listForTrip(this.rowIdNum(tripId));
     const map = new Map<number, ReservationTraveler[]>();
     for (const row of rows) {
@@ -321,9 +302,7 @@ export class ReservationsService {
     const ids = [...new Set(userIds)].filter(uid => allowed.has(uid));
     const reservationIdNum = this.rowIdNum(reservationId);
     await this.uow.transactional(async () => {
-      // RS8
       await this.travelersRepo.deleteForReservation(reservationIdNum);
-      // RS9
       await this.travelersRepo.insertIgnore(reservationIdNum, ids);
     });
   }
@@ -348,7 +327,6 @@ export class ReservationsService {
     if (!time) return null;
     const datePart = time.slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return null;
-    // RS10
     const exact = await this.daysRepo.findByTripAndDate(this.rowIdNum(tripId), datePart);
     if (exact) return exact.id;
     // Fallback: clamp to the nearest day in the trip so an imported booking whose
@@ -356,7 +334,6 @@ export class ReservationsService {
     // Skipped by callers (e.g. resyncReservationDays) that must leave a booking whose
     // date now falls outside the range untouched instead of snapping it to an edge day.
     if (!clampToNearest) return null;
-    // RS11
     const nearestId = await this.reservationsRepo.findNearestDayId(this.rowIdNum(tripId), datePart);
     return nearestId ?? null;
   }
@@ -380,7 +357,6 @@ export class ReservationsService {
           ? ((await this.resolveDayIdFromTime(tripId, r.reservation_end_time, false)) ?? r.end_day_id)
           : r.end_day_id;
         if (newDayId !== r.day_id || newEndDayId !== r.end_day_id) {
-          // RS13
           await this.reservationsRepo.setDays(r.id, newDayId, newEndDayId);
         }
       }
@@ -396,7 +372,6 @@ export class ReservationsService {
     // bound its transaction lazily per call for the same reason ("The
     // database connection is not open").
     await this.uow.transactional(async () => {
-      // RS16
       await this.endpointsRepo.deleteForReservation(reservationId);
       // lat/lng are NOT NULL: an imported transport whose pick-up/return (or station/
       // stop) couldn't be geocoded reaches here with null coords. Skip those rows rather
@@ -404,7 +379,6 @@ export class ReservationsService {
       // on reservation_time/reservation_end_time, so the booking lands on its day either way.
       const filtered = endpoints.filter((e) => e.lat != null && e.lng != null);
       for (const [i, e] of filtered.entries()) {
-        // RS17
         await this.endpointsRepo.insertEndpoint({
           reservation_id: reservationId,
           role: e.role,
@@ -434,7 +408,6 @@ export class ReservationsService {
     // hand-edited NULL) still reads back as `null` on the wire.
     const reservations: ReservationRow[] = (await this.reservationsRepo.listForTrip(tripId)).map((r) => ({ ...r }));
 
-    // RS19
     const dayPositions = await this.dayPositionsRepo.listForTrip(this.rowIdNum(tripId));
 
     const posMap = new Map<number, Record<number, number>>();
@@ -681,6 +654,45 @@ export class ReservationsService {
     return written;
   }
 
+  /**
+   * create and the linked cost the booking carries, as one write. The price's rate
+   * is frozen before (withFrozenRate, network I/O). REST, the plugin RPC and MCP
+   * all come through here and send the cost events after the commit.
+   */
+  async createWithCost(tripId: string, data: CreateReservationData, entry: BudgetEntry) {
+    const costEvents: CostEvent[] = [];
+    const { stayMirror, ...written } = await this.uow.transactional(async () => {
+      const done = await this.createInTx(tripId, data);
+      await this.syncBudgetOnCreate(tripId, done.reservation.id, data.title, data.type, entry, undefined, costEvents);
+      return done;
+    });
+    await this.announceStayMirror(tripId, stayMirror);
+    return { ...written, costEvents };
+  }
+
+  /** update and the linked cost it moves, as one write, the way createWithCost is. */
+  async updateWithCost(id: string, tripId: string, data: UpdateReservationData, current: Reservation, entry: BudgetEntry) {
+    const costEvents: CostEvent[] = [];
+    const { stayMirror, ...written } = await this.uow.transactional(async () => {
+      const done = await this.updateInTx(id, tripId, data, current);
+      await this.syncBudgetOnUpdate(tripId, id, data.title ?? '', data.type, current.title, current.type ?? undefined, entry, undefined, costEvents);
+      return done;
+    });
+    await this.announceStayMirror(tripId, stayMirror);
+    return { ...written, costEvents };
+  }
+
+  /** Sends a booking write's cost events to the trip. */
+  announceCost(tripId: string | number, events: readonly CostEvent[], socketId: string | undefined): void {
+    for (const e of events) this.realtime.broadcast(tripId, e.event, e.payload, socketId);
+  }
+
+  /** Broadcasts now, or collects for a caller whose transaction has not committed yet. */
+  private sendCost(tripId: string, e: CostEvent, socketId: string | undefined, collect?: CostEvent[]): void {
+    if (collect) collect.push(e);
+    else this.announceCost(tripId, [e], socketId);
+  }
+
   private async createInTx(tripId: string | number, data: CreateReservationData): Promise<{ reservation: ReservationRow; accommodationCreated: boolean; stayMirror: AccommodationMirror }> {
     const {
       title, reservation_time, reservation_end_time, location,
@@ -703,7 +715,6 @@ export class ReservationsService {
       const { place_id: accPlaceId, start_day_id, end_day_id, check_in, check_out, confirmation: accConf } = create_accommodation;
       if (start_day_id && end_day_id) {
         await this.requireResolvableStay(create_accommodation);
-        // RS27
         resolvedAccommodationId = await this.dayAccommodationsRepo.insertBookingStay({
           trip_id: tripId,
           place_id: accPlaceId || null,
@@ -779,13 +790,11 @@ export class ReservationsService {
     if (resolvedAccommodationId && metadata) {
       const meta = (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) as AccommodationTimesMeta;
       if (meta.check_in_time || meta.check_in_end_time || meta.check_out_time) {
-        // RS29
         await this.dayAccommodationsRepo.patchTimes(
           resolvedAccommodationId, meta.check_in_time || null, meta.check_in_end_time || null, meta.check_out_time || null,
         );
       }
       if (confirmation_number) {
-        // RS30
         await this.dayAccommodationsRepo.patchConfirmation(resolvedAccommodationId, confirmation_number);
       }
     }
@@ -907,7 +916,6 @@ export class ReservationsService {
     if (resolvedAccId) {
       // Scoped to the trip on purpose: an id belonging to someone else's trip
       // must read as absent here, not as an accommodation to write through to.
-      // RS37
       const accExists = await this.dayAccommodationsRepo.existsInTrip(accIdForRead(resolvedAccId)!, this.rowIdNum(tripId));
       if (!accExists) resolvedAccId = null;
     }
@@ -917,9 +925,7 @@ export class ReservationsService {
         await this.requireResolvableStay(create_accommodation);
         if (resolvedAccId) {
           const resolvedAccIdNum = accIdForRead(resolvedAccId)!;
-          // RS38
           const priorCheckIn = await this.dayAccommodationsRepo.getCheckIn(resolvedAccIdNum);
-          // RS39
           await this.dayAccommodationsRepo.updateFromBooking(resolvedAccIdNum, {
             place_id: accPlaceId || null,
             start_day_id,
@@ -935,7 +941,6 @@ export class ReservationsService {
             checkInChanged: (check_in || null) !== (priorCheckIn ?? null),
           });
         } else if (accPlaceId) {
-          // RS40
           resolvedAccId = await this.dayAccommodationsRepo.insertBookingStay({
             trip_id: tripId,
             place_id: accPlaceId,
@@ -1037,14 +1042,12 @@ export class ReservationsService {
       const meta = (typeof resolvedMeta === 'string' ? JSON.parse(resolvedMeta) : resolvedMeta) as AccommodationTimesMeta;
       const resolvedAccIdNum = accIdForRead(resolvedAccId)!;
       if (meta.check_in_time || meta.check_in_end_time || meta.check_out_time) {
-        // RS42
         await this.dayAccommodationsRepo.patchTimes(
           resolvedAccIdNum, meta.check_in_time || null, meta.check_in_end_time || null, meta.check_out_time || null,
         );
       }
       const resolvedConf = confirmation_number !== undefined ? confirmation_number : current.confirmation_number;
       if (resolvedConf) {
-        // RS43
         await this.dayAccommodationsRepo.patchConfirmation(resolvedAccIdNum, resolvedConf);
       }
     }
@@ -1069,7 +1072,6 @@ export class ReservationsService {
       return { deleted: undefined, accommodationDeleted: false, deletedBudgetItemId: null, deletedBudgetItemIds: [] };
     }
     const removed = await this.uow.transactional(async () => {
-      // RS45
       const reservation = await this.reservationsRepo.findHeaderInTrip(idNum, tripIdNum);
       if (!reservation) return { deleted: undefined, accommodationDeleted: false, deletedBudgetItemId: null, deletedBudgetItemIds: [], stayMirror: noStayMirror() };
 
@@ -1086,7 +1088,6 @@ export class ReservationsService {
         // WRITE-side raw string (`reservation.accommodation_id`) still ships
         // unconverted in the `accommodation:deleted` broadcast payload below.
         const accIdNum = Number(reservation.accommodation_id);
-        // RS46
         const ownStay = await this.dayAccommodationsRepo.existsInTrip(accIdNum, tripIdNum);
         if (ownStay) {
           // Released before the row goes, not after: the release looks the stops up
@@ -1094,7 +1095,6 @@ export class ReservationsService {
           // deleted. Reversed, the stop stands with nothing left to remove it, and
           // the day list hides it for carrying a booking id.
           stayMirror = await this.accommodations.dropStayStops(accIdNum);
-          // RS47
           await this.dayAccommodationsRepo.deleteInTrip(accIdNum, tripIdNum);
           accommodationDeleted = true;
         }
@@ -1105,7 +1105,6 @@ export class ReservationsService {
       const deletedBudgetItemIds = (await this.budgetItemsRepo.listIdAndCategoryByReservation(tripIdNum, idNum)).map(item => item.id);
       await this.budgetItemsRepo.deleteByIds(deletedBudgetItemIds);
 
-      // RS50
       await this.reservationsRepo.deleteById(idNum);
       return { deleted: reservation, accommodationDeleted, deletedBudgetItemId: deletedBudgetItemIds[0] ?? null, deletedBudgetItemIds, stayMirror };
     });
@@ -1134,8 +1133,8 @@ export class ReservationsService {
     return { ...rest, currency, ...(priced.exchange_rate != null ? { exchange_rate: priced.exchange_rate } : {}) };
   }
 
-  /** POST side effect: auto-create a linked budget item when a price is provided. */
-  async syncBudgetOnCreate(tripId: string, reservationId: number, title: string, type: string | undefined, entry: BudgetEntry, socketId: string | undefined): Promise<void> {
+  /** POST side effect: auto-create a linked budget item when a price is provided. `collect` holds the broadcast for a caller inside its transaction. */
+  async syncBudgetOnCreate(tripId: string, reservationId: number, title: string, type: string | undefined, entry: BudgetEntry, socketId: string | undefined, collect?: CostEvent[]): Promise<void> {
     if (!entry || !(Number(entry.total_price) > 0)) return;
     try {
       const item = await this.budget.linkBudgetItemToReservation(tripId, reservationId, {
@@ -1145,14 +1144,14 @@ export class ReservationsService {
         ...(entry.currency ? { currency: entry.currency } : {}),
         ...(entry.exchange_rate != null ? { exchange_rate: entry.exchange_rate } : {}),
       });
-      this.realtime.broadcast(tripId, 'budget:created', { item }, socketId);
+      this.sendCost(tripId, { event: 'budget:created', payload: { item } }, socketId, collect);
     } catch (err) {
       console.error('[reservations] Failed to create budget entry:', err);
     }
   }
 
-  /** PUT side effect: drop the linked budget item when the price is cleared, else create/update it. */
-  async syncBudgetOnUpdate(tripId: string, id: string, title: string, type: string | undefined, currentTitle: string, currentType: string | undefined, entry: BudgetEntry, socketId: string | undefined): Promise<void> {
+  /** PUT side effect: drop the linked budget item when the price is cleared, else create/update it. `collect` as on create. */
+  async syncBudgetOnUpdate(tripId: string, id: string, title: string, type: string | undefined, currentTitle: string, currentType: string | undefined, entry: BudgetEntry, socketId: string | undefined, collect?: CostEvent[]): Promise<void> {
     // When the booking type changes, keep a linked expense's category in sync —
     // but only if it still carries the auto-derived category (so a manual pick in
     // the Costs editor is preserved). Runs regardless of create_budget_entry.
@@ -1163,7 +1162,7 @@ export class ReservationsService {
       const linked = oldCat === newCat ? [] : await this.budgetItemsRepo.listIdAndCategoryByReservation(tripId, id);
       for (const item of linked.filter(i => i.category === oldCat)) {
         const updated = await this.budget.updateBudgetItem(item.id, tripId, { category: newCat });
-        this.realtime.broadcast(tripId, 'budget:updated', { item: updated }, socketId);
+        this.sendCost(tripId, { event: 'budget:updated', payload: { item: updated } }, socketId, collect);
       }
     }
 
@@ -1173,15 +1172,14 @@ export class ReservationsService {
     if (!entry) return;
     // The price field speaks for a single expense. With several linked (#2084)
     // it has none to mean, so they are managed from the Costs block only.
-    // RS51
     if ((await this.budgetItemsRepo.listIdAndCategoryByReservation(tripId, id)).length > 1) return;
 
     if (!(Number(entry.total_price) > 0)) {
-      // Explicit clear (total_price 0/empty) — drop the linked item. RS52 — Plan 3e Task 2, converted.
+      // Explicit clear (total_price 0/empty) — drop the linked item.
       const linked = await this.budgetItemsRepo.findIdByReservationInTrip(tripId, id);
       if (linked) {
         await this.budget.deleteBudgetItem(linked.id, tripId);
-        this.realtime.broadcast(tripId, 'budget:deleted', { itemId: linked.id }, socketId);
+        this.sendCost(tripId, { event: 'budget:deleted', payload: { itemId: linked.id } }, socketId, collect);
       }
       return;
     }
@@ -1189,17 +1187,15 @@ export class ReservationsService {
     try {
       const itemName = title || currentTitle;
       const category = entry.category || type || currentType || 'Other';
-      // RS53 — Plan 3e Task 2, converted.
       const existing = await this.budgetItemsRepo.findIdByReservationInTrip(tripId, id);
       if (existing) {
         const updated = await this.budget.updateBudgetItem(existing.id, tripId, { name: itemName, category, total_price: entry.total_price });
-        this.realtime.broadcast(tripId, 'budget:updated', { item: updated }, socketId);
+        this.sendCost(tripId, { event: 'budget:updated', payload: { item: updated } }, socketId, collect);
       } else {
         const item = await this.budget.createBudgetItem(tripId, { name: itemName, category, total_price: entry.total_price });
-        // RS54 — Plan 3e Task 2, converted.
         await this.budgetItemsRepo.setReservationId(item.id, id);
         item.reservation_id = Number(id);
-        this.realtime.broadcast(tripId, 'budget:created', { item }, socketId);
+        this.sendCost(tripId, { event: 'budget:created', payload: { item } }, socketId, collect);
       }
     } catch (err) {
       console.error('[reservations] Failed to create/update budget entry:', err);

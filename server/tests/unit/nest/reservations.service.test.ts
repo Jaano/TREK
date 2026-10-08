@@ -706,6 +706,63 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       expect(testDb.prepare('SELECT reservation_id FROM budget_items WHERE id = ?').get(created.id)).toEqual({ reservation_id: res.id });
       expect(broadcast).toHaveBeenCalledWith(String(trip.id), 'budget:created', { item: { id: created.id, reservation_id: res.id } }, 'sock');
     });
+
+    it('RESV-TX-001: updateWithCost rolls the booking edit back when its cost write fails', async () => {
+      const { trip, res } = linkedItem({ category: 'other' });
+      testDb.prepare("UPDATE reservations SET title = 'Old', type = 'other' WHERE id = ?").run(res.id);
+      const current = (await svc.getReservation(String(res.id), String(trip.id)))!;
+      budget.updateBudgetItem.mockRejectedValueOnce(new Error('boom'));
+
+      // other -> flight re-files the linked expense, and that write throws.
+      await expect(svc.updateWithCost(String(res.id), String(trip.id), { title: 'New', type: 'flight' } as never, current, undefined))
+        .rejects.toThrow('boom');
+
+      expect(testDb.prepare('SELECT title, type FROM reservations WHERE id = ?').get(res.id)).toEqual({ title: 'Old', type: 'other' });
+      expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    it('RESV-TX-002: updateWithCost hands the cost events back instead of sending them inside the write', async () => {
+      const { trip, res, item } = linkedItem();
+      const current = (await svc.getReservation(String(res.id), String(trip.id)))!;
+      budget.updateBudgetItem.mockReturnValue({ id: item.id });
+
+      const out = await svc.updateWithCost(String(res.id), String(trip.id), { title: 'New' } as never, current, { total_price: 80 });
+
+      expect(out.costEvents).toEqual([{ event: 'budget:updated', payload: { item: { id: item.id } } }]);
+      expect(broadcast).not.toHaveBeenCalledWith(String(trip.id), 'budget:updated', expect.anything(), expect.anything());
+      svc.announceCost(String(trip.id), out.costEvents, 'sock');
+      expect(broadcast).toHaveBeenCalledWith(String(trip.id), 'budget:updated', { item: { id: item.id } }, 'sock');
+    });
+  });
+
+  describe('createWithCost', () => {
+    it('RESV-TX-003: links the cost inside the booking write and hands its event back', async () => {
+      const { trip } = ownerTrip();
+      budget.linkBudgetItemToReservation.mockReturnValue({ id: 7 });
+
+      const out = await svc.createWithCost(String(trip.id), { title: 'Hotel', type: 'other' } as never, { total_price: 200 });
+
+      expect(budget.linkBudgetItemToReservation).toHaveBeenCalledWith(String(trip.id), out.reservation.id, { name: 'Hotel', category: 'other', total_price: 200 });
+      expect(out.costEvents).toEqual([{ event: 'budget:created', payload: { item: { id: 7 } } }]);
+      expect(broadcast).not.toHaveBeenCalledWith(String(trip.id), 'budget:created', expect.anything(), expect.anything());
+    });
+
+    it('RESV-TX-004: a failing cost keeps the booking, as the REST route always has', async () => {
+      const { trip } = ownerTrip();
+      budget.linkBudgetItemToReservation.mockRejectedValueOnce(new Error('boom'));
+
+      const out = await svc.createWithCost(String(trip.id), { title: 'Hotel', type: 'other' } as never, { total_price: 200 });
+
+      expect(out.costEvents).toEqual([]);
+      expect(testDb.prepare('SELECT title FROM reservations WHERE id = ?').get(out.reservation.id)).toEqual({ title: 'Hotel' });
+    });
+
+    it('RESV-TX-005: without a price there is no cost and no event', async () => {
+      const { trip } = ownerTrip();
+      const out = await svc.createWithCost(String(trip.id), { title: 'Dinner' } as never, undefined);
+      expect(out.costEvents).toEqual([]);
+      expect(budget.linkBudgetItemToReservation).not.toHaveBeenCalled();
+    });
   });
 
   describe('notifyBookingChange', () => {
