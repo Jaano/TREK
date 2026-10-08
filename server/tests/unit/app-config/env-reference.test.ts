@@ -12,14 +12,20 @@ import { envSchema } from '../../../src/app-config/env.schema';
 const ENV_EXAMPLE = path.join(__dirname, '..', '..', '..', '.env.example');
 
 /**
- * Schema entries an operator never sets, with the reason. Everything else in
+ * Schema entries a self-hoster never sets, with the reason. Everything else in
  * the schema has a line in .env.example, commented out when it is optional.
+ * The managed-hosting switches are here on purpose: they stay out of every
+ * public reference, like TREK_DB_FILE and APP_VERSION.
  */
 const NOT_OPERATOR_SETTINGS: Record<string, string> = {
   PATH: 'the OS search path, validated only so the kitinerary probe can resolve its binary',
   Path: 'the Windows spelling of PATH',
   APP_VERSION: 'set by the image build; the VERSION file wins over it',
   TREK_DB_FILE: 'points the Playwright harness at a throwaway database',
+  TREK_MANAGED: 'managed hosting only, deliberately undocumented for self-hosters',
+  MAPBOX_ACCESS_TOKEN: 'managed hosting only (read with TREK_MANAGED), deliberately undocumented for self-hosters',
+  CARTO_API_KEY: 'managed hosting only (read with TREK_MANAGED), deliberately undocumented for self-hosters',
+  PLACES_API_BASE: "managed hosting's egress gateway for the Places calls, deliberately undocumented for self-hosters",
 };
 
 /** Every variable named on a `KEY=` line, set or commented out. */

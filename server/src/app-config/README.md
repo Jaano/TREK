@@ -117,7 +117,10 @@ variable to a token means moving its field from `derive.ts` to
 
 `server/.env.example` names every variable the schema validates except the
 few in `env-reference.test.ts`'s `NOT_OPERATOR_SETTINGS`; that test fails on
-drift in either direction.
+drift in either direction. The managed-hosting switches (TREK_MANAGED and the
+keys only a managed install sets: MAPBOX_ACCESS_TOKEN, CARTO_API_KEY,
+PLACES_API_BASE) are on that list on purpose and stay out of every public
+reference.
 
 ## Classification: boot-stable vs runtime-toggled
 
