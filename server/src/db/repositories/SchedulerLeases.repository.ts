@@ -1,5 +1,6 @@
 import type { SchedulerLeases } from '../entities/SchedulerLeases.entity';
 import { TrekRepository } from './_shared/trek-repository';
+import type { DB } from '../kysely/db';
 
 /**
  * `scheduler_leases`: which process may run a cron job's tick, and until when
@@ -9,22 +10,23 @@ import { TrekRepository } from './_shared/trek-repository';
 export class SchedulerLeasesRepository extends TrekRepository<SchedulerLeases> {
   /**
    * Take (or renew) the lease on `name` for `owner` until `until`, if it is
-   * free at `now`. The decision is one conditional UPDATE, so of two
-   * processes asking at the same moment exactly one gets a changed row; the
-   * insert before it only makes sure there is a row to race on. True when
-   * `owner` holds the lease afterwards. Two statements, so the caller runs it
-   * inside `UnitOfWork.transactional` (CronRegistrarService does).
+   * free at `now`. One statement: the insert takes a lease nobody has held
+   * yet, and on a conflict the update only applies while the lease has run out
+   * or already belongs to `owner`. Of two processes asking at the same moment
+   * exactly one gets a row written. True when `owner` holds the lease afterwards.
    */
   async acquire(name: string, owner: string, now: number, until: number): Promise<boolean> {
-    await this.upsert(
-      { name, owner, expires_at: 0 },
-      { onConflictFields: ['name'], onConflictAction: 'ignore' },
-    );
-    const changed = await this.nativeUpdate(
-      { name, $or: [{ expires_at: { $lte: now } }, { owner }] },
-      { owner, expires_at: until },
-    );
-    return changed > 0;
+    const result = await this.kysely<Pick<DB, 'scheduler_leases'>>()
+      .insertInto('scheduler_leases')
+      .values({ name, owner, expires_at: until })
+      .onConflict((oc) =>
+        oc
+          .column('name')
+          .doUpdateSet({ owner, expires_at: until })
+          .where((eb) => eb.or([eb('scheduler_leases.expires_at', '<=', now), eb('scheduler_leases.owner', '=', owner)])),
+      )
+      .executeTakeFirst();
+    return (result.numInsertedOrUpdatedRows ?? 0n) > 0n;
   }
 
   /** Move the expiry of a lease `owner` still holds; false when somebody else has it now. */

@@ -7,7 +7,6 @@ import { MikroORM } from '@mikro-orm/core';
 import { readEnv } from '../../app-config';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import { withRequestContext } from '../database/request-context';
-import { UnitOfWork } from '../database/unit-of-work';
 import { logError } from '../audit/audit-log.logger';
 import { traceEntry, wasTraced } from '../audit/entry-trace.logger';
 import { SchedulerLeases } from '../../db/entities/SchedulerLeases.entity';
@@ -162,14 +161,8 @@ export class CronRegistrarService implements OnApplicationShutdown {
     onTick: () => void | Promise<void>,
   ): Promise<'ran' | 'skipped'> {
     const leases = orm.em.getRepository(SchedulerLeases);
-    // acquire() is two statements (make sure the row exists, then the
-    // conditional UPDATE that decides the race), so it runs as one unit of
-    // work like every other multi-statement write. A UnitOfWork over the ORM
-    // this tick already has, rather than an injected one: the partial e2e
-    // graphs build this service without the global OrmModule.
-    const acquired = await new UnitOfWork(orm.em).transactional(() =>
-      leases.acquire(name, LEASE_OWNER, Date.now(), Date.now() + LEASE_TTL_MS),
-    );
+    // acquire() is one conditional upsert, so the race needs no transaction.
+    const acquired = await leases.acquire(name, LEASE_OWNER, Date.now(), Date.now() + LEASE_TTL_MS);
     if (!acquired) return 'skipped';
     const leaseFailed = (err: unknown) =>
       logError(`Cron job "${name}": lease update failed: ${err instanceof Error ? err.message : String(err)}`);

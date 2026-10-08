@@ -6,6 +6,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { deleteRows } from '../../../helpers/factories/rows';
 import { SchedulerLeases } from '../../../../src/db/entities/SchedulerLeases.entity';
 import type { SchedulerLeasesRepository } from '../../../../src/db/repositories/SchedulerLeases.repository';
 
@@ -17,8 +18,8 @@ beforeAll(async () => {
   t = await createTestOrm(testDb);
   leases = t.repo(SchedulerLeases);
 });
-beforeEach(() => {
-  testDb.prepare('DELETE FROM scheduler_leases').run();
+beforeEach(async () => {
+  await deleteRows(t, SchedulerLeases);
   t.clear();
 });
 afterAll(async () => {
