@@ -21,6 +21,7 @@ import { badgeLabel, distanceBadge } from './roadtrip/stageBadges'
 import type { CorridorReach } from '../../../components/Roadtrip/corridorSearchModel'
 import { useSettingsStore } from '../../../store/settingsStore'
 import { useAuthStore } from '../../../store/authStore'
+import { useListsSubTab, type ListsSubTab } from '../../../hooks/useListsSubTab'
 import { canManageDocSync } from '../../../components/Files/docsync/useDocSync'
 import { useDocSyncOffered } from '../../../components/Files/docsync/useDocSyncOffered'
 import type { Day, Trip } from '../../../types'
@@ -46,7 +47,7 @@ export type MTripView = 'plan' | 'map'
 export type MTripMode = 'go' | 'edit' | 'browse'
 /** The road trip tab's own two halves: the chain, or the same map showing the stage. */
 export type MRtView = 'list' | 'map'
-export type MTripListsTab = 'packing' | 'todo'
+export type MTripListsTab = ListsSubTab
 export type MTripCollabTab = 'chat' | 'notes' | 'links' | 'polls'
 
 /**
@@ -221,10 +222,7 @@ export default function MTripShell({
   const [mode, setMode] = useState<MTripMode>('go')
   const [browseFromEdit, setBrowseFromEdit] = useState(false)
   const [sheet, setSheet] = useState<MTripSheetState | null>(null)
-  const [listsTab, setListsTabState] = useState<MTripListsTab>(() => {
-    const saved = sessionStorage.getItem(`trip-lists-subtab-${tripId}`)
-    return saved === 'todo' ? 'todo' : 'packing'
-  })
+  const [listsTab, setListsTab] = useListsSubTab(tripId, { onlyKnownTabs: true })
   const [collabTab, setCollabTab] = useState<MTripCollabTab>('chat')
   const [transportsCompact, setTransportsCompact] = useState(false)
   const [bookingsCompact, setBookingsCompact] = useState(false)
@@ -385,11 +383,6 @@ export default function MTripShell({
   }
 
   const mapFront = (trTab === 'plan' && view === 'map') || (trTab === 'roadtrip' && rtView === 'map')
-
-  const setListsTab = (tab: MTripListsTab) => {
-    setListsTabState(tab)
-    sessionStorage.setItem(`trip-lists-subtab-${tripId}`, tab)
-  }
 
   const openSheet = (id: string, payload?: unknown) => setSheet({ id, payload })
   const closeSheet = () => setSheet(null)

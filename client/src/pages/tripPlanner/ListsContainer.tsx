@@ -6,15 +6,13 @@ import { useTranslation } from '../../i18n'
 import { useAuthStore } from '../../store/authStore'
 import { useTripStore } from '../../store/tripStore'
 import { useCanDo } from '../../store/permissionsStore'
+import { useListsSubTab } from '../../hooks/useListsSubTab'
 import type { PackingItem, TodoItem } from '../../types'
 import { PackingListPanel, TodoListPanel } from './plannerLazy'
 import { LazyPanel } from './LazyPanel'
 
 export function ListsContainer({ tripId, packingItems, todoItems }: Readonly<{ tripId: number; packingItems: PackingItem[]; todoItems: TodoItem[] }>) {
-  const [subTab, setSubTab] = useState<'packing' | 'todo'>(() => {
-    return (sessionStorage.getItem(`trip-lists-subtab-${tripId}`) as 'packing' | 'todo') || 'packing'
-  })
-  const setSubTabPersist = (tab: 'packing' | 'todo') => { setSubTab(tab); sessionStorage.setItem(`trip-lists-subtab-${tripId}`, tab) }
+  const [subTab, setSubTabPersist] = useListsSubTab(tripId)
   const [importPackingSignal, setImportPackingSignal] = useState(0)
   const [addCategorySignal, setAddCategorySignal] = useState(0)
   const [saveTemplateSignal, setSaveTemplateSignal] = useState(0)
