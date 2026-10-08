@@ -2624,6 +2624,40 @@ describe('journey gallery', () => {
     expect(await svc.uploadGalleryPhotos(journey.id, stranger.id, [{ path: 'journey/x.jpg' }])).toEqual([]);
   });
 
+  it('JOURNEY-SVC-PHOTO-003b: gallery uploads at the same time take one position each', async () => {
+    const { user } = createUser(testDb);
+    const journey = await svc.createJourney(user.id, { title: 'J' });
+
+    // Each upload reads MAX(sort_order) inside the transaction that inserts. Read
+    // outside it, every upload saw the same MAX and the batches overlapped.
+    const batches = await Promise.all([1, 2, 3].map((n) => svc.uploadGalleryPhotos(journey.id, user.id, [
+      { path: `journey/c${n}-a.jpg` },
+      { path: `journey/c${n}-b.jpg` },
+    ])));
+    expect(batches.map((b) => b.length)).toEqual([2, 2, 2]);
+
+    const orders = testDb
+      .prepare('SELECT sort_order FROM journey_photos WHERE journey_id = ? ORDER BY sort_order')
+      .all(journey.id) as { sort_order: number }[];
+    expect(orders.map((o) => o.sort_order)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it('JOURNEY-SVC-PHOTO-003c: photos added to one entry at the same time take one gallery and one entry position each', async () => {
+    const { user, journey, entry } = await ownedEntry();
+
+    const photos = await Promise.all(['a', 'b', 'c'].map((n) => svc.addPhoto(entry.id, user.id, `journey/e-${n}.jpg`)));
+    expect(photos.every(Boolean)).toBe(true);
+
+    const gallery = testDb
+      .prepare('SELECT sort_order FROM journey_photos WHERE journey_id = ? ORDER BY sort_order')
+      .all(journey.id) as { sort_order: number }[];
+    expect(gallery.map((o) => o.sort_order)).toEqual([0, 1, 2]);
+    const linked = testDb
+      .prepare('SELECT sort_order FROM journey_entry_photos WHERE entry_id = ? ORDER BY sort_order')
+      .all(entry.id) as { sort_order: number }[];
+    expect(linked.map((o) => o.sort_order)).toEqual([0, 1, 2]);
+  });
+
   it('JOURNEY-SVC-PHOTO-004: linkPhotoToEntry attaches a gallery row, unlinkPhotoFromEntry detaches it', async () => {
     const { user, journey, entry } = await ownedEntry();
     const [gallery] = await svc.uploadGalleryPhotos(journey.id, user.id, [{ path: 'journey/a.jpg' }]);
