@@ -14,7 +14,7 @@ import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
  * `scripts/generate-entities.ts`'s `RULE1d_fixNaNNumericDefaults` and
  * `tests/unit/db/generate-entities.test.ts`'s `RULE1D-*` fixture tests for
  * the mechanism). This file pins the OUTPUT of that rule against the real,
- * committed entities — every one of the 131, not a sample — and reproduces
+ * committed entities (every one of the 131, not a sample) and reproduces
  * the reviewer's own insert probe so a future regenerate/hand-edit that
  * reintroduces a `NaN` initialiser fails loudly here, not silently at a
  * caller's first `em.create()`.

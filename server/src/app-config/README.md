@@ -84,7 +84,7 @@ Every variable has exactly one owner, and the owner decides how it is read:
   `boot-derive.ts`): boot-stable values that only Nest classes need. The token
   is snapshotted per built app and injected (`@Inject(storageConfig.KEY)`, or
   `app.get(httpConfig.KEY)` for the pre-init Express layer). Today:
-  `httpConfig` (TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS) and `storageConfig`
+  `httpConfig` (TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS, HTTP_KEEP_ALIVE_TIMEOUT_MS) and `storageConfig`
   (TREK_PLACE_PHOTO_DIR).
 - **`readEnv()` / `RuntimeEnvService`** (`derive.ts`): everything else, both
   the runtime-toggled values and the boot-stable ones that code outside the
@@ -106,7 +106,7 @@ drift in either direction.
 
 **Boot-stable** (frozen at app/module creation; a `registerAs` token where the
 variable is token-owned, module-top `readEnv()` consts elsewhere):
-PORT, HOST, TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS, SESSION_DURATION(_REMEMBER), MCP_SESSION_TTL,
+PORT, HOST, TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS, HTTP_KEEP_ALIVE_TIMEOUT_MS, SESSION_DURATION(_REMEMBER), MCP_SESSION_TTL,
 MCP_MAX_SESSION_PER_USER, MCP_SSE_KEEPALIVE, TREK_PLUGIN_RPC_*/LOG_*/MAX_RSS_MB,
 TREK_PLUGIN_REGISTRY_URL, TREK_WIKI_DIR*, TREK_PLACE_PHOTO_DIR, BACKUP_*,
 TRANSIT_API_URL, LOG_LEVEL*, ALLOW_INTERNAL_NETWORK*, ALLOW_LINK_LOCAL_IPS*, DEFAULT_LANGUAGE,
