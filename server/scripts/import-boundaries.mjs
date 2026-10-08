@@ -39,7 +39,8 @@
  *                   layer sits below the domains, never the other way round.
  *
  * Each rule's baseline lists today's violations. A violation not in it fails
- * the check; one that is gone is reported so the baseline can shrink.
+ * the check, and so does an entry that no longer occurs, until --update drops
+ * it: a stale entry would let the same violation back in unseen.
  *
  *   npm run lint:boundaries              check against the baseline (CI)
  *   npm run lint:boundaries -- --update  drop the entries that no longer occur;
@@ -374,9 +375,17 @@ function main(argv) {
       failed++;
     }
   }
-  const lowerable = RULES.reduce((n, rule) => n + gone[rule].length, 0);
-  if (lowerable && !update) {
-    console.log(`${lowerable} baseline entr${lowerable === 1 ? 'y no longer occurs' : 'ies no longer occur'}: run with --update to drop them.`);
+  for (const rule of RULES) {
+    for (const key of gone[rule]) {
+      console.error(`FAIL  ${rule}: ${key} is in scripts/import-boundaries-baseline.json but no longer occurs.`);
+      failed++;
+    }
+  }
+  if (RULES.some((rule) => gone[rule].length)) {
+    console.error(
+      'Run npm run lint:boundaries -- --update to drop it with the change that fixed it: ' +
+        'a stale entry would let the same violation back in unseen.',
+    );
   }
   console.log(
     `boundaries: ${edges.length} import(s); held at baseline: ` + RULES.map((rule) => `${rule} ${baseline[rule].length}`).join(', '),

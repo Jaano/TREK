@@ -170,7 +170,7 @@ describe('import-boundaries.mjs', () => {
     expect(out).toContain('FAIL  dbImportsNest: db/orm.ts -> nest/database/request-context.ts');
   });
 
-  it('BOUND-008: a baselined violation passes; a gone one is reported and --update drops it without adding', () => {
+  it('BOUND-008: a baselined violation passes; a gone one fails and --update drops it without adding', () => {
     const files = {
       'nest/b/b.helpers.ts': 'export const h = 1;\n',
       'nest/a/a.service.ts': "import { h } from '../b/b.helpers';\nexport const a = h;\n",
@@ -182,13 +182,28 @@ describe('import-boundaries.mjs', () => {
     expect(check.status).toBe(1);
     expect(check.out).toContain('FAIL  domainInternals: c -> b/b.helpers.ts');
     expect(check.out).not.toContain('FAIL  domainInternals: a -> b/b.helpers.ts');
-    expect(check.out).toContain('1 baseline entry no longer occurs');
+    expect(check.out).toContain(
+      'FAIL  domainInternals: z -> b/gone.ts is in scripts/import-boundaries-baseline.json but no longer occurs.',
+    );
+    expect(check.out).toContain('npm run lint:boundaries -- --update');
 
     expect(run(dir, '--update').status).toBe(1);
     const written: unknown = JSON.parse(
       readFileSync(path.join(dir, 'scripts/import-boundaries-baseline.json'), 'utf8'),
     );
     expect(written).toEqual({ ...EMPTY, domainInternals: ['a -> b/b.helpers.ts'] });
+  });
+
+  it('BOUND-011: a stale entry alone fails, and passes once --update dropped it', () => {
+    const files = { 'nest/a/a.service.ts': 'export const a = 1;\n' };
+    const dir = serverRoot(files, { ...EMPTY, domainCycles: ['a -> b', 'b -> a'] });
+    const check = run(dir);
+    expect(check.status).toBe(1);
+    expect(check.out).toContain(
+      'FAIL  domainCycles: a -> b is in scripts/import-boundaries-baseline.json but no longer occurs.',
+    );
+    expect(run(dir, '--update').status).toBe(0);
+    expect(run(dir).status).toBe(0);
   });
 
   it('BOUND-009: fails closed on a missing or malformed baseline, a missing src/ and an unresolvable import', () => {

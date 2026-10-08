@@ -75,10 +75,28 @@ describe('size-lint.mjs', () => {
     expect(out).toContain('FAIL  src/nest/big/big.service.ts: 1001 lines, the limit is 1000.');
   });
 
-  it('SIZE-003: fails when a baselined file grows past its entry, passes at or under it', () => {
+  it('SIZE-003: fails when a baselined file grows past its entry, passes at it', () => {
     expect(run(serverRoot({ 'src/a.ts': lines(1201) }, { 'src/a.ts': 1200 })).status).toBe(1);
     expect(run(serverRoot({ 'src/a.ts': lines(1200) }, { 'src/a.ts': 1200 })).status).toBe(0);
-    expect(run(serverRoot({ 'src/a.ts': lines(1100) }, { 'src/a.ts': 1200 })).out).toContain('run with --update');
+  });
+
+  it('SIZE-010: fails an entry above its file, or for a file that is gone, until --update lowers it', () => {
+    const shrunk = run(serverRoot({ 'src/a.ts': lines(1100) }, { 'src/a.ts': 1200 }));
+    expect(shrunk.status).toBe(1);
+    expect(shrunk.out).toContain(
+      'FAIL  src/a.ts is held at 1200 in scripts/size-baseline.json, but it has 1100 lines now.',
+    );
+    expect(shrunk.out).toContain('npm run lint:size -- --update');
+    // Back under the limit, the entry would let it grow past the limit again.
+    expect(run(serverRoot({ 'src/a.ts': lines(900) }, { 'src/a.ts': 1200 })).status).toBe(1);
+    // A deleted file would hand its allowance to the next file at its path.
+    const gone = run(serverRoot({ 'src/b.ts': lines(1) }, { 'src/a.ts': 1200 }));
+    expect(gone.status).toBe(1);
+    expect(gone.out).toContain('FAIL  src/a.ts is held at 1200 in scripts/size-baseline.json, but the file is gone.');
+
+    const dir = serverRoot({ 'src/a.ts': lines(1100) }, { 'src/a.ts': 1200, 'src/gone.ts': 1300 });
+    expect(run(dir, '--update').status).toBe(0);
+    expect(run(dir).status).toBe(0);
   });
 
   it('SIZE-004: counts a long line once per 120 columns, so joining lines buys nothing', () => {

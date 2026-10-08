@@ -10,7 +10,10 @@
  * scripts/size-baseline.json with the length they had, and the check fails
  * when one of them grows past its entry. A file that needs to grow is split
  * by concern instead (trips into trips/trip-members/trip-membership/
- * trip-invite/trip-read-model/calendar is the precedent).
+ * trip-invite/trip-read-model/calendar is the precedent). An entry above what
+ * its file holds now, or for a file that is gone, fails as well until
+ * --update lowers it: otherwise the file could grow back unseen, and a new
+ * file at a deleted path would inherit its allowance.
  *
  * Lines are counted the way they read, not the way they are stored: a line
  * longer than LINE_WIDTH (prettier's printWidth) counts once per LINE_WIDTH
@@ -111,11 +114,16 @@ export function lowerBaseline(baseline, counts) {
   return Object.fromEntries(Object.entries(lowered).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/** Files over their allowance, and baseline entries the files have shrunk below. */
+/**
+ * Files over their allowance, and the baseline entries that allow more than
+ * their file holds now (shrunk, back under the limit, or gone): exactly the
+ * entries lowerBaseline would lower or drop.
+ */
 export function compare(baseline, counts) {
   const grown = Object.entries(counts).filter(([file, n]) => n > Math.max(baseline[file] ?? 0, LIMIT));
-  const lowerable = Object.entries(baseline).filter(([file, n]) => (counts[file] ?? 0) < n);
-  return { grown, lowerable };
+  const lowered = lowerBaseline(baseline, counts);
+  const stale = Object.entries(baseline).filter(([file, n]) => lowered[file] !== n);
+  return { grown, stale };
 }
 
 function main(argv) {
@@ -131,7 +139,7 @@ function main(argv) {
     writeFileSync(baselinePath, JSON.stringify(baseline, null, 2) + '\n');
   }
 
-  const { grown, lowerable } = compare(baseline, counts);
+  const { grown, stale } = compare(baseline, counts);
   for (const [file, n] of grown) {
     const entry = baseline[file];
     console.error(
@@ -140,13 +148,22 @@ function main(argv) {
         'Split a concern into a service, helper or module of its own instead of growing the file.',
     );
   }
-  if (lowerable.length && !update) {
-    console.log(`${lowerable.length} file(s) are shorter than their baseline now: run with --update to lower it.`);
+  for (const [file, entry] of stale) {
+    console.error(
+      `FAIL  ${file} is held at ${entry} in scripts/size-baseline.json, ` +
+        (file in counts ? `but it has ${counts[file]} lines now.` : 'but the file is gone.'),
+    );
+  }
+  if (stale.length) {
+    console.error(
+      'Run npm run lint:size -- --update to lower the baseline with the change that made it smaller: ' +
+        'an entry above the file lets it grow back unseen.',
+    );
   }
   console.log(
     `size: ${Object.keys(counts).length} file(s), ${Object.keys(baseline).length} over ${LIMIT} lines held at their baseline`,
   );
-  return grown.length ? 1 : 0;
+  return grown.length || stale.length ? 1 : 0;
 }
 
 // Compared by real path, so the check still runs when the script is started through a symlink.
