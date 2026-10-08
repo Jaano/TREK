@@ -16,14 +16,6 @@ vi.mock('../../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`
-        SELECT t.id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: any, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
     return mock;
 });
@@ -60,6 +52,8 @@ import type { TripAlbumLinksRepository } from '../../../src/db/repositories/Trip
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import { notificationsStub } from '../../helpers/notifications';
 import { createTestUnitOfWork, sharedTestOrm, createTestUsersRepo } from '../../helpers/test-uow';
+import type { TestOrm } from '../../helpers/test-orm';
+import { countRows, findRow, findRows, insertRow, insertRowIgnoringConflict, updateRows } from '../../helpers/factories/rows';
 
 // The album-sync paths are the providers' half and have their own suites; these
 // cases never reach them, so stubs keep the graph small.
@@ -104,6 +98,7 @@ beforeAll(async () => {
   // never read it, so the `dbs.canAccessTrip` spy this block used to route
   // to a real `DatabaseService` was already dead; removed with it.
   const t = await sharedTestOrm(testDb);
+  orm = t;
   tripPhotosRepo = t.repo(TripPhotos);
   tripAlbumLinksRepo = t.repo(TripAlbumLinks);
   usersRepo = await createTestUsersRepo(testDb);
@@ -124,10 +119,10 @@ beforeAll(async () => {
   );
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   // Ensure default providers are enabled (resetTestDb seeds them but doesn't reset enabled flag)
-  testDb.prepare('UPDATE photo_providers SET enabled = 1').run();
+  await updateRows(orm, PhotoProviders, {}, { enabled: 1 });
   // Providers only count as enabled under an enabled journey addon (migration 84 seeds it off).
   setAddonEnabled(testDb, ADDON_IDS.JOURNEY, true);
   realtimeMock.broadcast.mockClear();
@@ -136,6 +131,13 @@ beforeEach(() => {
 afterAll(() => {
   testDb.close();
 });
+
+let orm: TestOrm;
+
+/** The ids of the providers switched on, the list the legacy statements bind into their IN (...). */
+async function enabledProviderIds(): Promise<string[]> {
+  return (await findRows(orm, PhotoProviders, { enabled: 1 })).map((r) => r.id as string);
+}
 
 // ── listTripPhotos ────────────────────────────────────────────────────────────
 
@@ -151,7 +153,7 @@ describe('listTripPhotos', () => {
     const trip = createTrip(testDb, user.id);
 
     // Disable all providers
-    testDb.prepare('UPDATE photo_providers SET enabled = 0').run();
+    await updateRows(orm, PhotoProviders, {}, { enabled: 0 });
 
     const result = await listTripPhotos(String(trip.id), user.id);
     expect(result.success).toBe(false);
@@ -185,7 +187,7 @@ describe('listTripAlbumLinks', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('UPDATE photo_providers SET enabled = 0').run();
+    await updateRows(orm, PhotoProviders, {}, { enabled: 0 });
 
     const result = await listTripAlbumLinks(String(trip.id), user.id);
     expect(result.success).toBe(false);
@@ -207,9 +209,9 @@ describe('addTripPhotos', () => {
     const trip = createTrip(testDb, user.id);
 
     // Insert a disabled provider
-    testDb.prepare(
-      'INSERT OR IGNORE INTO photo_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run('disabled-prov', 'Disabled', 'Disabled provider', 'Image', 0, 99);
+    await insertRowIgnoringConflict(orm, PhotoProviders, {
+      id: 'disabled-prov', name: 'Disabled', description: 'Disabled provider', icon: 'Image', enabled: 0, sort_order: 99,
+    });
 
     const result = await addTripPhotos(
       String(trip.id),
@@ -292,9 +294,9 @@ describe('createTripAlbumLink', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare(
-      'INSERT OR IGNORE INTO photo_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run('disabled-prov2', 'Disabled2', 'desc', 'Image', 0, 100);
+    await insertRowIgnoringConflict(orm, PhotoProviders, {
+      id: 'disabled-prov2', name: 'Disabled2', description: 'desc', icon: 'Image', enabled: 0, sort_order: 100,
+    });
 
     const result = await createTripAlbumLink(String(trip.id), user.id, 'disabled-prov2', 'album-1', 'My Album');
     expect(result.success).toBe(false);
@@ -311,8 +313,7 @@ describe('createTripAlbumLink', () => {
     const second = await createTripAlbumLink(String(trip.id), user.id, 'immich', 'album-dup-1', 'Second Name');
     expect(expectFailure(second).status).toBe(409);
 
-    const rows = testDb.prepare('SELECT COUNT(*) as c FROM trip_album_links WHERE trip_id = ? AND user_id = ?').get(trip.id, user.id) as { c: number };
-    expect(rows.c).toBe(1);
+    expect(await countRows(orm, TripAlbumLinks, { trip: trip.id, user: user.id })).toBe(1);
   });
 });
 
@@ -331,22 +332,23 @@ describe('removeAlbumLink', () => {
 
     const linked = await createTripAlbumLink(String(trip.id), user.id, 'immich', 'album-rm-1', 'To Remove');
     expect(linked.success).toBe(true);
-    const linkRow = testDb.prepare('SELECT id FROM trip_album_links WHERE trip_id = ? AND user_id = ? AND album_id = ?').get(trip.id, user.id, 'album-rm-1') as { id: number };
+    const linkRow = await findRow(orm, TripAlbumLinks, { trip: trip.id, user: user.id, album_id: 'album-rm-1' });
+    if (!linkRow) throw new Error('album link album-rm-1 was not created');
 
     await addTripPhotos(String(trip.id), user.id, true, [{ provider: 'immich', asset_ids: ['asset-rm-1'] }], 'sid-6', String(linkRow.id));
-    const photoRow = testDb.prepare('SELECT photo_id FROM trip_photos WHERE trip_id = ? AND album_link_id = ?').get(trip.id, linkRow.id) as { photo_id: number };
-    expect(photoRow).toBeDefined();
+    const photoRow = await findRow(orm, TripPhotos, { trip: trip.id, albumLink: linkRow.id });
+    expect(photoRow).not.toBeNull();
 
     const result = await removeAlbumLink(String(trip.id), String(linkRow.id), user.id);
     expect(result.success).toBe(true);
 
-    const remainingLink = testDb.prepare('SELECT * FROM trip_album_links WHERE id = ?').get(linkRow.id);
-    expect(remainingLink).toBeUndefined();
-    const remainingPhoto = testDb.prepare('SELECT * FROM trip_photos WHERE trip_id = ? AND album_link_id = ?').get(trip.id, linkRow.id);
-    expect(remainingPhoto).toBeUndefined();
+    const remainingLink = await findRow(orm, TripAlbumLinks, { id: linkRow.id });
+    expect(remainingLink).toBeNull();
+    const remainingPhoto = await findRow(orm, TripPhotos, { trip: trip.id, albumLink: linkRow.id });
+    expect(remainingPhoto).toBeNull();
     // The orphaned trek_photos row is reclaimed too (TrekPhotoRegistrationService.deleteIfOrphan, PH10/PH11).
-    const orphan = testDb.prepare('SELECT * FROM trek_photos WHERE id = ?').get(photoRow.photo_id);
-    expect(orphan).toBeUndefined();
+    const orphan = await findRow(orm, TrekPhotos, { id: photoRow?.photo_id });
+    expect(orphan).toBeNull();
   });
 });
 
@@ -359,17 +361,18 @@ describe('listTripPhotos / listTripAlbumLinks — parity', () => {
 
     // A photo under a disabled provider must not appear — the legacy `tkp.provider IN (...)`
     // only ever names the enabled set.
-    testDb.prepare(
-      'INSERT OR IGNORE INTO photo_providers (id, name, description, icon, enabled, sort_order) VALUES (?, ?, ?, ?, 0, 50)'
-    ).run('disabled-x', 'Disabled X', 'desc', 'Image');
+    await insertRowIgnoringConflict(orm, PhotoProviders, {
+      id: 'disabled-x', name: 'Disabled X', description: 'desc', icon: 'Image', enabled: 0, sort_order: 50,
+    });
 
-    const enabledPhoto = testDb.prepare('INSERT INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)').run('immich', 'asset-enabled', user.id).lastInsertRowid as number;
-    const disabledPhoto = testDb.prepare('INSERT INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)').run('disabled-x', 'asset-disabled', user.id).lastInsertRowid as number;
+    const enabledPhoto = await insertRow(orm, TrekPhotos, { provider: 'immich', asset_id: 'asset-enabled', owner: user.id });
+    const disabledPhoto = await insertRow(orm, TrekPhotos, { provider: 'disabled-x', asset_id: 'asset-disabled', owner: user.id });
 
-    testDb.prepare('INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 1)').run(trip.id, user.id, enabledPhoto);
-    testDb.prepare('INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 1)').run(trip.id, user.id, disabledPhoto);
+    await insertRow(orm, TripPhotos, { trip: trip.id, user: user.id, photo: enabledPhoto, shared: 1 });
+    await insertRow(orm, TripPhotos, { trip: trip.id, user: user.id, photo: disabledPhoto, shared: 1 });
 
-    const enabledProviders = testDb.prepare('SELECT id FROM photo_providers WHERE enabled = 1').all().map((r: { id: string }) => r.id);
+    const enabledProviders = await enabledProviderIds();
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const oracle = testDb.prepare(`
       SELECT tp.photo_id, tkp.asset_id, tkp.provider, tp.user_id, tp.shared, tp.added_at,
              u.username, u.avatar
@@ -394,7 +397,8 @@ describe('listTripPhotos / listTripAlbumLinks — parity', () => {
 
     await createTripAlbumLink(String(trip.id), user.id, 'synologyphotos', 'album-p1', 'Passphrase Album', 'secret-pass');
 
-    const enabledProviders = testDb.prepare('SELECT id FROM photo_providers WHERE enabled = 1').all().map((r: { id: string }) => r.id);
+    const enabledProviders = await enabledProviderIds();
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const oracle = testDb.prepare(`
       SELECT tal.id,
              tal.trip_id,
@@ -452,16 +456,16 @@ describe('R8 — injected RealtimeService, not the legacy module broadcast', () 
   it('MEM-UNIFIED-016: setTripPhotoSharing calls this.realtime.broadcast', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const photoId = testDb.prepare('INSERT INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)').run('immich', 'asset-r8-2', user.id).lastInsertRowid as number;
-    testDb.prepare('INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 0)').run(trip.id, user.id, photoId);
+    const photoId = await insertRow(orm, TrekPhotos, { provider: 'immich', asset_id: 'asset-r8-2', owner: user.id });
+    await insertRow(orm, TripPhotos, { trip: trip.id, user: user.id, photo: photoId, shared: 0 });
 
     const result = await setTripPhotoSharing(String(trip.id), user.id, photoId, true, 'sid-2');
 
     expect(result.success).toBe(true);
     expect(realtimeMock.broadcast).toHaveBeenCalledTimes(1);
     expect(realtimeMock.broadcast).toHaveBeenCalledWith(String(trip.id), 'memories:updated', { userId: user.id }, 'sid-2');
-    const row = testDb.prepare('SELECT shared FROM trip_photos WHERE trip_id = ? AND user_id = ? AND photo_id = ?').get(trip.id, user.id, photoId) as { shared: number };
-    expect(row.shared).toBe(1);
+    const row = await findRow(orm, TripPhotos, { trip: trip.id, user: user.id, photo: photoId });
+    expect(row?.shared).toBe(1);
   });
 
   it('MEM-UNIFIED-018: UM4 insertIgnore reports 0 added on a re-add of the same photo (duplicate-ignore, not a crash)', async () => {
@@ -475,22 +479,21 @@ describe('R8 — injected RealtimeService, not the legacy module broadcast', () 
     const second = await addTripPhotos(String(trip.id), user.id, false, [{ provider: 'immich', asset_ids: ['asset-dup-1'] }], 'sid-5');
     expect(expectSuccess(second).added).toBe(0);
 
-    const rows = testDb.prepare('SELECT COUNT(*) as c FROM trip_photos WHERE trip_id = ? AND user_id = ?').get(trip.id, user.id) as { c: number };
-    expect(rows.c).toBe(1);
+    expect(await countRows(orm, TripPhotos, { trip: trip.id, user: user.id })).toBe(1);
   });
 
   it('MEM-UNIFIED-017: removeTripPhoto calls this.realtime.broadcast and deletes the row', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const photoId = testDb.prepare('INSERT INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)').run('immich', 'asset-r8-3', user.id).lastInsertRowid as number;
-    testDb.prepare('INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, 0)').run(trip.id, user.id, photoId);
+    const photoId = await insertRow(orm, TrekPhotos, { provider: 'immich', asset_id: 'asset-r8-3', owner: user.id });
+    await insertRow(orm, TripPhotos, { trip: trip.id, user: user.id, photo: photoId, shared: 0 });
 
     const result = await removeTripPhoto(String(trip.id), user.id, photoId, 'sid-3');
 
     expect(result.success).toBe(true);
     expect(realtimeMock.broadcast).toHaveBeenCalledTimes(1);
     expect(realtimeMock.broadcast).toHaveBeenCalledWith(String(trip.id), 'memories:updated', { userId: user.id }, 'sid-3');
-    const row = testDb.prepare('SELECT * FROM trip_photos WHERE trip_id = ? AND user_id = ? AND photo_id = ?').get(trip.id, user.id, photoId);
-    expect(row).toBeUndefined();
+    const row = await findRow(orm, TripPhotos, { trip: trip.id, user: user.id, photo: photoId });
+    expect(row).toBeNull();
   });
 });

@@ -110,6 +110,12 @@ import { PushSubscriptions } from '../../../src/db/entities/PushSubscriptions.en
 import type { McpTokensRepository } from '../../../src/db/repositories/McpTokens.repository';
 import { budgetRepoArgs } from '../../helpers/budget-repos';
 import { createTestShareTokensRepo, createTestPluginsRepo, createTestPluginUserErasureQueueRepo } from '../../helpers/share-repos';
+import type { TestOrm } from '../../helpers/test-orm';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { readAppSetting } from '../../helpers/factories/settings';
+import { readUser } from '../../helpers/factories/users';
+import { McpTokens } from '../../../src/db/entities/McpTokens.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 import { createTestBudgetItemsRepo } from '../../helpers/files-repos';
 import { createTestJourneysRepo, createTestJourneyEntriesRepo, createTestJourneyContributorsRepo } from '../../helpers/journey-repos';
 import { createTestJourneyShareTokensRepo } from '../../helpers/journey-share-repos';
@@ -155,6 +161,7 @@ beforeAll(async () => {
     await createTestSessionsService(testDb),
   );
   const t = await sharedTestOrm(testDb);
+  orm = t;
   mcpTokensRepo = await createTestMcpTokensRepo(testDb);
   auditLogRepo = t.repo(AuditLog);
   svc = new AdminService(
@@ -208,6 +215,10 @@ beforeEach(() => {
 afterAll(() => {
   testDb.close();
 });
+
+let orm: TestOrm;
+
+const setJourney = (enabled: boolean) => updateRows(orm, Addons, { id: 'journey' }, { enabled });
 
 // ── listUsers ─────────────────────────────────────────────────────────────────
 
@@ -389,9 +400,7 @@ describe('getAuditLog', () => {
 describe('getAuditLog — JSON details', () => {
   it('ADMIN-SVC-045 — parses JSON details when present', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)').run(
-      user.id, 'test_action', JSON.stringify({ key: 'val' })
-    );
+    await insertRow(orm, AuditLog, { user: user.id, action: 'test_action', details: JSON.stringify({ key: 'val' }) });
     const result = (await getAuditLog({})) as any;
     expect(result.entries.length).toBeGreaterThanOrEqual(1);
     const entry = result.entries.find((e: any) => e.action === 'test_action');
@@ -401,9 +410,7 @@ describe('getAuditLog — JSON details', () => {
 
   it('ADMIN-SVC-046 — falls back to the raw string when details are not valid JSON', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare('INSERT INTO audit_log (user_id, action, details) VALUES (?, ?, ?)').run(
-      user.id, 'bad_json_action', 'not-valid-json{'
-    );
+    await insertRow(orm, AuditLog, { user: user.id, action: 'bad_json_action', details: 'not-valid-json{' });
     const result = (await getAuditLog({})) as any;
     const entry = result.entries.find((e: any) => e.action === 'bad_json_action');
     expect(entry).toBeDefined();
@@ -642,32 +649,32 @@ describe('updateAddon', () => {
   });
 
   it('ADMIN-SVC-087 — refuses to enable a photo provider while journey is off', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 0 WHERE id = 'journey'").run();
-    testDb.prepare("UPDATE photo_providers SET enabled = 0 WHERE id = 'immich'").run();
+    await setJourney(false);
+    await updateRows(orm, PhotoProviders, { id: 'immich' }, { enabled: 0 });
 
     const result = await updateAddon('immich', { enabled: true }) as any;
     expect(result).toEqual({ error: 'Enable the Journey addon first', status: 409 });
-    expect(testDb.prepare("SELECT enabled FROM photo_providers WHERE id = 'immich'").get()).toEqual({ enabled: 0 });
+    expect((await findRow(orm, PhotoProviders, { id: 'immich' }))?.enabled).toBe(0);
   });
 
   it('ADMIN-SVC-088 — enables a provider under an enabled journey; disabling never needs journey', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'journey'").run();
+    await setJourney(true);
     const enabled = await updateAddon('immich', { enabled: true }) as any;
     expect(enabled.addon).toMatchObject({ id: 'immich', type: 'photo_provider', enabled: true });
 
     // Switching a provider OFF stays possible with journey off — cleanup must not dead-end.
-    testDb.prepare("UPDATE addons SET enabled = 0 WHERE id = 'journey'").run();
+    await setJourney(false);
     const disabled = await updateAddon('immich', { enabled: false }) as any;
     expect(disabled.addon.enabled).toBe(false);
   });
 
   it('ADMIN-SVC-089 — disabling journey cascades every photo provider off', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'journey'").run();
-    testDb.prepare('UPDATE photo_providers SET enabled = 1').run();
+    await setJourney(true);
+    await updateRows(orm, PhotoProviders, {}, { enabled: 1 });
 
     const result = await updateAddon('journey', { enabled: false }) as any;
     expect(result.addon.enabled).toBe(false);
-    const rows = testDb.prepare('SELECT enabled FROM photo_providers').all() as Array<{ enabled: number }>;
+    const rows = await findRows(orm, PhotoProviders);
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.enabled === 0)).toBe(true);
   });
@@ -691,10 +698,7 @@ describe('version-check job', () => {
 
     await new VersionCheckJob(svc, registrarStub, envStub).tick();
 
-    const notified = testDb
-      .prepare('SELECT value FROM app_settings WHERE key = ?')
-      .get('last_notified_version') as { value: string } | undefined;
-    expect(notified?.value).toBe('99.9.9');
+    expect(await readAppSetting(orm, 'last_notified_version')).toBe('99.9.9');
 
     // The version cache is module-scoped in admin.helpers, so the cron and
     // GET /api/admin/version-check hit GitHub once between them.
@@ -714,7 +718,7 @@ describe('admin quirk fixes (post-fold)', () => {
     expect((await updateUser(String(user.id), { username: '' })) as any).toMatchObject({ status: 400, error: 'Username cannot be empty' });
     expect((await updateUser(String(user.id), { email: '  ' })) as any).toMatchObject({ status: 400, error: 'Email cannot be empty' });
     // The row is untouched.
-    const row = testDb.prepare('SELECT username FROM users WHERE id = ?').get(user.id) as { username: string };
+    const row = await readUser(orm, user.id);
     expect(row.username).toBe(user.username);
   });
 
@@ -722,29 +726,20 @@ describe('admin quirk fixes (post-fold)', () => {
 
 // ── What an admin password reset ends, and what an ordinary edit must not ─────
 
-const pv = (id: number): number =>
-  (testDb.prepare('SELECT password_version FROM users WHERE id = ?').get(id) as { password_version: number | null })
-    ?.password_version ?? 0;
+const pv = async (id: number): Promise<number> => (await findRow(orm, Users, { id }))?.password_version ?? 0;
 
-const mcpTokenCount = (id: number): number =>
-  (testDb.prepare('SELECT COUNT(*) AS n FROM mcp_tokens WHERE user_id = ?').get(id) as { n: number }).n;
+const mcpTokenCount = (id: number): Promise<number> => countRows(orm, McpTokens, { user: id });
 
-const addPushDevice = (userId: number, endpoint: string): void => {
-  testDb
-    .prepare(
-      "INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, vapid_public_key) VALUES (?, ?, 'p', 'a', 'k')",
-    )
-    .run(userId, endpoint);
+const addPushDevice = async (userId: number, endpoint: string): Promise<void> => {
+  await insertRow(orm, PushSubscriptions, { user: userId, endpoint, p256dh: 'p', auth: 'a', vapid_public_key: 'k' });
 };
 
 const liveSessions = (id: number): number =>
   (testDb.prepare('SELECT COUNT(*) AS n FROM user_sessions WHERE user_id = ? AND revoked_at IS NULL').get(id) as { n: number }).n;
 
-const pushDeviceCount = (id: number): number =>
-  (testDb.prepare('SELECT COUNT(*) AS n FROM push_subscriptions WHERE user_id = ?').get(id) as { n: number }).n;
+const pushDeviceCount = (id: number): Promise<number> => countRows(orm, PushSubscriptions, { user: id });
 
-const passwordHash = (id: number): string =>
-  (testDb.prepare('SELECT password_hash FROM users WHERE id = ?').get(id) as { password_hash: string }).password_hash;
+const passwordHash = async (id: number): Promise<string> => (await readUser(orm, id)).password_hash;
 
 describe('admin password reset revokes what an intruder already holds', () => {
   it('ADMIN-SVC-080 — setting a password bumps password_version, so existing cookies stop working', async () => {
@@ -753,41 +748,41 @@ describe('admin password reset revokes what an intruder already holds', () => {
     // accepting every cookie the intruder holds, and the one action taken to
     // lock them out is the one action that did not.
     const { user } = createUser(testDb);
-    const before = pv(user.id);
+    const before = await pv(user.id);
 
     await updateUser(String(user.id), { password: 'ANewStrongPass123!' });
 
-    expect(pv(user.id)).toBe(before + 1);
+    expect(await pv(user.id)).toBe(before + 1);
   });
 
   it('ADMIN-SVC-081 — and clears the MCP tokens, which the version bump does not reach', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("INSERT INTO mcp_tokens (user_id, token_hash, token_prefix, name) VALUES (?, 'hash', 'trek_ab', 'cli')").run(user.id);
+    await insertRow(orm, McpTokens, { user: user.id, token_hash: 'hash', token_prefix: 'trek_ab', name: 'cli' });
 
     await updateUser(String(user.id), { password: 'ANewStrongPass123!' });
 
-    expect(mcpTokenCount(user.id)).toBe(0);
+    expect(await mcpTokenCount(user.id)).toBe(0);
   });
 
   it('ADMIN-SVC-081b: and forgets the push devices, which outlive every session, of that user only', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
-    addPushDevice(user.id, 'https://fcm.googleapis.com/fcm/send/intruder');
-    addPushDevice(user.id, 'https://web.push.apple.com/owner');
-    addPushDevice(other.id, 'https://fcm.googleapis.com/fcm/send/bystander');
+    await addPushDevice(user.id, 'https://fcm.googleapis.com/fcm/send/intruder');
+    await addPushDevice(user.id, 'https://web.push.apple.com/owner');
+    await addPushDevice(other.id, 'https://fcm.googleapis.com/fcm/send/bystander');
 
     await updateUser(String(user.id), { password: 'ANewStrongPass123!' });
 
-    expect(pushDeviceCount(user.id)).toBe(0);
-    expect(pushDeviceCount(other.id)).toBe(1);
+    expect(await pushDeviceCount(user.id)).toBe(0);
+    expect(await pushDeviceCount(other.id)).toBe(1);
   });
 
   it('ADMIN-SVC-081c: drops them in the same transaction as the password, so a failure leaves the account as it was', async () => {
     const { user } = createUser(testDb);
-    const before = pv(user.id);
-    const hashBefore = passwordHash(user.id);
-    testDb.prepare("INSERT INTO mcp_tokens (user_id, token_hash, token_prefix, name) VALUES (?, 'hash', 'trek_ab', 'cli')").run(user.id);
-    addPushDevice(user.id, 'https://fcm.googleapis.com/fcm/send/intruder');
+    const before = await pv(user.id);
+    const hashBefore = await passwordHash(user.id);
+    await insertRow(orm, McpTokens, { user: user.id, token_hash: 'hash', token_prefix: 'trek_ab', name: 'cli' });
+    await addPushDevice(user.id, 'https://fcm.googleapis.com/fcm/send/intruder');
     testDb.exec("CREATE TRIGGER boom BEFORE DELETE ON push_subscriptions BEGIN SELECT RAISE(ABORT, 'boom'); END");
     try {
       await expect(updateUser(String(user.id), { password: 'ANewStrongPass123!' })).rejects.toThrow('boom');
@@ -795,10 +790,10 @@ describe('admin password reset revokes what an intruder already holds', () => {
       testDb.exec('DROP TRIGGER boom');
     }
 
-    expect(pv(user.id)).toBe(before);
-    expect(passwordHash(user.id)).toBe(hashBefore);
-    expect(mcpTokenCount(user.id)).toBe(1);
-    expect(pushDeviceCount(user.id)).toBe(1);
+    expect(await pv(user.id)).toBe(before);
+    expect(await passwordHash(user.id)).toBe(hashBefore);
+    expect(await mcpTokenCount(user.id)).toBe(1);
+    expect(await pushDeviceCount(user.id)).toBe(1);
   });
 
   it('ADMIN-SVC-081d: and ends every session of that user, and only of that user', async () => {
@@ -817,15 +812,15 @@ describe('admin password reset revokes what an intruder already holds', () => {
 
   it('ADMIN-SVC-082 — renaming a user touches neither, so an ordinary edit stays ordinary', async () => {
     const { user } = createUser(testDb);
-    const before = pv(user.id);
-    testDb.prepare("INSERT INTO mcp_tokens (user_id, token_hash, token_prefix, name) VALUES (?, 'hash', 'trek_ab', 'cli')").run(user.id);
-    addPushDevice(user.id, 'https://fcm.googleapis.com/fcm/send/renamed');
+    const before = await pv(user.id);
+    await insertRow(orm, McpTokens, { user: user.id, token_hash: 'hash', token_prefix: 'trek_ab', name: 'cli' });
+    await addPushDevice(user.id, 'https://fcm.googleapis.com/fcm/send/renamed');
 
     await updateUser(String(user.id), { username: 'renamed' });
 
-    expect(pv(user.id)).toBe(before);
-    expect(mcpTokenCount(user.id)).toBe(1);
-    expect(pushDeviceCount(user.id)).toBe(1);
+    expect(await pv(user.id)).toBe(before);
+    expect(await mcpTokenCount(user.id)).toBe(1);
+    expect(await pushDeviceCount(user.id)).toBe(1);
   });
 });
 
@@ -852,9 +847,7 @@ describe('resetUserMfa', () => {
 
     expect(result.success).toBe(true);
     expect(result.email).toBe(user.email);
-    const row = testDb
-      .prepare('SELECT mfa_enabled, mfa_secret, mfa_backup_codes FROM users WHERE id = ?')
-      .get(user.id) as { mfa_enabled: number; mfa_secret: string | null; mfa_backup_codes: string | null };
+    const row = await readUser(orm, user.id);
     expect(row.mfa_enabled).toBe(0);
     expect(row.mfa_secret).toBeNull();
     expect(row.mfa_backup_codes).toBeNull();
@@ -912,7 +905,7 @@ describe('updateUser — last-admin guard (AD9/AD10, R4)', () => {
     const result = (await updateUser(String(soleAdmin.id), { role: 'user' })) as { error?: string; status?: number };
 
     expect(result).toEqual({ error: 'Cannot remove the last admin', status: 400 });
-    const row = testDb.prepare('SELECT role FROM users WHERE id = ?').get(soleAdmin.id) as { role: string };
+    const row = await readUser(orm, soleAdmin.id);
     expect(row.role).toBe('admin');
   });
 
@@ -923,7 +916,7 @@ describe('updateUser — last-admin guard (AD9/AD10, R4)', () => {
     const result = (await updateUser(String(secondAdmin.id), { role: 'user' })) as { user?: { role: string }; error?: string };
 
     expect(result.error).toBeUndefined();
-    const row = testDb.prepare('SELECT role FROM users WHERE id = ?').get(secondAdmin.id) as { role: string };
+    const row = await readUser(orm, secondAdmin.id);
     expect(row.role).toBe('user');
   });
 });
@@ -933,18 +926,17 @@ describe('getAuditLog — AD22 parity through the service (LEFT JOIN survives a 
     const { user: liveUser } = createUser(testDb);
     const { user: doomedUser } = createUser(testDb);
 
-    testDb.prepare('INSERT INTO audit_log (user_id, action, resource, details, ip) VALUES (?, ?, ?, ?, ?)')
-      .run(liveUser.id, 'live_user_action', 'trip', null, '127.0.0.1');
-    testDb.prepare('INSERT INTO audit_log (user_id, action, resource, details, ip) VALUES (?, ?, ?, ?, ?)')
-      .run(doomedUser.id, 'about_to_be_deleted_action', 'trip', null, '127.0.0.1');
+    await insertRow(orm, AuditLog, { user: liveUser.id, action: 'live_user_action', resource: 'trip', details: null, ip: '127.0.0.1' });
+    await insertRow(orm, AuditLog, { user: doomedUser.id, action: 'about_to_be_deleted_action', resource: 'trip', details: null, ip: '127.0.0.1' });
 
     // audit_log.user_id is ON DELETE SET NULL (Task 0's report) — deleting the
     // user directly (not through the service) makes the row's user_id
     // genuinely NULL, the exact LEFT JOIN shape rule 16 warns about.
-    testDb.prepare('DELETE FROM users WHERE id = ?').run(doomedUser.id);
+    await deleteRows(orm, Users, { id: doomedUser.id });
 
     // The legacy statement, run raw on the SAME seeded rows — the parity anchor.
     const legacyRows = testDb
+      // test-sql-allow: the legacy statement is this parity test's oracle and has to run as written.
       .prepare(
         `SELECT a.id, a.created_at, a.user_id, u.username, u.email as user_email, a.action, a.resource, a.details, a.ip
          FROM audit_log a
@@ -986,9 +978,7 @@ describe('getAuditLog — AD22 parity through the service (LEFT JOIN survives a 
 describe('updateUser — password-reset transaction boundary (AD11/12/13)', () => {
   it('ADMIN-SVC-093 — a failure on the mcp_tokens delete (AD12, not try/caught) rolls back the already-run users UPDATE (AD11) too', async () => {
     const { user } = createUser(testDb);
-    const before = testDb
-      .prepare('SELECT username, password_version FROM users WHERE id = ?')
-      .get(user.id) as { username: string; password_version: number };
+    const before = await readUser(orm, user.id);
 
     const spy = vi.spyOn(mcpTokensRepo, 'deleteAllForUser').mockRejectedValueOnce(new Error('simulated mcp_tokens failure'));
 
@@ -996,9 +986,7 @@ describe('updateUser — password-reset transaction boundary (AD11/12/13)', () =
       updateUser(String(user.id), { username: 'should-roll-back', password: 'ANewStrongPass123!' }),
     ).rejects.toThrow('simulated mcp_tokens failure');
 
-    const after = testDb
-      .prepare('SELECT username, password_version FROM users WHERE id = ?')
-      .get(user.id) as { username: string; password_version: number };
+    const after = await readUser(orm, user.id);
 
     // The users UPDATE (AD11) ran FIRST, inside the SAME uow.transactional
     // boundary as the failing mcp_tokens delete — proves the TX boundary
@@ -1069,6 +1057,6 @@ describe('a create or edit that loses the race for an email or username', () => 
     const { user } = createUser(testDb, { username: 'carl', email: 'carl@example.com' });
     vi.spyOn(UsersRepository.prototype, 'findIdByEmailCI').mockResolvedValue(null);
     expect(await updateUser(String(user.id), { email: 'Anna@Example.com' })).toEqual({ error: 'Email already taken', status: 409 });
-    expect(testDb.prepare('SELECT email FROM users WHERE id = ?').get(user.id)).toEqual({ email: 'carl@example.com' });
+    expect((await readUser(orm, user.id)).email).toBe('carl@example.com');
   });
 });
