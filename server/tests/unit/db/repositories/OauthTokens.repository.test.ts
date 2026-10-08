@@ -132,8 +132,12 @@ describe('OauthTokensRepository', () => {
       await tokens.revokeAllForClient('proto-3'); // legacy: datetime('now')
       await tokens.revokeById(idB);               // legacy: CURRENT_TIMESTAMP
 
-      const rowA = await tokenRow(idA);
-      const rowB = await tokenRow(idB);
+      // test-sql-allow: the stored text of revoked_at is under test, which DbTimestampType would normalise on read.
+      const rowA = testDb.prepare('SELECT revoked_at FROM oauth_tokens WHERE id = ?').get(idA) as { revoked_at: unknown };
+      // test-sql-allow: the stored text of revoked_at is under test, which DbTimestampType would normalise on read.
+      const rowB = testDb.prepare('SELECT revoked_at FROM oauth_tokens WHERE id = ?').get(idB) as { revoked_at: unknown };
+      expect(typeof rowA.revoked_at).toBe('string');
+      expect(typeof rowB.revoked_at).toBe('string');
       expect(rowA.revoked_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
       expect(rowB.revoked_at).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
     });
