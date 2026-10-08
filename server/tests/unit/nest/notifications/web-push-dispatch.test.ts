@@ -222,7 +222,8 @@ describe('Web Push while the stored key pair cannot be used', () => {
     setNotificationChannels(testDb, 'webhook,push');
     breakStoredPrivateKey();
 
-    await expect(invite(user.id, actor.id)).resolves.toBeUndefined();
+    // In-app and the webhook go out; the skipped push is no failed delivery.
+    await expect(invite(user.id, actor.id)).resolves.toEqual({ attempted: 2, delivered: 2 });
 
     expect(pushedTo()).toEqual(['https://hooks.example.test/trek']);
     const inApp = testDb.prepare('SELECT COUNT(*) AS n FROM notifications WHERE recipient_id = ?').get(user.id) as {
@@ -290,7 +291,8 @@ describe('Web Push while the VAPID_* pair is broken and an older pair is stored'
     // A typo or a rotated Secret: still a valid 32-byte key, so boot is fine.
     vi.stubEnv('VAPID_PRIVATE_KEY', generateVapidKeyPair().privateKey);
 
-    await expect(invite(user.id, actor.id)).resolves.toBeUndefined();
+    // Only the in-app row goes out; the push it cannot send counts as skipped, not failed.
+    await expect(invite(user.id, actor.id)).resolves.toEqual({ attempted: 1, delivered: 1 });
 
     expect(safeFetchFollow).not.toHaveBeenCalled();
     expect((await subscriptions.listForUser(user.id)).map((r) => [r.endpoint, r.vapid_public_key])).toEqual([
