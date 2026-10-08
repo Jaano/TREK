@@ -18,21 +18,8 @@ vi.mock('../../../src/db/database', async () => {
 
   const { createSnapshotTestDb } = await import('../../helpers/db-mock');
   const db = createSnapshotTestDb();
-  const mock = {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: unknown, userId: number) =>
-      db.prepare(`
-        SELECT t.id, t.user_id FROM trips t
-        LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-        WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-      `).get(userId, tripId, userId),
-    isOwner: (tripId: unknown, userId: number) =>
-      !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
-  };
-    return mock;
+  // Trip access reads through TripsRepository now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 
 
@@ -65,6 +52,14 @@ import {
   createTestJourneyPhotosRepo, createTestJourneyEntryPhotosRepo,
 } from '../../helpers/journey-repos';
 import { createTestToursRepo, createTour } from '../../helpers/tours-repos';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { tagPlace } from '../../helpers/factories/places';
+import { makeDayAccommodation } from '../../helpers/factories/itinerary';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { Days } from '../../../src/db/entities/Days.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { RoadtripVias } from '../../../src/db/entities/RoadtripVias.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 let svc: AssignmentsService;
 beforeAll(async () => {
@@ -122,9 +117,26 @@ function fixture() {
   return { user, trip, day, place };
 }
 
+const orm = () => sharedTestOrm(testDb);
+
+/** The stored stop; fails the case when it is gone. */
+async function assignmentRow(id: number) {
+  const row = await findRow(await orm(), DayAssignments, { id });
+  if (!row) throw new Error(`no day assignment ${id}`);
+  return row;
+}
+
+async function setAssignment(id: number, data: { assignment_time?: string; assignment_end_time?: string; place?: number; accommodation_id?: number }) {
+  await updateRows(await orm(), DayAssignments, { id }, data);
+}
+
+async function setPlace(id: number, data: { route_geometry?: string; lat?: null; lng?: null; place_time?: string }) {
+  await updateRows(await orm(), Places, { id }, data);
+}
+
 /** Makes `placeId` a Tour: a `tours` facet row plus the route it was planned along. */
-function addTourFacet(placeId: number, routeGeometry = '[[48.1,11.5],[48.2,11.6]]') {
-  testDb.prepare('UPDATE places SET route_geometry = ? WHERE id = ?').run(routeGeometry, placeId);
+async function addTourFacet(placeId: number, routeGeometry = '[[48.1,11.5],[48.2,11.6]]') {
+  await setPlace(placeId, { route_geometry: routeGeometry });
   createTour(testDb, placeId);
 }
 
@@ -259,7 +271,7 @@ describe('createAssignment', () => {
   it('ASG-SVC-009: returns the re-selected nested shape with place, category and compact tags', async () => {
     const { user, trip, day, place } = fixture();
     const tag = createTag(testDb, user.id, { name: 'museum' });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tag.id);
+    await tagPlace(await orm(), place.id, [tag.id]);
     const a = await svc.createAssignment(day.id, place.id, 'skip the line');
     expect(a).toMatchObject({
       day_id: day.id,
@@ -281,7 +293,7 @@ describe('createAssignment', () => {
     const { trip, day, place: tourPlace } = fixture();
     const secondDay = createDay(testDb, trip.id);
     const ordinaryPlace = createPlace(testDb, trip.id, { name: 'Ordinary place' });
-    addTourFacet(tourPlace.id);
+    await addTourFacet(tourPlace.id);
 
     const firstTourAssignment = await svc.createAssignment(day.id, tourPlace.id);
     await expect(svc.createAssignment(day.id, tourPlace.id)).rejects.toThrow(ConflictException);
@@ -289,16 +301,16 @@ describe('createAssignment', () => {
     const otherDayTourAssignment = await svc.createAssignment(secondDay.id, tourPlace.id);
     expect(firstTourAssignment?.day_id).toBe(day.id);
     expect(otherDayTourAssignment?.day_id).toBe(secondDay.id);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE place_id = ?').get(tourPlace.id)).toEqual({ n: 2 });
+    expect(await countRows(await orm(), DayAssignments, { place: tourPlace.id })).toBe(2);
 
     await svc.createAssignment(day.id, ordinaryPlace.id);
     await svc.createAssignment(day.id, ordinaryPlace.id);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE place_id = ?').get(ordinaryPlace.id)).toEqual({ n: 2 });
+    expect(await countRows(await orm(), DayAssignments, { place: ordinaryPlace.id })).toBe(2);
   });
 
   it('ASG-SVC-032: near-concurrent Tour assignments serialize to one row and one conflict', async () => {
     const { day, place } = fixture();
-    addTourFacet(place.id);
+    await addTourFacet(place.id);
 
     const results = await Promise.allSettled([
       svc.createAssignment(day.id, place.id),
@@ -309,15 +321,15 @@ describe('createAssignment', () => {
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
     expect(rejected).toHaveLength(1);
     expect(rejected[0].reason).toBeInstanceOf(ConflictException);
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = ? AND place_id = ?').get(day.id, place.id)).toEqual({ n: 1 });
+    expect(await countRows(await orm(), DayAssignments, { day: day.id, place: place.id })).toBe(1);
   });
 
   it('ASG-SVC-048: a Tour stop carries its facet id and route geometry, an ordinary stop nulls both', async () => {
     const { trip, day, place: tourPlace } = fixture();
     const ordinaryPlace = createPlace(testDb, trip.id, { name: 'Ordinary place' });
     // Geometry on a plain place (an imported track) must not leak into the Tour fields.
-    testDb.prepare('UPDATE places SET route_geometry = ? WHERE id = ?').run('[[1,2],[3,4]]', ordinaryPlace.id);
-    addTourFacet(tourPlace.id, '[[47,11],[47.5,11.5]]');
+    await setPlace(ordinaryPlace.id, { route_geometry: '[[1,2],[3,4]]' });
+    await addTourFacet(tourPlace.id, '[[47,11],[47.5,11.5]]');
 
     const tour = await svc.createAssignment(day.id, tourPlace.id);
     const ordinary = await svc.createAssignment(day.id, ordinaryPlace.id);
@@ -339,7 +351,7 @@ describe('listDayAssignments', () => {
     const { user, trip, day, place } = fixture();
     const second = createPlace(testDb, trip.id, { name: 'Orsay' });
     const tag = createTag(testDb, user.id, { name: 'art' });
-    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tag.id);
+    await tagPlace(await orm(), place.id, [tag.id]);
     const a1 = createDayAssignment(testDb, day.id, place.id, { order_index: 1 });
     const a2 = createDayAssignment(testDb, day.id, second.id, { order_index: 0 });
     await svc.setParticipants(a1.id, [user.id], trip.id);
@@ -366,7 +378,7 @@ describe('deleteAssignment / reorderAssignments', () => {
     const { day, place } = fixture();
     const a = createDayAssignment(testDb, day.id, place.id);
     await svc.deleteAssignment(a.id);
-    expect(testDb.prepare('SELECT id FROM day_assignments WHERE id = ?').get(a.id)).toBeUndefined();
+    expect(await findRow(await orm(), DayAssignments, { id: a.id })).toBeNull();
   });
 
   it('ASG-SVC-013: reorderAssignments applies positional order, scoped to the day', async () => {
@@ -378,11 +390,11 @@ describe('deleteAssignment / reorderAssignments', () => {
 
     await svc.reorderAssignments(day.id, [a2.id, a1.id, foreign.id]);
 
-    const order = (id: number) => (testDb.prepare('SELECT order_index FROM day_assignments WHERE id = ?').get(id) as { order_index: number }).order_index;
-    expect(order(a2.id)).toBe(0);
-    expect(order(a1.id)).toBe(1);
+    const order = async (id: number) => (await assignmentRow(id)).order_index;
+    expect(await order(a2.id)).toBe(0);
+    expect(await order(a1.id)).toBe(1);
     // The day-scoped WHERE leaves another day's assignment untouched.
-    expect(order(foreign.id)).toBe(5);
+    expect(await order(foreign.id)).toBe(5);
   });
 });
 
@@ -395,9 +407,9 @@ describe('clearDay (#2470)', () => {
     const kept = createDayAssignment(testDb, otherDay.id, place.id);
 
     expect((await svc.clearDay(day.id)).sort()).toEqual([a1.id, a2.id].sort());
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE day_id = ?').get(day.id)).toEqual({ n: 0 });
-    expect(testDb.prepare('SELECT id FROM day_assignments WHERE id = ?').get(kept.id)).toEqual({ id: kept.id });
-    expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id)).toEqual({ id: day.id });
+    expect(await countRows(await orm(), DayAssignments, { day: day.id })).toBe(0);
+    expect((await findRow(await orm(), DayAssignments, { id: kept.id }))?.id).toBe(kept.id);
+    expect((await findRow(await orm(), Days, { id: day.id }))?.id).toBe(day.id);
   });
 
   it('ASG-SVC-013c: an empty day clears to an empty list', async () => {
@@ -439,18 +451,19 @@ describe('moveAssignment', () => {
   it('ASG-SVC-049: refuses to move a Tour onto a day that already holds it, and leaves the row where it was', async () => {
     const { trip, day, place } = fixture();
     const target = createDay(testDb, trip.id);
-    addTourFacet(place.id);
+    await addTourFacet(place.id);
     createDayAssignment(testDb, target.id, place.id);
     const a = createDayAssignment(testDb, day.id, place.id, { order_index: 3 });
 
     await expect(svc.moveAssignment(a.id, target.id, 0)).rejects.toThrow(ConflictException);
-    expect(testDb.prepare('SELECT day_id, order_index FROM day_assignments WHERE id = ?').get(a.id)).toEqual({ day_id: day.id, order_index: 3 });
+    const stayed = await assignmentRow(a.id);
+    expect({ day_id: stayed.day_id, order_index: stayed.order_index }).toEqual({ day_id: day.id, order_index: 3 });
   });
 
   it('ASG-SVC-050: a Tour may be reordered within its own day, and an ordinary place may join a day that already holds it', async () => {
     const { trip, day, place } = fixture();
     const target = createDay(testDb, trip.id);
-    addTourFacet(place.id);
+    await addTourFacet(place.id);
     const tour = createDayAssignment(testDb, day.id, place.id, { order_index: 0 });
     expect((await svc.moveAssignment(tour.id, day.id, 2)).assignment).toMatchObject({ day_id: day.id, order_index: 2 });
 
@@ -485,7 +498,7 @@ describe('getParticipants / setParticipants', () => {
 
   it('ASG-SVC-019: username COALESCEs display_name over username', async () => {
     const { user, trip, day, place } = fixture();
-    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Fancy Name', user.id);
+    await updateRows(await orm(), Users, { id: user.id }, { display_name: 'Fancy Name' });
     const a = createDayAssignment(testDb, day.id, place.id);
     const rows = await svc.setParticipants(a.id, [user.id], trip.id);
     expect(rows).toEqual([{ user_id: user.id, username: 'Fancy Name', avatar: null }]);
@@ -529,33 +542,35 @@ describe('getParticipants / setParticipants', () => {
 // ── updateTime / setLegTransportMode ──────────────────────────────────────────
 
 describe('updateTime', () => {
-  const order = (id: number) => (testDb.prepare('SELECT order_index FROM day_assignments WHERE id = ?').get(id) as { order_index: number }).order_index;
+  const order = async (id: number) => (await assignmentRow(id)).order_index;
   /** The day the way every reader lists it: by order_index, then insertion. */
-  const dayOrder = (dayId: number) =>
-    (testDb.prepare('SELECT id FROM day_assignments WHERE day_id = ? ORDER BY order_index, created_at, id').all(dayId) as { id: number }[]).map(r => r.id);
+  const dayOrder = async (dayId: number) =>
+    (await findRows(await orm(), DayAssignments, { day: dayId }, { order_index: 'asc', created_at: 'asc', id: 'asc' })).map(r => r.id);
 
   /**
    * A day of stops at the given order_index keys, each with its own start (null for
    * none). Times go in by SQL so the setup itself never sorts anything.
    */
-  function dayOf(stops: [string | null, number][]) {
+  async function dayOf(stops: [string | null, number][]) {
     const { trip, day, place } = fixture();
-    const ids = stops.map(([time, orderIndex]) => {
+    const ids: number[] = [];
+    for (const [time, orderIndex] of stops) {
       const a = createDayAssignment(testDb, day.id, place.id, { order_index: orderIndex });
-      if (time) testDb.prepare('UPDATE day_assignments SET assignment_time = ? WHERE id = ?').run(time, a.id);
-      return a.id;
-    });
+      if (time) await setAssignment(a.id, { assignment_time: time });
+      ids.push(a.id);
+    }
     return { trip, day, ids };
   }
 
-  function addVia(dayId: number, afterOrderIndex: number, sequence = 0): number {
-    return Number(testDb.prepare(
-      'INSERT INTO roadtrip_vias (day_id, after_order_index, sequence, lat, lng) VALUES (?, ?, ?, 48.1, 11.5)'
-    ).run(dayId, afterOrderIndex, sequence).lastInsertRowid);
+  async function addVia(dayId: number, afterOrderIndex: number, sequence = 0): Promise<number> {
+    return insertRow(await orm(), RoadtripVias, { day: dayId, after_order_index: afterOrderIndex, sequence, lat: 48.1, lng: 11.5 });
   }
-  const viaAnchors = (dayId: number) =>
-    testDb.prepare('SELECT id, after_order_index, sequence FROM roadtrip_vias WHERE day_id = ? ORDER BY id').all(dayId) as
-      { id: number; after_order_index: number; sequence: number }[];
+  const viaAnchors = async (dayId: number) =>
+    (await findRows(await orm(), RoadtripVias, { day: dayId }, { id: 'asc' })).map((v) => ({
+      id: v.id,
+      after_order_index: v.after_order_index,
+      sequence: v.sequence,
+    }));
 
   it('ASG-SVC-021: persists both times and re-selects the nested shape', async () => {
     const { day, place } = fixture();
@@ -567,19 +582,19 @@ describe('updateTime', () => {
   it('ASG-SVC-022: a start sorts the timed stops and leaves every untimed stop behind the one it followed', async () => {
     // The tester's day: two stops without a time, then a start on the last one. It
     // used to jump to the top, because every untimed stop was appended after it.
-    const untimedHead = dayOf([[null, 0], [null, 1], [null, 2]]);
+    const untimedHead = await dayOf([[null, 0], [null, 1], [null, 2]]);
     await svc.updateTime(untimedHead.ids[2], '14:00', null);
-    expect(dayOrder(untimedHead.day.id)).toEqual(untimedHead.ids);
+    expect(await dayOrder(untimedHead.day.id)).toEqual(untimedHead.ids);
 
-    const between = dayOf([['09:00', 0], [null, 1], [null, 2]]);
+    const between = await dayOf([['09:00', 0], [null, 1], [null, 2]]);
     await svc.updateTime(between.ids[2], '14:00', null);
-    expect(dayOrder(between.day.id)).toEqual(between.ids);
+    expect(await dayOrder(between.day.id)).toEqual(between.ids);
 
     // Timed stops still keep time order among themselves. A has nothing timed in
     // front of it and stays first.
-    const [a, b, c] = dayOf([[null, 0], ['15:00', 1], [null, 2]]).ids;
+    const [a, b, c] = (await dayOf([[null, 0], ['15:00', 1], [null, 2]])).ids;
     await svc.updateTime(c, '10:00', null);
-    expect([order(a), order(c), order(b)]).toEqual([0, 1, 2]);
+    expect(await Promise.all([order(a), order(c), order(b)])).toEqual([0, 1, 2]);
   });
 
   it('ASG-SVC-022b: a booked night sorts by its check-in, which is where its hour lives', async () => {
@@ -590,40 +605,38 @@ describe('updateTime', () => {
     const hotel = createPlace(testDb, trip.id, { name: 'Billstedt' });
     const afternoon = createDayAssignment(testDb, day.id, place.id, { order_index: 0 });
     const night = createDayAssignment(testDb, day.id, hotel.id, { order_index: 1 });
-    const stay = testDb.prepare(
-      "INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in) VALUES (?, ?, ?, ?, '11:00')"
-    ).run(trip.id, hotel.id, day.id, day.id);
-    testDb.prepare('UPDATE day_assignments SET accommodation_id = ? WHERE id = ?').run(Number(stay.lastInsertRowid), night.id);
+    const stay = await makeDayAccommodation(await orm(), trip.id, hotel.id, day.id, day.id, { check_in: '11:00' });
+    await setAssignment(night.id, { accommodation_id: stay.id });
 
     await svc.updateTime(afternoon.id, '16:00', null);
 
-    expect(order(night.id)).toBeLessThan(order(afternoon.id));
+    expect(await order(night.id)).toBeLessThan(await order(afternoon.id));
   });
 
   it('ASG-SVC-023: clearing with null persists but skips the auto-sort (falsy gate)', async () => {
-    const { day, ids: [a, b, c] } = dayOf([['09:00', 0], [null, 1], ['12:00', 2]]);
+    const { day, ids: [a, b, c] } = await dayOf([['09:00', 0], [null, 1], ['12:00', 2]]);
     await svc.updateTime(b, '06:00', null); // sorts b first
-    expect(dayOrder(day.id)).toEqual([b, a, c]);
+    expect(await dayOrder(day.id)).toEqual([b, a, c]);
     // Dragged back out of time order on purpose: a sort now would put b first again,
     // with c behind it.
     await svc.reorderAssignments(day.id, [a, b, c]);
 
     const { assignment } = await svc.updateTime(c, null, null); // clear, no re-sort
     expect((await assignment!).assignment_time).toBeNull();
-    expect(dayOrder(day.id)).toEqual([a, b, c]);
+    expect(await dayOrder(day.id)).toEqual([a, b, c]);
   });
 
   it('ASG-SVC-027: an empty-string time clears the override like null (and skips the auto-sort)', async () => {
-    const { day, ids: [a, b, c] } = dayOf([['09:00', 0], [null, 1], ['12:00', 2]]);
+    const { day, ids: [a, b, c] } = await dayOf([['09:00', 0], [null, 1], ['12:00', 2]]);
     await svc.updateTime(b, '06:00', '07:00'); // sorts b first
-    expect(dayOrder(day.id)).toEqual([b, a, c]);
+    expect(await dayOrder(day.id)).toEqual([b, a, c]);
     await svc.reorderAssignments(day.id, [a, b, c]);
 
     const { assignment } = await svc.updateTime(c, '', '');
     expect((await assignment!).assignment_time).toBeNull();
     expect((await assignment!).assignment_end_time).toBeNull();
-    expect(testDb.prepare('SELECT assignment_time FROM day_assignments WHERE id = ?').get(c)).toEqual({ assignment_time: null });
-    expect(dayOrder(day.id)).toEqual([a, b, c]);
+    expect((await assignmentRow(c)).assignment_time).toBeNull();
+    expect(await dayOrder(day.id)).toEqual([a, b, c]);
   });
 
   it('ASG-SVC-024: a time without ":" sorts last among timed via the 99:99 sentinel', async () => {
@@ -632,23 +645,24 @@ describe('updateTime', () => {
     const b = createDayAssignment(testDb, day.id, place.id, { order_index: 1 });
     await svc.updateTime(a.id, 'morning', null); // no colon → '99:99' in the sort
     await svc.updateTime(b.id, '13:00', null);
-    expect(order(b.id)).toBe(0);
-    expect(order(a.id)).toBe(1);
+    expect(await order(b.id)).toBe(0);
+    expect(await order(a.id)).toBe(1);
   });
 
   it('ASG-SVC-033: writes nothing but the time when the day is already in order', async () => {
     // Keys with gaps, as a deleted stop leaves them. A day the start leaves in order
     // keeps them: nothing about it changed.
-    const { day, ids: [a, b, c] } = dayOf([['09:00', 0], [null, 5], [null, 9]]);
-    const via = addVia(day.id, 0);
+    const { day, ids: [a, b, c] } = await dayOf([['09:00', 0], [null, 5], [null, 9]]);
+    const via = await addVia(day.id, 0);
+    // test-sql-allow: total_changes() counts the writes on the connection itself, which no entity maps.
     const changes = () => (testDb.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
     const before = changes();
 
     const update = await svc.updateTime(c, '14:00', null);
 
     expect(changes() - before).toBe(1);
-    expect([order(a), order(b), order(c)]).toEqual([0, 5, 9]);
-    expect(viaAnchors(day.id)).toEqual([{ id: via, after_order_index: 0, sequence: 0 }]);
+    expect(await Promise.all([order(a), order(b), order(c)])).toEqual([0, 5, 9]);
+    expect(await viaAnchors(day.id)).toEqual([{ id: via, after_order_index: 0, sequence: 0 }]);
     expect(update.reordered).toBeNull();
     expect(update.vias).toBeNull();
   });
@@ -657,46 +671,47 @@ describe('updateTime', () => {
     // A gap, as a deleted stop leaves it. Kept, the writer would read 0, 4, 7 back and
     // everyone else would apply 0, 1, 2, and a note at 3 would sit behind a different
     // stop for each of them.
-    const { day, ids: [a, b, c] } = dayOf([[null, 0], ['15:00', 4], [null, 7]]);
+    const { day, ids: [a, b, c] } = await dayOf([[null, 0], ['15:00', 4], [null, 7]]);
+    // test-sql-allow: total_changes() counts the writes on the connection itself, which no entity maps.
     const changes = () => (testDb.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
     const before = changes();
 
     const update = await svc.updateTime(c, '10:00', null);
 
     expect(update.reordered).toEqual({ dayId: day.id, orderedIds: [a, c, b] });
-    expect(update.reordered!.orderedIds.map(order)).toEqual([0, 1, 2]);
+    expect(await Promise.all(update.reordered!.orderedIds.map(order))).toEqual([0, 1, 2]);
     // The time, then c and b. A already holds 0 and is not written.
     expect(changes() - before).toBe(3);
   });
 
   it('ASG-SVC-035: numbers a day with colliding keys from 0 again, since a shared key cannot hold an order', async () => {
     // A move drops a stop in at order_index 0 next to the one already there.
-    const { day, ids: [a, b, c] } = dayOf([[null, 0], ['15:00', 0], [null, 0]]);
+    const { day, ids: [a, b, c] } = await dayOf([[null, 0], ['15:00', 0], [null, 0]]);
 
     await svc.updateTime(c, '10:00', null);
 
-    expect(dayOrder(day.id)).toEqual([a, c, b]);
-    expect([order(a), order(c), order(b)]).toEqual([0, 1, 2]);
+    expect(await dayOrder(day.id)).toEqual([a, c, b]);
+    expect(await Promise.all([order(a), order(c), order(b)])).toEqual([0, 1, 2]);
   });
 
   it('ASG-SVC-036: keeps each drawn road behind the stop it was drawn after, counting located stops only', async () => {
     // X has no coordinates, so the router never sees it and the vias do not count it.
-    const { trip, day, ids: [a, x, b, c, d] } = dayOf([[null, 0], [null, 1], ['15:00', 2], [null, 3], [null, 4]]);
+    const { trip, day, ids: [a, x, b, c, d] } = await dayOf([[null, 0], [null, 1], ['15:00', 2], [null, 3], [null, 4]]);
     const unmapped = createPlace(testDb, trip.id, { name: 'Somewhere unmapped' });
-    testDb.prepare('UPDATE places SET lat = NULL, lng = NULL WHERE id = ?').run(unmapped.id);
-    testDb.prepare('UPDATE day_assignments SET place_id = ? WHERE id = ?').run(unmapped.id, x);
-    const afterA = addVia(day.id, 0);
-    const afterB = addVia(day.id, 1);
-    const afterBToo = addVia(day.id, 1, 1);
-    addVia(day.id, 2); // after C
+    await setPlace(unmapped.id, { lat: null, lng: null });
+    await setAssignment(x, { place: unmapped.id });
+    const afterA = await addVia(day.id, 0);
+    const afterB = await addVia(day.id, 1);
+    const afterBToo = await addVia(day.id, 1, 1);
+    await addVia(day.id, 2); // after C
 
     // D at 10:00 goes in front of B at 15:00, and C stays behind B: A, X, D, B, C.
     const update = await svc.updateTime(d, '10:00', null);
 
-    expect(dayOrder(day.id)).toEqual([a, x, d, b, c]);
+    expect(await dayOrder(day.id)).toEqual([a, x, d, b, c]);
     // A keeps its leg, B's two points follow B to 2 in their order, and C, now last,
     // has no leg left to bend.
-    expect(viaAnchors(day.id)).toEqual([
+    expect(await viaAnchors(day.id)).toEqual([
       { id: afterA, after_order_index: 0, sequence: 0 },
       { id: afterB, after_order_index: 2, sequence: 0 },
       { id: afterBToo, after_order_index: 2, sequence: 1 },
@@ -707,32 +722,32 @@ describe('updateTime', () => {
   });
 
   it('ASG-SVC-037: reports no vias when the reorder leaves every one on its stop', async () => {
-    const { day, ids: [a, b, c] } = dayOf([[null, 0], ['15:00', 1], [null, 2]]);
-    const via = addVia(day.id, 0);
+    const { day, ids: [a, b, c] } = await dayOf([[null, 0], ['15:00', 1], [null, 2]]);
+    const via = await addVia(day.id, 0);
 
     const update = await svc.updateTime(c, '10:00', null);
 
     expect(update.reordered).toEqual({ dayId: day.id, orderedIds: [a, c, b] });
-    expect(viaAnchors(day.id)).toEqual([{ id: via, after_order_index: 0, sequence: 0 }]);
+    expect(await viaAnchors(day.id)).toEqual([{ id: via, after_order_index: 0, sequence: 0 }]);
     expect(update.vias).toBeNull();
   });
 
   it('ASG-SVC-038: leaves every via alone when the sort moves only stops without coordinates', async () => {
     // X has no coordinates. It goes between A and B, and the located stops stay A, B.
-    const { trip, day, ids: [a, b, x] } = dayOf([['09:00', 0], ['12:00', 1], [null, 2]]);
+    const { trip, day, ids: [a, b, x] } = await dayOf([['09:00', 0], ['12:00', 1], [null, 2]]);
     const unmapped = createPlace(testDb, trip.id, { name: 'Somewhere unmapped' });
-    testDb.prepare('UPDATE places SET lat = NULL, lng = NULL WHERE id = ?').run(unmapped.id);
-    testDb.prepare('UPDATE day_assignments SET place_id = ? WHERE id = ?').run(unmapped.id, x);
-    const afterA = addVia(day.id, 0);
+    await setPlace(unmapped.id, { lat: null, lng: null });
+    await setAssignment(x, { place: unmapped.id });
+    const afterA = await addVia(day.id, 0);
     // Behind the day's last stop: the drive into the next day on a trip with connected
     // days. It was deleted here, since a last stop has no leg of its own.
-    const intoTomorrow = addVia(day.id, 1);
+    const intoTomorrow = await addVia(day.id, 1);
 
     const update = await svc.updateTime(x, '10:00', null);
 
-    expect(dayOrder(day.id)).toEqual([a, x, b]);
+    expect(await dayOrder(day.id)).toEqual([a, x, b]);
     expect(update.reordered).toEqual({ dayId: day.id, orderedIds: [a, x, b] });
-    expect(viaAnchors(day.id)).toEqual([
+    expect(await viaAnchors(day.id)).toEqual([
       { id: afterA, after_order_index: 0, sequence: 0 },
       { id: intoTomorrow, after_order_index: 1, sequence: 0 },
     ]);
@@ -740,15 +755,15 @@ describe('updateTime', () => {
   });
 
   it('ASG-SVC-039: keeps the via behind the last stop when that stop is still last', async () => {
-    const { day, ids: [a, b, c, d] } = dayOf([[null, 0], ['15:00', 1], [null, 2], ['18:00', 3]]);
-    const afterB = addVia(day.id, 1);
-    const intoTomorrow = addVia(day.id, 3);
+    const { day, ids: [a, b, c, d] } = await dayOf([[null, 0], ['15:00', 1], [null, 2], ['18:00', 3]]);
+    const afterB = await addVia(day.id, 1);
+    const intoTomorrow = await addVia(day.id, 3);
 
     // C at 10:00 goes in front of B. D stays last, and so does the drive out of it.
     const update = await svc.updateTime(c, '10:00', null);
 
-    expect(dayOrder(day.id)).toEqual([a, c, b, d]);
-    expect(viaAnchors(day.id)).toEqual([
+    expect(await dayOrder(day.id)).toEqual([a, c, b, d]);
+    expect(await viaAnchors(day.id)).toEqual([
       { id: afterB, after_order_index: 2, sequence: 0 },
       { id: intoTomorrow, after_order_index: 3, sequence: 0 },
     ]);
@@ -760,23 +775,23 @@ describe('updateTime', () => {
     // there only while that stop is last. Once another stop is, it goes: it lies on the
     // road to tomorrow, and read as the leg its stop leaves by now it would bend the
     // drive from C to A through a point on that road.
-    const { day, ids: [a, b, c] } = dayOf([['09:00', 0], ['12:00', 1], ['18:00', 2]]);
-    const afterA = addVia(day.id, 0);
-    const intoTomorrow = addVia(day.id, 2);
+    const { day, ids: [a, b, c] } = await dayOf([['09:00', 0], ['12:00', 1], ['18:00', 2]]);
+    const afterA = await addVia(day.id, 0);
+    const intoTomorrow = await addVia(day.id, 2);
 
     const update = await svc.updateTime(c, '08:00', null);
 
-    expect(dayOrder(day.id)).toEqual([c, a, b]);
-    expect(viaAnchors(day.id)).toEqual([{ id: afterA, after_order_index: 1, sequence: 0 }]);
-    expect(viaAnchors(day.id).map(via => via.id)).not.toContain(intoTomorrow);
+    expect(await dayOrder(day.id)).toEqual([c, a, b]);
+    expect(await viaAnchors(day.id)).toEqual([{ id: afterA, after_order_index: 1, sequence: 0 }]);
+    expect((await viaAnchors(day.id)).map(via => via.id)).not.toContain(intoTomorrow);
     expect(update.vias?.dayId).toBe(day.id);
   });
 
   it('ASG-SVC-040: an End saved with the start as it stood leaves a day dragged out of time order alone', async () => {
     // B belongs first by time, and the traveller put it second on purpose.
-    const { day, ids: [a, b, c] } = dayOf([['14:00', 0], ['10:00', 1], ['16:00', 2]]);
-    testDb.prepare("UPDATE day_assignments SET assignment_end_time = '11:00' WHERE id = ?").run(b);
-    const afterA = addVia(day.id, 0);
+    const { day, ids: [a, b, c] } = await dayOf([['14:00', 0], ['10:00', 1], ['16:00', 2]]);
+    await setAssignment(b, { assignment_end_time: '11:00' });
+    const afterA = await addVia(day.id, 0);
 
     // The stay dialog taking the End off, then the place form setting a new one.
     for (const end of [null, '12:00']) {
@@ -784,28 +799,28 @@ describe('updateTime', () => {
       expect(update.assignment).toMatchObject({ assignment_time: '10:00', assignment_end_time: end });
       expect(update.reordered).toBeNull();
       expect(update.vias).toBeNull();
-      expect(dayOrder(day.id)).toEqual([a, b, c]);
-      expect(viaAnchors(day.id)).toEqual([{ id: afterA, after_order_index: 0, sequence: 0 }]);
+      expect(await dayOrder(day.id)).toEqual([a, b, c]);
+      expect(await viaAnchors(day.id)).toEqual([{ id: afterA, after_order_index: 0, sequence: 0 }]);
     }
 
     // A start that moves still sorts, and the via follows A.
     const update = await svc.updateTime(b, '09:00', '12:00');
-    expect(dayOrder(day.id)).toEqual([b, a, c]);
+    expect(await dayOrder(day.id)).toEqual([b, a, c]);
     expect(update.reordered).toEqual({ dayId: day.id, orderedIds: [b, a, c] });
-    expect(viaAnchors(day.id)).toEqual([{ id: afterA, after_order_index: 1, sequence: 0 }]);
+    expect(await viaAnchors(day.id)).toEqual([{ id: afterA, after_order_index: 1, sequence: 0 }]);
   });
 
   it('ASG-SVC-041: a visit given the start its place already had does not sort either', async () => {
     // The place form fills Start from the place when the visit has none of its own.
-    const { trip, day, ids: [a, b] } = dayOf([['14:00', 0], [null, 1]]);
+    const { trip, day, ids: [a, b] } = await dayOf([['14:00', 0], [null, 1]]);
     const timedPlace = createPlace(testDb, trip.id, { name: 'Opens at ten' });
-    testDb.prepare("UPDATE places SET place_time = '10:00' WHERE id = ?").run(timedPlace.id);
-    testDb.prepare('UPDATE day_assignments SET place_id = ? WHERE id = ?').run(timedPlace.id, b);
+    await setPlace(timedPlace.id, { place_time: '10:00' });
+    await setAssignment(b, { place: timedPlace.id });
 
     const update = await svc.updateTime(b, '10:00', '11:00');
 
     expect(update.reordered).toBeNull();
-    expect(dayOrder(day.id)).toEqual([a, b]);
+    expect(await dayOrder(day.id)).toEqual([a, b]);
   });
 });
 
@@ -815,7 +830,7 @@ describe('updateNotes (#2163)', () => {
     const a = createDayAssignment(testDb, day.id, place.id);
     const updated = await svc.updateNotes(a.id, 'Book the 10:00 timed entry');
     expect(updated).toMatchObject({ id: a.id, notes: 'Book the 10:00 timed entry' });
-    expect(testDb.prepare('SELECT notes FROM day_assignments WHERE id = ?').get(a.id)).toEqual({ notes: 'Book the 10:00 timed entry' });
+    expect((await assignmentRow(a.id)).notes).toBe('Book the 10:00 timed entry');
   });
 
   it('ASG-SVC-031: empty string and null both clear the column (same normalisation as createAssignment)', async () => {
@@ -825,7 +840,7 @@ describe('updateNotes (#2163)', () => {
     expect((await svc.updateNotes(a.id, '')!).notes).toBeNull();
     await svc.updateNotes(a.id, 'gone again');
     expect((await svc.updateNotes(a.id, null)!).notes).toBeNull();
-    expect(testDb.prepare('SELECT notes FROM day_assignments WHERE id = ?').get(a.id)).toEqual({ notes: null });
+    expect((await assignmentRow(a.id)).notes).toBeNull();
   });
 
   it('ASG-SVC-032: leaves order and times untouched', async () => {
@@ -836,7 +851,7 @@ describe('updateNotes (#2163)', () => {
     expect(updated).toMatchObject({ assignment_time: '09:00', assignment_end_time: '10:00' });
     // 3, not 0: a start on a day already in order no longer renumbers it, so the key
     // this note edit must not touch is still the one the stop was created with.
-    expect((testDb.prepare('SELECT order_index FROM day_assignments WHERE id = ?').get(a.id) as { order_index: number }).order_index).toBe(3);
+    expect((await assignmentRow(a.id)).order_index).toBe(3);
   });
 });
 

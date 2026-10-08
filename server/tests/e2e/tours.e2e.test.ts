@@ -46,7 +46,21 @@ import { TripsModule } from '../../src/nest/trips/trips.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { countRows, deleteRows, findRow, insertRows } from '../helpers/factories/rows';
+import { makeUser } from '../helpers/factories/users';
+import { addTripMember } from '../helpers/factories/trips';
+import { makePlace, type PlaceRow } from '../helpers/factories/places';
+import { makeDayAssignment } from '../helpers/factories/itinerary';
+import { setAddonEnabled } from '../helpers/factories/settings';
+import { DayAssignments } from '../../src/db/entities/DayAssignments.entity';
+import { Days } from '../../src/db/entities/Days.entity';
+import { Places } from '../../src/db/entities/Places.entity';
+import { TourWaypoints } from '../../src/db/entities/TourWaypoints.entity';
+import { Tours } from '../../src/db/entities/Tours.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
+
+let orm: TestOrm;
 
 let checkPermission: MockInstance;
 
@@ -107,8 +121,17 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
     return nest;
   }
 
-  const setAddon = (enabled: boolean) =>
-    db.prepare("UPDATE addons SET enabled = ? WHERE id = 'tours'").run(enabled ? 1 : 0);
+  const setAddon = (enabled: boolean) => setAddonEnabled(orm, 'tours', enabled);
+
+  /** The named columns of a stored place, as a projected SELECT would return them. */
+  const placeColumns = async <K extends keyof PlaceRow>(id: number, ...keys: K[]) => {
+    const row = await findRow(orm, Places, { id });
+    return Object.fromEntries(keys.map((k) => [k, row?.[k]])) as Pick<PlaceRow, K>;
+  };
+
+  /** A plain place on the trip, no coordinates and no category. */
+  const plainPlace = async (tripId: number, name: string) =>
+    (await makePlace(orm, tripId, { name, lat: null, lng: null, category: null })).id;
 
   const createViaApi = async (tripId = 5, body: Record<string, unknown> = tourBody()) => {
     const res = await request(server).post(`/api/trips/${tripId}/tours`).set('Cookie', sessionCookie(OWNER)).send(body);
@@ -122,33 +145,41 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
   };
 
   beforeAll(async () => {
-    db.prepare(`INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES
-      (1, 'owner', 'owner@example.test', 'x', 'user', 0),
-      (2, 'viewer', 'viewer@example.test', 'x', 'user', 0),
-      (3, 'outsider', 'outsider@example.test', 'x', 'user', 0)`).run();
-    db.prepare("INSERT INTO trips (id, user_id, title) VALUES (5, 1, 'Alps'), (6, 1, 'Other')").run();
-    db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (5, 2)').run();
-    db.prepare('INSERT INTO days (id, trip_id, day_number) VALUES (3, 5, 1), (4, 5, 2)').run();
+    orm = await createTestOrm(db);
+    // Pinned ids: the session cookies sign for exactly these users.
+    await makeUser(orm, { id: 1, username: 'owner', email: 'owner@example.test', role: 'user', password_version: 0 });
+    await makeUser(orm, { id: 2, username: 'viewer', email: 'viewer@example.test', role: 'user', password_version: 0 });
+    await makeUser(orm, { id: 3, username: 'outsider', email: 'outsider@example.test', role: 'user', password_version: 0 });
+    await insertRows(orm, Trips, [
+      { id: 5, user: 1, title: 'Alps' },
+      { id: 6, user: 1, title: 'Other' },
+    ]);
+    await addTripMember(orm, 5, 2);
+    await insertRows(orm, Days, [
+      { id: 3, trip: 5, day_number: 1 },
+      { id: 4, trip: 5, day_number: 2 },
+    ]);
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     vi.spyOn(app.get(BudgetService), 'listBudgetItems').mockResolvedValue([]);
     server = app.getHttpServer();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // The viewer is a trip member whose 'place_edit' is withheld; every other
     // action and user passes, so the owner can create, move and copy.
     checkPermission.mockImplementation((action: string, _role: string, _owner: number, userId: number) =>
       !(action === 'place_edit' && userId === VIEWER));
-    setAddon(true);
+    await setAddon(true);
     broadcast.mockClear();
-    db.prepare('DELETE FROM day_assignments').run();
-    db.prepare('DELETE FROM places').run();
-    db.prepare('DELETE FROM trips WHERE id NOT IN (5, 6)').run();
+    await deleteRows(orm, DayAssignments);
+    await deleteRows(orm, Places);
+    await deleteRows(orm, Trips, { id: { $nin: [5, 6] } });
   });
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   describe('addon and access gates', () => {
@@ -158,7 +189,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
 
     it('404 on every route while the addon is disabled', async () => {
       const placeId = await createViaApi();
-      setAddon(false);
+      await setAddon(false);
       const off = { error: 'Tours addon is not enabled' };
       const cookie = sessionCookie(OWNER);
       const responses = [
@@ -172,8 +203,8 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
         expect(res.status).toBe(404);
         expect(res.body).toEqual(off);
       }
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tours').get()).toEqual({ n: 1 });
-      expect(db.prepare('SELECT name FROM places WHERE id = ?').get(placeId)).toEqual({ name: 'Ridge walk' });
+      expect(await countRows(orm, Tours)).toBe(1);
+      expect(await placeColumns(placeId, 'name')).toEqual({ name: 'Ridge walk' });
     });
 
     it('404 Trip not found for a user without access to the trip', async () => {
@@ -191,7 +222,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
         expect(res.status).toBe(404);
         expect(res.body).toEqual({ error: 'Trip not found' });
       }
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tours').get()).toEqual({ n: 1 });
+      expect(await countRows(orm, Tours)).toBe(1);
     });
 
     it('a member without place_edit can read but gets 403 on every write', async () => {
@@ -212,8 +243,8 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
         expect(res.status).toBe(403);
         expect(res.body).toEqual({ error: 'No permission' });
       }
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tours').get()).toEqual({ n: 1 });
-      expect(db.prepare('SELECT name FROM places WHERE id = ?').get(placeId)).toEqual({ name: 'Ridge walk' });
+      expect(await countRows(orm, Tours)).toBe(1);
+      expect(await placeColumns(placeId, 'name')).toEqual({ name: 'Ridge walk' });
     });
   });
 
@@ -235,7 +266,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
       expect(res.body.tour.elevation_loss).toBe(50);
       expect(res.body.waypoints).toEqual(tourBody().waypoints);
 
-      expect(db.prepare('SELECT trip_id, lat, lng, transport_mode, route_geometry FROM places WHERE id = ?').get(placeId)).toEqual({
+      expect(await placeColumns(placeId, 'trip_id', 'lat', 'lng', 'transport_mode', 'route_geometry')).toEqual({
         trip_id: 5, lat: 47, lng: 11, transport_mode: 'walking', route_geometry: JSON.stringify(GEOMETRY),
       });
       const events = broadcast.mock.calls.map(c => c[1]);
@@ -254,7 +285,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
     it('lists newest first and reports planned once a day holds the tour', async () => {
       const first = await createViaApi(5, tourBody({ name: 'First' }));
       const second = await createViaApi(5, tourBody({ name: 'Second' }));
-      db.prepare('INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (3, ?, 0)').run(first);
+      await makeDayAssignment(orm, 3, first, { order_index: 0 });
       const res = await request(server).get('/api/trips/5/tours').set('Cookie', sessionCookie(OWNER));
       expect(res.body.tours.map((t: { place_id: number; planned: boolean }) => [t.place_id, t.planned])).toEqual([
         [second, false],
@@ -272,12 +303,12 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
       expect(shortRoute.status).toBe(400);
       const badDifficulty = await request(server).post('/api/trips/5/tours').set('Cookie', cookie).send(tourBody({ max_hiking_difficulty: 7 }));
       expect(badDifficulty.status).toBe(400);
-      expect(db.prepare('SELECT COUNT(*) AS n FROM places').get()).toEqual({ n: 0 });
+      expect(await countRows(orm, Places)).toBe(0);
     });
 
     it('GET 404 for a tour of another trip, a plain place and a non-numeric id', async () => {
       const foreign = await createViaApi(6);
-      const plain = Number(db.prepare("INSERT INTO places (trip_id, name) VALUES (5, 'Cafe')").run().lastInsertRowid);
+      const plain = await plainPlace(5, 'Cafe');
       for (const id of [foreign, plain, 'abc', 999999]) {
         const res = await request(server).get(`/api/trips/5/tours/${id}`).set('Cookie', sessionCookie(OWNER));
         expect(res.status).toBe(404);
@@ -298,7 +329,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
         { lat: 49, lng: 12, role: 'start', sequence: 0 },
         { lat: 49.02, lng: 12.02, role: 'end', sequence: 1 },
       ]);
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tour_waypoints WHERE place_id = ?').get(placeId)).toEqual({ n: 0 });
+      expect(await countRows(orm, TourWaypoints, { place: placeId })).toBe(0);
     });
   });
 
@@ -320,25 +351,25 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
         place_id: placeId, name: 'Summit', elevation_gain: 200, elevation_loss: 100, duration: null, max_hiking_difficulty: 5,
       });
       expect(res.body.waypoints).toEqual(waypoints);
-      expect(db.prepare('SELECT name, lat, lng, route_geometry FROM places WHERE id = ?').get(placeId)).toEqual({
+      expect(await placeColumns(placeId, 'name', 'lat', 'lng', 'route_geometry')).toEqual({
         name: 'Summit', lat: 46, lng: 10, route_geometry: JSON.stringify(geometry),
       });
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tour_waypoints WHERE place_id = ?').get(placeId)).toEqual({ n: 3 });
+      expect(await countRows(orm, TourWaypoints, { place: placeId })).toBe(3);
       expect(broadcast.mock.calls.map(c => c[1])).toEqual(expect.arrayContaining(['tours:changed', 'place:updated']));
     });
 
     it('404 for a tour of another trip, a plain place and a non-numeric id, nothing changes', async () => {
       const foreign = await createViaApi(6);
-      const plain = Number(db.prepare("INSERT INTO places (trip_id, name) VALUES (5, 'Cafe')").run().lastInsertRowid);
+      const plain = await plainPlace(5, 'Cafe');
       for (const id of [foreign, plain, 'abc']) {
         const res = await request(server).put(`/api/trips/5/tours/${id}`).set('Cookie', sessionCookie(OWNER)).send(tourBody({ name: 'Moved' }));
         expect(res.status).toBe(404);
         expect(res.body).toEqual({ error: 'Tour not found' });
       }
-      expect(db.prepare('SELECT trip_id, name FROM places WHERE id = ?').get(foreign)).toEqual({ trip_id: 6, name: 'Ridge walk' });
-      expect(db.prepare('SELECT name, route_geometry FROM places WHERE id = ?').get(plain)).toEqual({ name: 'Cafe', route_geometry: null });
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tours WHERE place_id = ?').get(plain)).toEqual({ n: 0 });
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tour_waypoints WHERE place_id = ?').get(foreign)).toEqual({ n: 2 });
+      expect(await placeColumns(foreign, 'trip_id', 'name')).toEqual({ trip_id: 6, name: 'Ridge walk' });
+      expect(await placeColumns(plain, 'name', 'route_geometry')).toEqual({ name: 'Cafe', route_geometry: null });
+      expect(await countRows(orm, Tours, { place: plain })).toBe(0);
+      expect(await countRows(orm, TourWaypoints, { place: foreign })).toBe(2);
     });
   });
 
@@ -350,8 +381,8 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
       expect(res.body.tours).toHaveLength(1);
       const tour = res.body.tours[0];
       expect(tour).toMatchObject({ name: 'Alpine loop', tour_type: 'hike', match_confidence: 1, max_hiking_difficulty: 2, has_waypoints: false });
-      expect(db.prepare('SELECT trip_id FROM places WHERE id = ?').get(tour.place_id)).toEqual({ trip_id: 5 });
-      expect(db.prepare('SELECT tour_type FROM tours WHERE place_id = ?').get(tour.place_id)).toEqual({ tour_type: 'hike' });
+      expect(await placeColumns(tour.place_id, 'trip_id')).toEqual({ trip_id: 5 });
+      expect((await findRow(orm, Tours, { place: tour.place_id }))?.tour_type).toBe('hike');
       expect(broadcast.mock.calls.map(c => c[1])).toEqual(expect.arrayContaining(['tours:changed', 'place:created']));
     });
 
@@ -367,7 +398,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
       const again = await importGpx(OWNER, TRACK_GPX);
       expect(again.status).toBe(201);
       expect(again.body).toEqual({ tours: [], caution: false, skipped: 1 });
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tours').get()).toEqual({ n: 1 });
+      expect(await countRows(orm, Tours)).toBe(1);
     });
 
     it('400 without a file, and for a file with no track or route', async () => {
@@ -379,7 +410,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
         expect(res.status).toBe(400);
         expect(res.body).toEqual({ error: 'No track or route found in GPX file' });
       }
-      expect(db.prepare('SELECT COUNT(*) AS n FROM places').get()).toEqual({ n: 0 });
+      expect(await countRows(orm, Places)).toBe(0);
     });
   });
 
@@ -400,8 +431,8 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
       const move = await request(server).put(`/api/trips/5/assignments/${moving}/move`).set('Cookie', cookie).send({ new_day_id: 4, order_index: 1 });
       expect(move.status).toBe(409);
       expect(move.body).toEqual({ error: 'Tour is already assigned to this day' });
-      expect(db.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(moving)).toEqual({ day_id: 3 });
-      expect(db.prepare('SELECT COUNT(*) AS n FROM day_assignments WHERE place_id = ?').get(placeId)).toEqual({ n: 2 });
+      expect((await findRow(orm, DayAssignments, { id: moving }))?.day_id).toBe(3);
+      expect(await countRows(orm, DayAssignments, { place: placeId })).toBe(2);
     });
 
     it('copying the trip carries its tours and waypoints onto the new places', async () => {
@@ -428,7 +459,7 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
 
       const detail = await request(server).get(`/api/trips/${copyId}/tours/${copied.place_id}`).set('Cookie', sessionCookie(OWNER));
       expect(detail.body.waypoints).toEqual(source.waypoints);
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tour_waypoints WHERE place_id = ?').get(placeId)).toEqual({ n: 3 });
+      expect(await countRows(orm, TourWaypoints, { place: placeId })).toBe(3);
     });
 
     it('deleting the place removes its tour and waypoints and reports the tour id', async () => {
@@ -436,8 +467,8 @@ describe('Tours e2e (real guards + temp SQLite)', () => {
       const res = await request(server).delete(`/api/trips/5/places/${placeId}`).set('Cookie', sessionCookie(OWNER));
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ success: true, tourPlaceIds: [placeId] });
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tours WHERE place_id = ?').get(placeId)).toEqual({ n: 0 });
-      expect(db.prepare('SELECT COUNT(*) AS n FROM tour_waypoints WHERE place_id = ?').get(placeId)).toEqual({ n: 0 });
+      expect(await countRows(orm, Tours, { place: placeId })).toBe(0);
+      expect(await countRows(orm, TourWaypoints, { place: placeId })).toBe(0);
     });
   });
 });
