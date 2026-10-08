@@ -447,11 +447,15 @@ export class ReservationsMcp {
     if (assignment_id != null && !(await this.assignments.getAssignmentForTrip(assignment_id, tripId)))
       return errorResult('assignment_id does not belong to this trip.');
 
-    const { reservation } = await this.reservations.update(reservationId, tripId, {
+    // The booking and the linked expenses a type change re-files are one write,
+    // the same service path REST and the plugin RPC take.
+    const { reservation, accommodationChanged, costEvents } = await this.reservations.updateWithCost(String(reservationId), String(tripId), {
       title, type, reservation_time, reservation_end_time, url, location, confirmation_number, notes, status,
       place_id: place_id !== undefined ? place_id ?? undefined : undefined,
       assignment_id: assignment_id !== undefined ? assignment_id ?? undefined : undefined,
-    }, existing);
+    }, existing, undefined);
+    if (accommodationChanged) this.guards.safeBroadcast(tripId, 'accommodation:updated', {});
+    for (const { event, payload } of costEvents) this.guards.safeBroadcast(tripId, event, payload);
     this.guards.safeBroadcast(tripId, 'reservation:updated', { reservation });
     return ok({ reservation });
   }
@@ -860,7 +864,8 @@ export class ReservationsMcp {
       if (applied.endpointsChanged) resolvedEndpoints = applied.endpoints;
     }
 
-    const { reservation } = await this.reservations.update(reservationId, tripId, {
+    // One write with the linked expenses a type change re-files, as on update_reservation.
+    const { reservation, accommodationChanged, costEvents } = await this.reservations.updateWithCost(String(reservationId), String(tripId), {
       title,
       type,
       reservation_time: departureTime,
@@ -874,7 +879,9 @@ export class ReservationsMcp {
       metadata: nextMetadata,
       endpoints: resolvedEndpoints,
       needs_review,
-    }, existing);
+    }, existing, undefined);
+    if (accommodationChanged) this.guards.safeBroadcast(tripId, 'accommodation:updated', {});
+    for (const { event, payload } of costEvents) this.guards.safeBroadcast(tripId, event, payload);
     this.guards.safeBroadcast(tripId, 'reservation:updated', { reservation });
     return ok({ reservation });
   }

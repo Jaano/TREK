@@ -189,6 +189,38 @@ describe('Tool: update_transport', () => {
       expect(data.reservation.endpoints).toHaveLength(2);
     });
   });
+
+  it('re-files a linked expense on a type change in the same write, as REST and the plugin RPC do', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    await withHarness(user.id, async (h) => {
+      const created = parseToolResult(await h.client.callTool({
+        name: 'create_transport',
+        arguments: { tripId: trip.id, type: 'flight', title: 'F', endpoints: flightEndpoints },
+      })) as { reservation: { id: number } };
+      const auto = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, category, total_price, reservation_id) VALUES (?, 'Fare', 'flights', 100, ?)")
+        .run(trip.id, created.reservation.id).lastInsertRowid);
+      const picked = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, category, total_price, reservation_id) VALUES (?, 'Lounge', 'food', 20, ?)")
+        .run(trip.id, created.reservation.id).lastInsertRowid);
+      broadcastMock.mockClear();
+
+      const result = await h.client.callTool({
+        name: 'update_transport',
+        arguments: { tripId: trip.id, reservationId: created.reservation.id, type: 'train' },
+      });
+      expect((parseToolResult(result) as { reservation: { type: string } }).reservation.type).toBe('train');
+
+      // flight -> train moves the auto-derived category; the hand-picked one stays.
+      const category = (id: number) => (testDb.prepare('SELECT category FROM budget_items WHERE id = ?').get(id) as { category: string }).category;
+      expect(category(auto)).toBe('transport');
+      expect(category(picked)).toBe('food');
+      const updated = broadcastMock.mock.calls.filter(c => c[1] === 'budget:updated').map(c => (c[2] as { item: { id: number } }).item.id);
+      expect(updated).toEqual([auto]);
+      // The expense goes out after the commit, before the booking.
+      const events = broadcastMock.mock.calls.map(c => c[1]);
+      expect(events.indexOf('budget:updated')).toBeLessThan(events.indexOf('reservation:updated'));
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
