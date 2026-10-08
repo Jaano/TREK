@@ -12,6 +12,8 @@
  * The reads and writes around it run for real against the snapshot schema.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import type Database from 'better-sqlite3';
 import { createSnapshotTestDb } from '../../helpers/db-mock';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
@@ -25,6 +27,8 @@ import { verifyJwtAndLoadUser } from '../../../src/nest/auth/jwt-verify';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { UserSessions } from '../../../src/db/entities/UserSessions.entity';
 
+const BASELINE = path.resolve(__dirname, '..', '..', '..', 'data', 'travel-baseline.db');
+
 describe('demo reset and the signed-in sessions', () => {
   let ormDb: Database.Database;
   let t: TestOrm;
@@ -36,10 +40,13 @@ describe('demo reset and the signed-in sessions', () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
     ormDb = createSnapshotTestDb();
     t = await createTestOrm(ormDb);
+    // After the snapshot DB is built: it locates the migrations through fs.existsSync.
+    vi.spyOn(fs, 'existsSync').mockImplementation(((p: fs.PathLike) => String(p) === BASELINE) as typeof fs.existsSync);
     swap = async () => {
       await deleteRows(t, UserSessions);
     };
     database = {
+      canSnapshot: () => true,
       checkpoint: vi.fn(async () => undefined),
       replace: vi.fn(async () => {
         await swap();
