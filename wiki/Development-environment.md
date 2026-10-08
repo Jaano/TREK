@@ -177,6 +177,10 @@ The `@trek/shared` package is the single source of truth for code shared between
 | `npm run lint:boundaries`    | Import cycles and domain boundaries may not grow past their baseline (CI gate) |
 | `npm run lint:tx`            | Methods that write more than once outside one transaction may not grow past their baseline (CI gate) |
 | `npm run lint:test-sql`      | Raw SQL fixtures in `tests/` may not grow past their baseline (CI gate) |
+| `npm run lint:dialect`       | SQLite-only SQL spellings under `src/` may not grow past their baseline (CI gate) |
+| `npm run gen:db-types`       | Regenerate the Kysely table types in `src/db/kysely/` from the migrated schema |
+| `npm run check:db-types`     | Verify the generated Kysely table types match the migrations (CI gate) |
+| `npm run probe:pg`           | Run the dialect helpers and repository statements against Postgres (CI job, needs `TREK_PG_PROBE_URL`) |
 | `npm run format`             | Format source                            |
 
 ### Client (`/client`)
