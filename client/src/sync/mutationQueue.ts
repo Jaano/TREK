@@ -43,28 +43,27 @@ export function generateUUID(): string {
 let _flushing = false
 
 /**
- * Take the cross-tab flush lock, or learn that another tab holds it. Every open
+ * Take the cross-tab flush lock, waiting while another tab holds it. Every open
  * tab of the account shares the queue and runs its own triggers, and the
  * _flushing flag only covers its own tab: two tabs read the same pending rows
  * and replay each of them twice, leaning on the server's replay cache to answer
- * the second. Resolves to the release function, or null when another tab is
- * flushing (that flush picks the rows up). Where the Web Locks API is missing
- * or refuses the request, the flush runs as before, guarded by the flag alone.
- * The lock goes with the tab, so a tab killed mid-flush never strands it.
+ * the second. Waiting rather than skipping matters to the callers: the online
+ * trigger re-seeds Dexie from the server once flush() resolves, and the socket
+ * refetches the trip, so a flush that returned while another tab was still
+ * replaying would let them lay the server's older rows over edits that are
+ * about to land. The waiting tab then runs its own pass, which finds what the
+ * holder left. Resolves to the release function. Where the Web Locks API is
+ * missing or refuses the request, the flush runs as before, guarded by the
+ * flag alone. The lock goes with the tab, so a tab killed mid-flush never
+ * strands it.
  */
-function acquireFlushLock(): Promise<(() => void) | null> {
+function acquireFlushLock(): Promise<() => void> {
   const noop = () => {}
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks
   if (!locks || typeof locks.request !== 'function') return Promise.resolve(noop)
   return new Promise(resolve => {
     locks
-      .request(`trek-mutation-flush:${offlineDb.name}`, { ifAvailable: true }, lock => {
-        if (!lock) {
-          resolve(null)
-          return undefined
-        }
-        return new Promise<void>(release => resolve(release))
-      })
+      .request(`trek-mutation-flush:${offlineDb.name}`, () => new Promise<void>(release => resolve(release)))
       .catch(() => resolve(noop))
   })
 }
@@ -244,10 +243,6 @@ export const mutationQueue = {
     if (_flushing || isEffectivelyOffline() || !isAuthed()) return
     _flushing = true
     const release = await acquireFlushLock()
-    if (!release) {
-      _flushing = false
-      return
-    }
     // tempId → realId learned during this flush, so a dependent edit/delete
     // queued against an offline-created entity (still holding the negative id)
     // can be rewritten to the server id before it is replayed.

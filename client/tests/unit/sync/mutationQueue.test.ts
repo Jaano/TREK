@@ -716,42 +716,70 @@ describe('mutationQueue: writes to one entity keep their order around a parked o
 });
 
 describe('mutationQueue.flush: one tab at a time', () => {
-  /** A Web Locks stand-in: one holder per name, `ifAvailable` answers null when taken. */
+  /** A Web Locks stand-in: one holder per name, later requests wait their turn. */
   function fakeLocks() {
-    const held = new Set<string>();
-    const names: string[] = [];
-    const request = vi.fn(async (name: string, _opts: { ifAvailable?: boolean }, cb: (lock: { name: string } | null) => unknown) => {
-      names.push(name);
-      if (held.has(name)) return cb(null);
-      held.add(name);
-      try { return await cb({ name }); } finally { held.delete(name); }
+    const tails = new Map<string, Promise<unknown>>();
+    const request = vi.fn((name: string, cb: (lock: { name: string }) => unknown) => {
+      const run = (tails.get(name) ?? Promise.resolve()).then(() => cb({ name }));
+      tails.set(name, run.catch(() => {}));
+      return run;
     });
     Object.defineProperty(navigator, 'locks', { value: { request }, configurable: true });
-    return { held, names, request };
+    /** Another tab takes the lock and keeps it until the returned function runs. */
+    const holdElsewhere = () => {
+      let release = () => {};
+      void request(`trek-mutation-flush:${offlineDb.name}`, () => new Promise<void>(r => { release = r; }));
+      return () => release();
+    };
+    return { request, holdElsewhere };
   }
+
+  const settle = () => new Promise(resolve => setTimeout(resolve, 20));
 
   afterEach(() => {
     Reflect.deleteProperty(navigator, 'locks');
   });
 
-  it('leaves the queue to the tab that holds the lock', async () => {
+  it('waits for the tab that holds the lock, so what the caller does next sees its replay', async () => {
     const locks = fakeLocks();
-    locks.held.add(`trek-mutation-flush:${offlineDb.name}`);
+    const releaseOther = locks.holdElsewhere();
     const id = generateUUID();
     await mutationQueue.enqueue(makeMutation({ id }));
     let sent = 0;
     server.use(http.post('/api/trips/1/places', () => { sent++; return HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 61 }) }); }));
 
-    await mutationQueue.flush();
+    let done = false;
+    const flushed = mutationQueue.flush().then(() => { done = true; });
+    await settle();
+    // Still waiting: a caller chaining a re-seed onto this flush must not run yet.
+    expect(done).toBe(false);
     expect(sent).toBe(0);
-    expect(await offlineDb.mutationQueue.get(id)).toMatchObject({ status: 'pending' });
 
-    // The other tab is done: the next trigger here takes the lock and sends it.
-    locks.held.clear();
-    await mutationQueue.flush();
+    // The other tab sends the row and lets go of the lock.
+    await offlineDb.mutationQueue.delete(id);
+    releaseOther();
+    await flushed;
+
+    expect(done).toBe(true);
+    expect(sent).toBe(0);
+    expect(locks.request).toHaveBeenCalledWith(`trek-mutation-flush:${offlineDb.name}`, expect.any(Function));
+  });
+
+  it('sends what the other tab left once it has the lock', async () => {
+    const locks = fakeLocks();
+    const releaseOther = locks.holdElsewhere();
+    const id = generateUUID();
+    await mutationQueue.enqueue(makeMutation({ id }));
+    let sent = 0;
+    server.use(http.post('/api/trips/1/places', () => { sent++; return HttpResponse.json({ place: buildPlace({ trip_id: 1, id: 63 }) }); }));
+
+    const flushed = mutationQueue.flush();
+    await settle();
+    releaseOther();
+    await flushed;
+
     expect(sent).toBe(1);
     expect(await offlineDb.mutationQueue.get(id)).toBeUndefined();
-    expect(locks.held.size).toBe(0);
   });
 
   it('flushes under the flag alone when the lock request is refused', async () => {
