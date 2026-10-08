@@ -29,65 +29,33 @@ permissions:
 #     themselves: s3-contract (MINIO_LICENSE_KEY) and scan (SONAR_TOKEN).
 #     Everything else runs on fork PRs so outside contributors still get the
 #     full test signal.
+#   - changes runs first and decides which of the jobs below a change needs
+#     (scripts/ci/changed-areas.mjs holds the rules). A docs-only push or PR
+#     runs nothing else. The filter lives in a job, not in `on.paths`, because
+#     a workflow skipped by its path filter never reports a check, and a
+#     required check that never reports blocks the PR for good.
+#   - docker-image builds the Dockerfile and boots the result, and
+#     deploy-manifests lints and renders the Helm chart and checks the
+#     compose files. Both run beside the preflight rather than after it.
+#   - ci-ok `needs:` every gate, test, image and chart job, and is the one
+#     check the branch ruleset requires. It fails when any of them failed or
+#     was cancelled and passes when they passed or were skipped (by changes,
+#     or on a fork PR without secrets). The scan is not in it: the quality
+#     gate reports on the PR by itself, and a SonarCloud outage should not
+#     block a merge.
 #
 # Automatic Analysis must stay disabled on sonarcloud.io — it is mutually
 # exclusive with CI-based analysis, and it cannot import the lcov coverage
 # this workflow produces.
-# A push or PR that touches none of these paths can't change the tests or the
-# analysis, so don't spend the coverage fan-out on it. For a docs-only push
-# that means no run and no fresh branch analysis — harmless, since the last
-# analysis is still accurate for unchanged code. GitHub Actions doesn't
-# support YAML anchors, so the two lists are literal copies: keep them
-# identical when editing either one.
+#
+# Every job runs on ubuntu-24.04 rather than ubuntu-latest, so the move of
+# that label to a new Ubuntu release is a change made here, in a PR, and not
+# one that lands on its own.
 on:
   push:
     branches: [main, dev]
-    paths:
-      - 'server/**'
-      - 'client/**'
-      - 'shared/**'
-      - 'plugin-sdk/**'
-      # npm workspaces hoist every dependency into the single root lockfile,
-      # so a dependency bump touches none of the four directories above — and
-      # a native binding like better-sqlite3 is exactly what needs the suite.
-      - 'package.json'
-      - 'package-lock.json'
-      - 'sonar-project.properties'
-      - '.github/workflows/test.yml'
-      # The image's start-up shape is pinned by a unit test
-      # (server/tests/unit/docker-entrypoint.test.ts), so a change to the
-      # Dockerfile or to the entrypoint script has to run the suite — that is
-      # exactly the change the test exists to catch.
-      - 'Dockerfile'
-      - 'server/scripts/**'
-      # Docs inside the workspaces (CLAUDE.md, READMEs, PATTERN.md) affect
-      # neither the tests nor the scan — no test reads checked-in markdown
-      # and SonarCloud has no markdown analyzer. Negations must stay last.
-      - '!**/*.md'
   pull_request:
     branches: [main, dev]
-    paths:
-      - 'server/**'
-      - 'client/**'
-      - 'shared/**'
-      - 'plugin-sdk/**'
-      # npm workspaces hoist every dependency into the single root lockfile,
-      # so a dependency bump touches none of the four directories above — and
-      # a native binding like better-sqlite3 is exactly what needs the suite.
-      - 'package.json'
-      - 'package-lock.json'
-      - 'sonar-project.properties'
-      - '.github/workflows/test.yml'
-      # The image's start-up shape is pinned by a unit test
-      # (server/tests/unit/docker-entrypoint.test.ts), so a change to the
-      # Dockerfile or to the entrypoint script has to run the suite — that is
-      # exactly the change the test exists to catch.
-      - 'Dockerfile'
-      - 'server/scripts/**'
-      # Docs inside the workspaces (CLAUDE.md, READMEs, PATTERN.md) affect
-      # neither the tests nor the scan — no test reads checked-in markdown
-      # and SonarCloud has no markdown analyzer. Negations must stay last.
-      - '!**/*.md'
   workflow_dispatch:
 
 # A newer push to the same branch/PR supersedes the running one — cancel it
@@ -98,18 +66,84 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Changed Areas
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      code: ${{ steps.areas.outputs.code }}
+      image: ${{ steps.areas.outputs.image }}
+      deploy: ${{ steps.areas.outputs.deploy }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # On a pull request HEAD is the merge commit GitHub builds of the PR
+          # into its base, and its first parent is the base, so two commits
+          # are enough to see exactly what the PR changes.
+          fetch-depth: 2
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Test the classifier
+        run: npm run test:ci-scripts
+
+      - name: List the changed files
+        id: list
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          list="$RUNNER_TEMP/changed-files.txt"
+          changed_between() { git -c core.quotePath=false diff --name-only "$1" "$2" > "$list"; }
+          case "$EVENT" in
+            pull_request)
+              changed_between HEAD^1 HEAD
+              ;;
+            push)
+              # A new branch has no previous commit, and a force push can leave
+              # it unreachable. Both run everything.
+              if [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]                 && git fetch --no-tags --depth=1 origin "$BEFORE"; then
+                changed_between "$BEFORE" "$AFTER"
+              else
+                echo "No previous commit to compare with, so everything runs."
+                list=""
+              fi
+              ;;
+            *)
+              list=""
+              ;;
+          esac
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+          [ -z "$list" ] || cat "$list"
+
+      - name: Decide what runs
+        id: areas
+        env:
+          LIST: ${{ steps.list.outputs.list }}
+        run: |
+          if [ -n "$LIST" ]; then
+            node scripts/ci/changed-areas.mjs --files "$LIST"
+          else
+            node scripts/ci/changed-areas.mjs --all
+          fi
+
   plugin-facts:
     name: Plugin Permission Facts
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          # 22 matches the TREK server runtime (same choice as the plugin-sdk
-          # jobs and publish-plugin-sdk.yml).
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -128,7 +162,9 @@ jobs:
 
   i18n-parity:
     name: i18n Key Parity
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -136,21 +172,23 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
 
       - name: Check i18n key parity
         run: node shared/scripts/i18n-parity.mjs --strict
 
   server-quality:
     name: Server Types & Lint
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -208,7 +246,9 @@ jobs:
 
   client-quality:
     name: Client Types & Lint
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -216,7 +256,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -249,7 +289,9 @@ jobs:
 
   plugin-sdk-quality:
     name: Plugin SDK Types
-    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
       run:
@@ -260,7 +302,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: .nvmrc
 
       # plugin-sdk is standalone (own lockfile, not a root workspace), so it
       # installs from its own directory.
@@ -272,7 +314,7 @@ jobs:
 
   client-bundle:
     name: Client Bundle
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
@@ -280,7 +322,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -302,7 +344,7 @@ jobs:
 
   client-e2e:
     name: Client End-to-End
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
@@ -310,7 +352,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -359,7 +401,7 @@ jobs:
 
   s3-contract:
     name: S3 Driver Contract (MinIO)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     # Fork PRs don't get repo secrets, so MINIO_LICENSE_KEY would be empty and
@@ -373,7 +415,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -411,7 +453,7 @@ jobs:
         # 60 x 2s gives a wider margin on cold runners than the 30 x 1s the
         # pre-6fbff835 job used.
         run: |
-          for i in $(seq 1 60); do
+          for _ in $(seq 1 60); do
             curl -sf http://127.0.0.1:9000/minio/health/live && exit 0
             sleep 2
           done
@@ -432,7 +474,7 @@ jobs:
 
   server-coverage:
     name: Server Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
@@ -440,7 +482,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -471,7 +513,7 @@ jobs:
 
   client-coverage:
     name: Client Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
@@ -479,7 +521,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -505,7 +547,7 @@ jobs:
 
   shared-coverage:
     name: Shared Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     steps:
@@ -513,7 +555,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -532,7 +574,7 @@ jobs:
 
   plugin-sdk-coverage:
     name: Plugin SDK Coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     needs: [plugin-facts, i18n-parity, server-quality, client-quality, plugin-sdk-quality]
     defaults:
@@ -544,9 +586,9 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          # 22 matches the TREK server runtime and has node:sqlite, which the
-          # dev-server tests exercise (same choice as publish-plugin-sdk.yml).
-          node-version: 22
+          # The image's Node runs the plugins, and it has the node:sqlite the
+          # dev-server tests exercise.
+          node-version-file: .nvmrc
 
       # plugin-sdk is standalone (own lockfile, not a root workspace), so it
       # installs from its own directory.
@@ -565,7 +607,7 @@ jobs:
 
   scan:
     name: Scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     # Fork PRs don't receive SONAR_TOKEN — skip the scan rather than fail it.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -583,31 +625,31 @@ jobs:
           fetch-depth: 0
 
       - name: Download server coverage
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: sonar-server-coverage
           path: server/coverage/
 
       - name: Download client coverage
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: sonar-client-coverage
           path: client/coverage/
 
       - name: Download shared coverage
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: sonar-shared-coverage
           path: shared/coverage/
 
       - name: Download plugin-sdk coverage
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: sonar-plugin-sdk-coverage
           path: plugin-sdk/coverage/
 
       - name: Scan
-        uses: SonarSource/sonarqube-scan-action@v8
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           # SonarQube Cloud is the scan action's default host, so no
           # SONAR_HOST_URL — the token is a sonarcloud.io token for the
@@ -625,3 +667,191 @@ jobs:
           # false-positive list — lives in sonar-project.properties so it stays
           # reviewable in a PR rather than buried in workflow YAML.
           args: -Dsonar.projectVersion=4.0.0
+
+  # The image every release ships, built the way docker.yml builds it and
+  # started the way docker-compose.yml starts it (read-only root, every
+  # capability dropped but the three the entrypoint needs, bind-mounted data
+  # and uploads). Nothing else in CI builds the Dockerfile: the unit tests only
+  # read it as text, which is how a Dockerfile that could not be parsed
+  # reached dev unseen. It is separate from the vulnerability scan on purpose,
+  # so a newly published CVE cannot hide a broken build or the other way round.
+  docker-image:
+    name: Docker Image
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # Only pushes write the layer cache. Pull requests read what the last
+      # push to their base left, so a stream of PRs cannot evict it and the
+      # cache stays within the repository's quota.
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: trek:ci
+          build-args: |
+            APP_VERSION=0.0.0-ci
+          cache-from: type=gha,scope=trek-image
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=trek-image' || '' }}
+
+      - name: Start the container
+        run: |
+          mkdir -p "$RUNNER_TEMP/trek/data" "$RUNNER_TEMP/trek/uploads"
+          docker run -d --name trek-ci -p 127.0.0.1:3000:3000 \
+            --read-only --tmpfs /tmp:noexec,nosuid,size=128m \
+            --security-opt no-new-privileges:true \
+            --cap-drop ALL --cap-add CHOWN --cap-add SETUID --cap-add SETGID \
+            -v "$RUNNER_TEMP/trek/data:/app/data" \
+            -v "$RUNNER_TEMP/trek/uploads:/app/uploads" \
+            -e ENCRYPTION_KEY="$(openssl rand -hex 32)" \
+            trek:ci
+
+      # Ready means migrated, seeded and answering from the database. A first
+      # boot migrates an empty database, which takes seconds; three minutes
+      # is the bound, not the expectation.
+      - name: Wait until the server is ready
+        run: |
+          for _ in $(seq 1 90); do
+            if [ "$(docker inspect -f '{{.State.Running}}' trek-ci)" != "true" ]; then
+              echo "::error::The container exited before it became ready."
+              exit 1
+            fi
+            if curl -sf http://127.0.0.1:3000/api/health/ready; then
+              echo
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::/api/health/ready did not answer within 180 seconds."
+          exit 1
+
+      - name: Check what the image serves
+        run: |
+          set -euo pipefail
+          version="$(docker exec trek-ci cat /app/server/VERSION)"
+          [ "$version" = "0.0.0-ci" ] || { echo "::error::VERSION holds '$version'"; exit 1; }
+          curl -sf http://127.0.0.1:3000/ | grep -q '<div id="root">' \
+            || { echo "::error::/ does not serve the client"; exit 1; }
+
+      - name: Container log
+        if: always()
+        run: docker logs trek-ci 2>&1 || true
+
+  # The Helm chart and the compose files are what self-hosters deploy from,
+  # and before this job only a release ever touched them. The chart is linted,
+  # rendered with the defaults and with each secret and persistence mode, and
+  # the output checked against the Kubernetes API schemas. Both tools come
+  # from their release pages, pinned by version and checksum.
+  deploy-manifests:
+    name: Helm Chart & Compose
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      HELM_VERSION: v3.22.0
+      HELM_SHA256: 1e4ab49e429626cf6c6958d914248b78c9730803c2751b87627e171dc800e7bb
+      KUBECONFORM_VERSION: v0.8.0
+      KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install helm and kubeconform
+        run: |
+          set -euo pipefail
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          cd "$RUNNER_TEMP"
+          curl -sSfLo helm.tgz "https://get.helm.sh/helm-$HELM_VERSION-linux-amd64.tar.gz"
+          echo "$HELM_SHA256  helm.tgz" | sha256sum -c -
+          tar -xzf helm.tgz --strip-components=1 -C "$bin" linux-amd64/helm
+          curl -sSfLo kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/$KUBECONFORM_VERSION/kubeconform-linux-amd64.tar.gz"
+          echo "$KUBECONFORM_SHA256  kubeconform.tgz" | sha256sum -c -
+          tar -xzf kubeconform.tgz -C "$bin" kubeconform
+          echo "$bin" >> "$GITHUB_PATH"
+
+      - name: Lint the chart
+        run: helm lint --strict charts/trek
+
+      - name: Render the chart
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/rendered"
+          mkdir -p "$out"
+          helm template trek charts/trek > "$out/defaults.yaml"
+          helm template trek charts/trek --set existingSecret=trek-secrets > "$out/existing-secret.yaml"
+          helm template trek charts/trek --set generateEncryptionKey=true > "$out/generated-key.yaml"
+          helm template trek charts/trek \
+            --set persistence.enabled=false \
+            --set ingress.enabled=true \
+            --set 'ingress.tls[0].secretName=trek-tls' \
+            --set 'ingress.tls[0].hosts[0]=chart-example.local' \
+            --set 'extraEnv[0].name=SESSION_DURATION' \
+            --set 'extraEnv[0].value=7d' \
+            --set 'extraEnvFrom[0].secretRef.name=trek-smtp' \
+            --set probes.liveness=null \
+            > "$out/variants.yaml"
+
+      - name: Check the manifests against the Kubernetes schemas
+        run: kubeconform -strict -summary "$RUNNER_TEMP"/rendered/*.yaml
+
+      - name: Check every compose file
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(docker-compose*.yml docker-compose*.yaml)
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::No compose file found."; exit 1; }
+          for f in "${files[@]}"; do
+            echo "$f"
+            docker compose -f "$f" config --quiet
+          done
+
+  # The single check the branch ruleset requires. It needs every job that
+  # gates a merge, so listing a job here is what makes it required. The scan
+  # stays out (see the layout notes at the top).
+  ci-ok:
+    needs:
+      - changes
+      - plugin-facts
+      - i18n-parity
+      - server-quality
+      - client-quality
+      - plugin-sdk-quality
+      - client-bundle
+      - client-e2e
+      - s3-contract
+      - server-coverage
+      - client-coverage
+      - shared-coverage
+      - plugin-sdk-coverage
+      - docker-image
+      - deploy-manifests
+    # always(): without it a failed dependency would skip this job, and the
+    # ruleset reads a skipped required check as passed.
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every needed job passed or was skipped
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"' | sort
+          failed="$(echo "$NEEDS" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(", ")')"
+          if [ -n "$failed" ]; then
+            echo "::error::Not passed: $failed"
+            exit 1
+          fi
