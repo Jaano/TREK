@@ -8,6 +8,8 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { PlaceShadowPicks } from '../../../../src/db/entities/PlaceShadowPicks.entity';
+import { findRow, findRows, updateRows } from '../../../helpers/factories/rows';
+import { dbNow } from '../../../../src/db/types';
 import type { PlaceShadowPicksRepository, NewPlaceShadowPickRow } from '../../../../src/db/repositories/PlaceShadowPicks.repository';
 
 const testDb = createSnapshotTestDb();
@@ -38,15 +40,23 @@ function row(overrides: Partial<NewPlaceShadowPickRow> = {}): NewPlaceShadowPick
   };
 }
 
-function rawRow(id: number): unknown {
-  return testDb.prepare('SELECT * FROM place_shadow_picks WHERE id = ?').get(id);
+function rawRow(id: number) {
+  return findRow(t, PlaceShadowPicks, { id });
 }
+
+/** Every stored pick, oldest first. */
+function storedPicks() {
+  return findRows(t, PlaceShadowPicks, {}, { id: 'asc' });
+}
+
+/** `created_at` as `datetime('now', '-N seconds')` would write it. */
+const secondsAgo = (seconds: number): string => dbNow(new Date(Date.now() - seconds * 1000));
 
 describe('PlaceShadowPicksRepository.insertPick', () => {
   it('PSPICKREPO-001: inserts exactly the given columns, nullable ones included', async () => {
     await picks.insertPick(row());
-    const stored = testDb.prepare('SELECT * FROM place_shadow_picks').get() as { id: number };
-    expect(rawRow(stored.id)).toMatchObject({ query: 'louvre', source: 'nominatim', live_rank: 0, live_count: 5, lang: null });
+    const [stored] = await storedPicks();
+    expect(await rawRow(stored.id)).toMatchObject({ query: 'louvre', source: 'nominatim', live_rank: 0, live_count: 5, lang: null });
   });
 });
 
@@ -63,7 +73,7 @@ describe('PlaceShadowPicksRepository.page', () => {
 
   it('PSPICKREPO-003: after excludes everything at or below that id', async () => {
     await picks.insertPick(row({ query: 'a' }));
-    const firstId = (testDb.prepare('SELECT id FROM place_shadow_picks').get() as { id: number }).id;
+    const firstId = (await storedPicks())[0].id;
     await picks.insertPick(row({ query: 'b' }));
     const page = await picks.page(firstId, 5);
     expect(page.map((r) => r.query)).toEqual(['b']);
@@ -78,8 +88,9 @@ describe('PlaceShadowPicksRepository.totals / countBySource / countByLiveRank', 
   it('PSPICKREPO-005: totals reports COUNT/MIN/MAX across every row', async () => {
     await picks.insertPick(row());
     await picks.insertPick(row());
-    testDb.prepare("UPDATE place_shadow_picks SET created_at = '2026-01-01 00:00:00' WHERE id = (SELECT MIN(id) FROM place_shadow_picks)").run();
-    testDb.prepare("UPDATE place_shadow_picks SET created_at = '2026-06-01 00:00:00' WHERE id = (SELECT MAX(id) FROM place_shadow_picks)").run();
+    const stored = await storedPicks();
+    await updateRows(t, PlaceShadowPicks, { id: stored[0].id }, { created_at: '2026-01-01 00:00:00' });
+    await updateRows(t, PlaceShadowPicks, { id: stored[stored.length - 1].id }, { created_at: '2026-06-01 00:00:00' });
     const totals = await picks.totals();
     expect(totals).toEqual({ total: 2, oldest: '2026-01-01 00:00:00', newest: '2026-06-01 00:00:00' });
   });
@@ -108,6 +119,7 @@ describe('PlaceShadowPicksRepository.totals / countBySource / countByLiveRank', 
     }
     const rows = await picks.countBySource();
     const legacy = testDb
+      // test-sql-allow: the legacy statement is the oracle the repository read is held to.
       .prepare('SELECT source, COUNT(*) AS count FROM place_shadow_picks GROUP BY source ORDER BY count DESC')
       .all();
     expect(rows).toEqual(legacy);
@@ -141,20 +153,20 @@ describe('PlaceShadowPicksRepository.deleteAll / purgeOlderThan', () => {
   it('PSPICKREPO-009: purgeOlderThan removes exactly the rows older than the cutoff, proving the deleted set on a seeded table', async () => {
     await picks.insertPick(row({ query: 'old' }));
     await picks.insertPick(row({ query: 'new' }));
-    const [oldRow, newRow] = testDb.prepare('SELECT id, query FROM place_shadow_picks ORDER BY id ASC').all() as { id: number; query: string }[];
-    testDb.prepare("UPDATE place_shadow_picks SET created_at = datetime('now', '-200 days') WHERE id = ?").run(oldRow.id);
-    testDb.prepare("UPDATE place_shadow_picks SET created_at = datetime('now', '-1 days') WHERE id = ?").run(newRow.id);
+    const [oldRow, newRow] = await storedPicks();
+    await updateRows(t, PlaceShadowPicks, { id: oldRow.id }, { created_at: secondsAgo(200 * 86_400) });
+    await updateRows(t, PlaceShadowPicks, { id: newRow.id }, { created_at: secondsAgo(86_400) });
 
     const removed = await picks.purgeOlderThan(180);
     expect(removed).toBe(1);
-    const survivors = testDb.prepare('SELECT query FROM place_shadow_picks').all() as { query: string }[];
+    const survivors = await storedPicks();
     expect(survivors.map((r) => r.query)).toEqual(['new']);
   });
 
   it('PSPICKREPO-010: purgeOlderThan(0) removes rows created before right now, leaving nothing newer than the boundary', async () => {
     await picks.insertPick(row());
-    const { id } = testDb.prepare('SELECT id FROM place_shadow_picks').get() as { id: number };
-    testDb.prepare("UPDATE place_shadow_picks SET created_at = datetime('now', '-1 seconds') WHERE id = ?").run(id);
+    const [{ id }] = await storedPicks();
+    await updateRows(t, PlaceShadowPicks, { id }, { created_at: secondsAgo(1) });
     expect(await picks.purgeOlderThan(0)).toBe(1);
   });
 });

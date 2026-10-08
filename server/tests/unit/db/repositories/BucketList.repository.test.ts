@@ -4,6 +4,7 @@ import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
 import { BucketList } from '../../../../src/db/entities/BucketList.entity';
+import { insertRow, insertRows } from '../../../helpers/factories/rows';
 import type { BucketListRepository } from '../../../../src/db/repositories/BucketList.repository';
 
 const testDb = createSnapshotTestDb();
@@ -21,13 +22,13 @@ describe('BucketListRepository.listForPublicApi (Plan 4 Task 1, public-api.servi
   it('BUCKETREPO-001: name/lat/lng/country_code/notes/target_date only, ordered by created_at DESC then id DESC, scoped to the caller', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
-    const insert = testDb.prepare(
-      'INSERT INTO bucket_list (user_id, name, lat, lng, country_code, notes, target_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    );
-    insert.run(user.id, 'Older', 1, 2, 'JP', 'note', null, '2026-01-01T00:00:00.000Z');
-    insert.run(user.id, 'Newer', null, null, null, null, '2027-03-01', '2026-02-01T00:00:00.000Z');
-    insert.run(other.id, 'Not mine', 9, 9, null, null, null, '2026-03-01T00:00:00.000Z');
+    await insertRows(t, BucketList, [
+      { user: user.id, name: 'Older', lat: 1, lng: 2, country_code: 'JP', notes: 'note', target_date: null, created_at: '2026-01-01T00:00:00.000Z' },
+      { user: user.id, name: 'Newer', lat: null, lng: null, country_code: null, notes: null, target_date: '2027-03-01', created_at: '2026-02-01T00:00:00.000Z' },
+      { user: other.id, name: 'Not mine', lat: 9, lng: 9, country_code: null, notes: null, target_date: null, created_at: '2026-03-01T00:00:00.000Z' },
+    ]);
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare(
       'SELECT name, lat, lng, country_code, notes, target_date FROM bucket_list WHERE user_id = ? ORDER BY created_at DESC, id DESC',
     ).all(user.id);
@@ -39,11 +40,8 @@ describe('BucketListRepository.listForPublicApi (Plan 4 Task 1, public-api.servi
 
   it('BUCKETREPO-002: same-instant rows tiebreak on id DESC (the second ORDER BY key)', async () => {
     const { user } = createUser(testDb);
-    const insert = testDb.prepare(
-      'INSERT INTO bucket_list (user_id, name, created_at) VALUES (?, ?, ?)',
-    );
-    insert.run(user.id, 'First inserted', '2026-01-01T00:00:00.000Z');
-    insert.run(user.id, 'Second inserted', '2026-01-01T00:00:00.000Z');
+    await insertRow(t, BucketList, { user: user.id, name: 'First inserted', created_at: '2026-01-01T00:00:00.000Z' });
+    await insertRow(t, BucketList, { user: user.id, name: 'Second inserted', created_at: '2026-01-01T00:00:00.000Z' });
 
     const rows = await bucketList.listForPublicApi(user.id);
     expect(rows.map((r) => r.name)).toEqual(['Second inserted', 'First inserted']);
@@ -66,19 +64,27 @@ describe('BucketListRepository.listForUser (AT30) — SELECT * ordered by create
   it('BUCKETREPO-004: matches the legacy row exactly, every nullable column both NULL and SET', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
-    const sparse = testDb.prepare(
-      'INSERT INTO bucket_list (user_id, name, created_at) VALUES (?, ?, ?)',
-    ).run(user.id, 'Sparse', '2026-01-01T00:00:00.000Z');
-    const full = testDb.prepare(
-      'INSERT INTO bucket_list (user_id, name, lat, lng, country_code, notes, target_date, visited_at, visited_source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(user.id, 'Full', 10.5, 20.5, 'JP', 'note', '2027-01-01', '2026-06-01', 'manual', '2026-02-01T00:00:00.000Z');
-    testDb.prepare('INSERT INTO bucket_list (user_id, name) VALUES (?, ?)').run(other.id, 'Not mine');
+    const sparse = await insertRow(t, BucketList, { user: user.id, name: 'Sparse', created_at: '2026-01-01T00:00:00.000Z' });
+    const full = await insertRow(t, BucketList, {
+      user: user.id,
+      name: 'Full',
+      lat: 10.5,
+      lng: 20.5,
+      country_code: 'JP',
+      notes: 'note',
+      target_date: '2027-01-01',
+      visited_at: '2026-06-01',
+      visited_source: 'manual',
+      created_at: '2026-02-01T00:00:00.000Z',
+    });
+    await insertRow(t, BucketList, { user: other.id, name: 'Not mine' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM bucket_list WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
     const rows = await bucketList.listForUser(user.id);
 
     expect(rows).toEqual(legacy);
-    expect(rows.map((r) => r.id)).toEqual([Number(full.lastInsertRowid), Number(sparse.lastInsertRowid)]);
+    expect(rows.map((r) => r.id)).toEqual([full, sparse]);
   });
 
   it('BUCKETREPO-005: empty array for a user with nothing on their list', async () => {
@@ -90,9 +96,9 @@ describe('BucketListRepository.listForUser (AT30) — SELECT * ordered by create
 describe('BucketListRepository.findById (AT33) — SELECT * WHERE id = ?, NOT user-scoped', () => {
   it('BUCKETREPO-006: matches the legacy row, regardless of owner', async () => {
     const { user } = createUser(testDb);
-    const inserted = testDb.prepare('INSERT INTO bucket_list (user_id, name) VALUES (?, ?)').run(user.id, 'Item');
-    const id = Number(inserted.lastInsertRowid);
+    const id = await insertRow(t, BucketList, { user: user.id, name: 'Item' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM bucket_list WHERE id = ?').get(id);
     expect(await bucketList.findById(id)).toEqual(legacy);
   });
@@ -105,9 +111,9 @@ describe('BucketListRepository.findById (AT33) — SELECT * WHERE id = ?, NOT us
 describe('BucketListRepository.findForUser (AT34/AT36/AT37) — SELECT * WHERE id = ? AND user_id = ?', () => {
   it('BUCKETREPO-008: matches the legacy row for the owning user', async () => {
     const { user } = createUser(testDb);
-    const inserted = testDb.prepare('INSERT INTO bucket_list (user_id, name) VALUES (?, ?)').run(user.id, 'Item');
-    const id = Number(inserted.lastInsertRowid);
+    const id = await insertRow(t, BucketList, { user: user.id, name: 'Item' });
 
+    // test-sql-allow: the legacy statement is the oracle the repository read is held to.
     const legacy = testDb.prepare('SELECT * FROM bucket_list WHERE id = ? AND user_id = ?').get(id, user.id);
     expect(await bucketList.findForUser(id, user.id)).toEqual(legacy);
   });
@@ -115,8 +121,7 @@ describe('BucketListRepository.findForUser (AT34/AT36/AT37) — SELECT * WHERE i
   it('BUCKETREPO-009: undefined for a foreign owner — the guard never leaks another user\'s item', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb, { username: 'other' });
-    const inserted = testDb.prepare('INSERT INTO bucket_list (user_id, name) VALUES (?, ?)').run(user.id, 'Item');
-    const id = Number(inserted.lastInsertRowid);
+    const id = await insertRow(t, BucketList, { user: user.id, name: 'Item' });
 
     expect(await bucketList.findForUser(id, other.id)).toBeUndefined();
   });

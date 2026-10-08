@@ -27,6 +27,11 @@ import type { PlacesService } from '../../../src/nest/places/places.service';
 import { resetTestDb } from '../../helpers/test-db';
 import { createPlace, createTrip, createUser } from '../../helpers/factories';
 import { createTestPlacesRepo, createTestUnitOfWork, sharedTestOrm } from '../../helpers/test-uow';
+import type { EntityClass } from '@mikro-orm/core';
+import { countRows, deleteRows, findRow, findRows } from '../../helpers/factories/rows';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Tours } from '../../../src/db/entities/Tours.entity';
+import { TourWaypoints } from '../../../src/db/entities/TourWaypoints.entity';
 import { createTestToursRepo, createTestTourTypesRepo, createTestTourWaypointsRepo, createTour } from '../../helpers/tours-repos';
 
 const request: TourCreateRequest = {
@@ -52,7 +57,12 @@ let service: ToursService;
 let tripId: string;
 let otherTripId: string;
 
-const count = (table: string) => (testDb.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n;
+const count = async <T extends object>(entity: EntityClass<T>) => countRows(await sharedTestOrm(testDb), entity);
+
+/** The first stored place and tour, the only ones most cases leave behind. */
+const firstPlace = async () => (await findRows(await sharedTestOrm(testDb), Places, {}, { id: 'asc' }))[0];
+const firstTour = async () => (await findRows(await sharedTestOrm(testDb), Tours, {}, { place: 'asc' }))[0];
+const placeById = async (id: number) => findRow(await sharedTestOrm(testDb), Places, { id });
 
 beforeAll(async () => {
   service = new ToursService(
@@ -86,9 +96,14 @@ describe('ToursService planner creation', () => {
     const result = await service.createTour(tripId, request, 'socket-1');
 
     const placeId = result.tour.place_id;
-    const place = testDb.prepare('SELECT * FROM places WHERE id = ?').get(placeId) as Record<string, unknown>;
-    const tour = testDb.prepare('SELECT * FROM tours WHERE place_id = ?').get(placeId) as Record<string, unknown>;
-    const points = testDb.prepare('SELECT role, sequence FROM tour_waypoints WHERE place_id = ? ORDER BY sequence').all(placeId);
+    const orm = await sharedTestOrm(testDb);
+    const place = await findRow(orm, Places, { id: placeId });
+    const tour = await findRow(orm, Tours, { place: placeId });
+    const points = (await findRows(orm, TourWaypoints, { place: placeId }, { sequence: 'asc' })).map((w) => ({
+      role: w.role,
+      sequence: w.sequence,
+    }));
+    if (!place || !tour) throw new Error('createTour should have stored the place and its tour');
 
     expect(place).toMatchObject({ trip_id: Number(tripId), name: 'Ridge walk', lat: 48, lng: 11, transport_mode: 'walking' });
     expect(JSON.parse(String(place.route_geometry))).toEqual(request.route_geometry);
@@ -110,9 +125,9 @@ describe('ToursService planner creation', () => {
   it('TOURS-SVC-002: rolls the owning place and facet back when a waypoint insert fails', async () => {
     await expect(service.createTour(tripId, duplicateSequence)).rejects.toThrow();
 
-    expect(count('places')).toBe(0);
-    expect(count('tours')).toBe(0);
-    expect(count('tour_waypoints')).toBe(0);
+    expect(await count(Places)).toBe(0);
+    expect(await count(Tours)).toBe(0);
+    expect(await count(TourWaypoints)).toBe(0);
     expect(broadcast).not.toHaveBeenCalled();
   });
 
@@ -121,10 +136,10 @@ describe('ToursService planner creation', () => {
 
     const result = await service.createTour(tripId, validated);
 
-    expect(count('places')).toBe(1);
-    expect(count('tours')).toBe(1);
-    expect(count('tour_waypoints')).toBe(2);
-    expect(testDb.prepare('SELECT duration FROM tours').get()).toEqual({ duration: 60 });
+    expect(await count(Places)).toBe(1);
+    expect(await count(Tours)).toBe(1);
+    expect(await count(TourWaypoints)).toBe(2);
+    expect((await firstTour()).duration).toBe(60);
     expect(result.tour).toMatchObject({ name: 'Ridge walk', planned: false });
   });
 
@@ -141,8 +156,8 @@ describe('ToursService planner creation', () => {
 
     await expect(service.createTour(tripId, bike)).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(count('places')).toBe(0);
-    expect(count('tours')).toBe(0);
+    expect(await count(Places)).toBe(0);
+    expect(await count(Tours)).toBe(0);
     expect(broadcast).not.toHaveBeenCalled();
   });
 
@@ -153,7 +168,8 @@ describe('ToursService planner creation', () => {
 
     await expect(service.updateTour(tripId, String(created.tour.place_id), bike)).rejects.toBeInstanceOf(BadRequestException);
 
-    expect(testDb.prepare('SELECT t.tour_type, p.name FROM tours t JOIN places p ON p.id = t.place_id').get())
+    const storedTour = await firstTour();
+    expect({ tour_type: storedTour.tour_type, name: (await placeById(Number(storedTour.place_id)))?.name })
       .toEqual({ tour_type: 'hike', name: 'Ridge walk' });
     expect(broadcast).not.toHaveBeenCalled();
   });
@@ -167,8 +183,8 @@ describe('ToursService planner creation', () => {
     const result = await service.createTour(tripId, request);
 
     expect(result.tour.name).toBe('Ridge walk');
-    expect(count('places')).toBe(1);
-    expect(count('tours')).toBe(1);
+    expect(await count(Places)).toBe(1);
+    expect(await count(Tours)).toBe(1);
     expect(broadcast).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledOnce();
   });
@@ -192,7 +208,7 @@ describe('ToursService reads', () => {
     expect(await service.getTour(tripId, placeId)).toEqual(created);
     await expect(service.getTour(otherTripId, placeId)).rejects.toThrow('Tour not found');
 
-    testDb.prepare('DELETE FROM tour_waypoints WHERE place_id = ?').run(created.tour.place_id);
+    await deleteRows(await sharedTestOrm(testDb), TourWaypoints, { place: created.tour.place_id });
     const legacyGpx = await service.getTour(tripId, placeId);
     expect(legacyGpx.tour.has_waypoints).toBe(false);
     expect(legacyGpx.waypoints).toEqual([
@@ -200,7 +216,7 @@ describe('ToursService reads', () => {
       { lat: 48.02, lng: 11.04, role: 'end', sequence: 1 },
     ]);
     // The fallback is read-only: nothing was backfilled.
-    expect(count('tour_waypoints')).toBe(0);
+    expect(await count(TourWaypoints)).toBe(0);
   });
 
   it('TOURS-SVC-004b: a plain place, a malformed id and a geometry-less tour', async () => {
@@ -257,10 +273,12 @@ describe('ToursService updates', () => {
 
     expect(result.tour).toMatchObject({ place_id: created.tour.place_id, name: 'Updated ridge walk' });
     expect(result.waypoints).toEqual(update.waypoints);
-    expect(testDb.prepare('SELECT name, lat, lng, transport_mode FROM places').get()).toEqual({
+    const storedPlace = await firstPlace();
+    expect({ name: storedPlace.name, lat: storedPlace.lat, lng: storedPlace.lng, transport_mode: storedPlace.transport_mode }).toEqual({
       name: 'Updated ridge walk', lat: 49, lng: 12, transport_mode: 'walking',
     });
-    expect(testDb.prepare('SELECT duration, elevation_gain, elevation_loss FROM tours').get()).toEqual({
+    const storedTour = await firstTour();
+    expect({ duration: storedTour.duration, elevation_gain: storedTour.elevation_gain, elevation_loss: storedTour.elevation_loss }).toEqual({
       duration: 45, elevation_gain: 60, elevation_loss: 0,
     });
     expect(broadcast).toHaveBeenNthCalledWith(1, tripId, 'tours:changed', { placeIds: [created.tour.place_id] }, 'socket-2');
@@ -276,7 +294,7 @@ describe('ToursService updates', () => {
 
     await expect(service.updateTour(tripId, String(created.tour.place_id), { ...duplicateSequence, name: 'Must roll back' })).rejects.toThrow();
 
-    expect(testDb.prepare('SELECT name FROM places').get()).toEqual({ name: 'Ridge walk' });
+    expect((await firstPlace()).name).toBe('Ridge walk');
     expect((await service.getTour(tripId, String(created.tour.place_id))).waypoints).toEqual(request.waypoints);
     expect(broadcast).not.toHaveBeenCalled();
   });
@@ -287,7 +305,8 @@ describe('ToursService updates', () => {
 
     await expect(service.updateTour(tripId, String(created.tour.place_id), update, 'socket')).rejects.toThrow('Tour not found');
 
-    expect(testDb.prepare('SELECT trip_id, name FROM places WHERE id = ?').get(created.tour.place_id))
+    const untouched = await placeById(Number(created.tour.place_id));
+    expect({ trip_id: untouched?.trip_id, name: untouched?.name })
       .toEqual({ trip_id: Number(otherTripId), name: 'Ridge walk' });
     expect((await service.getTour(otherTripId, String(created.tour.place_id))).waypoints).toEqual(request.waypoints);
     expect(broadcast).not.toHaveBeenCalled();
@@ -300,8 +319,8 @@ describe('ToursService updates', () => {
     await expect(service.updateTour(tripId, 'abc', update)).rejects.toThrow('Tour not found');
     await expect(service.updateTour('abc', String(plain.id), update)).rejects.toThrow('Tour not found');
 
-    expect(testDb.prepare('SELECT name FROM places WHERE id = ?').get(plain.id)).toEqual({ name: 'Plain' });
-    expect(count('tours')).toBe(0);
+    expect((await placeById(plain.id))?.name).toBe('Plain');
+    expect(await count(Tours)).toBe(0);
     expect(broadcast).not.toHaveBeenCalled();
   });
 });

@@ -40,6 +40,9 @@ import { db as testDb } from '../../../../src/db/database';
 import type { MikroORM } from '@mikro-orm/core';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestAppSettingsRepo, createTestUnitOfWork, sharedTestOrm } from '../../../helpers/test-uow';
+import { insertRows, updateRows } from '../../../helpers/factories/rows';
+import { readAppSetting } from '../../../helpers/factories/settings';
+import { AppSettings } from '../../../../src/db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../../../src/db/repositories/AppSettings.repository';
 import type { UnitOfWork } from '../../../../src/nest/database/unit-of-work';
 import { decrypt_api_key, encrypt_api_key } from '../../../../src/nest/common/crypto/apiKeyCrypto';
@@ -67,9 +70,18 @@ function make(repo: AppSettingsRepository = appSettings): VapidKeysService {
 /** An enc:v1: value the current ENCRYPTION_KEY cannot open. */
 const UNREADABLE = 'enc:v1:bm90IGEgY2lwaGVydGV4dA';
 
-function setting(key: string): string | undefined {
-  return (testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)
-    ?.value;
+async function setting(key: string): Promise<string | undefined> {
+  return (await readAppSetting(await sharedTestOrm(testDb), key)) ?? undefined;
+}
+
+/** Overwrites a stored setting in place, as a restore or another instance would. */
+async function overwriteSetting(key: string, value: string): Promise<void> {
+  await updateRows(await sharedTestOrm(testDb), AppSettings, { key }, { value });
+}
+
+/** Stores settings rows that are not there yet, the way another writer would. */
+async function storeSettings(rows: Array<{ key: string; value: string }>): Promise<void> {
+  await insertRows(await sharedTestOrm(testDb), AppSettings, rows);
 }
 
 beforeAll(async () => {
@@ -108,8 +120,8 @@ describe('VapidKeysService key pair', () => {
     const keys = await svc.getKeys();
     expect(keys.source).toBe('database');
     expect(isVapidKeyPair(keys.publicKey, keys.privateKey)).toBe(true);
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(keys.publicKey);
-    const stored = setting(VAPID_PRIVATE_KEY_SETTING)!;
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(keys.publicKey);
+    const stored = (await setting(VAPID_PRIVATE_KEY_SETTING))!;
     expect(stored.startsWith('enc:v1:')).toBe(true);
     expect(decrypt_api_key(stored)).toBe(keys.privateKey);
     expect(logInfo).toHaveBeenCalledTimes(1);
@@ -118,7 +130,7 @@ describe('VapidKeysService key pair', () => {
     const again = make();
     expect(await again.getKeys()).toEqual(keys);
     expect(await svc.getPublicKey()).toBe(keys.publicKey);
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBe(stored);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBe(stored);
     expect(logInfo).toHaveBeenCalledTimes(1);
   });
 
@@ -126,15 +138,16 @@ describe('VapidKeysService key pair', () => {
     const theirs = generateVapidKeyPair();
     const svc = make();
     const transactional = uow.transactional.bind(uow);
-    const spy = vi.spyOn(uow, 'transactional').mockImplementationOnce((fn) => {
-      testDb
-        .prepare('INSERT INTO app_settings (key, value) VALUES (?, ?), (?, ?)')
-        .run(VAPID_PUBLIC_KEY_SETTING, theirs.publicKey, VAPID_PRIVATE_KEY_SETTING, encrypt_api_key(theirs.privateKey));
+    const spy = vi.spyOn(uow, 'transactional').mockImplementationOnce(async (fn) => {
+      await storeSettings([
+        { key: VAPID_PUBLIC_KEY_SETTING, value: theirs.publicKey },
+        { key: VAPID_PRIVATE_KEY_SETTING, value: encrypt_api_key(theirs.privateKey) },
+      ]);
       return transactional(fn);
     });
     try {
       expect(await svc.getKeys()).toEqual({ ...theirs, source: 'database' });
-      expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(theirs.publicKey);
+      expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(theirs.publicKey);
       expect(logInfo).not.toHaveBeenCalled();
     } finally {
       spy.mockRestore();
@@ -143,8 +156,8 @@ describe('VapidKeysService key pair', () => {
 
   it('VKEY-002: bootstrap creates the pair, so the public-key GET only reads', async () => {
     await make().onApplicationBootstrap();
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBeTruthy();
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBeTruthy();
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBeTruthy();
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBeTruthy();
   });
 
   it('VKEY-003: a bootstrap failure is logged, not thrown', async () => {
@@ -164,13 +177,13 @@ describe('VapidKeysService key pair', () => {
     vi.stubEnv('VAPID_PRIVATE_KEY', pair.privateKey);
     const keys = await make().getKeys();
     expect(keys).toEqual({ ...pair, source: 'env' });
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
     expect(logError).not.toHaveBeenCalled();
   });
 
   it('VKEY-005: a mismatched environment pair turns push off, reported once, and the stored pair is not used', async () => {
     const stored = await make().getKeys();
-    const ciphertext = setting(VAPID_PRIVATE_KEY_SETTING);
+    const ciphertext = await setting(VAPID_PRIVATE_KEY_SETTING);
     vi.stubEnv('VAPID_PUBLIC_KEY', generateVapidKeyPair().publicKey);
     vi.stubEnv('VAPID_PRIVATE_KEY', generateVapidKeyPair().privateKey);
     const svc = make();
@@ -182,14 +195,14 @@ describe('VapidKeysService key pair', () => {
       expect.stringContaining('Web Push is off: VAPID_PUBLIC_KEY does not belong to VAPID_PRIVATE_KEY'),
     );
     // Both stored rows are exactly as they were, for when the variables go again.
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(stored.publicKey);
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBe(ciphertext);
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(stored.publicKey);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBe(ciphertext);
     expect(logInfo).toHaveBeenCalledTimes(1);
   });
 
   it('VKEY-006: half a pair in the environment turns push off over a stored pair, and is reported again after a fix and relapse', async () => {
     const stored = await make().getKeys();
-    const ciphertext = setting(VAPID_PRIVATE_KEY_SETTING);
+    const ciphertext = await setting(VAPID_PRIVATE_KEY_SETTING);
     const pair = generateVapidKeyPair();
     const svc = make();
     vi.stubEnv('VAPID_PRIVATE_KEY', pair.privateKey);
@@ -209,8 +222,8 @@ describe('VapidKeysService key pair', () => {
     expect(logError).toHaveBeenLastCalledWith(
       expect.stringContaining('VAPID_PUBLIC_KEY is set without its other half'),
     );
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(stored.publicKey);
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBe(ciphertext);
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(stored.publicKey);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBe(ciphertext);
 
     // Both variables removed on purpose: the stored pair, as on any install without them.
     vi.stubEnv('VAPID_PUBLIC_KEY', '');
@@ -230,8 +243,8 @@ describe('VapidKeysService key pair', () => {
     await make().onApplicationBootstrap();
     expect(await svc.isAvailable()).toBe(false);
     await expect(svc.getKeys()).rejects.toThrow(PushUnavailableError);
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBeUndefined();
     expect(logInfo).not.toHaveBeenCalled();
     // Once per instance, with what to do and without the key.
     expect(logError).toHaveBeenCalledTimes(2);
@@ -246,7 +259,7 @@ describe('VapidKeysService key pair', () => {
     expect(logError).toHaveBeenLastCalledWith(
       expect.stringContaining('Web Push is off: VAPID_PUBLIC_KEY does not belong to VAPID_PRIVATE_KEY'),
     );
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
 
     // The pair fixed: the same key as before, so every device receives again as it was.
     vi.stubEnv('VAPID_PRIVATE_KEY', pair.privateKey);
@@ -255,12 +268,12 @@ describe('VapidKeysService key pair', () => {
 
   it('VKEY-006c: a broken environment pair over an unusable stored pair names the variables and touches no row', async () => {
     await make().getKeys();
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, UNREADABLE);
     vi.stubEnv('VAPID_PUBLIC_KEY', generateVapidKeyPair().publicKey);
     const svc = make();
     await expect(svc.getKeys()).rejects.toThrow(PushUnavailableError);
     await expect(svc.getKeys()).rejects.toThrow(PushUnavailableError);
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
     // The variables are what push would sign with, so they are what the log names.
     expect(logError).toHaveBeenCalledTimes(1);
     expect(logError).toHaveBeenCalledWith(
@@ -271,17 +284,17 @@ describe('VapidKeysService key pair', () => {
   it('VKEY-007: a stored private key that no longer decrypts is kept, and push is off until the key is back', async () => {
     const svc = make();
     const original = await svc.getKeys();
-    const ciphertext = setting(VAPID_PRIVATE_KEY_SETTING)!;
+    const ciphertext = (await setting(VAPID_PRIVATE_KEY_SETTING))!;
     // What a restore under a different ENCRYPTION_KEY looks like from here.
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, UNREADABLE);
     logInfo.mockClear();
 
     const broken = make();
     await expect(broken.getKeys()).rejects.toThrow(PushUnavailableError);
     await expect(broken.getPublicKey()).rejects.toThrow(PushUnavailableError);
     // Nothing was replaced: both rows are exactly as they were.
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(original.publicKey);
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(original.publicKey);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
     expect(logInfo).not.toHaveBeenCalled();
     // Said once, with the way out, and without any key material.
     expect(logError).toHaveBeenCalledTimes(1);
@@ -292,62 +305,56 @@ describe('VapidKeysService key pair', () => {
     expect(line).not.toContain(ciphertext);
 
     // The right key again (here: the original ciphertext back) brings the same pair back.
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(ciphertext, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, ciphertext);
     expect(await broken.getKeys()).toEqual(original);
   });
 
   it('VKEY-008: half a stored pair is not completed with a new pair either', async () => {
     const publicKey = generateVapidKeyPair().publicKey;
-    testDb.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)').run(VAPID_PUBLIC_KEY_SETTING, publicKey);
+    await storeSettings([{ key: VAPID_PUBLIC_KEY_SETTING, value: publicKey }]);
     await expect(make().getKeys()).rejects.toThrow(PushUnavailableError);
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(publicKey);
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(publicKey);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBeUndefined();
     expect(logError).toHaveBeenCalledWith(expect.stringContaining('only one half of the stored VAPID key pair'));
     expect(logError).toHaveBeenCalledWith(expect.not.stringContaining(publicKey));
   });
 
   it('VKEY-008b: only the private half stored counts as incomplete too', async () => {
     const { privateKey } = generateVapidKeyPair();
-    testDb
-      .prepare('INSERT INTO app_settings (key, value) VALUES (?, ?)')
-      .run(VAPID_PRIVATE_KEY_SETTING, encrypt_api_key(privateKey));
+    await storeSettings([{ key: VAPID_PRIVATE_KEY_SETTING, value: encrypt_api_key(privateKey) }]);
     await expect(make().getKeys()).rejects.toThrow(PushUnavailableError);
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
   });
 
   it('VKEY-008c: halves that decrypt but do not belong together are refused, not replaced', async () => {
     const stored = generateVapidKeyPair();
-    testDb
-      .prepare('INSERT INTO app_settings (key, value) VALUES (?, ?), (?, ?)')
-      .run(
-        VAPID_PUBLIC_KEY_SETTING,
-        stored.publicKey,
-        VAPID_PRIVATE_KEY_SETTING,
-        encrypt_api_key(generateVapidKeyPair().privateKey),
-      );
+    await storeSettings([
+      { key: VAPID_PUBLIC_KEY_SETTING, value: stored.publicKey },
+      { key: VAPID_PRIVATE_KEY_SETTING, value: encrypt_api_key(generateVapidKeyPair().privateKey) },
+    ]);
     await expect(make().getKeys()).rejects.toThrow(PushUnavailableError);
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(stored.publicKey);
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(stored.publicKey);
     expect(logError).toHaveBeenCalledWith(expect.stringContaining('does not belong to the stored public key'));
   });
 
   it('VKEY-008d: an unusable pair is reported once per state, and again after it was fixed and broke again', async () => {
     const svc = make();
     await svc.getKeys();
-    const ciphertext = setting(VAPID_PRIVATE_KEY_SETTING)!;
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+    const ciphertext = (await setting(VAPID_PRIVATE_KEY_SETTING))!;
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, UNREADABLE);
     for (let i = 0; i < 3; i++) await expect(svc.getKeys()).rejects.toThrow(PushUnavailableError);
     expect(logError).toHaveBeenCalledTimes(1);
 
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(ciphertext, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, ciphertext);
     await svc.getKeys();
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, UNREADABLE);
     await expect(svc.getKeys()).rejects.toThrow(PushUnavailableError);
     expect(logError).toHaveBeenCalledTimes(2);
   });
 
   it('VKEY-008e: bootstrap over an unusable pair logs the reason once and does not throw', async () => {
     await make().getKeys();
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, UNREADABLE);
     logError.mockClear();
     await expect(make().onApplicationBootstrap()).resolves.toBeUndefined();
     expect(logError).toHaveBeenCalledTimes(1);
@@ -356,7 +363,7 @@ describe('VapidKeysService key pair', () => {
 
   it('VKEY-008f: a consistent environment pair still works while the stored one is unusable', async () => {
     await make().getKeys();
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, UNREADABLE);
     const pair = generateVapidKeyPair();
     vi.stubEnv('VAPID_PUBLIC_KEY', pair.publicKey);
     vi.stubEnv('VAPID_PRIVATE_KEY', pair.privateKey);
@@ -364,7 +371,7 @@ describe('VapidKeysService key pair', () => {
     expect(await svc.getKeys()).toEqual({ ...pair, source: 'env' });
     expect(await svc.isAvailable()).toBe(true);
     // The stored rows are still exactly what was there.
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
   });
 
   it('VKEY-008g: isAvailable only reads: it creates nothing, and never touches an unusable pair', async () => {
@@ -372,17 +379,17 @@ describe('VapidKeysService key pair', () => {
     // Neither row yet: available, since the next send or subscribe creates the
     // pair, but nothing is written now (the preference matrix GET asks this).
     expect(await svc.isAvailable()).toBe(true);
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBeUndefined();
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBeUndefined();
     expect(logInfo).not.toHaveBeenCalled();
 
     const { publicKey } = await svc.getKeys();
     expect(await svc.isAvailable()).toBe(true);
-    testDb.prepare('UPDATE app_settings SET value = ? WHERE key = ?').run(UNREADABLE, VAPID_PRIVATE_KEY_SETTING);
+    await overwriteSetting(VAPID_PRIVATE_KEY_SETTING, UNREADABLE);
     expect(await svc.isAvailable()).toBe(false);
     expect(await svc.isAvailable()).toBe(false);
-    expect(setting(VAPID_PUBLIC_KEY_SETTING)).toBe(publicKey);
-    expect(setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
+    expect(await setting(VAPID_PUBLIC_KEY_SETTING)).toBe(publicKey);
+    expect(await setting(VAPID_PRIVATE_KEY_SETTING)).toBe(UNREADABLE);
     expect(logError).toHaveBeenCalledTimes(1);
   });
 

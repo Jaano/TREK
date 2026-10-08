@@ -21,6 +21,10 @@ import {
   createTestSchoolHolidayPeriodsRepo, createTestVacayHolidayCalendarsRepo,
 } from '../../helpers/school-holidays-repos';
 import type { TestOrm } from '../../helpers/test-orm';
+import { deleteRows, findRows, insertRow } from '../../helpers/factories/rows';
+import { makeVacayPlan } from '../../helpers/factories/vacay';
+import { SchoolHolidayPeriods } from '../../../src/db/entities/SchoolHolidayPeriods.entity';
+import { VacayHolidayCalendars } from '../../../src/db/entities/VacayHolidayCalendars.entity';
 import { SchoolHolidaysService } from '../../../src/nest/school-holidays/school-holidays.service';
 
 const testDb = createSnapshotTestDb();
@@ -68,7 +72,9 @@ describe('catalog / region parity', () => {
     await seedRegion();
     await svc.createCountry({ code: 'DE', name: 'Germany' });
 
+    // test-sql-allow: the legacy statement is the oracle the service read is held to.
     const legacyCountries = testDb.prepare('SELECT code, name FROM school_holiday_countries ORDER BY name, code').all();
+    // test-sql-allow: the legacy statement is the oracle the service read is held to.
     const legacyRegions = testDb.prepare("SELECT *, country || '-MANUAL-' || id AS code FROM school_holiday_regions ORDER BY name, id").all();
 
     expect(await svc.catalog()).toEqual({ countries: legacyCountries, regions: legacyRegions });
@@ -77,8 +83,10 @@ describe('catalog / region parity', () => {
   it('SH-SVC-002: region() is full-key identical to the legacy region + periods SELECTs, including the synthesized code column', async () => {
     const region = await seedRegion();
 
+    // test-sql-allow: the legacy statement is the oracle the service read is held to.
     const legacyRegion = testDb.prepare("SELECT *, country || '-MANUAL-' || id AS code FROM school_holiday_regions WHERE id = ?").get(region.id);
     const legacyHolidays = testDb
+      // test-sql-allow: the legacy statement is the oracle the service read is held to.
       .prepare('SELECT name, start_date AS startDate, end_date AS endDate FROM school_holiday_periods WHERE region_id = ? ORDER BY start_date, end_date, name')
       .all(region.id);
 
@@ -150,8 +158,8 @@ describe('deleteRegion cross-domain integrity guard (existsForSchoolRegion)', ()
   it('SH-SVC-009: refused while a vacay_holiday_calendars row of type school_holiday still references the region', async () => {
     const region = await seedRegion();
     const { user } = createUser(testDb);
-    const plan = testDb.prepare('INSERT INTO vacay_plans (owner_id) VALUES (?)').run(user.id);
-    testDb.prepare("INSERT INTO vacay_holiday_calendars (plan_id, type, region) VALUES (?, 'school_holiday', ?)").run(plan.lastInsertRowid, region.code);
+    const plan = await makeVacayPlan(t, user.id);
+    await insertRow(t, VacayHolidayCalendars, { plan: plan.id, type: 'school_holiday', region: region.code });
 
     await expect(svc.deleteRegion(region.id, region.revision)).rejects.toThrow(ConflictException);
     // Untouched — the region and its periods are still there.
@@ -161,8 +169,8 @@ describe('deleteRegion cross-domain integrity guard (existsForSchoolRegion)', ()
   it('SH-SVC-010: a calendar of a DIFFERENT type referencing the same code string does not block deletion (type is part of the guard)', async () => {
     const region = await seedRegion();
     const { user } = createUser(testDb);
-    const plan = testDb.prepare('INSERT INTO vacay_plans (owner_id) VALUES (?)').run(user.id);
-    testDb.prepare("INSERT INTO vacay_holiday_calendars (plan_id, type, region) VALUES (?, 'public_holiday', ?)").run(plan.lastInsertRowid, region.code);
+    const plan = await makeVacayPlan(t, user.id);
+    await insertRow(t, VacayHolidayCalendars, { plan: plan.id, type: 'public_holiday', region: region.code });
 
     await expect(svc.deleteRegion(region.id, region.revision)).resolves.toEqual({ success: true });
   });
@@ -170,12 +178,12 @@ describe('deleteRegion cross-domain integrity guard (existsForSchoolRegion)', ()
   it('SH-SVC-011: succeeds once no referencing calendar remains, and removes the region and its periods', async () => {
     const region = await seedRegion();
     const { user } = createUser(testDb);
-    const plan = testDb.prepare('INSERT INTO vacay_plans (owner_id) VALUES (?)').run(user.id);
-    testDb.prepare("INSERT INTO vacay_holiday_calendars (plan_id, type, region) VALUES (?, 'school_holiday', ?)").run(plan.lastInsertRowid, region.code);
-    testDb.exec('DELETE FROM vacay_holiday_calendars');
+    const plan = await makeVacayPlan(t, user.id);
+    await insertRow(t, VacayHolidayCalendars, { plan: plan.id, type: 'school_holiday', region: region.code });
+    await deleteRows(t, VacayHolidayCalendars);
 
     await expect(svc.deleteRegion(region.id, region.revision)).resolves.toEqual({ success: true });
-    expect(testDb.prepare('SELECT * FROM school_holiday_periods WHERE region_id = ?').all(region.id)).toEqual([]);
+    expect(await findRows(t, SchoolHolidayPeriods, { region: region.id })).toEqual([]);
     await expect(svc.region(region.id)).rejects.toThrow('not found');
   });
 });
