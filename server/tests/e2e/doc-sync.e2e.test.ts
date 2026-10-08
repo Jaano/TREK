@@ -32,12 +32,6 @@ vi.mock('../../src/db/database', async () => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: number | string, userId: number) =>
-      db
-        .prepare(
-          'SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)',
-        )
-        .get(userId, tripId, userId),
     isOwner: () => false,
   };
 });
@@ -79,7 +73,18 @@ import { NextcloudDocumentProvider, OpencloudDocumentProvider } from '../../src/
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { addTripMember } from '../helpers/factories/trips';
+import { countRows, findRow, updateRows } from '../helpers/factories/rows';
+import { DocumentConnections } from '../../src/db/entities/DocumentConnections.entity';
+import { DocumentProviders } from '../../src/db/entities/DocumentProviders.entity';
+import { TripDocumentLinks } from '../../src/db/entities/TripDocumentLinks.entity';
+
+let orm: TestOrm;
+
+async function connectionRow(tripId: number) {
+  return (await findRow(orm, DocumentConnections, { trip: tripId }))!;
+}
 
 /** A provider that answers plausibly but never opens a socket. */
 function fakeProvider(id: string) {
@@ -151,14 +156,15 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
   }
 
   beforeAll(async () => {
+    orm = await createTestOrm(db);
     ownerId = createUser(db as never, { username: 'owner', email: 'owner@test.local' }).user.id;
     memberId = createUser(db as never, { username: 'member', email: 'member@test.local' }).user.id;
     strangerId = createUser(db as never, { username: 'stranger', email: 'stranger@test.local' }).user.id;
 
     tripId = createTrip(db as never, ownerId, { title: 'Japan', start_date: '2026-10-01', end_date: '2026-10-07' }).id;
-    db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, memberId);
+    await addTripMember(orm, tripId, memberId);
     // Providers are off by default, exactly as a fresh install ships them.
-    db.prepare("UPDATE document_providers SET enabled = 1 WHERE id IN ('paperless', 'nextcloud')").run();
+    await updateRows(orm, DocumentProviders, { id: { $in: ['paperless', 'nextcloud'] } }, { enabled: 1 });
 
     app = await build();
     server = app.getHttpServer();
@@ -166,6 +172,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
 
   afterAll(async () => {
     await app?.close();
+    await orm?.close();
     db.close();
   });
 
@@ -249,7 +256,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
     expect(JSON.stringify(res.body)).not.toContain('super-secret-token');
 
     // And it is encrypted at rest, not merely hidden on the way out.
-    const row = db.prepare('SELECT secrets FROM document_connections WHERE trip_id = ?').get(tripId) as { secrets: string };
+    const row = await connectionRow(tripId);
     expect(row.secrets).toMatch(/^enc:v1:/);
     expect(row.secrets).not.toContain('super-secret-token');
   });
@@ -260,7 +267,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
       .set('Cookie', sessionCookie(ownerId))
       .send({ providerId: 'paperless', baseUrl: 'https://paperless.example.com', credentials: { api_token: '' } })
       .expect(200);
-    const row = db.prepare('SELECT secrets FROM document_connections WHERE trip_id = ?').get(tripId) as { secrets: string };
+    const row = await connectionRow(tripId);
     expect(row.secrets).toMatch(/^enc:v1:/);
   });
 
@@ -272,7 +279,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
       .set('Cookie', sessionCookie(ownerId))
       .send({ providerId: 'paperless', baseUrl: 'https://paperless.example.net', credentials: { api_token: '' } })
       .expect(400);
-    const row = db.prepare('SELECT base_url FROM document_connections WHERE trip_id = ?').get(tripId) as { base_url: string };
+    const row = await connectionRow(tripId);
     expect(row.base_url).toBe('https://paperless.example.com');
   });
 
@@ -380,7 +387,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
   it('still names the store of a binding after the admin switches its provider off', async () => {
     // The providers list drops a provider that is off, so the binding itself is
     // the only thing left that can tell a member where the documents went.
-    db.prepare("UPDATE document_providers SET enabled = 0 WHERE id = 'paperless'").run();
+    await updateRows(orm, DocumentProviders, { id: 'paperless' }, { enabled: 0 });
     try {
       const providers = await request(server)
         .get(`/api/trips/${tripId}/docsync/providers`)
@@ -405,7 +412,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
       const status = JSON.parse(result.content[0].text) as { links: Array<Record<string, unknown>> };
       expect(status.links[0]).toMatchObject({ providerId: 'paperless', providerName: 'Paperless-ngx' });
     } finally {
-      db.prepare("UPDATE document_providers SET enabled = 1 WHERE id = 'paperless'").run();
+      await updateRows(orm, DocumentProviders, { id: 'paperless' }, { enabled: 1 });
     }
   });
 
@@ -443,7 +450,7 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
       .set('Cookie', sessionCookie(ownerId))
       .expect(200);
     expect(res.body.documentsKept).toBe(true);
-    expect(db.prepare('SELECT COUNT(*) AS n FROM trip_document_links WHERE id = ?').get(linkId)).toEqual({ n: 0 });
+    expect(await countRows(orm, TripDocumentLinks, { id: linkId })).toBe(0);
   });
 
   it('disconnects the store through the real contract, bindings included', async () => {
@@ -467,8 +474,8 @@ describe('Document sync e2e (real guards + real services + temp SQLite)', () => 
       .expect(200);
 
     expect(res.body).toEqual({ success: true });
-    expect(db.prepare('SELECT COUNT(*) AS n FROM document_connections WHERE trip_id = ?').get(tripId)).toEqual({ n: 0 });
-    expect(db.prepare('SELECT COUNT(*) AS n FROM trip_document_links WHERE trip_id = ?').get(tripId)).toEqual({ n: 0 });
+    expect(await countRows(orm, DocumentConnections, { trip: tripId })).toBe(0);
+    expect(await countRows(orm, TripDocumentLinks, { trip: tripId })).toBe(0);
   });
 
   it('accepts an unknown webhook token without revealing that it is unknown', async () => {

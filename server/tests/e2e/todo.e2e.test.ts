@@ -1,71 +1,25 @@
 /**
  * To-do module e2e — exercises the migrated /api/trips/:tripId/todo endpoints
- * through the real JwtAuthGuard against a temp SQLite db. TodoService runs its
- * real SQL via DatabaseModule (the DATABASE_CONNECTION factory picks up the
- * mocked db singleton); trip access resolves through a real-SQL canAccessTrip
- * over the temp db. Only the permission check and the WebSocket broadcast stay
- * mocked.
+ * through the real JwtAuthGuard against a migrated temp SQLite db
+ * (createSnapshotTestDb()). TodoService and the trip access check run their
+ * real queries through the repositories; rows are seeded and read through the
+ * factories in tests/helpers/factories. Only the permission check and the
+ * WebSocket broadcast stay mocked.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
-    avatar TEXT);`);
-  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, currency TEXT);');
-  tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
-  tmp.exec(`CREATE TABLE todo_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    trip_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    checked INTEGER NOT NULL DEFAULT 0,
-    category TEXT,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    due_date TEXT,
-    description TEXT,
-    assigned_user_id INTEGER,
-    priority INTEGER NOT NULL DEFAULT 0,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  );`);
-  tmp.exec(`CREATE TABLE todo_category_assignees (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    trip_id INTEGER NOT NULL,
-    category_name TEXT NOT NULL,
-    user_id INTEGER NOT NULL,
-    UNIQUE(trip_id, category_name, user_id)
-  );`);
-  // StorageRegistryService (behind StorageModule, now in this module chain) reads
-  // this at onModuleInit.
-  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-
-vi.mock('../../src/db/database', () => ({
-  db,
-  // Real-SQL trip access over the temp db — TodoService.verifyTripAccess and
-  // DatabaseModule both read the mocked singleton.
-  canAccessTrip: (tripId: number | string, userId: number) =>
-    db.prepare(`
-      SELECT t.id, t.user_id FROM trips t
-      LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
-      WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
-    `).get(userId, tripId, userId),
-  isOwner: () => false,
-  getPlaceWithTags: () => null,
-  closeDb: () => {},
-  reinitialize: () => {},
-}));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
+import { db } from '../../src/db/database';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 
 // Since the permissions DI migration, the check is a spy on the container's
@@ -77,13 +31,19 @@ import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+import { addTripMember, makeTrip } from '../helpers/factories/trips';
+import { countRows, deleteRows, findRow, findRows, insertRow } from '../helpers/factories/rows';
+import { TodoCategoryAssignees } from '../../src/db/entities/TodoCategoryAssignees.entity';
+import { TodoItems } from '../../src/db/entities/TodoItems.entity';
+import { TripMembers } from '../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
 
-function insertItem(tripId: number, name: string, extra: Partial<{ sort_order: number; due_date: string }> = {}): number {
-  const res = db
-    .prepare('INSERT INTO todo_items (trip_id, name, sort_order, due_date) VALUES (?, ?, ?, ?)')
-    .run(tripId, name, extra.sort_order ?? 0, extra.due_date ?? null);
-  return Number(res.lastInsertRowid);
+let orm: TestOrm;
+
+function insertItem(tripId: number, name: string, extra: Partial<{ sort_order: number; due_date: string }> = {}): Promise<number> {
+  return insertRow(orm, TodoItems, { trip: tripId, name, sort_order: extra.sort_order ?? 0, due_date: extra.due_date ?? null });
 }
 
 describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
@@ -104,24 +64,28 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
   }
 
   beforeAll(async () => {
-    seedUser(db as never, { id: 1 });
-    seedUser(db as never, { id: 2, email: 'stranger@example.test' });
+    orm = await createTestOrm(db);
+    // Usernames are unique on the migrated schema. User 2 carries 'e2e-user',
+    // the name the category assignee case below reads back for it.
+    await makeUser(orm, { id: 1, username: 'e2e-owner', email: 'e2e@example.test' });
+    await makeUser(orm, { id: 2, username: 'e2e-user', email: 'stranger@example.test' });
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 
-  beforeEach(() => {
-    db.exec('DELETE FROM todo_category_assignees');
-    db.exec('DELETE FROM todo_items');
-    db.exec('DELETE FROM trip_members');
-    db.exec('DELETE FROM trips');
-    tripId = Number(db.prepare('INSERT INTO trips (user_id, title) VALUES (1, ?)').run('Trip').lastInsertRowid);
+  beforeEach(async () => {
+    await deleteRows(orm, TodoCategoryAssignees);
+    await deleteRows(orm, TodoItems);
+    await deleteRows(orm, TripMembers);
+    await deleteRows(orm, Trips);
+    tripId = (await makeTrip(orm, 1, { title: 'Trip' })).id;
     checkPermission.mockReturnValue(true);
   });
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   it('401 without a session cookie', async () => {
@@ -130,8 +94,8 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
   });
 
   it('200 list ordered by sort_order', async () => {
-    insertItem(tripId, 'Second', { sort_order: 1 });
-    insertItem(tripId, 'First', { sort_order: 0 });
+    await insertItem(tripId, 'Second', { sort_order: 1 });
+    await insertItem(tripId, 'First', { sort_order: 0 });
     const res = await request(server).get(`/api/trips/${tripId}/todo`).set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     expect(res.body.items.map((i: { name: string }) => i.name)).toEqual(['First', 'Second']);
@@ -144,11 +108,11 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
   });
 
   it('201 on create, inserting the row with the legacy defaults and incrementing sort_order', async () => {
-    insertItem(tripId, 'Existing', { sort_order: 4 });
+    await insertItem(tripId, 'Existing', { sort_order: 4 });
     const res = await request(server).post(`/api/trips/${tripId}/todo`).set('Cookie', sessionCookie(1)).send({ name: 'Book hotel' });
     expect(res.status).toBe(201);
     expect(res.body.item).toMatchObject({ name: 'Book hotel', checked: 0, priority: 0, sort_order: 5 });
-    expect(db.prepare('SELECT name FROM todo_items WHERE id = ?').get(res.body.item.id)).toEqual({ name: 'Book hotel' });
+    expect((await findRow(orm, TodoItems, { id: res.body.item.id }))!.name).toBe('Book hotel');
   });
 
   it('400 from the Zod pipe on create without a name', async () => {
@@ -164,7 +128,7 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
   });
 
   it('accepts the legacy numeric checked form through the pipe', async () => {
-    const id = insertItem(tripId, 'Toggle me');
+    const id = await insertItem(tripId, 'Toggle me');
     const res = await request(server).put(`/api/trips/${tripId}/todo/${id}`).set('Cookie', sessionCookie(1)).send({ checked: 1 });
     expect(res.status).toBe(200);
     expect(res.body.item.checked).toBe(1);
@@ -175,11 +139,11 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
     const res = await request(server).post(`/api/trips/${tripId}/todo`).set('Cookie', sessionCookie(1)).send({ name: 'X' });
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'No permission' });
-    expect((db.prepare('SELECT COUNT(*) AS n FROM todo_items').get() as { n: number }).n).toBe(0);
+    expect(await countRows(orm, TodoItems)).toBe(0);
   });
 
   it('200 on update; a body key with null clears the field, omitted keys stay', async () => {
-    const id = insertItem(tripId, 'Task', { due_date: '2026-06-01' });
+    const id = await insertItem(tripId, 'Task', { due_date: '2026-06-01' });
     const renamed = await request(server).put(`/api/trips/${tripId}/todo/${id}`).set('Cookie', sessionCookie(1)).send({ name: 'Renamed' });
     expect(renamed.status).toBe(200);
     expect(renamed.body.item).toMatchObject({ id, name: 'Renamed', due_date: '2026-06-01' });
@@ -212,28 +176,28 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
   });
 
   it('200 on reorder, persisting the new sort_order', async () => {
-    const a = insertItem(tripId, 'A', { sort_order: 0 });
-    const b = insertItem(tripId, 'B', { sort_order: 1 });
+    const a = await insertItem(tripId, 'A', { sort_order: 0 });
+    const b = await insertItem(tripId, 'B', { sort_order: 1 });
     const res = await request(server).put(`/api/trips/${tripId}/todo/reorder`).set('Cookie', sessionCookie(1)).send({ orderedIds: [b, a] });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true });
-    const rows = db.prepare('SELECT id FROM todo_items WHERE trip_id = ? ORDER BY sort_order').all(tripId) as { id: number }[];
+    const rows = await findRows(orm, TodoItems, { trip: tripId }, { sort_order: 'asc' });
     expect(rows.map((r) => r.id)).toEqual([b, a]);
   });
 
   it('200 on delete, removing the row; 404 when already gone', async () => {
-    const id = insertItem(tripId, 'Gone');
+    const id = await insertItem(tripId, 'Gone');
     const ok = await request(server).delete(`/api/trips/${tripId}/todo/${id}`).set('Cookie', sessionCookie(1));
     expect(ok.status).toBe(200);
     expect(ok.body).toEqual({ success: true });
-    expect(db.prepare('SELECT id FROM todo_items WHERE id = ?').get(id)).toBeUndefined();
+    expect(await findRow(orm, TodoItems, { id })).toBeNull();
     const missing = await request(server).delete(`/api/trips/${tripId}/todo/${id}`).set('Cookie', sessionCookie(1));
     expect(missing.status).toBe(404);
     expect(missing.body).toEqual({ error: 'Item not found' });
   });
 
   it('category assignees round-trip: PUT replaces, GET groups by category', async () => {
-    db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, 2);
+    await addTripMember(orm, tripId, 2);
     const put = await request(server)
       .put(`/api/trips/${tripId}/todo/category-assignees/Booking`)
       .set('Cookie', sessionCookie(1))

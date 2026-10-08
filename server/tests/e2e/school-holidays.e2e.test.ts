@@ -24,6 +24,13 @@ import { createTestRegistry } from '../../src/nest-mcp';
 import { trekMcpAccessPolicy, trekMcpValidateAccess } from '../../src/mcp/nest-mcp-policy';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
 import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { makeAdmin, makeUser } from '../helpers/factories/users';
+import { deleteRows, findRows, insertRow, insertRowIgnoringConflict } from '../helpers/factories/rows';
+import { SchoolHolidayCountries } from '../../src/db/entities/SchoolHolidayCountries.entity';
+import { SchoolHolidayPeriods } from '../../src/db/entities/SchoolHolidayPeriods.entity';
+import { SchoolHolidayRegions } from '../../src/db/entities/SchoolHolidayRegions.entity';
+import { VacayHolidayCalendars } from '../../src/db/entities/VacayHolidayCalendars.entity';
+import { VacayPlans } from '../../src/db/entities/VacayPlans.entity';
 
 const base = '/api/school-holiday-catalog';
 const winter = { name: 'Winter break', startDate: '2026-12-20', endDate: '2027-01-06' };
@@ -31,7 +38,6 @@ let app: INestApplication;
 let service: SchoolHolidaysService;
 let orm: MikroORM;
 beforeAll(async () => {
-  db.prepare("INSERT INTO users (id, username, email, password_hash, role) VALUES (1, 'admin', 'admin@test.local', '', 'admin'), (2, 'member', 'member@test.local', '', 'user')").run();
   const module = await Test.createTestingModule({ imports: [await TestUnitOfWorkModule.forRoot(db), await createTestMikroOrmModule(db), RealtimeModule, SchoolHolidaysModule] }).compile();
   app = module.createNestApplication();
   app.use(cookieParser());
@@ -40,10 +46,15 @@ beforeAll(async () => {
   await app.init();
   service = app.get(SchoolHolidaysService);
   orm = app.get(MikroORM);
+  await makeAdmin(orm, { id: 1, username: 'admin', email: 'admin@test.local' });
+  await makeUser(orm, { id: 2, username: 'member', email: 'member@test.local' });
 });
 afterAll(async () => { await app.close(); db.close(); });
-beforeEach(() => {
-  db.exec('DELETE FROM vacay_holiday_calendars; DELETE FROM school_holiday_periods; DELETE FROM school_holiday_regions; DELETE FROM school_holiday_countries;');
+beforeEach(async () => {
+  await deleteRows(orm, VacayHolidayCalendars);
+  await deleteRows(orm, SchoolHolidayPeriods);
+  await deleteRows(orm, SchoolHolidayRegions);
+  await deleteRows(orm, SchoolHolidayCountries);
 });
 
 async function seed() {
@@ -126,13 +137,13 @@ describe('global manual school holidays', () => {
 
   it('protects used regions and deletes unused regions with their periods', () => withRequestContext(orm, async () => {
     const region = await seed();
-    db.prepare('INSERT OR IGNORE INTO vacay_plans (id, owner_id) VALUES (1, 1)').run();
-    db.prepare("INSERT INTO vacay_holiday_calendars (plan_id, type, region) VALUES (1, 'school_holiday', ?)").run(region.code);
+    await insertRowIgnoringConflict(orm, VacayPlans, { id: 1, owner: 1 });
+    await insertRow(orm, VacayHolidayCalendars, { plan: 1, type: 'school_holiday', region: region.code });
     await request(app.getHttpServer()).delete(`${base}/regions/${region.id}?revision=1`).set('Cookie', sessionCookie(1)).expect(409);
     await request(app.getHttpServer()).delete(`${base}/countries/US`).set('Cookie', sessionCookie(1)).expect(409);
-    db.exec('DELETE FROM vacay_holiday_calendars');
+    await deleteRows(orm, VacayHolidayCalendars);
     await request(app.getHttpServer()).delete(`${base}/regions/${region.id}?revision=1`).set('Cookie', sessionCookie(1)).expect(200);
-    expect(db.prepare('SELECT * FROM school_holiday_periods').all()).toEqual([]);
+    expect(await findRows(orm, SchoolHolidayPeriods)).toEqual([]);
     await request(app.getHttpServer()).delete(`${base}/countries/US`).set('Cookie', sessionCookie(1)).expect(200);
     expect(await service.catalog()).toEqual({ countries: [], regions: [] });
   }));

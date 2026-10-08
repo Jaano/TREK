@@ -49,7 +49,19 @@ import { PlacesService } from '../../src/nest/places/places.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+import { makeTour } from '../helpers/factories/tours';
+import { countRows, deleteRows, findRow, findRows, insertRow, insertRows, upsertRow } from '../helpers/factories/rows';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { DayAssignments } from '../../src/db/entities/DayAssignments.entity';
+import { Days } from '../../src/db/entities/Days.entity';
+import { PlaceRatings } from '../../src/db/entities/PlaceRatings.entity';
+import { Places } from '../../src/db/entities/Places.entity';
+import { Tours } from '../../src/db/entities/Tours.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
+
+let orm: TestOrm;
 
 describe('Places e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
@@ -79,29 +91,31 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     // trip (id 6) several tests below reference — `trips.user_id` and
     // `places.trip_id` both carry a real FK now (`ON DELETE CASCADE`), so a
     // dangling trip_id the old hand-rolled DDL tolerated would fail here.
-    db.prepare("INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)").run();
-    db.prepare("INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (2, 'peer', 'peer@example.test', 'x', 'user', 0)").run();
-    db.prepare("INSERT INTO trips (id, title, user_id) VALUES (6, 'Theirs', 2)").run();
+    orm = await createTestOrm(db);
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test' });
+    await makeUser(orm, { id: 2, username: 'peer', email: 'peer@example.test' });
+    await insertRow(orm, Trips, { id: 6, title: 'Theirs', user: 2 });
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Trip 5 (owned by user 1) is the suite's main trip, re-seeded fresh
     // every test — deleting it (`ON DELETE CASCADE`) also clears every place/
     // day/assignment/rating/tag-link/budget-item this suite seeded under it,
     // the real-FK equivalent of the old blanket `DELETE FROM places; …`.
     // Trip 6 (the "foreign" trip, owned by user 2) is seeded once in
     // beforeAll and left alone.
-    db.exec('DELETE FROM trips WHERE id = 5;');
-    db.prepare("INSERT INTO trips (id, title, user_id) VALUES (5, 'Trip', 1)").run();
-    db.exec('DELETE FROM places WHERE trip_id = 6;');
+    await deleteRows(orm, Trips, { id: 5 });
+    await insertRow(orm, Trips, { id: 5, title: 'Trip', user: 1 });
+    await deleteRows(orm, Places, { trip: 6 });
     checkPermission.mockReturnValue(true);
   });
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   it('401 without a cookie', async () => {
@@ -109,7 +123,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('200 list', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (1, 5, 'Spot')").run();
+    await insertRow(orm, Places, { id: 1, trip: 5, name: 'Spot' });
     const res = await request(server).get('/api/trips/5/places').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     expect(res.body.places).toHaveLength(1);
@@ -117,8 +131,8 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('marks Tour-backed Places without changing ordinary Place rows', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (1, 5, 'Plain'), (2, 5, 'Tour')").run();
-    db.prepare("INSERT INTO tours (place_id, tour_type) VALUES (2, 'hike')").run();
+    await insertRows(orm, Places, [{ id: 1, trip: 5, name: 'Plain' }, { id: 2, trip: 5, name: 'Tour' }]);
+    await makeTour(orm, 2, { tourTypeRef: 'hike' });
 
     const all = await request(server).get('/api/trips/5/places').set('Cookie', sessionCookie(1));
     expect(all.status).toBe(200);
@@ -129,8 +143,8 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('200 list scoped to the trip', async () => {
-    db.prepare("INSERT INTO places (trip_id, name) VALUES (5, 'Mine')").run();
-    db.prepare("INSERT INTO places (trip_id, name) VALUES (6, 'Theirs')").run();
+    await insertRow(orm, Places, { trip: 5, name: 'Mine' });
+    await insertRow(orm, Places, { trip: 6, name: 'Theirs' });
     const res = await request(server).get('/api/trips/5/places').set('Cookie', sessionCookie(1));
     expect(res.body.places.map((p: { name: string }) => p.name)).toEqual(['Mine']);
   });
@@ -140,7 +154,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     expect(ok.status).toBe(201);
     expect(ok.body.place).toMatchObject({ name: 'Spot', trip_id: 5, transport_mode: 'walking', duration_minutes: 60 });
     // The row really landed.
-    expect(db.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = 5').get()).toEqual({ n: 1 });
+    expect(await countRows(orm, Places, { trip: 5 })).toBe(1);
 
     const long = await request(server).post('/api/trips/5/places').set('Cookie', sessionCookie(1)).send({ name: 'x'.repeat(201) });
     expect(long.status).toBe(400);
@@ -152,13 +166,13 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('200 (not 201) bulk-delete, 400 on bad ids', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (1, 5, 'A'), (2, 5, 'B')").run();
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (3, 6, 'Foreign')").run();
+    await insertRows(orm, Places, [{ id: 1, trip: 5, name: 'A' }, { id: 2, trip: 5, name: 'B' }]);
+    await insertRow(orm, Places, { id: 3, trip: 6, name: 'Foreign' });
     const ok = await request(server).post('/api/trips/5/places/bulk-delete').set('Cookie', sessionCookie(1)).send({ ids: [1, 2, 3] });
     expect(ok.status).toBe(200);
     expect(ok.body).toEqual({ deleted: [1, 2], count: 2, tourPlaceIds: [] });
     // The foreign trip's place is untouched.
-    expect(db.prepare('SELECT id FROM places ORDER BY id').all()).toEqual([{ id: 3 }]);
+    expect((await findRows(orm, Places, {}, { id: 'asc' })).map(p => ({ id: p.id }))).toEqual([{ id: 3 }]);
 
     // The ZodValidationPipe owns this 400 since the DTO ratchet — the legacy
     // 'ids must be an array of numbers' string is gone.
@@ -178,7 +192,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
 
     // And it fires ahead of the trip-access 404 it used to follow (documented
     // parity shift of the ratchet — the todo/trips precedent).
-    db.prepare('DELETE FROM trips WHERE id = 5').run();
+    await deleteRows(orm, Trips, { id: 5 });
     const noTrip = await request(server).post('/api/trips/5/places').set('Cookie', sessionCookie(1)).send({});
     expect(noTrip.status).toBe(400);
   });
@@ -207,7 +221,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('PUT route_color: hex through, null through, garbage rejected (#776)', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (9, 5, 'Walk')").run();
+    await insertRow(orm, Places, { id: 9, trip: 5, name: 'Walk' });
 
     const ok = await request(server).put('/api/trips/5/places/9').set('Cookie', sessionCookie(1)).send({ route_color: '#e11d48' });
     expect(ok.status).toBe(200);
@@ -234,7 +248,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     const updated = await request(server).put(`/api/trips/5/places/${id}`).set('Cookie', sessionCookie(1))
       .send({ website: '//www.example.fr/patrimoine' });
     expect(updated.status).toBe(200);
-    expect(db.prepare('SELECT website FROM places WHERE id = ?').get(id)).toEqual({ website: 'https://www.example.fr/patrimoine' });
+    expect((await findRow(orm, Places, { id }))!.website).toBe('https://www.example.fr/patrimoine');
 
     // An explicit scheme is stored exactly as sent, and '' still clears the field.
     const kept = await request(server).put(`/api/trips/5/places/${id}`).set('Cookie', sessionCookie(1))
@@ -250,11 +264,11 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
       expect(res.status).toBe(400);
       expect(res.body).toEqual({ error: 'website must be an http or https URL' });
     }
-    expect(db.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = 5').get()).toEqual({ n: 0 });
+    expect(await countRows(orm, Places, { trip: 5 })).toBe(0);
   });
 
   it('409 on a stale If-Match token (#1135)', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name, updated_at) VALUES (9, 5, 'Walk', '2026-01-01 00:00:00')").run();
+    await insertRow(orm, Places, { id: 9, trip: 5, name: 'Walk', updated_at: '2026-01-01 00:00:00' });
     const res = await request(server)
       .put('/api/trips/5/places/9')
       .set('Cookie', sessionCookie(1))
@@ -262,29 +276,29 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
       .send({ name: 'Mine' });
     expect(res.status).toBe(409);
     expect(res.body.error).toBe('conflict');
-    expect(db.prepare('SELECT name FROM places WHERE id = 9').get()).toEqual({ name: 'Walk' });
+    expect((await findRow(orm, Places, { id: 9 }))!.name).toBe('Walk');
   });
 
   it('PUT/DELETE :id/rating stores and clears the caller\'s vote', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (9, 5, 'Rated')").run();
+    await insertRow(orm, Places, { id: 9, trip: 5, name: 'Rated' });
 
     const rated = await request(server).put('/api/trips/5/places/9/rating').set('Cookie', sessionCookie(1)).send({ rating: 4 });
     expect(rated.status).toBe(200);
-    expect(db.prepare('SELECT user_id, rating FROM place_ratings WHERE place_id = 9').all()).toEqual([{ user_id: 1, rating: 4 }]);
+    expect((await findRows(orm, PlaceRatings, { place: 9 }, { id: 'asc' })).map(r => ({ user_id: r.user_id, rating: r.rating }))).toEqual([{ user_id: 1, rating: 4 }]);
 
     const cleared = await request(server).delete('/api/trips/5/places/9/rating').set('Cookie', sessionCookie(1));
     expect(cleared.status).toBe(200);
-    expect(db.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = 9').get()).toEqual({ n: 0 });
+    expect(await countRows(orm, PlaceRatings, { place: 9 })).toBe(0);
   });
 
   it('DELETE :id removes the row, 404 for a foreign place', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (9, 5, 'Gone')").run();
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (10, 6, 'Foreign')").run();
+    await insertRow(orm, Places, { id: 9, trip: 5, name: 'Gone' });
+    await insertRow(orm, Places, { id: 10, trip: 6, name: 'Foreign' });
 
     const ok = await request(server).delete('/api/trips/5/places/9').set('Cookie', sessionCookie(1));
     expect(ok.status).toBe(200);
     expect(ok.body).toEqual({ success: true, tourPlaceIds: [] });
-    expect(db.prepare('SELECT id FROM places WHERE id = 9').get()).toBeUndefined();
+    expect(await findRow(orm, Places, { id: 9 })).toBeNull();
 
     const foreign = await request(server).delete('/api/trips/5/places/10').set('Cookie', sessionCookie(1));
     expect(foreign.status).toBe(404);
@@ -292,13 +306,18 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('DELETE :id and bulk-delete report the Tour place ids they removed', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (20, 5, 'Tour A'), (21, 5, 'Tour B'), (22, 5, 'Plain')").run();
-    db.prepare("INSERT INTO tours (place_id, tour_type) VALUES (20, 'hike'), (21, 'hike')").run();
+    await insertRows(orm, Places, [
+      { id: 20, trip: 5, name: 'Tour A' },
+      { id: 21, trip: 5, name: 'Tour B' },
+      { id: 22, trip: 5, name: 'Plain' },
+    ]);
+    await makeTour(orm, 20, { tourTypeRef: 'hike' });
+    await makeTour(orm, 21, { tourTypeRef: 'hike' });
 
     const single = await request(server).delete('/api/trips/5/places/20').set('Cookie', sessionCookie(1));
     expect(single.status).toBe(200);
     expect(single.body).toEqual({ success: true, tourPlaceIds: [20] });
-    expect(db.prepare('SELECT place_id FROM tours WHERE place_id = 20').get()).toBeUndefined();
+    expect(await findRow(orm, Tours, { place: 20 })).toBeNull();
 
     const bulk = await request(server).post('/api/trips/5/places/bulk-delete').set('Cookie', sessionCookie(1)).send({ ids: [21, 22] });
     expect(bulk.status).toBe(200);
@@ -306,22 +325,22 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('DELETE :id takes the expense linked to the place with it (#1298)', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (12, 5, 'Louvre')").run();
-    db.prepare("INSERT INTO budget_items (id, trip_id, name, total_price, place_id) VALUES (44, 5, 'Tickets', 34, 12)").run();
-    db.prepare("INSERT INTO budget_items (id, trip_id, name, total_price) VALUES (45, 5, 'Coffee', 3)").run();
+    await insertRow(orm, Places, { id: 12, trip: 5, name: 'Louvre' });
+    await insertRow(orm, BudgetItems, { id: 44, trip: 5, name: 'Tickets', total_price: 34, place: 12 });
+    await insertRow(orm, BudgetItems, { id: 45, trip: 5, name: 'Coffee', total_price: 3 });
 
     const res = await request(server).delete('/api/trips/5/places/12').set('Cookie', sessionCookie(1));
 
     expect(res.status).toBe(200);
-    expect(db.prepare('SELECT id FROM budget_items ORDER BY id').all()).toEqual([{ id: 45 }]);
+    expect((await findRows(orm, BudgetItems, {}, { id: 'asc' })).map(b => ({ id: b.id }))).toEqual([{ id: 45 }]);
   });
 
   it('DELETE :id tells the deleting tab about the expense that went with the place', async () => {
     // X-Socket-Id keeps a tab from hearing back what it did itself. The tab
     // removed the place; the expense went on the server alone, so that event
     // goes out without the filter or the tab keeps the expense until a reload.
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (13, 5, 'Louvre')").run();
-    db.prepare("INSERT INTO budget_items (id, trip_id, name, total_price, place_id) VALUES (46, 5, 'Tickets', 34, 13)").run();
+    await insertRow(orm, Places, { id: 13, trip: 5, name: 'Louvre' });
+    await insertRow(orm, BudgetItems, { id: 46, trip: 5, name: 'Tickets', total_price: 34, place: 13 });
     vi.mocked(broadcast).mockClear();
 
     const res = await request(server).delete('/api/trips/5/places/13')
@@ -333,7 +352,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('404 trip when not accessible', async () => {
-    db.prepare('DELETE FROM trips WHERE id = 5').run();
+    await deleteRows(orm, Trips, { id: 5 });
     const res = await request(server).get('/api/trips/5/places').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Trip not found' });
@@ -344,18 +363,18 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   // the status, so a check that happens to return the right code for the wrong
   // reason still fails.
   it('DELETE :id demands place_edit, by name', async () => {
-    db.prepare("INSERT INTO places (id, trip_id, name) VALUES (11, 5, 'Guarded')").run();
+    await insertRow(orm, Places, { id: 11, trip: 5, name: 'Guarded' });
     checkPermission.mockReturnValue(false);
 
     const res = await request(server).delete('/api/trips/5/places/11').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'No permission' });
     expect(checkPermission).toHaveBeenCalledWith('place_edit', 'user', 1, 1, false);
-    expect(db.prepare('SELECT id FROM places WHERE id = 11').get()).toBeDefined();
+    expect(await findRow(orm, Places, { id: 11 })).not.toBeNull();
   });
 
   it('the guarded read routes 404 an inaccessible trip without touching the place', async () => {
-    db.prepare('DELETE FROM trips WHERE id = 5').run();
+    await deleteRows(orm, Trips, { id: 5 });
     for (const path of ['/api/trips/5/places/9', '/api/trips/5/places/9/image']) {
       const res = await request(server).get(path).set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
@@ -368,16 +387,19 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
 
   // ── GPX export ────────────────────────────────────────────────────────────
   describe('GET export.gpx (#1442)', () => {
-    const seedTrip = () => {
-      db.prepare("INSERT OR REPLACE INTO trips (id, title, user_id) VALUES (5, 'Alpine week', 1)").run();
-      db.prepare("INSERT INTO places (id, trip_id, name, lat, lng) VALUES (1, 5, 'Trailhead', 47.1, 11.2)").run();
-      db.prepare("INSERT INTO places (id, trip_id, name, lat, lng, route_geometry) VALUES (2, 5, 'Ridge', 47.2, 11.3, '[[47.2,11.3],[47.25,11.35]]')").run();
-      db.prepare("INSERT INTO days (id, trip_id, day_number, date, title) VALUES (1, 5, 1, '2026-05-01', 'Warm up')").run();
-      db.prepare('INSERT INTO day_assignments (day_id, place_id, order_index) VALUES (1, 1, 0), (1, 2, 1)').run();
+    const seedTrip = async () => {
+      await upsertRow(orm, Trips, { id: 5, title: 'Alpine week', user: 1 });
+      await insertRow(orm, Places, { id: 1, trip: 5, name: 'Trailhead', lat: 47.1, lng: 11.2 });
+      await insertRow(orm, Places, { id: 2, trip: 5, name: 'Ridge', lat: 47.2, lng: 11.3, route_geometry: '[[47.2,11.3],[47.25,11.35]]' });
+      await insertRow(orm, Days, { id: 1, trip: 5, day_number: 1, date: '2026-05-01', title: 'Warm up' });
+      await insertRows(orm, DayAssignments, [
+        { day: 1, place: 1, order_index: 0 },
+        { day: 1, place: 2, order_index: 1 },
+      ]);
     };
 
     it('serves the trip as an attachment named after it', async () => {
-      seedTrip();
+      await seedTrip();
       const res = await request(server).get('/api/trips/5/places/export.gpx').set('Cookie', sessionCookie(1));
 
       expect(res.status).toBe(200);
@@ -393,8 +415,8 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     // ERR_INVALID_CHAR before the first body byte. Now the header folds to
     // ASCII and carries the real name RFC 5987-encoded.
     it('a non-ASCII trip title exports 200 with a filename* header instead of a 500 (#2165)', async () => {
-      db.prepare('INSERT OR REPLACE INTO trips (id, title, user_id) VALUES (5, ?, 1)').run('沖縄 4泊5日');
-      db.prepare('INSERT INTO places (id, trip_id, name, lat, lng) VALUES (1, 5, ?, 26.217, 127.719)').run('首里城');
+      await upsertRow(orm, Trips, { id: 5, title: '沖縄 4泊5日', user: 1 });
+      await insertRow(orm, Places, { id: 1, trip: 5, name: '首里城', lat: 26.217, lng: 127.719 });
 
       const res = await request(server).get('/api/trips/5/places/export.gpx').set('Cookie', sessionCookie(1));
       expect(res.status).toBe(200);
@@ -405,7 +427,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     });
 
     it('narrows the document to the requested parts', async () => {
-      seedTrip();
+      await seedTrip();
       const res = await request(server)
         .get('/api/trips/5/places/export.gpx?waypoints=false&dayRoutes=false')
         .set('Cookie', sessionCookie(1));
@@ -417,7 +439,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     });
 
     it('400s when every part was switched off', async () => {
-      seedTrip();
+      await seedTrip();
       const res = await request(server)
         .get('/api/trips/5/places/export.gpx?waypoints=false&tracks=false&dayRoutes=false')
         .set('Cookie', sessionCookie(1));
@@ -427,15 +449,15 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     });
 
     it('404s an empty trip rather than handing over a file that imports as nothing', async () => {
-      db.prepare("INSERT OR REPLACE INTO trips (id, title, user_id) VALUES (5, 'Nothing here', 1)").run();
+      await upsertRow(orm, Trips, { id: 5, title: 'Nothing here', user: 1 });
       const res = await request(server).get('/api/trips/5/places/export.gpx').set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Nothing to export' });
     });
 
     it('404s a trip the caller cannot reach, and 401s without a cookie', async () => {
-      seedTrip();
-      db.prepare('DELETE FROM trips WHERE id = 5').run();
+      await seedTrip();
+      await deleteRows(orm, Trips, { id: 5 });
       const res = await request(server).get('/api/trips/5/places/export.gpx').set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
@@ -444,7 +466,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     });
 
     it('is a read: no place_edit permission required', async () => {
-      seedTrip();
+      await seedTrip();
       checkPermission.mockReturnValue(false);
       const res = await request(server).get('/api/trips/5/places/export.gpx').set('Cookie', sessionCookie(1));
       expect(res.status).toBe(200);
@@ -455,7 +477,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   // before the pipe, so guarding create would answer 404 where the suite above
   // pins a 400. This is the non-regression pin for that decision.
   it('a bad create body still 400s ahead of the trip 404', async () => {
-    db.prepare('DELETE FROM trips WHERE id = 5').run();
+    await deleteRows(orm, Trips, { id: 5 });
     const res = await request(server).post('/api/trips/5/places').set('Cookie', sessionCookie(1)).send({});
     expect(res.status).toBe(400);
   });

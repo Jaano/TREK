@@ -58,7 +58,24 @@ import { BudgetService } from '../../src/nest/budget/budget.service';
 import { TripsModule } from '../../src/nest/trips/trips.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+import { setUserSetting } from '../helpers/factories/settings';
+import { countRows, deleteRows, findRow, findRows, insertRow } from '../helpers/factories/rows';
+import { AuditLog } from '../../src/db/entities/AuditLog.entity';
+import { Days } from '../../src/db/entities/Days.entity';
+import { JourneyEntries } from '../../src/db/entities/JourneyEntries.entity';
+import { Journeys } from '../../src/db/entities/Journeys.entity';
+import { Settings } from '../../src/db/entities/Settings.entity';
+import { TripMembers } from '../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
+
+let orm: TestOrm;
+
+/** The trip's day ids in day order. */
+async function dayIds(tripId: number): Promise<number[]> {
+  return (await findRows(orm, Days, { trip: tripId }, { day_number: 'asc' })).map(d => d.id);
+}
 
 describe('Trips e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
@@ -77,9 +94,8 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     // harness.ts's seedUser() omits password_hash, which the real migrated
     // schema requires NOT NULL (days.e2e.test.ts/addons.e2e.test.ts hit the
     // same thing) — a raw insert here instead.
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
-    ).run();
+    orm = await createTestOrm(db);
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test' });
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     vi.spyOn(app.get(BudgetService), 'listBudgetItems').mockResolvedValue([]);
@@ -87,12 +103,12 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     server = app.getHttpServer();
   });
 
-  beforeEach(() => {
-    db.prepare('DELETE FROM trips').run();
-    db.prepare('DELETE FROM trip_members').run();
-    db.prepare('DELETE FROM days').run();
-    db.prepare('DELETE FROM audit_log').run();
-    db.prepare('DELETE FROM settings').run();
+  beforeEach(async () => {
+    await deleteRows(orm, Trips);
+    await deleteRows(orm, TripMembers);
+    await deleteRows(orm, Days);
+    await deleteRows(orm, AuditLog);
+    await deleteRows(orm, Settings);
     // 0b review L2 / security review F-B7: dead mock scaffolding — see
     // budget.e2e.test.ts's identical comment.
     checkPermission.mockReturnValue(true);
@@ -100,17 +116,17 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
-  const seedTrip = (title = 'T', userId = 1) =>
-    Number(db.prepare('INSERT INTO trips (user_id, title) VALUES (?, ?)').run(userId, title).lastInsertRowid);
+  const seedTrip = (title = 'T', userId = 1) => insertRow(orm, Trips, { user: userId, title });
 
   it('401 without a cookie', async () => {
     expect((await request(server).get('/api/trips')).status).toBe(401);
   });
 
   it('200 list (real TRIP_SELECT: is_owner + counts)', async () => {
-    const tripId = seedTrip('T');
+    const tripId = await seedTrip('T');
     const res = await request(server).get('/api/trips').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     expect(res.body.trips).toHaveLength(1);
@@ -122,18 +138,18 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     expect(ok.status).toBe(201);
     // The dateless create seeds the default 7 placeholder days.
     expect(ok.body.trip).toMatchObject({ title: 'T', currency: 'EUR', day_count: 7, is_owner: 1 });
-    const dayRows = db.prepare('SELECT COUNT(*) AS n FROM days WHERE trip_id = ?').get(ok.body.trip.id) as { n: number };
-    expect(dayRows.n).toBe(7);
+    const dayRows = await countRows(orm, Days, { trip: ok.body.trip.id });
+    expect(dayRows).toBe(7);
     // The DI-native AuditService wrote the real row (audit_log DDL above).
-    const audit = db.prepare("SELECT user_id FROM audit_log WHERE action = 'trip.create'").get() as { user_id: number };
-    expect(audit).toEqual({ user_id: 1 });
+    const audit = await findRow(orm, AuditLog, { action: 'trip.create' });
+    expect({ user_id: audit?.user_id }).toEqual({ user_id: 1 });
     checkPermission.mockReturnValue(false);
     const forbidden = await request(server).post('/api/trips').set('Cookie', sessionCookie(1)).send({ title: 'T' });
     expect(forbidden.status).toBe(403);
   });
 
   it('201 create without a currency takes the display currency from the settings', async () => {
-    db.prepare("INSERT INTO settings (user_id, key, value) VALUES (1, 'default_currency', ?)").run(JSON.stringify('USD'));
+    await setUserSetting(orm, 1, 'default_currency', JSON.stringify('USD'));
     const preferred = await request(server).post('/api/trips').set('Cookie', sessionCookie(1)).send({ title: 'Road trip' });
     expect(preferred.status).toBe(201);
     expect(preferred.body.trip).toMatchObject({ title: 'Road trip', currency: 'USD' });
@@ -148,9 +164,8 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
       .send({ title: 'Gap year', start_date: '2025-01-26', end_date: '2026-01-28' });
     expect(res.status).toBe(201);
     expect(res.body.trip).toMatchObject({ start_date: '2025-01-26', end_date: '2026-01-28', day_count: 368 });
-    const last = db.prepare('SELECT day_number, date FROM days WHERE trip_id = ? ORDER BY day_number DESC LIMIT 1')
-      .get(res.body.trip.id) as { day_number: number; date: string };
-    expect(last).toEqual({ day_number: 368, date: '2026-01-28' });
+    const [last] = await findRows(orm, Days, { trip: res.body.trip.id }, { day_number: 'desc' });
+    expect({ day_number: last.day_number, date: last.date }).toEqual({ day_number: 368, date: '2026-01-28' });
   });
 
   it('400 on a date range past MAX_TRIP_DAYS, for create and update alike', async () => {
@@ -158,7 +173,7 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
       .send({ title: 'Decade', start_date: '2026-01-01', end_date: '2036-01-01' });
     expect(tooLong.status).toBe(400);
     expect(tooLong.body).toEqual({ error: `A trip can span at most ${MAX_TRIP_DAYS} days` });
-    expect(db.prepare('SELECT COUNT(*) AS n FROM trips').get()).toEqual({ n: 0 });
+    expect(await countRows(orm, Trips)).toBe(0);
 
     const week = await request(server).post('/api/trips').set('Cookie', sessionCookie(1))
       .send({ title: 'Week', start_date: '2026-07-01', end_date: '2026-07-07' });
@@ -166,19 +181,19 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
       .send({ end_date: '2036-07-01' });
     expect(stretched.status).toBe(400);
     expect(stretched.body).toEqual({ error: `A trip can span at most ${MAX_TRIP_DAYS} days` });
-    expect(db.prepare('SELECT end_date FROM trips WHERE id = ?').get(week.body.trip.id)).toEqual({ end_date: '2026-07-07' });
+    expect((await findRow(orm, Trips, { id: week.body.trip.id }))!.end_date).toBe('2026-07-07');
   });
 
   it('200 update with an earlier end drops the last days, and the answer stays { trip }', async () => {
     const week = await request(server).post('/api/trips').set('Cookie', sessionCookie(1))
       .send({ title: 'Week', start_date: '2026-07-01', end_date: '2026-07-07' });
-    const kept = db.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number LIMIT 5').all(week.body.trip.id);
+    const kept = (await dayIds(week.body.trip.id)).slice(0, 5);
     const res = await request(server).put(`/api/trips/${week.body.trip.id}`).set('Cookie', sessionCookie(1))
       .send({ end_date: '2026-07-05' });
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['trip']);
     expect(res.body.trip).toMatchObject({ start_date: '2026-07-01', end_date: '2026-07-05', day_count: 5 });
-    expect(db.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(week.body.trip.id)).toEqual(kept);
+    expect(await dayIds(week.body.trip.id)).toEqual(kept);
   });
 
   it('404 on a missing trip', async () => {
@@ -189,8 +204,7 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
 
   describe('GET /active (startup destination)', () => {
     const seedDated = (title: string, start: string, end: string) =>
-      Number(db.prepare('INSERT INTO trips (user_id, title, start_date, end_date) VALUES (1, ?, ?, ?)')
-        .run(title, start, end).lastInsertRowid);
+      insertRow(orm, Trips, { user: 1, title, start_date: start, end_date: end });
 
     it('401 without a cookie', async () => {
       expect((await request(server).get('/api/trips/active')).status).toBe(401);
@@ -199,7 +213,7 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     // The literal route sits above @Get(':id'); if it ever slips below, this
     // asks for a trip with the id "active" and comes back 404 instead.
     it('resolves as its own route rather than as /api/trips/:id', async () => {
-      const running = seedDated('Running', '2000-01-01', '2999-12-31');
+      const running = await seedDated('Running', '2000-01-01', '2999-12-31');
       const res = await request(server).get('/api/trips/active').set('Cookie', sessionCookie(1));
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ trip: { id: running, title: 'Running', start_date: '2000-01-01', end_date: '2999-12-31' } });
@@ -212,7 +226,7 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     });
 
     it('carries no wide trip columns — it is read on first paint', async () => {
-      seedDated('Running', '2000-01-01', '2999-12-31');
+      await seedDated('Running', '2000-01-01', '2999-12-31');
       const res = await request(server).get('/api/trips/active').set('Cookie', sessionCookie(1));
       expect(Object.keys(res.body.trip).sort()).toEqual(['end_date', 'id', 'start_date', 'title']);
     });
@@ -221,8 +235,7 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
   // Real CalendarService against the temp db: a title carrying U+3000 slipped
   // through the old \s keep-class into setHeader and 500'd the export (#2165).
   it('200 export.ics with a header-safe filename for a title full of ideographic whitespace', async () => {
-    const tripId = Number(db.prepare('INSERT INTO trips (user_id, title, start_date, end_date) VALUES (1, ?, ?, ?)')
-      .run('沖縄　4泊5日', '2026-05-01', '2026-05-05').lastInsertRowid);
+    const tripId = await insertRow(orm, Trips, { user: 1, title: '沖縄　4泊5日', start_date: '2026-05-01', end_date: '2026-05-05' });
     const res = await request(server).get(`/api/trips/${tripId}/export.ics`).set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('text/calendar');
@@ -231,14 +244,14 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
   });
 
   it('200 bundle for an accessible trip (real member list)', async () => {
-    const tripId = seedTrip('B');
+    const tripId = await seedTrip('B');
     const res = await request(server).get(`/api/trips/${tripId}/bundle`).set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ trip: { id: tripId }, days: [], members: [{ id: 1, role: 'owner' }] });
   });
 
   it('200 delete cleans up synced journey entries (real SQL)', async () => {
-    const tripId = seedTrip('D');
+    const tripId = await seedTrip('D');
     // Task 9 fix wave (M6) finding: the hand-rolled DDL this test used to run
     // against had no NOT NULL/FK constraints on `journey_entries` at all
     // (no `author_id`, no `entry_date`, no FK to a real `journeys` row) — a
@@ -249,20 +262,18 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     // NULL — a real journey row (and those columns) are seeded here so the
     // insert that used to pass for the wrong reason now passes for the real
     // one. The assertions below are untouched, character-for-character.
-    const journeyId = Number(db.prepare(
-      "INSERT INTO journeys (user_id, title, created_at, updated_at) VALUES (1, 'J', 0, 0)",
-    ).run().lastInsertRowid);
-    db.prepare(
-      "INSERT INTO journey_entries (journey_id, source_trip_id, author_id, type, entry_date, created_at, updated_at) VALUES (?, ?, 1, 'skeleton', '2026-01-01', 0, 0)",
-    ).run(journeyId, tripId);
-    const filledId = Number(db.prepare(
-      "INSERT INTO journey_entries (journey_id, source_trip_id, author_id, type, entry_date, created_at, updated_at) VALUES (?, ?, 1, 'story', '2026-01-01', 0, 0)",
-    ).run(journeyId, tripId).lastInsertRowid);
+    const journeyId = await insertRow(orm, Journeys, { user: 1, title: 'J', created_at: 0, updated_at: 0 });
+    await insertRow(orm, JourneyEntries, {
+      journey: journeyId, sourceTrip: tripId, author: 1, type: 'skeleton', entry_date: '2026-01-01', created_at: 0, updated_at: 0,
+    });
+    const filledId = await insertRow(orm, JourneyEntries, {
+      journey: journeyId, sourceTrip: tripId, author: 1, type: 'story', entry_date: '2026-01-01', created_at: 0, updated_at: 0,
+    });
     const res = await request(server).delete(`/api/trips/${tripId}`).set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ success: true });
-    expect(db.prepare('SELECT id FROM trips WHERE id = ?').get(tripId)).toBeUndefined();
-    expect(db.prepare("SELECT id FROM journey_entries WHERE type = 'skeleton'").get()).toBeUndefined();
-    expect((db.prepare('SELECT source_trip_id FROM journey_entries WHERE id = ?').get(filledId) as { source_trip_id: number | null }).source_trip_id).toBeNull();
+    expect(await findRow(orm, Trips, { id: tripId })).toBeNull();
+    expect(await findRow(orm, JourneyEntries, { type: 'skeleton' })).toBeNull();
+    expect((await findRow(orm, JourneyEntries, { id: filledId }))!.source_trip_id).toBeNull();
   });
 });

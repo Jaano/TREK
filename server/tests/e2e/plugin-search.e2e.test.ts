@@ -43,7 +43,10 @@ vi.mock('../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled: () => plu
 
 import { db } from '../../src/db/database';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+
+let orm: TestOrm;
 
 const place = (id: string, name: string) => ({ id, name, lat: 35.66, lng: 139.7, address: 'Shibuya', rating: 4.4 });
 
@@ -70,9 +73,8 @@ describe('Plugin search e2e (real guard chain + temp SQLite)', () => {
     // harness.ts's seedUser() omits password_hash, which the migrated schema
     // requires NOT NULL (addons.e2e.test.ts does the same) — the same SeededUser
     // shape sessionCookie(1) needs, with the hash filled in.
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
-    ).run();
+    orm = await createTestOrm(db);
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test' });
     app = await build();
     const hooks = app.get(PluginHooks, { strict: false });
     providersOf = vi.spyOn(hooks, 'providersOf');
@@ -95,6 +97,7 @@ describe('Plugin search e2e (real guard chain + temp SQLite)', () => {
 
   afterAll(async () => {
     await app?.close();
+    await orm?.close();
   });
 
   const cookie = () => sessionCookie(1);

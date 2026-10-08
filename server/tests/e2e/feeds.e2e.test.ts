@@ -56,7 +56,11 @@ import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { AppConfigModule } from '../../src/nest/app-config/app-config.module';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { findRow, updateRows } from '../helpers/factories/rows';
+import { Trips } from '../../src/db/entities/Trips.entity';
+
+let orm: TestOrm;
 
 const BASE = 'https://trek.example.test';
 
@@ -85,6 +89,7 @@ describe('Calendar-feed e2e (real auth guard + temp SQLite)', () => {
   beforeAll(async () => {
     prevAppUrl = process.env.APP_URL;
     process.env.APP_URL = BASE;
+    orm = await createTestOrm(db);
     app = await build();
     vi.spyOn(app.get(CalendarService), 'buildTripCalendar').mockImplementation(buildTripCalendar as never);
     server = app.getHttpServer();
@@ -100,6 +105,7 @@ describe('Calendar-feed e2e (real auth guard + temp SQLite)', () => {
     if (prevAppUrl === undefined) delete process.env.APP_URL;
     else process.env.APP_URL = prevAppUrl;
     await app.close();
+    await orm.close();
   });
 
   // ── Trip token endpoints ───────────────────────────────────────────────────
@@ -202,7 +208,7 @@ describe('Calendar-feed e2e (real auth guard + temp SQLite)', () => {
       expect(res.body).toEqual({ error: 'No permission' });
     }
     // Refused, not silently applied: the column is untouched.
-    expect((db.prepare('SELECT feed_token FROM trips WHERE id = ?').get(trip.id) as { feed_token: string | null }).feed_token).toBeNull();
+    expect((await findRow(orm, Trips, { id: trip.id }))!.feed_token).toBeNull();
   });
 
   it('a non-member still gets 404 rather than 403, so the 403 is no existence oracle', async () => {
@@ -288,7 +294,7 @@ describe('Calendar-feed e2e (real auth guard + temp SQLite)', () => {
     const { user: owner } = createUser(db);
     const active = createTrip(db, owner.id, { title: 'Active', start_date: '2026-01-01', end_date: '2099-01-01' });
     const archived = createTrip(db, owner.id, { title: 'Archived', start_date: '2026-01-01', end_date: '2099-01-01' });
-    db.prepare('UPDATE trips SET is_archived = 1 WHERE id = ?').run(archived.id);
+    await updateRows(orm, Trips, { id: archived.id }, { is_archived: 1 });
     createTrip(db, owner.id, { title: 'Old', start_date: '2000-01-01', end_date: '2000-01-10' });
 
     const gen = await request(server).post('/api/feed/user/token').set('Cookie', sessionCookie(owner.id));

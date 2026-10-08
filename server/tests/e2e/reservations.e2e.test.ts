@@ -50,7 +50,38 @@ let checkPermission: MockInstance;
 import { db } from '../../src/db/database';
 import { NotificationsService } from '../../src/nest/notifications/notifications.service';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeUser } from '../helpers/factories/users';
+import { makeTrip, makeDay } from '../helpers/factories/trips';
+import { countRows, deleteRows, findRow, findRows, insertRow, insertRowIgnoringConflict } from '../helpers/factories/rows';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { DayAccommodations } from '../../src/db/entities/DayAccommodations.entity';
+import { DayAssignments } from '../../src/db/entities/DayAssignments.entity';
+import { Places } from '../../src/db/entities/Places.entity';
+import { ReservationDayPositions } from '../../src/db/entities/ReservationDayPositions.entity';
+import { Reservations } from '../../src/db/entities/Reservations.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
+import { Users } from '../../src/db/entities/Users.entity';
+
+let orm: TestOrm;
+
+/** The expense booked with the reservation, as total, currency and frozen rate. */
+async function bookedExpense(reservationId: number) {
+  const item = await findRow(orm, BudgetItems, { reservation: reservationId });
+  return item ? { total_price: item.total_price, currency: item.currency, exchange_rate: item.exchange_rate } : undefined;
+}
+
+function seedReservation(tripId: number, title: string, type: string, extra: { reservation_time?: string; accommodation_id?: string } = {}) {
+  return insertRow(orm, Reservations, { trip: tripId, title, type, ...extra });
+}
+
+function seedPlace(tripId: number, name: string) {
+  return insertRow(orm, Places, { trip: tripId, name });
+}
+
+async function seedDay(tripId: number, dayNumber: number, date: string) {
+  return (await makeDay(orm, tripId, { day_number: dayNumber, date })).id;
+}
 import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
 
 describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real reservation SQL)', () => {
@@ -78,10 +109,9 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   beforeAll(async () => {
     // The temp db carries the real schema (password_hash NOT NULL), so seed the
     // auth user directly instead of via the trimmed-DDL seedUser helper.
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
-    ).run();
-    tripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (1, 'E2E Trip')").run().lastInsertRowid);
+    orm = await createTestOrm(db);
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test' });
+    tripId = (await makeTrip(orm, 1, { title: 'E2E Trip' })).id;
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
@@ -94,6 +124,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   it('401 without a cookie (reservations)', async () => {
@@ -101,7 +132,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   });
 
   it('200 list reservations (real SQL, joins attached)', async () => {
-    const rid = db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Hotel', 'hotel')").run(tripId).lastInsertRowid;
+    const rid = await seedReservation(tripId, 'Hotel', 'hotel');
     const res = await request(server).get(`/api/trips/${tripId}/reservations`).set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     const row = res.body.reservations.find((r: { id: number }) => r.id === Number(rid));
@@ -113,8 +144,8 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   });
 
   it('200 cross-trip upcoming reservations feed, without the hotels (#1934)', async () => {
-    db.prepare("INSERT INTO reservations (trip_id, title, type, reservation_time) VALUES (?, 'Flight', 'flight', '2999-01-01T10:00:00')").run(tripId);
-    db.prepare("INSERT INTO reservations (trip_id, title, type, reservation_time) VALUES (?, 'Stay', 'hotel', '2999-01-01T09:00:00')").run(tripId);
+    await seedReservation(tripId, 'Flight', 'flight', { reservation_time: '2999-01-01T10:00:00' });
+    await seedReservation(tripId, 'Stay', 'hotel', { reservation_time: '2999-01-01T09:00:00' });
     const res = await request(server).get('/api/reservations/upcoming').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
     const titles = res.body.reservations.map((r: { title: string }) => r.title);
@@ -128,13 +159,13 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     // longer intercepts it. The trip row is seeded once in `beforeAll` (not
     // re-seeded per test), so it is removed and restored around this one
     // assertion instead.
-    db.prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+    await deleteRows(orm, Trips, { id: tripId });
     try {
       const res = await request(server).get(`/api/trips/${tripId}/reservations`).set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
     } finally {
-      db.prepare("INSERT INTO trips (id, user_id, title) VALUES (?, 1, 'E2E Trip')").run(tripId);
+      await insertRow(orm, Trips, { id: tripId, user: 1, title: 'E2E Trip' });
     }
   });
 
@@ -149,7 +180,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
       });
     expect(res.status).toBe(201);
     // It used to land as 801.76 with no currency, which is 801.76 of the trip's euros.
-    const item = db.prepare('SELECT total_price, currency, exchange_rate FROM budget_items WHERE reservation_id = ?').get(res.body.reservation.id);
+    const item = await bookedExpense(res.body.reservation.id);
     expect(item).toEqual({ total_price: 801.76, currency: 'USD', exchange_rate: 1.17 });
   });
 
@@ -159,7 +190,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
       .set('Cookie', sessionCookie(1))
       .send({ title: 'Museum', type: 'event', create_budget_entry: { total_price: 20, currency: 'not a code' } });
     expect(res.status).toBe(201);
-    const item = db.prepare('SELECT total_price, currency, exchange_rate FROM budget_items WHERE reservation_id = ?').get(res.body.reservation.id);
+    const item = await bookedExpense(res.body.reservation.id);
     expect(item).toEqual({ total_price: 20, currency: null, exchange_rate: 1 });
   });
 
@@ -170,7 +201,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
       .send({ title: 'Hotel' });
     expect(ok.status).toBe(201);
     expect(ok.body.reservation).toMatchObject({ title: 'Hotel', type: 'other', status: 'pending' });
-    expect(db.prepare('SELECT title FROM reservations WHERE id = ?').get(ok.body.reservation.id)).toEqual({ title: 'Hotel' });
+    expect((await findRow(orm, Reservations, { id: ok.body.reservation.id }))!.title).toBe('Hotel');
     // The fire-and-forget booking notification reaches the (mocked) notification service.
     await vi.waitFor(() => expect(notificationSend).toHaveBeenCalled());
     expect(notificationSend).toHaveBeenCalledWith(expect.objectContaining({ event: 'booking_change', actorId: 1 }));
@@ -183,7 +214,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
   // The reported repro (#2355): an id that resolves to nothing used to reach
   // the statement and come back as an unhandled SqliteError, i.e. a bare 500.
   it('400 on an update whose place_id exists nowhere, and the row is left alone', async () => {
-    const rid = Number(db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Dinner', 'other')").run(tripId).lastInsertRowid);
+    const rid = await seedReservation(tripId, 'Dinner', 'other');
 
     const res = await request(server)
       .put(`/api/trips/${tripId}/reservations/${rid}`)
@@ -192,13 +223,14 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Unknown reference: place_id' });
-    expect(db.prepare('SELECT title, place_id FROM reservations WHERE id = ?').get(rid)).toEqual({ title: 'Dinner', place_id: null });
+    const dinner = (await findRow(orm, Reservations, { id: rid }))!;
+    expect({ title: dinner.title, place_id: dinner.place_id }).toEqual({ title: 'Dinner', place_id: null });
   });
 
   it('400 on a create whose create_accommodation day exists nowhere, and no stay is written', async () => {
-    const placeId = Number(db.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(tripId, 'Hotel Unknown').lastInsertRowid);
-    const dayId = Number(db.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, 7, ?)').run(tripId, '2026-03-07').lastInsertRowid);
-    const before = db.prepare('SELECT COUNT(*) as c FROM day_accommodations WHERE trip_id = ?').get(tripId);
+    const placeId = await seedPlace(tripId, 'Hotel Unknown');
+    const dayId = await seedDay(tripId, 7, '2026-03-07');
+    const before = await countRows(orm, DayAccommodations, { trip: tripId });
 
     const res = await request(server)
       .post(`/api/trips/${tripId}/reservations`)
@@ -207,16 +239,14 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
 
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'Unknown reference: create_accommodation.end_day_id' });
-    expect(db.prepare('SELECT COUNT(*) as c FROM day_accommodations WHERE trip_id = ?').get(tripId)).toEqual(before);
+    expect(await countRows(orm, DayAccommodations, { trip: tripId })).toBe(before);
   });
 
   // #522, which must survive all of the above: shortening a trip cascades the
   // stay away and leaves the booking pointing at a gap, and the booking still
   // has to be savable.
   it('200 on an update whose stored accommodation_id no longer resolves', async () => {
-    const rid = Number(
-      db.prepare("INSERT INTO reservations (trip_id, title, type, accommodation_id) VALUES (?, 'Stay', 'hotel', 999999)").run(tripId).lastInsertRowid,
-    );
+    const rid = await seedReservation(tripId, 'Stay', 'hotel', { accommodation_id: '999999' });
 
     const res = await request(server)
       .put(`/api/trips/${tripId}/reservations/${rid}`)
@@ -224,13 +254,14 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
       .send({ title: 'Stay, renamed', accommodation_id: 999999 });
 
     expect(res.status).toBe(200);
-    expect(db.prepare('SELECT title, accommodation_id FROM reservations WHERE id = ?').get(rid))
+    const stay = (await findRow(orm, Reservations, { id: rid }))!;
+    expect({ title: stay.title, accommodation_id: stay.accommodation_id })
       .toEqual({ title: 'Stay, renamed', accommodation_id: null });
   });
 
   it('200 list accommodations + 201 create (real insert + auto hotel reservation), 404 on bad refs', async () => {
-    const placeId = Number(db.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(tripId, 'Grand Hotel').lastInsertRowid);
-    const dayId = Number(db.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, 1, ?)').run(tripId, '2026-03-01').lastInsertRowid);
+    const placeId = await seedPlace(tripId, 'Grand Hotel');
+    const dayId = await seedDay(tripId, 1, '2026-03-01');
     const create = await request(server)
       .post(`/api/trips/${tripId}/accommodations`)
       .set('Cookie', sessionCookie(1))
@@ -238,7 +269,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     expect(create.status).toBe(201);
     expect(create.body.accommodation).toMatchObject({ place_id: placeId, start_day_id: dayId, end_day_id: dayId, place_name: 'Grand Hotel' });
     // The partner hotel reservation is auto-created by the real DaysService SQL.
-    const linked = db.prepare('SELECT * FROM reservations WHERE accommodation_id = ?').get(create.body.accommodation.id) as { type: string; status: string };
+    const linked = await findRow(orm, Reservations, { accommodation_id: String(create.body.accommodation.id) });
     expect(linked).toMatchObject({ type: 'hotel', status: 'confirmed' });
     const list = await request(server).get(`/api/trips/${tripId}/accommodations`).set('Cookie', sessionCookie(1));
     expect(list.status).toBe(200);
@@ -256,8 +287,8 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     // The road-trip view builds its stops from day_assignments and only looks the stay
     // up afterwards, so a booking without one never reaches the route: the complaint
     // was having to enter the same hotel a second time as an ordinary place.
-    const placeId = Number(db.prepare('INSERT INTO places (trip_id, name) VALUES (?, ?)').run(tripId, 'Hotel Adlon').lastInsertRowid);
-    const dayId = Number(db.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (?, 4, ?)').run(tripId, '2026-03-04').lastInsertRowid);
+    const placeId = await seedPlace(tripId, 'Hotel Adlon');
+    const dayId = await seedDay(tripId, 4, '2026-03-04');
 
     const create = await request(server)
       .post(`/api/trips/${tripId}/accommodations`)
@@ -266,26 +297,26 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     expect(create.status).toBe(201);
     // In the answer, not only on the socket: the broadcast skips the sender.
     expect(create.body.assignment).toMatchObject({ day_id: dayId, place_id: placeId });
-    expect(db.prepare('SELECT stop_type FROM places WHERE id = ?').get(placeId)).toMatchObject({ stop_type: 'hotel' });
+    expect(await findRow(orm, Places, { id: placeId })).toMatchObject({ stop_type: 'hotel' });
 
     const del = await request(server)
       .delete(`/api/trips/${tripId}/accommodations/${create.body.accommodation.id}`)
       .set('Cookie', sessionCookie(1));
     expect(del.status).toBe(200);
     expect(del.body.removedAssignments).toEqual([{ id: create.body.assignment.id, dayId }]);
-    expect(db.prepare('SELECT id FROM day_assignments WHERE day_id = ?').all(dayId)).toEqual([]);
+    expect(await findRows(orm, DayAssignments, { day: dayId })).toEqual([]);
   });
 
   it('404 when trip not accessible (accommodations)', async () => {
     // See the reservations 404 case above for why this deletes/restores the
     // real row instead of mocking canAccessTrip.
-    db.prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+    await deleteRows(orm, Trips, { id: tripId });
     try {
       const res = await request(server).get(`/api/trips/${tripId}/accommodations`).set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
     } finally {
-      db.prepare("INSERT INTO trips (id, user_id, title) VALUES (?, 1, 'E2E Trip')").run(tripId);
+      await insertRow(orm, Trips, { id: tripId, user: 1, title: 'E2E Trip' });
     }
   });
 
@@ -312,19 +343,20 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     // for every case, so the numbers have to keep climbing.
     let dayNumber = 100;
 
-    beforeEach(() => {
-      db.prepare(
-        "INSERT OR IGNORE INTO users (id, username, email, password_hash, role, password_version) VALUES (2, 'victim', 'victim@example.test', 'x', 'user', 0)",
-      ).run();
-      foreignTripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (2, 'Someone else')").run().lastInsertRowid);
-      foreignReservationId = Number(db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Secret', 'other')").run(foreignTripId).lastInsertRowid);
+    beforeEach(async () => {
+      await insertRowIgnoringConflict(orm, Users, {
+        id: 2, username: 'victim', email: 'victim@example.test', password_hash: 'x', role: 'user', password_version: 0,
+      });
+      foreignTripId = (await makeTrip(orm, 2, { title: 'Someone else' })).id;
+      foreignReservationId = await seedReservation(foreignTripId, 'Secret', 'other');
       dayNumber += 1;
-      foreignDayId = Number(db.prepare("INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, '2026-05-01')").run(foreignTripId, dayNumber).lastInsertRowid);
-      ownDayId = Number(db.prepare("INSERT INTO days (trip_id, day_number, date) VALUES (?, ?, '2026-05-01')").run(tripId, dayNumber).lastInsertRowid);
+      foreignDayId = await seedDay(foreignTripId, dayNumber, '2026-05-01');
+      ownDayId = await seedDay(tripId, dayNumber, '2026-05-01');
     });
 
-    function positionRow(reservationId: number, dayId: number) {
-      return db.prepare('SELECT position FROM reservation_day_positions WHERE reservation_id = ? AND day_id = ?').get(reservationId, dayId);
+    async function positionRow(reservationId: number, dayId: number) {
+      const row = await findRow(orm, ReservationDayPositions, { reservation: reservationId, day: dayId });
+      return row ? { position: row.position } : undefined;
     }
 
     it('writes nothing when both ids belong to another trip', async () => {
@@ -333,7 +365,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
         .set('Cookie', sessionCookie(1))
         .send({ positions: [{ id: foreignReservationId, day_plan_position: 999 }], day_id: foreignDayId });
       expect(res.status).toBe(200);
-      expect(positionRow(foreignReservationId, foreignDayId)).toBeUndefined();
+      expect(await positionRow(foreignReservationId, foreignDayId)).toBeUndefined();
     });
 
     it('writes nothing when only the reservation is foreign', async () => {
@@ -342,27 +374,27 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
         .set('Cookie', sessionCookie(1))
         .send({ positions: [{ id: foreignReservationId, day_plan_position: 5 }], day_id: ownDayId });
       expect(res.status).toBe(200);
-      expect(positionRow(foreignReservationId, ownDayId)).toBeUndefined();
+      expect(await positionRow(foreignReservationId, ownDayId)).toBeUndefined();
     });
 
     it('writes nothing when only the day is foreign', async () => {
-      const ownReservationId = Number(db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Mine', 'other')").run(tripId).lastInsertRowid);
+      const ownReservationId = await seedReservation(tripId, 'Mine', 'other');
       const res = await request(server)
         .put(`/api/trips/${tripId}/reservations/positions`)
         .set('Cookie', sessionCookie(1))
         .send({ positions: [{ id: ownReservationId, day_plan_position: 5 }], day_id: foreignDayId });
       expect(res.status).toBe(200);
-      expect(positionRow(ownReservationId, foreignDayId)).toBeUndefined();
+      expect(await positionRow(ownReservationId, foreignDayId)).toBeUndefined();
     });
 
     it('still stores a position when both ids are on the trip', async () => {
-      const ownReservationId = Number(db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Mine', 'other')").run(tripId).lastInsertRowid);
+      const ownReservationId = await seedReservation(tripId, 'Mine', 'other');
       const res = await request(server)
         .put(`/api/trips/${tripId}/reservations/positions`)
         .set('Cookie', sessionCookie(1))
         .send({ positions: [{ id: ownReservationId, day_plan_position: 3 }], day_id: ownDayId });
       expect(res.status).toBe(200);
-      expect(positionRow(ownReservationId, ownDayId)).toEqual({ position: 3 });
+      expect(await positionRow(ownReservationId, ownDayId)).toEqual({ position: 3 });
     });
 
     // An id that exists nowhere used to raise a foreign-key error, which the
@@ -377,7 +409,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     });
 
     it('does not fall over when day_plan_position is omitted', async () => {
-      const ownReservationId = Number(db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Mine', 'other')").run(tripId).lastInsertRowid);
+      const ownReservationId = await seedReservation(tripId, 'Mine', 'other');
       const res = await request(server)
         .put(`/api/trips/${tripId}/reservations/positions`)
         .set('Cookie', sessionCookie(1))

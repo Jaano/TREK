@@ -12,28 +12,27 @@ import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
-import { seedUser, sessionCookie } from './harness';
+import { sessionCookie } from './harness';
 
-const { db } = vi.hoisted(() => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const Database = require('better-sqlite3');
-  const tmp = new Database(':memory:');
-  tmp.exec('PRAGMA journal_mode = WAL');
-  tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
-    maps_api_key TEXT, unsplash_api_key TEXT);`);
-  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
-  tmp.exec('CREATE TABLE google_api_usage (day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0);');
-  return { db: tmp };
+vi.mock('../../src/db/database', async () => {
+  const { createSnapshotTestDb, buildDbMock } = await import('../helpers/db-mock');
+  return buildDbMock(createSnapshotTestDb());
 });
-vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: () => {} }));
 
+import { db } from '../../src/db/database';
 import { TransitModule } from '../../src/nest/transit/transit.module';
 import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { clearGoogleTransitCache } from '../../src/nest/transit/google-transit.provider';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { makeAdmin } from '../helpers/factories/users';
+import { setAppSetting } from '../helpers/factories/settings';
+import { deleteRows, updateRows } from '../helpers/factories/rows';
+import { AppSettings } from '../../src/db/entities/AppSettings.entity';
+import { Users } from '../../src/db/entities/Users.entity';
+
+let orm: TestOrm;
 
 const ADMIN = 1;
 
@@ -60,13 +59,17 @@ describe('Transit backend switch e2e (#1699)', () => {
   }
 
   beforeAll(async () => {
-    seedUser(db as never, { id: ADMIN, role: 'admin' });
+    orm = await createTestOrm(db);
+    await makeAdmin(orm, { id: ADMIN });
     app = await build();
     server = app.getHttpServer();
   });
-  afterAll(async () => { await app?.close(); });
+  afterAll(async () => {
+    await app?.close();
+    await orm?.close();
+  });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.stubGlobal('fetch', fetchMock);
     fetchMock.mockReset();
     // MOTIS and Routes shapes both parse as "no itineraries", which is all this
@@ -74,8 +77,8 @@ describe('Transit backend switch e2e (#1699)', () => {
     fetchMock.mockResolvedValue({
       ok: true, status: 200, headers: { get: () => null }, json: async () => ({}),
     });
-    db.prepare('DELETE FROM app_settings').run();
-    db.prepare('UPDATE users SET maps_api_key = NULL WHERE id = ?').run(ADMIN);
+    await deleteRows(orm, AppSettings);
+    await updateRows(orm, Users, { id: ADMIN }, { maps_api_key: null });
     clearGoogleTransitCache();
   });
 
@@ -94,7 +97,7 @@ describe('Transit backend switch e2e (#1699)', () => {
   });
 
   it('TRANSIT-PROV-E2E-002: selecting Google without a key still plans through Transitous', async () => {
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('transit_provider', 'google')").run();
+    await setAppSetting(orm, 'transit_provider', 'google');
     expect(await planUpstream()).toContain('transitous.org');
     // The response says who really answered, so the empty state cannot blame
     // Google for a Transitous result.
@@ -102,15 +105,15 @@ describe('Transit backend switch e2e (#1699)', () => {
   });
 
   it('TRANSIT-PROV-E2E-003: with the switch on and a key set, the plan leaves for the Routes API', async () => {
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('transit_provider', 'google')").run();
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('maps_api_key', 'instance-key')").run();
+    await setAppSetting(orm, 'transit_provider', 'google');
+    await setAppSetting(orm, 'maps_api_key', 'instance-key');
     expect(await planUpstream()).toBe('https://routes.googleapis.com/directions/v2:computeRoutes');
     expect(lastBody.provider).toBe('google');
   });
 
   it('TRANSIT-PROV-E2E-004: the picker follows the switch to Google Places', async () => {
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('transit_provider', 'google')").run();
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('maps_api_key', 'instance-key')").run();
+    await setAppSetting(orm, 'transit_provider', 'google');
+    await setAppSetting(orm, 'maps_api_key', 'instance-key');
 
     const res = await request(server)
       .get('/api/transit/geocode?q=Nakanoshima&lang=ja')
@@ -120,8 +123,8 @@ describe('Transit backend switch e2e (#1699)', () => {
   });
 
   it("TRANSIT-PROV-E2E-005: a member's own key is used when the instance has none", async () => {
-    db.prepare("INSERT INTO app_settings (key, value) VALUES ('transit_provider', 'google')").run();
-    db.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('personal-key', ADMIN);
+    await setAppSetting(orm, 'transit_provider', 'google');
+    await updateRows(orm, Users, { id: ADMIN }, { maps_api_key: 'personal-key' });
 
     expect(await planUpstream()).toBe('https://routes.googleapis.com/directions/v2:computeRoutes');
     expect(fetchMock.mock.calls[0][1].headers['X-Goog-Api-Key']).toBe('personal-key');
