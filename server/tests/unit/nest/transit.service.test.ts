@@ -12,6 +12,7 @@
 import { deriveTransitStats, type TransitLeg } from '../../../src/nest/transit/transit.helpers';
 import { GoogleTransitProvider } from '../../../src/nest/transit/google-transit.provider';
 import { TransitService } from '../../../src/nest/transit/transit.service';
+import { transitConfig } from '../../../src/nest/app-config/tokens';
 import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 
@@ -29,7 +30,7 @@ const fetchMock = vi.fn();
 // exercising the MOTIS path — the Google branch has its own suite.
 const noAppSettings = { getValue: async () => null } as unknown as AppSettingsRepository;
 const noUsers = { getApiKeyColumn: async () => null } as unknown as UsersRepository;
-const svc = new TransitService(new GoogleTransitProvider(noAppSettings, noUsers, noGoogleQuota));
+const svc = new TransitService(new GoogleTransitProvider(noAppSettings, noUsers, noGoogleQuota), transitConfig());
 
 beforeEach(() => {
   vi.stubGlobal('fetch', fetchMock);
@@ -270,5 +271,22 @@ describe('quirk repairs (DI fold fix pass)', () => {
     await svc.geocode('lru-evictor-station');
     await svc.geocode('lru-probe-station');
     expect(fetchMock.mock.calls.length).toBe(fetchesBeforeTouch + 1);
+  });
+});
+
+describe('upstream base URL', () => {
+  it('TRANSIT-SVC-016: calls the instance the transitConfig token names (TRANSIT_API_URL)', async () => {
+    const own = new TransitService(new GoogleTransitProvider(noAppSettings, noUsers, noGoogleQuota), {
+      apiBase: 'https://motis.internal.example',
+    });
+    fetchMock.mockResolvedValueOnce(okJson([]));
+    await own.geocode('own-motis-station');
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/^https:\/\/motis\.internal\.example\/api\/v1\/geocode\?/);
+  });
+
+  it('TRANSIT-SVC-017: defaults to Transitous when TRANSIT_API_URL is unset', async () => {
+    fetchMock.mockResolvedValueOnce(okJson([]));
+    await svc.geocode('default-base-station');
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/^https:\/\/api\.transitous\.org\/api\/v1\/geocode\?/);
   });
 });

@@ -13,12 +13,15 @@ import { AppSettings } from '../../db/entities/AppSettings.entity';
 import { Users } from '../../db/entities/Users.entity';
 import { Trips } from '../../db/entities/Trips.entity';
 import { GoogleQuotaModule } from '../google-quota/google-quota.module';
+import { AppConfigModule } from '../app-config/app-config.module';
 
 /**
  * Transit domain (#1065) — the Transitous/MOTIS proxy, with the optional
  * Google backend (#1699) behind it. TransitMcp carries the
  * decorator-registered MCP tools; DaysModule/ReservationsModule feed
  * create_transit_journey. Exports TransitService for in-container consumers.
+ * AppConfigModule provides the transitConfig token (TRANSIT_API_URL) that
+ * TransitService injects.
  *
  * MikroOrmModule.forFeature([AppSettings, Users, Trips]): GoogleTransitProvider
  * passes its own AppSettingsRepository/UsersRepository to
@@ -30,7 +33,7 @@ import { GoogleQuotaModule } from '../google-quota/google-quota.module';
  */
 @Module({
   // DaysModule + ReservationsModule: TransitMcp's create_transit_journey injects both.
-  imports: [McpSharedModule, RateLimitModule, DaysModule, ReservationsModule, AuthModule, MikroOrmModule.forFeature([AppSettings, Users, Trips]), GoogleQuotaModule],
+  imports: [AppConfigModule, McpSharedModule, RateLimitModule, DaysModule, ReservationsModule, AuthModule, MikroOrmModule.forFeature([AppSettings, Users, Trips]), GoogleQuotaModule],
   controllers: [TransitController],
   providers: [TransitService, TransitMcp, GoogleTransitProvider],
   exports: [TransitService],

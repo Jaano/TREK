@@ -8,11 +8,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * at all, and every branch that resolves it is a filesystem lookup that behaves
  * differently on the three platforms TREK ships to.
  */
-const { existsSync, readdirSync, readEnv, execFileSync, execFile, logDebug } = vi.hoisted(() => ({
+const { existsSync, readdirSync, execFileSync, execFile, logDebug } = vi.hoisted(() => ({
   logDebug: vi.fn(),
   existsSync: vi.fn(),
   readdirSync: vi.fn(),
-  readEnv: vi.fn(),
   execFileSync: vi.fn(),
   // A plain function, because the service promisifies it at module load.
   execFile: vi.fn(),
@@ -29,7 +28,6 @@ vi.mock('node:fs', () => ({
 // green-or-red depending on whether the developer happens to have KItinerary
 // installed.
 vi.mock('node:child_process', () => ({ execFileSync, execFile }));
-vi.mock('../../../../src/app-config', () => ({ readEnv }));
 // The logger reads readEnv().app.logLevel while its module is evaluated, so it
 // has to be mocked rather than imported for real.
 vi.mock('../../../../src/nest/audit/audit-log.logger', () => ({
@@ -44,9 +42,10 @@ import { KitineraryExtractorService } from '../../../../src/nest/booking-import/
 // string would never match.
 const onPath = (dir: string) => join(dir, 'kitinerary-extractor');
 
-function boot(env: { kitineraryExtractorPath?: string; searchPath?: string[] } = {}) {
-  readEnv.mockReturnValue({ integrations: { searchPath: [], ...env } });
-  const svc = new KitineraryExtractorService();
+// What the kitineraryConfig token hands the service: KITINERARY_EXTRACTOR_PATH
+// and the split PATH, frozen when the app is built.
+function boot(env: { extractorPath?: string; searchPath?: string[] } = {}) {
+  const svc = new KitineraryExtractorService({ extractorPath: undefined, searchPath: [], ...env });
   svc.onModuleInit();
   return svc;
 }
@@ -61,14 +60,14 @@ beforeEach(() => {
 describe('KitineraryExtractorService binary probe', () => {
   it('KIT-EXT-001: takes the configured path when it exists', () => {
     existsSync.mockImplementation((p: string) => p === '/opt/kitinerary-extractor');
-    expect(boot({ kitineraryExtractorPath: '/opt/kitinerary-extractor' }).isAvailable()).toBe(true);
+    expect(boot({ extractorPath: '/opt/kitinerary-extractor' }).isAvailable()).toBe(true);
   });
 
   it('KIT-EXT-002: an explicitly configured path that is missing disables the feature outright', () => {
     // It deliberately does NOT fall through to the search: somebody who set the
     // variable meant that binary, and silently using another one would hide the
     // typo behind a working feature.
-    const svc = boot({ kitineraryExtractorPath: '/nope/kitinerary-extractor' });
+    const svc = boot({ extractorPath: '/nope/kitinerary-extractor' });
     expect(svc.isAvailable()).toBe(false);
     expect(readdirSync).not.toHaveBeenCalled();
   });
@@ -138,7 +137,7 @@ describe('KitineraryExtractorService diagnostics', () => {
     existsSync.mockImplementation((p: string) => p === '/opt/ki');
     execFileSync.mockReturnValue(Buffer.from('kitinerary-extractor 6.3.3\n'));
 
-    expect(boot({ kitineraryExtractorPath: '/opt/ki' }).describe()).toEqual({
+    expect(boot({ extractorPath: '/opt/ki' }).describe()).toEqual({
       available: true, path: '/opt/ki', version: '6.3.3', configuredPath: '/opt/ki',
     });
   });
@@ -147,7 +146,7 @@ describe('KitineraryExtractorService diagnostics', () => {
     existsSync.mockImplementation((p: string) => p === '/opt/ki');
     execFileSync.mockImplementation(() => { throw new Error('nope'); });
 
-    const described = boot({ kitineraryExtractorPath: '/opt/ki' }).describe();
+    const described = boot({ extractorPath: '/opt/ki' }).describe();
     expect(described.available).toBe(true);
     expect(described.version).toBeNull();
   });
@@ -155,7 +154,7 @@ describe('KitineraryExtractorService diagnostics', () => {
   it('KIT-EXT-012: a configured path that does not exist is reported as such', () => {
     existsSync.mockReturnValue(false);
 
-    expect(boot({ kitineraryExtractorPath: '/nope/ki' }).describe()).toEqual({
+    expect(boot({ extractorPath: '/nope/ki' }).describe()).toEqual({
       available: false, path: null, version: null, configuredPath: '/nope/ki',
     });
   });
@@ -184,7 +183,7 @@ describe('KitineraryExtractorService stderr handling', () => {
     execFile.mockImplementation((_bin: string, _args: string[], _opts: unknown, cb: (e: unknown, r: unknown) => void) => {
       cb(null, { stdout: '[]', stderr });
     });
-    await boot({ kitineraryExtractorPath: '/opt/ki' }).extract(Buffer.from(''), 'booking.eml');
+    await boot({ extractorPath: '/opt/ki' }).extract(Buffer.from(''), 'booking.eml');
   }
 
   it('KIT-EXT-015: passes every raw line to the debug log, script errors included', async () => {

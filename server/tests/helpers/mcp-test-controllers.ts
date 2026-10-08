@@ -51,6 +51,7 @@ import { TodoService } from '../../src/nest/todo/todo.service';
 import { TransitMcp } from '../../src/nest/transit/transit.mcp';
 import { GoogleTransitProvider } from '../../src/nest/transit/google-transit.provider';
 import { TransitService } from '../../src/nest/transit/transit.service';
+import { transitConfig } from '../../src/nest/app-config/tokens';
 import { FilesService } from '../../src/nest/files/files.service';
 import { FilesMcp } from '../../src/nest/files/files.mcp';
 import { TripsMcp } from '../../src/nest/trips/trips.mcp';
@@ -491,7 +492,7 @@ export async function createMcpTestRegistry(): Promise<McpRegistry> {
         // (`findUsernameEmail`, UM11's precedent) added in its place.
         usersRepo, authService, addonsService,
       ),
-      new TransitMcp(new TransitService(new GoogleTransitProvider(appSettings, usersRepo, noGoogleQuota)), daysService, reservationsService, await createTestTripsRepo(db), authService, guards),
+      new TransitMcp(new TransitService(new GoogleTransitProvider(appSettings, usersRepo, noGoogleQuota), transitConfig()), daysService, reservationsService, await createTestTripsRepo(db), authService, guards),
       new AtlasMcp(new AtlasService(
         await createTestBucketListRepo(db), await createTestHiddenCountriesRepo(db),
         await createTestHiddenRegionsRepo(db), await createTestVisitedCountriesRepo(db),

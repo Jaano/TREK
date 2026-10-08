@@ -9,7 +9,7 @@
  * mutate mid-lifetime, belongs in derive.ts instead.
  */
 import type { RawEnv } from './derive';
-import { parseBool, positiveIntOr } from './parsers';
+import { parseBool, positiveIntOr, stripTrailingSlashes } from './parsers';
 
 /**
  * Longer than the upstream idle timeout of the common reverse proxies and load
@@ -42,10 +42,32 @@ export function deriveStorage(raw: RawEnv) {
   };
 }
 
+/** The Transitous/MOTIS instance TransitService proxies to. */
+export function deriveTransit(raw: RawEnv) {
+  return {
+    apiBase: stripTrailingSlashes(raw.TRANSIT_API_URL || 'https://api.transitous.org'),
+  };
+}
+
+/** Where KitineraryExtractorService looks for its binary when the module starts. */
+export function deriveKitinerary(raw: RawEnv) {
+  return {
+    extractorPath: raw.KITINERARY_EXTRACTOR_PATH,
+    // Windows spells it Path; every other platform PATH. Split here so the
+    // probe gets a list and never re-implements the delimiter.
+    searchPath: (raw.PATH || raw.Path || '')
+      .split(process.platform === 'win32' ? ';' : ':')
+      .map((p) => p.trim())
+      .filter(Boolean),
+  };
+}
+
 /** One entry per token: the namespace it registers under and the function it derives with. */
 export const BOOT_DERIVERS = {
   http: deriveHttpBoot,
   storage: deriveStorage,
+  transit: deriveTransit,
+  kitinerary: deriveKitinerary,
 } as const;
 
 export type BootNamespace = keyof typeof BOOT_DERIVERS;

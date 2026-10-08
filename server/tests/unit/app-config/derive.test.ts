@@ -21,7 +21,7 @@ import {
   derivePush,
   deriveAll,
 } from '../../../src/app-config/derive';
-import { deriveHttpBoot, deriveStorage } from '../../../src/app-config/boot-derive';
+import { deriveHttpBoot, deriveKitinerary, deriveStorage, deriveTransit } from '../../../src/app-config/boot-derive';
 
 // These tests PIN the exact legacy coercions each derived field replaced.
 // If one fails after an edit, the edit changed runtime behavior — fix the
@@ -229,10 +229,8 @@ describe('derivePlugins', () => {
 });
 
 describe('deriveIntegrations', () => {
-  it('pins unsplash trim, transit base strip + default, nominatim trim + default, overpass timeout', () => {
+  it('pins unsplash trim, nominatim trim + default, overpass timeout', () => {
     expect(deriveIntegrations({ UNSPLASH_ACCESS_KEY: ' key ' }).unsplashAccessKey).toBe('key');
-    expect(deriveIntegrations({}).transitApiBase).toBe('https://api.transitous.org');
-    expect(deriveIntegrations({ TRANSIT_API_URL: 'https://t.example//' }).transitApiBase).toBe('https://t.example');
     expect(deriveIntegrations({}).nominatimUrl).toBe('https://nominatim.openstreetmap.org');
     // Padded and whitespace-only both come back from a compose file or a ConfigMap,
     // and the schema already called the second one unset.
@@ -250,6 +248,28 @@ describe('deriveIntegrations', () => {
     expect(deriveIntegrations({}).llmTimeoutMs).toBe(900_000);
     expect(deriveIntegrations({ LLM_TIMEOUT_MS: '-1' }).llmTimeoutMs).toBe(900_000);
     expect(deriveIntegrations({ LLM_TIMEOUT_MS: '60000.5' }).llmTimeoutMs).toBe(60_000);
+  });
+});
+
+describe('deriveTransit (transitConfig token)', () => {
+  it('TRANSIT_API_URL: trailing slashes stripped, Transitous unless set', () => {
+    expect(deriveTransit({}).apiBase).toBe('https://api.transitous.org');
+    expect(deriveTransit({ TRANSIT_API_URL: 'https://t.example//' }).apiBase).toBe('https://t.example');
+  });
+});
+
+describe('deriveKitinerary (kitineraryConfig token)', () => {
+  const sep = process.platform === 'win32' ? ';' : ':';
+
+  it('KITINERARY_EXTRACTOR_PATH passes through as given, unset stays unset', () => {
+    expect(deriveKitinerary({}).extractorPath).toBeUndefined();
+    expect(deriveKitinerary({ KITINERARY_EXTRACTOR_PATH: '/opt/ki' }).extractorPath).toBe('/opt/ki');
+  });
+
+  it('splits PATH (or the Windows Path) on the platform delimiter and drops blank entries', () => {
+    expect(deriveKitinerary({ PATH: ['/a', ' /b ', '', '/c'].join(sep) }).searchPath).toEqual(['/a', '/b', '/c']);
+    expect(deriveKitinerary({ Path: ['/w1', '/w2'].join(sep) }).searchPath).toEqual(['/w1', '/w2']);
+    expect(deriveKitinerary({}).searchPath).toEqual([]);
   });
 });
 

@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { GoogleTransitProvider, clearGoogleTransitCache } from '../../../src/nest/transit/google-transit.provider';
 import { decodePolyline, encodePolyline } from '../../../src/nest/transit/transit.helpers';
 import { TransitService } from '../../../src/nest/transit/transit.service';
+import { transitConfig } from '../../../src/nest/app-config/tokens';
 import type { AppSettingsRepository } from '../../../src/db/repositories/AppSettings.repository';
 import type { UsersRepository } from '../../../src/db/repositories/Users.repository';
 import { noGoogleQuota } from '../../helpers/google-quota';
@@ -193,13 +194,13 @@ describe('activation', () => {
 
   it('GTRANSIT-005: TransitService routes to Google only when it is active', async () => {
     fetchMock.mockResolvedValue(okJson(subwayRoute()));
-    const service = new TransitService(makeProvider(GOOGLE_SETTINGS));
+    const service = new TransitService(makeProvider(GOOGLE_SETTINGS), transitConfig());
     await service.plan({ from: FROM, to: TO });
     expect(fetchMock.mock.calls[0][0]).toBe('https://routes.googleapis.com/directions/v2:computeRoutes');
   });
 
   it('GTRANSIT-006: TransitService still validates the request before dispatching', async () => {
-    const service = new TransitService(makeProvider(GOOGLE_SETTINGS));
+    const service = new TransitService(makeProvider(GOOGLE_SETTINGS), transitConfig());
     await expect(service.plan({ from: 'nowhere', to: TO })).rejects.toThrow('from must be "lat,lng"');
     await expect(service.plan({ from: FROM, to: TO, modes: 'ROCKET' })).rejects.toThrow('unsupported transit mode');
     expect(fetchMock).not.toHaveBeenCalled();
@@ -477,14 +478,14 @@ describe('geocode', () => {
 
   it('GTRANSIT-020: repeat lookups of the same station are answered from cache', async () => {
     fetchMock.mockResolvedValue(okJson(places));
-    const service = new TransitService(makeProvider(GOOGLE_SETTINGS));
+    const service = new TransitService(makeProvider(GOOGLE_SETTINGS), transitConfig());
     await service.geocode('Kyobashi', 'en', undefined, 1);
     await service.geocode('Kyobashi', 'en', undefined, 1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('GTRANSIT-021: a short query never reaches Google', async () => {
-    const service = new TransitService(makeProvider(GOOGLE_SETTINGS));
+    const service = new TransitService(makeProvider(GOOGLE_SETTINGS), transitConfig());
     // The provider is still named: the answer comes from the length guard, not
     // from a backend that declined.
     expect(await service.geocode('a', 'en', undefined, 1)).toEqual({ results: [], provider: 'google' });
@@ -684,7 +685,7 @@ describe('walk coalescing', () => {
 describe('provider reporting', () => {
   it('GTRANSIT-036: names Google when Google answered', async () => {
     fetchMock.mockResolvedValue(okJson(subwayRoute()));
-    const service = new TransitService(makeProvider(GOOGLE_SETTINGS));
+    const service = new TransitService(makeProvider(GOOGLE_SETTINGS), transitConfig());
     const planned = await service.plan({ from: FROM, to: TO }, 'en', 1);
     expect(planned.provider).toBe('google');
 
@@ -696,7 +697,7 @@ describe('provider reporting', () => {
     fetchMock.mockResolvedValue(okJson({ itineraries: [] }));
     // Google selected, but no key resolves — the request goes to Transitous and
     // says so, instead of leaving an empty result to be blamed on Google.
-    const service = new TransitService(makeProvider({ transit_provider: 'google' }));
+    const service = new TransitService(makeProvider({ transit_provider: 'google' }), transitConfig());
     const planned = await service.plan({ from: '48.8583,2.3470', to: '48.8809,2.3553' }, 'en', 1);
     expect(planned.provider).toBe('transitous');
     expect(planned.itineraries).toEqual([]);
@@ -705,7 +706,7 @@ describe('provider reporting', () => {
 
   it('GTRANSIT-038: a cached answer still names its backend', async () => {
     fetchMock.mockResolvedValue(okJson({ itineraries: [] }));
-    const service = new TransitService(makeProvider({}));
+    const service = new TransitService(makeProvider({}), transitConfig());
     const first = await service.plan({ from: '48.1,2.1', to: '48.2,2.2' }, 'en', 1);
     const second = await service.plan({ from: '48.1,2.1', to: '48.2,2.2' }, 'en', 1);
     expect(fetchMock).toHaveBeenCalledTimes(1);

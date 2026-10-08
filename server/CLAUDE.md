@@ -84,7 +84,7 @@ SQLite is the engine today and Postgres is the planned second one. Code under `s
 
 **Never read `process.env` in `src/**`** — ESLint errors on it. All env access goes through `src/app-config/`:
 
-- Every variable has exactly one owner. Nest classes inject a boot-stable namespace token from `src/nest/app-config/` (`httpConfig`, `storageConfig`) for values frozen per app build, or use `RuntimeEnvService` / `readEnv()` for everything else (DEMO_MODE, NODE_ENV, OIDC_*, ...). A token-owned variable is derived in `boot-derive.ts` and never by `readEnv()`; `tests/unit/app-config/config-ownership.test.ts` fails on a variable read through both, and on a token nothing injects.
+- Every variable has exactly one owner. Nest classes inject a boot-stable namespace token from `src/nest/app-config/` (`httpConfig`, `storageConfig`, `transitConfig`, `kitineraryConfig`) for values frozen per app build, or use `RuntimeEnvService` / `readEnv()` for everything else (DEMO_MODE, NODE_ENV, OIDC_*, ...). A token-owned variable is derived in `boot-derive.ts` and never by `readEnv()`; `tests/unit/app-config/config-ownership.test.ts` fails on a variable read through both, and on a token nothing injects.
 - `server/.env.example` documents every variable `env.schema.ts` validates; `env-reference.test.ts` fails on drift either way.
 - Everything else calls `readEnv()` — live, uncached, per call.
 - Validation is fail-fast at boot only (`boot-validate.ts`, imported by `index.ts` right after dotenv): malformed values abort startup; unset/blank defaults. Never wire validation into `buildApp()` or `ConfigModule.forRoot`, and never `cache`/snapshot a runtime-toggled value (it breaks the env-mutating tests).

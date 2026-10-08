@@ -279,7 +279,6 @@ export function deriveWebauthn(raw: RawEnv) {
 export function deriveIntegrations(raw: RawEnv) {
   return {
     unsplashAccessKey: raw.UNSPLASH_ACCESS_KEY?.trim(),
-    transitApiBase: stripTrailingSlashes(raw.TRANSIT_API_URL || 'https://api.transitous.org'),
     // Trimmed before the default fires: the schema validates the trimmed value and
     // treats a blank one as unset, so a padded or whitespace-only value would
     // otherwise pass startup and then be the string that cannot be fetched.
@@ -288,7 +287,6 @@ export function deriveIntegrations(raw: RawEnv) {
     // Longer than the `[timeout:20]` the query itself carries, or we abort an answer the
     // mirror was still allowed to be working on. See OVERPASS_QUERY_TIMEOUT_S.
     overpassTimeoutMs: positiveNumberOr(raw.OVERPASS_TIMEOUT_MS, 25000),
-    kitineraryExtractorPath: raw.KITINERARY_EXTRACTOR_PATH,
     /**
      * One ceiling for a model call, replacing the three per-client constants
      * that used to disagree. The default is deliberately generous: heavier
@@ -297,12 +295,9 @@ export function deriveIntegrations(raw: RawEnv) {
      * rejects a fractional value.
      */
     llmTimeoutMs: Math.floor(positiveNumberOr(raw.LLM_TIMEOUT_MS, 900_000)),
-    // Windows spells it Path; every other platform PATH. Split here so callers
-    // get a list and never re-implement the delimiter.
-    searchPath: (raw.PATH || raw.Path || '')
-      .split(process.platform === 'win32' ? ';' : ':')
-      .map(p => p.trim())
-      .filter(Boolean),
+    // TRANSIT_API_URL, KITINERARY_EXTRACTOR_PATH and PATH are boot-stable and
+    // read only by Nest providers, so the transitConfig and kitineraryConfig
+    // tokens own them (boot-derive.ts).
   };
 }
 

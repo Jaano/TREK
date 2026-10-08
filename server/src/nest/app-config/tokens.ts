@@ -27,5 +27,9 @@ import { BOOT_DERIVERS } from '../../app-config/boot-derive';
 export const httpConfig = registerAs('http', () => BOOT_DERIVERS.http(process.env));
 /** The storage registry's conditional place-photo backend (TREK_PLACE_PHOTO_DIR). */
 export const storageConfig = registerAs('storage', () => BOOT_DERIVERS.storage(process.env));
+/** TransitService's upstream (TRANSIT_API_URL). */
+export const transitConfig = registerAs('transit', () => BOOT_DERIVERS.transit(process.env));
+/** KitineraryExtractorService's binary probe (KITINERARY_EXTRACTOR_PATH, then PATH). */
+export const kitineraryConfig = registerAs('kitinerary', () => BOOT_DERIVERS.kitinerary(process.env));
 
-export const BOOT_STABLE_TOKENS = [httpConfig, storageConfig];
+export const BOOT_STABLE_TOKENS = [httpConfig, storageConfig, transitConfig, kitineraryConfig];

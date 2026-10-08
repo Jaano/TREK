@@ -1,10 +1,11 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
 import { execFile } from 'node:child_process';
 import { existsSync, readdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { readEnv } from '../../app-config';
+import { kitineraryConfig } from '../app-config/tokens';
 import { logDebug } from '../audit/audit-log.logger';
 import { execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -29,8 +30,11 @@ export class KitineraryExtractorService implements OnModuleInit {
    *  one failure that otherwise looks exactly like "not installed". */
   private configuredPath: string | null = null;
 
+  /** KITINERARY_EXTRACTOR_PATH and PATH, frozen per built app like the probe result itself. */
+  constructor(@Inject(kitineraryConfig.KEY) private readonly kitineraryEnv: ConfigType<typeof kitineraryConfig>) {}
+
   onModuleInit() {
-    this.configuredPath = readEnv().integrations.kitineraryExtractorPath || null;
+    this.configuredPath = this.kitineraryEnv.extractorPath || null;
     this.binaryPath = this.findBinary();
     if (this.binaryPath) {
       this.binaryVersion = this.probeVersion(this.binaryPath);
@@ -131,7 +135,7 @@ export class KitineraryExtractorService implements OnModuleInit {
   }
 
   private findBinary(): string | null {
-    const envPath = readEnv().integrations.kitineraryExtractorPath;
+    const envPath = this.kitineraryEnv.extractorPath;
     if (envPath) {
       if (existsSync(envPath)) return envPath;
       console.warn(`[KItinerary] KITINERARY_EXTRACTOR_PATH="${envPath}" not found`);
@@ -153,7 +157,7 @@ export class KitineraryExtractorService implements OnModuleInit {
     // this branch is dead there) anyone who could write to a PATH directory could
     // have their binary run as the TREK user. Probing the concrete file with
     // execFileSync also drops the /bin/sh hop the old execSync string needed.
-    for (const dir of readEnv().integrations.searchPath) {
+    for (const dir of this.kitineraryEnv.searchPath) {
       const candidate = join(dir, BINARY_NAME);
       if (!existsSync(candidate)) continue;
       try {

@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { getAppUrl, readEnv } from '../../app-config';
+import { Inject, Injectable } from '@nestjs/common';
+import type { ConfigType } from '@nestjs/config';
+import { getAppUrl } from '../../app-config';
+import { transitConfig } from '../app-config/tokens';
 import { buildUserAgent } from '../maps/maps.helpers';
 import { GoogleTransitProvider } from './google-transit.provider';
 import type { TransitProvider } from '@trek/shared';
@@ -37,15 +39,13 @@ import {
  * contact info, which we send once from the server), and responses are mapped
  * to a compact shape so the client isn't coupled to the MOTIS schema.
  *
- * Folded 1:1 from the legacy services/transitService.ts. The base URL, the
- * lazy User-Agent memo and the response cache stay module-scoped on purpose
- * (the permissions/exchange-rates precedent): the DI singleton and any future
- * non-Nest caller share one cache, and the base URL keeps its frozen-at-import
- * legacy timing.
+ * Folded 1:1 from the legacy services/transitService.ts. The lazy User-Agent
+ * memo and the response cache stay module-scoped on purpose (the
+ * permissions/exchange-rates precedent): the DI singleton and any future
+ * non-Nest caller share one cache. The base URL (TRANSIT_API_URL) is
+ * boot-stable and comes from the transitConfig token, frozen per built app.
  */
 
-// Frozen at import on purpose (legacy timing).
-const TRANSIT_API_BASE = readEnv().integrations.transitApiBase;
 let userAgent: string | null = null;
 
 function getUserAgent(): string {
@@ -95,8 +95,8 @@ function isCoord(v: string): boolean {
 // megabyte; anything bigger is a misbehaving provider, not data we want to map.
 const MAX_RESPONSE_BYTES = 5_000_000;
 
-async function upstream(path: string, params: URLSearchParams): Promise<unknown> {
-  const url = `${TRANSIT_API_BASE}${path}?${params}`;
+async function upstream(base: string, path: string, params: URLSearchParams): Promise<unknown> {
+  const url = `${base}${path}?${params}`;
   const res = await fetch(url, {
     headers: { 'User-Agent': getUserAgent(), Accept: 'application/json' },
     signal: AbortSignal.timeout(8000),
@@ -154,7 +154,10 @@ function mapStop(p: MotisPlaceRaw | undefined, kind: 'departure' | 'arrival'): T
 
 @Injectable()
 export class TransitService {
-  constructor(private readonly google: GoogleTransitProvider) {}
+  constructor(
+    private readonly google: GoogleTransitProvider,
+    @Inject(transitConfig.KEY) private readonly transitEnv: ConfigType<typeof transitConfig>,
+  ) {}
 
   /**
    * Station/place search for the from/to pickers. `near` biases results.
@@ -192,7 +195,7 @@ export class TransitService {
     const cached = cacheGet(key);
     if (cached) return { ...(cached as { results: TransitPlace[] }), provider };
 
-    const raw = (await upstream('/api/v1/geocode', params)) as Array<{
+    const raw = (await upstream(this.transitEnv.apiBase, '/api/v1/geocode', params)) as Array<{
       name?: string;
       lat?: number;
       lon?: number;
@@ -261,7 +264,7 @@ export class TransitService {
     const cached = cacheGet(key);
     if (cached) return { ...(cached as { itineraries: TransitItinerary[] }), provider: 'transitous' };
 
-    const raw = (await upstream('/api/v6/plan', params)) as {
+    const raw = (await upstream(this.transitEnv.apiBase, '/api/v6/plan', params)) as {
       itineraries?: Array<{
         duration?: number;
         startTime?: string;

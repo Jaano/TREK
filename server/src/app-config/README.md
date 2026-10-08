@@ -101,12 +101,31 @@ Every variable has exactly one owner, and the owner decides how it is read:
   `boot-derive.ts`): boot-stable values that only Nest classes need. The token
   is snapshotted per built app and injected (`@Inject(storageConfig.KEY)`, or
   `app.get(httpConfig.KEY)` for the pre-init Express layer). Today:
-  `httpConfig` (TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS, HTTP_KEEP_ALIVE_TIMEOUT_MS) and `storageConfig`
-  (TREK_PLACE_PHOTO_DIR).
+  `httpConfig` (TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS, HTTP_KEEP_ALIVE_TIMEOUT_MS),
+  `storageConfig` (TREK_PLACE_PHOTO_DIR), `transitConfig` (TRANSIT_API_URL,
+  for TransitService) and `kitineraryConfig` (KITINERARY_EXTRACTOR_PATH and
+  PATH, for KitineraryExtractorService's binary probe). A module whose provider
+  injects one imports `AppConfigModule`, so it also builds on its own in a test.
 - **`readEnv()` / `RuntimeEnvService`** (`derive.ts`): everything else, both
-  the runtime-toggled values and the boot-stable ones that code outside the
-  container needs (config.ts, the database, src/mcp, the SSRF guard), which
-  freeze them in module-top consts.
+  the runtime-toggled values and the boot-stable ones that code outside a Nest
+  provider reads, which freezes them in module-top consts. Each of those has a
+  reader the container cannot inject into:
+  - PORT, HOST: `index.ts`, before the app exists.
+  - SESSION_DURATION(_REMEMBER), DEFAULT_LANGUAGE, ENCRYPTION_KEY: `src/config.ts`,
+    a plain module evaluated at process start.
+  - MCP_*: `src/mcp/`, the process-wide session state.
+  - TREK_PLUGIN_RPC_*/LOG_*/MAX_RSS_MB: the plugin host and supervisor, which
+    are deliberately not Nest (the sandbox boundary).
+  - TREK_PLUGIN_REGISTRY_URL: `PluginRegistryService` is a provider, but several
+    plugin suites build it by hand with a trailing `@Optional()` UnitOfWork, so
+    a required token parameter cannot go in without reordering that signature.
+  - TREK_WIKI_DIR: `nest/help/wiki.ts`, a plain module the help MCP tools call.
+  - BACKUP_*: `nest/backup/backup-archive.ts`, which the first-start restore
+    (`boot-restore.ts`, called from `index.ts`) runs before the database opens.
+  - LOG_LEVEL: the logger, imported everywhere.
+  - ALLOW_INTERNAL_NETWORK, ALLOW_LINK_LOCAL_IPS: the SSRF guard in `utils/`.
+  - TREK_DB_FILE, TREK_DB_JOURNAL_MODE, TREK_DB_SYNCHRONOUS: the database,
+    opened before the container.
 
 `deriveAll()` never reads a variable a token owns, and a token is dropped once
 nothing injects it. `tests/unit/app-config/config-ownership.test.ts` records
@@ -129,7 +148,7 @@ variable is token-owned, module-top `readEnv()` consts elsewhere):
 PORT, HOST, TRUST_PROXY, HSTS_INCLUDE_SUBDOMAINS, HTTP_KEEP_ALIVE_TIMEOUT_MS, SESSION_DURATION(_REMEMBER), MCP_SESSION_TTL,
 MCP_MAX_SESSION_PER_USER, MCP_SSE_KEEPALIVE, TREK_PLUGIN_RPC_*/LOG_*/MAX_RSS_MB,
 TREK_PLUGIN_REGISTRY_URL, TREK_WIKI_DIR*, TREK_PLACE_PHOTO_DIR, BACKUP_*,
-TRANSIT_API_URL, LOG_LEVEL*, ALLOW_INTERNAL_NETWORK*, ALLOW_LINK_LOCAL_IPS*, DEFAULT_LANGUAGE,
+TRANSIT_API_URL, KITINERARY_EXTRACTOR_PATH, LOG_LEVEL*, ALLOW_INTERNAL_NETWORK*, ALLOW_LINK_LOCAL_IPS*, DEFAULT_LANGUAGE,
 TREK_DB_FILE, TREK_DB_JOURNAL_MODE, TREK_DB_SYNCHRONOUS, ENCRYPTION_KEY**.
 (* frozen today because the consuming module captures it at import; tests that
 override these set them at file top, before the SUT import.)
