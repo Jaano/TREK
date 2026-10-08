@@ -238,6 +238,11 @@ jobs:
       - name: Entity files match the generator
         run: cd server && npm run check:entities
 
+      - name: Kysely table types match the migrated schema
+        # src/db/kysely/ is generated from the migrations by gen:db-types; a
+        # migration that changes a column regenerates it in the same change.
+        run: cd server && npm run check:db-types
+
       - name: Lint
         # Type-aware rules build the src + tests program, which outgrows
         # Node's default ~4 GB heap on the runner.
@@ -259,6 +264,12 @@ jobs:
         # internals, src/db stays below src/nest. Today's violations sit in
         # scripts/import-boundaries-baseline.json and may only shrink.
         run: cd server && npm run lint:boundaries
+
+      - name: SQLite-only SQL spellings may only shrink
+        # INSERT OR IGNORE, datetime(), json_extract, insertId and friends
+        # outside src/db/dialect/ are held to scripts/dialect-baseline.json,
+        # so the code stays portable to a second engine.
+        run: cd server && npm run lint:dialect
 
       - name: Writes outside a transaction
         # A method that writes twice does it inside one uow.transactional.
