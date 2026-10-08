@@ -9,6 +9,8 @@ import {
   lowerCounts,
   readBaseline,
   readText,
+  reportStale,
+  staleCounts,
   TEST_FILE,
   toKey,
   writeBaseline,
@@ -163,9 +165,8 @@ export function check({
 
   const grown = Object.entries(counts).filter(([file, n]) => n > (baseline[file] ?? 0));
   const marked = Object.entries(markers).filter(([file, n]) => n > (allowedMarkers[file] ?? 0));
-  const lowerable =
-    Object.entries(baseline).filter(([file, n]) => (counts[file] ?? 0) < n).length +
-    Object.entries(allowedMarkers).filter(([file, n]) => (markers[file] ?? 0) < n).length;
+  const stale = staleCounts(baseline, counts);
+  const staleMarkers = staleCounts(allowedMarkers, markers);
 
   for (const [file, n] of grown) {
     error(
@@ -182,12 +183,11 @@ export function check({
         '(a map, a measured position, a time axis) needs a reviewer to raise the entry by hand.'
     );
   }
-  if (lowerable && !update) {
-    log(`${lowerable} entr(ies) are above what the files hold now: run with --update to lower them.`);
-  }
+  reportStale(stale, { file: 'rtl-baseline.json', command: 'lint:rtl', root: join(root, 'src'), error });
+  reportStale(staleMarkers, { file: 'rtl-disable-baseline.json', command: 'lint:rtl', root: join(root, 'src'), error });
   log(
     `rtl: ${sum(counts)} physical side(s) in ${Object.keys(counts).length} file(s), baseline allows ${sum(baseline)}; ` +
       `${sum(markers)} line(s) marked ${DISABLE}, baseline allows ${sum(allowedMarkers)}`
   );
-  return grown.length || marked.length ? 1 : 0;
+  return grown.length || marked.length || stale.length || staleMarkers.length ? 1 : 0;
 }

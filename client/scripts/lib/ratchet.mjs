@@ -126,6 +126,50 @@ export function lowerCounts(baseline, counts, floor = 0) {
   return lowered;
 }
 
+/**
+ * The entries of a count baseline that allow more than is measured now: a
+ * count that fell below its entry, one back at floor or under it, or a file
+ * that is gone. Exactly the entries lowerCounts would lower or drop. Each one
+ * fails its check until --update lowers it, or the count could grow back to
+ * the old entry unseen, and a deleted file would hand its allowance to the
+ * next file at its path.
+ *
+ * @param {Record<string, number>} baseline
+ * @param {Record<string, number>} counts
+ * @param {number | ((key: string) => number)} [floor]
+ * @returns {{ key: string, entry: number, now: number }[]}
+ */
+export function staleCounts(baseline, counts, floor = 0) {
+  const lowered = lowerCounts(baseline, counts, floor);
+  return Object.entries(baseline)
+    .filter(([key, entry]) => lowered[key] !== entry)
+    .map(([key, entry]) => ({ key, entry, now: counts[key] ?? 0 }));
+}
+
+/**
+ * Prints a FAIL line for each stale entry (see staleCounts) of the baseline
+ * scripts/<file>, then how to lower them. With root, an entry whose file is
+ * not there is called gone; label names an entry that is not a file path.
+ *
+ * @param {{ key: string, entry: number, now: number }[]} stale
+ * @param {{ file: string, command: string, root?: string, label?: (key: string) => string, error: (line: string) => void }} options
+ */
+export function reportStale(stale, { file, command, root, label = (key) => key, error }) {
+  for (const { key, entry, now } of stale) {
+    const gone = root !== undefined && !existsSync(join(root, key));
+    error(
+      `FAIL  ${label(key)} is held at ${entry} in scripts/${file}, ` +
+        (gone ? 'but the file is gone.' : `but there are ${now} now.`)
+    );
+  }
+  if (stale.length) {
+    error(
+      `Run npm run ${command} -- --update to lower the baseline with the change that made it smaller: ` +
+        'an entry above the count lets it grow back unseen.'
+    );
+  }
+}
+
 /** The baseline entries that are still offenders: a list only ever loses files. */
 export function lowerList(baseline, offenders) {
   const now = new Set(offenders);

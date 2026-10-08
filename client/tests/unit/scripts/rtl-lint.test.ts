@@ -76,6 +76,24 @@ describe('lint:rtl', () => {
     expect(JSON.parse(readFileSync(tree.path(MARKERS), 'utf8'))).toEqual({ 'a.tsx': 1 });
   });
 
+  it('RTL-009: fails an entry of either baseline above the file, or for a file that is gone, until --update', () => {
+    const files = { 'src/a.tsx': 'const a = <div className="ml-2" />\nconst s = { left: 0 } // rtl-lint-disable\n' };
+    expect(run({ 'a.tsx': 2 }, { 'a.tsx': 1 }, files)).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/a\.tsx is held at 2 in scripts\/rtl-baseline\.json, but there are 1 now/);
+    tree.remove();
+    expect(run({ 'a.tsx': 1 }, { 'a.tsx': 2 }, files)).toBe(1);
+    expect(tree.error.join('\n')).toMatch(
+      /a\.tsx is held at 2 in scripts\/rtl-disable-baseline\.json, but there are 1 now/
+    );
+    tree.remove();
+    expect(run({ 'a.tsx': 1, 'gone.tsx': 3 }, { 'a.tsx': 1, 'gone.tsx': 1 }, files)).toBe(1);
+    const out = tree.error.join('\n');
+    expect(out).toMatch(/gone\.tsx is held at 3 in scripts\/rtl-baseline\.json, but the file is gone/);
+    expect(out).toMatch(/gone\.tsx is held at 1 in scripts\/rtl-disable-baseline\.json, but the file is gone/);
+    tree.remove();
+    expect(run({ 'a.tsx': 2, 'gone.tsx': 3 }, { 'a.tsx': 2, 'gone.tsx': 1 }, files, true)).toBe(0);
+  });
+
   it('RTL-007: a missing or broken baseline stops the check instead of reading as empty', () => {
     tree = ratchetTree({ [USES]: '{}', 'src/a.tsx': 'const a = 1\n' });
     expect(() =>

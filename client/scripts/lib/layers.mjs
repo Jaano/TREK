@@ -3,7 +3,7 @@
  */
 import { join } from 'node:path';
 import { sourceGraph } from './imports.mjs';
-import { countMap, lowerCounts, readBaseline, writeBaseline } from './ratchet.mjs';
+import { countMap, lowerCounts, readBaseline, reportStale, staleCounts, writeBaseline } from './ratchet.mjs';
 
 const VIEW = ['components', 'mobile', 'pages', 'hooks'];
 
@@ -82,7 +82,7 @@ export function check({
   }
 
   const grown = Object.entries(counts).filter(([key, n]) => n > (baseline[key] ?? 0));
-  const lowerable = Object.entries(baseline).filter(([key, n]) => (counts[key] ?? 0) < n);
+  const stale = staleCounts(baseline, counts);
 
   for (const [key, n] of grown) {
     error(`FAIL  ${key}: ${n} import(s) against the layering, baseline ${baseline[key] ?? 0}:`);
@@ -94,12 +94,10 @@ export function check({
         'a hook under hooks/, a type under types/) instead of importing upwards.'
     );
   }
-  if (lowerable.length && !update) {
-    log(`${lowerable.length} file(s) hold fewer of these imports than the baseline: run with --update to lower it.`);
-  }
+  reportStale(stale, { file: 'layers-baseline.json', command: 'lint:layers', root, error });
   const sum = (map) => Object.values(map).reduce((a, b) => a + b, 0);
   log(
     `layers: ${sum(counts)} import(s) against the layering in ${Object.keys(counts).length} file(s), baseline allows ${sum(baseline)}`
   );
-  return grown.length ? 1 : 0;
+  return grown.length || stale.length ? 1 : 0;
 }

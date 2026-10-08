@@ -67,12 +67,23 @@ describe('lint:warnings', () => {
     expect(errors).toEqual([]);
   });
 
-  it('ESLINT-002: passes when no count passes its entry', async () => {
-    const code = await run({ ...empty, src: { 'no-empty': 2 } }, (root) => [
+  it('ESLINT-002: passes when every count sits at its entry', async () => {
+    const code = await run({ ...empty, src: { 'no-empty': 1 } }, (root) => [
       result(root, 'src/a.ts', [warn('no-empty')]),
     ]);
     expect(code).toBe(0);
-    expect(tree.log.join('\n')).toMatch(/fell below the baseline/);
+  });
+
+  it('ESLINT-010: fails a count that fell below its entry, or a rule with none left, until --update', async () => {
+    const baseline = { ...empty, src: { 'no-empty': 2 }, suppressed: { 'react-hooks/exhaustive-deps': 1 } };
+    const results = (root: string) => [result(root, 'src/a.ts', [warn('no-empty')])];
+    expect(await run(baseline, results)).toBe(1);
+    const out = tree.error.join('\n');
+    expect(out).toMatch(/src: no-empty is held at 2 in scripts\/eslint-baseline\.json, but there are 1 now/);
+    expect(out).toMatch(/suppressed: react-hooks\/exhaustive-deps is held at 1 .*but there are 0 now/);
+    expect(out).toMatch(/npm run lint:warnings -- --update/);
+    tree.remove();
+    expect(await run(baseline, results, true)).toBe(0);
   });
 
   it('ESLINT-003: fails a new warning and names the files behind it', async () => {

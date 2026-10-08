@@ -11,6 +11,8 @@ import {
   RatchetError,
   readBaseline,
   readText,
+  reportStale,
+  staleCounts,
   writeBaseline,
 } from '../../../scripts/lib/ratchet.mjs';
 import { ratchetTree, type RatchetTree } from '../../helpers/ratchetFixture';
@@ -77,6 +79,36 @@ describe('scripts/lib/ratchet', () => {
     );
     expect(lowered).toEqual({ grew: 5, shrank: 3 });
     expect(lowerCounts({ a: 9 }, { a: 4 }, (key: string) => (key === 'a' ? 4 : 0))).toEqual({});
+  });
+
+  it('RATCHET-010: an entry above the count, at the floor or for a gone file is stale, one at the count is not', () => {
+    expect(
+      staleCounts({ held: 5, shrank: 5, gone: 5, floor: 5 }, { held: 5, shrank: 3, floor: 2, fresh: 9 }, 2)
+    ).toEqual([
+      { key: 'shrank', entry: 5, now: 3 },
+      { key: 'gone', entry: 5, now: 0 },
+      { key: 'floor', entry: 5, now: 2 },
+    ]);
+    expect(staleCounts({ a: 3 }, { a: 4 })).toEqual([]);
+  });
+
+  it('RATCHET-011: a stale entry is reported with its count, or as gone, and how to lower it', () => {
+    tree = ratchetTree({ 'src/here.ts': 'x\n' });
+    const lines: string[] = [];
+    const error = (line: string) => lines.push(line);
+    const stale = [
+      { key: 'src/here.ts', entry: 4, now: 2 },
+      { key: 'src/gone.ts', entry: 3, now: 0 },
+    ];
+    reportStale(stale, { file: 'b.json', command: 'lint:x', root: tree.root, error });
+    expect(lines).toEqual([
+      'FAIL  src/here.ts is held at 4 in scripts/b.json, but there are 2 now.',
+      'FAIL  src/gone.ts is held at 3 in scripts/b.json, but the file is gone.',
+      expect.stringMatching(/^Run npm run lint:x -- --update to lower the baseline/),
+    ]);
+    lines.length = 0;
+    reportStale([], { file: 'b.json', command: 'lint:x', error });
+    expect(lines).toEqual([]);
   });
 
   it('RATCHET-008: a file list only loses the files that stopped offending', () => {

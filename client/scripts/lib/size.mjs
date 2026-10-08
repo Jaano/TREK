@@ -14,6 +14,8 @@ import {
   lowerCounts,
   readBaseline,
   readText,
+  reportStale,
+  staleCounts,
   TEST_FILE,
   toKey,
   writeBaseline,
@@ -68,7 +70,9 @@ const limitOf = (key) => groupOf(key)?.limit ?? 0;
 
 /**
  * Runs the check against the baseline at baselinePath. With update, the
- * baseline is lowered first. Returns the exit code.
+ * baseline is lowered first. An entry above the file's size now, or for a
+ * file that is gone, fails as well until --update lowers it. Returns the
+ * exit code.
  */
 export function check({
   root,
@@ -86,7 +90,7 @@ export function check({
   }
 
   const grown = Object.entries(sizes).filter(([key, n]) => n > Math.max(baseline[key] ?? 0, limitOf(key)));
-  const lowerable = Object.entries(baseline).filter(([key, n]) => (sizes[key] ?? 0) < n);
+  const stale = staleCounts(baseline, sizes, limitOf);
 
   for (const [key, n] of grown) {
     const entry = baseline[key];
@@ -96,11 +100,9 @@ export function check({
         'Move a concern into a module of its own instead of growing the file or packing its lines.'
     );
   }
-  if (lowerable.length && !update) {
-    log(`${lowerable.length} file(s) are smaller than their baseline now: run with --update to lower it.`);
-  }
+  reportStale(stale, { file: 'size-baseline.json', command: 'lint:size', root, error });
   log(
     `size: ${Object.keys(sizes).length} file(s), ${Object.keys(baseline).length} past their limit held at their baseline`
   );
-  return grown.length ? 1 : 0;
+  return grown.length || stale.length ? 1 : 0;
 }

@@ -93,6 +93,17 @@ describe('lint:skips', () => {
     expect(JSON.parse(readFileSync(tree.path(BASELINE), 'utf8'))).toEqual({ 'src/a.test.ts': 2 });
   });
 
+  it('SKIPS-010: fails an entry above the skips a file holds, or for a file that is gone, until --update', () => {
+    const files = { 'src/a.test.ts': "it.skip('a', () => {})\n" };
+    expect(run({ 'src/a.test.ts': 2, 'tests/gone.test.ts': 1 }, files)).toBe(1);
+    const out = tree.error.join('\n');
+    expect(out).toMatch(/src\/a\.test\.ts is held at 2 in scripts\/skip-baseline\.json, but there are 1 now/);
+    expect(out).toMatch(/tests\/gone\.test\.ts is held at 1 .*but the file is gone/);
+    expect(out).toMatch(/npm run lint:skips -- --update/);
+    tree.remove();
+    expect(run({ 'src/a.test.ts': 2, 'tests/gone.test.ts': 1 }, files, true)).toBe(0);
+  });
+
   it('SKIPS-009: counts every vitest skip, whatever its title is', () => {
     const source = [
       "const T = 'a'",

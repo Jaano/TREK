@@ -120,6 +120,17 @@ describe('lint:layers', () => {
     expect(JSON.parse(readFileSync(tree.path(BASELINE), 'utf8'))).toEqual({ 'src/components/A.tsx': 1 });
   });
 
+  it('LAYERS-008: fails an entry above the imports a file holds, or for a file that is gone, until --update', () => {
+    const files = { 'src/components/A.tsx': "import { m } from '../pages/x/model'\n" };
+    expect(run({ 'src/components/A.tsx': 2, 'src/components/Gone.tsx': 1 }, files)).toBe(1);
+    const out = tree.error.join('\n');
+    expect(out).toMatch(/src\/components\/A\.tsx is held at 2 in scripts\/layers-baseline\.json, but there are 1 now/);
+    expect(out).toMatch(/src\/components\/Gone\.tsx is held at 1 .*but the file is gone/);
+    expect(out).toMatch(/npm run lint:layers -- --update/);
+    tree.remove();
+    expect(run({ 'src/components/A.tsx': 2, 'src/components/Gone.tsx': 1 }, files, true)).toBe(0);
+  });
+
   it('LAYERS-007: help/ and vacay/ are helpers and import no view', () => {
     for (const helper of ['help', 'vacay']) {
       expect(RULES[helper as keyof typeof RULES]).toEqual(

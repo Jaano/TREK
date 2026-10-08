@@ -7,6 +7,8 @@
  * switched off and then forgotten (JourneyDetailPage.test.tsx has carried 35
  * skipped blocks since April); the files that hold some are listed in
  * scripts/skip-baseline.json with their count, and a file may hold no more.
+ * An entry above what its file holds now, or for a file that is gone, fails
+ * as well until --update lowers it.
  * Playwright's test.fixme counts as a skip. Only a skip that decides at run
  * time is left out: skipIf and runIf, and in a Playwright spec
  * test.skip(condition, 'why'), unless the condition is a literal that always

@@ -4,7 +4,17 @@
 import { ESLint } from 'eslint';
 import { join } from 'node:path';
 import ts from 'typescript';
-import { countMap, lowerCounts, readBaseline, readText, TEST_FILE, toKey, writeBaseline } from './ratchet.mjs';
+import {
+  countMap,
+  lowerCounts,
+  readBaseline,
+  readText,
+  reportStale,
+  staleCounts,
+  TEST_FILE,
+  toKey,
+  writeBaseline,
+} from './ratchet.mjs';
 
 /**
  * Where a warning is counted: in the app code, in the tests, or, for a
@@ -151,7 +161,7 @@ export async function check({
 
   for (const line of errors) error(`FAIL  ${line}`);
   let grown = 0;
-  let lowerable = 0;
+  let stale = 0;
   for (const area of AREAS) {
     for (const [rule, n] of Object.entries(counts[area])) {
       const allowed = baseline[area][rule] ?? 0;
@@ -163,7 +173,14 @@ export async function check({
         .map(([key, k]) => `${key} (${k})`);
       error(`FAIL  ${area}: ${n} ${rule} warning(s), baseline ${allowed}. Most in: ${top.join(', ')}`);
     }
-    for (const [rule, allowed] of Object.entries(baseline[area])) if ((counts[area][rule] ?? 0) < allowed) lowerable++;
+    const fallen = staleCounts(baseline[area], counts[area]);
+    reportStale(fallen, {
+      file: 'eslint-baseline.json',
+      command: 'lint:warnings',
+      label: (rule) => `${area}: ${rule}`,
+      error,
+    });
+    stale += fallen.length;
   }
   if (grown) {
     error(
@@ -171,9 +188,8 @@ export async function check({
         'Run npx eslint <file> to see each one.'
     );
   }
-  if (lowerable && !update) log(`${lowerable} rule count(s) fell below the baseline: run with --update to lower it.`);
   log(
     `eslint: ${errors.length} error(s); warnings ${AREAS.map((area) => `${area} ${sum(counts[area])}/${sum(baseline[area])}`).join(', ')} (now/baseline)`
   );
-  return errors.length || grown ? 1 : 0;
+  return errors.length || grown || stale ? 1 : 0;
 }

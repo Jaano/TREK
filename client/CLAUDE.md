@@ -8,8 +8,8 @@ Scope: the **`@trek/client`** workspace (React 19 + Vite + Zustand + Tailwind PW
 npm run dev               # Vite dev server; proxies the API/ws/uploads/MCP/OAuth paths → http://localhost:3001
 npm run build             # prebuild generates PWA icons, then vite build
 npm run typecheck         # tsc --noEmit (CI)
-npm run lint              # eslint .   (lint:check in CI)
-npm run lint:warnings     # eslint, failing on any error and on any warning count per rule above scripts/eslint-baseline.json (app code, tests and eslint-disable'd messages counted apart; a `/* eslint <rule>: ... */` config comment fails outright; --update lowers it)
+npm run lint              # eslint .   (CI runs lint:warnings instead, which fails on the same errors)
+npm run lint:warnings     # eslint, failing on any error and on any warning count per rule above scripts/eslint-baseline.json and on any entry above its count (app code, tests and eslint-disable'd messages counted apart; a `/* eslint <rule>: ... */` config comment fails outright; --update lowers it)
 npm run lint:pages        # enforce the Page pattern (CI gate)
 npm run lint:rtl          # physical left/right sides and rtl-lint-disable comments may only shrink per file (CI gate; --list shows them, --update lowers both baselines)
 npm run lint:size         # no source file or stylesheet past 1000 lines, no test (Playwright specs and fixtures under e2e/ included) past 2000, counted wrapped at 120 columns; longer ones may only shrink (CI gate; --update lowers the baseline)
@@ -24,6 +24,8 @@ npm run shots             # Playwright screenshot project (shots:promote to acce
 npm run theme:lint        # theme conformance audit (theme:lint:strict exits 1; local only)
 npm run check:gl-split    # after build: fails if one chunk bundles both mapbox-gl and maplibre-gl (CI gate)
 ```
+
+Every baseline ratchet above also fails on an entry that allows more than the tree holds: a count above what its file or rule has now, or a file that is gone. Run the check with `--update` in the change that made it smaller, so a fixed file cannot grow back to its old entry and a new file at a deleted path does not inherit one.
 
 Single test: `npx vitest run src/store/slices/budgetSlice.test.ts`, or `npx vitest run -t "optimistically adds the place"`.
 

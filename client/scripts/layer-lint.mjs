@@ -10,7 +10,8 @@
  * all. The imports that already broke a rule are counted per file in
  * scripts/layers-baseline.json, and a file may hold no more of them than its
  * entry (a file without an entry holds none). Type-only imports count: a type
- * the lower layer needs belongs below it.
+ * the lower layer needs belongs below it. An entry above what its file holds
+ * now, or for a file that is gone, fails as well until --update lowers it.
  *
  *   npm run lint:layers              check against the baseline (CI)
  *   npm run lint:layers -- --list    print every import against the layering

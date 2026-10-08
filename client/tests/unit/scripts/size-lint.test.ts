@@ -94,6 +94,23 @@ describe('lint:size', () => {
     expect(tree.error.join('\n')).toMatch(/src\/grew\.ts: 1150 lines/);
   });
 
+  it('SIZE-011: fails an entry above the file it holds, or for a file that is gone, until --update', () => {
+    expect(run({ 'src/big.ts': 1200 }, { 'src/big.ts': lines(1100) })).toBe(1);
+    expect(tree.error.join('\n')).toMatch(
+      /src\/big\.ts is held at 1200 in scripts\/size-baseline\.json, but there are 1100 now/
+    );
+    expect(tree.error.join('\n')).toMatch(/npm run lint:size -- --update/);
+    tree.remove();
+    // A deleted file would hand its allowance to the next file at its path.
+    expect(run({ 'src/gone.ts': 1200 }, { 'src/a.ts': lines(1) })).toBe(1);
+    expect(tree.error.join('\n')).toMatch(/src\/gone\.ts is held at 1200 .*but the file is gone/);
+    tree.remove();
+    // Back under the limit is stale too: the entry would let it grow past the limit again.
+    expect(run({ 'src/big.ts': 1200 }, { 'src/big.ts': lines(900) })).toBe(1);
+    tree.remove();
+    expect(run({ 'src/big.ts': 1200, 'src/gone.ts': 1200 }, { 'src/big.ts': lines(1100) }, true)).toBe(0);
+  });
+
   it('SIZE-009: a broken baseline stops the check', () => {
     tree = ratchetTree({ [BASELINE]: '{', 'src/a.ts': lines(1), 'tests/a.ts': lines(1), 'e2e/a.ts': lines(1) });
     expect(() => check({ root: tree.root, baselinePath: tree.path(BASELINE), ...tree.out })).toThrow(RatchetError);

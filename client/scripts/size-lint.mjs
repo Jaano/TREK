@@ -10,7 +10,10 @@
  * that were already larger are listed in scripts/size-baseline.json with the
  * size they had, and the check fails when one of them grows past its entry. A
  * file that needs to grow is split by concern instead (the trip planner hook,
- * page and road trip sidebar are the precedent).
+ * page and road trip sidebar are the precedent). An entry above the file's
+ * size now, or for a file that is gone, fails as well until --update lowers
+ * it: otherwise the file could grow back unseen, and a new file at a deleted
+ * path would inherit its allowance.
  *
  *   npm run lint:size              check against the baseline (CI)
  *   npm run lint:size -- --update  lower the baseline to what the files hold now;

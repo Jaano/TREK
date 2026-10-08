@@ -9,6 +9,8 @@ import {
   lowerCounts,
   readBaseline,
   readText,
+  reportStale,
+  staleCounts,
   TEST_FILE,
   toKey,
   writeBaseline,
@@ -139,12 +141,11 @@ export function check({
   if (grown.length) {
     error('Fix the test, delete it if its feature is gone, or use skipIf/runIf when it depends on the environment.');
   }
-  const lowerable = Object.entries(baseline).filter(([key, n]) => (counts[key] ?? 0) < n);
-  if (lowerable.length && !update)
-    log(`${lowerable.length} file(s) skip fewer tests than the baseline: run with --update to lower it.`);
+  const stale = staleCounts(baseline, counts);
+  reportStale(stale, { file: 'skip-baseline.json', command: 'lint:skips', root, error });
   const sum = (map) => Object.values(map).reduce((a, b) => a + b, 0);
   log(
     `skips: ${sum(counts)} skipped or todo test(s), baseline allows ${sum(baseline)}; ${Object.keys(only).length} file(s) with .only`
   );
-  return grown.length || Object.keys(only).length ? 1 : 0;
+  return grown.length || stale.length || Object.keys(only).length ? 1 : 0;
 }

@@ -17,7 +17,9 @@
  * carries `rtl-lint-disable` in a comment (in a string it is no marker). The
  * marked lines are counted too, against scripts/rtl-disable-baseline.json, so
  * the marker cannot quietly take the place of the logical forms: a new one
- * raises its file's entry by hand, where review sees it.
+ * raises its file's entry by hand, where review sees it. An entry of either
+ * baseline above what its file holds now, or for a file that is gone, fails
+ * as well until --update lowers it.
  *
  *   npm run lint:rtl              check against the baselines (CI)
  *   npm run lint:rtl -- --list    print every counted use, file by file
