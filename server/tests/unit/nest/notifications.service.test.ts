@@ -97,6 +97,12 @@ import { setPluginChannelSource } from '../../../src/nest/notifications/channel-
 // it for its own signatures and never re-exported it.
 import type { ExternalChannel } from '../../../src/nest/notifications/notification-events';
 import { makeNotificationsService, makeNotificationPreferencesService } from '../../helpers/notifications';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { setUserSetting } from '../../helpers/factories/settings';
+import { addTripMember, makeTrip } from '../../helpers/factories/trips';
+import { Notifications } from '../../../src/db/entities/Notifications.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
 
 // Built in beforeAll: the service now takes a UnitOfWork, which is async to build.
 let notifications: NotificationsService;
@@ -110,28 +116,37 @@ function setSmtp(): void {
   setAppSetting(testDb, 'smtp_from', 'trek@test.com');
 }
 
-function setUserWebhookUrl(userId: number, url = 'https://hooks.test.com/webhook'): void {
-  testDb.prepare("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'webhook_url', ?)").run(userId, url);
+const orm = () => sharedTestOrm(testDb);
+
+async function setUserWebhookUrl(userId: number, url = 'https://hooks.test.com/webhook'): Promise<void> {
+  await setUserSetting(await orm(), userId, 'webhook_url', url);
 }
 
 function setAdminWebhookUrl(url = 'https://hooks.test.com/admin-webhook'): void {
   setAppSetting(testDb, 'admin_webhook_url', url);
 }
 
-function getInAppNotifications(recipientId: number) {
-  return testDb.prepare('SELECT * FROM notifications WHERE recipient_id = ? ORDER BY id').all(recipientId) as Array<{
-    id: number;
-    type: string;
-    scope: string;
-    navigate_target: string | null;
-    navigate_text_key: string | null;
-    title_key: string;
-    text_key: string;
-  }>;
+async function getInAppNotifications(recipientId: number) {
+  return findRows(await orm(), Notifications, { recipient: recipientId }, { id: 'asc' });
 }
 
-function countAllNotifications(): number {
-  return (testDb.prepare('SELECT COUNT(*) as c FROM notifications').get() as { c: number }).c;
+async function countAllNotifications(): Promise<number> {
+  return countRows(await orm(), Notifications);
+}
+
+/** Every notification's recipient, lowest id first. */
+async function recipientIds(): Promise<number[]> {
+  return (await findRows(await orm(), Notifications, {}, { recipient: 'asc' })).map(r => r.recipient_id);
+}
+
+/** A trip with just its owner, returning its id. */
+async function newTrip(title: string, userId: number): Promise<number> {
+  return (await makeTrip(await orm(), userId, { title })).id;
+}
+
+/** Points the user's email at the address the mail assertions expect. */
+async function setRecipientEmail(userId: number): Promise<void> {
+  await updateRows(await orm(), Users, { id: userId }, { email: 'recipient@test.com' });
 }
 
 // ── Setup ──────────────────────────────────────────────────────────────────
@@ -161,43 +176,43 @@ describe('send() — multi-channel dispatch', () => {
   it('NSVC-001 — dispatches to all 3 channels (inapp, email, webhook) when all are active', async () => {
     const { user } = createUser(testDb);
     setSmtp();
-    setUserWebhookUrl(user.id);
+    await setUserWebhookUrl(user.id);
     setNotificationChannels(testDb, 'email,webhook');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Paris', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
     expect(sendMailMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(broadcastMock).toHaveBeenCalledTimes(1);
-    expect(countAllNotifications()).toBe(1);
+    expect(await countAllNotifications()).toBe(1);
   });
 
   it('NSVC-002 — skips email/webhook when no channels are active (in-app still fires)', async () => {
     const { user } = createUser(testDb);
     setSmtp();
-    setUserWebhookUrl(user.id);
+    await setUserWebhookUrl(user.id);
     setNotificationChannels(testDb, 'none');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Rome', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Rome', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Rome', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
     expect(sendMailMock).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     expect(broadcastMock).toHaveBeenCalledTimes(1);
-    expect(countAllNotifications()).toBe(1);
+    expect(await countAllNotifications()).toBe(1);
   });
 
   it('NSVC-003 — sends only email when only email channel is active', async () => {
     const { user } = createUser(testDb);
     setSmtp();
     setNotificationChannels(testDb, 'email');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Berlin', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Berlin', user.id);
 
     await send({ event: 'booking_change', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Berlin', actor: 'Bob', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } });
 
@@ -215,10 +230,10 @@ describe('send() — per-user preference filtering', () => {
     const { user } = createUser(testDb);
     setSmtp();
     setNotificationChannels(testDb, 'email');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
     disableNotificationPref(testDb, user.id, 'trip_invite', 'email');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Paris', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
@@ -232,23 +247,23 @@ describe('send() — per-user preference filtering', () => {
     setNotificationChannels(testDb, 'none');
     disableNotificationPref(testDb, user.id, 'collab_message', 'inapp');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Trip', user.id);
 
     await send({ event: 'collab_message', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', tripId: String(tripId) } });
 
     expect(broadcastMock).not.toHaveBeenCalled();
-    expect(countAllNotifications()).toBe(0);
+    expect(await countAllNotifications()).toBe(0);
   });
 
   it('NSVC-006 — still sends webhook when user has email disabled but webhook enabled', async () => {
     const { user } = createUser(testDb);
     setSmtp();
-    setUserWebhookUrl(user.id);
+    await setUserWebhookUrl(user.id);
     setNotificationChannels(testDb, 'email,webhook');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
     disableNotificationPref(testDb, user.id, 'trip_invite', 'email');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Paris', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
@@ -269,16 +284,16 @@ describe('send() — recipient resolution', () => {
     const { user: actor } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', owner.id)).lastInsertRowid as number;
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member1.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member2.id);
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, actor.id);
+    const tripId = await newTrip('Trip', owner.id);
+    await addTripMember(await orm(), tripId, member1.id);
+    await addTripMember(await orm(), tripId, member2.id);
+    await addTripMember(await orm(), tripId, actor.id);
 
     await send({ event: 'booking_change', actorId: actor.id, scope: 'trip', targetId: tripId, params: { trip: 'Trip', actor: 'Actor', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } });
 
     // Owner, member1, member2 get it; actor is excluded
-    expect(countAllNotifications()).toBe(3);
-    const recipients = (testDb.prepare('SELECT recipient_id FROM notifications ORDER BY recipient_id').all() as { recipient_id: number }[]).map(r => r.recipient_id);
+    expect(await countAllNotifications()).toBe(3);
+    const recipients = await recipientIds();
     expect(recipients).toContain(owner.id);
     expect(recipients).toContain(member1.id);
     expect(recipients).toContain(member2.id);
@@ -290,20 +305,20 @@ describe('send() — recipient resolution', () => {
     const { user: member } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', owner.id)).lastInsertRowid as number;
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member.id);
+    const tripId = await newTrip('Trip', owner.id);
+    await addTripMember(await orm(), tripId, member.id);
     // A guest joined into the trip — assignable, but has no inbox.
-    const guestId = (testDb.prepare("INSERT INTO users (username, email, password_hash, role, is_guest) VALUES ('Guest', 'guest-x@guests.invalid', '', 'user', 1)").run()).lastInsertRowid as number;
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, guestId);
+    const guestId = await insertRow(await orm(), Users, { username: 'Guest', email: 'guest-x@guests.invalid', password_hash: '', role: 'user', is_guest: 1 });
+    await addTripMember(await orm(), tripId, guestId);
 
     await send({ event: 'booking_change', actorId: owner.id, scope: 'trip', targetId: tripId, params: { trip: 'Trip', actor: 'Owner', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } });
-    let recipients = (testDb.prepare('SELECT recipient_id FROM notifications').all() as { recipient_id: number }[]).map(r => r.recipient_id);
+    let recipients = await recipientIds();
     expect(recipients).toContain(member.id);
     expect(recipients).not.toContain(guestId);
 
     // Even a direct user-scope notification (e.g. a todo assigned to the guest) is dropped.
     await send({ event: 'vacay_invite', actorId: owner.id, scope: 'user', targetId: guestId, params: { actor: 'owner@test.com', planId: '1' } });
-    recipients = (testDb.prepare('SELECT recipient_id FROM notifications').all() as { recipient_id: number }[]).map(r => r.recipient_id);
+    recipients = await recipientIds();
     expect(recipients).not.toContain(guestId);
   });
 
@@ -311,10 +326,10 @@ describe('send() — recipient resolution', () => {
     const { user: owner } = createUser(testDb);
     const { user: member } = createUser(testDb);
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', owner.id)).lastInsertRowid as number;
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member.id);
-    const guestId = (testDb.prepare("INSERT INTO users (username, email, password_hash, role, is_guest) VALUES ('Guest', 'guest-y@guests.invalid', '', 'user', 1)").run()).lastInsertRowid as number;
-    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, guestId);
+    const tripId = await newTrip('Trip', owner.id);
+    await addTripMember(await orm(), tripId, member.id);
+    const guestId = await insertRow(await orm(), Users, { username: 'Guest', email: 'guest-y@guests.invalid', password_hash: '', role: 'user', is_guest: 1 });
+    await addTripMember(await orm(), tripId, guestId);
 
     const tripRecipients = await notifications.resolveRecipients('trip', tripId);
     expect(tripRecipients).toContain(owner.id);
@@ -332,8 +347,8 @@ describe('send() — recipient resolution', () => {
 
     await send({ event: 'vacay_invite', actorId: other.id, scope: 'user', targetId: target.id, params: { actor: 'other@test.com', planId: '42' } });
 
-    expect(countAllNotifications()).toBe(1);
-    const notif = testDb.prepare('SELECT recipient_id FROM notifications LIMIT 1').get() as { recipient_id: number };
+    expect(await countAllNotifications()).toBe(1);
+    const notif = (await findRow(await orm(), Notifications, {}))!;
     expect(notif.recipient_id).toBe(target.id);
   });
 
@@ -345,8 +360,8 @@ describe('send() — recipient resolution', () => {
 
     await send({ event: 'version_available', actorId: null, scope: 'admin', targetId: 0, params: { version: '2.0.0' } });
 
-    expect(countAllNotifications()).toBe(2);
-    const recipients = (testDb.prepare('SELECT recipient_id FROM notifications ORDER BY recipient_id').all() as { recipient_id: number }[]).map(r => r.recipient_id);
+    expect(await countAllNotifications()).toBe(2);
+    const recipients = await recipientIds();
     expect(recipients).toContain(admin1.id);
     expect(recipients).toContain(admin2.id);
   });
@@ -369,11 +384,11 @@ describe('send() — recipient resolution', () => {
     // Trip with no members, sending as the trip owner (actor excluded from trip scope)
     const { user: owner } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Solo', owner.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Solo', owner.id);
 
     await send({ event: 'booking_change', actorId: owner.id, scope: 'trip', targetId: tripId, params: { trip: 'Solo', actor: 'owner@test.com', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } });
 
-    expect(countAllNotifications()).toBe(0);
+    expect(await countAllNotifications()).toBe(0);
     expect(broadcastMock).not.toHaveBeenCalled();
   });
 });
@@ -389,7 +404,7 @@ describe('send() — in-app notification content', () => {
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '42' } });
 
-    const notifs = getInAppNotifications(user.id);
+    const notifs = await getInAppNotifications(user.id);
     expect(notifs.length).toBe(1);
     expect(notifs[0].type).toBe('navigate');
     expect(notifs[0].title_key).toBe('notif.trip_invite.title');
@@ -405,7 +420,7 @@ describe('send() — in-app notification content', () => {
     // vacay_invite without planId → no navigate target → simple type
     await send({ event: 'vacay_invite', actorId: null, scope: 'user', targetId: user.id, params: { actor: 'Alice' } });
 
-    const notifs = getInAppNotifications(user.id);
+    const notifs = await getInAppNotifications(user.id);
     expect(notifs.length).toBe(1);
     expect(notifs[0].type).toBe('simple');
     expect(notifs[0].navigate_target).toBeNull();
@@ -417,7 +432,7 @@ describe('send() — in-app notification content', () => {
 
     await send({ event: 'version_available', actorId: null, scope: 'admin', targetId: 0, params: { version: '9.9.9' } });
 
-    const notifs = getInAppNotifications(admin.id);
+    const notifs = await getInAppNotifications(admin.id);
     expect(notifs.length).toBe(1);
     expect(notifs[0].navigate_target).toBe('/admin');
     expect(notifs[0].title_key).toBe('notif.version_available.title');
@@ -443,7 +458,7 @@ describe('send() — in-app notification content', () => {
       params: { backend: 'minio', op: 'put', key: 'trips/1/b.jpg', error: 'ECONNRESET', suppressed: '0' },
     });
 
-    const notifs = getInAppNotifications(admin.id);
+    const notifs = await getInAppNotifications(admin.id);
     expect(notifs.length).toBe(2);
     expect(notifs[0].text_key).toBe('notif.replica_failure.textSuppressed');
     expect(notifs[1].text_key).toBe('notif.replica_failure.text');
@@ -461,7 +476,7 @@ describe('send() — in-app notification content', () => {
       params: { backend: 'minio', op: 'put', key: 'trips/1/c.jpg', error: 'ECONNRESET' },
     });
 
-    const notifs = getInAppNotifications(admin.id);
+    const notifs = await getInAppNotifications(admin.id);
     expect(notifs.length).toBe(1);
     expect(notifs[0].text_key).toBe('notif.replica_failure.text');
   });
@@ -476,11 +491,11 @@ describe('send() — email/webhook links', () => {
     const { user } = createUser(testDb);
     setSmtp();
     setNotificationChannels(testDb, 'email');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
     // Set user language to French
-    testDb.prepare("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'language', 'fr')").run(user.id);
+    await setUserSetting(await orm(), user.id, 'language', 'fr');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Paris', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
@@ -492,7 +507,7 @@ describe('send() — email/webhook links', () => {
 
   it('NSVC-016 — webhook payload includes link field when navigate target is available', async () => {
     const { user } = createUser(testDb);
-    setUserWebhookUrl(user.id, 'https://hooks.test.com/generic-webhook');
+    await setUserWebhookUrl(user.id, 'https://hooks.test.com/generic-webhook');
     setNotificationChannels(testDb, 'webhook');
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '55' } });
@@ -528,7 +543,7 @@ describe('send() — boolean in-app type', () => {
       },
     });
 
-    const notifs = getInAppNotifications(user.id);
+    const notifs = await getInAppNotifications(user.id);
     expect(notifs.length).toBe(1);
     const row = notifs[0] as any;
     expect(row.type).toBe('boolean');
@@ -545,41 +560,41 @@ describe('send() — channel failure resilience', () => {
   it('NSVC-018 — email failure does not prevent in-app or webhook delivery', async () => {
     const { user } = createUser(testDb);
     setSmtp();
-    setUserWebhookUrl(user.id);
+    await setUserWebhookUrl(user.id);
     setNotificationChannels(testDb, 'email,webhook');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
 
     // Make email throw
     sendMailMock.mockRejectedValueOnce(new Error('SMTP connection refused'));
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Trip', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
     // In-app and webhook still fire despite email failure
     expect(broadcastMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(countAllNotifications()).toBe(1);
+    expect(await countAllNotifications()).toBe(1);
   });
 
   it('NSVC-019 — webhook failure does not prevent in-app or email delivery', async () => {
     const { user } = createUser(testDb);
     setSmtp();
-    setUserWebhookUrl(user.id);
+    await setUserWebhookUrl(user.id);
     setNotificationChannels(testDb, 'email,webhook');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
 
     // Make webhook throw
     fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Trip', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
     // In-app and email still fire despite webhook failure
     expect(broadcastMock).toHaveBeenCalledTimes(1);
     expect(sendMailMock).toHaveBeenCalledTimes(1);
-    expect(countAllNotifications()).toBe(1);
+    expect(await countAllNotifications()).toBe(1);
   });
 
 });
@@ -588,10 +603,10 @@ describe('send() reports what it delivered', () => {
   it('NSVC-022: counts in-app and every channel that went out', async () => {
     const { user } = createUser(testDb);
     setSmtp();
-    setUserWebhookUrl(user.id);
+    await setUserWebhookUrl(user.id);
     setNotificationChannels(testDb, 'email,webhook');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    await setRecipientEmail(user.id);
+    const tripId = await newTrip('Trip', user.id);
 
     await expect(
       send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } }),
@@ -602,10 +617,10 @@ describe('send() reports what it delivered', () => {
     const { user } = createUser(testDb);
     setSmtp();
     setNotificationChannels(testDb, 'email');
-    testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
+    await setRecipientEmail(user.id);
     disableNotificationPref(testDb, user.id, 'trip_reminder', 'inapp');
     sendMailMock.mockRejectedValueOnce(new Error('SMTP connection refused'));
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Trip', user.id);
 
     await expect(
       send({ event: 'trip_reminder', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', tripId: String(tripId) } }),
@@ -616,7 +631,7 @@ describe('send() reports what it delivered', () => {
     const { user } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
     disableNotificationPref(testDb, user.id, 'collab_message', 'inapp');
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Trip', user.id);
 
     await expect(
       send({ event: 'collab_message', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', tripId: String(tripId) } }),
@@ -629,8 +644,8 @@ describe('send() reports what it delivered', () => {
 
 // ── Ntfy dispatch ─────────────────────────────────────────────────────────────
 
-function setUserNtfyTopic(userId: number, topic = 'my-trek-topic'): void {
-  testDb.prepare("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'ntfy_topic', ?)").run(userId, topic);
+async function setUserNtfyTopic(userId: number, topic = 'my-trek-topic'): Promise<void> {
+  await setUserSetting(await orm(), userId, 'ntfy_topic', topic);
 }
 
 function setAdminNtfyTopic(topic = 'trek-admin-alerts'): void {
@@ -644,9 +659,9 @@ describe('send() — ntfy channel dispatch', () => {
 
   it('NTFY-SVCB-001 — ntfy fires when channel active and user has topic configured', async () => {
     const { user } = createUser(testDb);
-    setUserNtfyTopic(user.id);
+    await setUserNtfyTopic(user.id);
     setNotificationChannels(testDb, 'ntfy');
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Tokyo', user.id)).lastInsertRowid as number;
+    const tripId = await newTrip('Tokyo', user.id);
 
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Tokyo', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
 
@@ -659,7 +674,7 @@ describe('send() — ntfy channel dispatch', () => {
 
   it('NTFY-SVCB-002 — ntfy skips when channel not in active channels', async () => {
     const { user } = createUser(testDb);
-    setUserNtfyTopic(user.id);
+    await setUserNtfyTopic(user.id);
     setNotificationChannels(testDb, 'none');
 
     fetchMock.mockClear();
@@ -794,7 +809,7 @@ describe('send() — plugin notification channels', () => {
     await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Rome', actor: 'Alice', invitee: 'Bob', tripId: '1' } });
 
     expect(sendMailMock).toHaveBeenCalledTimes(1);
-    expect(getInAppNotifications(user.id).length).toBe(1);
+    expect((await getInAppNotifications(user.id)).length).toBe(1);
   });
 
   it('NSVC-PLUG-006 — never receives an admin-scoped event', async () => {

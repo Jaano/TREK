@@ -20,6 +20,12 @@ import {
   createTestReservationEndpointsRepo,
   createTestReservationDayPositionsRepo,
 } from '../../helpers/test-uow';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { DayAssignments } from '../../../src/db/entities/DayAssignments.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { ReservationEndpoints } from '../../../src/db/entities/ReservationEndpoints.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
 import type { RoadtripPreferences } from '@trek/shared';
 import { bookendAssignmentId, type RoadtripStop } from '@trek/shared/roadtrip';
 
@@ -64,16 +70,50 @@ async function planRepos() {
   ] as const;
 }
 
+/** Sets columns on one day assignment. */
+async function setVisit(id: number, fields: Partial<Pick<DayAssignments, 'assignment_time' | 'assignment_end_time' | 'accommodation_id'>>) {
+  await updateRows(await sharedTestOrm(db), DayAssignments, { id }, fields);
+}
+
+/** Sets columns on one place. */
+async function setPlace(id: number, fields: Partial<Pick<Places, 'duration_minutes' | 'end_time'>>) {
+  await updateRows(await sharedTestOrm(db), Places, { id }, fields);
+}
+
+/** The day a visit sits on. */
+async function dayOf(assignmentId: number): Promise<{ day_id: number }> {
+  const row = (await findRow(await sharedTestOrm(db), DayAssignments, { id: assignmentId }))!;
+  return { day_id: row.day_id };
+}
+
+/** Adds a booking and returns its id. */
+async function addReservation(fields: {
+  trip: number; title: string; type: string; day?: number | null; endDay?: number | null;
+  reservation_time?: string; reservation_end_time?: string; accommodation_id?: number; day_plan_position?: number;
+}): Promise<number> {
+  const { accommodation_id, ...rest } = fields;
+  return insertRow(await sharedTestOrm(db), Reservations, {
+    ...rest,
+    ...(accommodation_id === undefined ? {} : { accommodation_id: String(accommodation_id) }),
+  });
+}
+
+/** Adds one located terminal to a booking. */
+async function addEndpoint(reservation: number, role: string, sequence: number, name: string, code: string | null, lat: number, lng: number) {
+  await insertRow(await sharedTestOrm(db), ReservationEndpoints, { reservation, role, sequence, name, code, lat, lng });
+}
+
 async function setup() {
   const { user } = createUser(db);
   const trip = createTrip(db, user.id);
   const day = createDay(db, trip.id);
-  const visits = ['Hamburg', 'Lueneburg', 'Celle'].map((name, i) => {
+  const visits: ReturnType<typeof createDayAssignment>[] = [];
+  for (const [i, name] of ['Hamburg', 'Lueneburg', 'Celle'].entries()) {
     const place = createPlace(db, trip.id, { name, lat: 53 - i * 0.3, lng: 10 });
-    db.prepare('UPDATE places SET duration_minutes = ? WHERE id = ?').run(i === 0 ? 0 : 30, place.id);
-    return createDayAssignment(db, day.id, place.id);
-  });
-  db.prepare("UPDATE day_assignments SET assignment_time = '09:00' WHERE id = ?").run(visits[0].id);
+    await setPlace(place.id, { duration_minutes: i === 0 ? 0 : 30 });
+    visits.push(createDayAssignment(db, day.id, place.id));
+  }
+  await setVisit(visits[0].id, { assignment_time: '09:00' });
   const plans = new RoadtripPlanService(
     { getUserSettings: () => ({}) } as never,
     { read: () => ({}) } as never,
@@ -92,10 +132,8 @@ beforeEach(() => {
 describe('a visit end time on the road trip', () => {
   it('is read from the visit, and from the place when the visit has none', async () => {
     const { user, trip, visits, plans } = await setup();
-    db.prepare("UPDATE day_assignments SET assignment_end_time = '14:00' WHERE id = ?").run(visits[1].id);
-    db.prepare(
-      "UPDATE places SET end_time = '18:00' WHERE id = (SELECT place_id FROM day_assignments WHERE id = ?)",
-    ).run(visits[2].id);
+    await setVisit(visits[1].id, { assignment_end_time: '14:00' });
+    await setPlace((await findRow(await sharedTestOrm(db), DayAssignments, { id: visits[2].id }))!.place_id, { end_time: '18:00' });
 
     const context = await plans.context(trip.id, user.id);
 
@@ -108,7 +146,7 @@ describe('a visit end time on the road trip', () => {
 
   it('is when the drive leaves the stop, in place of its stay', async () => {
     const { user, trip, visits, plans } = await setup();
-    db.prepare("UPDATE day_assignments SET assignment_end_time = '14:00' WHERE id = ?").run(visits[1].id);
+    await setVisit(visits[1].id, { assignment_end_time: '14:00' });
 
     const { calculated } = await plans.calculate(trip.id, user.id);
     const day = calculated.days[0];
@@ -124,7 +162,7 @@ describe('a visit end time on the road trip', () => {
 
   it('is reported when the drive gets there after it', async () => {
     const { user, trip, visits, plans } = await setup();
-    db.prepare("UPDATE day_assignments SET assignment_end_time = '09:30' WHERE id = ?").run(visits[1].id);
+    await setVisit(visits[1].id, { assignment_end_time: '09:30' });
 
     const { calculated } = await plans.calculate(trip.id, user.id);
 
@@ -183,31 +221,25 @@ describe('a booked night on the road trip (#2410)', () => {
 });
 
 describe('a booking the traveller rides (#2428)', () => {
-  function withFlight(dayId: number, tripId: number, over: { end_day_id?: number; dep?: string; arr?: string } = {}) {
-    const result = db
-      .prepare(
-        `INSERT INTO reservations (trip_id, title, type, day_id, end_day_id, reservation_time, reservation_end_time)
-         VALUES (?, ?, 'flight', ?, ?, ?, ?)`,
-      )
-      .run(tripId, 'LH 2020 HAM → MUC', dayId, over.end_day_id ?? dayId, over.dep ?? '13:20', over.arr ?? '14:30');
-    const id = Number(result.lastInsertRowid);
-    const endpoint = db.prepare(
-      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    );
-    endpoint.run(id, 'from', 0, 'Hamburg Airport', 'HAM', 53.63, 9.99);
-    endpoint.run(id, 'to', 1, 'Munich Airport', 'MUC', 48.35, 11.78);
+  async function withFlight(dayId: number, tripId: number, over: { end_day_id?: number; dep?: string; arr?: string } = {}) {
+    const id = await addReservation({
+      trip: tripId, title: 'LH 2020 HAM → MUC', type: 'flight', day: dayId, endDay: over.end_day_id ?? dayId,
+      reservation_time: over.dep ?? '13:20', reservation_end_time: over.arr ?? '14:30',
+    });
+    await addEndpoint(id, 'from', 0, 'Hamburg Airport', 'HAM', 53.63, 9.99);
+    await addEndpoint(id, 'to', 1, 'Munich Airport', 'MUC', 48.35, 11.78);
     return id;
   }
 
   it('seats the terminals in the day and never asks the router for the ride', async () => {
     const { user, trip, visits, plans } = await setup();
-    db.prepare("UPDATE day_assignments SET assignment_time = '10:00' WHERE id = ?").run(visits[1].id);
+    await setVisit(visits[1].id, { assignment_time: '10:00' });
     // Pinned to the minute the drive reaches it anyway, so the clock alone seats the
     // flight here. Untimed, Celle lies south of Lueneburg with the airport north of both,
     // and the flight would go where it adds the least road (#2461, see below).
-    db.prepare("UPDATE day_assignments SET assignment_time = '15:30' WHERE id = ?").run(visits[2].id);
-    const day = db.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(visits[0].id) as { day_id: number };
-    const flightId = withFlight(day.day_id, trip.id);
+    await setVisit(visits[2].id, { assignment_time: '15:30' });
+    const day = await dayOf(visits[0].id);
+    const flightId = await withFlight(day.day_id, trip.id);
 
     const { context, calculated } = await plans.calculate(trip.id, user.id);
 
@@ -243,10 +275,10 @@ describe('a booking the traveller rides (#2428)', () => {
 
   it('lets a booking without located terminals fall through, a hire car without a desk among them', async () => {
     const { user, trip, visits, plans } = await setup();
-    const day = db.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(visits[0].id) as { day_id: number };
-    db.prepare("INSERT INTO reservations (trip_id, title, type, day_id) VALUES (?, 'Hire car', 'car', ?)").run(trip.id, day.day_id);
-    db.prepare("INSERT INTO reservations (trip_id, title, type, day_id, reservation_time) VALUES (?, 'Somewhere', 'train', ?, '11:00')").run(trip.id, day.day_id);
-    db.prepare("INSERT INTO reservations (trip_id, title, type, day_id, reservation_time) VALUES (?, 'Cab', 'taxi', ?, '11:00')").run(trip.id, day.day_id);
+    const day = await dayOf(visits[0].id);
+    await addReservation({ trip: trip.id, title: 'Hire car', type: 'car', day: day.day_id });
+    await addReservation({ trip: trip.id, title: 'Somewhere', type: 'train', day: day.day_id, reservation_time: '11:00' });
+    await addReservation({ trip: trip.id, title: 'Cab', type: 'taxi', day: day.day_id, reservation_time: '11:00' });
 
     const { context, calculated } = await plans.calculate(trip.id, user.id);
 
@@ -256,21 +288,14 @@ describe('a booking the traveller rides (#2428)', () => {
 
   it("puts a hire car's desks on the road: the pick-up opens the day, the return closes it, one run through both", async () => {
     const { user, trip, visits, plans } = await setup();
-    db.prepare("UPDATE day_assignments SET assignment_time = '10:00' WHERE id = ?").run(visits[1].id);
-    db.prepare("UPDATE day_assignments SET assignment_time = '12:00' WHERE id = ?").run(visits[2].id);
-    const day = db.prepare('SELECT day_id FROM day_assignments WHERE id = ?').get(visits[0].id) as { day_id: number };
-    const result = db
-      .prepare(
-        `INSERT INTO reservations (trip_id, title, type, day_id, end_day_id, reservation_time, reservation_end_time)
-         VALUES (?, 'Sixt', 'car', ?, ?, '08:00', '18:00')`,
-      )
-      .run(trip.id, day.day_id, day.day_id);
-    const carId = Number(result.lastInsertRowid);
-    const endpoint = db.prepare(
-      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    );
-    endpoint.run(carId, 'from', 0, 'Sixt Hauptbahnhof', null, 53.55, 10.0);
-    endpoint.run(carId, 'to', 1, 'Sixt Airport', 'HAM', 53.63, 9.99);
+    await setVisit(visits[1].id, { assignment_time: '10:00' });
+    await setVisit(visits[2].id, { assignment_time: '12:00' });
+    const day = await dayOf(visits[0].id);
+    const carId = await addReservation({
+      trip: trip.id, title: 'Sixt', type: 'car', day: day.day_id, endDay: day.day_id, reservation_time: '08:00', reservation_end_time: '18:00',
+    });
+    await addEndpoint(carId, 'from', 0, 'Sixt Hauptbahnhof', null, 53.55, 10.0);
+    await addEndpoint(carId, 'to', 1, 'Sixt Airport', 'HAM', 53.63, 9.99);
     const router = hourlyRouter();
     const service = new RoadtripPlanService(
       { getUserSettings: () => ({}) } as never,
@@ -324,28 +349,20 @@ describe('a ferry across the day, and one on no day (#2461)', () => {
     return { user, trip, day, router, plans };
   }
 
-  function withFerry(tripId: number, dayId: number | null, title: string, located = true): number {
-    const id = Number(
-      db
-        .prepare(
-          `INSERT INTO reservations (trip_id, title, type, day_id, end_day_id, reservation_time, reservation_end_time)
-           VALUES (?, ?, 'ferry', ?, ?, '09:30', '15:00')`,
-        )
-        .run(tripId, title, dayId, dayId).lastInsertRowid,
-    );
+  async function withFerry(tripId: number, dayId: number | null, title: string, located = true): Promise<number> {
+    const id = await addReservation({
+      trip: tripId, title, type: 'ferry', day: dayId, endDay: dayId, reservation_time: '09:30', reservation_end_time: '15:00',
+    });
     if (located) {
-      const endpoint = db.prepare(
-        'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      );
-      endpoint.run(id, 'from', 0, 'IJmuiden', null, 52.4581, 4.5879);
-      endpoint.run(id, 'to', 1, 'Port of Tyne', null, 54.9925, -1.4522);
+      await addEndpoint(id, 'from', 0, 'IJmuiden', null, 52.4581, 4.5879);
+      await addEndpoint(id, 'to', 1, 'Port of Tyne', null, 54.9925, -1.4522);
     }
     return id;
   }
 
   it('drives to the pier and on from the far one, and never overland between the two shores', async () => {
     const { user, trip, day, router, plans } = await crossing();
-    withFerry(trip.id, day.id, 'IJmuiden to Newcastle');
+    await withFerry(trip.id, day.id, 'IJmuiden to Newcastle');
 
     const { calculated, undatedRides } = await plans.calculate(trip.id, user.id);
 
@@ -362,10 +379,10 @@ describe('a ferry across the day, and one on no day (#2461)', () => {
 
   it('names a located ride on no day, and the tool answers with the same list', async () => {
     const { user, trip, day, plans } = await crossing();
-    const undated = withFerry(trip.id, null, 'Ferry without a date');
-    withFerry(trip.id, day.id, 'Ferry on the day');
-    withFerry(trip.id, null, 'Ferry without terminals', false);
-    db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Dinner', 'restaurant')").run(trip.id);
+    const undated = await withFerry(trip.id, null, 'Ferry without a date');
+    await withFerry(trip.id, day.id, 'Ferry on the day');
+    await withFerry(trip.id, null, 'Ferry without terminals', false);
+    await addReservation({ trip: trip.id, title: 'Dinner', type: 'restaurant' });
 
     const plan = await plans.calculate(trip.id, user.id);
 
@@ -409,17 +426,13 @@ describe('a booked night at both ends of its days', () => {
     );
     return { user, trip: created, router, plans };
   }
-  const visit = (tripId: number, dayId: number, name: string, at: { lat: number; lng: number }) => {
+  const visit = async (tripId: number, dayId: number, name: string, at: { lat: number; lng: number }) => {
     const place = createPlace(db, tripId, { name, ...at });
-    db.prepare('UPDATE places SET duration_minutes = 0 WHERE id = ?').run(place.id);
+    await setPlace(place.id, { duration_minutes: 0 });
     return { place, assignment: createDayAssignment(db, dayId, place.id) };
   };
   const linkBooking = (tripId: number, stayId: number) =>
-    Number(
-      db
-        .prepare("INSERT INTO reservations (trip_id, title, type, accommodation_id) VALUES (?, 'Motel', 'hotel', ?)")
-        .run(tripId, stayId).lastInsertRowid,
-    );
+    addReservation({ trip: tripId, title: 'Motel', type: 'hotel', accommodation_id: stayId });
   const shape = (stops: RoadtripStop[]) =>
     stops.map((s) => (s.bookend ? `${s.bookend.phase}:${s.bookend.accommodationId}` : s.name));
   const lats = (router: ReturnType<typeof hourlyRouter>) =>
@@ -429,10 +442,10 @@ describe('a booked night at both ends of its days', () => {
   async function cam(settings?: RoadtripPreferences) {
     const t = await trip(settings);
     const [d1, d2, d3] = [createDay(db, t.trip.id), createDay(db, t.trip.id), createDay(db, t.trip.id)];
-    const getaway = visit(t.trip.id, d1.id, 'Getaway', GETAWAY);
-    visit(t.trip.id, d1.id, 'Lookout', { lat: -33.73, lng: 150.35 });
-    visit(t.trip.id, d1.id, 'Falls', { lat: -33.65, lng: 150.38 });
-    const wallinga = visit(t.trip.id, d2.id, 'Wallinga', WALLINGA);
+    const getaway = await visit(t.trip.id, d1.id, 'Getaway', GETAWAY);
+    await visit(t.trip.id, d1.id, 'Lookout', { lat: -33.73, lng: 150.35 });
+    await visit(t.trip.id, d1.id, 'Falls', { lat: -33.65, lng: 150.38 });
+    const wallinga = await visit(t.trip.id, d2.id, 'Wallinga', WALLINGA);
     const stayA = createDayAccommodation(db, t.trip.id, getaway.place.id, d1.id, d2.id, {
       check_in: '14:00',
       check_out: '10:00',
@@ -445,25 +458,24 @@ describe('a booked night at both ends of its days', () => {
   async function simeon(settings?: RoadtripPreferences) {
     const t = await trip(settings);
     const days = [1, 2, 3, 4].map(() => createDay(db, t.trip.id));
-    const h = visit(t.trip.id, days[0].id, 'H', HOTEL);
-    (
-      [
-        [0, 'P1', 45.1],
-        [0, 'P2', 45.2],
-        [1, 'P3', 45.3],
-        [1, 'P4', 45.4],
-        [2, 'P5', 45.5],
-        [2, 'P6', 45.6],
-      ] as const
-    ).forEach(([day, name, lat]) => visit(t.trip.id, days[day].id, name, { lat, lng: 7.5 }));
+    const h = await visit(t.trip.id, days[0].id, 'H', HOTEL);
+    const stops = [
+      [0, 'P1', 45.1],
+      [0, 'P2', 45.2],
+      [1, 'P3', 45.3],
+      [1, 'P4', 45.4],
+      [2, 'P5', 45.5],
+      [2, 'P6', 45.6],
+    ] as const;
+    for (const [day, name, lat] of stops) await visit(t.trip.id, days[day].id, name, { lat, lng: 7.5 });
     const stay = createDayAccommodation(db, t.trip.id, h.place.id, days[0].id, days[3].id, { check_in: '15:00' });
     return { ...t, days, stay };
   }
 
   it('seats the check-in day back at the stay and starts the transfer day there, as the rule in shared does', async () => {
     const { user, trip: created, router, plans, days, stayA } = await cam();
-    const reservationId = linkBooking(created.id, stayA.id);
-    linkBooking(created.id, stayA.id);
+    const reservationId = await linkBooking(created.id, stayA.id);
+    await linkBooking(created.id, stayA.id);
 
     const { calculated, failures } = await plans.calculate(created.id, user.id);
 
@@ -536,9 +548,8 @@ describe('a booked night at both ends of its days', () => {
 
   it('drives out of the morning hotel the way the first place is reached from it, as the browser and the day plan do', async () => {
     const { user, trip: created, router, plans } = await simeon();
-    db.prepare(
-      "UPDATE day_assignments SET incoming_leg_transport_mode = 'walking' WHERE place_id = (SELECT id FROM places WHERE trip_id = ? AND name = 'P3')",
-    ).run(created.id);
+    const p3 = (await findRow(await sharedTestOrm(db), Places, { trip: created.id, name: 'P3' }))!;
+    await updateRows(await sharedTestOrm(db), DayAssignments, { place: p3.id }, { incoming_leg_transport_mode: 'walking' });
 
     const { calculated } = await plans.calculate(created.id, user.id);
 
@@ -554,15 +565,15 @@ describe('a booked night at both ends of its days', () => {
   it('drops the stop tonight’s booking put first on its check-in day, as the browser does, and keeps it while off (#2546)', async () => {
     const t = await trip();
     const [d1, d2, d3] = [createDay(db, t.trip.id), createDay(db, t.trip.id), createDay(db, t.trip.id)];
-    const getaway = visit(t.trip.id, d1.id, 'Getaway', GETAWAY);
-    visit(t.trip.id, d1.id, 'Lookout', { lat: -33.73, lng: 150.35 });
-    const wallinga = visit(t.trip.id, d2.id, 'Wallinga', WALLINGA);
-    visit(t.trip.id, d2.id, 'Cave', { lat: -34.2, lng: 150.8 });
-    visit(t.trip.id, d2.id, 'Bakery', { lat: -34.3, lng: 150.7 });
+    const getaway = await visit(t.trip.id, d1.id, 'Getaway', GETAWAY);
+    await visit(t.trip.id, d1.id, 'Lookout', { lat: -33.73, lng: 150.35 });
+    const wallinga = await visit(t.trip.id, d2.id, 'Wallinga', WALLINGA);
+    await visit(t.trip.id, d2.id, 'Cave', { lat: -34.2, lng: 150.8 });
+    await visit(t.trip.id, d2.id, 'Bakery', { lat: -34.3, lng: 150.7 });
     const stayA = createDayAccommodation(db, t.trip.id, getaway.place.id, d1.id, d2.id);
     const stayB = createDayAccommodation(db, t.trip.id, wallinga.place.id, d2.id, d3.id);
     // The Wallinga stop is the one the booking wrote, seated first without a check-in.
-    db.prepare('UPDATE day_assignments SET accommodation_id = ? WHERE id = ?').run(stayB.id, wallinga.assignment.id);
+    await setVisit(wallinga.assignment.id, { accommodation_id: stayB.id });
 
     const { calculated } = await t.plans.calculate(t.trip.id, t.user.id);
     expect(shape(calculated.days[1].stops)).toEqual([`morning:${stayA.id}`, 'Cave', 'Bakery', `evening:${stayB.id}`]);
@@ -593,8 +604,8 @@ describe('a booked night at both ends of its days', () => {
 
   it('reads every stay with its place, its nights and its earliest booking into the context', async () => {
     const { user, trip: created, plans, days, stayA, stayB } = await cam();
-    const first = linkBooking(created.id, stayA.id);
-    linkBooking(created.id, stayA.id);
+    const first = await linkBooking(created.id, stayA.id);
+    await linkBooking(created.id, stayA.id);
 
     const context = await plans.context(created.id, user.id);
 
@@ -618,7 +629,7 @@ describe('a booked night at both ends of its days', () => {
   it('names the hotel in the failures of a run it pushes past the router’s waypoint limit', async () => {
     const t = await trip({});
     const [d1, d2] = [createDay(db, t.trip.id), createDay(db, t.trip.id)];
-    for (let i = 0; i < 100; i++) visit(t.trip.id, d1.id, `Stop ${i}`, { lat: 40 + i * 0.01, lng: 5 });
+    for (let i = 0; i < 100; i++) await visit(t.trip.id, d1.id, `Stop ${i}`, { lat: 40 + i * 0.01, lng: 5 });
     const hotel = createPlace(db, t.trip.id, { name: 'Tonight', ...HOTEL });
     createDayAccommodation(db, t.trip.id, hotel.id, d1.id, d2.id);
 
@@ -643,24 +654,17 @@ describe('a booked night at both ends of its days', () => {
   async function trip45(settings?: RoadtripPreferences) {
     const t = await trip(settings);
     const days = [1, 2, 3, 4, 5].map(() => createDay(db, t.trip.id));
-    const atlantic = visit(t.trip.id, days[0].id, 'Hotel Atlantic Hamburg', { lat: 53.5573, lng: 10.0056 });
-    const munich = visit(t.trip.id, days[2].id, 'Hotel Bayerischer Hof', { lat: 48.1403, lng: 11.5732 });
+    const atlantic = await visit(t.trip.id, days[0].id, 'Hotel Atlantic Hamburg', { lat: 53.5573, lng: 10.0056 });
+    const munich = await visit(t.trip.id, days[2].id, 'Hotel Bayerischer Hof', { lat: 48.1403, lng: 11.5732 });
     const stays = { check_in: '15:00', check_out: '11:00' };
     const hamburgStay = createDayAccommodation(db, t.trip.id, atlantic.place.id, days[0].id, days[2].id, stays);
     createDayAccommodation(db, t.trip.id, munich.place.id, days[2].id, days[4].id, stays);
-    const flight = Number(
-      db
-        .prepare(
-          `INSERT INTO reservations (trip_id, title, type, day_id, end_day_id, reservation_time, reservation_end_time, day_plan_position)
-           VALUES (?, 'LH 2078 HAM-MUC', 'flight', ?, ?, '2026-11-04T15:15', '2026-11-04T17:20', 0.5)`,
-        )
-        .run(t.trip.id, days[2].id, days[2].id).lastInsertRowid,
-    );
-    const endpoint = db.prepare(
-      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    );
-    endpoint.run(flight, 'from', 0, 'Hamburg (HAM)', 'HAM', 53.630402, 9.98823);
-    endpoint.run(flight, 'to', 1, 'Munich (MUC)', 'MUC', 48.353802, 11.7861);
+    const flight = await addReservation({
+      trip: t.trip.id, title: 'LH 2078 HAM-MUC', type: 'flight', day: days[2].id, endDay: days[2].id,
+      reservation_time: '2026-11-04T15:15', reservation_end_time: '2026-11-04T17:20', day_plan_position: 0.5,
+    });
+    await addEndpoint(flight, 'from', 0, 'Hamburg (HAM)', 'HAM', 53.630402, 9.98823);
+    await addEndpoint(flight, 'to', 1, 'Munich (MUC)', 'MUC', 48.353802, 11.7861);
     return { ...t, flightDay: days[2], hamburgStay };
   }
 
@@ -693,9 +697,7 @@ describe('a booked night at both ends of its days', () => {
 
   it('drives no road between two stays on a day a flight saved without its airports moves the traveller (#2476)', async () => {
     const { user, trip: created, router, plans, days, stayA } = await cam();
-    db.prepare(
-      "INSERT INTO reservations (trip_id, title, type, day_id, end_day_id, reservation_time) VALUES (?, 'Flight', 'flight', ?, ?, '12:00')",
-    ).run(created.id, days[1].id, days[1].id);
+    await addReservation({ trip: created.id, title: 'Flight', type: 'flight', day: days[1].id, endDay: days[1].id, reservation_time: '12:00' });
 
     const { calculated, failures } = await plans.calculate(created.id, user.id);
 

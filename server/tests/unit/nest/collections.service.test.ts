@@ -18,14 +18,6 @@ vi.mock('../../../src/db/database', async () => {
     db,
     closeDb: () => {},
     reinitialize: () => {},
-    getPlaceWithTags: () => null,
-    canAccessTrip: (tripId: number | string, userId: number) =>
-      db
-        .prepare(
-          'SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)',
-        )
-        .get(userId, tripId, userId),
-    isOwner: () => false,
   };
 });
 
@@ -56,6 +48,52 @@ import {
   createTestCollectionPlacesRepo, createTestCollectionPlaceRatingsRepo, createTestTripsRepo, createTestTripMembersRepo,
   createTestPlaceRatingsRepo, createTestTagsRepo, createTestUsersRepo,
 } from '../../helpers/test-uow';
+import { sharedTestOrm } from '../../helpers/test-uow';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { addCollectionMember } from '../../helpers/factories/collections';
+import { CollectionLabels } from '../../../src/db/entities/CollectionLabels.entity';
+import { CollectionMembers } from '../../../src/db/entities/CollectionMembers.entity';
+import { CollectionPlaceRatings } from '../../../src/db/entities/CollectionPlaceRatings.entity';
+import { CollectionPlaces } from '../../../src/db/entities/CollectionPlaces.entity';
+import { Collections } from '../../../src/db/entities/Collections.entity';
+import { GooglePlacePhotoMeta } from '../../../src/db/entities/GooglePlacePhotoMeta.entity';
+import { PlaceRatings } from '../../../src/db/entities/PlaceRatings.entity';
+import { Places } from '../../../src/db/entities/Places.entity';
+import { Tags } from '../../../src/db/entities/Tags.entity';
+import { Users } from '../../../src/db/entities/Users.entity';
+
+const orm = () => sharedTestOrm(testDb);
+
+/** Puts the user on the list as an accepted member, with the role the column defaults to unless given. */
+async function joinCollection(colId: number, userId: number, role?: 'viewer' | 'editor' | 'admin') {
+  await addCollectionMember(await orm(), colId, userId, role ? { role } : {});
+}
+
+/** How many saved places a list holds. */
+async function placesIn(colId: number): Promise<{ n: number }> {
+  return { n: await countRows(await orm(), CollectionPlaces, { collection: colId }) };
+}
+
+/** How many member rows (any status) a list holds. */
+async function membersOf(colId: number): Promise<{ n: number }> {
+  return { n: await countRows(await orm(), CollectionMembers, { collection: colId }) };
+}
+
+/** The newest place on a trip. */
+async function newestPlace(tripId: number): Promise<{ id: number }> {
+  const [row] = await findRows(await orm(), Places, { trip: tripId }, { id: 'desc' });
+  return { id: row.id };
+}
+
+/** The votes stored on a trip place. */
+async function placeVotes(placeId: number): Promise<{ user_id: number; rating: number }[]> {
+  return (await findRows(await orm(), PlaceRatings, { place: placeId })).map(v => ({ user_id: v.user_id, rating: v.rating }));
+}
+
+/** The votes stored on a saved place. */
+async function savedPlaceVotes(collectionPlaceId: number): Promise<{ user_id: number; rating: number }[]> {
+  return (await findRows(await orm(), CollectionPlaceRatings, { collectionPlace: collectionPlaceId })).map(v => ({ user_id: v.user_id, rating: v.rating }));
+}
 
 const storageFx = makeStorageFixture('');
 let svc: CollectionsService;
@@ -180,8 +218,8 @@ describe('collections CRUD + visibility', () => {
     const b = createUser(testDb).user;
     const other = await svc.createCollection(b.id, { name: 'B-list' }); // b's first list → sort_order 0
     await svc.reorderCollections(a.id, [other.id, col.id]); // a cannot see other → skipped; col → index 1
-    const otherRow = testDb.prepare('SELECT sort_order FROM collections WHERE id = ?').get(other.id) as { sort_order: number };
-    const colRow = testDb.prepare('SELECT sort_order FROM collections WHERE id = ?').get(col.id) as { sort_order: number };
+    const otherRow = (await findRow(await orm(), Collections, { id: other.id }))!;
+    const colRow = (await findRow(await orm(), Collections, { id: col.id }))!;
     expect(otherRow.sort_order).toBe(0); // untouched — not visible to a
     expect(colRow.sort_order).toBe(1); // reordered to its index in the visible-filtered list
   });
@@ -194,10 +232,11 @@ describe('saved places + dedup', () => {
     const owner = createUser(testDb).user;
     const member = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Shared' });
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status) VALUES (?, ?, 'accepted')").run(col.id, member.id);
+    await joinCollection(col.id, member.id);
 
     const res = await svc.savePlace(member.id, { collection_id: col.id, name: 'Senso-ji', lat: 35.71, lng: 139.79 });
     expect(res.place).toBeDefined();
+    // test-sql-allow: SELECT * shows the table's real columns, and the assertion is that no itinerary column is among them.
     const row = testDb.prepare('SELECT * FROM collection_places WHERE id = ?').get(res.place!.id) as Record<string, unknown>;
     expect(row.owner_id).toBe(owner.id);
     expect(row.saved_by).toBe(member.id);
@@ -216,7 +255,7 @@ describe('saved places + dedup', () => {
 
     const forced = await svc.savePlace(u.id, { collection_id: col.id, name: 'eiffel tower', force: true });
     expect(forced.place).toBeDefined();
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE collection_id = ?').get(col.id)).toEqual({ n: 2 });
+    expect(await placesIn(col.id)).toEqual({ n: 2 });
   });
 
   it('COLLECTIONS-SVC-012: savePlace attaches tags', async () => {
@@ -319,7 +358,7 @@ describe('saved places + dedup', () => {
     const col = await svc.createCollection(u.id, { name: 'Rome' });
     const trip = createTrip(testDb, u.id);
     const place = createPlace(testDb, trip.id, { name: 'Trattoria da Enzo' });
-    testDb.prepare('UPDATE places SET google_ftid = ? WHERE id = ?').run('0x1:0x2', place.id);
+    await updateRows(await orm(), Places, { id: place.id }, { google_ftid: '0x1:0x2' });
     await svc.savePlace(u.id, { collection_id: col.id, name: 'Dinner Tuesday', lat: 41.88, lng: 12.47, google_ftid: '0x1:0x2' });
 
     const out = await svc.saveFromTripPlaces(u.id, col.id, trip.id, [place.id]);
@@ -335,7 +374,7 @@ describe('saved places + dedup', () => {
     const col = await svc.createCollection(u.id, { name: 'Rome' });
     const trip = createTrip(testDb, u.id);
     const place = createPlace(testDb, trip.id, { name: 'Trattoria da Enzo' });
-    testDb.prepare('UPDATE places SET google_ftid = ? WHERE id = ?').run('0x1:0x2', place.id);
+    await updateRows(await orm(), Places, { id: place.id }, { google_ftid: '0x1:0x2' });
     await svc.savePlace(u.id, { collection_id: col.id, name: 'Dinner Tuesday', lat: 41.88, lng: 12.47, google_ftid: '0x1:0x2' });
 
     const listed = (await svc.importablePlaces(u.id, col.id, trip.id)).places.find(p => p.place_id === place.id);
@@ -391,12 +430,12 @@ describe('status + updatePlace move', () => {
     const targetOwner = createUser(testDb).user;
     const b = await svc.createCollection(targetOwner.id, { name: 'B' });
     // owner is also an accepted member of b so the move target is visible to them
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status) VALUES (?, ?, 'accepted')").run(b.id, owner.id);
+    await joinCollection(b.id, owner.id);
 
     const p = (await svc.savePlace(owner.id, { collection_id: a.id, name: 'Movable' })).place!;
     const moved = await svc.updatePlace(owner.id, p.id, { collection_id: b.id });
     expect(moved.collection_id).toBe(b.id);
-    const row = testDb.prepare('SELECT owner_id FROM collection_places WHERE id = ?').get(p.id) as { owner_id: number };
+    const row = (await findRow(await orm(), CollectionPlaces, { id: p.id }))!;
     expect(row.owner_id).toBe(targetOwner.id); // reset to the target collection's owner
   });
 
@@ -448,10 +487,10 @@ describe('copyToTrip', () => {
     expect(res.copied).toBe(1);
     expect(res.skipped.map((s) => s.name)).toEqual(['Pantheon']);
 
-    const inserted = testDb.prepare("SELECT * FROM places WHERE trip_id = ? AND name = 'Colosseum'").get(trip.id) as Record<string, unknown>;
+    const inserted = (await findRow(await orm(), Places, { trip: trip.id, name: 'Colosseum' }))!;
     expect(inserted.reservation_status).toBe('none'); // itinerary column took the table default
     expect(inserted.duration_minutes).toBe(60);
-    const tagLink = testDb.prepare('SELECT COUNT(*) n FROM place_tags WHERE place_id = ?').get(inserted.id);
+    const tagLink = { n: await countRows(await orm(), Tags, { place_tags_inverse: inserted.id }) };
     expect(tagLink).toEqual({ n: 1 });
   });
 
@@ -498,9 +537,9 @@ describe('delete places', () => {
     const p1 = (await svc.savePlace(u.id, { collection_id: col.id, name: 'A' })).place!;
     const p2 = (await svc.savePlace(u.id, { collection_id: col.id, name: 'B' })).place!;
     await svc.deletePlace(u.id, p1.id);
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE collection_id = ?').get(col.id)).toEqual({ n: 1 });
+    expect(await placesIn(col.id)).toEqual({ n: 1 });
     expect(await svc.deletePlacesMany(u.id, [p2.id])).toEqual([p2.id]);
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE collection_id = ?').get(col.id)).toEqual({ n: 0 });
+    expect(await placesIn(col.id)).toEqual({ n: 0 });
   });
 });
 
@@ -554,7 +593,7 @@ describe('fusion invitations', () => {
     const { owner, target, col } = await setup();
     await svc.sendInvite(col.id, owner.id, owner.username, owner.email, target.id);
     await svc.declineInvite(target.id, col.id, undefined);
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_members WHERE collection_id = ?').get(col.id)).toEqual({ n: 0 });
+    expect(await membersOf(col.id)).toEqual({ n: 0 });
   });
 
   it('COLLECTIONS-SVC-035: cancelInvite is owner-only', async () => {
@@ -562,7 +601,7 @@ describe('fusion invitations', () => {
     await svc.sendInvite(col.id, owner.id, owner.username, owner.email, target.id);
     await expect(svc.cancelInvite(col.id, target.id, target.id)).rejects.toThrow(); // non-owner
     await svc.cancelInvite(col.id, owner.id, target.id); // owner ok
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_members WHERE collection_id = ?').get(col.id)).toEqual({ n: 0 });
+    expect(await membersOf(col.id)).toEqual({ n: 0 });
   });
 
   it('COLLECTIONS-SVC-036: leaveCollection — member ok, owner blocked (400)', async () => {
@@ -595,7 +634,7 @@ describe('fusion invitations', () => {
     const owner = createUser(testDb).user;
     const normal = createUser(testDb).user;
     const guest = createUser(testDb).user;
-    testDb.prepare('UPDATE users SET is_guest = 1 WHERE id = ?').run(guest.id);
+    await updateRows(await orm(), Users, { id: guest.id }, { is_guest: 1 });
     const col = await svc.createCollection(owner.id, { name: 'C' });
     const ids = (await svc.availableUsers(owner.id, col.id)).map((u) => u.id);
     expect(ids).toContain(normal.id);
@@ -636,9 +675,9 @@ describe('deleteCollection', () => {
     expect(targets).not.toContain(owner.id);
     expect(broadcastToUser.mock.calls.every((c) => (c[1] as { type: string }).type === 'collections:deleted')).toBe(true);
 
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collections WHERE id = ?').get(col.id)).toEqual({ n: 0 });
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE collection_id = ?').get(col.id)).toEqual({ n: 0 });
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_members WHERE collection_id = ?').get(col.id)).toEqual({ n: 0 });
+    expect(await countRows(await orm(), Collections, { id: col.id })).toBe(0);
+    expect(await placesIn(col.id)).toEqual({ n: 0 });
+    expect(await membersOf(col.id)).toEqual({ n: 0 });
   });
 });
 
@@ -649,13 +688,13 @@ describe('owner_id semantics', () => {
     const owner = createUser(testDb).user;
     const member = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Shared' });
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status) VALUES (?, ?, 'accepted')").run(col.id, member.id);
+    await joinCollection(col.id, member.id);
     const p = (await svc.savePlace(member.id, { collection_id: col.id, name: 'Kept' })).place!;
 
-    testDb.prepare('DELETE FROM users WHERE id = ?').run(member.id);
+    await deleteRows(await orm(), Users, { id: member.id });
 
-    const row = testDb.prepare('SELECT owner_id, saved_by FROM collection_places WHERE id = ?').get(p.id) as { owner_id: number; saved_by: number | null };
-    expect(row).toBeDefined();
+    const row = (await findRow(await orm(), CollectionPlaces, { id: p.id }))!;
+    expect(row).not.toBeNull();
     expect(row.owner_id).toBe(owner.id);
     expect(row.saved_by).toBeNull(); // ON DELETE SET NULL
   });
@@ -668,27 +707,27 @@ describe('photo-cache widening', () => {
     const u = createUser(testDb).user;
     const col = await svc.createCollection(u.id, { name: 'Photos' });
     // cache meta for place_id 'gp-x', referenced ONLY by a collection_places row.
-    testDb.prepare('INSERT INTO google_place_photo_meta (place_id, attribution, fetched_at) VALUES (?, ?, ?)').run('gp-x', null, Date.now());
+    await insertRow(await orm(), GooglePlacePhotoMeta, { place_id: 'gp-x', attribution: null, fetched_at: Date.now() });
     await svc.savePlace(u.id, { collection_id: col.id, name: 'Cached', google_place_id: 'gp-x' });
 
     await removeIfUnreferenced('gp-x'); // would evict if isReferenced ignored collection_places
 
-    const meta = testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('gp-x');
-    expect(meta).toBeDefined();
+    const meta = await findRow(await orm(), GooglePlacePhotoMeta, { place_id: 'gp-x' });
+    expect(meta).not.toBeNull();
   });
 
   it('COLLECTIONS-SVC-043: an unreferenced photo is still reclaimable', async () => {
-    testDb.prepare('INSERT INTO google_place_photo_meta (place_id, attribution, fetched_at) VALUES (?, ?, ?)').run('gp-orphan', null, Date.now());
+    await insertRow(await orm(), GooglePlacePhotoMeta, { place_id: 'gp-orphan', attribution: null, fetched_at: Date.now() });
     await removeIfUnreferenced('gp-orphan');
-    const meta = testDb.prepare('SELECT 1 FROM google_place_photo_meta WHERE place_id = ?').get('gp-orphan');
-    expect(meta).toBeUndefined();
+    const meta = await findRow(await orm(), GooglePlacePhotoMeta, { place_id: 'gp-orphan' });
+    expect(meta).toBeNull();
   });
 });
 
 // ── Labels ───────────────────────────────────────────────────────────────────
 
 function addMember(colId: number, userId: number, role: 'viewer' | 'editor' | 'admin') {
-  testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', ?)").run(colId, userId, role);
+  return joinCollection(colId, userId, role);
 }
 
 describe('collection labels', () => {
@@ -708,12 +747,12 @@ describe('collection labels', () => {
     const owner = createUser(testDb).user;
     const viewer = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Trip' });
-    addMember(col.id, viewer.id, 'viewer');
+    await addMember(col.id, viewer.id, 'viewer');
     await expect(svc.createLabel(viewer.id, col.id, 'X')).rejects.toThrow(expect.objectContaining({ status: 403, message: 'You have read-only access to this list' }));
     expect((await svc.getCollection(owner.id, col.id)).collection.labels).toHaveLength(0);
 
     const editor = createUser(testDb).user;
-    addMember(col.id, editor.id, 'editor');
+    await addMember(col.id, editor.id, 'editor');
     expect((await svc.createLabel(editor.id, col.id, 'Museums')).id).toBeGreaterThan(0);
   });
 
@@ -839,7 +878,7 @@ describe('collaborative ratings (#1435)', () => {
     const member = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Shared rate' });
     // A viewer (read-only) member — still allowed to cast a personal vote.
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'viewer')").run(col.id, member.id);
+    await joinCollection(col.id, member.id, 'viewer');
     const p = (await svc.savePlace(owner.id, { collection_id: col.id, name: 'Notre-Dame' })).place!;
 
     await svc.setRating(owner.id, p.id, 5);
@@ -861,22 +900,21 @@ describe('collaborative ratings (#1435)', () => {
     const shared = createUser(testDb).user;   // member of BOTH the trip and the collection
     const tripOnly = createUser(testDb).user; // member of the trip only
     const col = await svc.createCollection(owner.id, { name: 'From trip rated' });
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'editor')").run(col.id, shared.id);
+    await joinCollection(col.id, shared.id, 'editor');
 
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, shared.id);
     addTripMember(testDb, trip.id, tripOnly.id);
     const place = createPlace(testDb, trip.id, { name: 'Colosseum' });
-    const ins = testDb.prepare('INSERT INTO place_ratings (place_id, user_id, rating) VALUES (?, ?, ?)');
-    ins.run(place.id, owner.id, 5);
-    ins.run(place.id, shared.id, 4);
-    ins.run(place.id, tripOnly.id, 1);
+    await insertRow(await orm(), PlaceRatings, { place: place.id, user: owner.id, rating: 5 });
+    await insertRow(await orm(), PlaceRatings, { place: place.id, user: shared.id, rating: 4 });
+    await insertRow(await orm(), PlaceRatings, { place: place.id, user: tripOnly.id, rating: 1 });
 
     const saved = (await svc.savePlace(owner.id, {
       collection_id: col.id, name: 'Colosseum', source_trip_id: trip.id, source_place_id: place.id,
     })).place!;
 
-    const votes = testDb.prepare('SELECT user_id, rating FROM collection_place_ratings WHERE collection_place_id = ?').all(saved.id) as { user_id: number; rating: number }[];
+    const votes = await savedPlaceVotes(saved.id);
     const voterIds = votes.map(v => v.user_id).sort((a, b) => a - b);
     expect(voterIds).toEqual([owner.id, shared.id].sort((a, b) => a - b));
     expect(votes.find(v => v.user_id === tripOnly.id)).toBeUndefined();
@@ -886,7 +924,7 @@ describe('collaborative ratings (#1435)', () => {
     const owner = createUser(testDb).user;
     const member = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Copyable' });
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'editor')").run(col.id, member.id);
+    await joinCollection(col.id, member.id, 'editor');
     const cp = (await svc.savePlace(owner.id, { collection_id: col.id, name: 'Trevi' })).place!;
     await svc.setRating(owner.id, cp.id, 5);
     await svc.setRating(member.id, cp.id, 3);
@@ -896,8 +934,8 @@ describe('collaborative ratings (#1435)', () => {
     const res = await svc.copyToTrip(owner.id, { trip_id: trip.id, place_ids: [cp.id] });
     expect(res.copied).toBe(1);
 
-    const newPlace = testDb.prepare('SELECT id FROM places WHERE trip_id = ? ORDER BY id DESC LIMIT 1').get(trip.id) as { id: number };
-    const votes = testDb.prepare('SELECT user_id, rating FROM place_ratings WHERE place_id = ?').all(newPlace.id) as { user_id: number; rating: number }[];
+    const newPlace = await newestPlace(trip.id);
+    const votes = await placeVotes(newPlace.id);
     expect(votes).toHaveLength(2);
     expect(votes.find(v => v.user_id === owner.id)?.rating).toBe(5);
     expect(votes.find(v => v.user_id === member.id)?.rating).toBe(3);
@@ -908,17 +946,17 @@ describe('collaborative ratings (#1435)', () => {
     const victim = createUser(testDb).user;
     const col = await svc.createCollection(attacker.id, { name: 'Harvest attempt' });
     // The victim is a member of the attacker's collection (so they'd be "eligible").
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'editor')").run(col.id, victim.id);
+    await joinCollection(col.id, victim.id, 'editor');
     // A PRIVATE trip the attacker is not on, with the victim's vote on a place.
     const privateTrip = createTrip(testDb, victim.id);
     const secret = createPlace(testDb, privateTrip.id, { name: 'Secret spot' });
-    testDb.prepare('INSERT INTO place_ratings (place_id, user_id, rating) VALUES (?, ?, ?)').run(secret.id, victim.id, 5);
+    await insertRow(await orm(), PlaceRatings, { place: secret.id, user: victim.id, rating: 5 });
 
     const saved = (await svc.savePlace(attacker.id, {
       collection_id: col.id, name: 'x', source_trip_id: privateTrip.id, source_place_id: secret.id,
     })).place!;
 
-    const stolen = testDb.prepare('SELECT * FROM collection_place_ratings WHERE collection_place_id = ?').all(saved.id);
+    const stolen = await savedPlaceVotes(saved.id);
     expect(stolen).toHaveLength(0); // no access to the source trip → nothing copied
   });
 
@@ -928,7 +966,7 @@ describe('collaborative ratings (#1435)', () => {
     const notInTrip = createUser(testDb).user; // collection member only
     const col = await svc.createCollection(owner.id, { name: 'Mixed membership' });
     for (const u of [inTrip, notInTrip]) {
-      testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'editor')").run(col.id, u.id);
+      await joinCollection(col.id, u.id, 'editor');
     }
     const cp = (await svc.savePlace(owner.id, { collection_id: col.id, name: 'Pantheon' })).place!;
     await svc.setRating(owner.id, cp.id, 5);
@@ -939,8 +977,8 @@ describe('collaborative ratings (#1435)', () => {
     addTripMember(testDb, trip.id, inTrip.id);
     await svc.copyToTrip(owner.id, { trip_id: trip.id, place_ids: [cp.id] });
 
-    const newPlace = testDb.prepare('SELECT id FROM places WHERE trip_id = ? ORDER BY id DESC LIMIT 1').get(trip.id) as { id: number };
-    const ids = (testDb.prepare('SELECT user_id FROM place_ratings WHERE place_id = ?').all(newPlace.id) as { user_id: number }[])
+    const newPlace = await newestPlace(trip.id);
+    const ids = (await placeVotes(newPlace.id))
       .map(v => v.user_id).sort((a, b) => a - b);
     expect(ids).toEqual([owner.id, inTrip.id].sort((a, b) => a - b));
     expect(ids).not.toContain(notInTrip.id);
@@ -989,15 +1027,15 @@ describe('atomic bulk writes (post-fold quirk fixes)', () => {
     const mine = await svc.createCollection(u.id, { name: 'Mine' });
     const shared = await svc.createCollection(otherOwner.id, { name: 'Shared' });
     // u is an editor on the shared list — can add/edit but NOT delete (owner/admin only).
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'editor')").run(shared.id, u.id);
+    await joinCollection(shared.id, u.id, 'editor');
     const p1 = (await svc.savePlace(u.id, { collection_id: mine.id, name: 'Deletable' })).place!;
     const p2 = (await svc.savePlace(u.id, { collection_id: shared.id, name: 'Protected' })).place!;
 
     // The relocated legacy interleaved checks with deletes, so p1 was gone by
     // the time p2's 403 fired. Now every id is checked first: nothing deleted.
     await expect(svc.deletePlacesMany(u.id, [p1.id, p2.id])).rejects.toThrow('Only an admin can delete places from this list');
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE id = ?').get(p1.id)).toEqual({ n: 1 });
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE id = ?').get(p2.id)).toEqual({ n: 1 });
+    expect(await countRows(await orm(), CollectionPlaces, { id: p1.id })).toBe(1);
+    expect(await countRows(await orm(), CollectionPlaces, { id: p2.id })).toBe(1);
   });
 
   it('COLLECTIONS-SVC-091: assignLabels permission-checks every list before writing anything', async () => {
@@ -1005,16 +1043,15 @@ describe('atomic bulk writes (post-fold quirk fixes)', () => {
     const otherOwner = createUser(testDb).user;
     const mine = await svc.createCollection(u.id, { name: 'Mine' });
     const readonly = await svc.createCollection(otherOwner.id, { name: 'ReadOnly' });
-    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'viewer')").run(readonly.id, u.id);
+    await joinCollection(readonly.id, u.id, 'viewer');
     const label = await svc.createLabel(u.id, mine.id, 'Coast');
     const pa = (await svc.savePlace(u.id, { collection_id: mine.id, name: 'A' })).place!;
-    const pb = testDb.prepare('INSERT INTO collection_places (collection_id, owner_id, saved_by, name) VALUES (?, ?, ?, ?)')
-      .run(readonly.id, otherOwner.id, otherOwner.id, 'B').lastInsertRowid as number;
+    const pb = await insertRow(await orm(), CollectionPlaces, { collection: readonly.id, owner: otherOwner.id, savedByRef: otherOwner.id, name: 'B' });
 
     // The relocated legacy checked per list inside the write loop, so `mine`
     // was labeled before `readonly`'s 403 fired. Now all lists check first.
     await expect(svc.assignLabels(u.id, [label.id], [pa.id, Number(pb)], false)).rejects.toThrow('You have read-only access to this list');
-    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_place_labels WHERE collection_place_id = ?').get(pa.id)).toEqual({ n: 0 });
+    expect(await countRows(await orm(), CollectionLabels, { collection_place_labels_inverse: pa.id })).toBe(0);
   });
 
   it('COLLECTIONS-SVC-092: from-trip saves forward the socket id so the origin client does not echo', async () => {
@@ -1039,8 +1076,8 @@ describe('atomic bulk writes (post-fold quirk fixes)', () => {
 // ── Bulk "visited" from a trip (#1469) ───────────────────────────────────────
 
 /** The stored status of a saved place, read straight off the row. */
-function statusOf(placeId: number): string {
-  return (testDb.prepare('SELECT status FROM collection_places WHERE id = ?').get(placeId) as { status: string }).status;
+async function statusOf(placeId: number): Promise<string> {
+  return (await findRow(await orm(), CollectionPlaces, { id: placeId }))!.status;
 }
 
 describe('bulk status', () => {
@@ -1054,7 +1091,7 @@ describe('bulk status', () => {
 
     // pb is already visited, so only pa is a change.
     expect(await svc.setStatusMany(u.id, [pa.id, pb.id], 'visited')).toEqual({ updated: 1 });
-    expect(statusOf(pa.id)).toBe('visited');
+    expect(await statusOf(pa.id)).toBe('visited');
     expect(await svc.setStatusMany(u.id, [pa.id, pb.id], 'visited')).toEqual({ updated: 0 });
   });
 
@@ -1063,12 +1100,12 @@ describe('bulk status', () => {
     const viewer = createUser(testDb).user;
     const mine = await svc.createCollection(viewer.id, { name: 'Mine' });
     const readonly = await svc.createCollection(owner.id, { name: 'Shared' });
-    addMember(readonly.id, viewer.id, 'viewer');
+    await addMember(readonly.id, viewer.id, 'viewer');
     const p1 = (await svc.savePlace(viewer.id, { collection_id: mine.id, name: 'Louvre' })).place!;
     const p2 = (await svc.savePlace(owner.id, { collection_id: readonly.id, name: 'Louvre' })).place!;
 
     await expect(svc.setStatusMany(viewer.id, [p1.id, p2.id], 'visited')).rejects.toThrow('You have read-only access to this list');
-    expect(statusOf(p1.id)).toBe('idea');
+    expect(await statusOf(p1.id)).toBe('idea');
   });
 
   it('COLLECTIONS-SVC-095: setStatusFromTrip marks every saved copy of the selected trip places', async () => {
@@ -1084,7 +1121,7 @@ describe('bulk status', () => {
     await svc.saveFromTripPlace(u.id, a.id, trip.id, orsay.id);
 
     expect(await svc.setStatusFromTrip(u.id, trip.id, [louvre.id], 'visited')).toEqual({ updated: 2, places: 1 });
-    const statuses = testDb.prepare('SELECT status FROM collection_places ORDER BY id').all() as { status: string }[];
+    const statuses = await findRows(await orm(), CollectionPlaces, {}, { id: 'asc' });
     expect(statuses.map(s => s.status)).toEqual(['visited', 'visited', 'idea']);
   });
 
@@ -1097,7 +1134,7 @@ describe('bulk status', () => {
     const saved = (await svc.saveFromTripPlace(u.id, col.id, trip.id, place.id)).place!;
     // Renamed on both sides, and moved far enough that coordinates cannot match.
     await svc.updatePlace(u.id, saved.id, { name: 'Dinner spot', lat: 45, lng: 9 });
-    testDb.prepare('UPDATE places SET name = ? WHERE id = ?').run('Enzo', place.id);
+    await updateRows(await orm(), Places, { id: place.id }, { name: 'Enzo' });
 
     expect(await svc.setStatusFromTrip(u.id, trip.id, [place.id], 'visited')).toEqual({ updated: 1, places: 1 });
   });
@@ -1120,18 +1157,18 @@ describe('bulk status', () => {
     const trip = createTrip(testDb, viewer.id);
     const place = createPlace(testDb, trip.id, { name: 'Louvre', lat: 48.8606, lng: 2.3376 });
     const readonly = await svc.createCollection(owner.id, { name: 'Shared' });
-    addMember(readonly.id, viewer.id, 'viewer');
+    await addMember(readonly.id, viewer.id, 'viewer');
     const theirs = (await svc.savePlace(owner.id, { collection_id: readonly.id, name: 'Louvre', lat: 48.8606, lng: 2.3376 })).place!;
 
     expect(await svc.setStatusFromTrip(viewer.id, trip.id, [place.id], 'visited')).toEqual({ updated: 0, places: 0 });
-    expect(statusOf(theirs.id)).toBe('idea');
+    expect(await statusOf(theirs.id)).toBe('idea');
   });
 
   it('COLLECTIONS-SVC-099: findMembership reports the per-list status and edit right', async () => {
     const owner = createUser(testDb).user;
     const viewer = createUser(testDb).user;
     const readonly = await svc.createCollection(owner.id, { name: 'Shared' });
-    addMember(readonly.id, viewer.id, 'viewer');
+    await addMember(readonly.id, viewer.id, 'viewer');
     const saved = (await svc.savePlace(owner.id, { collection_id: readonly.id, name: 'Louvre', google_place_id: 'gp-9' })).place!;
     await svc.setStatus(owner.id, saved.id, 'visited');
 
@@ -1191,7 +1228,7 @@ describe('exportCollection / importCollection (#2198)', () => {
     const owner = createUser(testDb).user;
     const member = createUser(testDb).user;
     const { col, market } = await seedList(owner.id);
-    addMember(col.id, member.id, 'editor');
+    await addMember(col.id, member.id, 'editor');
     await svc.setRating(member.id, market.id, 5);
 
     const file = await svc.exportCollection(owner.id, col.id);
@@ -1219,7 +1256,7 @@ describe('exportCollection / importCollection (#2198)', () => {
     const viewer = createUser(testDb).user;
     const stranger = createUser(testDb).user;
     const { col } = await seedList(owner.id);
-    addMember(col.id, viewer.id, 'viewer');
+    await addMember(col.id, viewer.id, 'viewer');
 
     expect((await svc.exportCollection(viewer.id, col.id)).places).toHaveLength(2);
     try {
@@ -1328,7 +1365,7 @@ describe('exportCollection / importCollection (#2198)', () => {
       } as never],
     } })).collection as { id: number };
 
-    const row = testDb.prepare('SELECT * FROM collection_places WHERE collection_id = ?').get(created.id) as Record<string, unknown>;
+    const row = (await findRow(await orm(), CollectionPlaces, { collection: created.id }))!;
     expect(row.owner_id).toBe(owner.id);
     expect(row.saved_by).toBe(owner.id);
     expect(row.source_trip_id).toBeNull();
@@ -1399,7 +1436,7 @@ describe('importIntoCollection', () => {
     expect(after.collection).toMatchObject({ name: 'Lisbon', description: 'Mine', color: '#111827' });
     expect(after.places.map(p => p.name)).toEqual(['Time Out Market', 'Belém', 'Alfama']);
     // Appended after what was there, so a manual order survives.
-    const orders = testDb.prepare('SELECT name, sort_order FROM collection_places WHERE collection_id = ? ORDER BY sort_order').all(col.id);
+    const orders = (await findRows(await orm(), CollectionPlaces, { collection: col.id }, { sort_order: 'asc' })).map(r => ({ name: r.name, sort_order: r.sort_order }));
     expect(orders).toEqual([
       { name: 'Time Out Market', sort_order: 0 },
       { name: 'Belém', sort_order: 1 },
@@ -1461,8 +1498,8 @@ describe('importIntoCollection', () => {
     const viewer = createUser(testDb).user;
     const stranger = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Shared' });
-    addMember(col.id, editor.id, 'editor');
-    addMember(col.id, viewer.id, 'viewer');
+    await addMember(col.id, editor.id, 'editor');
+    await addMember(col.id, viewer.id, 'viewer');
 
     expect(await svc.importIntoCollection(editor.id, col.id, { file: file([{ name: 'Belém' }]) })).toMatchObject({ imported: 1 });
     await expect(svc.importIntoCollection(viewer.id, col.id, { file: file([{ name: 'Alfama' }]) })).rejects.toThrow();
@@ -1479,19 +1516,19 @@ describe('importIntoCollection', () => {
     const owner = createUser(testDb).user;
     const editor = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Shared' });
-    addMember(col.id, editor.id, 'editor');
+    await addMember(col.id, editor.id, 'editor');
 
     await svc.importIntoCollection(editor.id, col.id, { file: file([{ name: 'Belém' }]) });
 
-    const row = testDb.prepare('SELECT owner_id, saved_by FROM collection_places WHERE collection_id = ?').get(col.id);
-    expect(row).toEqual({ owner_id: owner.id, saved_by: editor.id });
+    const stored = (await findRow(await orm(), CollectionPlaces, { collection: col.id }))!;
+    expect({ owner_id: stored.owner_id, saved_by: stored.saved_by }).toEqual({ owner_id: owner.id, saved_by: editor.id });
   });
 
   it('COLLECTIONS-SVC-126: everyone on the list is told once, and nothing is said when nothing changed', async () => {
     const owner = createUser(testDb).user;
     const member = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Shared' });
-    addMember(col.id, member.id, 'editor');
+    await addMember(col.id, member.id, 'editor');
     await svc.savePlace(owner.id, { collection_id: col.id, name: 'Belém' });
     broadcastToUser.mockClear();
 
@@ -1600,12 +1637,12 @@ describe('exportCollectionGpx / readCollectionGpx (#2301)', () => {
 
   it('COLLECTIONS-SVC-123: reading a GPX writes nothing, whatever is in it', async () => {
     const owner = createUser(testDb).user;
-    const before = testDb.prepare('SELECT COUNT(*) AS n FROM collections').get() as { n: number };
+    const before = await countRows(await orm(), Collections);
 
     svc.readCollectionGpx({ gpx: fixture('garmin-sym.gpx') });
     expect(() => svc.readCollectionGpx({ gpx: fixture('hostile-doctype.gpx') })).toThrow(expect.objectContaining({ code: 'unreadable' }));
 
-    expect(testDb.prepare('SELECT COUNT(*) AS n FROM collections').get()).toEqual(before);
+    expect(await countRows(await orm(), Collections)).toBe(before);
     expect((await svc.listCollections(owner.id)).collections).toHaveLength(0);
   });
 });
@@ -1631,9 +1668,9 @@ describe('Plan 3h Task 1 — repository conversion parity', () => {
     const viewer = createUser(testDb).user;
     const pending = createUser(testDb).user;
     const col = await svc.createCollection(owner.id, { name: 'Full house', description: 'Every role', color: '#111111' });
-    addMember(col.id, admin.id, 'admin');
-    addMember(col.id, editor.id, 'editor');
-    addMember(col.id, viewer.id, 'viewer');
+    await addMember(col.id, admin.id, 'admin');
+    await addMember(col.id, editor.id, 'editor');
+    await addMember(col.id, viewer.id, 'viewer');
     await svc.sendInvite(col.id, owner.id, owner.username, owner.email, pending.id);
 
     const tag = createTag(testDb, owner.id, { name: 'Foodie' });
@@ -1649,7 +1686,9 @@ describe('Plan 3h Task 1 — repository conversion parity', () => {
     // the same seeded rows — the oracle this test proves the repository
     // conversion against, kept structurally separate from the production
     // code path it verifies.
+    // test-sql-allow: legacy read-model oracle, recomputed from raw SQL on purpose.
     const colRow = testDb.prepare('SELECT * FROM collections WHERE id = ?').get(col.id) as Record<string, unknown>;
+    // test-sql-allow: legacy read-model oracle, recomputed from raw SQL on purpose.
     const placeCount = (testDb.prepare('SELECT COUNT(*) AS n FROM collection_places WHERE collection_id = ?').get(col.id) as { n: number }).n;
     const legacyMembers = [
       { user_id: owner.id, username: owner.username, email: owner.email, avatar: null, status: 'accepted', role: 'admin', is_owner: true },
@@ -1665,8 +1704,10 @@ describe('Plan 3h Task 1 — repository conversion parity', () => {
         .sort((a, b) => a.u.username.localeCompare(b.u.username))
         .map(({ u, role, status }) => ({ user_id: u.id, username: u.username, email: u.email, avatar: null, status, role, is_owner: false })),
     ];
+    // test-sql-allow: legacy read-model oracle, recomputed from raw SQL on purpose.
     const placeRow = testDb.prepare('SELECT * FROM collection_places WHERE collection_id = ?').get(col.id) as Record<string, unknown>;
     const ratingRows = testDb
+      // test-sql-allow: legacy read-model oracle, recomputed from raw SQL on purpose.
       .prepare('SELECT cpr.user_id, cpr.rating FROM collection_place_ratings cpr WHERE cpr.collection_place_id = ? ORDER BY cpr.created_at')
       .all(place.id) as { user_id: number; rating: number }[];
 
@@ -1702,6 +1743,7 @@ describe('Plan 3h Task 1 — repository conversion parity', () => {
     // cascade already happened by the time any broadcast fires.
     const memberCountAtBroadcastTime: number[] = [];
     broadcastToUser.mockImplementation(() => {
+      // test-sql-allow: the count has to be taken synchronously, at the moment the broadcast fires.
       memberCountAtBroadcastTime.push((testDb.prepare('SELECT COUNT(*) AS n FROM collection_members WHERE collection_id = ?').get(col.id) as { n: number }).n);
     });
 
@@ -1777,9 +1819,9 @@ describe('Plan 3h Task 2 — R6 two-layer authorization order', () => {
     const strangerOwner = createUser(testDb).user;
     const strangerTrip = createTrip(testDb, strangerOwner.id); // owner (the caller) is not on this trip
 
-    const before = (testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(strangerTrip.id) as { n: number }).n;
+    const before = await countRows(await orm(), Places, { trip: strangerTrip.id });
     await expect(svc.copyToTrip(owner.id, { trip_id: strangerTrip.id, place_ids: [cp.id] })).rejects.toThrow();
-    const after = (testDb.prepare('SELECT COUNT(*) AS n FROM places WHERE trip_id = ?').get(strangerTrip.id) as { n: number }).n;
+    const after = await countRows(await orm(), Places, { trip: strangerTrip.id });
     expect(after).toBe(before); // no places row (CL64), and therefore no place_tags/place_ratings rows either
   });
 });
