@@ -241,6 +241,12 @@ jobs:
         # so new code uses the logical start/end forms (scripts/rtl-lint.mjs).
         run: cd client && npm run lint:rtl
 
+      - name: File size check
+        # A source file may hold no more lines than scripts/size-baseline.json
+        # allows (1000 for a file without an entry), so a big file is split by
+        # concern instead of growing (scripts/size-lint.mjs).
+        run: cd client && npm run lint:size
+
   plugin-sdk-quality:
     name: Plugin SDK Types
     runs-on: ubuntu-latest
