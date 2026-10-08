@@ -47,6 +47,9 @@ import { OauthClients } from '../../src/db/entities/OauthClients.entity';
 import { OauthTokens } from '../../src/db/entities/OauthTokens.entity';
 import { OauthConsents } from '../../src/db/entities/OauthConsents.entity';
 import { MikroORM } from '@mikro-orm/core';
+import { McpTokens } from '../../src/db/entities/McpTokens.entity';
+import { countRows, deleteRows, findRow, findRows } from '../helpers/factories/rows';
+import { setAddonEnabled } from '../helpers/factories/settings';
 
 let oauthSvc: OauthService;
 
@@ -123,7 +126,7 @@ describe('MCP session init', () => {
     const token = generateToken(user.id);
 
     // Enable MCP addon in test DB
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const res = await request(app)
       .post('/mcp')
@@ -138,7 +141,7 @@ describe('MCP session init', () => {
     const { user } = createUser(testDb);
     const token = generateToken(user.id);
 
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const res = await request(app)
       .delete('/mcp')
@@ -148,7 +151,7 @@ describe('MCP session init', () => {
   });
 
   it('MCP-004 — POST /mcp with invalid JWT returns 401 (when addon enabled)', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const res = await request(app)
       .post('/mcp')
@@ -162,7 +165,7 @@ describe('MCP API token auth', () => {
   it('MCP-002 — POST /mcp with valid trek_ API token authenticates successfully', async () => {
     const { user } = createUser(testDb);
     const { rawToken } = createMcpToken(testDb, user.id);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const res = await request(app)
       .post('/mcp')
@@ -175,9 +178,9 @@ describe('MCP API token auth', () => {
   it('MCP-002 — last_used_at is updated on token use', async () => {
     const { user } = createUser(testDb);
     const { rawToken, id: tokenId } = createMcpToken(testDb, user.id);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
-    const before = (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(tokenId) as { last_used_at: string | null }).last_used_at;
+    const before = (await findRow(t, McpTokens, { id: tokenId }))?.last_used_at;
 
     await request(app)
       .post('/mcp')
@@ -185,13 +188,13 @@ describe('MCP API token auth', () => {
       .set('Accept', 'application/json, text/event-stream')
       .send({ jsonrpc: '2.0', method: 'initialize', id: 1, params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } });
 
-    const after = (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(tokenId) as { last_used_at: string | null }).last_used_at;
+    const after = (await findRow(t, McpTokens, { id: tokenId }))?.last_used_at;
     expect(after).not.toBeNull();
     expect(after).not.toBe(before);
   });
 
   it('MCP — POST /mcp with unknown trek_ token returns 401', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const res = await request(app)
       .post('/mcp')
@@ -201,7 +204,7 @@ describe('MCP API token auth', () => {
   });
 
   it('MCP — POST /mcp with no Authorization header returns 401', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const res = await request(app)
       .post('/mcp')
@@ -226,7 +229,7 @@ describe('MCP session management', () => {
 
   it('MCP-003 — at the session cap, the coldest session is evicted rather than the request refused', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const sessionsForUser = () => [...sessions.values()].filter((s) => s.userId === user.id).length;
 
@@ -247,7 +250,7 @@ describe('MCP session management', () => {
 
   it('MCP-006 — initializes that race past the cap check are trimmed when they register', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const sessionsForUser = () => [...sessions.values()].filter((s) => s.userId === user.id).length;
 
@@ -284,7 +287,7 @@ describe('MCP session management', () => {
 
   it('MCP — session resumption with valid mcp-session-id', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
     const sessionId = await createSession(user.id);
     const token = generateToken(user.id);
 
@@ -300,7 +303,7 @@ describe('MCP session management', () => {
   it('MCP — session belongs to different user returns 403', async () => {
     const { user: user1 } = createUser(testDb);
     const { user: user2 } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
 
     const sessionId = await createSession(user1.id);
     const token2 = generateToken(user2.id);
@@ -315,7 +318,7 @@ describe('MCP session management', () => {
 
   it('MCP — a session-less non-initialize POST is rejected without registering a session', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
     const token = generateToken(user.id);
 
     const before = sessions.size;
@@ -333,7 +336,7 @@ describe('MCP session management', () => {
 
   it('MCP — initialize response exposes Mcp-Session-Id to browser-context clients', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
     const token = generateToken(user.id);
 
     const res = await request(app)
@@ -353,7 +356,7 @@ describe('MCP session management', () => {
 
   it('MCP — GET without mcp-session-id returns 400', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
     const token = generateToken(user.id);
 
     const res = await request(app)
@@ -376,8 +379,8 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
     return res.headers['mcp-session-id'] as string;
   }
 
-  beforeEach(() => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+  beforeEach(async () => {
+    await setAddonEnabled(t, 'mcp', true);
   });
 
   // The source is process-level, so a test that installs one must not leak it
@@ -387,7 +390,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
   });
 
   it('MCP-P01 — addon off answers 403 with the exact legacy body', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 0 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', false);
     const res = await request(app).post('/mcp').send(initBody);
     expect(res.status).toBe(403);
     expect(res.body).toEqual({ error: 'MCP is not enabled' });
@@ -537,7 +540,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
     const { user } = createUser(testDb);
     const { accessToken, clientId } = await mintOauthToken(user.id, MCP_AUDIENCE);
     const sessionId = await createSession(accessToken);
-    testDb.prepare("DELETE FROM audit_log WHERE action = 'mcp.tool_call'").run();
+    await deleteRows(t, AuditLog, { action: 'mcp.tool_call' });
 
     const call = await request(app)
       .post('/mcp')
@@ -547,20 +550,18 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
       .send({ jsonrpc: '2.0', method: 'tools/call', id: 3, params: { name: 'list_trips', arguments: {} } });
     expect(call.status).toBe(200);
 
-    const rows = testDb.prepare(
-      "SELECT user_id, action, resource, details FROM audit_log WHERE action = 'mcp.tool_call'",
-    ).all() as Array<{ user_id: number; action: string; resource: string; details: string }>;
+    const rows = await findRows(t, AuditLog, { action: 'mcp.tool_call' });
     expect(rows).toHaveLength(1);
     expect(rows[0].user_id).toBe(user.id);
     expect(rows[0].resource).toBe('list_trips');
-    expect(JSON.parse(rows[0].details)).toEqual({ clientId });
+    expect(JSON.parse(String(rows[0].details))).toEqual({ clientId });
   });
 
   it('MCP-P14 — tools/list and resource reads write no mcp.tool_call rows', async () => {
     const { user } = createUser(testDb);
     const token = generateToken(user.id);
     const sessionId = await createSession(token);
-    testDb.prepare("DELETE FROM audit_log WHERE action = 'mcp.tool_call'").run();
+    await deleteRows(t, AuditLog, { action: 'mcp.tool_call' });
 
     const list = await request(app)
       .post('/mcp')
@@ -578,8 +579,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
       .send({ jsonrpc: '2.0', method: 'resources/list', id: 3, params: {} });
     expect(read.status).toBe(200);
 
-    const rows = testDb.prepare("SELECT id FROM audit_log WHERE action = 'mcp.tool_call'").all();
-    expect(rows).toHaveLength(0);
+    expect(await countRows(t, AuditLog, { action: 'mcp.tool_call' })).toBe(0);
   });
 
   // ── plugin-contributed tools ──
@@ -655,7 +655,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
     setPluginMcpToolSource(() => [dynamicTool('plugin_demo_echo', 'contributed')]);
     const { accessToken, clientId } = await mintOauthToken(user.id, MCP_AUDIENCE, ['trips:read', 'plugins:use']);
     const sessionId = await createSession(accessToken);
-    testDb.prepare("DELETE FROM audit_log WHERE action = 'mcp.tool_call'").run();
+    await deleteRows(t, AuditLog, { action: 'mcp.tool_call' });
 
     const call = await request(app)
       .post('/mcp')
@@ -667,13 +667,11 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
 
     // The audit seam is exactly why the source lives on McpAttachOptions rather
     // than the host calling server.registerTool() itself.
-    const rows = testDb.prepare(
-      "SELECT user_id, resource, details FROM audit_log WHERE action = 'mcp.tool_call'",
-    ).all() as Array<{ user_id: number; resource: string; details: string }>;
+    const rows = await findRows(t, AuditLog, { action: 'mcp.tool_call' });
     expect(rows).toHaveLength(1);
     expect(rows[0].user_id).toBe(user.id);
     expect(rows[0].resource).toBe('plugin_demo_echo');
-    expect(JSON.parse(rows[0].details)).toEqual({ clientId });
+    expect(JSON.parse(String(rows[0].details))).toEqual({ clientId });
   });
 
   it('MCP-P18 — a token without plugins:use is never shown a plugin tool', async () => {
@@ -736,7 +734,7 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
 describe('MCP rate limiting', () => {
   it('MCP-005 — requests below limit succeed', async () => {
     const { user } = createUser(testDb);
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
     const token = generateToken(user.id);
 
     // Set a very low rate limit via env for this test
@@ -786,10 +784,10 @@ describe('MCP bearer-token verification runs inside the HTTP request context (Pl
   });
 
   it('MCP-CTX-002: a repository read inside verifyMcpToken (the trek_ bearer-token branch) succeeds — the /mcp route already forks a request context before the auth step runs', async () => {
-    testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'mcp'").run();
+    await setAddonEnabled(t, 'mcp', true);
     const { user } = createUser(testDb);
     const { rawToken, id: tokenId } = createMcpToken(testDb, user.id);
-    const before = (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(tokenId) as { last_used_at: string | null }).last_used_at;
+    const before = (await findRow(t, McpTokens, { id: tokenId }))?.last_used_at;
     expect(before).toBeNull();
 
     const res = await request(app)
@@ -803,7 +801,7 @@ describe('MCP bearer-token verification runs inside the HTTP request context (Pl
     // `findUserByHashAndKind` (TK13) then `touchLastUsedByHash` (TK14) —
     // `last_used_at` moving is only possible if both reached the DB, which
     // MCP-CTX-001 proves the ORM refuses outside a forked request context.
-    const after = (testDb.prepare('SELECT last_used_at FROM mcp_tokens WHERE id = ?').get(tokenId) as { last_used_at: string | null }).last_used_at;
+    const after = (await findRow(t, McpTokens, { id: tokenId }))?.last_used_at;
     expect(after).not.toBeNull();
     expect(after).not.toBe(before);
   });

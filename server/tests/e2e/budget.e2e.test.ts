@@ -15,19 +15,11 @@ import { RealtimeModule } from '../../src/nest/realtime/realtime.module';
 import { Test } from '@nestjs/testing';
 import { sessionCookie } from './harness';
 
-const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
-
 vi.mock('../../src/db/database', async () => {
   const { createSnapshotTestDb } = await import('../helpers/db-mock');
   const db = createSnapshotTestDb();
-  return {
-    db,
-    closeDb: () => {},
-    reinitialize: () => {},
-    canAccessTrip,
-    getPlaceWithTags: () => null,
-    isOwner: () => false,
-  };
+  // Trip access reads through TripsRepository now; the module only hands out the handle.
+  return { db, closeDb: () => {}, reinitialize: () => {} };
 });
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
@@ -45,7 +37,32 @@ import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.servi
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { countRows, deleteRows, findRow, insertRow } from '../helpers/factories/rows';
+import { makeUser } from '../helpers/factories/users';
+import { addTripMember, makeTrip } from '../helpers/factories/trips';
+import { makePlace } from '../helpers/factories/places';
+import { makeReservation } from '../helpers/factories/reservations';
+import { BudgetItems } from '../../src/db/entities/BudgetItems.entity';
+import { BudgetSettlements } from '../../src/db/entities/BudgetSettlements.entity';
+import { Reservations } from '../../src/db/entities/Reservations.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
+
+let orm: TestOrm;
+
+/** The stored expense; fails the case when it is gone. */
+async function budgetRow(id: number) {
+  const row = await findRow(orm, BudgetItems, { id });
+  if (!row) throw new Error(`no budget item ${id}`);
+  return row;
+}
+
+/** The stored settlement; fails the case when it is gone. */
+async function settlementRow(id: number) {
+  const row = await findRow(orm, BudgetSettlements, { id });
+  if (!row) throw new Error(`no settlement ${id}`);
+  return row;
+}
 
 describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   let server: Server;
@@ -71,18 +88,15 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   }
 
   beforeAll(async () => {
-    // The temp db carries the real schema (password_hash NOT NULL), so seed the
-    // auth users directly instead of via the trimmed-DDL seedUser helper.
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
-    ).run();
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (2, 'e2e-peer', 'peer@example.test', 'x', 'user', 0)",
-    ).run();
-    tripId = Number(db.prepare("INSERT INTO trips (user_id, title, currency) VALUES (1, 'E2E Trip', 'EUR')").run().lastInsertRowid);
+    // The temp db carries the real schema, so the auth users go in through the
+    // factories, pinned to the ids the session cookies are signed for.
+    orm = await createTestOrm(db);
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test', role: 'user', password_version: 0 });
+    await makeUser(orm, { id: 2, username: 'e2e-peer', email: 'peer@example.test', role: 'user', password_version: 0 });
+    tripId = (await makeTrip(orm, 1, { title: 'E2E Trip', currency: 'EUR' })).id;
     // The peer settles up with the owner below, so they have to be on the trip:
     // a settlement between people who do not share one is refused.
-    db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, 2)').run(tripId);
+    await addTripMember(orm, tripId, 2);
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
@@ -99,6 +113,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   it('401 without a session cookie', async () => {
@@ -112,14 +127,14 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     // longer intercepts it. The trip row is seeded once in `beforeAll` (not
     // re-seeded per test), so it is removed and restored around this one
     // assertion instead.
-    db.prepare('DELETE FROM trips WHERE id = ?').run(tripId);
+    await deleteRows(orm, Trips, { id: tripId });
     try {
       const res = await request(server).get(`/api/trips/${tripId}/budget`).set('Cookie', sessionCookie(1));
       expect(res.status).toBe(404);
       expect(res.body).toEqual({ error: 'Trip not found' });
     } finally {
-      db.prepare("INSERT INTO trips (id, user_id, title, currency) VALUES (?, 1, 'E2E Trip', 'EUR')").run(tripId);
-      db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, 2)').run(tripId);
+      await insertRow(orm, Trips, { id: tripId, user: 1, title: 'E2E Trip', currency: 'EUR' });
+      await addTripMember(orm, tripId, 2);
     }
   });
 
@@ -131,8 +146,8 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     expect(created.status).toBe(201);
     expect(created.body.item).toMatchObject({ name: 'Hotel', total_price: 200, category: 'other', members: [], payers: [] });
 
-    const row = db.prepare('SELECT name, total_price FROM budget_items WHERE id = ?').get(created.body.item.id);
-    expect(row).toEqual({ name: 'Hotel', total_price: 200 });
+    const row = await budgetRow(created.body.item.id);
+    expect({ name: row.name, total_price: row.total_price }).toEqual({ name: 'Hotel', total_price: 200 });
 
     const list = await request(server).get(`/api/trips/${tripId}/budget`).set('Cookie', sessionCookie(1));
     expect(list.status).toBe(200);
@@ -184,8 +199,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     expect(refund.status).toBe(201);
     expect(refund.body.item).toMatchObject({ total_price: -30 });
     expect(refund.body.item.payers).toEqual([expect.objectContaining({ user_id: 1, amount: -30 })]);
-    const row = db.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(refund.body.item.id) as { total_price: number };
-    expect(row.total_price).toBe(-30);
+    expect((await budgetRow(refund.body.item.id)).total_price).toBe(-30);
 
     const settlement = await request(server)
       .get(`/api/trips/${tripId}/budget/settlement`)
@@ -279,8 +293,8 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     expect(res.status).toBe(200);
     expect(res.body.settlement).toMatchObject({ id: created.body.settlement.id, from_user_id: 2, to_user_id: 1, amount: 15, settled_at: '2026-01-09' });
 
-    const row = db.prepare('SELECT amount, settled_at FROM budget_settlements WHERE id = ?').get(created.body.settlement.id);
-    expect(row).toEqual({ amount: 15, settled_at: '2026-01-09' });
+    const row = await settlementRow(created.body.settlement.id);
+    expect({ amount: row.amount, settled_at: row.settled_at }).toEqual({ amount: 15, settled_at: '2026-01-09' });
   });
 
   it('200 on settlement update that clears the day, leaving NULL in the column', async () => {
@@ -297,8 +311,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     expect(res.status).toBe(200);
     expect(res.body.settlement.settled_at).toBeNull();
 
-    const row = db.prepare('SELECT settled_at FROM budget_settlements WHERE id = ?').get(created.body.settlement.id);
-    expect(row).toEqual({ settled_at: null });
+    expect((await settlementRow(created.body.settlement.id)).settled_at).toBeNull();
   });
 
   it('keeps a note on a settlement, leaves it alone when omitted and clears it on blank (#2340)', async () => {
@@ -359,24 +372,26 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     let luggageId: number;
     let seatId: number;
 
-    const metadataOf = (id: number) => {
-      const row = db.prepare('SELECT metadata FROM reservations WHERE id = ?').get(id) as { metadata: string | null };
+    const metadataOf = async (id: number) => {
+      const row = await findRow(orm, Reservations, { id });
+      if (!row) throw new Error(`no reservation ${id}`);
       return row.metadata ? JSON.parse(row.metadata) : null;
     };
-    const linkOf = (id: number) =>
-      db.prepare('SELECT reservation_id FROM budget_items WHERE id = ?').get(id) as { reservation_id: number | null } | undefined;
+    /** The expense's booking link, or undefined once the expense is gone. */
+    const linkOf = async (id: number) => {
+      const row = await findRow(orm, BudgetItems, { id });
+      return row ? { reservation_id: row.reservation_id ?? null } : undefined;
+    };
     const put = (id: number, body: Record<string, unknown>) =>
       request(server).put(`/api/trips/${tripId}/budget/${id}`).set('Cookie', sessionCookie(1)).send(body);
     const create = (body: Record<string, unknown>) =>
       request(server).post(`/api/trips/${tripId}/budget`).set('Cookie', sessionCookie(1)).send(body);
 
     beforeAll(async () => {
-      bookingId = Number(db.prepare(
-        "INSERT INTO reservations (trip_id, title, type, metadata) VALUES (?, 'Flight', 'flight', ?)",
-      ).run(tripId, JSON.stringify({ seat: '12A' })).lastInsertRowid);
-      const otherTripId = Number(db.prepare("INSERT INTO trips (user_id, title, currency) VALUES (1, 'Other Trip', 'EUR')").run().lastInsertRowid);
-      foreignBookingId = Number(db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Elsewhere', 'flight')").run(otherTripId).lastInsertRowid);
-      foreignPlaceId = Number(db.prepare("INSERT INTO places (trip_id, name) VALUES (?, 'Elsewhere')").run(otherTripId).lastInsertRowid);
+      bookingId = (await makeReservation(orm, tripId, { title: 'Flight', type: 'flight', metadata: JSON.stringify({ seat: '12A' }) })).id;
+      const otherTripId = (await makeTrip(orm, 1, { title: 'Other Trip', currency: 'EUR' })).id;
+      foreignBookingId = (await makeReservation(orm, otherTripId, { title: 'Elsewhere', type: 'flight' })).id;
+      foreignPlaceId = (await makePlace(orm, otherTripId, { name: 'Elsewhere', lat: null, lng: null, category: null })).id;
     });
 
     it('200 on linking two expenses to one booking, which then mirrors their sum', async () => {
@@ -390,11 +405,11 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
       const first = await put(fareId, { reservation_id: bookingId });
       expect(first.status).toBe(200);
       expect(first.body.item).toMatchObject({ id: fareId, reservation_id: bookingId, total_price: 120 });
-      expect(metadataOf(bookingId)).toEqual({ seat: '12A', price: '120' });
+      expect(await metadataOf(bookingId)).toEqual({ seat: '12A', price: '120' });
 
       const second = await put(luggageId, { reservation_id: bookingId });
       expect(second.status).toBe(200);
-      expect(metadataOf(bookingId)).toEqual({ seat: '12A', price: '150.5' });
+      expect(await metadataOf(bookingId)).toEqual({ seat: '12A', price: '150.5' });
 
       const list = await request(server).get(`/api/trips/${tripId}/budget`).set('Cookie', sessionCookie(1));
       const linked = (list.body.items as { id: number; reservation_id: number | null }[])
@@ -406,34 +421,34 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
       const relink = await put(fareId, { reservation_id: foreignBookingId, name: 'Hijacked' });
       expect(relink.status).toBe(400);
       expect(relink.body).toEqual({ error: 'reservation_id does not belong to this trip.' });
-      expect(linkOf(fareId)).toEqual({ reservation_id: bookingId });
-      expect(db.prepare('SELECT name FROM budget_items WHERE id = ?').get(fareId)).toEqual({ name: 'Fare' });
-      expect(metadataOf(foreignBookingId)).toBeNull();
+      expect(await linkOf(fareId)).toEqual({ reservation_id: bookingId });
+      expect((await budgetRow(fareId)).name).toBe('Fare');
+      expect(await metadataOf(foreignBookingId)).toBeNull();
 
       const place = await put(fareId, { place_id: foreignPlaceId });
       expect(place.status).toBe(400);
       expect(place.body).toEqual({ error: 'place_id does not belong to this trip.' });
 
-      const before = (db.prepare('SELECT COUNT(*) AS n FROM budget_items').get() as { n: number }).n;
+      const before = await countRows(orm, BudgetItems);
       const created = await create({ name: 'Smuggled', total_price: 5, reservation_id: foreignBookingId });
       expect(created.status).toBe(400);
       expect(created.body).toEqual({ error: 'reservation_id does not belong to this trip.' });
-      expect((db.prepare('SELECT COUNT(*) AS n FROM budget_items').get() as { n: number }).n).toBe(before);
+      expect(await countRows(orm, BudgetItems)).toBe(before);
     });
 
     it('400 on a reservation_id that is not a positive integer (Zod pipe envelope)', async () => {
       const res = await put(fareId, { reservation_id: 0 });
       expect(res.status).toBe(400);
       expect(res.body.error).toContain('reservation_id');
-      expect(linkOf(fareId)).toEqual({ reservation_id: bookingId });
+      expect(await linkOf(fareId)).toEqual({ reservation_id: bookingId });
     });
 
     it('200 on unlinking: the expense stays and the booking price is worked out again', async () => {
       const res = await put(luggageId, { reservation_id: null });
       expect(res.status).toBe(200);
       expect(res.body.item).toMatchObject({ id: luggageId, reservation_id: null, total_price: 30.5 });
-      expect(linkOf(luggageId)).toEqual({ reservation_id: null });
-      expect(metadataOf(bookingId)).toEqual({ seat: '12A', price: '120' });
+      expect(await linkOf(luggageId)).toEqual({ reservation_id: null });
+      expect(await metadataOf(bookingId)).toEqual({ seat: '12A', price: '120' });
     });
 
     it('201 on a second expense created straight onto the booking, which raises its price to the sum', async () => {
@@ -441,7 +456,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
       expect(seat.status).toBe(201);
       expect(seat.body.item.reservation_id).toBe(bookingId);
       seatId = seat.body.item.id;
-      expect(metadataOf(bookingId)).toEqual({ seat: '12A', price: '135' });
+      expect(await metadataOf(bookingId)).toEqual({ seat: '12A', price: '135' });
     });
 
     it('200 on new payers for a linked expense, whose derived total the booking price follows', async () => {
@@ -451,30 +466,30 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
         .send({ payers: [{ user_id: 1, amount: 12 }, { user_id: 2, amount: 6 }] });
       expect(res.status).toBe(200);
       expect(res.body.item).toMatchObject({ id: seatId, total_price: 18 });
-      expect(metadataOf(bookingId)).toEqual({ seat: '12A', price: '138' });
+      expect(await metadataOf(bookingId)).toEqual({ seat: '12A', price: '138' });
     });
 
     it('200 on a currency-only change of a linked expense, which re-names the booking price', async () => {
-      const trainId = Number(db.prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Train', 'train')").run(tripId).lastInsertRowid);
+      const trainId = (await makeReservation(orm, tripId, { title: 'Train', type: 'train' })).id;
       const ticket = await create({ name: 'Ticket', total_price: 60, reservation_id: trainId });
       expect(ticket.status).toBe(201);
       // In the trip currency, so the price carries no currency of its own.
-      expect(metadataOf(trainId)).toEqual({ price: '60' });
+      expect(await metadataOf(trainId)).toEqual({ price: '60' });
 
       const chf = await put(ticket.body.item.id, { currency: 'CHF' });
       expect(chf.status).toBe(200);
       expect(chf.body.item).toMatchObject({ currency: 'CHF', total_price: 60 });
-      expect(metadataOf(trainId)).toEqual({ price: '60', priceCurrency: 'CHF' });
+      expect(await metadataOf(trainId)).toEqual({ price: '60', priceCurrency: 'CHF' });
 
       const back = await put(ticket.body.item.id, { currency: null });
       expect(back.status).toBe(200);
-      expect(metadataOf(trainId)).toEqual({ price: '60' });
+      expect(await metadataOf(trainId)).toEqual({ price: '60' });
 
       // An expense with no currency and one naming the trip's own (EUR, in any
       // case) are in the same money, so the booking shows their sum.
       const bike = await create({ name: 'Bike ticket', total_price: 9.5, currency: 'eur', reservation_id: trainId });
       expect(bike.status).toBe(201);
-      expect(metadataOf(trainId)).toEqual({ price: '69.5', priceCurrency: 'EUR' });
+      expect(await metadataOf(trainId)).toEqual({ price: '69.5', priceCurrency: 'EUR' });
     });
 
     it('deleting the booking removes every expense linked to it, and only those', async () => {
@@ -486,10 +501,10 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ success: true });
 
-      expect(db.prepare('SELECT id FROM reservations WHERE id = ?').get(bookingId)).toBeUndefined();
-      expect(linkOf(fareId)).toBeUndefined();
-      expect(linkOf(seatId)).toBeUndefined();
-      expect(linkOf(unlinkedId)).toEqual({ reservation_id: null });
+      expect(await findRow(orm, Reservations, { id: bookingId })).toBeNull();
+      expect(await linkOf(fareId)).toBeUndefined();
+      expect(await linkOf(seatId)).toBeUndefined();
+      expect(await linkOf(unlinkedId)).toEqual({ reservation_id: null });
 
       const list = await request(server).get(`/api/trips/${tripId}/budget`).set('Cookie', sessionCookie(1));
       const ids = (list.body.items as { id: number }[]).map(i => i.id);
@@ -504,16 +519,16 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
   // are the ones the browser lends.
   describe('rows no rate can convert', () => {
     /** A fresh AUD trip the owner shares with user 2, so these cases never meet the ledger above. */
-    function audTrip(): number {
-      const id = Number(db.prepare("INSERT INTO trips (user_id, title, currency) VALUES (1, 'AUD Trip', 'AUD')").run().lastInsertRowid);
-      db.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, 2)').run(id);
+    async function audTrip(): Promise<number> {
+      const id = (await makeTrip(orm, 1, { title: 'AUD Trip', currency: 'AUD' })).id;
+      await addTripMember(orm, id, 2);
       return id;
     }
     const balanceOf = (body: { balances: { user_id: number; balance: number }[] }, uid: number) =>
       body.balances.find(b => b.user_id === uid)!.balance;
 
     it('VND/AUD regression: unfrozen VND bill is listed as unconverted, freeze-rates heals it from the browser quote, settlement nets 489.00, second freeze heals nothing', async () => {
-      const trip = audTrip();
+      const trip = await audTrip();
       const bill = await request(server)
         .post(`/api/trips/${trip}/budget`)
         .set('Cookie', sessionCookie(1))
@@ -550,11 +565,11 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
         .send({ fallback_fx: { base: 'AUD', rates: { VND: 25000 } } });
       expect(again.status).toBe(200);
       expect(again.body).toEqual({ items: [], settlements: [], unresolved: [] });
-      expect((db.prepare('SELECT exchange_rate FROM budget_items WHERE id = ?').get(bill.body.item.id) as { exchange_rate: number }).exchange_rate).toBe(18241.3);
+      expect((await budgetRow(bill.body.item.id)).exchange_rate).toBe(18241.3);
     });
 
     it('POST with fallback_fx freezes at entry', async () => {
-      const trip = audTrip();
+      const trip = await audTrip();
       const res = await request(server)
         .post(`/api/trips/${trip}/budget`)
         .set('Cookie', sessionCookie(1))
@@ -565,7 +580,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     });
 
     it('POST /settlements in EUR with fallback_fx freezes the transfer', async () => {
-      const trip = audTrip();
+      const trip = await audTrip();
       const res = await request(server)
         .post(`/api/trips/${trip}/budget/settlements`)
         .set('Cookie', sessionCookie(1))
@@ -582,7 +597,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     });
 
     it('GET /settlement?base=EUR answers in AUD without base_rate and in EUR with it', async () => {
-      const trip = audTrip();
+      const trip = await audTrip();
       const dinner = await request(server)
         .post(`/api/trips/${trip}/budget`)
         .set('Cookie', sessionCookie(1))
@@ -602,7 +617,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
     });
 
     it('PUT currency change to VND without a rate stores 1 instead of the USD rate', async () => {
-      const trip = audTrip();
+      const trip = await audTrip();
       const created = await request(server)
         .post(`/api/trips/${trip}/budget`)
         .set('Cookie', sessionCookie(1))
@@ -615,12 +630,13 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
         .send({ currency: 'VND' });
       expect(res.status).toBe(200);
       expect(res.body.item).toMatchObject({ currency: 'VND', exchange_rate: 1 });
-      expect(db.prepare('SELECT currency, exchange_rate FROM budget_items WHERE id = ?').get(created.body.item.id))
+      const stored = await budgetRow(created.body.item.id);
+      expect({ currency: stored.currency, exchange_rate: stored.exchange_rate })
         .toEqual({ currency: 'VND', exchange_rate: 1 });
     });
 
     it('freeze-rates 403 without budget_edit, 400 on malformed fallback_fx, other base heals nothing (unresolved VND)', async () => {
-      const trip = audTrip();
+      const trip = await audTrip();
       const bill = await request(server)
         .post(`/api/trips/${trip}/budget`)
         .set('Cookie', sessionCookie(1))
@@ -644,7 +660,7 @@ describe('Budget e2e (real auth guard + temp SQLite, real budget SQL)', () => {
       const otherBase = await freeze({ fallback_fx: { base: 'EUR', rates: { VND: 27000 } } });
       expect(otherBase.status).toBe(200);
       expect(otherBase.body).toEqual({ items: [], settlements: [], unresolved: ['VND'] });
-      expect((db.prepare('SELECT exchange_rate FROM budget_items WHERE id = ?').get(bill.body.item.id) as { exchange_rate: number }).exchange_rate).toBe(1);
+      expect((await budgetRow(bill.body.item.id)).exchange_rate).toBe(1);
     });
 
     it('400 on base_rate=abc', async () => {

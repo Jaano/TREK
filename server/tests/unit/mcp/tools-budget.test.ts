@@ -26,6 +26,16 @@ import { createUser, createTrip, createBudgetItem, createPlace, createReservatio
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { invalidatePermissionsCache } from '../../../src/nest/permissions/permissions-cache';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { countRows, deleteRows, findRow, findRows, insertRow, updateRows } from '../../helpers/factories/rows';
+import { addBudgetItemMember, addBudgetItemPayer } from '../../helpers/factories/budget';
+import { setAppSetting } from '../../helpers/factories/settings';
+import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
+import { BudgetItemMembers } from '../../../src/db/entities/BudgetItemMembers.entity';
+import { BudgetItems } from '../../../src/db/entities/BudgetItems.entity';
+import { BudgetSettlements } from '../../../src/db/entities/BudgetSettlements.entity';
+import { Reservations } from '../../../src/db/entities/Reservations.entity';
+import { Trips } from '../../../src/db/entities/Trips.entity';
 
 beforeEach(() => {
   resetTestDb(testDb);
@@ -37,8 +47,15 @@ beforeEach(() => {
   vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
   vi.unstubAllGlobals();
+  await orm.close();
   testDb.close();
 });
 
@@ -60,32 +77,35 @@ function tripWithTwo() {
   return { user, other, trip };
 }
 
-function memberRows(itemId: number) {
-  return testDb.prepare('SELECT user_id, amount FROM budget_item_members WHERE budget_item_id = ? ORDER BY user_id')
-    .all(itemId) as { user_id: number; amount: number | null }[];
+async function memberRows(itemId: number) {
+  return (await findRows(orm, BudgetItemMembers, { budgetItem: itemId }, { user: 'asc' })).map((m) => ({
+    user_id: m.user_id,
+    amount: m.amount ?? null,
+  }));
 }
 
-function itemRow(itemId: number) {
-  return testDb.prepare('SELECT total_price, currency, exchange_rate, persons, expense_date, place_id FROM budget_items WHERE id = ?')
-    .get(itemId) as {
-      total_price: number; currency: string | null; exchange_rate: number | null;
-      persons: number | null; expense_date: string | null; place_id: number | null;
-    };
+/** The stored expense; fails the case when it is gone. */
+async function itemRow(itemId: number) {
+  const row = await findRow(orm, BudgetItems, { id: itemId });
+  if (!row) throw new Error(`no budget item ${itemId}`);
+  return row;
 }
 
-function itemCount(tripId: number): number {
-  return (testDb.prepare('SELECT COUNT(*) AS count FROM budget_items WHERE trip_id = ?').get(tripId) as { count: number }).count;
+function itemCount(tripId: number): Promise<number> {
+  return countRows(orm, BudgetItems, { trip: tripId });
 }
 
-function settlementRow(id: number) {
-  return testDb.prepare('SELECT amount, currency, exchange_rate FROM budget_settlements WHERE id = ?')
-    .get(id) as { amount: number; currency: string | null; exchange_rate: number | null };
+/** The stored settlement; fails the case when it is gone. */
+async function settlementRow(id: number) {
+  const row = await findRow(orm, BudgetSettlements, { id });
+  if (!row) throw new Error(`no settlement ${id}`);
+  return row;
 }
 
 // budget_settlements is not one of the tables the reset clears, and trip ids are
 // reused, so a count is only ever compared against the count taken in the same test.
-function settlementCount(tripId: number): number {
-  return (testDb.prepare('SELECT COUNT(*) AS count FROM budget_settlements WHERE trip_id = ?').get(tripId) as { count: number }).count;
+function settlementCount(tripId: number): Promise<number> {
+  return countRows(orm, BudgetSettlements, { trip: tripId });
 }
 
 /** Frankfurter's shape: one entry per quote, the base's own rate omitted. */
@@ -310,7 +330,7 @@ describe('Tool: delete_budget_item', () => {
       const result = await h.client.callTool({ name: 'delete_budget_item', arguments: { tripId: trip.id, itemId: item.id } });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM budget_items WHERE id = ?').get(item.id)).toBeUndefined();
+      expect(await findRow(orm, BudgetItems, { id: item.id })).toBeNull();
     });
   });
 
@@ -394,11 +414,11 @@ describe('Tool: create_budget_item (uneven split)', () => {
         },
       });
       const data = parseToolResult(result) as any;
-      expect(memberRows(data.item.id)).toEqual([
+      expect(await memberRows(data.item.id)).toEqual([
         { user_id: user.id, amount: 70 },
         { user_id: other.id, amount: 30 },
       ]);
-      expect(itemRow(data.item.id).persons).toBe(2);
+      expect((await itemRow(data.item.id)).persons).toBe(2);
     });
   });
 
@@ -414,7 +434,7 @@ describe('Tool: create_budget_item (uneven split)', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('does not add up');
-      expect(itemCount(trip.id)).toBe(0);
+      expect(await itemCount(trip.id)).toBe(0);
     });
   });
 
@@ -430,8 +450,8 @@ describe('Tool: create_budget_item (uneven split)', () => {
         },
       });
       const data = parseToolResult(result) as any;
-      expect(itemRow(data.item.id).total_price).toBe(90);
-      expect(memberRows(data.item.id).map(m => m.amount)).toEqual([60, 30]);
+      expect((await itemRow(data.item.id)).total_price).toBe(90);
+      expect((await memberRows(data.item.id)).map(m => m.amount)).toEqual([60, 30]);
     });
   });
 
@@ -447,7 +467,7 @@ describe('Tool: create_budget_item (uneven split)', () => {
         },
       });
       expect(result.isError).toBe(true);
-      expect(itemCount(trip.id)).toBe(0);
+      expect(await itemCount(trip.id)).toBe(0);
     });
   });
 
@@ -464,7 +484,7 @@ describe('Tool: create_budget_item (uneven split)', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('not on this trip');
-      expect(itemCount(trip.id)).toBe(0);
+      expect(await itemCount(trip.id)).toBe(0);
     });
   });
 
@@ -481,23 +501,22 @@ describe('Tool: create_budget_item (uneven split)', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('not both');
-      expect(itemCount(trip.id)).toBe(0);
+      expect(await itemCount(trip.id)).toBe(0);
     });
   });
 });
 
 describe('Tool: update_budget_item (uneven split)', () => {
-  function itemWithEqualSplit(tripId: number, userIds: number[]) {
+  async function itemWithEqualSplit(tripId: number, userIds: number[]) {
     const item = createBudgetItem(testDb, tripId, { name: 'Dinner', total_price: 100 });
-    const insert = testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, NULL)');
-    for (const id of userIds) insert.run(item.id, id);
-    testDb.prepare('UPDATE budget_items SET persons = ? WHERE id = ?').run(userIds.length, item.id);
+    for (const id of userIds) await addBudgetItemMember(orm, item.id, id, { paid: 0, amount: null });
+    await updateRows(orm, BudgetItems, { id: item.id }, { persons: userIds.length });
     return item;
   }
 
   it('replaces the equal split with per-member amounts', async () => {
     const { user, other, trip } = tripWithTwo();
-    const item = itemWithEqualSplit(trip.id, [user.id, other.id]);
+    const item = await itemWithEqualSplit(trip.id, [user.id, other.id]);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_budget_item',
@@ -507,17 +526,17 @@ describe('Tool: update_budget_item (uneven split)', () => {
         },
       });
       expect(result.isError).toBeFalsy();
-      expect(memberRows(item.id)).toEqual([
+      expect(await memberRows(item.id)).toEqual([
         { user_id: user.id, amount: 40 },
         { user_id: other.id, amount: 60 },
       ]);
-      expect(itemRow(item.id).persons).toBe(2);
+      expect((await itemRow(item.id)).persons).toBe(2);
     });
   });
 
   it('measures the split against the stored total when the call does not restate it', async () => {
     const { user, other, trip } = tripWithTwo();
-    const item = itemWithEqualSplit(trip.id, [user.id, other.id]);
+    const item = await itemWithEqualSplit(trip.id, [user.id, other.id]);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_budget_item',
@@ -528,7 +547,7 @@ describe('Tool: update_budget_item (uneven split)', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('100.00');
-      expect(memberRows(item.id)).toEqual([
+      expect(await memberRows(item.id)).toEqual([
         { user_id: user.id, amount: null },
         { user_id: other.id, amount: null },
       ]);
@@ -537,7 +556,7 @@ describe('Tool: update_budget_item (uneven split)', () => {
 
   it('refuses the same member twice', async () => {
     const { user, other, trip } = tripWithTwo();
-    const item = itemWithEqualSplit(trip.id, [user.id, other.id]);
+    const item = await itemWithEqualSplit(trip.id, [user.id, other.id]);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_budget_item',
@@ -548,13 +567,13 @@ describe('Tool: update_budget_item (uneven split)', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('twice');
-      expect(memberRows(item.id).map(m => m.amount)).toEqual([null, null]);
+      expect((await memberRows(item.id)).map(m => m.amount)).toEqual([null, null]);
     });
   });
 
   it('refuses members alongside member_ids', async () => {
     const { user, other, trip } = tripWithTwo();
-    const item = itemWithEqualSplit(trip.id, [user.id, other.id]);
+    const item = await itemWithEqualSplit(trip.id, [user.id, other.id]);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_budget_item',
@@ -566,7 +585,7 @@ describe('Tool: update_budget_item (uneven split)', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('not both');
-      expect(memberRows(item.id)).toHaveLength(2);
+      expect(await memberRows(item.id)).toHaveLength(2);
     });
   });
 
@@ -599,7 +618,7 @@ describe('Tool: update_budget_item (currency)', () => {
         arguments: { tripId: trip.id, itemId: item.id, currency: 'USD' },
       });
       expect(result.isError).toBeFalsy();
-      const row = itemRow(item.id);
+      const row = await itemRow(item.id);
       expect(row.currency).toBe('USD');
       expect(row.exchange_rate).toBe(1.1);
     });
@@ -609,14 +628,14 @@ describe('Tool: update_budget_item (currency)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createBudgetItem(testDb, trip.id, { total_price: 100 });
-    testDb.prepare('UPDATE budget_items SET currency = ?, exchange_rate = ? WHERE id = ?').run('USD', 1.1, item.id);
+    await updateRows(orm, BudgetItems, { id: item.id }, { currency: 'USD', exchange_rate: 1.1 });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_budget_item',
         arguments: { tripId: trip.id, itemId: item.id, currency: null },
       });
       expect(result.isError).toBeFalsy();
-      expect(itemRow(item.id).currency).toBeNull();
+      expect((await itemRow(item.id)).currency).toBeNull();
     });
   });
 
@@ -646,7 +665,7 @@ describe('Tool: update_budget_item (currency)', () => {
         arguments: { tripId: trip.id, itemId: item.id, currency: 'United States Dollars' },
       });
       expect(result.isError).toBe(true);
-      expect(itemRow(item.id).currency).toBeNull();
+      expect((await itemRow(item.id)).currency).toBeNull();
     });
   });
 });
@@ -662,7 +681,7 @@ describe('Tool: update_budget_item (expense date)', () => {
         arguments: { tripId: trip.id, itemId: item.id, expense_date: '2026-09-14' },
       });
       expect(result.isError).toBeFalsy();
-      expect(itemRow(item.id).expense_date).toBe('2026-09-14');
+      expect((await itemRow(item.id)).expense_date).toBe('2026-09-14');
     });
   });
 
@@ -670,14 +689,14 @@ describe('Tool: update_budget_item (expense date)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createBudgetItem(testDb, trip.id);
-    testDb.prepare('UPDATE budget_items SET expense_date = ? WHERE id = ?').run('2026-09-14', item.id);
+    await updateRows(orm, BudgetItems, { id: item.id }, { expense_date: '2026-09-14' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_budget_item',
         arguments: { tripId: trip.id, itemId: item.id, expense_date: null },
       });
       expect(result.isError).toBeFalsy();
-      expect(itemRow(item.id).expense_date).toBeNull();
+      expect((await itemRow(item.id)).expense_date).toBeNull();
     });
   });
 
@@ -685,14 +704,14 @@ describe('Tool: update_budget_item (expense date)', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const item = createBudgetItem(testDb, trip.id);
-    testDb.prepare('UPDATE budget_items SET expense_date = ? WHERE id = ?').run('2026-09-14', item.id);
+    await updateRows(orm, BudgetItems, { id: item.id }, { expense_date: '2026-09-14' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_budget_item',
         arguments: { tripId: trip.id, itemId: item.id, expense_date: 20260915 },
       });
       expect(result.isError).toBe(true);
-      expect(itemRow(item.id).expense_date).toBe('2026-09-14');
+      expect((await itemRow(item.id)).expense_date).toBe('2026-09-14');
     });
   });
 });
@@ -712,7 +731,7 @@ describe('Budget tools: place link', () => {
         arguments: { tripId: trip.id, name: 'Louvre tickets', total_price: 34, place_id: place.id },
       });
       const data = parseToolResult(result) as any;
-      expect(itemRow(data.item.id).place_id).toBe(place.id);
+      expect((await itemRow(data.item.id)).place_id).toBe(place.id);
     });
   });
 
@@ -728,7 +747,7 @@ describe('Budget tools: place link', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toBe('place_id does not belong to this trip.');
-      expect(itemCount(trip.id)).toBe(0);
+      expect(await itemCount(trip.id)).toBe(0);
     });
   });
 
@@ -741,7 +760,7 @@ describe('Budget tools: place link', () => {
         arguments: { tripId: trip.id, name: 'Louvre tickets', total_price: 68, userIds: [user.id, other.id], place_id: place.id },
       });
       const data = parseToolResult(result) as any;
-      expect(itemRow(data.item.id).place_id).toBe(place.id);
+      expect((await itemRow(data.item.id)).place_id).toBe(place.id);
     });
   });
 
@@ -756,7 +775,7 @@ describe('Budget tools: place link', () => {
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toBe('place_id does not belong to this trip.');
-      expect(itemCount(trip.id)).toBe(0);
+      expect(await itemCount(trip.id)).toBe(0);
     });
   });
 });
@@ -767,13 +786,14 @@ describe('Budget tools: place link', () => {
 // ---------------------------------------------------------------------------
 
 describe('Tool: update_budget_item (links)', () => {
-  function links(itemId: number) {
-    return testDb.prepare('SELECT reservation_id, place_id FROM budget_items WHERE id = ?')
-      .get(itemId) as { reservation_id: number | null; place_id: number | null };
+  async function links(itemId: number) {
+    const row = await itemRow(itemId);
+    return { reservation_id: row.reservation_id ?? null, place_id: row.place_id ?? null };
   }
 
-  function priceOf(reservationId: number): Record<string, unknown> {
-    const row = testDb.prepare('SELECT metadata FROM reservations WHERE id = ?').get(reservationId) as { metadata: string | null };
+  async function priceOf(reservationId: number): Promise<Record<string, unknown>> {
+    const row = await findRow(orm, Reservations, { id: reservationId });
+    if (!row) throw new Error(`no reservation ${reservationId}`);
     return row.metadata ? JSON.parse(row.metadata) : {};
   }
 
@@ -790,11 +810,11 @@ describe('Tool: update_budget_item (links)', () => {
     await withHarness(user.id, async (h) => {
       const result = await update(h, { tripId: trip.id, itemId: fare.id, reservation_id: booking.id });
       expect((parseToolResult(result) as any).item.reservation_id).toBe(booking.id);
-      expect(priceOf(booking.id)).toEqual({ price: '180' });
+      expect(await priceOf(booking.id)).toEqual({ price: '180' });
 
       await update(h, { tripId: trip.id, itemId: luggage.id, reservation_id: booking.id });
-      expect(links(luggage.id).reservation_id).toBe(booking.id);
-      expect(priceOf(booking.id)).toEqual({ price: '215.5' });
+      expect((await links(luggage.id)).reservation_id).toBe(booking.id);
+      expect(await priceOf(booking.id)).toEqual({ price: '215.5' });
       // The booking card updates in every open session, not only the expense row.
       expect(broadcastMock).toHaveBeenCalledWith(String(trip.id), 'reservation:updated', expect.objectContaining({ reservation: expect.objectContaining({ id: booking.id }) }), undefined);
       expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'budget:updated', expect.objectContaining({ item: expect.objectContaining({ id: luggage.id }) }));
@@ -812,9 +832,9 @@ describe('Tool: update_budget_item (links)', () => {
       expect(result.isError).toBe(true);
       expect(errorText(result)).toBe('reservation_id does not belong to this trip.');
     });
-    expect(links(item.id)).toEqual({ reservation_id: null, place_id: null });
-    expect(testDb.prepare('SELECT name FROM budget_items WHERE id = ?').get(item.id)).toEqual({ name: 'Fare' });
-    expect(priceOf(foreign.id)).toEqual({});
+    expect(await links(item.id)).toEqual({ reservation_id: null, place_id: null });
+    expect((await itemRow(item.id)).name).toBe('Fare');
+    expect(await priceOf(foreign.id)).toEqual({});
     expect(broadcastMock).not.toHaveBeenCalled();
   });
 
@@ -829,7 +849,7 @@ describe('Tool: update_budget_item (links)', () => {
       expect(result.isError).toBe(true);
       expect(errorText(result)).toBe('place_id does not belong to this trip.');
     });
-    expect(links(item.id).place_id).toBeNull();
+    expect((await links(item.id)).place_id).toBeNull();
   });
 
   it('links an expense to a place, and null lets go of it while the expense stays', async () => {
@@ -839,14 +859,14 @@ describe('Tool: update_budget_item (links)', () => {
     const item = createBudgetItem(testDb, trip.id, { name: 'Tickets', total_price: 34 });
     await withHarness(user.id, async (h) => {
       await update(h, { tripId: trip.id, itemId: item.id, place_id: place.id });
-      expect(links(item.id).place_id).toBe(place.id);
+      expect((await links(item.id)).place_id).toBe(place.id);
       // An edit that leaves the link out keeps it.
       await update(h, { tripId: trip.id, itemId: item.id, name: 'Museum tickets' });
-      expect(links(item.id).place_id).toBe(place.id);
+      expect((await links(item.id)).place_id).toBe(place.id);
       await update(h, { tripId: trip.id, itemId: item.id, place_id: null });
     });
-    expect(links(item.id).place_id).toBeNull();
-    expect(itemRow(item.id).total_price).toBe(34);
+    expect((await links(item.id)).place_id).toBeNull();
+    expect((await itemRow(item.id)).total_price).toBe(34);
   });
 
   it('null lets go of the booking, keeps the expense and takes its share off the booking price', async () => {
@@ -858,14 +878,14 @@ describe('Tool: update_budget_item (links)', () => {
     await withHarness(user.id, async (h) => {
       await update(h, { tripId: trip.id, itemId: fare.id, reservation_id: booking.id });
       await update(h, { tripId: trip.id, itemId: extra.id, reservation_id: booking.id });
-      expect(priceOf(booking.id)).toEqual({ price: '120' });
+      expect(await priceOf(booking.id)).toEqual({ price: '120' });
 
       await update(h, { tripId: trip.id, itemId: extra.id, reservation_id: null });
-      expect(priceOf(booking.id)).toEqual({ price: '100' });
+      expect(await priceOf(booking.id)).toEqual({ price: '100' });
       await update(h, { tripId: trip.id, itemId: fare.id, reservation_id: null });
-      expect(priceOf(booking.id)).toEqual({});
+      expect(await priceOf(booking.id)).toEqual({});
     });
-    expect(itemCount(trip.id)).toBe(2);
+    expect(await itemCount(trip.id)).toBe(2);
   });
 
   it('moving an expense to another booking resyncs both', async () => {
@@ -878,8 +898,8 @@ describe('Tool: update_budget_item (links)', () => {
       await update(h, { tripId: trip.id, itemId: item.id, reservation_id: outbound.id });
       await update(h, { tripId: trip.id, itemId: item.id, reservation_id: inbound.id });
     });
-    expect(priceOf(outbound.id)).toEqual({});
-    expect(priceOf(inbound.id)).toEqual({ price: '75' });
+    expect(await priceOf(outbound.id)).toEqual({});
+    expect(await priceOf(inbound.id)).toEqual({ price: '75' });
   });
 
   it('a new total on a linked expense reaches the booking price', async () => {
@@ -887,11 +907,11 @@ describe('Tool: update_budget_item (links)', () => {
     const trip = createTrip(testDb, user.id);
     const booking = createReservation(testDb, trip.id);
     const item = createBudgetItem(testDb, trip.id, { total_price: 50 });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id = ?').run(booking.id, item.id);
+    await updateRows(orm, BudgetItems, { id: item.id }, { reservation: booking.id });
     await withHarness(user.id, async (h) => {
       await update(h, { tripId: trip.id, itemId: item.id, total_price: 64.2 });
     });
-    expect(priceOf(booking.id)).toEqual({ price: '64.2' });
+    expect(await priceOf(booking.id)).toEqual({ price: '64.2' });
   });
 
   it('a currency change alone on a linked expense re-names the booking price', async () => {
@@ -899,13 +919,13 @@ describe('Tool: update_budget_item (links)', () => {
     const trip = createTrip(testDb, user.id);
     const booking = createReservation(testDb, trip.id);
     const item = createBudgetItem(testDb, trip.id, { total_price: 50 });
-    testDb.prepare('UPDATE budget_items SET reservation_id = ? WHERE id = ?').run(booking.id, item.id);
+    await updateRows(orm, BudgetItems, { id: item.id }, { reservation: booking.id });
     stubRates({ USD: 1.1 });
     await withHarness(user.id, async (h) => {
       await update(h, { tripId: trip.id, itemId: item.id, currency: 'USD' });
-      expect(priceOf(booking.id)).toEqual({ price: '50', priceCurrency: 'USD' });
+      expect(await priceOf(booking.id)).toEqual({ price: '50', priceCurrency: 'USD' });
       await update(h, { tripId: trip.id, itemId: item.id, currency: null });
-      expect(priceOf(booking.id)).toEqual({ price: '50' });
+      expect(await priceOf(booking.id)).toEqual({ price: '50' });
     });
   });
 });
@@ -924,7 +944,7 @@ describe('Tool: create_settlement (currency)', () => {
         arguments: { tripId: trip.id, from_user_id: other.id, to_user_id: user.id, amount: 20, currency: 'USD' },
       });
       const data = parseToolResult(result) as any;
-      const row = settlementRow(data.settlement.id);
+      const row = await settlementRow(data.settlement.id);
       expect(row.currency).toBe('USD');
       expect(row.exchange_rate).toBe(1.1);
       expect(row.amount).toBe(20);
@@ -939,7 +959,7 @@ describe('Tool: create_settlement (currency)', () => {
         arguments: { tripId: trip.id, from_user_id: other.id, to_user_id: user.id, amount: 20 },
       });
       const data = parseToolResult(result) as any;
-      const row = settlementRow(data.settlement.id);
+      const row = await settlementRow(data.settlement.id);
       expect(row.currency).toBeNull();
       expect(row.exchange_rate).toBe(1);
     });
@@ -947,14 +967,14 @@ describe('Tool: create_settlement (currency)', () => {
 
   it('refuses a currency that is not a code', async () => {
     const { user, other, trip } = tripWithTwo();
-    const before = settlementCount(trip.id);
+    const before = await settlementCount(trip.id);
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'create_settlement',
         arguments: { tripId: trip.id, from_user_id: other.id, to_user_id: user.id, amount: 20, currency: 'United States Dollars' },
       });
       expect(result.isError).toBe(true);
-      expect(settlementCount(trip.id)).toBe(before);
+      expect(await settlementCount(trip.id)).toBe(before);
     });
   });
 });
@@ -973,7 +993,7 @@ describe('Tool: update_settlement (currency)', () => {
         arguments: { tripId: trip.id, settlementId: created.settlement.id, from_user_id: other.id, to_user_id: user.id, amount: 20, currency: 'USD' },
       });
       expect(result.isError).toBeFalsy();
-      const row = settlementRow(created.settlement.id);
+      const row = await settlementRow(created.settlement.id);
       expect(row.currency).toBe('USD');
       expect(row.exchange_rate).toBe(1.1);
     });
@@ -992,7 +1012,7 @@ describe('Tool: update_settlement (currency)', () => {
         arguments: { tripId: trip.id, settlementId: created.settlement.id, from_user_id: other.id, to_user_id: user.id, amount: 20, currency: null },
       });
       expect(result.isError).toBeFalsy();
-      expect(settlementRow(created.settlement.id).currency).toBeNull();
+      expect((await settlementRow(created.settlement.id)).currency).toBeNull();
     });
   });
 });
@@ -1023,7 +1043,7 @@ describe('Budget tools: a custom split cannot be certified against a total the r
       });
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('not on this trip');
-      expect(testDb.prepare('SELECT COUNT(*) AS n FROM budget_items WHERE trip_id = ?').get(trip.id)).toEqual({ n: 0 });
+      expect(await itemCount(trip.id)).toBe(0);
     });
   });
 
@@ -1050,7 +1070,7 @@ describe('Budget tools: a custom split cannot be certified against a total the r
       expect(result.isError).toBe(true);
       expect(errorText(result)).toContain('does not add up');
       // The item is untouched: the refusal happens before the write.
-      const row = testDb.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(item.id) as any;
+      const row = await itemRow(item.id);
       expect(row.total_price).toBe(100);
     });
   });
@@ -1070,7 +1090,7 @@ describe('Budget tools: a custom split cannot be certified against a total the r
         arguments: { tripId: trip.id, itemId: item.id, payers: [], members: [] },
       });
       expect(result.isError).toBeFalsy();
-      const row = testDb.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(item.id) as any;
+      const row = await itemRow(item.id);
       expect(row.total_price).toBe(0);
     });
   });
@@ -1092,9 +1112,9 @@ describe('Budget tools: a custom split cannot be certified against a total the r
       expect(result.isError).toBeFalsy();
       const data = parseToolResult(result) as any;
       // total_price came from the payers, not from the stated 999.
-      const row = testDb.prepare('SELECT total_price FROM budget_items WHERE id = ?').get(data.item.id) as any;
+      const row = await itemRow(data.item.id);
       expect(row.total_price).toBe(100);
-      const shares = testDb.prepare('SELECT user_id, amount FROM budget_item_members WHERE budget_item_id = ? ORDER BY user_id').all(data.item.id) as any[];
+      const shares = await memberRows(data.item.id);
       expect(shares.map(s => s.amount)).toEqual([60, 40]);
     });
   });
@@ -1109,25 +1129,29 @@ describe('Budget tools: a custom split cannot be certified against a total the r
 // ---------------------------------------------------------------------------
 
 /** A trip in `currency` with one unfrozen VND bill and one unfrozen VND transfer. */
-function tripWithVndRows(currency: string) {
+async function tripWithVndRows(currency: string) {
   const { user, other, trip } = tripWithTwo();
-  testDb.prepare('UPDATE trips SET currency = ? WHERE id = ?').run(currency, trip.id);
-  testDb.prepare('DELETE FROM budget_settlements WHERE trip_id = ?').run(trip.id);
+  await updateRows(orm, Trips, { id: trip.id }, { currency });
+  await deleteRows(orm, BudgetSettlements, { trip: trip.id });
   const item = createBudgetItem(testDb, trip.id, { name: 'Pho', total_price: 8920000 });
-  testDb.prepare("UPDATE budget_items SET currency = 'VND', exchange_rate = 1 WHERE id = ?").run(item.id);
-  testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, 0), (?, ?, 0)')
-    .run(item.id, user.id, item.id, other.id);
-  testDb.prepare('INSERT INTO budget_item_payers (budget_item_id, user_id, amount) VALUES (?, ?, ?)')
-    .run(item.id, user.id, 8920000);
-  const settlementId = Number(testDb.prepare(
-    "INSERT INTO budget_settlements (trip_id, from_user_id, to_user_id, amount, currency, exchange_rate) VALUES (?, ?, ?, ?, 'VND', 1)",
-  ).run(trip.id, other.id, user.id, 100000).lastInsertRowid);
+  await updateRows(orm, BudgetItems, { id: item.id }, { currency: 'VND', exchange_rate: 1 });
+  await addBudgetItemMember(orm, item.id, user.id, { paid: 0 });
+  await addBudgetItemMember(orm, item.id, other.id, { paid: 0 });
+  await addBudgetItemPayer(orm, item.id, user.id, 8920000);
+  const settlementId = await insertRow(orm, BudgetSettlements, {
+    trip: trip.id,
+    fromUser: other.id,
+    toUser: user.id,
+    amount: 100000,
+    currency: 'VND',
+    exchange_rate: 1,
+  });
   return { user, other, trip, item, settlementId };
 }
 
 describe('Tool: freeze_budget_rates', () => {
   it('refuses a demo user, a stranger and a member without budget_edit, writing nothing', async () => {
-    const { other, trip, item, settlementId } = tripWithVndRows('AUD');
+    const { other, trip, item, settlementId } = await tripWithVndRows('AUD');
     const { user: stranger } = createUser(testDb);
     const spy = vi.spyOn(BudgetService.prototype, 'freezeMissingRates');
     try {
@@ -1137,13 +1161,13 @@ describe('Tool: freeze_budget_rates', () => {
       });
 
       // budget_edit lowered to the owner, the way the admin permission panel does it.
-      testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_budget_edit', 'trip_owner');
+      await setAppSetting(orm, 'perm_budget_edit', 'trip_owner');
       await invalidatePermissionsCache();
       await withHarness(other.id, async (h) => {
         const result = await h.client.callTool({ name: 'freeze_budget_rates', arguments: { tripId: trip.id } });
         expect(result.isError).toBe(true);
       });
-      testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
+      await deleteRows(orm, AppSettings, { key: 'perm_budget_edit' });
       await invalidatePermissionsCache();
 
       process.env.DEMO_MODE = 'true';
@@ -1155,17 +1179,17 @@ describe('Tool: freeze_budget_rates', () => {
       });
 
       expect(spy).not.toHaveBeenCalled();
-      expect(itemRow(item.id).exchange_rate).toBe(1);
-      expect(settlementRow(settlementId).exchange_rate).toBe(1);
+      expect((await itemRow(item.id)).exchange_rate).toBe(1);
+      expect((await settlementRow(settlementId)).exchange_rate).toBe(1);
     } finally {
       spy.mockRestore();
-      testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
+      await deleteRows(orm, AppSettings, { key: 'perm_budget_edit' });
       await invalidatePermissionsCache();
     }
   });
 
   it('calls freezeMissingRates without a quote of its own, freezes the server rate and broadcasts', async () => {
-    const { user, trip, item, settlementId } = tripWithVndRows('AUD');
+    const { user, trip, item, settlementId } = await tripWithVndRows('AUD');
     stubRates({ VND: 18241.3 });
     const spy = vi.spyOn(BudgetService.prototype, 'freezeMissingRates');
     try {
@@ -1178,8 +1202,8 @@ describe('Tool: freeze_budget_rates', () => {
         expect(data.items.map(i => i.id)).toEqual([item.id]);
         expect(data.settlements.map(s => s.id)).toEqual([settlementId]);
         expect(data.unresolved).toEqual([]);
-        expect(itemRow(item.id).exchange_rate).toBe(18241.3);
-        expect(settlementRow(settlementId).exchange_rate).toBe(18241.3);
+        expect((await itemRow(item.id)).exchange_rate).toBe(18241.3);
+        expect((await settlementRow(settlementId)).exchange_rate).toBe(18241.3);
         expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'budget:updated', expect.objectContaining({ item: expect.objectContaining({ id: item.id }) }));
         expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'budget:settlement-updated', expect.objectContaining({ settlement: expect.objectContaining({ id: settlementId }) }));
 
@@ -1193,7 +1217,7 @@ describe('Tool: freeze_budget_rates', () => {
   });
 
   it('answers with an error and broadcasts nothing when the trip currency changed during the fetch', async () => {
-    const { user, trip, item, settlementId } = tripWithVndRows('AUD');
+    const { user, trip, item, settlementId } = await tripWithVndRows('AUD');
     // The service's own answer for that race (BUDGET-SVC-DB-066): null, nothing written.
     const spy = vi.spyOn(BudgetService.prototype, 'freezeMissingRates').mockResolvedValueOnce(null);
     try {
@@ -1204,8 +1228,8 @@ describe('Tool: freeze_budget_rates', () => {
       });
       expect(spy).toHaveBeenCalledTimes(1);
       expect(broadcastMock).not.toHaveBeenCalled();
-      expect(itemRow(item.id).exchange_rate).toBe(1);
-      expect(settlementRow(settlementId).exchange_rate).toBe(1);
+      expect((await itemRow(item.id)).exchange_rate).toBe(1);
+      expect((await settlementRow(settlementId)).exchange_rate).toBe(1);
     } finally {
       spy.mockRestore();
     }
@@ -1214,7 +1238,7 @@ describe('Tool: freeze_budget_rates', () => {
 
 describe('Tool: get_settlement_summary (unconverted rows)', () => {
   it('returns the currency it answers in and the rows no rate could convert', async () => {
-    const { user, trip, item, settlementId } = tripWithVndRows('NZD');
+    const { user, trip, item, settlementId } = await tripWithVndRows('NZD');
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'get_settlement_summary', arguments: { tripId: trip.id } });
       const { summary } = parseToolResult(result) as {
