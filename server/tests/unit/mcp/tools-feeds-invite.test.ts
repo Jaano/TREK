@@ -27,7 +27,7 @@ import { createUser, createTrip, addTripMember } from '../../helpers/factories';
 import { invalidatePermissionsCache } from '../../../src/nest/permissions/permissions-cache';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
-import { countRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
+import { countRows, deleteRows, findRow, insertRow, updateRows } from '../../helpers/factories/rows';
 import { AppSettings } from '../../../src/db/entities/AppSettings.entity';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import { TripInviteTokens } from '../../../src/db/entities/TripInviteTokens.entity';
@@ -77,7 +77,7 @@ beforeEach(async () => {
   // trip_invite_tokens is not in the shared helper's RESET_TABLES, and trip ids
   // restart after a DELETE-based reset, so a leftover row would attach itself
   // to the next test's trip.
-  testDb.exec('DELETE FROM trip_invite_tokens');
+  await deleteRows(orm, TripInviteTokens);
   // The permission levels are cached in module state that resetTestDb knows
   // nothing about, so the one test that lowers share_manage would otherwise
   // keep the lowered level alive for every test after it.

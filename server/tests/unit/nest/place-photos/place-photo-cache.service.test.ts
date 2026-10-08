@@ -44,7 +44,7 @@ import type { PlacesRepository } from '../../../../src/db/repositories/Places.re
 import { CollectionPlaces } from '../../../../src/db/entities/CollectionPlaces.entity';
 import type { CollectionPlacesRepository } from '../../../../src/db/repositories/CollectionPlaces.repository';
 import { makeStorageFixture, type StorageFixture } from '../../../helpers/storage-fixture';
-import { findRow, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { deleteRows, findRow, insertRow, updateRows } from '../../../helpers/factories/rows';
 import { makeUser } from '../../../helpers/factories/users';
 import { makeTrip } from '../../../helpers/factories/trips';
 import { makePlace } from '../../../helpers/factories/places';
@@ -122,8 +122,10 @@ describe.each([
     cache = new PlacePhotoCacheService(fx.storage, metaRepo, placesRepo, collectionPlacesRepo);
   });
 
-  beforeEach(() => {
-    testDb.exec('DELETE FROM places; DELETE FROM collection_places; DELETE FROM google_place_photo_meta;');
+  beforeEach(async () => {
+    await deleteRows(t, Places);
+    await deleteRows(t, CollectionPlaces);
+    await deleteRows(t, GooglePlacePhotoMeta);
     t.clear();
     for (const f of fs.readdirSync(fx.root)) {
       if (f === '.tmp') continue;

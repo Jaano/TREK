@@ -252,8 +252,8 @@ beforeEach(async () => {
   // RESET_TABLES in tests/helpers/test-db.ts predates this domain and does not
   // list its two tables; foreign keys are off during the reset, so rows would
   // otherwise outlive their user and leak into the next case.
-  testDb.exec('DELETE FROM dawarich_visit_suggestions');
-  testDb.exec('DELETE FROM dawarich_connections');
+  await deleteRows(t, DawarichVisitSuggestions);
+  await deleteRows(t, DawarichConnections);
   t.clear();
   vi.clearAllMocks();
   probeCapabilities.mockResolvedValue(CAPABILITIES);

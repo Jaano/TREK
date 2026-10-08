@@ -3,7 +3,7 @@ import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
 import { createUser } from '../../../helpers/factories';
-import { countRows, findRow, insertRow, upsertRow } from '../../../helpers/factories/rows';
+import { countRows, deleteRows, findRow, insertRow, updateRows, upsertRow } from '../../../helpers/factories/rows';
 import { DawarichVisitSuggestions } from '../../../../src/db/entities/DawarichVisitSuggestions.entity';
 import { DawarichConnections } from '../../../../src/db/entities/DawarichConnections.entity';
 import type { DawarichConnectionsRepository } from '../../../../src/db/repositories/DawarichConnections.repository';
@@ -16,10 +16,10 @@ beforeAll(async () => {
   t = await createTestOrm(testDb);
   connections = t.repo(DawarichConnections);
 });
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   t.clear();
-  testDb.exec('DELETE FROM dawarich_connections');
+  await deleteRows(t, DawarichConnections);
 });
 afterAll(async () => {
   await t.close();
@@ -147,7 +147,7 @@ describe('DawarichConnectionsRepository', () => {
     it('CONNREPO-032: updated_at is bumped unconditionally, insert or merge alike', async () => {
       const { user } = createUser(testDb);
       await connections.upsertConnection(user.id, { url: 'https://d.example', allowInsecureTls: false, syncEnabled: true });
-      testDb.exec(`UPDATE dawarich_connections SET updated_at = '2000-01-01 00:00:00'`);
+      await updateRows(t, DawarichConnections, {}, { updated_at: '2000-01-01 00:00:00' });
 
       await connections.upsertConnection(user.id, { url: 'https://d.example', allowInsecureTls: false, syncEnabled: false });
 

@@ -31,7 +31,7 @@ describe('GoogleQuotaService', () => {
   });
 
   beforeEach(async () => {
-    db.exec('DELETE FROM google_api_usage');
+    await deleteRows(await sharedTestOrm(db), GoogleApiUsage);
     await deleteRows(await sharedTestOrm(db), AppSettings, { key: GOOGLE_DAILY_LIMIT_SETTING });
     // A fresh service per case, so the once-a-day warning state starts clean.
     quota = new GoogleQuotaService(appSettings, usage);

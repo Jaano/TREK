@@ -45,7 +45,7 @@ import { db } from '../../src/db/database';
 import { AppSettings } from '../../src/db/entities/AppSettings.entity';
 import { AuditLog } from '../../src/db/entities/AuditLog.entity';
 import { makeAdmin, makeUser } from '../helpers/factories/users';
-import { countRows, findRow } from '../helpers/factories/rows';
+import { countRows, deleteRows, findRow } from '../helpers/factories/rows';
 
 let orm: TestOrm;
 
@@ -86,9 +86,9 @@ describe('Storage admin e2e (real auth + admin guard + managed guard + migrated 
   // STORE2E-004 that expects to see fresh defaults must call GET (which
   // renders the registry's live snapshot) rather than assume the deleted rows
   // reset it — the registry only re-reads app_settings on `reload()`/init.
-  beforeEach(() => {
-    db.exec("DELETE FROM app_settings WHERE key LIKE 'storage.%'");
-    db.exec('DELETE FROM audit_log');
+  beforeEach(async () => {
+    await deleteRows(orm, AppSettings, { key: { $like: 'storage.%' } });
+    await deleteRows(orm, AuditLog);
   });
 
   afterAll(async () => {

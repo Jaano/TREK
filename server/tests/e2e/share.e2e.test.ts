@@ -48,9 +48,11 @@ import { TestUnitOfWorkModule } from '../helpers/test-uow';
 import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
 import { makeUser } from '../helpers/factories/users';
 import { makeTrip } from '../helpers/factories/trips';
-import { findRow, insertRow } from '../helpers/factories/rows';
+import { deleteRows, findRow, insertRow } from '../helpers/factories/rows';
 import { Places } from '../../src/db/entities/Places.entity';
 import { ShareTokens } from '../../src/db/entities/ShareTokens.entity';
+import { TripMembers } from '../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
 
 let orm: TestOrm;
 
@@ -83,10 +85,10 @@ describe('Share-link e2e (real auth guard + real SQL over temp SQLite)', () => {
   });
 
   beforeEach(async () => {
-    db.exec('DELETE FROM share_tokens');
-    db.exec('DELETE FROM places');
-    db.exec('DELETE FROM trip_members');
-    db.exec('DELETE FROM trips');
+    await deleteRows(orm, ShareTokens);
+    await deleteRows(orm, Places);
+    await deleteRows(orm, TripMembers);
+    await deleteRows(orm, Trips);
     tripId = (await makeTrip(orm, 1, { title: 'Trip' })).id;
     checkPermission.mockReturnValue(true);
     serveKey.mockReset();

@@ -34,14 +34,17 @@ import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helper
 import { db } from '../../src/db/database';
 import { dbNow } from '../../src/db/types/db-timestamp.type';
 import { PackingBags } from '../../src/db/entities/PackingBags.entity';
+import { PackingCategoryAssignees } from '../../src/db/entities/PackingCategoryAssignees.entity';
+import { PackingItemContributors } from '../../src/db/entities/PackingItemContributors.entity';
 import { PackingItems } from '../../src/db/entities/PackingItems.entity';
 import { PackingTemplateCategories } from '../../src/db/entities/PackingTemplateCategories.entity';
 import { PackingTemplateItems } from '../../src/db/entities/PackingTemplateItems.entity';
 import { PackingTemplates } from '../../src/db/entities/PackingTemplates.entity';
 import { TripMembers } from '../../src/db/entities/TripMembers.entity';
+import { Trips } from '../../src/db/entities/Trips.entity';
 import { makeAdmin, makeUser } from '../helpers/factories/users';
 import { makeTrip } from '../helpers/factories/trips';
-import { countRows, findRow, findRows, insertRow } from '../helpers/factories/rows';
+import { countRows, deleteRows, findRow, findRows, insertRow } from '../helpers/factories/rows';
 
 let orm: TestOrm;
 
@@ -86,17 +89,18 @@ describe('Packing e2e (real auth guard + real SQL over migrated temp SQLite)', (
   });
 
   beforeEach(async () => {
-    db.exec('DELETE FROM packing_category_assignees');
-    db.exec('DELETE FROM packing_template_items');
-    db.exec('DELETE FROM packing_template_categories');
-    db.exec('DELETE FROM packing_templates');
-    db.exec('DELETE FROM packing_item_recipients');
-    db.exec('DELETE FROM packing_item_contributors');
-    db.exec('DELETE FROM packing_bag_members');
-    db.exec('DELETE FROM packing_items');
-    db.exec('DELETE FROM packing_bags');
-    db.exec('DELETE FROM trip_members');
-    db.exec('DELETE FROM trips');
+    await deleteRows(orm, PackingCategoryAssignees);
+    await deleteRows(orm, PackingTemplateItems);
+    await deleteRows(orm, PackingTemplateCategories);
+    await deleteRows(orm, PackingTemplates);
+    await deleteRows(orm, PackingItemContributors);
+    // packing_item_recipients and packing_bag_members have no entity of their
+    // own; both cascade on delete from their item and bag, so the two deletes
+    // below clear them too (foreign keys are on in the snapshot database).
+    await deleteRows(orm, PackingItems);
+    await deleteRows(orm, PackingBags);
+    await deleteRows(orm, TripMembers);
+    await deleteRows(orm, Trips);
     tripId = await insertTrip('Trip');
     checkPermission.mockReturnValue(true);
   });
