@@ -52,9 +52,9 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
 });
 
 afterAll(async () => {

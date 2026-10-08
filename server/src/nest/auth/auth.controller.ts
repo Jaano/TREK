@@ -75,8 +75,8 @@ export const AVATAR_FILE_FILTER: Options['fileFilter'] = (_req, file, cb) => {
 export class AuthController {
   constructor(private readonly auth: AuthService, private readonly profile: UserProfileService, private readonly tokens: TokenService, private readonly rl: RateLimitService, private readonly audit: AuditService, private readonly env: RuntimeEnvService, private readonly storage: StorageService) {}
 
-  private limit(bucket: string, req: Request, max: number): void {
-    if (!this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now())) {
+  private async limit(bucket: string, req: Request, max: number): Promise<void> {
+    if (!(await this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now()))) {
       throw new HttpException({ error: 'Too many attempts. Please try again later.' }, 429);
     }
   }
@@ -90,8 +90,8 @@ export class AuthController {
    * (login, register, forgot-password) keep the IP key — there is no account
    * to charge yet.
    */
-  private limitUser(bucket: string, userId: number, max: number): void {
-    if (!this.rl.check(bucket, String(userId), max, WINDOW, Date.now())) {
+  private async limitUser(bucket: string, userId: number, max: number): Promise<void> {
+    if (!(await this.rl.check(bucket, String(userId), max, WINDOW, Date.now()))) {
       throw new HttpException({ error: 'Too many attempts. Please try again later.' }, 429);
     }
   }
@@ -108,7 +108,7 @@ export class AuthController {
 
   @Put('me/password')
   async changePassword(@CurrentUser() user: User, @Body() body: ChangePasswordDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.limit('login', req, 5);
+    await this.limit('login', req, 5);
     // Carry the session's remember choice into the re-issued token/cookie so a
     // "remember me" login survives a password change (#1927). Bearer callers
     // have no cookie → undefined → the historical default duration.
@@ -275,7 +275,7 @@ export class AuthController {
   @MfaExempt('completing setup is the way out of the policy')
   @HttpCode(200)
   async mfaEnable(@CurrentUser() user: User, @Body() body: MfaEnableDto, @Req() req: Request) {
-    this.limit('mfa', req, 5);
+    await this.limit('mfa', req, 5);
     const result = await this.auth.enableMfa(user.id, body.code);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
@@ -287,7 +287,7 @@ export class AuthController {
   @Post('mfa/disable')
   @HttpCode(200)
   async mfaDisable(@CurrentUser() user: User, @Body() body: MfaDisableDto, @Req() req: Request) {
-    this.limit('login', req, 5);
+    await this.limit('login', req, 5);
     const result = await this.auth.disableMfa(user.id, user.email, body);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
@@ -305,7 +305,7 @@ export class AuthController {
   @Post('mcp-tokens')
   @HttpCode(201)
   async createMcpToken(@CurrentUser() user: User, @Body() body: McpTokenCreateDto, @Req() req: Request) {
-    this.limit('login', req, 5);
+    await this.limit('login', req, 5);
     const result = await this.tokens.createMcpToken(user.id, body.name);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
@@ -342,7 +342,7 @@ export class AuthController {
   @Post('api-tokens')
   @HttpCode(201)
   async createApiToken(@CurrentUser() user: User, @Body() body: ApiTokenCreateDto, @Req() req: Request) {
-    this.limit('login', req, 5);
+    await this.limit('login', req, 5);
     // No `scopes` means the key reads everything, which is what every key minted
     // before this field existed does. Narrowing stays opt-in so the change
     // cannot break an integration that is already running.
@@ -370,7 +370,7 @@ export class AuthController {
     // above any real client, which mints one token per socket connect, but it
     // stops a single account from filling the process-wide ephemeral store and
     // 503-ing every other user's ws and download tokens.
-    this.limitUser('ws_token', user.id, 120);
+    await this.limitUser('ws_token', user.id, 120);
     const result = await this.tokens.createWsToken(user.id);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
@@ -380,8 +380,8 @@ export class AuthController {
 
   @Post('resource-token')
   @HttpCode(200)
-  resourceToken(@CurrentUser() user: User, @Body() body: ResourceTokenDto) {
-    this.limitUser('resource_token', user.id, 120);
+  async resourceToken(@CurrentUser() user: User, @Body() body: ResourceTokenDto) {
+    await this.limitUser('resource_token', user.id, 120);
     const token = this.tokens.createResourceToken(user.id, body.purpose);
     if (!token) {
       throw new HttpException({ error: 'Service unavailable' }, 503);

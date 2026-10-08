@@ -34,7 +34,7 @@ export class OauthApiController {
   @Get('authorize/validate')
   @UseGuards(OptionalJwtGuard)
   async validate(@Req() req: Request, @Query() params: Partial<AuthorizeParams>, @Res({ passthrough: true }) res: Response) {
-    if (!this.rl.check('oauth_validate', req.ip || 'unknown', 30, MIN, Date.now())) {
+    if (!(await this.rl.check('oauth_validate', req.ip || 'unknown', 30, MIN, Date.now()))) {
       throw new HttpException({ error: 'too_many_requests', error_description: 'Too many attempts. Please try again later.' }, 429);
     }
     if (!(await this.oauth.mcpEnabled())) {
@@ -100,7 +100,7 @@ export class OauthApiController {
     }
     const scopes = validation.scopes!;
     await this.oauth.saveConsent(body.client_id, user.id, scopes, ip);
-    const code = this.oauth.createAuthCode({
+    const code = await this.oauth.createAuthCode({
       clientId: body.client_id,
       userId: user.id,
       redirectUri: body.redirect_uri,

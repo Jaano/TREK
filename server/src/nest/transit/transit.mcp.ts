@@ -25,9 +25,6 @@ import { SCHEDULED_TRANSIT_MODES, type TransitItinerary } from './transit.helper
 import { TransitService } from './transit.service';
 
 const TRANSIT_RATE_WINDOW = 15 * 60 * 1000;
-// Deliberately its own instance, separate from the REST controller's: the MCP
-// buckets are keyed by userId (mcp_transit_*), the REST ones by req.ip.
-const transitRateLimiter = new RateLimitService();
 
 const transitModes = z.enum(['TRANSIT', ...SCHEDULED_TRANSIT_MODES]);
 
@@ -40,8 +37,8 @@ function errorResult(err: unknown, fallback: string) {
   };
 }
 
-function rateLimit(userId: number, bucket: string, max: number) {
-  if (transitRateLimiter.check(bucket, String(userId), max, TRANSIT_RATE_WINDOW, Date.now())) return null;
+async function rateLimit(limiter: RateLimitService, userId: number, bucket: string, max: number) {
+  if (await limiter.check(bucket, String(userId), max, TRANSIT_RATE_WINDOW, Date.now())) return null;
   return {
     content: [{ type: 'text' as const, text: 'Too many transit requests. Please try again later.' }],
     isError: true,
@@ -74,6 +71,11 @@ export class TransitMcp {
     @InjectRepository(Trips) private readonly trips: TripsRepository,
     private readonly auth: AuthService,
     private readonly guards: McpToolGuardsService,
+    // The limiter RateLimitModule provides, so its store is the one every
+    // other caller counts in. The MCP buckets (mcp_transit_*) are keyed by
+    // user and the REST ones (transit_*) by address, so they never share a
+    // count. A hand-built instance (the MCP test harness) gets its own.
+    private readonly rl: RateLimitService = new RateLimitService(),
   ) {}
 
   @Tool({
@@ -95,7 +97,7 @@ export class TransitMcp {
     { query, language, near }: { query: string; language?: string; near?: { lat: number; lng: number } },
     ctx: McpContext,
   ) {
-    const limited = rateLimit(ctx.userId, 'mcp_transit_geocode', 300);
+    const limited = await rateLimit(this.rl, ctx.userId, 'mcp_transit_geocode', 300);
     if (limited) return limited;
     try {
       return ok(await this.transit.geocode(query, language, near ? `${near.lat},${near.lng}` : undefined, ctx.userId));
@@ -134,7 +136,7 @@ export class TransitMcp {
     },
     ctx: McpContext,
   ) {
-    const limited = rateLimit(ctx.userId, 'mcp_transit_plan', 60);
+    const limited = await rateLimit(this.rl, ctx.userId, 'mcp_transit_plan', 60);
     if (limited) return limited;
     try {
       const result = await this.transit.plan({

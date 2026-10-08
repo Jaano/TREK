@@ -267,11 +267,11 @@ describe('PasskeyController', () => {
   it('throttles registration and login ceremonies once the bucket is exhausted', async () => {
     const s = new RateLimitService();
     const now = Date.now();
-    for (let i = 0; i < 5; i++) s.check('mfa', '9.9.9.9', 5, 15 * 60 * 1000, now);
+    for (let i = 0; i < 5; i++) await s.check('mfa', '9.9.9.9', 5, 15 * 60 * 1000, now);
     expect(await thrownAsync(() => pc(s).registerOptions(user, {}, req))).toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
 
     const s2 = new RateLimitService();
-    for (let i = 0; i < 10; i++) s2.check('login', '9.9.9.9', 10, 15 * 60 * 1000, now);
+    for (let i = 0; i < 10; i++) await s2.check('login', '9.9.9.9', 10, 15 * 60 * 1000, now);
     expect(await thrownAsync(() => pc(s2).loginOptions(req))).toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
   });
 

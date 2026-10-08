@@ -69,9 +69,9 @@ beforeAll(async () => {
   placePhotoCache = new PlacePhotoCacheService(testStorage, t.repo(GooglePlacePhotoMeta), t.repo(Places), t.repo(CollectionPlaces));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
 });
 
 afterAll(async () => {
@@ -309,7 +309,7 @@ describe('Shared trip access', () => {
 
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_share_manage', 'trip_member')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
     try {
       const res = await request(app).get(`/api/trips/${trip.id}/share-link`).set('Cookie', authCookie(member.id));
       expect(res.status).toBe(200);
@@ -317,7 +317,7 @@ describe('Shared trip access', () => {
     } finally {
       // Module-scoped cache: leaving it set would decide the next file's tests.
       testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_share_manage'").run();
-      invalidatePermissionsCache();
+      await invalidatePermissionsCache();
     }
   });
 });

@@ -77,10 +77,10 @@ describe('Place enrichment e2e (real auth guard + real validation pipe)', () => 
     await app.close();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db.prepare('DELETE FROM app_settings').run();
     db.prepare('DELETE FROM place_details_cache').run();
-    app.get(RateLimitService).reset('place_enrichment');
+    await app.get(RateLimitService).reset('place_enrichment');
     // spyOn hands back the same spy on a second call, so the call counts carry
     // over between tests unless they are cleared explicitly.
     vi.spyOn(maps, 'fetchCommonsCandidates').mockClear().mockResolvedValue([]);

@@ -646,24 +646,38 @@ export class CollabService {
     // entry yet, since the first has not answered. Joining the running fetch keeps
     // that a single outbound request instead of twenty.
     const running = this.inFlight.get(url);
-    if (running !== undefined) return { ...(await running), url };
-
-    // Charged per outbound fetch rather than per request, which is what the
-    // budget is actually protecting. Without a user there is no one to charge —
-    // no caller passes that today, and the fetch stays behind the SSRF guard.
-    if (userId !== undefined && !this.rateLimit.check('collab_link_preview', String(userId), PREVIEW_FETCHES_PER_MINUTE, 60_000, Date.now())) {
-      return { ...fallback, rateLimited: true };
+    if (running !== undefined) {
+      const shared = await running;
+      // The asker this call joined was out of budget, which says nothing about
+      // this caller's: ask again, first in line or behind the next asker.
+      if (shared.rateLimited) return this.linkPreview(url, userId);
+      return { ...shared, url };
     }
 
     // Memoised in-flight fetch, not a missing await: the promise is stored so the
-    // concurrent askers above can join it, and this frame awaits it below.
-    const task = this.fetchPreview(url, fallback);
+    // concurrent askers above can join it, and this frame awaits it below. It is
+    // stored before the budget check, which awaits its store, so an asker that
+    // arrives meanwhile joins this one instead of being charged for a fetch it
+    // does not make.
+    const task = this.chargeAndFetch(url, fallback, userId);
     this.inFlight.set(url, task);
     try {
       return await task;
     } finally {
       this.inFlight.delete(url);
     }
+  }
+
+  /**
+   * Charged per outbound fetch rather than per request, which is what the
+   * budget is actually protecting. Without a user there is no one to charge:
+   * no caller passes that today, and the fetch stays behind the SSRF guard.
+   */
+  private async chargeAndFetch(url: string, fallback: LinkPreviewResult, userId?: number): Promise<LinkPreviewResult> {
+    if (userId !== undefined && !(await this.rateLimit.check('collab_link_preview', String(userId), PREVIEW_FETCHES_PER_MINUTE, 60_000, Date.now()))) {
+      return { ...fallback, rateLimited: true };
+    }
+    return this.fetchPreview(url, fallback);
   }
 
   /** The outbound half of linkPreview, past the cache and the budget. */

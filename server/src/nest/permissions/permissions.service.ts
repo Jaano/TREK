@@ -5,7 +5,7 @@ import { UnitOfWork } from '../database/unit-of-work';
 import { logError } from '../audit/audit-log.logger';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
-import { PermissionsCacheStore, processPermissionsCache } from './permissions-cache';
+import { PermissionsCacheStore, permissionsCacheSlot } from './permissions-cache';
 
 /**
  * Permission levels (hierarchical, higher includes lower):
@@ -64,10 +64,9 @@ export const PERMISSION_ACTIONS: PermissionAction[] = [
 const ACTIONS_MAP = new Map(PERMISSION_ACTIONS.map(a => [a.key, a]));
 
 // The cache is a PermissionsCacheStore (./permissions-cache), injected so a
-// store shared between processes can be plugged in later. PermissionsModule
-// provides the process-wide instance, which a hand-built service defaults to
-// as well: the backup restore path (backup.impl.ts) is plain functions, no
-// DI, and must flush the same cache the request path reads.
+// store shared between processes can be plugged in later. A hand-built
+// service takes the store installed in permissionsCacheSlot, the one the
+// backup restore path (backup.impl.ts, plain functions, no DI) flushes too.
 
 
 @Injectable()
@@ -75,11 +74,11 @@ export class PermissionsService {
   constructor(
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
     private readonly uow: UnitOfWork,
-    private readonly cacheStore: PermissionsCacheStore = processPermissionsCache,
+    private readonly cacheStore: PermissionsCacheStore = permissionsCacheSlot.get(),
   ) {}
 
   private async loadPermissions(): Promise<Map<string, PermissionLevel>> {
-    const cached = this.cacheStore.get();
+    const cached = await this.cacheStore.get();
     if (cached) return cached;
     const cache = new Map<string, PermissionLevel>();
     try {
@@ -134,8 +133,8 @@ export class PermissionsService {
     return this.cacheStore.set(cache);
   }
 
-  invalidatePermissionsCache(): void {
-    this.cacheStore.invalidate();
+  invalidatePermissionsCache(): Promise<void> {
+    return this.cacheStore.invalidate();
   }
 
   async getPermissionLevel(actionKey: string): Promise<PermissionLevel> {
@@ -173,7 +172,7 @@ export class PermissionsService {
         await this.appSettings.setValue(`perm_${actionKey}`, level);
       }
     });
-    this.invalidatePermissionsCache();
+    await this.invalidatePermissionsCache();
     return { skipped };
   }
 

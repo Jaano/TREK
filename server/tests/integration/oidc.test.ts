@@ -80,9 +80,9 @@ beforeAll(async () => {
   mockVerifyIdToken = vi.spyOn(oidcSvc, 'verifyIdToken').mockImplementation(async () => undefined as never);
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
   vi.clearAllMocks();
 
   // Set OIDC environment variables for each test
@@ -163,7 +163,7 @@ describe('GET /api/auth/oidc/callback', () => {
     });
 
     // Create a valid state token
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=authcode123&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -177,7 +177,7 @@ describe('GET /api/auth/oidc/callback', () => {
     mockExchangeCode.mockResolvedValueOnce({ access_token: 'test-access-token', id_token: 'fake.id.token', _ok: true, _status: 200 });
     mockVerifyIdToken.mockResolvedValueOnce({ ok: true, claims: { sub: 'sub-audited-1' } });
     mockGetUserInfo.mockResolvedValueOnce({ sub: 'sub-audited-1', email: 'audited@example.com', name: 'Audited', email_verified: true });
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=authcode123&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -202,7 +202,7 @@ describe('GET /api/auth/oidc/callback', () => {
       name: 'New User',
     });
 
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=code999&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -245,7 +245,7 @@ describe('GET /api/auth/oidc/callback', () => {
     mockDiscover.mockResolvedValueOnce(MOCK_DISCOVERY_DOC);
     mockExchangeCode.mockResolvedValueOnce({ _ok: false, _status: 400 });
 
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=badcode&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -257,7 +257,7 @@ describe('GET /api/auth/oidc/callback', () => {
     mockDiscover.mockResolvedValueOnce(MOCK_DISCOVERY_DOC);
     mockExchangeCode.mockResolvedValueOnce({ access_token: 'tok', _ok: true, _status: 200 }); // no id_token
 
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=anycode&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -270,7 +270,7 @@ describe('GET /api/auth/oidc/callback', () => {
     mockExchangeCode.mockResolvedValueOnce({ access_token: 'tok', id_token: 'bad.id.token', _ok: true, _status: 200 });
     mockVerifyIdToken.mockResolvedValueOnce({ ok: false, error: 'signature_or_claim_mismatch: invalid signature' });
 
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=anycode&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -288,7 +288,7 @@ describe('GET /api/auth/oidc/callback', () => {
       name: 'Alice',
     });
 
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=anycode&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -311,7 +311,7 @@ describe('GET /api/auth/oidc/callback', () => {
       name: 'Blocked',
     });
 
-    const { state } = oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
+    const { state } = await oidcSvc.createState('http://localhost:3001/api/auth/oidc/callback');
 
     const res = await request(app).get(`/api/auth/oidc/callback?code=anycode&state=${state}`).set('Cookie', `trek_oidc_state=${state}`);
 
@@ -325,7 +325,7 @@ describe('GET /api/auth/oidc/callback', () => {
 describe('GET /api/auth/oidc/exchange', () => {
   it('OIDC-011: valid auth code returns JWT and sets cookie', async () => {
     const fakeToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.sig';
-    const { code, binding } = oidcSvc.createAuthCode(fakeToken);
+    const { code, binding } = await oidcSvc.createAuthCode(fakeToken);
 
     const res = await request(app)
       .get(`/api/auth/oidc/exchange?code=${code}`)
@@ -353,7 +353,7 @@ describe('GET /api/auth/oidc/exchange', () => {
   });
 
   it('OIDC-013b: a real code without its binding cookie returns 400 and buys nothing', async () => {
-    const { code } = oidcSvc.createAuthCode('valid.but.unbound');
+    const { code } = await oidcSvc.createAuthCode('valid.but.unbound');
 
     const res = await request(app).get(`/api/auth/oidc/exchange?code=${code}`);
 
@@ -365,7 +365,7 @@ describe('GET /api/auth/oidc/exchange', () => {
 
   it('OIDC-014: auth code is single-use (second use returns 400)', async () => {
     const fakeToken = 'test.token.here';
-    const { code, binding } = oidcSvc.createAuthCode(fakeToken);
+    const { code, binding } = await oidcSvc.createAuthCode(fakeToken);
     const cookie = `trek_oidc_exchange=${binding}`;
 
     // First use: success

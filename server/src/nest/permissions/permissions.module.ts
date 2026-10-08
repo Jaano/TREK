@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common';
+import { Module, type OnModuleDestroy } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { PermissionsService } from './permissions.service';
 import { TripAccessGuard } from './trip-access.guard';
 import { TripOwnerGuard } from './trip-owner.guard';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
-import { PermissionsCacheStore, processPermissionsCache } from './permissions-cache';
+import { PermissionsCacheStore, permissionsCacheSlot, processPermissionsCache } from './permissions-cache';
 
 /** Cross-cutting permissions domain (Wave 2). No controller/MCP surface of its
  *  own — the admin HTTP surface stays with AdminModule. Exports
@@ -16,8 +16,9 @@ import { PermissionsCacheStore, processPermissionsCache } from './permissions-ca
  *  canAccessTrip (Plan 3c), unaffected by this. */
 @Module({
   imports: [MikroOrmModule.forFeature([AppSettings])],
-  // The cache store is the process-wide in-memory one, the same instance the
-  // backup restore flushes; a shared store replaces it here.
+  // The cache store is the process-wide in-memory one; a shared store replaces
+  // it here, and the constructor below hands whichever one the container
+  // resolved to the readers outside it (the backup restore's flush).
   providers: [
     PermissionsService,
     TripAccessGuard,
@@ -26,4 +27,12 @@ import { PermissionsCacheStore, processPermissionsCache } from './permissions-ca
   ],
   exports: [PermissionsService, TripAccessGuard, TripOwnerGuard],
 })
-export class PermissionsModule {}
+export class PermissionsModule implements OnModuleDestroy {
+  constructor(private readonly cacheStore: PermissionsCacheStore) {
+    permissionsCacheSlot.install(cacheStore);
+  }
+
+  onModuleDestroy(): void {
+    permissionsCacheSlot.release(this.cacheStore);
+  }
+}

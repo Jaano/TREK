@@ -65,11 +65,11 @@ beforeAll(async () => {
   svc = new PermissionsService(appSettings, await createTestUnitOfWork(testDb));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.clearAllMocks();
   testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'perm_%'").run();
   t.clear();
-  svc.invalidatePermissionsCache();
+  await svc.invalidatePermissionsCache();
 });
 
 afterAll(async () => {
@@ -172,7 +172,7 @@ describe('corrupt stored levels', () => {
   it('PERM-SVC-013: an unrecognized stored level is ignored — every reader falls back to the default', async () => {
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'unknown_level');
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_delete', '');
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
     // Since the quirk fix the corrupt rows never enter the cache, so
     // getPermissionLevel, getAllPermissions and checkPermission agree on the
     // default instead of the old display-default/deny-in-check split.
@@ -186,7 +186,7 @@ describe('corrupt stored levels', () => {
   it('PERM-SVC-021: a stored level outside the action\'s allowedLevels is ignored too', async () => {
     // trip_edit only allows trip_owner/trip_member — a raw 'everybody' row must not widen it.
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'everybody');
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
     expect(await svc.checkPermission('trip_edit', 'user', 10, 30, false)).toBe(false);
   });
@@ -206,32 +206,32 @@ describe('load failures', () => {
     const spy = vi
       .spyOn(appSettings, 'findByKeyPrefix')
       .mockRejectedValueOnce(new Error('no such table: app_settings'));
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
     expect(logError).toHaveBeenCalledWith('Permissions load failed: no such table: app_settings');
     spy.mockRestore();
-    svc.invalidatePermissionsCache(); // don't leak the failed-read (uncached) state
+    await svc.invalidatePermissionsCache(); // don't leak the failed-read (uncached) state
   });
 
   it('PERM-SVC-024: a failed read serves defaults without installing them, and a later read populates the cache', async () => {
     const spy = vi
       .spyOn(appSettings, 'findByKeyPrefix')
       .mockRejectedValueOnce(new Error('database connection is closed'));
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
 
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
     expect(logError).toHaveBeenCalledWith('Permissions load failed: database connection is closed');
     // Nothing installed: an admin's stricter stored level would otherwise stay
     // invisible until somebody invalidated by hand.
-    expect(getPermissionsCache()).toBe(null);
+    expect(await getPermissionsCache()).toBe(null);
 
     // The mock is exhausted after the one queued rejection — the next call
     // falls through to the real (now-working) repository read.
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'trip_member');
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_member');
-    expect(getPermissionsCache()).not.toBe(null);
+    expect(await getPermissionsCache()).not.toBe(null);
     spy.mockRestore();
-    svc.invalidatePermissionsCache(); // don't leak this test's cache to later tests
+    await svc.invalidatePermissionsCache(); // don't leak this test's cache to later tests
   });
 
   it('PERM-SVC-025: a MikroORM ValidationError (context misuse) is a programming error and propagates, uncached — it does not get the "log and serve defaults" treatment', async () => {
@@ -244,14 +244,14 @@ describe('load failures', () => {
     const spy = vi
       .spyOn(appSettings, 'findByKeyPrefix')
       .mockRejectedValueOnce(ValidationError.cannotUseGlobalContext());
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
 
     await expect(svc.getPermissionLevel('trip_edit')).rejects.toThrow(ValidationError);
     expect(logError).not.toHaveBeenCalled();
-    expect(getPermissionsCache()).toBe(null);
+    expect(await getPermissionsCache()).toBe(null);
 
     spy.mockRestore();
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
   });
 
   it('PERM-SVC-023: an all-skipped save writes nothing and leaves the cache untouched', async () => {
@@ -262,7 +262,7 @@ describe('load failures', () => {
     // No valid entries → no transaction and no cache flush: the raw row above
     // stays invisible until an explicit invalidation.
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_member');
   });
 });
@@ -272,7 +272,7 @@ describe('load failures', () => {
 describe('stored overrides + cache', () => {
   it('PERM-SVC-014: stored perm_ row overrides the default after invalidation', async () => {
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'trip_member');
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_member');
     // A plain member now passes what defaults to a trip_owner-only action.
     expect(await svc.checkPermission('trip_edit', 'user', 10, 20, true)).toBe(true);
@@ -294,7 +294,7 @@ describe('stored overrides + cache', () => {
     // Raw SQL write bypasses savePermissions' self-invalidation → stale value served.
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'trip_member');
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
-    svc.invalidatePermissionsCache();
+    await svc.invalidatePermissionsCache();
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_member');
   });
 });
@@ -327,7 +327,7 @@ describe('module-scoped permissions cache', () => {
     // must serve the fresh value afterwards.
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'trip_owner');
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_member'); // still cached
-    invalidateSharedCache();
+    await invalidateSharedCache();
     expect(await svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
     expect(await secondInstance.checkPermission('trip_edit', 'user', 10, 20, true)).toBe(false);
   });

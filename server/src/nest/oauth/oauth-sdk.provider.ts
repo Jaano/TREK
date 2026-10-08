@@ -162,7 +162,7 @@ export class TrekOAuthProvider implements OAuthServerProvider {
         redirectUri?: string,
         resource?: URL,
     ): Promise<OAuthTokens> {
-        const pending = this.oauth.consumeAuthCode(code);
+        const pending = await this.oauth.consumeAuthCode(code);
         if (!pending || pending.clientId !== client.client_id)
             throw new Error('Authorization grant is invalid.');
 

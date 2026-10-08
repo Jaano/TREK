@@ -37,10 +37,10 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
-  invalidatePermissionsCache();
+  await resetRateLimits(nestApp);
+  await invalidatePermissionsCache();
 });
 
 afterAll(async () => {

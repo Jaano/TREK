@@ -36,9 +36,9 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
   // GET /budget/settlement reaches ExchangeRatesService.getRates unconditionally
   // (budget.service.ts settlement()), and that is a real fetch to
   // api.frankfurter.dev with a 10 s abort. Without this stub the suite talks to
@@ -404,7 +404,7 @@ describe('Reorder budget items', () => {
     // Restrict budget_edit to trip_owner only
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .put(`/api/trips/${trip.id}/budget/reorder/items`)
@@ -414,7 +414,7 @@ describe('Reorder budget items', () => {
 
     // Restore default
     testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
   });
 
   it('BUDGET-013 — owner can reorder budget items — returns 200', async () => {
@@ -508,7 +508,7 @@ describe('Budget edit permission enforcement', () => {
 
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/budget`)
@@ -517,7 +517,7 @@ describe('Budget edit permission enforcement', () => {
     expect(res.status).toBe(403);
 
     testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
   });
 
   it('BUDGET-018 — member cannot reorder categories when budget_edit is restricted to trip_owner', async () => {
@@ -529,7 +529,7 @@ describe('Budget edit permission enforcement', () => {
 
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .put(`/api/trips/${trip.id}/budget/reorder/categories`)
@@ -538,6 +538,6 @@ describe('Budget edit permission enforcement', () => {
     expect(res.status).toBe(403);
 
     testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
   });
 });

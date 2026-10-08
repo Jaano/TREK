@@ -389,7 +389,7 @@ describe('createAuthCode + consumeAuthCode', () => {
     const created = await makeClient(user.id);
     const clientId = created.client!.client_id as string;
 
-    const code = createAuthCode({
+    const code = await createAuthCode({
       clientId,
       userId: user.id,
       redirectUri: 'https://example.com/callback',
@@ -399,14 +399,14 @@ describe('createAuthCode + consumeAuthCode', () => {
       codeChallengeMethod: 'S256',
     });
 
-    const entry = consumeAuthCode(code);
+    const entry = await consumeAuthCode(code);
     expect(entry).not.toBeNull();
     expect(entry!.userId).toBe(user.id);
     expect(entry!.clientId).toBe(clientId);
   });
 
   it('returns null for non-existent code', async () => {
-    expect(consumeAuthCode('does-not-exist')).toBeNull();
+    expect(await consumeAuthCode('does-not-exist')).toBeNull();
   });
 
   it('consuming same code twice returns null (one-time use)', async () => {
@@ -414,7 +414,7 @@ describe('createAuthCode + consumeAuthCode', () => {
     const created = await makeClient(user.id);
     const clientId = created.client!.client_id as string;
 
-    const code = createAuthCode({
+    const code = await createAuthCode({
       clientId,
       userId: user.id,
       redirectUri: 'https://example.com/callback',
@@ -424,8 +424,8 @@ describe('createAuthCode + consumeAuthCode', () => {
       codeChallengeMethod: 'S256',
     });
 
-    consumeAuthCode(code);
-    expect(consumeAuthCode(code)).toBeNull();
+    await consumeAuthCode(code);
+    expect(await consumeAuthCode(code)).toBeNull();
   });
 });
 
@@ -1189,24 +1189,24 @@ describe('pending-code store', () => {
   };
 
   it('refuses a new code at capacity and the sweep frees it again', async () => {
-    for (let i = 0; i < MAX_PENDING_CODES; i++) createAuthCode(codeParams);
+    for (let i = 0; i < MAX_PENDING_CODES; i++) await createAuthCode(codeParams);
 
-    expect(createAuthCode(codeParams)).toBeNull();
+    expect(await createAuthCode(codeParams)).toBeNull();
 
     // Everything in the store is past its 2-minute TTL by then.
-    sweepPendingCodes(Date.now() + 3 * 60 * 1000);
+    await sweepPendingCodes(Date.now() + 3 * 60 * 1000);
 
-    const afterSweep = createAuthCode(codeParams);
+    const afterSweep = await createAuthCode(codeParams);
     expect(afterSweep).not.toBeNull();
-    sweepPendingCodes(Date.now() + 3 * 60 * 1000);
+    await sweepPendingCodes(Date.now() + 3 * 60 * 1000);
   });
 
   it('a code past its TTL is consumed as invalid', async () => {
-    const code = createAuthCode(codeParams)!;
+    const code = (await createAuthCode(codeParams))!;
     const realNow = Date.now;
     Date.now = () => realNow() + 3 * 60 * 1000;
     try {
-      expect(consumeAuthCode(code)).toBeNull();
+      expect(await consumeAuthCode(code)).toBeNull();
     } finally {
       Date.now = realNow;
     }
@@ -1298,7 +1298,7 @@ describe('module-scoped OAuth state', () => {
     // the DI singleton, the SDK exchange path reads it back. The map is module-
     // scoped, so even a second hand-built instance must see it — two maps would
     // kill the authorization-code flow silently.
-    const code = createAuthCode({
+    const code = (await createAuthCode({
       clientId: 'c',
       userId: 42,
       redirectUri: 'https://example.com/callback',
@@ -1306,10 +1306,10 @@ describe('module-scoped OAuth state', () => {
       resource: null,
       codeChallenge: 'x',
       codeChallengeMethod: 'S256',
-    })!;
+    }))!;
 
     const secondInstance = new OauthService(clientsRepo, tokensRepo, consentsRepo, addonsStub, new AuditService(auditLogRepo, usersRepo));
-    expect(secondInstance.consumeAuthCode(code)?.userId).toBe(42);
+    expect((await secondInstance.consumeAuthCode(code))?.userId).toBe(42);
   });
 });
 

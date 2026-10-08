@@ -14,6 +14,7 @@ import { TripMembershipService } from '../trip-membership/trip-membership.servic
 import { setAuthCookie, RememberOption } from '../common/cookie';
 import { AuthService } from '../auth/auth.service';
 import { UnitOfWork } from '../database/unit-of-work';
+import { logError } from '../audit/audit-log.logger';
 import { safeFetchAdminConfigured } from '../../utils/ssrfGuard';
 import { Users } from '../../db/entities/Users.entity';
 import type { UsersRepository, UserRow } from '../../db/repositories/Users.repository';
@@ -21,7 +22,7 @@ import { InviteTokens } from '../../db/entities/InviteTokens.entity';
 import type { InviteTokensRepository, InviteTokenRow } from '../../db/repositories/InviteTokens.repository';
 import { AppSettings } from '../../db/entities/AppSettings.entity';
 import type { AppSettingsRepository } from '../../db/repositories/AppSettings.repository';
-import { InMemoryOidcFlowStore, OidcFlowStore } from './oidc-flow.store';
+import { InMemoryOidcFlowStore, OidcFlowStore, type OidcPendingState } from './oidc-flow.store';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -247,8 +248,14 @@ export class OidcService implements OnModuleDestroy {
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
     private readonly flows: OidcFlowStore = new InMemoryOidcFlowStore(),
   ) {
-    this.stateSweeper = setInterval(() => this.flows.sweepStates(Date.now(), STATE_TTL), STATE_CLEANUP);
-    this.codeSweeper = setInterval(() => this.flows.sweepCodes(Date.now(), AUTH_CODE_TTL), AUTH_CODE_CLEANUP);
+    const sweepFailed = (err: unknown) =>
+      logError(`OIDC flow sweep failed: ${err instanceof Error ? err.message : String(err)}`);
+    this.stateSweeper = setInterval(() => {
+      this.flows.sweepStates(Date.now(), STATE_TTL).catch(sweepFailed);
+    }, STATE_CLEANUP);
+    this.codeSweeper = setInterval(() => {
+      this.flows.sweepCodes(Date.now(), AUTH_CODE_TTL).catch(sweepFailed);
+    }, AUTH_CODE_CLEANUP);
   }
 
   onModuleDestroy(): void {
@@ -265,15 +272,19 @@ export class OidcService implements OnModuleDestroy {
   // Creates the login state and a matching PKCE pair. The verifier stays server
   // side (in the flow store); the S256 challenge goes to the provider so PKCE-
   // required setups (e.g. Pocket ID with PKCE = required) work.
-  createState(redirectUri: string, inviteToken?: string, remember?: boolean): { state: string; codeChallenge: string } {
+  async createState(
+    redirectUri: string,
+    inviteToken?: string,
+    remember?: boolean,
+  ): Promise<{ state: string; codeChallenge: string }> {
     const state = crypto.randomBytes(32).toString('hex');
     const codeVerifier = base64url(crypto.randomBytes(32));
     const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
-    this.flows.putState(state, { createdAt: Date.now(), redirectUri, inviteToken, codeVerifier, remember });
+    await this.flows.putState(state, { createdAt: Date.now(), redirectUri, inviteToken, codeVerifier, remember });
     return { state, codeChallenge };
   }
 
-  consumeState(state: string) {
+  consumeState(state: string): Promise<OidcPendingState | null> {
     return this.flows.takeState(state);
   }
 
@@ -284,18 +295,21 @@ export class OidcService implements OnModuleDestroy {
    * cookie, so redeeming the code takes both halves and only the browser that
    * completed the provider handshake has both.
    */
-  createAuthCode(token: string, remember?: boolean): { code: string; binding: string } {
+  async createAuthCode(token: string, remember?: boolean): Promise<{ code: string; binding: string }> {
     const authCode: string = uuidv4();
     const binding = crypto.randomBytes(32).toString('base64url');
-    this.flows.putCode(authCode, { token, created: Date.now(), remember, bindingHash: sha256Hex(binding) });
+    await this.flows.putCode(authCode, { token, created: Date.now(), remember, bindingHash: sha256Hex(binding) });
     return { code: authCode, binding };
   }
 
-  consumeAuthCode(code: string, binding?: string): { token: string; remember?: boolean } | { error: string } {
+  async consumeAuthCode(
+    code: string,
+    binding?: string,
+  ): Promise<{ token: string; remember?: boolean } | { error: string }> {
     // Single use, burnt on every outcome: a code seen by someone else must not
     // survive their attempt for a second guess, and the browser that owns it can
     // simply log in again.
-    const entry = this.flows.takeCode(code);
+    const entry = await this.flows.takeCode(code);
     if (!entry) return { error: 'Invalid or expired code' };
     if (Date.now() - entry.created > AUTH_CODE_TTL) return { error: 'Code expired' };
     // Same wording as the unknown-code case on purpose — whoever presents a code

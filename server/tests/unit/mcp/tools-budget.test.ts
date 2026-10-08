@@ -1138,13 +1138,13 @@ describe('Tool: freeze_budget_rates', () => {
 
       // budget_edit lowered to the owner, the way the admin permission panel does it.
       testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_budget_edit', 'trip_owner');
-      invalidatePermissionsCache();
+      await invalidatePermissionsCache();
       await withHarness(other.id, async (h) => {
         const result = await h.client.callTool({ name: 'freeze_budget_rates', arguments: { tripId: trip.id } });
         expect(result.isError).toBe(true);
       });
       testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
-      invalidatePermissionsCache();
+      await invalidatePermissionsCache();
 
       process.env.DEMO_MODE = 'true';
       const { user: demo } = createUser(testDb, { email: 'demo@nomad.app' });
@@ -1160,7 +1160,7 @@ describe('Tool: freeze_budget_rates', () => {
     } finally {
       spy.mockRestore();
       testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_budget_edit'").run();
-      invalidatePermissionsCache();
+      await invalidatePermissionsCache();
     }
   });
 

@@ -26,13 +26,13 @@ import { invalidatePermissionsCache } from '../../../src/nest/permissions/permis
 import { createUser, createAdmin, createTrip, addTripMember } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   broadcastMock.mockClear();
   delete process.env.DEMO_MODE;
   // resetTestDb truncates app_settings, but the permission cache is module-scoped
   // and would keep serving whatever the previous case configured.
-  invalidatePermissionsCache();
+  await invalidatePermissionsCache();
 });
 
 afterAll(() => {
@@ -45,9 +45,9 @@ async function withHarness(userId: number, fn: (h: McpHarness) => Promise<void>)
 }
 
 /** Lower a configurable action the way the admin permission panel does. */
-function setPermission(action: string, level: string) {
+async function setPermission(action: string, level: string): Promise<void> {
   testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(`perm_${action}`, level);
-  invalidatePermissionsCache();
+  await invalidatePermissionsCache();
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +157,7 @@ describe('Tool: add_trip_member', () => {
     const { user: outsider } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, collaborator.id);
-    setPermission('member_manage', 'trip_member');
+    await setPermission('member_manage', 'trip_member');
     await withHarness(collaborator.id, async (h) => {
       const result = await h.client.callTool({
         name: 'add_trip_member',
@@ -274,7 +274,7 @@ describe('Tool: remove_trip_member', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
     addTripMember(testDb, trip.id, other.id);
-    setPermission('member_manage', 'trip_member');
+    await setPermission('member_manage', 'trip_member');
     await withHarness(member.id, async (h) => {
       const result = await h.client.callTool({
         name: 'remove_trip_member',
@@ -867,7 +867,7 @@ describe('Guest tools stay owner-only', () => {
     let guestId = 0;
     await withHarness(owner.id, async (h) => { guestId = await makeGuest(h, trip.id, 'Anna'); });
 
-    setPermission('member_manage', 'trip_member');
+    await setPermission('member_manage', 'trip_member');
     await withHarness(collaborator.id, async (h) => {
       expect((await h.client.callTool({
         name: 'create_trip_guest', arguments: { tripId: trip.id, name: 'Bea' },

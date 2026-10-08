@@ -134,7 +134,7 @@ async function thrownAsync(fn: () => Promise<unknown>): Promise<{ status: number
 }
 
 function apiController(svc: Partial<PublicApiService>) {
-  const rl = { check: vi.fn().mockReturnValue(true) } as unknown as RateLimitService;
+  const rl = { check: vi.fn().mockResolvedValue(true) } as unknown as RateLimitService;
   return new PublicApiController(svc as PublicApiService, rl);
 }
 

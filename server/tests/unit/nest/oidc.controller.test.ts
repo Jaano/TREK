@@ -18,15 +18,15 @@ function svc(o: Partial<OidcService> = {}): OidcService {
     getOidcConfig: vi.fn().mockReturnValue({ issuer: 'https://idp', clientId: 'c', clientSecret: 's', discoveryUrl: null }),
     getAppUrl: vi.fn().mockReturnValue('https://app'),
     discover: vi.fn().mockResolvedValue({ authorization_endpoint: 'https://idp/auth', userinfo_endpoint: 'https://idp/ui', issuer: 'https://idp' }),
-    createState: vi.fn().mockReturnValue({ state: 'st', codeChallenge: 'cc' }),
-    consumeState: vi.fn().mockReturnValue({ redirectUri: 'https://app/api/auth/oidc/callback', codeVerifier: 'cv', inviteToken: undefined }),
+    createState: vi.fn().mockResolvedValue({ state: 'st', codeChallenge: 'cc' }),
+    consumeState: vi.fn().mockResolvedValue({ redirectUri: 'https://app/api/auth/oidc/callback', codeVerifier: 'cv', inviteToken: undefined }),
     exchangeCodeForToken: vi.fn(),
     verifyIdToken: vi.fn(),
     getUserInfo: vi.fn(),
     findOrCreateUser: vi.fn(),
     touchLastLogin: vi.fn(),
     generateToken: vi.fn().mockReturnValue('jwt'),
-    createAuthCode: vi.fn().mockReturnValue({ code: 'ac', binding: 'bnd' }),
+    createAuthCode: vi.fn().mockResolvedValue({ code: 'ac', binding: 'bnd' }),
     consumeAuthCode: vi.fn(),
     frontendUrl: vi.fn((p: string) => 'https://app' + p),
     setAuthCookie: vi.fn(),
@@ -112,7 +112,7 @@ describe('OidcController /login', () => {
 
   it('passes the invite token from the query into createState', async () => {
     const res = makeRes();
-    const createState = vi.fn().mockReturnValue({ state: 'st', codeChallenge: 'cc' });
+    const createState = vi.fn().mockResolvedValue({ state: 'st', codeChallenge: 'cc' });
     const reqInvite = { query: { invite: 'tok123' }, headers: {} } as unknown as Request;
     await ctl(svc({ createState })).login(reqInvite, res);
     expect(createState).toHaveBeenCalledWith('https://app/api/auth/oidc/callback', 'tok123', undefined);
@@ -124,7 +124,7 @@ describe('OidcController /login', () => {
       [{ remember: '0' }, false],
       [{}, undefined],
     ] as const) {
-      const createState = vi.fn().mockReturnValue({ state: 'st', codeChallenge: 'cc' });
+      const createState = vi.fn().mockResolvedValue({ state: 'st', codeChallenge: 'cc' });
       const r = makeRes();
       await ctl(svc({ createState })).login({ query, headers: {} } as unknown as Request, r);
       expect(createState).toHaveBeenCalledWith('https://app/api/auth/oidc/callback', undefined, expected);
@@ -132,7 +132,7 @@ describe('OidcController /login', () => {
   });
 
   it('a malformed remember value never blocks the redirect and falls back to the default duration', async () => {
-    const createState = vi.fn().mockReturnValue({ state: 'st', codeChallenge: 'cc' });
+    const createState = vi.fn().mockResolvedValue({ state: 'st', codeChallenge: 'cc' });
     const res = makeRes();
     const reqBad = { query: { invite: 'tok123', remember: 'yes' }, headers: {} } as unknown as Request;
     await ctl(svc({ createState })).login(reqBad, res);
@@ -142,8 +142,8 @@ describe('OidcController /login', () => {
 
   it('trims a trailing slash off APP_URL when building the redirect uri', async () => {
     const res = makeRes();
-    const createState = vi.fn().mockReturnValue({ state: 'st', codeChallenge: 'cc' });
-    await ctl(svc({ getAppUrl: vi.fn().mockReturnValue('https://app///'), createState })).login(req, res);
+    const createState = vi.fn().mockResolvedValue({ state: 'st', codeChallenge: 'cc' });
+    await ctl(svc({ getAppUrl: vi.fn().mockResolvedValue('https://app///'), createState })).login(req, res);
     expect(createState).toHaveBeenCalledWith('https://app/api/auth/oidc/callback', undefined, undefined);
   });
 
@@ -182,7 +182,7 @@ describe('OidcController /callback', () => {
     await ctl(svc()).callback(undefined, 's', undefined, reqCb('s'), r1);
     expect(r1.redirectedTo).toBe('https://app/login?oidc_error=missing_params');
     const r2 = makeRes();
-    await ctl(svc({ consumeState: vi.fn().mockReturnValue(null) })).callback('c', 's', undefined, reqCb('s'), r2);
+    await ctl(svc({ consumeState: vi.fn().mockResolvedValue(null) })).callback('c', 's', undefined, reqCb('s'), r2);
     expect(r2.redirectedTo).toBe('https://app/login?oidc_error=invalid_state');
   });
 
@@ -453,10 +453,10 @@ describe('OidcController /callback', () => {
     // to a browser-session cookie half a lifetime later.
     for (const remember of [true, false, undefined] as const) {
       const generateToken = vi.fn().mockReturnValue('jwt');
-      const createAuthCode = vi.fn().mockReturnValue({ code: 'ac', binding: 'bnd' });
+      const createAuthCode = vi.fn().mockResolvedValue({ code: 'ac', binding: 'bnd' });
       const res = makeRes();
       await ctl(svc({
-        consumeState: vi.fn().mockReturnValue({ redirectUri: 'https://app/api/auth/oidc/callback', codeVerifier: 'cv', inviteToken: undefined, remember }),
+        consumeState: vi.fn().mockResolvedValue({ redirectUri: 'https://app/api/auth/oidc/callback', codeVerifier: 'cv', inviteToken: undefined, remember }),
         exchangeCodeForToken: vi.fn().mockResolvedValue({ _ok: true, access_token: 'at', id_token: 'it' }),
         verifyIdToken: vi.fn().mockResolvedValue({ ok: true, claims: { sub: 'u1' } }),
         getUserInfo: vi.fn().mockResolvedValue({ email: 'a@b.c', sub: 'u1' }),
@@ -471,57 +471,57 @@ describe('OidcController /callback', () => {
 });
 
 describe('OidcController /exchange', () => {
-  it('400 without a code, 400 on an invalid code, else sets the cookie + returns the token', () => {
+  it('400 without a code, 400 on an invalid code, else sets the cookie + returns the token', async () => {
     const r1 = makeRes();
-    ctl(svc()).exchange(undefined, reqEx(), r1);
+    await ctl(svc()).exchange(undefined, reqEx(), r1);
     expect(r1.statusCode).toBe(400);
     expect(r1.body).toEqual({ error: 'Code required' });
 
     const r2 = makeRes();
-    ctl(svc({ consumeAuthCode: vi.fn().mockReturnValue({ error: 'invalid_code' }) })).exchange('x', reqEx(), r2);
+    await ctl(svc({ consumeAuthCode: vi.fn().mockResolvedValue({ error: 'invalid_code' }) })).exchange('x', reqEx(), r2);
     expect(r2.statusCode).toBe(400);
     expect(r2.body).toEqual({ error: 'invalid_code' });
 
     const r3 = makeRes();
     const setAuthCookie = vi.fn();
     const req3 = reqEx();
-    ctl(svc({ consumeAuthCode: vi.fn().mockReturnValue({ token: 'jwt' }), setAuthCookie })).exchange('x', req3, r3);
+    await ctl(svc({ consumeAuthCode: vi.fn().mockResolvedValue({ token: 'jwt' }), setAuthCookie })).exchange('x', req3, r3);
     expect(setAuthCookie).toHaveBeenCalledWith(r3, 'jwt', req3, undefined);
     expect(r3.body).toEqual({ token: 'jwt' });
   });
 
-  it('forwards the stored remember flag to setAuthCookie', () => {
+  it('forwards the stored remember flag to setAuthCookie', async () => {
     for (const remember of [true, false] as const) {
       const res = makeRes();
       const setAuthCookie = vi.fn();
       const r = reqEx();
-      ctl(svc({ consumeAuthCode: vi.fn().mockReturnValue({ token: 'jwt', remember }), setAuthCookie })).exchange('x', r, res);
+      await ctl(svc({ consumeAuthCode: vi.fn().mockResolvedValue({ token: 'jwt', remember }), setAuthCookie })).exchange('x', r, res);
       expect(setAuthCookie).toHaveBeenCalledWith(res, 'jwt', r, remember);
       expect(res.body).toEqual({ token: 'jwt' });
     }
   });
 
-  it('hands the binding cookie to consumeAuthCode and clears it on the way out', () => {
-    const consumeAuthCode = vi.fn().mockReturnValue({ token: 'jwt' });
+  it('hands the binding cookie to consumeAuthCode and clears it on the way out', async () => {
+    const consumeAuthCode = vi.fn().mockResolvedValue({ token: 'jwt' });
     const res = makeRes();
-    ctl(svc({ consumeAuthCode })).exchange('x', reqEx('the-secret'), res);
+    await ctl(svc({ consumeAuthCode })).exchange('x', reqEx('the-secret'), res);
     expect(consumeAuthCode).toHaveBeenCalledWith('x', 'the-secret');
     expect(res.clearCookie).toHaveBeenCalledWith('trek_oidc_exchange', expect.objectContaining({ httpOnly: true, path: '/' }));
   });
 
-  it('passes undefined when the browser has no binding cookie, and still clears it', () => {
-    const consumeAuthCode = vi.fn().mockReturnValue({ error: 'Invalid or expired code' });
+  it('passes undefined when the browser has no binding cookie, and still clears it', async () => {
+    const consumeAuthCode = vi.fn().mockResolvedValue({ error: 'Invalid or expired code' });
     const res = makeRes();
     // A request from any other context: no cookie jar for this origin at all.
-    ctl(svc({ consumeAuthCode })).exchange('stolen', { query: {}, headers: {} } as Request, res);
+    await ctl(svc({ consumeAuthCode })).exchange('stolen', { query: {}, headers: {} } as Request, res);
     expect(consumeAuthCode).toHaveBeenCalledWith('stolen', undefined);
     expect(res.statusCode).toBe(400);
     expect(res.clearCookie).toHaveBeenCalledWith('trek_oidc_exchange', expect.anything());
   });
 
-  it('clears the binding cookie even when no code was presented', () => {
+  it('clears the binding cookie even when no code was presented', async () => {
     const res = makeRes();
-    ctl(svc()).exchange(undefined, reqEx(), res);
+    await ctl(svc()).exchange(undefined, reqEx(), res);
     expect(res.clearCookie).toHaveBeenCalledWith('trek_oidc_exchange', expect.anything());
   });
 });

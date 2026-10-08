@@ -26,9 +26,9 @@ export const PUBLIC_API_RATE_MAX_PER_MINUTE = 120;
  * Falls back to a constant key when a request somehow carries no user, so the
  * limiter can never end up with one shared bucket for every anonymous caller.
  */
-export function enforcePublicApiRateLimit(rl: RateLimitService, req: Request): void {
+export async function enforcePublicApiRateLimit(rl: RateLimitService, req: Request): Promise<void> {
   const key = `user:${req.user?.id ?? 'unknown'}`;
-  if (!rl.check('public-api', key, PUBLIC_API_RATE_MAX_PER_MINUTE, PUBLIC_API_RATE_WINDOW_MS, Date.now())) {
+  if (!(await rl.check('public-api', key, PUBLIC_API_RATE_MAX_PER_MINUTE, PUBLIC_API_RATE_WINDOW_MS, Date.now()))) {
     throw new HttpException({ error: 'Too many requests. Please slow down.' }, 429);
   }
 }

@@ -49,13 +49,13 @@ import { FilesMcp } from '../../../src/nest/files/files.mcp';
 import { FILE_CONTENT_MAX } from '../../../src/nest/files/files.service';
 import { StorageService } from '../../../src/nest/storage/storage.service';
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   broadcastMock.mockClear();
   delete process.env.DEMO_MODE;
   // resetTestDb truncates app_settings, but the permission cache is module-scoped
   // and would keep serving whatever the previous case configured.
-  invalidatePermissionsCache();
+  await invalidatePermissionsCache();
 });
 
 afterAll(() => {
@@ -68,9 +68,9 @@ async function withHarness(userId: number, fn: (h: McpHarness) => Promise<void>)
 }
 
 /** Lower a configurable action the way the admin permission panel does. */
-function setPermission(action: string, level: string) {
+async function setPermission(action: string, level: string): Promise<void> {
   testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(`perm_${action}`, level);
-  invalidatePermissionsCache();
+  await invalidatePermissionsCache();
 }
 
 interface FileRowOverrides {
@@ -435,7 +435,7 @@ describe('Tool: update_trip_file', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
     const file = insertFile(trip.id);
-    setPermission('file_edit', 'trip_owner');
+    await setPermission('file_edit', 'trip_owner');
 
     await withHarness(member.id, async (h) => {
       const result = await h.client.callTool({
@@ -574,7 +574,7 @@ describe('Tool: upload_trip_file', () => {
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
-    setPermission('file_upload', 'trip_owner');
+    await setPermission('file_upload', 'trip_owner');
     await withHarness(member.id, async (h) => {
       const result = await h.client.callTool({ name: 'upload_trip_file', arguments: { tripId: trip.id, filename: 'a.pdf', content: pdf } });
       expect(result.isError).toBe(true);
@@ -708,7 +708,7 @@ describe('Tool: link_trip_file', () => {
     addTripMember(testDb, trip.id, member.id);
     const reservation = createReservation(testDb, trip.id);
     const file = insertFile(trip.id);
-    setPermission('file_edit', 'trip_owner');
+    await setPermission('file_edit', 'trip_owner');
 
     await withHarness(member.id, async (h) => {
       const result = await h.client.callTool({
@@ -811,7 +811,7 @@ describe('Tool: unlink_trip_file', () => {
     const file = insertFile(trip.id);
     testDb.prepare('INSERT INTO file_links (file_id, reservation_id) VALUES (?, ?)').run(file.id, reservation.id);
     const linkId = linkRows(file.id)[0].id;
-    setPermission('file_edit', 'trip_owner');
+    await setPermission('file_edit', 'trip_owner');
 
     await withHarness(member.id, async (h) => {
       const result = await h.client.callTool({

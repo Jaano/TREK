@@ -64,9 +64,9 @@ beforeAll(async () => {
   await getRegionGeo(['ZZ']);
 }, 60_000);
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
 });
 
 afterAll(async () => {

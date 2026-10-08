@@ -69,7 +69,7 @@ export class OidcController {
       const query = oidcLoginQuerySchema.safeParse(req.query);
       const inviteToken = query.success ? query.data.invite : (req.query.invite as string | undefined);
       const remember = query.success && query.data.remember !== undefined ? query.data.remember === '1' : undefined;
-      const { state, codeChallenge } = this.oidc.createState(redirectUri, inviteToken, remember);
+      const { state, codeChallenge } = await this.oidc.createState(redirectUri, inviteToken, remember);
       // Bind the state to THIS browser. The callback requires a matching cookie,
       // so an attacker-initiated login (whose callback URL carries a valid state
       // from the shared server map) cannot be replayed in a victim's browser to
@@ -117,7 +117,7 @@ export class OidcController {
     // Require the callback to come from the browser that started the flow.
     if (!boundState || boundState !== state) return f('/login?oidc_error=invalid_state');
 
-    const pending = this.oidc.consumeState(state);
+    const pending = await this.oidc.consumeState(state);
     if (!pending) return f('/login?oidc_error=invalid_state');
 
     const config = await this.oidc.getOidcConfig();
@@ -203,7 +203,7 @@ export class OidcController {
       // "absent", not `false`, or the sliding renewal would later downgrade the
       // default persistent cookie to a browser-session one (remember-me, #1927).
       const jwtToken = await this.oidc.generateToken(result.user, pending.remember);
-      const { code: authCode, binding } = this.oidc.createAuthCode(jwtToken, pending.remember);
+      const { code: authCode, binding } = await this.oidc.createAuthCode(jwtToken, pending.remember);
       // Bind the code to THIS browser, the way the state cookie binds the callback.
       // The code rides home in a URL, so it is readable from history, from a
       // referrer and from anything that logs URLs; without a second half nobody
@@ -219,7 +219,7 @@ export class OidcController {
   }
 
   @Get('exchange')
-  exchange(@Query('code') code: string | undefined, @Req() req: Request, @Res() res: Response): void {
+  async exchange(@Query('code') code: string | undefined, @Req() req: Request, @Res() res: Response): Promise<void> {
     // The binding cookie is single-use like the state cookie: one redemption
     // attempt per callback, whatever its outcome.
     const binding = (req.cookies as Record<string, string> | undefined)?.[OIDC_EXCHANGE_COOKIE];
@@ -229,7 +229,7 @@ export class OidcController {
       res.status(400).json({ error: 'Code required' });
       return;
     }
-    const result = this.oidc.consumeAuthCode(code, binding);
+    const result = await this.oidc.consumeAuthCode(code, binding);
     if ('error' in result) {
       res.status(400).json({ error: result.error });
       return;

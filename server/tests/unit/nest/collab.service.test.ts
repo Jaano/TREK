@@ -740,15 +740,37 @@ describe('linkPreview hardening', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const service = await freshSvc();
+    const limiter = new RateLimitService();
+    const check = vi.spyOn(limiter, 'check');
+    const service = await buildCollabService(collabFx.storage, limiter);
     const all = Promise.all(Array.from({ length: 20 }, () => service.linkPreview('https://example.com/same', 9)));
     release!();
     const results = await all;
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(results.every(r => r.title === 'Geteilt')).toBe(true);
-    // And the nineteen that joined were not charged for a fetch they did not make.
+    // And the nineteen that joined were not charged for a fetch they did not
+    // make, although the budget check awaits its store before the fetch starts.
     expect(results.some(r => r.rateLimited)).toBe(false);
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it('COLLAB-SVC-049: an asker that joined someone out of budget asks again on its own budget', async () => {
+    const fetchMock = stubFetch({ ok: true, text: async () => '<title>Eigenes Budget</title>' });
+    const limiter = new RateLimitService();
+    for (let i = 0; i < 60; i++) await limiter.check('collab_link_preview', '42', 60, 60_000, Date.now());
+    const service = await buildCollabService(collabFx.storage, limiter);
+
+    // 42 is first in line and out of budget; 43 arrives while 42's check runs.
+    const [spent, fresh] = await Promise.all([
+      service.linkPreview('https://example.com/shared-link', 42),
+      service.linkPreview('https://example.com/shared-link', 43),
+    ]);
+
+    expect(spent.rateLimited).toBe(true);
+    expect(fresh.rateLimited).toBeUndefined();
+    expect(fresh.title).toBe('Eigenes Budget');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('COLLAB-SVC-047: a body over the cap, and one behind a failed response, are both released', async () => {

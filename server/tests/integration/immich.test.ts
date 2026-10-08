@@ -63,9 +63,9 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
   // Providers only count as enabled under an enabled journey addon (migration 84 seeds it off).
   setAddonEnabled(testDb, 'journey', true);
   // The migrated snapshot seeds photo_providers.immich.enabled = 0 (an admin must

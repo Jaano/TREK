@@ -25,6 +25,7 @@ import { clientRegistrationHandler } from '@modelcontextprotocol/sdk/server/auth
 import { InvalidClientMetadataError, ServerError } from '@modelcontextprotocol/sdk/server/auth/errors';
 import { TrekClientsStore, TrekOAuthProvider } from '../../../src/nest/oauth/oauth-sdk.provider';
 import { OauthModule } from '../../../src/nest/oauth/oauth.module';
+import { processPendingCodes } from '../../../src/nest/oauth/oauth.pending-codes';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import { ALL_SCOPES, DEFAULT_CLIENT_SCOPES, OPT_IN_ONLY_SCOPES } from '../../../src/mcp/scopes';
 import type { OauthService } from '../../../src/nest/oauth/oauth.service';
@@ -362,30 +363,30 @@ describe('TrekOAuthProvider.exchangeAuthorizationCode', () => {
   const invalid = 'Authorization grant is invalid.';
 
   it('SDKP-040: unknown/expired code throws the uniform grant error', async () => {
-    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(() => null) }));
+    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(async () => null) }));
     await expect(provider.exchangeAuthorizationCode(clientInfo(), 'code')).rejects.toThrow(invalid);
   });
 
   it('SDKP-041: a code minted for another client throws the same error', async () => {
-    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(() => pending({ clientId: 'someone-else' })) }));
+    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(async () => pending({ clientId: 'someone-else' })) }));
     await expect(provider.exchangeAuthorizationCode(clientInfo(), 'code')).rejects.toThrow(invalid);
   });
 
   it('SDKP-042: redirect_uri mismatch throws the same error', async () => {
-    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(() => pending()) }));
+    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(async () => pending()) }));
     await expect(provider.exchangeAuthorizationCode(clientInfo(), 'code', undefined, 'https://wrong.example.com/cb'))
       .rejects.toThrow(invalid);
   });
 
   it('SDKP-043: resource mismatch throws the same error', async () => {
-    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(() => pending()) }));
+    const { provider } = makeProvider(makeOauth({ consumeAuthCode: vi.fn(async () => pending()) }));
     await expect(provider.exchangeAuthorizationCode(
       clientInfo(), 'code', undefined, 'https://client.example.com/cb', new URL('https://other.example.com/'),
     )).rejects.toThrow(invalid);
   });
 
   it('SDKP-044: failed PKCE throws the same error', async () => {
-    const oauth = makeOauth({ consumeAuthCode: vi.fn(() => pending()), verifyPKCE: vi.fn(() => false) });
+    const oauth = makeOauth({ consumeAuthCode: vi.fn(async () => pending()), verifyPKCE: vi.fn(() => false) });
     const { provider } = makeProvider(oauth);
     await expect(provider.exchangeAuthorizationCode(clientInfo(), 'code', 'bad-verifier', 'https://client.example.com/cb'))
       .rejects.toThrow(invalid);
@@ -393,7 +394,7 @@ describe('TrekOAuthProvider.exchangeAuthorizationCode', () => {
   });
 
   it('SDKP-045: a valid exchange issues tokens and audits the issue', async () => {
-    const oauth = makeOauth({ consumeAuthCode: vi.fn(() => pending()) });
+    const oauth = makeOauth({ consumeAuthCode: vi.fn(async () => pending()) });
     const audit = makeAudit();
     const { provider } = makeProvider(oauth, audit);
     const result = await provider.exchangeAuthorizationCode(
@@ -410,14 +411,14 @@ describe('TrekOAuthProvider.exchangeAuthorizationCode', () => {
   });
 
   it('SDKP-046: a pending code without a resource issues a null-audience token', async () => {
-    const oauth = makeOauth({ consumeAuthCode: vi.fn(() => pending({ resource: null })) });
+    const oauth = makeOauth({ consumeAuthCode: vi.fn(async () => pending({ resource: null })) });
     const { provider } = makeProvider(oauth);
     await provider.exchangeAuthorizationCode(clientInfo(), 'code', 'verifier');
     expect(oauth.issueTokens).toHaveBeenCalledWith('cid-1', 7, ['trips:read'], null, null);
   });
 
   it('SDKP-047: a missing codeVerifier is refused, not waved through', async () => {
-    const oauth = makeOauth({ consumeAuthCode: vi.fn(() => pending()) });
+    const oauth = makeOauth({ consumeAuthCode: vi.fn(async () => pending()) });
     const { provider } = makeProvider(oauth);
     await expect(provider.exchangeAuthorizationCode(clientInfo(), 'code')).rejects.toThrow(invalid);
     expect(oauth.issueTokens).not.toHaveBeenCalled();
@@ -485,7 +486,7 @@ describe('OauthModule.configure', () => {
       })),
     };
 
-    new OauthModule(addons, provider, clients).configure(consumer as never);
+    new OauthModule(addons, provider, clients, processPendingCodes).configure(consumer as never);
 
     expect(vi.mocked(authorizationHandler)).toHaveBeenCalledWith({ provider });
     expect(vi.mocked(clientRegistrationHandler)).toHaveBeenCalledWith({ clientsStore: clients });

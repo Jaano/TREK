@@ -233,7 +233,7 @@ describe('Collab e2e (real auth guard + temp SQLite)', () => {
     expect(last).toBe(429);
     // The counters live on the container singleton, so a spent budget would
     // follow this user into every test declared after it.
-    app.get(RateLimitService).reset('collab_link_preview');
+    await app.get(RateLimitService).reset('collab_link_preview');
   });
 
   it('400 on link-preview without a url', async () => {

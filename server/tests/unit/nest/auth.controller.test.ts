@@ -60,25 +60,25 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(() => { delete process.env.DEMO_MODE; });
 
 describe('RateLimitService', () => {
-  it('allows up to max then blocks within the window; buckets are isolated', () => {
+  it('allows up to max then blocks within the window; buckets are isolated', async () => {
     const s = rl();
-    expect(s.check('login', 'ip', 2, 1000, 0)).toBe(true);
-    expect(s.check('login', 'ip', 2, 1000, 10)).toBe(true);
-    expect(s.check('login', 'ip', 2, 1000, 20)).toBe(false); // 3rd within window
-    expect(s.check('mfa', 'ip', 2, 1000, 20)).toBe(true);     // different bucket
-    expect(s.check('login', 'ip', 2, 1000, 2000)).toBe(true); // window elapsed -> reset
+    expect(await s.check('login', 'ip', 2, 1000, 0)).toBe(true);
+    expect(await s.check('login', 'ip', 2, 1000, 10)).toBe(true);
+    expect(await s.check('login', 'ip', 2, 1000, 20)).toBe(false); // 3rd within window
+    expect(await s.check('mfa', 'ip', 2, 1000, 20)).toBe(true);     // different bucket
+    expect(await s.check('login', 'ip', 2, 1000, 2000)).toBe(true); // window elapsed -> reset
   });
 
-  it('reset clears a single named bucket, and reset() clears all of them', () => {
+  it('reset clears a single named bucket, and reset() clears all of them', async () => {
     const s = rl();
-    s.check('login', 'ip', 1, 1000, 0); // login bucket now at its cap
-    s.check('mfa', 'ip', 1, 1000, 0);   // mfa bucket now at its cap
-    expect(s.check('login', 'ip', 1, 1000, 0)).toBe(false);
-    s.reset('login'); // only the login bucket
-    expect(s.check('login', 'ip', 1, 1000, 0)).toBe(true);
-    expect(s.check('mfa', 'ip', 1, 1000, 0)).toBe(false); // mfa untouched
-    s.reset(); // everything
-    expect(s.check('mfa', 'ip', 1, 1000, 0)).toBe(true);
+    await s.check('login', 'ip', 1, 1000, 0); // login bucket now at its cap
+    await s.check('mfa', 'ip', 1, 1000, 0);   // mfa bucket now at its cap
+    expect(await s.check('login', 'ip', 1, 1000, 0)).toBe(false);
+    await s.reset('login'); // only the login bucket
+    expect(await s.check('login', 'ip', 1, 1000, 0)).toBe(true);
+    expect(await s.check('mfa', 'ip', 1, 1000, 0)).toBe(false); // mfa untouched
+    await s.reset(); // everything
+    expect(await s.check('mfa', 'ip', 1, 1000, 0)).toBe(true);
   });
 });
 
@@ -102,7 +102,7 @@ describe('AuthPublicController', () => {
 
   it('invite 429 when rate-limited', async () => {
     const s = rl();
-    s.check('login', '9.9.9.9', 10, 15 * 60 * 1000, Date.now()); // not exhausted yet
+    await s.check('login', '9.9.9.9', 10, 15 * 60 * 1000, Date.now()); // not exhausted yet
     const c = apc(asvc({ validateInviteToken: vi.fn().mockReturnValue({ valid: true, max_uses: 1, used_count: 0, expires_at: null }) } as Partial<AuthService>), s);
     expect(await c.invite('tok', req)).toEqual({ valid: true, max_uses: 1, used_count: 0, expires_at: null });
   });
@@ -179,7 +179,7 @@ describe('AuthPublicController', () => {
   it('reset-password 429 once the dedicated reset bucket is exhausted', async () => {
     const s = rl();
     const now = Date.now();
-    for (let i = 0; i < 5; i++) s.check('reset', '9.9.9.9', 5, 15 * 60 * 1000, now);
+    for (let i = 0; i < 5; i++) await s.check('reset', '9.9.9.9', 5, 15 * 60 * 1000, now);
     const c = apc(asvc({ resetPassword: vi.fn() } as Partial<AuthService>), s);
     expect(await thrownAsync(() => c.resetPassword(anyBody(), req))).toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
   });
@@ -192,7 +192,7 @@ describe('AuthPublicController', () => {
   it('demo-login + register + invite throw 429 when the login bucket is exhausted', async () => {
     const s = rl();
     const now = Date.now();
-    for (let i = 0; i < 10; i++) s.check('login', '9.9.9.9', 10, 15 * 60 * 1000, now);
+    for (let i = 0; i < 10; i++) await s.check('login', '9.9.9.9', 10, 15 * 60 * 1000, now);
     const c = apc(asvc({ registerUser: vi.fn(), validateInviteToken: vi.fn() } as Partial<AuthService>), s);
     expect(await thrownAsync(() => c.register(anyBody(), req, res))).toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
     expect(await thrownAsync(() => c.invite('t', req))).toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
@@ -248,23 +248,23 @@ describe('AuthController (authenticated)', () => {
     expect(await tok.createMcpToken(user, { name: 'CLI' }, req)).toEqual({ token: 'mcp_x' });
   });
 
-  it('resource-token 503 when unavailable, else returns the token payload', () => {
-    expect(thrown(() => ac(asvc({}), rl(), { createResourceToken: vi.fn().mockReturnValue(null) }).resourceToken(user, {}))).toEqual({ status: 503, body: { error: 'Service unavailable' } });
-    expect(ac(asvc({}), rl(), { createResourceToken: vi.fn().mockReturnValue({ token: 'rt' }) }).resourceToken(user, { purpose: 'download' })).toEqual({ token: 'rt' });
+  it('resource-token 503 when unavailable, else returns the token payload', async () => {
+    expect(await thrownAsync(() => ac(asvc({}), rl(), { createResourceToken: vi.fn().mockReturnValue(null) }).resourceToken(user, {}))).toEqual({ status: 503, body: { error: 'Service unavailable' } });
+    expect(await ac(asvc({}), rl(), { createResourceToken: vi.fn().mockReturnValue({ token: 'rt' }) }).resourceToken(user, { purpose: 'download' })).toEqual({ token: 'rt' });
   });
 
   it('ws/resource tokens throttle on their own buckets, so a mint loop cannot drain the store or block login', async () => {
     const s = rl();
     const now = Date.now();
-    for (let i = 0; i < 120; i++) s.check('ws_token', String(user.id), 120, 15 * 60 * 1000, now);
+    for (let i = 0; i < 120; i++) await s.check('ws_token', String(user.id), 120, 15 * 60 * 1000, now);
     expect(await thrownAsync(() => ac(asvc({}), s, { createWsToken: vi.fn().mockReturnValue({ token: 'ws' }) }).wsToken(user)))
       .toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
     // The login bucket is untouched: an exhausted socket loop must not lock the account out.
-    expect(s.check('login', '9.9.9.9', 5, 15 * 60 * 1000, now)).toBe(true);
+    expect(await s.check('login', '9.9.9.9', 5, 15 * 60 * 1000, now)).toBe(true);
 
     const s2 = rl();
-    for (let i = 0; i < 120; i++) s2.check('resource_token', String(user.id), 120, 15 * 60 * 1000, now);
-    expect(thrown(() => ac(asvc({}), s2, { createResourceToken: vi.fn().mockReturnValue({ token: 'rt' }) }).resourceToken(user, {})))
+    for (let i = 0; i < 120; i++) await s2.check('resource_token', String(user.id), 120, 15 * 60 * 1000, now);
+    expect(await thrownAsync(() => ac(asvc({}), s2, { createResourceToken: vi.fn().mockReturnValue({ token: 'rt' }) }).resourceToken(user, {})))
       .toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
   });
 
@@ -281,14 +281,14 @@ describe('AuthController (authenticated)', () => {
       .toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
 
     expect(await ac(asvc({}), s, { createWsToken: vi.fn().mockReturnValue({ token: 'ws2' }) }).wsToken(other)).toEqual({ token: 'ws2' });
-    expect(ac(asvc({}), s, { createResourceToken: vi.fn().mockReturnValue({ token: 'rt2' }) }).resourceToken(other, {})).toEqual({ token: 'rt2' });
+    expect(await ac(asvc({}), s, { createResourceToken: vi.fn().mockReturnValue({ token: 'rt2' }) }).resourceToken(other, {})).toEqual({ token: 'rt2' });
   });
 
   it('rate-limited account ops throw 429 once the bucket is exhausted', async () => {
     const s = rl();
     const now = Date.now();
     // exhaust the shared 'login' bucket for this ip (max 5)
-    for (let i = 0; i < 5; i++) s.check('login', '9.9.9.9', 5, 15 * 60 * 1000, now);
+    for (let i = 0; i < 5; i++) await s.check('login', '9.9.9.9', 5, 15 * 60 * 1000, now);
     const c = ac(asvc({ changePassword: vi.fn() } as Partial<AuthService>), s);
     expect(await thrownAsync(() => c.changePassword(user, anyBody(), req, res))).toEqual({ status: 429, body: { error: 'Too many attempts. Please try again later.' } });
   });

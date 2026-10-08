@@ -89,9 +89,9 @@ beforeAll(async () => {
     containerSideOauth = new OauthService(t.repo(OauthClients), t.repo(OauthTokens), t.repo(OauthConsents), await createTestAddonsService(testDb), new AuditService(t.repo(AuditLog), t.repo(Users)));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
     resetTestDb(testDb);
-    resetRateLimits(nestApp);
+    await resetRateLimits(nestApp);
     setMcpEnabled(true);
 });
 
@@ -273,7 +273,7 @@ describe('GET /oauth/authorize — SDK authorizationHandler over trekOAuthProvid
         // 2. the consent controller writes the code through the container
         //    singleton; the module-scoped pending-code map is what lets the
         //    SDK-side exchange see it.
-        const code = containerSideOauth.createAuthCode({
+        const code = await containerSideOauth.createAuthCode({
             clientId,
             userId: user.id,
             redirectUri: 'https://client.example.com/cb',

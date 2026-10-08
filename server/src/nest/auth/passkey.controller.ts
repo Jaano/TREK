@@ -36,8 +36,8 @@ export class PasskeyController {
     private readonly passkeys: PasskeyService,
   ) {}
 
-  private limit(bucket: string, req: Request, max: number): void {
-    if (!this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now())) {
+  private async limit(bucket: string, req: Request, max: number): Promise<void> {
+    if (!(await this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now()))) {
       throw new HttpException({ error: 'Too many attempts. Please try again later.' }, 429);
     }
   }
@@ -48,7 +48,7 @@ export class PasskeyController {
   @HttpCode(200)
   @UseGuards(PasskeyEnabledGuard, JwtAuthGuard)
   async registerOptions(@CurrentUser() user: User, @Body() body: PasskeyRegisterOptionsDto, @Req() req: Request) {
-    this.limit('mfa', req, 5);
+    await this.limit('mfa', req, 5);
     // The Origin header is only a pre-ceremony sanity input (see PasskeyService)
     // — the RP ID itself is never derived from request headers.
     const result = await this.passkeys.passkeyRegisterOptions(user.id, body?.password, req.headers.origin);
@@ -73,7 +73,7 @@ export class PasskeyController {
   @HttpCode(200)
   @UseGuards(PasskeyEnabledGuard)
   async loginOptions(@Req() req: Request) {
-    this.limit('login', req, 10);
+    await this.limit('login', req, 10);
     const result = await this.passkeys.passkeyLoginOptions(req.headers.origin);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
     return result.options;
@@ -84,7 +84,7 @@ export class PasskeyController {
   @HttpCode(200)
   @UseGuards(PasskeyEnabledGuard)
   async loginVerify(@Body() body: PasskeyLoginVerifyDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.limit('login', req, 10);
+    await this.limit('login', req, 10);
     const started = Date.now();
     const result = await this.passkeys.passkeyLoginVerify(body);
     if (result.auditAction) {
@@ -119,7 +119,7 @@ export class PasskeyController {
   @Delete('credentials/:id')
   @UseGuards(JwtAuthGuard)
   async remove(@CurrentUser() user: User, @Param('id') id: string, @Body() body: PasskeyDeleteDto, @Req() req: Request) {
-    this.limit('login', req, 5);
+    await this.limit('login', req, 5);
     const result = await this.passkeys.deletePasskey(user.id, id, body?.password);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
     await this.audit.writeAudit({ userId: user.id, action: 'user.passkey_delete', resource: String(id), ip: getClientIp(req) });

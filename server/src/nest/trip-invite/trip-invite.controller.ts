@@ -75,15 +75,15 @@ export class TripInviteLinkController {
 export class TripInviteController {
   constructor(private readonly invites: TripInviteService, private readonly rl: RateLimitService, private readonly audit: AuditService) {}
 
-  private limit(req: Request, max: number): void {
-    if (!this.rl.check('trip_invite', req.ip || 'unknown', max, RL_WINDOW, Date.now())) {
+  private async limit(req: Request, max: number): Promise<void> {
+    if (!(await this.rl.check('trip_invite', req.ip || 'unknown', max, RL_WINDOW, Date.now()))) {
       throw new HttpException({ error: 'Too many attempts. Please try again later.' }, 429);
     }
   }
 
   @Get(':token')
   async preview(@Param('token') token: string, @Req() req: Request) {
-    this.limit(req, 30);
+    await this.limit(req, 30);
     const resolved = await this.invites.resolve(token);
     if (!resolved) throw new HttpException({ error: 'Invalid or expired invite link' }, 404);
     return { trip_id: resolved.trip_id, title: resolved.title };
@@ -92,7 +92,7 @@ export class TripInviteController {
   @Post(':token/accept')
   @HttpCode(200)
   async accept(@CurrentUser() user: User, @Param('token') token: string, @Req() req: Request) {
-    this.limit(req, 20);
+    await this.limit(req, 20);
     const resolved = await this.invites.resolve(token);
     if (!resolved) throw new HttpException({ error: 'Invalid or expired invite link' }, 404);
     const result = await this.invites.join(resolved.trip_id, user.id);

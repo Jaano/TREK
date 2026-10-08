@@ -182,9 +182,9 @@ export function resetTestDb(db: Database.Database): void {
  * app.get(RateLimitService) is ambiguous and may hand back the wrong instance — we
  * resolve the auth controller and clear the limiter it actually uses.
  */
-export function resetRateLimits(app: INestApplication): void {
+export function resetRateLimits(app: INestApplication): Promise<void> {
   const ctrl = app.get(AuthPublicController, { strict: false }) as unknown as { rl: RateLimitService };
-  ctrl.rl.reset();
+  return ctrl.rl.reset();
 }
 
 /** Fixed config mock — use with vi.mock('../../src/config', () => TEST_CONFIG) */

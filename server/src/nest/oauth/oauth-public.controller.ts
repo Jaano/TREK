@@ -37,7 +37,7 @@ export class OauthPublicController {
     if (!(await this.oauth.mcpEnabled())) { res.status(404).end(); return; }
 
     const body: Record<string, string> = typeof req.body === 'object' && req.body ? req.body : {};
-    if (!this.rl.check('oauth_token', `${req.ip}|${body.client_id ?? ''}`, 30, MIN, Date.now())) {
+    if (!(await this.rl.check('oauth_token', `${req.ip}|${body.client_id ?? ''}`, 30, MIN, Date.now()))) {
       res.status(429).json({ error: 'too_many_requests', error_description: 'Too many attempts. Please try again later.' });
       return;
     }
@@ -58,7 +58,7 @@ export class OauthPublicController {
         res.status(400).json({ error: 'invalid_request', error_description: 'code, redirect_uri, and code_verifier are required' });
         return;
       }
-      const pending = this.oauth.consumeAuthCode(code);
+      const pending = await this.oauth.consumeAuthCode(code);
       const invalidGrant = async (reason: string, userId: number | null) => {
         await this.audit.writeAudit({ userId, action: 'oauth.token.grant_failed', details: { client_id, reason }, ip });
         res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid.' });
@@ -155,7 +155,7 @@ export class OauthPublicController {
   @Post('revoke')
   async revoke(@Req() req: Request, @Res() res: Response): Promise<void> {
     if (!(await this.oauth.mcpEnabled())) { res.status(404).end(); return; }
-    if (!this.rl.check('oauth_revoke', req.ip || 'unknown', 10, MIN, Date.now())) {
+    if (!(await this.rl.check('oauth_revoke', req.ip || 'unknown', 10, MIN, Date.now()))) {
       res.status(429).json({ error: 'too_many_requests', error_description: 'Too many attempts. Please try again later.' });
       return;
     }

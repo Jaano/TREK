@@ -5,7 +5,8 @@
  * as one process; with several, each would count on its own and a client
  * could spread its attempts over them. A store shared between processes
  * replaces InMemoryRateLimitStore in RateLimitModule without touching the
- * service or its callers.
+ * service or its callers. Both methods return a promise, because such a
+ * store lives in the database or on the network.
  */
 export abstract class RateLimitStore {
   /**
@@ -13,9 +14,9 @@ export abstract class RateLimitStore {
    * already used `max` attempts in the current `windowMs` window (the caller
    * answers 429), true otherwise.
    */
-  abstract hit(bucket: string, key: string, max: number, windowMs: number, now: number): boolean;
+  abstract hit(bucket: string, key: string, max: number, windowMs: number, now: number): Promise<boolean>;
   /** Clear one bucket, or every bucket. */
-  abstract reset(bucket?: string): void;
+  abstract reset(bucket?: string): Promise<void>;
 }
 
 interface Attempt {
@@ -40,7 +41,26 @@ export class InMemoryRateLimitStore extends RateLimitStore {
   /** Last sweep per bucket, so a busy bucket doesn't keep a quiet one from being cleaned. */
   private readonly lastSweep = new Map<string, number>();
 
-  hit(bucket: string, key: string, max: number, windowMs: number, now: number): boolean {
+  hit(bucket: string, key: string, max: number, windowMs: number, now: number): Promise<boolean> {
+    return Promise.resolve(this.count(bucket, key, max, windowMs, now));
+  }
+
+  reset(bucket?: string): Promise<void> {
+    if (bucket) this.buckets.get(bucket)?.clear();
+    else {
+      this.buckets.clear();
+      this.lastSweep.clear();
+    }
+    return Promise.resolve();
+  }
+
+  /** How many keys a bucket holds right now; the housekeeping is only visible here. */
+  size(bucket: string): number {
+    return this.buckets.get(bucket)?.size ?? 0;
+  }
+
+  /** The window check and the count, in one synchronous step so two hits cannot interleave. */
+  private count(bucket: string, key: string, max: number, windowMs: number, now: number): boolean {
     const store = this.store(bucket);
     this.sweep(bucket, store, windowMs, now);
     const record = store.get(key);
@@ -53,19 +73,6 @@ export class InMemoryRateLimitStore extends RateLimitStore {
       record.count++;
     }
     return true;
-  }
-
-  reset(bucket?: string): void {
-    if (bucket) this.buckets.get(bucket)?.clear();
-    else {
-      this.buckets.clear();
-      this.lastSweep.clear();
-    }
-  }
-
-  /** How many keys a bucket holds right now; the housekeeping is only visible here. */
-  size(bucket: string): number {
-    return this.buckets.get(bucket)?.size ?? 0;
   }
 
   private store(bucket: string): Map<string, Attempt> {

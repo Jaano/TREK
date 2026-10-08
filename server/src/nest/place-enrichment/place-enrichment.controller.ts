@@ -41,7 +41,7 @@ export class PlaceEnrichmentController {
   ): Promise<MapsPlaceEnrichmentResult> {
     // Keyed by user, not by IP: the cost lands on the key of whoever is signed
     // in, and a household behind one address should not share a budget.
-    if (!this.rl.check('place_enrichment', String(user.id), MAX_PER_MINUTE, MINUTE, Date.now())) {
+    if (!(await this.rl.check('place_enrichment', String(user.id), MAX_PER_MINUTE, MINUTE, Date.now()))) {
       throw new HttpException({ error: 'Too many requests' }, 429);
     }
 

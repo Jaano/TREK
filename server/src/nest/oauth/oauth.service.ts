@@ -35,7 +35,7 @@ import {
   redirectUriMatches,
   timingSafeEqualHex,
 } from './oauth.helpers';
-import { AUTH_CODE_TTL_MS, PendingCodeStore, processPendingCodes, type PendingCode } from './oauth.pending-codes';
+import { AUTH_CODE_TTL_MS, PendingCodeStore, pendingCodesSlot, type PendingCode } from './oauth.pending-codes';
 
 export type { PendingCode } from './oauth.pending-codes';
 
@@ -89,7 +89,7 @@ export class OauthService {
     @InjectRepository(OauthConsents) private readonly consents: OauthConsentsRepository,
     private readonly addons: AddonsService,
     private readonly audit: AuditService,
-    private readonly pendingCodes: PendingCodeStore = processPendingCodes,
+    private readonly pendingCodes: PendingCodeStore = pendingCodesSlot.get(),
   ) {}
 
   async mcpEnabled(): Promise<boolean> { return this.addons.isAddonEnabled(ADDON_IDS.MCP); }
@@ -231,7 +231,7 @@ export class OauthService {
   // Auth code (in-memory, 2-minute TTL)
   // -------------------------------------------------------------------------
 
-  createAuthCode(params: {
+  async createAuthCode(params: {
     clientId: string;
     userId: number;
     redirectUri: string;
@@ -239,13 +239,13 @@ export class OauthService {
     resource: string | null;
     codeChallenge: string;
     codeChallengeMethod: 'S256';
-  }): string | null {
+  }): Promise<string | null> {
     const rawCode = randomBytes(32).toString('hex');
-    const stored = this.pendingCodes.put(rawCode, { ...params, expiresAt: Date.now() + AUTH_CODE_TTL_MS });
+    const stored = await this.pendingCodes.put(rawCode, { ...params, expiresAt: Date.now() + AUTH_CODE_TTL_MS });
     return stored ? rawCode : null;
   }
 
-  consumeAuthCode(code: string): PendingCode | null {
+  consumeAuthCode(code: string): Promise<PendingCode | null> {
     return this.pendingCodes.take(code);
   }
 

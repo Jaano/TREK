@@ -47,7 +47,7 @@ export class PublicStatsController {
 
   @Get('stats')
   async stats(@Req() req: Request): Promise<PublicApiStats> {
-    enforcePublicApiRateLimit(this.rl, req);
+    await enforcePublicApiRateLimit(this.rl, req);
     requireScope(req, 'stats');
     const userId = requireUserId(req);
 

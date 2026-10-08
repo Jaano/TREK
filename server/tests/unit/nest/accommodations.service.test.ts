@@ -606,7 +606,7 @@ describe('trip access and edit permission', () => {
       // The permission cache is module-scoped and outlives resetTestDb — drop the row and
       // the cache together, or every later case in this file inherits the raised level.
       testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_day_edit'").run();
-      permissions.invalidatePermissionsCache();
+      await permissions.invalidatePermissionsCache();
     }
   });
 

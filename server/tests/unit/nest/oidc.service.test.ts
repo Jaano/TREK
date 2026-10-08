@@ -100,6 +100,7 @@ import { UserCleanupService } from '../../../src/nest/auth/user-cleanup.service'
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 import { AllowedFileTypesService } from '../../../src/nest/files/allowed-file-types.service';
 import { OidcService } from '../../../src/nest/oidc/oidc.service';
+import { InMemoryOidcFlowStore } from '../../../src/nest/oidc/oidc-flow.store';
 import { MailerService } from '../../../src/nest/notifications/mailer/mailer.service';
 import {
   createTestUnitOfWork,
@@ -178,51 +179,51 @@ afterAll(() => {
 // ── createState / consumeState ────────────────────────────────────────────────
 
 describe('createState / consumeState', () => {
-  it('OIDC-SVC-001: createState returns a hex token + PKCE S256 challenge', () => {
-    const { state, codeChallenge } = svc.createState('https://example.com/callback');
+  it('OIDC-SVC-001: createState returns a hex token + PKCE S256 challenge', async () => {
+    const { state, codeChallenge } = await svc.createState('https://example.com/callback');
     expect(state).toMatch(/^[0-9a-f]{64}$/);
     expect(codeChallenge).toMatch(/^[A-Za-z0-9_-]{43}$/); // base64url SHA-256, no padding
   });
 
-  it('OIDC-SVC-002: consumeState returns stored data (incl. verifier) and deletes state', () => {
-    const { state } = svc.createState('https://example.com/callback', 'invite-abc');
-    const data = svc.consumeState(state);
+  it('OIDC-SVC-002: consumeState returns stored data (incl. verifier) and deletes state', async () => {
+    const { state } = await svc.createState('https://example.com/callback', 'invite-abc');
+    const data = await svc.consumeState(state);
     expect(data).not.toBeNull();
     expect(data!.redirectUri).toBe('https://example.com/callback');
     expect(data!.inviteToken).toBe('invite-abc');
     expect(typeof data!.codeVerifier).toBe('string');
     expect(data!.codeVerifier.length).toBeGreaterThan(20);
     // State is consumed — second call returns null
-    expect(svc.consumeState(state)).toBeNull();
+    expect(await svc.consumeState(state)).toBeNull();
   });
 
-  it('OIDC-SVC-003: consumeState returns null for unknown state', () => {
-    expect(svc.consumeState('not-a-real-state')).toBeNull();
+  it('OIDC-SVC-003: consumeState returns null for unknown state', async () => {
+    expect(await svc.consumeState('not-a-real-state')).toBeNull();
   });
 
-  it('OIDC-SVC-055: createState stores the remember flag and consumeState returns it', () => {
-    const { state: sTrue } = svc.createState('https://example.com/cb', undefined, true);
-    const { state: sFalse } = svc.createState('https://example.com/cb', undefined, false);
-    const { state: sAbsent } = svc.createState('https://example.com/cb');
-    expect(svc.consumeState(sTrue)!.remember).toBe(true);
-    expect(svc.consumeState(sFalse)!.remember).toBe(false);
-    expect(svc.consumeState(sAbsent)!.remember).toBeUndefined();
+  it('OIDC-SVC-055: createState stores the remember flag and consumeState returns it', async () => {
+    const { state: sTrue } = await svc.createState('https://example.com/cb', undefined, true);
+    const { state: sFalse } = await svc.createState('https://example.com/cb', undefined, false);
+    const { state: sAbsent } = await svc.createState('https://example.com/cb');
+    expect((await svc.consumeState(sTrue))!.remember).toBe(true);
+    expect((await svc.consumeState(sFalse))!.remember).toBe(false);
+    expect((await svc.consumeState(sAbsent))!.remember).toBeUndefined();
   });
 
-  it('OIDC-SVC-004: two different states do not conflict', () => {
-    const { state: s1 } = svc.createState('http://a.example.com');
-    const { state: s2 } = svc.createState('http://b.example.com');
+  it('OIDC-SVC-004: two different states do not conflict', async () => {
+    const { state: s1 } = await svc.createState('http://a.example.com');
+    const { state: s2 } = await svc.createState('http://b.example.com');
     expect(s1).not.toBe(s2);
-    expect(svc.consumeState(s1)!.redirectUri).toBe('http://a.example.com');
-    expect(svc.consumeState(s2)!.redirectUri).toBe('http://b.example.com');
+    expect((await svc.consumeState(s1))!.redirectUri).toBe('http://a.example.com');
+    expect((await svc.consumeState(s2))!.redirectUri).toBe('http://b.example.com');
   });
 });
 
 // ── createAuthCode / consumeAuthCode ─────────────────────────────────────────
 
 describe('createAuthCode / consumeAuthCode', () => {
-  it('OIDC-SVC-005: createAuthCode returns a code and the secret that redeems it', () => {
-    const { code, binding } = svc.createAuthCode('my.jwt.token');
+  it('OIDC-SVC-005: createAuthCode returns a code and the secret that redeems it', async () => {
+    const { code, binding } = await svc.createAuthCode('my.jwt.token');
     expect(typeof code).toBe('string');
     expect(code.length).toBeGreaterThan(0);
     // 32 random bytes as base64url; the code alone must never be enough.
@@ -230,62 +231,62 @@ describe('createAuthCode / consumeAuthCode', () => {
     expect(binding).not.toBe(code);
   });
 
-  it('OIDC-SVC-005b: every code gets its own binding secret', () => {
-    const a = svc.createAuthCode('t');
-    const b = svc.createAuthCode('t');
+  it('OIDC-SVC-005b: every code gets its own binding secret', async () => {
+    const a = await svc.createAuthCode('t');
+    const b = await svc.createAuthCode('t');
     expect(a.binding).not.toBe(b.binding);
     expect(a.code).not.toBe(b.code);
   });
 
-  it('OIDC-SVC-006: consumeAuthCode returns the stored token', () => {
-    const { code, binding } = svc.createAuthCode('real.jwt.here');
-    const result = svc.consumeAuthCode(code, binding);
+  it('OIDC-SVC-006: consumeAuthCode returns the stored token', async () => {
+    const { code, binding } = await svc.createAuthCode('real.jwt.here');
+    const result = await svc.consumeAuthCode(code, binding);
     expect('token' in result).toBe(true);
     expect((result as { token: string }).token).toBe('real.jwt.here');
   });
 
-  it('OIDC-SVC-007: auth code is single-use (second consume returns error)', () => {
-    const { code, binding } = svc.createAuthCode('single.use.token');
-    svc.consumeAuthCode(code, binding); // first use
-    const second = svc.consumeAuthCode(code, binding);
+  it('OIDC-SVC-007: auth code is single-use (second consume returns error)', async () => {
+    const { code, binding } = await svc.createAuthCode('single.use.token');
+    await svc.consumeAuthCode(code, binding); // first use
+    const second = await svc.consumeAuthCode(code, binding);
     expect('error' in second).toBe(true);
   });
 
-  it('OIDC-SVC-008: consumeAuthCode returns error for unknown code', () => {
-    const result = svc.consumeAuthCode('not-a-real-code', 'whatever');
+  it('OIDC-SVC-008: consumeAuthCode returns error for unknown code', async () => {
+    const result = await svc.consumeAuthCode('not-a-real-code', 'whatever');
     expect('error' in result).toBe(true);
   });
 
-  it('OIDC-SVC-008b: a valid code without its binding is refused, and indistinguishable from an unknown one', () => {
-    const { code } = svc.createAuthCode('bound.token');
-    expect(svc.consumeAuthCode(code, undefined)).toEqual({ error: 'Invalid or expired code' });
-    expect(svc.consumeAuthCode('not-a-real-code', undefined)).toEqual({ error: 'Invalid or expired code' });
+  it('OIDC-SVC-008b: a valid code without its binding is refused, and indistinguishable from an unknown one', async () => {
+    const { code } = await svc.createAuthCode('bound.token');
+    expect(await svc.consumeAuthCode(code, undefined)).toEqual({ error: 'Invalid or expired code' });
+    expect(await svc.consumeAuthCode('not-a-real-code', undefined)).toEqual({ error: 'Invalid or expired code' });
   });
 
-  it('OIDC-SVC-008c: another browser binding is refused', () => {
-    const mine = svc.createAuthCode('mine');
-    const theirs = svc.createAuthCode('theirs');
-    expect('error' in svc.consumeAuthCode(mine.code, theirs.binding)).toBe(true);
+  it('OIDC-SVC-008c: another browser binding is refused', async () => {
+    const mine = await svc.createAuthCode('mine');
+    const theirs = await svc.createAuthCode('theirs');
+    expect('error' in (await svc.consumeAuthCode(mine.code, theirs.binding))).toBe(true);
   });
 
-  it('OIDC-SVC-008d: a wrong binding burns the code, so it cannot be retried', () => {
-    const { code, binding } = svc.createAuthCode('burn.me');
-    svc.consumeAuthCode(code, 'not-the-binding');
-    expect('error' in svc.consumeAuthCode(code, binding)).toBe(true);
+  it('OIDC-SVC-008d: a wrong binding burns the code, so it cannot be retried', async () => {
+    const { code, binding } = await svc.createAuthCode('burn.me');
+    await svc.consumeAuthCode(code, 'not-the-binding');
+    expect('error' in (await svc.consumeAuthCode(code, binding))).toBe(true);
   });
 
-  it('OIDC-SVC-008e: a binding that is not even base64 is refused instead of throwing', () => {
-    const { code } = svc.createAuthCode('t');
-    expect('error' in svc.consumeAuthCode(code, '!!!!')).toBe(true);
+  it('OIDC-SVC-008e: a binding that is not even base64 is refused instead of throwing', async () => {
+    const { code } = await svc.createAuthCode('t');
+    expect('error' in (await svc.consumeAuthCode(code, '!!!!'))).toBe(true);
   });
 
-  it('OIDC-SVC-056: auth code round-trips the remember flag', () => {
-    const cTrue = svc.createAuthCode('t1', true);
-    const cFalse = svc.createAuthCode('t2', false);
-    const cAbsent = svc.createAuthCode('t3');
-    expect((svc.consumeAuthCode(cTrue.code, cTrue.binding) as { remember?: boolean }).remember).toBe(true);
-    expect((svc.consumeAuthCode(cFalse.code, cFalse.binding) as { remember?: boolean }).remember).toBe(false);
-    expect((svc.consumeAuthCode(cAbsent.code, cAbsent.binding) as { remember?: boolean }).remember).toBeUndefined();
+  it('OIDC-SVC-056: auth code round-trips the remember flag', async () => {
+    const cTrue = await svc.createAuthCode('t1', true);
+    const cFalse = await svc.createAuthCode('t2', false);
+    const cAbsent = await svc.createAuthCode('t3');
+    expect(((await svc.consumeAuthCode(cTrue.code, cTrue.binding)) as { remember?: boolean }).remember).toBe(true);
+    expect(((await svc.consumeAuthCode(cFalse.code, cFalse.binding)) as { remember?: boolean }).remember).toBe(false);
+    expect(((await svc.consumeAuthCode(cAbsent.code, cAbsent.binding)) as { remember?: boolean }).remember).toBeUndefined();
   });
 });
 
@@ -1399,5 +1400,26 @@ describe('OIDC settings — the lockout guard', () => {
     await svc.updateOidcSettings({ issuer: 'https://idp', client_id: 'c', client_secret: '' });
     expect((await svc.getOidcSettings()).client_secret_set).toBe(false);
     toggles.mockRestore();
+  });
+});
+
+describe('the flow-store sweeps', () => {
+  it('OIDC-SVC-093: the interval sweeps go through the injected store, and a failed sweep is logged, not thrown', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const flows = new InMemoryOidcFlowStore();
+    const sweepStates = vi.spyOn(flows, 'sweepStates').mockRejectedValue(new Error('store offline'));
+    const sweepCodes = vi.spyOn(flows, 'sweepCodes');
+    const fresh = new OidcService(auth, membership, await createTestUnitOfWork(testDb), await createTestUsersRepo(testDb), await createTestInviteTokensRepo(testDb), await createTestAppSettingsRepo(testDb), flows);
+    try {
+      vi.advanceTimersByTime(60_000);
+      expect(sweepCodes).toHaveBeenCalled();
+      expect(sweepStates).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith(expect.stringContaining('OIDC flow sweep failed: store offline')));
+    } finally {
+      fresh.onModuleDestroy();
+      error.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

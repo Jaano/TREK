@@ -447,9 +447,13 @@ export async function restoreFromZip({ storage, database }: BackupDeps, zipPath:
       // still holds the pre-restore state. Any request using a cached
       // permission would decide against the wrong grants until the
       // next restart. Dropping the cache forces a fresh read.
-      // D6: no repository read happens on this path today (invalidation is a
-      // plain function, not a DB call), so no withRequestContext is owed here.
-      invalidatePermissionsCache();
+      // D6: no repository read happens on this path today. The flush goes to
+      // the store PermissionsModule installed (permissionsCacheSlot), and the
+      // in-memory one makes no DB call, so no withRequestContext is owed here
+      // yet. A store that reads the database, or the domain phase that gives
+      // this restore path a repository read (Plan 3's admin/backup cluster),
+      // must wrap it then; see task-2-review.md's non-HTTP caller table.
+      await invalidatePermissionsCache();
     }
 
     if (!reinitFailed) {
@@ -517,7 +521,7 @@ export async function restoreFromZip({ storage, database }: BackupDeps, zipPath:
     // we leave the process in after a failed restore.
     // D6: same no-repository-read note as the other invalidatePermissionsCache()
     // call above — nothing to wrap yet.
-    try { invalidatePermissionsCache(); } catch { /* best-effort */ }
+    try { await invalidatePermissionsCache(); } catch { /* best-effort */ }
     throw err;
   }
 }

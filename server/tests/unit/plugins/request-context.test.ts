@@ -120,7 +120,7 @@ function makeSupervisor(resolveOrm?: () => { em: EntityManager } | undefined) {
 
 describe('PluginSupervisor request context (D6, C3)', () => {
   it('CTX-PLUGIN-001: without a resolveOrm thunk, the dispatch THROWS (host-side visibility) but the child still gets answered first (task-6-rereview.md §5 RULING: an unanswered \'req\' hangs the plugin forever — plugin-host-entry.ts\'s pending map has no timeout)', async () => {
-    permissions.invalidatePermissionsCache();
+    await permissions.invalidatePermissionsCache();
     const { supervisor, sup, sent } = makeSupervisor(); // no resolveOrm — the bug's exact reproduction
     const canCreateAsSpy = vi.spyOn(guards, 'canCreateAs');
     try {
@@ -147,7 +147,7 @@ describe('PluginSupervisor request context (D6, C3)', () => {
   });
 
   it('CTX-PLUGIN-002: wrapped in withRequestContext, the same dispatch enforces the stored override — a "user" role is refused', async () => {
-    permissions.invalidatePermissionsCache();
+    await permissions.invalidatePermissionsCache();
     const { supervisor, sup, sent } = makeSupervisor(() => t.orm);
 
     await supervisor.onMessage(sup, { k: 'req', id: 'r2', method: 'trips.create', params: { _inv: 'inv-1' } });

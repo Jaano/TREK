@@ -149,9 +149,9 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
   seen.length = 0;
   answers.clear();
   process.env.OIDC_CLIENT_ID = CLIENT_ID;

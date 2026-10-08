@@ -53,9 +53,9 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
   // Enable the collections addon (the controller sits behind AddonGuard).
   testDb.prepare(
     "INSERT OR REPLACE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('collections', 'Collections', 'Saved places', 'global', 'Bookmark', 1, 40)"

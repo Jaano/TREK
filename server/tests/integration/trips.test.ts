@@ -39,10 +39,10 @@ beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
-  invalidatePermissionsCache();
+  await resetRateLimits(nestApp);
+  await invalidatePermissionsCache();
 });
 afterAll(async () => {
   await nestApp.close();
@@ -137,7 +137,7 @@ describe('Create trip', () => {
 
     // Restrict trip creation to admins only
     testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('perm_trip_create', 'admin')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .post('/api/trips')
@@ -152,7 +152,7 @@ describe('Create trip', () => {
     const { user: admin } = createAdmin(testDb);
 
     testDb.prepare("INSERT INTO app_settings (key, value) VALUES ('perm_trip_create', 'admin')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .post('/api/trips')
@@ -375,7 +375,7 @@ describe('Update trip', () => {
 
     // Restrict archiving to trip_owner only (this is actually the default, but set explicitly)
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_trip_archive', 'trip_owner')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .put(`/api/trips/${trip.id}`)
@@ -394,7 +394,7 @@ describe('Update trip', () => {
 
     // Default trip_edit is trip_owner — members should be blocked
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_trip_edit', 'trip_owner')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .put(`/api/trips/${trip.id}`)
@@ -896,7 +896,7 @@ describe('Trip members', () => {
 
     // Restrict member management to trip_owner (default)
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_member_manage', 'trip_owner')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/members`)

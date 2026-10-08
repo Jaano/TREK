@@ -1,12 +1,15 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { emitPluginEvent, pluginEventMeta } from '../../plugin-event-sink';
 import { User } from '../../types';
+import { ProcessStoreSlot } from '../common/process-store-slot';
 
 /**
  * The socket registry: rooms, per-socket identity, and the three fan-out
  * primitives.
  *
- * MODULE state, not provider state, and that is load-bearing. The no-Nest test
+ * MODULE state, not provider state, and that is load-bearing: the rooms live
+ * in the registry `roomsSlot` holds, which the container's provider replaces
+ * when RealtimeGatewayModule is built and nothing else does. The no-Nest test
  * harnesses hand-build RealtimeService instances (mcp-test-controllers.ts and
  * ~60 unit suites), and the 115 vi.mock('src/websocket') seams assert on these
  * exact exports. If the rooms lived on a provider instance, an out-of-container
@@ -31,12 +34,18 @@ export interface TrekWebSocket extends WebSocket {
  * contributor's sockets would send a pointer moving at ten frames a second to
  * someone reading the journey on their phone.
  *
- * An injectable port: RealtimeGatewayModule provides `processRooms` and the
- * gateway takes it, while the broadcast functions below read the same
- * instance. Membership holds live sockets, so it is local to the process by
- * nature; running several processes needs a fan-out between them (each
- * delivering to its own sockets) rather than a different place to keep these
- * sets.
+ * An injectable port: RealtimeGatewayModule provides it (`processRooms`
+ * unless overridden) and installs whatever the container resolved in
+ * `roomsSlot`, which the broadcast functions below read, so the gateway that
+ * joins sockets and the broadcasts that deliver to them always use one
+ * registry.
+ *
+ * Unlike the other process-state ports this one stays synchronous on purpose.
+ * Membership holds live sockets, which cannot be kept anywhere but the process
+ * that owns the connection, and `broadcast()` is a synchronous call every
+ * domain makes after a write. Running several processes needs a fan-out
+ * between them (each delivering to its own sockets), which is a port in front
+ * of `broadcast()`, not a different place to keep these sets.
  */
 export abstract class RoomRegistry {
   /** Start tracking a new connection's rooms. */
@@ -119,8 +128,11 @@ export class InMemoryRoomRegistry extends RoomRegistry {
   }
 }
 
-/** The one registry this process has; see RoomRegistry for who reads it. */
+/** The in-memory registry this process starts with, and what RealtimeGatewayModule provides unless overridden. */
 export const processRooms: RoomRegistry = new InMemoryRoomRegistry();
+
+/** The registry the free functions below use; RealtimeGatewayModule installs the one the container resolved. */
+export const roomsSlot = new ProcessStoreSlot<RoomRegistry>(processRooms);
 
 const socketUser = new WeakMap<TrekWebSocket, User>();
 const socketId = new WeakMap<TrekWebSocket, number>();
@@ -150,7 +162,7 @@ export function registerSocket(ws: TrekWebSocket, user: User): number {
   const sid = nextSocketId++;
   socketId.set(ws, sid);
   socketUser.set(ws, user);
-  processRooms.register(ws);
+  roomsSlot.get().register(ws);
   return sid;
 }
 
@@ -159,15 +171,15 @@ export function userOf(ws: TrekWebSocket): User | undefined {
 }
 
 export function joinRoom(ws: TrekWebSocket, tripId: number): void {
-  processRooms.join(ws, tripId);
+  roomsSlot.get().join(ws, tripId);
 }
 
 export function leaveRoom(ws: TrekWebSocket, tripId: number): void {
-  processRooms.leave(ws, tripId);
+  roomsSlot.get().leave(ws, tripId);
 }
 
 export function leaveAllRooms(ws: TrekWebSocket): void {
-  processRooms.leaveAll(ws);
+  roomsSlot.get().leaveAll(ws);
 }
 
 // ── Studio books ──────────────────────────────────────────────────────────
@@ -180,16 +192,16 @@ export interface BookPeer {
 }
 
 export function joinBook(ws: TrekWebSocket, journeyId: number): void {
-  processRooms.joinBook(ws, journeyId);
+  roomsSlot.get().joinBook(ws, journeyId);
 }
 
 export function leaveBook(ws: TrekWebSocket, journeyId: number): void {
-  processRooms.leaveBook(ws, journeyId);
+  roomsSlot.get().leaveBook(ws, journeyId);
 }
 
 /** Every book this socket had open — called when the connection goes. */
 export function leaveAllBooks(ws: TrekWebSocket): number[] {
-  return processRooms.leaveAllBooks(ws);
+  return roomsSlot.get().leaveAllBooks(ws);
 }
 
 /**
@@ -199,7 +211,7 @@ export function leaveAllBooks(ws: TrekWebSocket): number[] {
  * pointers, and a list keyed by user could not say which one moved.
  */
 export function bookPeers(journeyId: number): BookPeer[] {
-  const room = processRooms.bookMembers(journeyId);
+  const room = roomsSlot.get().bookMembers(journeyId);
   if (!room) return [];
   const peers: BookPeer[] = [];
   for (const ws of room) {
@@ -224,7 +236,7 @@ export function broadcastToBook(
   payload: Record<string, unknown>,
   excludeSid?: number,
 ): void {
-  const room = processRooms.bookMembers(journeyId);
+  const room = roomsSlot.get().bookMembers(journeyId);
   if (!room || room.size === 0) return;
   for (const ws of room) {
     if (ws.readyState !== 1) continue;
@@ -259,7 +271,7 @@ export function broadcast(
   // and with no ws server at all, and skipping plugin:* re-broadcasts so a
   // plugin's own events can't loop back.
   if (!eventType.startsWith('plugin:')) emitPluginEvent(tripId, eventType, pluginEventMeta(eventType, payload));
-  const room = processRooms.members(tripId);
+  const room = roomsSlot.get().members(tripId);
   if (!room || room.size === 0) return;
 
   const excludeNum = excludeSid ? Number(excludeSid) : null;

@@ -106,7 +106,7 @@ const itinerary = {
   ],
 };
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   geocodeMock.mockReset();
   planMock.mockReset();
@@ -114,7 +114,7 @@ beforeEach(() => {
   // mockReset would fall back to the real notification write — keep it stubbed.
   notifyBookingChangeMock.mockReset().mockImplementation(async () => {});
   delete process.env.DEMO_MODE;
-  invalidatePermissionsCache();
+  await invalidatePermissionsCache();
 });
 
 afterAll(() => testDb.close());

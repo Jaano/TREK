@@ -206,7 +206,7 @@ describe('PluginGuards — canEditAs/canCreateAs against a real UsersRepository 
     // The permissions cache is module-scoped (permissions-cache.ts), not
     // per-instance — invalidate before every case so a stored override from
     // another describe block in this same worker can't leak in.
-    permissions.invalidatePermissionsCache();
+    await permissions.invalidatePermissionsCache();
     guards = new PluginGuards(db, permissions, {} as AddonsService, orm.repo(Users));
     createUser(testDb, { role: 'user' }); // id 1, the trip owner — unused by these cases directly
     memberId = createUser(testDb, { role: 'user' }).user.id; // id 2, a non-owner trip member

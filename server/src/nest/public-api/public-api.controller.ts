@@ -46,14 +46,14 @@ export class PublicApiController {
     private readonly rl: RateLimitService,
   ) {}
 
-  private limit(req: Request): void {
-    enforcePublicApiRateLimit(this.rl, req);
+  private limit(req: Request): Promise<void> {
+    return enforcePublicApiRateLimit(this.rl, req);
   }
 
   /** Every trip the token's owner can reach, without itineraries. */
   @Get('trips')
   async listTrips(@Req() req: Request): Promise<PublicApiTripList> {
-    this.limit(req);
+    await this.limit(req);
     requireScope(req, 'trips');
     return { trips: await this.api.listTrips(requireUserId(req)) };
   }
@@ -67,7 +67,7 @@ export class PublicApiController {
    */
   @Get('bucket-list')
   async listBucketList(@Req() req: Request): Promise<PublicApiBucketList> {
-    this.limit(req);
+    await this.limit(req);
     requireScope(req, 'bucket-list');
     return { items: await this.api.listBucketList(requireUserId(req)) };
   }
@@ -85,7 +85,7 @@ export class PublicApiController {
     @Param('id') id: string,
     @Query('include') include?: string,
   ): Promise<PublicApiTrip> {
-    this.limit(req);
+    await this.limit(req);
     requireScope(req, 'trips');
     const tripId = parseTripId(id);
 

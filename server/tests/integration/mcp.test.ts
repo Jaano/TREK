@@ -79,9 +79,9 @@ beforeAll(async () => {
   oauthSvc = new OauthService(t.repo(OauthClients), t.repo(OauthTokens), t.repo(OauthConsents), await createTestAddonsService(testDb), new AuditService(t.repo(AuditLog), t.repo(Users)));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
+  await resetRateLimits(nestApp);
 });
 
 afterAll(async () => {

@@ -23,9 +23,9 @@ import { logError } from '../audit/audit-log.logger';
 import {
   bookPeers,
   broadcastToBook,
-  processRooms,
   registerSocket,
   RoomRegistry,
+  roomsSlot,
   socketIdOf,
   userOf,
   type TrekWebSocket,
@@ -45,9 +45,10 @@ const HEARTBEAT_INTERVAL = 30_000;
  * than an interval nobody stops.
  *
  * What did NOT move is the socket registry. It stays one process-wide
- * instance in ws-state.ts (`processRooms`, injected here as the RoomRegistry
- * port) because out-of-container code (the no-Nest test harnesses, the
- * vi.mock'd src/websocket seam) must see the same rooms; see the note there.
+ * instance in ws-state.ts (the RoomRegistry port, installed in `roomsSlot` by
+ * RealtimeGatewayModule) because out-of-container code (the no-Nest test
+ * harnesses, the vi.mock'd src/websocket seam) must see the same rooms; see
+ * the note there.
  *
  * The wire protocol is unchanged, down to the frame names. TrekWsAdapter maps
  * `{ type }` onto @SubscribeMessage, because the stock adapter dispatches on
@@ -74,9 +75,10 @@ export class RealtimeGateway
     private readonly journeys: JourneyDomainService,
     @InjectRepository(Users) private readonly users: UsersRepository,
     @InjectRepository(AppSettings) private readonly appSettings: AppSettingsRepository,
-    // Room membership, behind its port. The process-wide registry by default:
-    // the broadcast functions in ws-state.ts read the same instance.
-    private readonly rooms: RoomRegistry = processRooms,
+    // Room membership, behind its port. The container's provider, which
+    // RealtimeGatewayModule also installs for the broadcast functions in
+    // ws-state.ts; a hand-built gateway takes the installed one.
+    private readonly rooms: RoomRegistry = roomsSlot.get(),
   ) {}
 
   afterInit(server: WebSocketServer): void {

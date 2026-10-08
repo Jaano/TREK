@@ -29,8 +29,8 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class AuthPublicController {
   constructor(private readonly auth: AuthService, private readonly rl: RateLimitService, private readonly audit: AuditService) {}
 
-  private limit(bucket: string, req: Request, max: number): void {
-    if (!this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now())) {
+  private async limit(bucket: string, req: Request, max: number): Promise<void> {
+    if (!(await this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now()))) {
       throw new HttpException({ error: 'Too many attempts. Please try again later.' }, 429);
     }
   }
@@ -57,7 +57,7 @@ export class AuthPublicController {
   @Get('invite/:token')
   @Public('the invite token IS the credential')
   async invite(@Param('token') token: string, @Req() req: Request) {
-    this.limit('login', req, 10);
+    await this.limit('login', req, 10);
     const result = await this.auth.validateInviteToken(token);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
@@ -69,7 +69,7 @@ export class AuthPublicController {
   @Public('creating the account that would carry the session')
   @HttpCode(201)
   async register(@Body() body: RegisterDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.limit('login', req, 10);
+    await this.limit('login', req, 10);
     const result = await this.auth.registerUser(body);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
@@ -83,7 +83,7 @@ export class AuthPublicController {
   @Public('the login itself')
   @HttpCode(200)
   async login(@Body() body: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.limit('login', req, 10);
+    await this.limit('login', req, 10);
     const started = Date.now();
     const result = await this.auth.loginUser(body);
     if (result.auditAction) {
@@ -111,7 +111,7 @@ export class AuthPublicController {
   @Public('reached by somebody who cannot log in')
   @HttpCode(200)
   async forgotPassword(@Body() body: ForgotPasswordDto, @Req() req: Request) {
-    this.limit('forgot', req, 3);
+    await this.limit('forgot', req, 3);
     const started = Date.now();
     const rawEmail = typeof body?.email === 'string' ? body.email : '';
     const ip = getClientIp(req);
@@ -141,7 +141,7 @@ export class AuthPublicController {
   async resetPassword(@Body() body: ResetPasswordDto, @Req() req: Request) {
     // Per-IP brute-force guard, parity with the legacy resetLimiter (5 / 15 min on
     // a dedicated bucket) — without it reset tokens could be guessed unthrottled.
-    this.limit('reset', req, 5);
+    await this.limit('reset', req, 5);
     const ip = getClientIp(req);
     const result = await this.auth.resetPassword(body);
     if (result.error) {
@@ -159,7 +159,7 @@ export class AuthPublicController {
   @Public('second factor of a login that has no session yet')
   @HttpCode(200)
   async verifyMfaLogin(@Body() body: MfaVerifyLoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.limit('mfa', req, 5);
+    await this.limit('mfa', req, 5);
     const result = await this.auth.verifyMfaLogin(body);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);

@@ -54,10 +54,10 @@ beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
-  invalidatePermissionsCache();
+  await resetRateLimits(nestApp);
+  await invalidatePermissionsCache();
   // Enable the journey addon.
   testDb.prepare(
     "INSERT OR REPLACE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('journey', 'Journey', 'Travel journal', 'global', 'Compass', 1, 35)"

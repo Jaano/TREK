@@ -36,7 +36,7 @@ const ITEM = {
 
 /** The limiter always allows unless a test says otherwise. */
 function makeController(svc: Partial<PublicApiService>, allow = true) {
-  const rl = { check: vi.fn().mockReturnValue(allow) } as unknown as RateLimitService;
+  const rl = { check: vi.fn().mockResolvedValue(allow) } as unknown as RateLimitService;
   return new PublicApiController(svc as PublicApiService, rl);
 }
 

@@ -235,7 +235,7 @@ describe('Tool: delete_day', () => {
     const day = createDay(testDb, trip.id);
     createDay(testDb, trip.id);
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_day_edit', 'trip_owner')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
     try {
       await withHarness(member.id, async (h) => {
         const result = await h.client.callTool({ name: 'delete_day', arguments: { tripId: trip.id, dayId: day.id } });
@@ -244,7 +244,7 @@ describe('Tool: delete_day', () => {
       });
     } finally {
       testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_day_edit'").run();
-      invalidatePermissionsCache();
+      await invalidatePermissionsCache();
     }
   });
 

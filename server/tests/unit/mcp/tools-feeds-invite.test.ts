@@ -62,7 +62,7 @@ interface FeedResult { feed_url: string | null }
 interface InviteLink { token: string; expires_at: string | null; created_at: string; url: string }
 interface InviteResult { invite_link: InviteLink | null }
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
   // trip_invite_tokens is not in the shared helper's RESET_TABLES, and trip ids
   // restart after a DELETE-based reset, so a leftover row would attach itself
@@ -71,7 +71,7 @@ beforeEach(() => {
   // The permission levels are cached in module state that resetTestDb knows
   // nothing about, so the one test that lowers share_manage would otherwise
   // keep the lowered level alive for every test after it.
-  invalidatePermissionsCache();
+  await invalidatePermissionsCache();
   delete process.env.DEMO_MODE;
   process.env.APP_URL = BASE;
 });

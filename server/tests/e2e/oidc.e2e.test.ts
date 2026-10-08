@@ -74,8 +74,8 @@ describe('OIDC e2e (real cookie service)', () => {
     const oidc = app.get(OidcService);
     vi.spyOn(oidc, 'getOidcConfig').mockResolvedValue({ issuer: 'https://idp', clientId: 'c', clientSecret: 's', displayName: 'SSO', discoveryUrl: null });
     vi.spyOn(oidc, 'discover').mockResolvedValue({ authorization_endpoint: 'https://idp/auth', userinfo_endpoint: 'https://idp/ui', issuer: 'https://idp' } as never);
-    vi.spyOn(oidc, 'createState').mockReturnValue({ state: 'st', codeChallenge: 'cc' });
-    consumeAuthCode = vi.spyOn(oidc, 'consumeAuthCode').mockReturnValue({ token: 'jwt.value' });
+    vi.spyOn(oidc, 'createState').mockResolvedValue({ state: 'st', codeChallenge: 'cc' });
+    consumeAuthCode = vi.spyOn(oidc, 'consumeAuthCode').mockResolvedValue({ token: 'jwt.value' });
   });
 
   beforeEach(() => { toggles.oidc_login = true; });
@@ -104,7 +104,7 @@ describe('OIDC e2e (real cookie service)', () => {
   });
 
   it('GET /exchange sets the httpOnly trek_session cookie + returns the token', async () => {
-    consumeAuthCode.mockReturnValue({ token: 'jwt.value' });
+    consumeAuthCode.mockResolvedValue({ token: 'jwt.value' });
     const res = await request(server).get('/api/auth/oidc/exchange').query({ code: 'good' });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ token: 'jwt.value' });
@@ -113,7 +113,7 @@ describe('OIDC e2e (real cookie service)', () => {
   });
 
   it('GET /exchange with a remembered code sets a persistent Max-Age cookie (#1927)', async () => {
-    consumeAuthCode.mockReturnValue({ token: 'jwt.value', remember: true });
+    consumeAuthCode.mockResolvedValue({ token: 'jwt.value', remember: true });
     const res = await request(server).get('/api/auth/oidc/exchange').query({ code: 'good' });
     expect(res.status).toBe(200);
     const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('trek_session='))!;
@@ -121,7 +121,7 @@ describe('OIDC e2e (real cookie service)', () => {
   });
 
   it('GET /exchange with remember=false sets a browser-session cookie (no Max-Age) (#1927)', async () => {
-    consumeAuthCode.mockReturnValue({ token: 'jwt.value', remember: false });
+    consumeAuthCode.mockResolvedValue({ token: 'jwt.value', remember: false });
     const res = await request(server).get('/api/auth/oidc/exchange').query({ code: 'good' });
     expect(res.status).toBe(200);
     const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('trek_session='))!;

@@ -201,7 +201,7 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
   }, 10000);
 
   it('PUT /me/password preserves the remember choice on the re-issued cookie (#1927)', async () => {
-    resetRateLimits(app); // earlier login cases share the same per-ip 'login' bucket
+    await resetRateLimits(app); // earlier login cases share the same per-ip 'login' bucket
     const seeded = createUser(db as never, { username: 'pw-remember', email: 'pw-remember@example.test' });
     const login = await request(server)
       .post('/api/auth/login')
@@ -378,7 +378,7 @@ describe('Auth e2e (real auth guard + real service + real cookie service + temp 
     });
 
     it('login/options gets the same gate on the same derivation chain', async () => {
-      resetRateLimits(app); // shares the per-ip 'login' bucket with the login cases above
+      await resetRateLimits(app); // shares the per-ip 'login' bucket with the login cases above
       const res = await request(server)
         .post('/api/auth/passkey/login/options')
         .set('Origin', 'https://trip.example.org')

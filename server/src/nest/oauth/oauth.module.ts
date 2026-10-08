@@ -1,5 +1,5 @@
 import { RateLimitModule } from '../common/rate-limit.module';
-import { Module } from '@nestjs/common';
+import { Module, type OnModuleDestroy } from '@nestjs/common';
 import type { MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { MikroOrmModule } from '@mikro-orm/nestjs';
 import { authorizationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/authorize';
@@ -18,7 +18,7 @@ import { OauthClients } from '../../db/entities/OauthClients.entity';
 import { OauthTokens } from '../../db/entities/OauthTokens.entity';
 import { OauthConsents } from '../../db/entities/OauthConsents.entity';
 import { Users } from '../../db/entities/Users.entity';
-import { PendingCodeStore, processPendingCodes } from './oauth.pending-codes';
+import { PendingCodeStore, pendingCodesSlot, processPendingCodes } from './oauth.pending-codes';
 
 /**
  * OAuth 2.1 server (MCP). Public token/userinfo/revoke endpoints + the SPA's
@@ -40,7 +40,10 @@ import { PendingCodeStore, processPendingCodes } from './oauth.pending-codes';
  * Pending authorization codes live behind the PendingCodeStore port
  * (oauth.pending-codes.ts), provided here as the process-wide in-memory
  * instance: the consent controller (container singleton) writes them, the
- * SDK exchange path reads them back through the same injected singleton.
+ * SDK exchange path reads them back through the same injected singleton. The
+ * constructor installs whichever store the container resolved in
+ * pendingCodesSlot, so the sweep and a hand-built OauthService follow a
+ * swapped provider too.
  *
  * Exports OauthService for AdminController (admin OAuth-session panel) and the
  * MCP transport's token verification.
@@ -67,12 +70,19 @@ import { PendingCodeStore, processPendingCodes } from './oauth.pending-codes';
   ],
   exports: [OauthService],
 })
-export class OauthModule implements NestModule {
+export class OauthModule implements NestModule, OnModuleDestroy {
   constructor(
     private readonly addons: AddonsService,
     private readonly provider: TrekOAuthProvider,
     private readonly clients: TrekClientsStore,
-  ) {}
+    private readonly pendingCodes: PendingCodeStore,
+  ) {
+    pendingCodesSlot.install(pendingCodes);
+  }
+
+  onModuleDestroy(): void {
+    pendingCodesSlot.release(this.pendingCodes);
+  }
 
   configure(consumer: MiddlewareConsumer): void {
     const mcpAddonGate = createMcpAddonGate(this.addons);

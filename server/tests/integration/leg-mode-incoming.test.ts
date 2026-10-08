@@ -43,9 +43,9 @@ describe('incoming_leg_transport_mode read-path parity', () => {
     app = nestApp.getHttpAdapter().getInstance();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     resetTestDb(testDb2);
-    resetRateLimits(nestApp);
+    await resetRateLimits(nestApp);
   });
 
   afterAll(async () => {

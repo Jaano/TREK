@@ -56,10 +56,10 @@ beforeAll(async () => {
   app = nestApp.getHttpAdapter().getInstance();
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   resetTestDb(testDb);
-  resetRateLimits(nestApp);
-  invalidatePermissionsCache();
+  await resetRateLimits(nestApp);
+  await invalidatePermissionsCache();
   // Re-attached per test: one describe below calls vi.restoreAllMocks() in its
   // afterEach, which would otherwise strip these for every later test.
   importGoogleList = vi.spyOn(nestApp.get(PlacesService), 'importGoogleList');
@@ -984,7 +984,7 @@ describe('Delete place — permission edge cases', () => {
 
     // Restrict place edits to trip owner only
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_place_edit', 'trip_owner')").run();
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
 
     const res = await request(app)
       .delete(`/api/trips/${trip.id}/places/${place.id}`)

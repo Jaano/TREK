@@ -37,7 +37,7 @@ beforeAll(async () => {
   nestApp = await buildApp();
   app = nestApp.getHttpAdapter().getInstance();
 });
-beforeEach(() => { resetTestDb(testDb); resetRateLimits(nestApp); });
+beforeEach(async () => { resetTestDb(testDb); await resetRateLimits(nestApp); });
 afterAll(async () => {
   await nestApp.close();
   testDb.close();
@@ -378,7 +378,7 @@ describe('Delete day', () => {
     createDay(testDb, trip.id);
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_day_edit', 'trip_owner')").run();
     const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
-    invalidatePermissionsCache();
+    await invalidatePermissionsCache();
     try {
       const res = await request(app)
         .delete(`/api/trips/${trip.id}/days/${day.id}`)
@@ -387,7 +387,7 @@ describe('Delete day', () => {
       expect(testDb.prepare('SELECT id FROM days WHERE id = ?').get(day.id)).toBeDefined();
     } finally {
       testDb.prepare("DELETE FROM app_settings WHERE key = 'perm_day_edit'").run();
-      invalidatePermissionsCache();
+      await invalidatePermissionsCache();
     }
   });
 });

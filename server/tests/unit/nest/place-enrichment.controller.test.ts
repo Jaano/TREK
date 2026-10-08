@@ -40,7 +40,7 @@ describe('PlaceEnrichmentController', () => {
   it('ENRICH-042: carries the 429 status and message', async () => {
     const rl = new RateLimitService();
     const { controller } = make({}, rl);
-    vi.spyOn(rl, 'check').mockReturnValue(false);
+    vi.spyOn(rl, 'check').mockResolvedValue(false);
 
     const err = await controller.enrich(USER, REQ, BODY).catch((e: HttpException) => e);
 

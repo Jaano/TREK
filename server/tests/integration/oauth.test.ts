@@ -87,9 +87,9 @@ beforeAll(async () => {
     containerSideOauth = new OauthService(t.repo(OauthClients), t.repo(OauthTokens), t.repo(OauthConsents), await createTestAddonsService(testDb), new AuditService(t.repo(AuditLog), t.repo(Users)));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
     resetTestDb(testDb);
-    resetRateLimits(nestApp);
+    await resetRateLimits(nestApp);
     setMcpEnabled(true);
 });
 
@@ -324,7 +324,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
         const { verifier, challenge } = makePkce();
 
         // Create code for client1
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r1.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app1.example.com/cb',
@@ -354,7 +354,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -383,7 +383,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -412,7 +412,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -441,7 +441,7 @@ describe('POST /oauth/token — authorization_code grant', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -504,7 +504,7 @@ describe('POST /oauth/token — refresh_token grant', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -596,7 +596,7 @@ describe('POST /oauth/revoke', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -1093,7 +1093,7 @@ describe('Sessions — /api/oauth/sessions', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -1211,7 +1211,7 @@ describe('H1 — PKCE format validation', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -1269,7 +1269,7 @@ describe('H5 — All invalid_grant cases return identical response body', () => 
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -1290,7 +1290,7 @@ describe('H5 — All invalid_grant cases return identical response body', () => 
         });
 
         // Redirect URI mismatch (need fresh code since code is single-use)
-        const code2 = createAuthCode({
+        const code2 = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -1427,7 +1427,7 @@ describe('C3 — Refresh token replay detection', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -1475,7 +1475,7 @@ describe('C3 — Refresh token replay detection', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',
@@ -1515,7 +1515,7 @@ describe('C3 — Refresh token replay detection', () => {
         const r = await createOAuthClient(user.id, 'App', ['https://app.example.com/cb'], ['trips:read']);
         const { verifier, challenge } = makePkce();
 
-        const code = createAuthCode({
+        const code = await createAuthCode({
             clientId: r.client!.client_id as string,
             userId: user.id,
             redirectUri: 'https://app.example.com/cb',

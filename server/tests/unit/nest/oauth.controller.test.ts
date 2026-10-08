@@ -150,7 +150,7 @@ describe('OauthPublicController /token', () => {
 
   it('429 when the token bucket is exhausted (per ip|client)', async () => {
     const s = rl();
-    for (let i = 0; i < 30; i++) s.check('oauth_token', '7.7.7.7|c', 30, 60000, Date.now());
+    for (let i = 0; i < 30; i++) await s.check('oauth_token', '7.7.7.7|c', 30, 60000, Date.now());
     const res = makeRes();
     await opc(osvc(), s).token(reqWith({ client_id: 'c' }), res);
     expect(res.statusCode).toBe(429);
@@ -293,7 +293,7 @@ describe('OauthPublicController /userinfo + /revoke', () => {
 
   it('revoke: 429 when the per-ip bucket is exhausted', async () => {
     const s = rl();
-    for (let i = 0; i < 10; i++) s.check('oauth_revoke', '1', 10, 60000, Date.now());
+    for (let i = 0; i < 10; i++) await s.check('oauth_revoke', '1', 10, 60000, Date.now());
     const res = makeRes();
     await opc(osvc(), s).revoke({ ip: '1', body: { token: 't', client_id: 'c' } } as Request, res);
     expect(res.statusCode).toBe(429);
@@ -375,7 +375,7 @@ describe('OauthApiController', () => {
 
   it('validate: 429 when the per-ip bucket is exhausted', async () => {
     const s = rl();
-    for (let i = 0; i < 30; i++) s.check('oauth_validate', '1.2.3.4', 30, 60000, Date.now());
+    for (let i = 0; i < 30; i++) await s.check('oauth_validate', '1.2.3.4', 30, 60000, Date.now());
     const res = makeRes2();
     expect(await thrownAsync(() => new OauthApiController(osvc(), s).validate({ ...req } as Request, {}, res))).toEqual({
       status: 429,
