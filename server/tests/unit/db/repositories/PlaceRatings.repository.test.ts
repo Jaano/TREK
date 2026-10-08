@@ -8,6 +8,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { countRows, findRow, findRows, insertRow, updateRows } from '../../../helpers/factories/rows';
+import { Places } from '../../../../src/db/entities/Places.entity';
+import { dbNow } from '../../../../src/db/types/db-timestamp.type';
 import { createPlace, createTrip, createUser } from '../../../helpers/factories';
 import { PlaceRatings } from '../../../../src/db/entities/PlaceRatings.entity';
 import type { PlaceRatingsRepository } from '../../../../src/db/repositories/PlaceRatings.repository';
@@ -23,8 +26,8 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
-function rate(placeId: number, userId: number, rating: number, createdAt: string): void {
-  testDb.prepare('INSERT INTO place_ratings (place_id, user_id, rating, created_at) VALUES (?, ?, ?, ?)').run(placeId, userId, rating, createdAt);
+async function rate(placeId: number, userId: number, rating: number, createdAt: string): Promise<void> {
+  await insertRow(t, PlaceRatings, { place: placeId, user: userId, rating, created_at: createdAt });
 }
 
 async function withQueryCount<T>(fn: () => Promise<T>): Promise<{ value: T; queries: number }> {
@@ -51,8 +54,8 @@ describe('PlaceRatingsRepository.listForPlaces', () => {
     const { user: voterB } = createUser(testDb, { username: 'beta' });
     const trip = createTrip(testDb, owner.id);
     const place = createPlace(testDb, trip.id);
-    rate(place.id, voterA.id, 4, '2026-01-01 00:00:00');
-    rate(place.id, voterB.id, 2, '2026-01-02 00:00:00');
+    await rate(place.id, voterA.id, 4, '2026-01-01 00:00:00');
+    await rate(place.id, voterB.id, 2, '2026-01-02 00:00:00');
 
     const rows = await placeRatings.listForPlaces([place.id]);
     expect(rows).toEqual([
@@ -67,8 +70,8 @@ describe('PlaceRatingsRepository.listForPlaces', () => {
     const trip = createTrip(testDb, owner.id);
     const placeA = createPlace(testDb, trip.id, { name: 'A' });
     const placeB = createPlace(testDb, trip.id, { name: 'B' });
-    rate(placeA.id, voter.id, 5, '2026-01-01 00:00:00');
-    rate(placeB.id, voter.id, 1, '2026-01-01 00:00:00');
+    await rate(placeA.id, voter.id, 5, '2026-01-01 00:00:00');
+    await rate(placeB.id, voter.id, 1, '2026-01-01 00:00:00');
 
     const rows = await placeRatings.listForPlaces([placeA.id, placeB.id]);
     expect(rows.map((r) => r.place_id).sort()).toEqual([placeA.id, placeB.id].sort());
@@ -93,12 +96,12 @@ describe('PlaceRatingsRepository.listForPlaces', () => {
     const { user: voter } = createUser(testDb, { username: 'fresh-voter' });
     const trip = createTrip(testDb, owner.id);
     const place = createPlace(testDb, trip.id);
-    rate(place.id, seedVoter.id, 1, '2026-01-01 00:00:00');
+    await rate(place.id, seedVoter.id, 1, '2026-01-01 00:00:00');
     // rule 20: the FIRST, wider setup read passes `disableIdentityMap: false`
     // explicitly and carries the column the later write targets (`rating`) —
     // `find({})` with the base default merged in populates nothing.
     await t.repo(PlaceRatings).find({}, { disableIdentityMap: false });
-    rate(place.id, voter.id, 3, '2026-01-02 00:00:00');
+    await rate(place.id, voter.id, 3, '2026-01-02 00:00:00');
     const rows = await placeRatings.listForPlaces([place.id]);
     expect(rows).toEqual([
       { place_id: place.id, user_id: seedVoter.id, username: 'seed-voter', avatar: null, rating: 1 },
@@ -119,15 +122,14 @@ describe('PlaceRatingsRepository.upsertRating (PL51)', () => {
     const place = createPlace(testDb, trip.id);
 
     await placeRatings.upsertRating(place.id, voter.id, 5);
-    let rows = testDb.prepare('SELECT rating FROM place_ratings WHERE place_id = ? AND user_id = ?').all(place.id, voter.id) as { rating: number }[];
+    let rows = (await findRows(t, PlaceRatings, { place: place.id, user: voter.id })).map((r) => ({ rating: r.rating }));
     expect(rows).toEqual([{ rating: 5 }]);
 
     await placeRatings.upsertRating(place.id, voter.id, 2);
-    rows = testDb.prepare('SELECT rating FROM place_ratings WHERE place_id = ? AND user_id = ?').all(place.id, voter.id) as { rating: number }[];
+    rows = (await findRows(t, PlaceRatings, { place: place.id, user: voter.id })).map((r) => ({ rating: r.rating }));
     expect(rows).toEqual([{ rating: 2 }]);
     // Exactly one row for the (place, user) pair — the composite unique key held, not a duplicate insert.
-    const count = testDb.prepare('SELECT COUNT(*) AS n FROM place_ratings WHERE place_id = ? AND user_id = ?').get(place.id, voter.id) as { n: number };
-    expect(count.n).toBe(1);
+    expect(await countRows(t, PlaceRatings, { place: place.id, user: voter.id })).toBe(1);
   });
 
   it('UPSERTRATINGREPO-002 (PL51 ruling): a re-vote never touches places.updated_at — a vote must not 409 another member\'s If-Match', async () => {
@@ -135,13 +137,13 @@ describe('PlaceRatingsRepository.upsertRating (PL51)', () => {
     const { user: voter } = createUser(testDb, { username: 'voter2' });
     const trip = createTrip(testDb, owner.id);
     const place = createPlace(testDb, trip.id);
-    testDb.prepare("UPDATE places SET updated_at = datetime('now', '-1 hour') WHERE id = ?").run(place.id);
-    const before = (testDb.prepare('SELECT updated_at FROM places WHERE id = ?').get(place.id) as { updated_at: string }).updated_at;
+    await updateRows(t, Places, { id: place.id }, { updated_at: dbNow(new Date(Date.now() - 60 * 60 * 1000)) });
+    const before = (await findRow(t, Places, { id: place.id }))?.updated_at;
 
     await placeRatings.upsertRating(place.id, voter.id, 4);
     await placeRatings.upsertRating(place.id, voter.id, 1); // the conflict path
 
-    const after = (testDb.prepare('SELECT updated_at FROM places WHERE id = ?').get(place.id) as { updated_at: string }).updated_at;
+    const after = (await findRow(t, Places, { id: place.id }))?.updated_at;
     expect(after).toBe(before);
   });
 
@@ -153,7 +155,7 @@ describe('PlaceRatingsRepository.upsertRating (PL51)', () => {
     const place = createPlace(testDb, trip.id);
     await placeRatings.upsertRating(place.id, voterA.id, 5);
     await placeRatings.upsertRating(place.id, voterB.id, 1);
-    const rows = testDb.prepare('SELECT user_id, rating FROM place_ratings WHERE place_id = ? ORDER BY user_id').all(place.id);
+    const rows = (await findRows(t, PlaceRatings, { place: place.id }, { user: 'asc' })).map((r) => ({ user_id: r.user_id, rating: r.rating }));
     expect(rows).toEqual([
       { user_id: Math.min(voterA.id, voterB.id), rating: voterA.id < voterB.id ? 5 : 1 },
       { user_id: Math.max(voterA.id, voterB.id), rating: voterA.id < voterB.id ? 1 : 5 },
@@ -171,7 +173,7 @@ describe('PlaceRatingsRepository.deleteRating (PL50)', () => {
     await placeRatings.upsertRating(place.id, voterA.id, 5);
     await placeRatings.upsertRating(place.id, voterB.id, 3);
     await placeRatings.deleteRating(place.id, voterA.id);
-    expect(testDb.prepare('SELECT user_id FROM place_ratings WHERE place_id = ?').all(place.id)).toEqual([{ user_id: voterB.id }]);
+    expect((await findRows(t, PlaceRatings, { place: place.id })).map((r) => ({ user_id: r.user_id }))).toEqual([{ user_id: voterB.id }]);
   });
 
   it('DELETERATINGREPO-002: deleting a vote that does not exist is a no-op, not a throw', async () => {

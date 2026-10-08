@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { createSnapshotTestDb } from '../../../helpers/db-mock';
 import { resetTestDb } from '../../../helpers/test-db';
 import { createTestOrm, type TestOrm } from '../../../helpers/test-orm';
+import { findRow, updateRows } from '../../../helpers/factories/rows';
 import { createDay, createDayAccommodation, createDayAssignment, createDayNote, createPlace, createTrip, createUser } from '../../../helpers/factories';
 import { Days } from '../../../../src/db/entities/Days.entity';
 import type { DaysRepository } from '../../../../src/db/repositories/Days.repository';
@@ -17,7 +18,9 @@ beforeAll(async () => {
 beforeEach(() => { resetTestDb(testDb); t.clear(); });
 afterAll(async () => { await t.close(); testDb.close(); });
 
+/** The SELECT * row as the database holds it: the oracle the repository's rows are compared with key for key. */
 function rawDay(id: number): unknown {
+  // test-sql-allow: the raw row is the oracle the ORM's rows are held against, key for key.
   return testDb.prepare('SELECT * FROM days WHERE id = ?').get(id);
 }
 
@@ -236,22 +239,22 @@ describe('DaysRepository.insertDayCopy (TP39)', () => {
     const src = createTrip(testDb, user.id);
     const dst = createTrip(testDb, user.id);
     const srcDay = createDay(testDb, src.id, { date: '2026-03-01', title: 'Arrival' });
-    testDb.prepare('UPDATE days SET notes = ? WHERE id = ?').run('Bring passport', srcDay.id);
+    await updateRows(t, Days, { id: srcDay.id }, { notes: 'Bring passport' });
 
     const newId = await days.insertDayCopy({
       trip_id: dst.id, day_number: srcDay.day_number, date: srcDay.date, notes: 'Bring passport', title: srcDay.title,
     });
 
-    const row = testDb.prepare('SELECT trip_id, day_number, date, notes, title FROM days WHERE id = ?').get(newId);
-    expect(row).toEqual({ trip_id: dst.id, day_number: srcDay.day_number, date: '2026-03-01', notes: 'Bring passport', title: 'Arrival' });
+    const row = await findRow(t, Days, { id: newId });
+    expect(row).toMatchObject({ trip_id: dst.id, day_number: srcDay.day_number, date: '2026-03-01', notes: 'Bring passport', title: 'Arrival' });
   });
 
   it('DAYREPO-026: null date/notes/title are written as NULL, not coerced', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const newId = await days.insertDayCopy({ trip_id: trip.id, day_number: 1, date: null, notes: null, title: null });
-    const row = testDb.prepare('SELECT date, notes, title FROM days WHERE id = ?').get(newId);
-    expect(row).toEqual({ date: null, notes: null, title: null });
+    const row = await findRow(t, Days, { id: newId });
+    expect(row).toMatchObject({ date: null, notes: null, title: null });
   });
 });
 
@@ -264,6 +267,7 @@ describe('DaysRepository.listForPublicApi (Plan 4 Task 1, public-api.service.ts:
     const day1 = createDay(testDb, trip.id, { day_number: 1, date: '2026-06-01' });
     createDay(testDb, other.id, { day_number: 1 });
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare('SELECT id, day_number, date, title, notes FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id);
     const rows = await days.listForPublicApi(trip.id);
     expect(rows).toEqual(legacy);
@@ -290,9 +294,10 @@ describe('DaysRepository.listPlanDays (RPL1, roadtrip-plan.service.ts::context)'
     const other = createTrip(testDb, user.id);
     const day2 = createDay(testDb, trip.id, { day_number: 2, date: '2026-06-02', title: 'Day 2' });
     const day1 = createDay(testDb, trip.id, { day_number: 1, date: '2026-06-01', title: null });
-    testDb.prepare('UPDATE days SET default_transport_mode = ? WHERE id = ?').run('walking', day2.id);
+    await updateRows(t, Days, { id: day2.id }, { default_transport_mode: 'walking' });
     createDay(testDb, other.id, { day_number: 1 });
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare('SELECT id, day_number, date, title, default_transport_mode FROM days WHERE trip_id = ? ORDER BY day_number ASC').all(trip.id);
     const rows = await days.listPlanDays(trip.id);
     expect(rows).toEqual(legacy);
@@ -327,6 +332,7 @@ describe('DaysRepository.listForDayGrid (TP77, trips.service.ts::generateDays)',
     createDayNote(testDb, withNote.id, trip.id);
     createDayAccommodation(testDb, trip.id, place.id, withStay.id, withStay.id);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`
       SELECT d.id, d.day_number, d.date,
         EXISTS (SELECT 1 FROM day_assignments da WHERE da.day_id = d.id)
@@ -363,6 +369,7 @@ describe('DaysRepository.listDayGridStays (TP78, trips.service.ts::generateDays)
     // `end_day_id IN` half alone, so that half cannot be dropped unnoticed.
     createDayAccommodation(testDb, other.id, otherPlace.id, foreign.id, d1.id);
 
+    // test-sql-allow: the raw statement is the legacy oracle this parity test holds the repository to.
     const legacy = testDb.prepare(`
       SELECT dac.start_day_id, dac.end_day_id FROM day_accommodations dac
       WHERE dac.start_day_id IN (SELECT id FROM days WHERE trip_id = ?)

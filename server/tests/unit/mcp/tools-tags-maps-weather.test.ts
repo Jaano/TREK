@@ -45,6 +45,10 @@ vi.mock('../../../src/nest/maps/trek-places.client', async (importOriginal) => (
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
+import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { findRow } from '../../helpers/factories/rows';
+import { makeTag } from '../../helpers/factories/places';
+import { Tags } from '../../../src/db/entities/Tags.entity';
 import { MapsService } from '../../../src/nest/maps/maps.service';
 import { getWeather, getDetailedWeather } from '../../../src/nest/weather/weather.impl';
 
@@ -84,7 +88,14 @@ beforeEach(() => {
   delete process.env.DEMO_MODE;
 });
 
-afterAll(() => {
+let orm: TestOrm;
+
+beforeAll(async () => {
+  orm = await createTestOrm(testDb);
+});
+
+afterAll(async () => {
+  await orm.close();
   testDb.close();
 });
 
@@ -110,8 +121,8 @@ describe('Tool: list_tags', () => {
   it('returns only tags belonging to the current user', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);
-    testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(user.id, 'My Tag', '#ff0000');
-    testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(other.id, 'Other Tag', '#00ff00');
+    await makeTag(orm, user.id, { name: 'My Tag', color: '#ff0000' });
+    await makeTag(orm, other.id, { name: 'Other Tag', color: '#00ff00' });
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'list_tags', arguments: {} });
       const data = parseToolResult(result) as any;
@@ -173,8 +184,7 @@ describe('Tool: create_tag', () => {
 describe('Tool: update_tag', () => {
   it('updates tag name and color', async () => {
     const { user } = createUser(testDb);
-    const r = testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(user.id, 'Old Name', '#aaaaaa');
-    const tagId = r.lastInsertRowid as number;
+    const tagId = (await makeTag(orm, user.id, { name: 'Old Name', color: '#aaaaaa' })).id;
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_tag',
@@ -201,15 +211,14 @@ describe('Tool: update_tag', () => {
   it('blocks demo user', async () => {
     process.env.DEMO_MODE = 'true';
     const { user } = createUser(testDb, { email: 'demo@nomad.app' });
-    const r = testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(user.id, 'Demo Tag', '#aaaaaa');
-    const tagId = r.lastInsertRowid as number;
+    const tagId = (await makeTag(orm, user.id, { name: 'Demo Tag', color: '#aaaaaa' })).id;
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'update_tag',
         arguments: { tagId, name: 'Blocked' },
       });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT name FROM tags WHERE id = ?').get(tagId)).toEqual({ name: 'Demo Tag' });
+      expect((await findRow(orm, Tags, { id: tagId }))?.name).toBe('Demo Tag');
     });
   });
 });
@@ -221,8 +230,7 @@ describe('Tool: update_tag', () => {
 describe('Tool: delete_tag', () => {
   it('removes the tag row', async () => {
     const { user } = createUser(testDb);
-    const r = testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(user.id, 'To Delete', '#cccccc');
-    const tagId = r.lastInsertRowid as number;
+    const tagId = (await makeTag(orm, user.id, { name: 'To Delete', color: '#cccccc' })).id;
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'delete_tag',
@@ -230,7 +238,7 @@ describe('Tool: delete_tag', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(testDb.prepare('SELECT id FROM tags WHERE id = ?').get(tagId)).toBeUndefined();
+      expect(await findRow(orm, Tags, { id: tagId })).toBeNull();
     });
   });
 
@@ -248,15 +256,14 @@ describe('Tool: delete_tag', () => {
   it('blocks demo user', async () => {
     process.env.DEMO_MODE = 'true';
     const { user } = createUser(testDb, { email: 'demo@nomad.app' });
-    const r = testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(user.id, 'Demo Tag', '#aaaaaa');
-    const tagId = r.lastInsertRowid as number;
+    const tagId = (await makeTag(orm, user.id, { name: 'Demo Tag', color: '#aaaaaa' })).id;
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({
         name: 'delete_tag',
         arguments: { tagId },
       });
       expect(result.isError).toBe(true);
-      expect(testDb.prepare('SELECT id FROM tags WHERE id = ?').get(tagId)).toBeDefined();
+      expect(await findRow(orm, Tags, { id: tagId })).not.toBeNull();
     });
   });
 });

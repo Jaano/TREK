@@ -37,12 +37,18 @@ import { PermissionsService } from '../../src/nest/permissions/permissions.servi
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 import { TestUnitOfWorkModule } from '../helpers/test-uow';
-import { createTestMikroOrmModule } from '../helpers/test-orm';
+import { createTestMikroOrmModule, createTestOrm, type TestOrm } from '../helpers/test-orm';
+import { Addons } from '../../src/db/entities/Addons.entity';
+import { makeUser } from '../helpers/factories/users';
+import { makeTrip } from '../helpers/factories/trips';
+import { updateRows, upsertRow } from '../helpers/factories/rows';
 
-function setVision(vision: string) {
-  db.prepare("UPDATE addons SET config = ? WHERE id = 'llm_parsing'").run(
-    JSON.stringify({ provider: 'openai', model: 'gpt-4.1-mini', apiKey: '', vision }),
-  );
+let orm: TestOrm;
+
+async function setVision(vision: string): Promise<void> {
+  await updateRows(orm, Addons, { id: 'llm_parsing' }, {
+    config: { provider: 'openai', model: 'gpt-4.1-mini', apiKey: '', vision },
+  });
 }
 
 /** The provider's chat-completions answer, carrying `payload` as its content. */
@@ -80,36 +86,29 @@ describe('Photos through AI Parsing e2e', () => {
   }
 
   beforeAll(async () => {
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (1, 'e2e-user', 'e2e@example.test', 'x', 'user', 0)",
-    ).run();
-    tripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (1, 'Lyon')").run().lastInsertRowid);
+    orm = await createTestOrm(db);
+    // Pinned id: sessionCookie(1) signs for exactly this user.
+    await makeUser(orm, { id: 1, username: 'e2e-user', email: 'e2e@example.test' });
+    tripId = (await makeTrip(orm, 1, { title: 'Lyon' })).id;
     // A trip user 1 is no member of: the real access lookup answers 404 for it.
-    db.prepare(
-      "INSERT INTO users (id, username, email, password_hash, role, password_version) VALUES (2, 'e2e-other', 'e2e-other@example.test', 'x', 'user', 0)",
-    ).run();
-    foreignTripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (2, 'Elsewhere')").run().lastInsertRowid);
-    db.prepare(
-      `INSERT INTO addons (id, name, type, enabled, config) VALUES ('llm_parsing', 'AI Parsing', 'integration', 1, '{}')
-       ON CONFLICT(id) DO UPDATE SET enabled = 1`,
-    ).run();
-    db.prepare(
-      `INSERT INTO addons (id, name, type, enabled) VALUES ('budget', 'Costs', 'trip', 1)
-       ON CONFLICT(id) DO UPDATE SET enabled = 1`,
-    ).run();
+    await makeUser(orm, { id: 2, username: 'e2e-other', email: 'e2e-other@example.test' });
+    foreignTripId = (await makeTrip(orm, 2, { title: 'Elsewhere' })).id;
+    await upsertRow(orm, Addons, { id: 'llm_parsing', name: 'AI Parsing', type: 'integration', enabled: true, config: {} }, ['enabled']);
+    await upsertRow(orm, Addons, { id: 'budget', name: 'Costs', type: 'trip', enabled: true }, ['enabled']);
     photo = Buffer.from(await new Jimp({ width: 40, height: 60, color: 0xffffffff }).getBuffer('image/png'));
     app = await build();
     vi.spyOn(app.get(PermissionsService), 'checkPermission').mockResolvedValue(true);
     server = app.getHttpServer();
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
     safeFetchLlm.mockReset();
-    setVision('on');
+    await setVision('on');
   });
 
   afterAll(async () => {
     await app.close();
+    await orm.close();
   });
 
   describe('GET /api/llm/capabilities', () => {
@@ -119,7 +118,7 @@ describe('Photos through AI Parsing e2e', () => {
 
     it('answers the instance setting, and no for a cloud model on Automatic', async () => {
       expect((await request(server).get('/api/llm/capabilities').set('Cookie', sessionCookie(1))).body).toEqual({ images: true });
-      setVision('auto');
+      await setVision('auto');
       expect((await request(server).get('/api/llm/capabilities').set('Cookie', sessionCookie(1))).body).toEqual({ images: false });
       expect(safeFetchLlm).not.toHaveBeenCalled();
     });
@@ -145,7 +144,7 @@ describe('Photos through AI Parsing e2e', () => {
     });
 
     it('refuses a photo with 400 when the model reads no images', async () => {
-      setVision('off');
+      await setVision('off');
       const res = await upload();
       expect(res.status).toBe(400);
       expect(res.body.error).toBe('The configured AI model does not read photos');
@@ -186,19 +185,19 @@ describe('Photos through AI Parsing e2e', () => {
 
     it('refuses a file that is not a photo, and any photo when the model reads no images', async () => {
       expect((await scan('bill.pdf')).status).toBe(400);
-      setVision('off');
+      await setVision('off');
       expect((await scan()).status).toBe(400);
       expect(safeFetchLlm).not.toHaveBeenCalled();
     });
 
     it('404 while Costs is off', async () => {
-      db.prepare("UPDATE addons SET enabled = 0 WHERE id = 'budget'").run();
+      await updateRows(orm, Addons, { id: 'budget' }, { enabled: false });
       try {
         const res = await scan();
         expect(res.status).toBe(404);
         expect(res.body.error).toBe('Costs addon is not enabled');
       } finally {
-        db.prepare("UPDATE addons SET enabled = 1 WHERE id = 'budget'").run();
+        await updateRows(orm, Addons, { id: 'budget' }, { enabled: true });
       }
     });
   });

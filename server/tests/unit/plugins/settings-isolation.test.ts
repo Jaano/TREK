@@ -26,6 +26,9 @@ import { createUser } from '../../helpers/factories';
 import { PluginUserSettingsService } from '../../../src/nest/plugins/plugin-user-settings.service';
 import { parseManifest, ManifestError } from '../../../src/nest/plugins/install/manifest';
 import { createTestOrm, type TestOrm } from '../../helpers/test-orm';
+import { deleteRows, insertRow, upsertRow } from '../../helpers/factories/rows';
+import { makePluginSettingsField, setPluginUserConfig } from '../../helpers/factories/plugins';
+import { readUserSetting } from '../../helpers/factories/settings';
 import { AuditLog } from '../../../src/db/entities/AuditLog.entity';
 import { Users } from '../../../src/db/entities/Users.entity';
 import { Plugins } from '../../../src/db/entities/Plugins.entity';
@@ -60,14 +63,15 @@ afterAll(async () => {
   await t?.close();
 });
 
-function declareField(pluginId: string, key: string, opts: { required?: boolean; secret?: boolean } = {}) {
-  testDb.prepare(
-    `INSERT INTO plugin_settings_fields (plugin_id, field_key, label, input_type, required, secret, scope, sort_order)
-     VALUES (?, ?, ?, 'text', ?, ?, 'user', 0)`,
-  ).run(pluginId, key, key, opts.required ? 1 : 0, opts.secret ? 1 : 0);
+const orm = () => t as TestOrm;
+
+async function declareField(pluginId: string, key: string, opts: { required?: boolean; secret?: boolean } = {}) {
+  await makePluginSettingsField(orm(), pluginId, key, {
+    label: key, input_type: 'text', required: opts.required ? 1 : 0, secret: opts.secret ? 1 : 0, scope: 'user', sort_order: 0,
+  });
 }
-function setUserConfig(pluginId: string, config: Record<string, unknown>) {
-  testDb.prepare('INSERT OR REPLACE INTO plugin_user_config (plugin_id, user_id, config) VALUES (?, ?, ?)').run(pluginId, uid, JSON.stringify(config));
+async function setUserConfig(pluginId: string, config: Record<string, unknown>) {
+  await setPluginUserConfig(orm(), pluginId, uid, config);
 }
 
 beforeAll(async () => {
@@ -76,31 +80,30 @@ beforeAll(async () => {
   // test runs (PSET-001..006 call `userSettings()` with no ORM of their own).
   t = await createTestOrm(testDb);
 });
-beforeEach(() => {
-  testDb.prepare('DELETE FROM plugin_settings_fields').run();
-  testDb.prepare('DELETE FROM plugin_user_config').run();
-  testDb.prepare('DELETE FROM settings').run();
-  testDb.prepare('DELETE FROM users').run();
+beforeEach(async () => {
+  await deleteRows(orm(), PluginSettingsFields);
+  await deleteRows(orm(), PluginUserConfig);
+  await deleteRows(orm(), Settings);
+  await deleteRows(orm(), Users);
   uid = createUser(testDb).user.id;
 });
 
 describe('plugin settings are isolated from core and from each other', () => {
   it('PSET-001 — a plugin declaring "webhook_url" cannot touch the CORE settings row', async () => {
-    testDb.prepare("INSERT INTO settings (user_id, key, value) VALUES (?, 'webhook_url', 'https://core.example.com/real')").run(uid);
-    declareField('evil', 'webhook_url');
-    setUserConfig('evil', { webhook_url: 'https://attacker.example.com' });
+    await insertRow(orm(), Settings, { user: uid, key: 'webhook_url', value: 'https://core.example.com/real' });
+    await declareField('evil', 'webhook_url');
+    await setUserConfig('evil', { webhook_url: 'https://attacker.example.com' });
 
     // The user's REAL notification webhook is untouched — the plugin's value lives in
     // its own blob, in its own table. The namespacing is structural, not by key naming.
-    const core = testDb.prepare("SELECT value FROM settings WHERE user_id = ? AND key = 'webhook_url'").get(uid) as { value: string };
-    expect(core.value).toBe('https://core.example.com/real');
+    expect(await readUserSetting(orm(), uid, 'webhook_url')).toBe('https://core.example.com/real');
     expect(await userSettings().readAll('evil', uid)).toEqual({ webhook_url: 'https://attacker.example.com' });
   });
 
   it('PSET-002 — plugin A cannot read plugin B’s config, even with the same key name', async () => {
-    declareField('a', 'token', { secret: true });
-    declareField('b', 'token', { secret: true });
-    setUserConfig('b', { token: 'B-SECRET' });
+    await declareField('a', 'token', { secret: true });
+    await declareField('b', 'token', { secret: true });
+    await setUserConfig('b', { token: 'B-SECRET' });
 
     expect(await userSettings().readAll('a', uid)).toEqual({});
     expect(await userSettings().readOne('a', uid, 'token')).toBeUndefined();
@@ -108,9 +111,9 @@ describe('plugin settings are isolated from core and from each other', () => {
   });
 
   it('PSET-003 — a plugin only ever sees its own DECLARED keys', async () => {
-    declareField('p', 'declared');
+    await declareField('p', 'declared');
     // An undeclared key that somehow reached the blob is not handed to the plugin.
-    setUserConfig('p', { declared: 'yes', sneaked: 'no' });
+    await setUserConfig('p', { declared: 'yes', sneaked: 'no' });
     expect(await userSettings().readAll('p', uid)).toEqual({ declared: 'yes' });
   });
 });
@@ -119,7 +122,7 @@ describe('settings keys cannot resolve off the prototype chain', () => {
   it.each(['__proto__', 'constructor', 'prototype'])(
     'PSET-004 — a REQUIRED field named "%s" is NOT reported as configured',
     async (key) => {
-      declareField('evil', key, { required: true });
+      await declareField('evil', key, { required: true });
       // The user has configured nothing at all.
       expect(await userSettings().hasRequired('evil', uid)).toBe(false);
       expect(await userSettings().readAll('evil', uid)).toEqual({});
@@ -127,9 +130,9 @@ describe('settings keys cannot resolve off the prototype chain', () => {
   );
 
   it('PSET-005 — a genuinely configured required field still reports configured', async () => {
-    declareField('good', 'appToken', { required: true, secret: true });
+    await declareField('good', 'appToken', { required: true, secret: true });
     expect(await userSettings().hasRequired('good', uid)).toBe(false);
-    setUserConfig('good', { appToken: 'T' });
+    await setUserConfig('good', { appToken: 'T' });
     expect(await userSettings().hasRequired('good', uid)).toBe(true);
   });
 
@@ -153,10 +156,10 @@ describe('a plugin channel label is bounded by the host', () => {
     const { PluginRuntimeService } = await import('../../../src/nest/plugins/plugin-runtime.service');
     process.env.TREK_PLUGINS_ENABLED = 'true';
 
-    testDb.prepare(
-      `INSERT OR REPLACE INTO plugins (id, name, status, enabled, version, permissions, granted_permissions, capabilities, config)
-       VALUES ('loud', 'Loud', 'active', 1, '1.0.0', '[]', '[]', ?, '{}')`,
-    ).run(JSON.stringify({ notificationChannel: { title: '🎉'.repeat(5) + 'A'.repeat(500) } }));
+    await upsertRow(orm(), Plugins, {
+      id: 'loud', name: 'Loud', status: 'active', enabled: 1, version: '1.0.0', permissions: '[]', granted_permissions: '[]',
+      capabilities: JSON.stringify({ notificationChannel: { title: '🎉'.repeat(5) + 'A'.repeat(500) } }), config: '{}',
+    });
 
     const rt = new PluginRuntimeService(
       new AuditService(t.repo(AuditLog), t.repo(Users)),
