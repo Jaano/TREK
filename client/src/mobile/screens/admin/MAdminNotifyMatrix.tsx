@@ -1,44 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import { adminApi } from '../../../api/client'
+import { useAdminNotificationMatrix } from '../../../components/Admin/useAdminNotificationMatrix'
 import type { TranslationFn } from '../../../types'
 import type { useToast } from '../../../components/shared/Toast'
 import { ADMIN_EVENT_LABEL_KEYS, ADMIN_CHANNEL_LABEL_KEYS } from '../../../pages/admin/AdminPage.constants'
 import MToggle from '../../components/MToggle'
 import { MAdminCard, MAdminCardHead } from './MAdminUi'
 
-interface ChannelInfo {
-  id: string
-  active: boolean
-}
-
-interface MatrixData {
-  event_types: string[]
-  channels?: ChannelInfo[]
-  implemented_combos: Record<string, string[]>
-  preferences: Record<string, Record<string, boolean>>
-}
-
-const BUILTIN_CHANNELS = ['inapp', 'email', 'webhook', 'ntfy'] as const
-
 // Per-event × per-channel admin notification matrix — the mobile layout of
 // AdminNotificationsPanel. Loads its own data and auto-saves each toggle.
 export default function MAdminNotifyMatrix({ t, toast }: { t: TranslationFn; toast: ReturnType<typeof useToast> }) {
-  const [matrix, setMatrix] = useState<MatrixData | null>(null)
-  // Toggles fire faster than React re-renders, so the live preferences are mirrored in a
-  // ref. Reading state out of the render closure would let a second toggle undo the first.
-  const prefsRef = useRef<MatrixData['preferences'] | null>(null)
-
-  const writePrefs = (prefs: MatrixData['preferences']) => {
-    prefsRef.current = prefs
-    setMatrix((m) => (m ? { ...m, preferences: prefs } : m))
-  }
-
-  useEffect(() => {
-    adminApi.getNotificationPreferences().then((data: MatrixData) => {
-      prefsRef.current = data.preferences
-      setMatrix(data)
-    }).catch(() => {})
-  }, [])
+  const { matrix, visibleChannels, toggle } = useAdminNotificationMatrix(t, toast)
 
   if (!matrix) {
     return (
@@ -54,28 +24,6 @@ export default function MAdminNotifyMatrix({ t, toast }: { t: TranslationFn; toa
         <p className="font-geist text-[0.6875rem] text-m-faint">{t('settings.notificationPreferences.noChannels')}</p>
       </MAdminCard>
     )
-  }
-
-  // Admin-scoped events only go out over the built-in channels (plugin
-  // channels are user-scoped), same rule as the desktop panel.
-  const isActive = (id: string) => matrix.channels?.some((c) => c.id === id && c.active) ?? false
-  const visibleChannels = BUILTIN_CHANNELS.filter(
-    (ch) => isActive(ch) && matrix.event_types.some((evt) => matrix.implemented_combos[evt]?.includes(ch)),
-  )
-
-  const toggle = async (eventType: string, channel: string) => {
-    const before = prefsRef.current ?? matrix.preferences
-    const current = before[eventType]?.[channel] ?? true
-    const updated = { ...before, [eventType]: { ...before[eventType], [channel]: !current } }
-    writePrefs(updated)
-    try {
-      await adminApi.updateNotificationPreferences(updated)
-    } catch {
-      // Revert this cell only: a toggle that already went through keeps its value.
-      const latest = prefsRef.current ?? updated
-      writePrefs({ ...latest, [eventType]: { ...latest[eventType], [channel]: current } })
-      toast.error(t('common.error'))
-    }
   }
 
   return (

@@ -1,43 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React from 'react'
 import { BellRing, Loader2 } from 'lucide-react'
-import { adminApi } from '../../api/client'
+import { useAdminNotificationMatrix } from '../../components/Admin/useAdminNotificationMatrix'
 import { useToast } from '../../components/shared/Toast'
 import ToggleSwitch from '../../components/Settings/ToggleSwitch'
 import { SettingsCard, SettingsHint } from '../../components/Settings/settingsKit'
 import { fs } from '../../components/shared/DialogShell'
 import { ADMIN_EVENT_LABEL_KEYS, ADMIN_CHANNEL_LABEL_KEYS } from './AdminPage.constants'
 
-type Preferences = Record<string, Record<string, boolean>>
-
-interface AdminPreferenceMatrix {
-  event_types: string[]
-  channels?: { id: string; active: boolean }[]
-  implemented_combos: Record<string, string[] | undefined>
-  preferences: Preferences
-}
-
 const EYEBROW = 'text-center font-geist font-bold uppercase tracking-[.08em] text-content-faint'
 
 // Per-event × per-channel admin notification preference matrix.
 // Loads its own data and auto-saves each toggle.
 export default function AdminNotificationsPanel({ t, toast }: { t: (k: string) => string; toast: ReturnType<typeof useToast> }) {
-  const [matrix, setMatrix] = useState<AdminPreferenceMatrix | null>(null)
-  const [saving, setSaving] = useState(false)
-  // Toggles fire faster than React re-renders, so the live preferences are mirrored in a
-  // ref. Reading state out of the render closure would let a second toggle undo the first.
-  const prefsRef = useRef<Preferences | null>(null)
-
-  const writePrefs = (prefs: Preferences) => {
-    prefsRef.current = prefs
-    setMatrix(m => m ? { ...m, preferences: prefs } : m)
-  }
-
-  useEffect(() => {
-    adminApi.getNotificationPreferences().then((data: AdminPreferenceMatrix) => {
-      prefsRef.current = data.preferences
-      setMatrix(data)
-    }).catch(() => {})
-  }, [])
+  const { matrix, saving, visibleChannels, toggle } = useAdminNotificationMatrix(t, toast)
 
   const card = (children: React.ReactNode) => (
     <SettingsCard icon={BellRing} title={t('admin.tabs.notifications')} hint={t('admin.notifications.adminNotificationsHint')}>
@@ -52,32 +27,6 @@ export default function AdminNotificationsPanel({ t, toast }: { t: (k: string) =
         <span>Loading…</span>
       </div>,
     )
-  }
-
-  // Admin-scoped events only ever go out over the built-in channels (plugin channels
-  // are user-scoped), so this list stays explicit rather than server-driven.
-  const isActive = (id: string) => matrix.channels?.some(c => c.id === id && c.active) ?? false
-  const visibleChannels = (['inapp', 'email', 'webhook', 'ntfy'] as const).filter(ch => {
-    if (!isActive(ch)) return false
-    return matrix.event_types.some(evt => matrix.implemented_combos[evt]?.includes(ch))
-  })
-
-  const toggle = async (eventType: string, channel: string) => {
-    const before = prefsRef.current ?? matrix.preferences
-    const current = before[eventType]?.[channel] ?? true
-    const updated = { ...before, [eventType]: { ...before[eventType], [channel]: !current } }
-    writePrefs(updated)
-    setSaving(true)
-    try {
-      await adminApi.updateNotificationPreferences(updated)
-    } catch {
-      // Revert this cell only — a toggle that already went through keeps its value.
-      const latest = prefsRef.current ?? updated
-      writePrefs({ ...latest, [eventType]: { ...latest[eventType], [channel]: current } })
-      toast.error(t('common.error'))
-    } finally {
-      setSaving(false)
-    }
   }
 
   if (matrix.event_types.length === 0) {
