@@ -2,30 +2,31 @@ import { Fragment, useState, useEffect, useMemo, useCallback, useId, type ReactN
 import { useSearchParams } from 'react-router'
 import { ArrowDown, ArrowUp, BarChart3, Plus, Search, ArrowRight, ArrowLeftRight, Check, RotateCcw, Pencil, Trash2, AlertCircle, Download, StickyNote, ChevronDown, Receipt, Paperclip, ScanLine, Users } from 'lucide-react'
 import { useTripStore } from '../../store/tripStore'
-import { useAuthStore } from '../../store/authStore'
-import { useSettingsStore } from '../../store/settingsStore'
 import { useCanDo } from '../../store/permissionsStore'
 import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
-import { budgetApi } from '../../api/client'
-import { convertBooked, convertedLine, tripAmountOf, useExchangeRates, withFallbackFx } from '../../hooks/useExchangeRates'
 import { splitShareLabel } from './expenseFx'
-import { useFreezeMissingRates } from './useFreezeMissingRates'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { formatMoney, currencyDecimals, currencyLocale, localizeAmountInput, amountToInputString } from '../../utils/formatters'
-import { downloadBlob, openFile } from '../../utils/fileDownload'
+import { formatMoney, currencyDecimals, currencyLocale, localizeAmountInput } from '../../utils/formatters'
+import { openFile } from '../../utils/fileDownload'
 import CustomSelect from '../shared/CustomSelect'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
-import { localToday } from '../Planner/today'
 import { useReceiptScan } from './useReceiptScan'
 import { ReceiptScanModal } from './ReceiptScanModal'
-import { SYMBOLS, currenciesWith, SPLIT_COLORS } from './BudgetPanel.constants'
-import { finalBudgetFor, finalBudgetSources, NOTE_MAX, paidByUser, readUserNote, settlementDate, splitEqualShares } from './CostsPanel.helpers'
-import { COST_CATEGORY_LIST, catMeta } from './costsCategories'
+import { SYMBOLS, SPLIT_COLORS } from './BudgetPanel.constants'
+import { finalBudgetFor, finalBudgetSources, NOTE_MAX, paidByUser, readUserNote, settlementDate } from './CostsPanel.helpers'
+import { COST_CAT_META, COST_CATEGORY_LIST, catMeta } from './costsCategories'
+import {
+  baseTotal as baseTotalOf, booked as bookedAmount, currencyOptions, isUnfinished as isUnfinishedModel, lineOf as lineOfModel, memberShareOf,
+  myPaidOf as myPaidOfModel, paymentAmount, paymentLineOf, settledShareOf,
+  type CostsSettlement as Settlement, type CostsSettlementResponse,
+} from './costsModel'
+import { useCostsLedger } from './useCostsLedger'
+import { useSettlementForm } from './useSettlementForm'
 import { usePercentSplit, type CustomSplitUnit } from './usePercentSplit'
 import { useExpenseForm } from './useExpenseForm'
 import { ReceiptPreviewModal } from './ReceiptPreviewModal'
-import type { BudgetParticipantFinal, BudgetUnconverted, ReceiptLine } from '@trek/shared'
+import type { BudgetParticipantFinal, ReceiptLine } from '@trek/shared'
 import type { BudgetItem, BudgetItemReceipt } from '../../types'
 import type { TripMember } from './BudgetPanelMemberChips'
 import GuestBadge from '../shared/GuestBadge'
@@ -46,41 +47,6 @@ interface CostsPanelProps {
   tripMembers?: TripMember[]
 }
 
-interface Settlement {
-  id: number
-  from_user_id: number
-  to_user_id: number
-  amount: number
-  // The currency the transfer was entered in. Legacy rows predate it (null) and are
-  // read as the display currency, which is what the server assumes for them too.
-  currency?: string | null
-  // The rate frozen when the transfer was settled, in units of `currency` per 1 trip
-  // currency (#1445). Absent, or exactly 1, on rows written before the freeze existed.
-  exchange_rate?: number
-  created_at?: string
-  // The day the transfer actually happened; editable, unlike created_at (when it
-  // was recorded). Null/absent on rows predating this field — settlementDate()
-  // falls back to created_at for those.
-  settled_at?: string | null
-  /** A free-text note on the payment (#2340). */
-  note?: string | null
-  from_username?: string
-  to_username?: string
-}
-interface SettlementData {
-  balances: { user_id: number; username: string; avatar_url: string | null; balance: number }[]
-  flows: { from: { user_id: number; username: string }; to: { user_id: number; username: string }; amount: number }[]
-  settlements: Settlement[]
-  // What the trip ends up costing each participant. Computed server-side off the
-  // same ledger as the balances, so the breakdown can't contradict them.
-  finalBudgets: BudgetParticipantFinal[]
-  // The currency the figures are in: the display currency, or the trip's own when
-  // neither the server nor `base_rate` could quote the pair.
-  currency?: string
-  // Rows no rate could convert, left out of every figure above.
-  unconverted?: BudgetUnconverted
-}
-
 // One row in the unified Costs ledger — either an expense or a settle-up payment,
 // carrying the date used to group it by day.
 type LedgerEntry =
@@ -93,7 +59,6 @@ const COSTS_VIEW_KEY = 'trek:costs-view'
 
 export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps) {
   const { trip, budgetItems, deleteBudgetItem, loadBudgetItems, addBudgetItem, updateBudgetItem } = useTripStore()
-  const me = useAuthStore(s => s.user?.id ?? -1)
   const can = useCanDo()
   const canEdit = can('budget_edit', trip)
   const receiptScan = useReceiptScan(tripId, canEdit)
@@ -101,23 +66,18 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
   const { t, locale } = useTranslation()
   const isMobile = useIsMobile()
 
-  // Display/base currency = the user's preferred currency (Settings), falling back
-  // to the trip's own currency. Everything in Costs is converted to and shown in it.
-  const displayCurrency = useSettingsStore(s => s.settings.default_currency)
-  const base = (displayCurrency || trip?.currency || 'EUR').toUpperCase()
-  // Pre-rework rows stored currency = NULL, meaning "the trip's own currency".
-  const tripCurrency = (trip?.currency || base).toUpperCase()
-  // Anchored on the trip currency's quote, the one the server books with (#2525).
-  const { convert, displayPerTrip } = useExchangeRates(base, tripCurrency)
+  // Display/base currency, the trip's own, the settlement, totals, filters and
+  // the ledger writes: the same ledger the phone tab runs on.
+  const {
+    me, base, tripCurrency, ctx, settlement, settlementError, loadSettlement,
+    search, setSearch, segment: filter, setSegment: setFilter, catFilter, setCatFilter, dayFilter, setDayFilter,
+    totals, filtered, filteredSettlements, catBreakdown, exportCsv: handleExportCsv,
+    deleteExpense: handleDelete, undoSettlement, settleFlow, settleAll,
+  } = useCostsLedger({
+    tripId, trip, budgetItems, actions: { loadBudgetItems, deleteBudgetItem }, canEdit, t, toast,
+    settlementOnTripChange: true, skipUnfinishedShares: true, csvCurrencyAsStored: true,
+  })
   const curOf = useCallback((e: BudgetItem) => (e.currency || tripCurrency), [tripCurrency])
-  const [settlement, setSettlement] = useState<SettlementData | null>(null)
-  // A failed settlement read leaves `settlement` null, which the empty views would
-  // otherwise present as "everyone is square", a balance claim we cannot make.
-  const [settlementError, setSettlementError] = useState(false)
-  const [filter, setFilter] = useState<'all' | 'mine' | 'owed'>('all')
-  const [search, setSearch] = useState('')
-  const [catFilter, setCatFilter] = useState('')   // '' = all categories
-  const [dayFilter, setDayFilter] = useState('')   // '' = all days, else YYYY-MM-DD
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<BudgetItem | null>(null)
   const [previewReceipts, setPreviewReceipts] = useState<{ receipts: BudgetItemReceipt[]; initialIndex: number } | null>(null)
@@ -152,21 +112,6 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
   const fmt = useCallback((v: number, c = base) => formatMoney(v, c, locale), [base, locale])
   const fmt0 = useCallback((v: number, c = base) => formatMoney(v, c, locale, { decimals: 0 }), [base, locale])
 
-  // The browser's own figure for the display currency goes along, for the server to
-  // answer in it when it cannot fetch a quote itself.
-  const loadSettlement = useCallback(() => {
-    budgetApi.settlement(tripId, base, base !== tripCurrency ? displayPerTrip : null)
-      .then(s => { setSettlement(s); setSettlementError(false) })
-      .catch(() => setSettlementError(true))
-  }, [tripId, base, tripCurrency, displayPerTrip])
-
-  useEffect(() => { loadBudgetItems(tripId); loadSettlement() }, [tripId])
-  useEffect(() => { loadSettlement() }, [budgetItems.length, loadSettlement])
-
-  // Rows the server could not count get a rate frozen from the browser's, and the
-  // settlement is read again once they count.
-  useFreezeMissingRates({ tripId, tripCurrency, canEdit, unconverted: settlement?.unconverted, onHealed: loadSettlement })
-
   // The bottom-nav "+" on the Costs tab opens the add-expense modal via ?create=expense.
   const [searchParams, setSearchParams] = useSearchParams()
   useEffect(() => {
@@ -179,81 +124,23 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
   // ── derived expense maths (everything converted to the base currency) ────
   // Booked, not live: an expense entered in a foreign currency keeps the rate it was
   // entered at, which is the same rule the server settles by (#1335).
-  const booked = useCallback(
-    (amount: number, e: BudgetItem) => convertBooked(amount, e.currency, e.exchange_rate, tripCurrency, convert),
-    [convert, tripCurrency],
-  )
-  const baseTotal = (e: BudgetItem) => booked(e.total_price || 0, e)
-  // A transfer freezes its own rate at settle time, in its own table (#1445). One
-  // without a currency predates that and was entered in the display currency, which
-  // is how the server settles it too, not in the trip's.
-  const settled = useCallback(
-    (s: Settlement) => convertBooked(s.amount, s.currency || base, s.exchange_rate, tripCurrency, convert),
-    [convert, tripCurrency, base],
-  )
-  const myPaidOf = (e: BudgetItem) => booked(paidByUser(e, me), e)
+  const booked = useCallback((amount: number, e: BudgetItem) => bookedAmount(amount, e, ctx), [ctx])
+  const baseTotal = (e: BudgetItem) => baseTotalOf(e, ctx)
+  // A transfer freezes its own rate at settle time, in its own table (#1445).
+  const settled = (s: Settlement) => paymentAmount(s, ctx)
+  const myPaidOf = (e: BudgetItem) => myPaidOfModel(e, ctx)
   // The line under an amount shown converted: what was entered, then where it went (#2525).
-  const lineOf = (amount: number, e: BudgetItem, shown: number) =>
-    convertedLine(amount, e.currency, e.exchange_rate, tripCurrency, base, shown)
-  // "Unfinished": a recorded total nobody has paid yet — counts toward the trip
-  // total but stays out of settlements until who-paid is filled in. A negative
-  // total (a refund, #2176) is just as unfinished until its recipient is named.
-  const isUnfinished = (e: BudgetItem) => baseTotal(e) !== 0 && (e.payers || []).filter(p => p.amount !== 0).length === 0
+  const lineOf = (amount: number, e: BudgetItem, shown: number) => lineOfModel(amount, e, ctx, shown)
+  // "Unfinished": a recorded total nobody has paid yet, counted toward the trip
+  // total but kept out of settlements until who-paid is filled in (#2176).
+  const isUnfinished = (e: BudgetItem) => isUnfinishedModel(e, ctx)
   // A member's part of an expense: the custom amount when one was set, else the
   // equal split the server settles with, in the display currency.
-  const shareOf = (e: BudgetItem, userId: number) => {
-    const member = (e.members || []).find(m => m.user_id === userId)
-    if (!member) return 0
-    if (member.amount !== null && member.amount !== undefined) {
-      return booked(member.amount, e)
-    }
-    const shares = splitEqualShares(e.total_price || 0, e.members || [], e.id)
-    return booked(shares[userId] || 0, e)
-  }
-  // Nobody paid, so nobody owes: the ledger skips these entirely (#2225), and
-  // counting them here left the tile contradicting the balances right beside it.
-  const myShareOf = (e: BudgetItem) => (isUnfinished(e) ? 0 : shareOf(e, me))
+  const shareOf = (e: BudgetItem, userId: number) => memberShareOf(e, userId, ctx)
+  // Nobody paid, so nobody owes (#2225).
+  const myShareOf = (e: BudgetItem) => settledShareOf(e, ctx)
 
-  // `booked` carries the rates. They can land after the expenses, and without it in the
-  // deps the cards kept the sums they were first added up with while the rows moved on.
-  const totals = useMemo(() => {
-    const totalSpend = budgetItems.reduce((a, e) => a + baseTotal(e), 0)
-    const myPaid = budgetItems.reduce((a, e) => a + myPaidOf(e), 0)
-    const myShare = budgetItems.reduce((a, e) => a + myShareOf(e), 0)
-    const owe = (settlement?.flows || []).filter(f => f.from.user_id === me).reduce((a, f) => a + f.amount, 0)
-    const owed = (settlement?.flows || []).filter(f => f.to.user_id === me).reduce((a, f) => a + f.amount, 0)
-    const outstanding = budgetItems.reduce((a, e) => (isUnfinished(e) ? a + baseTotal(e) : a), 0)
-    const outstandingCount = budgetItems.filter(isUnfinished).length
-    return { totalSpend, myPaid, myShare, owe, owed, outstanding, outstandingCount }
-  }, [budgetItems, settlement, me, booked])
-
-  // ── filtering + day grouping ────────────────────────────────────────────
-  const filtered = useMemo(() => {
-    let list = budgetItems.slice()
-    if (filter === 'mine') list = list.filter(e => myPaidOf(e) > 0)
-    if (filter === 'owed') list = list.filter(e => round2(myPaidOf(e) - myShareOf(e)) > 0)
-    // catMeta normalises legacy/free-text categories to the fixed keys, so the
-    // filter matches rows saved before the category rework too.
-    if (catFilter) list = list.filter(e => catMeta(e.category).key === catFilter)
-    if (dayFilter) list = list.filter(e => (e.expense_date || '') === dayFilter)
-    const q = search.trim().toLowerCase()
-    if (q) list = list.filter(e => e.name.toLowerCase().includes(q))
-    return list
-  }, [budgetItems, filter, search, catFilter, dayFilter, me, booked])
-
-  // Settlements ("payments") shown inline in the ledger. They have no name, so a
-  // text search hides them; they're excluded from the "owed" expense filter and,
-  // under "mine", only show transfers I'm part of.
-  const filteredSettlements = useMemo(() => {
-    // Payments carry no name or category, so a text/category filter hides them.
-    if (search.trim() || catFilter) return []
-    if (filter === 'owed') return []
-    let list = settlement?.settlements || []
-    if (filter === 'mine') list = list.filter(s => s.from_user_id === me || s.to_user_id === me)
-    if (dayFilter) list = list.filter(s => settlementDate(s) === dayFilter)
-    return list
-  }, [settlement, filter, search, catFilter, dayFilter, me])
-
+  // ── day grouping ─────────────────────────────────────────────────────────
   const dayGroups = useMemo(() => {
     const entries: LedgerEntry[] = [
       ...filtered.map(e => ({ kind: 'expense' as const, date: e.expense_date || '', e })),
@@ -289,27 +176,6 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
     return [{ value: '', label: t('costs.filter.allDays') }, ...days.map(d => ({ value: d, label: fmtDay(d) }))]
   }, [budgetItems, locale, t])
 
-  // ── settle actions ──────────────────────────────────────────────────────
-  const settleFlow = async (fromId: number, toId: number, amount: number) => {
-    try {
-      await budgetApi.createSettlement(tripId, withFallbackFx({ from_user_id: fromId, to_user_id: toId, amount, currency: base }, tripCurrency))
-      loadSettlement()
-    } catch { toast.error(t('common.unknownError')) }
-  }
-  const undoSettlement = async (id: number) => {
-    try { await budgetApi.deleteSettlement(tripId, id); loadSettlement() } catch { toast.error(t('common.unknownError')) }
-  }
-  const settleAll = async () => {
-    const flows = settlement?.flows || []
-    if (!flows.length) return
-    try {
-      for (const f of flows) await budgetApi.createSettlement(tripId, withFallbackFx({ from_user_id: f.from.user_id, to_user_id: f.to.user_id, amount: f.amount, currency: base }, tripCurrency))
-    } catch { toast.error(t('common.unknownError')) }
-    // Refresh even when one transfer failed: the ones created before it are real,
-    // and leaving them in the flow list invites a second, doubled settle-up.
-    finally { loadSettlement() }
-  }
-
   const dateMeta = useMemo(() => {
     if (!trip?.start_date || !trip?.end_date) return null
     try {
@@ -320,9 +186,6 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
     } catch { return null }
   }, [trip?.start_date, trip?.end_date, locale])
 
-  const handleDelete = async (id: number) => {
-    try { await deleteBudgetItem(tripId, id); loadSettlement() } catch { toast.error(t('common.unknownError')) }
-  }
   // The table's own writes: one cell at a time, and an empty row to type into.
   const updateFromTable = async (id: number, patch: Partial<BudgetItem>) => {
     try { await updateBudgetItem(tripId, id, patch); loadSettlement() } catch { toast.error(t('common.unknownError')) }
@@ -334,44 +197,6 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
       toast.error(t('common.unknownError'))
       return null
     }
-  }
-
-  // CSV export of all expenses — the wiki-documented export that got lost in the
-  // Costs rework (#1500). One row per expense, oldest first.
-  const handleExportCsv = () => {
-    const sep = ';'
-    // A cell starting with =, +, -, @, TAB or CR is evaluated as a formula by Excel
-    // and Sheets, and the name/note columns are free text any trip member can write.
-    const esc = (v: unknown) => {
-      let s = String(v ?? '')
-      if (/^[=+\-@\t\r]/.test(s)) s = "'" + s
-      return s.includes(sep) || s.includes('"') || s.includes('\n') ? '"' + s.replace(/"/g, '""') + '"' : s
-    }
-    const fmtDate = (iso: string) => { if (!iso) return ''; try { return new Date(iso + 'T00:00:00Z').toLocaleDateString(locale, { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' }) } catch { return iso } }
-
-    // Read in another currency than the trip's, what each row counts as in the trip
-    // currency too, the figure every sum is built from (#2525).
-    const tripCol = tripCurrency !== base
-    const header = ['Date', 'Name', 'Category', 'Amount', 'Currency', ...(tripCol ? ['Amount (' + tripCurrency + ')'] : []), 'Amount (' + base + ')', 'Note']
-    const rows = [header.join(sep)]
-    const items = budgetItems.slice().sort((a, b) => (a.expense_date || '').localeCompare(b.expense_date || ''))
-    for (const e of items) {
-      const cur = curOf(e)
-      const note = readUserNote(e)
-      const inTrip = tripAmountOf(e.total_price || 0, e.currency, e.exchange_rate, tripCurrency, convert)
-      rows.push([
-        esc(fmtDate(e.expense_date || '')), esc(e.name), esc(t(catMeta(e.category).labelKey)),
-        (e.total_price || 0).toFixed(currencyDecimals(cur)), cur,
-        ...(tripCol ? [inTrip.toFixed(currencyDecimals(tripCurrency))] : []),
-        baseTotal(e).toFixed(currencyDecimals(base)),
-        esc(note),
-      ].join(sep))
-    }
-
-    const bom = '﻿'
-    const blob = new Blob([bom + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' })
-    const safeName = (trip?.title || 'trip').replace(/[^a-zA-Z0-9À-ɏ _-]/g, '').trim()
-    downloadBlob(blob, `costs-${safeName}.csv`)
   }
 
   // ── small presentational helpers ────────────────────────────────────────
@@ -974,10 +799,8 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
   // A settle-up payment as a ledger row — visually distinct from an expense, with
   // inline edit + undo (reuses deleteSettlement) so it isn't buried in a modal.
   function SettlementRow({ s }: { s: Settlement }) {
-    // Legacy transfers carry no currency and were entered in the display base.
-    const cur = (s.currency || base).toUpperCase()
     // Booked in the trip currency like an expense, so it is explained the same way.
-    const line = convertedLine(s.amount, cur, s.exchange_rate, tripCurrency, base, settled(s))
+    const line = paymentLineOf(s, ctx, settled(s))
     return (
       <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
       <div className="bg-surface-secondary border border-edge-faint exp-row" style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: isMobile ? '46px 1fr auto' : '46px minmax(200px, 1fr) minmax(0, 1.5fr) auto', gap: isMobile ? 16 : 18, alignItems: 'center', borderRadius: 18, padding: '16px 20px' }}>
@@ -1015,7 +838,7 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
     )
   }
 
-  function BalancesList({ balances }: { balances: SettlementData['balances'] }) {
+  function BalancesList({ balances }: { balances: CostsSettlementResponse['balances'] }) {
     if (settlementError) return loadFailed()
     const rows = people.map(p => balances.find(b => b.user_id === p.id) || { user_id: p.id, username: p.username, avatar_url: null, balance: 0 })
     const max = Math.max(1, ...rows.map(r => Math.abs(r.balance)))
@@ -1165,21 +988,18 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
 
   function CategoryBreakdown() {
     // Categories net refunds against spend (#2176): a negative entry lowers its
-    // category's sum, and a category that nets negative keeps its own row —
-    // just without a bar, since the bars rank positive spend.
-    const tot: Record<string, number> = {}
-    for (const e of budgetItems) { const k = catMeta(e.category).key; tot[k] = (tot[k] || 0) + baseTotal(e) }
-    const rows = COST_CATEGORY_LIST.filter(c => (tot[c.key] || 0) !== 0).sort((a, b) => (tot[b.key] || 0) - (tot[a.key] || 0))
-    if (rows.length === 0) return <div className="text-content-faint" style={{ fontSize: 'calc(12.5px * var(--fs-scale-body, 1))' }}>{t('costs.noCategories')}</div>
-    // Bars are scaled relative to the most expensive category (the top row fills the
-    // bar), not to the trip grand total — makes the relative ranking readable.
-    const maxCat = Math.max(0, ...rows.map(c => tot[c.key] || 0))
+    // category's sum, and a category that nets negative keeps its own row,
+    // just without a bar, since the bars rank positive spend. Bars are scaled
+    // relative to the most expensive category (the top row fills the bar), not
+    // to the trip grand total, which makes the relative ranking readable.
+    if (catBreakdown.length === 0) return <div className="text-content-faint" style={{ fontSize: 'calc(12.5px * var(--fs-scale-body, 1))' }}>{t('costs.noCategories')}</div>
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {rows.map(c => {
-          const v = tot[c.key]; const pct = maxCat > 0 && v > 0 ? v / maxCat * 100 : 0
+        {catBreakdown.map(row => {
+          const c = COST_CAT_META[row.key]
+          const v = row.amount; const pct = row.widthPct
           return (
-            <div key={c.key} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center' }}>
+            <div key={row.key} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center' }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: c.color }} />
               <span className="text-content" style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 500 }}>{t(c.labelKey)}</span>
               <span className="text-content-muted" style={{ fontSize: 'calc(13px * var(--fs-scale-body, 1))', fontWeight: 600 }}>{fmt0(v)}</span>
@@ -1259,35 +1079,13 @@ function SettlementModal({ tripId, people, me, editing, currency, tripCurrency, 
 }) {
   const { t } = useTranslation()
   const toast = useToast()
-  const otherDefault = people.find(p => p.id !== me)?.id ?? me
-  const [fromId, setFromId] = useState<string>(String(editing?.from_user_id ?? me))
-  const [toId, setToId] = useState<string>(String(editing?.to_user_id ?? otherDefault))
-  // Seeded with the transfer's own currency decimals, so a reopened 4,90 reads
-  // "4.90" and not "4.9" (#2175) — and a JPY transfer gets no fake decimals.
-  const [amount, setAmount] = useState<string>(editing ? amountToInputString(editing.amount, (editing.currency || currency).toUpperCase()) : '')
-  const [cur, setCur] = useState<string>((editing?.currency || currency).toUpperCase())
-  const [day, setDay] = useState(editing ? settlementDate(editing) : localToday())
-  const [note, setNote] = useState(editing?.note || '')
-  const [saving, setSaving] = useState(false)
-
-  const amt = Number.parseFloat(amount) || 0
-  const valid = amt > 0 && fromId !== toId && !!day
+  const { fromId, setFromId, toId, setToId, amount, setAmount, currency: cur, setCurrency: setCur, day, setDay, note, setNote, saving, valid, save } =
+    useSettlementForm({ tripId, tripCurrency, base: currency, people, me, editing, t, toast, onSaved })
   const opts = people.map(p => ({ value: String(p.id), label: p.id === me ? t('costs.you') : p.username }))
 
-  const save = async () => {
-    if (!valid) return
-    setSaving(true)
-    const data = withFallbackFx({ from_user_id: Number(fromId), to_user_id: Number(toId), amount: amt, currency: cur, settled_at: day, note: note.trim() || null }, tripCurrency)
-    try {
-      if (editing) await budgetApi.updateSettlement(tripId, editing.id, data)
-      else await budgetApi.createSettlement(tripId, data)
-      onSaved()
-    } catch { toast.error(t('common.unknownError')) } finally { setSaving(false) }
-  }
-
   const labelId = useId()
-  const nameOf = (id: string) => {
-    const p = people.find(x => String(x.id) === id)
+  const nameOf = (id: number) => {
+    const p = people.find(x => x.id === id)
     if (!p) return ''
     return p.id === me ? t('costs.you') : p.username
   }
@@ -1317,10 +1115,10 @@ function SettlementModal({ tripId, people, me, editing, currency, tripCurrency, 
     >
       <div className={GRID_2}>
         <EditorField label={t('costs.from')}>
-          <CustomSelect value={fromId} onChange={v => setFromId(String(v))} options={opts} style={{ width: '100%' }} />
+          <CustomSelect value={String(fromId)} onChange={v => setFromId(Number(v))} options={opts} style={{ width: '100%' }} />
         </EditorField>
         <EditorField label={t('costs.to')}>
-          <CustomSelect value={toId} onChange={v => setToId(String(v))} options={opts} style={{ width: '100%' }} />
+          <CustomSelect value={String(toId)} onChange={v => setToId(Number(v))} options={opts} style={{ width: '100%' }} />
         </EditorField>
       </div>
       <div className={GRID_2}>
@@ -1335,7 +1133,7 @@ function SettlementModal({ tripId, people, me, editing, currency, tripCurrency, 
         </EditorField>
         <EditorField label={t('costs.currency')}>
           <CustomSelect value={cur} onChange={v => setCur(String(v))} searchable
-            options={currenciesWith(cur).map(c => ({ value: c, label: SYMBOLS[c] ? `${c}  ${SYMBOLS[c]}` : c }))}
+            options={currencyOptions(cur)}
             style={{ width: '100%' }} />
         </EditorField>
       </div>
@@ -1760,7 +1558,7 @@ export function ExpenseModal({ tripId, base, people, me, editing, prefill, onClo
           </EditorField>
           <EditorField label={t('costs.currency')}>
             <CustomSelect value={currency} onChange={v => setCurrency(String(v))} searchable
-              options={currenciesWith(currency).map(c => ({ value: c, label: SYMBOLS[c] ? `${c}  ${SYMBOLS[c]}` : c }))}
+              options={currencyOptions(currency)}
               style={{ width: '100%' }} />
           </EditorField>
           <EditorField label={t('costs.day')}>

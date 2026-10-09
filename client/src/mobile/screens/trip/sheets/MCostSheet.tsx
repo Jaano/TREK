@@ -11,7 +11,8 @@ import { useTripStore } from '../../../../store/tripStore'
 import { formatMoney, localizeAmountInput } from '../../../../utils/formatters'
 import { openFile } from '../../../../utils/fileDownload'
 import { splitShareLabel } from '../../../../components/Budget/expenseFx'
-import { SYMBOLS, SPLIT_COLORS, currenciesWith } from '../../../../components/Budget/BudgetPanel.constants'
+import { SPLIT_COLORS } from '../../../../components/Budget/BudgetPanel.constants'
+import { currencyOptions } from '../../../../components/Budget/costsModel'
 import { COST_CATEGORY_LIST, catMeta } from '../../../../components/Budget/costsCategories'
 import { NOTE_MAX } from '../../../../components/Budget/CostsPanel.helpers'
 import type { ExpensePrefill } from '../../../../components/Budget/CostsPanel'
@@ -166,7 +167,7 @@ export default function MCostSheet({ tripId, base, people, me, editing, prefill,
               onChange={v => setCurrency(String(v))}
               searchable
               size="sm"
-              options={currenciesWith(currency).map(c => ({ value: c, label: SYMBOLS[c] ? `${c}  ${SYMBOLS[c]}` : c }))}
+              options={currencyOptions(currency)}
               style={{ width: '100%' }}
             />
           </div>
