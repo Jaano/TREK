@@ -1,6 +1,4 @@
-import { useState, useEffect, useRef, useId } from 'react'
-import { categoriesApi } from '../../api/client'
-import { useToast } from '../shared/Toast'
+import { useId } from 'react'
 import { Plus, Pencil, Trash2, Pipette, Tags, Loader2 } from 'lucide-react'
 import { DialogButton, DialogFooter, DialogHeader, DialogSection, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { Tooltip } from '../shared/Tooltip'
@@ -8,98 +6,16 @@ import ConfirmDialog from '../shared/ConfirmDialog'
 import { SettingRows, SettingsCard, SettingsHint, StatusPill, SETTINGS_BUTTON_PRIMARY, SETTINGS_ICON_BUTTON } from '../Settings/settingsKit'
 import { CATEGORY_ICON_MAP, ICON_LABELS, getCategoryIcon } from '../shared/categoryIcons'
 import { useTranslation } from '../../i18n'
-import { getApiErrorMessage } from '../../types'
-
-const PRESET_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#ef4444', '#f97316',
-  '#f59e0b', '#10b981', '#06b6d4', '#3b82f6', '#84cc16',
-  '#6b7280', '#1f2937',
-]
-
-// The colour a new category is stored with: data the server keeps, not a theme colour.
-const DEFAULT_COLOR = '#6366f1' // theme-lint-disable: a stored category colour, not styling
-
-const ICON_NAMES = Object.keys(CATEGORY_ICON_MAP)
+import { ICON_NAMES, PRESET_COLORS, useCategoryAdmin } from './useCategoryAdmin'
 
 export default function CategoryManager() {
-  const [categories, setCategories] = useState([])
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState(null)
-  const [form, setForm] = useState({ name: '', color: DEFAULT_COLOR, icon: 'MapPin' })
-  const [isSaving, setIsSaving] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  // The category whose delete waits for the answer in the confirm dialog.
-  const [deleteId, setDeleteId] = useState(null)
-  const colorInputRef = useRef(null)
-  const toast = useToast()
+  const {
+    categories, showForm, editingId, form, setForm, isSaving, isLoading, deleteId, setDeleteId, colorInputRef,
+    handleStartEdit, handleStartCreate, handleCancel, handleSave, handleDelete, isPresetColor,
+  } = useCategoryAdmin()
   const { t } = useTranslation()
   const labelId = useId()
 
-  useEffect(() => { void loadCategories() }, [])
-
-  const loadCategories = async () => {
-    setIsLoading(true)
-    try {
-      const data = await categoriesApi.list()
-      setCategories(data.categories || [])
-    } catch (err: unknown) {
-      toast.error(t('categories.toast.loadError'))
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleStartEdit = (cat) => {
-    setEditingId(cat.id)
-    setForm({ name: cat.name, color: cat.color || DEFAULT_COLOR, icon: cat.icon || 'MapPin' })
-    setShowForm(false)
-  }
-
-  const handleStartCreate = () => {
-    setEditingId(null)
-    setForm({ name: '', color: DEFAULT_COLOR, icon: 'MapPin' })
-    setShowForm(true)
-  }
-
-  const handleCancel = () => {
-    setShowForm(false)
-    setEditingId(null)
-  }
-
-  // The Save button carries disabled={… || !form.name.trim()}, so the name is set here.
-  const handleSave = async () => {
-    setIsSaving(true)
-    try {
-      if (editingId) {
-        const result = await categoriesApi.update(editingId, form)
-        setCategories(prev => prev.map(c => c.id === editingId ? result.category : c))
-        setEditingId(null)
-        toast.success(t('categories.toast.updated'))
-      } else {
-        const result = await categoriesApi.create(form)
-        setCategories(prev => [...prev, result.category])
-        setShowForm(false)
-        toast.success(t('categories.toast.created'))
-      }
-      setForm({ name: '', color: DEFAULT_COLOR, icon: 'MapPin' })
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('categories.toast.saveError')))
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDelete = async (id) => {
-    try {
-      await categoriesApi.delete(id)
-      setCategories(prev => prev.filter(c => c.id !== id))
-      toast.success(t('categories.toast.deleted'))
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('categories.toast.deleteError')))
-    }
-  }
-
-  const isPresetColor = PRESET_COLORS.includes(form.color)
   const PreviewIcon = getCategoryIcon(form.icon)
   const formOpen = showForm || editingId !== null
   const saveDisabled = isSaving || !form.name.trim()
