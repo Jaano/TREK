@@ -12,6 +12,8 @@ import { useDocSyncOffered } from './docsync/useDocSyncOffered'
 import { getAuthUrl } from '../../api/authUrl'
 import { isImage, isMedia, isWalletPass } from './FileManager.helpers'
 import { openFile as openFileInTab } from '../../utils/fileDownload'
+import { useFileTrash } from './useFileTrash'
+import { filesFromClipboard } from './fileActions'
 
 export interface FileManagerProps {
   files?: TripFile[]
@@ -37,8 +39,6 @@ export function useFileManager({ files = [], onUpload, onDelete, onUpdate, place
   const [filterType, setFilterType] = useState('all')
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [showTrash, setShowTrash] = useState(false)
-  const [trashFiles, setTrashFiles] = useState<TripFile[]>([])
-  const [loadingTrash, setLoadingTrash] = useState(false)
   const toast = useToast()
   const can = useCanDo()
   const trip = useTripStore((s) => s.trip)
@@ -48,24 +48,20 @@ export function useFileManager({ files = [], onUpload, onDelete, onUpdate, place
   const docSyncOffered = useDocSyncOffered(tripId, canManageSync)
   const { t, locale } = useTranslation()
 
-  const loadTrash = useCallback(async () => {
-    setLoadingTrash(true)
-    try {
-      const data = await filesApi.list(tripId, true)
-      setTrashFiles(data.files || [])
-    } catch { /* */ }
-    setLoadingTrash(false)
-  }, [tripId])
+  // onUpdate doubles as the "files changed" signal towards the parent; the arguments carry no payload.
+  const refreshFiles = useCallback(async () => {
+    if (onUpdate) void onUpdate(0, {} as any)
+  }, [onUpdate])
+
+  const trash = useFileTrash({ tripId, t, toast, onRestored: refreshFiles })
+  const { load: loadTrash } = trash
+  const trashFiles = trash.files
+  const loadingTrash = trash.loading
 
   const toggleTrash = useCallback(() => {
     if (!showTrash) loadTrash()
     setShowTrash(v => !v)
   }, [showTrash, loadTrash])
-
-  // onUpdate doubles as the "files changed" signal towards the parent; the arguments carry no payload.
-  const refreshFiles = useCallback(async () => {
-    if (onUpdate) void onUpdate(0, {} as any)
-  }, [onUpdate])
 
   const handleStar = async (fileId: number) => {
     try {
@@ -74,37 +70,16 @@ export function useFileManager({ files = [], onUpload, onDelete, onUpdate, place
     } catch { /* */ }
   }
 
-  const handleRestore = async (fileId: number) => {
-    try {
-      await filesApi.restore(tripId, fileId)
-      setTrashFiles(prev => prev.filter(f => f.id !== fileId))
-      refreshFiles()
-      toast.success(t('files.toast.restored'))
-    } catch {
-      toast.error(t('files.toast.restoreError'))
-    }
-  }
+  const handleRestore = trash.restore
 
   const handlePermanentDelete = async (fileId: number) => {
     if (!confirm(t('files.confirm.permanentDelete'))) return
-    try {
-      await filesApi.permanentDelete(tripId, fileId)
-      setTrashFiles(prev => prev.filter(f => f.id !== fileId))
-      toast.success(t('files.toast.deleted'))
-    } catch {
-      toast.error(t('files.toast.deleteError'))
-    }
+    await trash.permanentDelete(fileId)
   }
 
   const handleEmptyTrash = async () => {
     if (!confirm(t('files.confirm.emptyTrash'))) return
-    try {
-      await filesApi.emptyTrash(tripId)
-      setTrashFiles([])
-      toast.success(t('files.toast.trashEmptied') || 'Trash emptied')
-    } catch {
-      toast.error(t('files.toast.deleteError'))
-    }
+    await trash.emptyTrash()
   }
 
   const [previewFile, setPreviewFile] = useState(null)
@@ -150,15 +125,7 @@ export function useFileManager({ files = [], onUpload, onDelete, onUpdate, place
 
   const handlePaste = useCallback((e: React.ClipboardEvent) => {
     if (!can('file_upload', trip)) return
-    const items = e.clipboardData?.items
-    if (!items) return
-    const pastedFiles: File[] = []
-    for (const item of Array.from(items)) {
-      if (item.kind === 'file') {
-        const file = item.getAsFile()
-        if (file) pastedFiles.push(file)
-      }
-    }
+    const pastedFiles = filesFromClipboard(e.clipboardData)
     if (pastedFiles.length > 0) {
       e.preventDefault()
       onDrop(pastedFiles)

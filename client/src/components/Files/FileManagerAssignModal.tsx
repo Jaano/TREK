@@ -1,10 +1,10 @@
 import { useId } from 'react'
 import { MapPin, Ticket, Check, Paperclip } from 'lucide-react'
-import { filesApi } from '../../api/client'
-import type { Place, Reservation, Day } from '../../types'
+import type { Place, Reservation, Day, TripFile } from '../../types'
 import type { FileManagerState } from './useFileManager'
 import { TRANSPORT_TYPES } from './FileManager.constants'
 import { transportIcon } from './FileManager.helpers'
+import { planFileLinkToggle, runFileLinkRecordStep, type FileLinkField } from './fileActions'
 import { DialogHeader, DialogShell, DialogTile, NEUTRAL_TINT } from '../shared/DialogShell'
 import { EditorField, INPUT } from '../shared/dialogParts'
 
@@ -12,6 +12,20 @@ export function AssignModal(S: FileManagerState) {
   const { files, assignFileId, setAssignFileId, t, days, assignments, places, reservations, tripId, handleAssign, refreshFiles } = S
   const labelId = useId()
   const close = () => setAssignFileId(null)
+  // The file's own column goes through handleAssign, which toasts a failure.
+  const toggleLink = async (file: TripFile, field: FileLinkField, targetId: number) => {
+    const step = planFileLinkToggle(file, field, targetId)
+    if (step.kind === 'update') {
+      await handleAssign(file.id, step.data)
+      return
+    }
+    try {
+      await runFileLinkRecordStep(tripId, file.id, field, targetId, step.kind)
+      refreshFiles()
+    } catch {
+      // A failed link record change stays quiet.
+    }
+  }
   return (
     <DialogShell
       onClose={close}
@@ -61,29 +75,7 @@ export function AssignModal(S: FileManagerState) {
             const placeBtn = (p: Place, idx: number) => {
               const isLinked = file.place_id === p.id || (file.linked_place_ids || []).includes(p.id)
               return (
-                <button type="button" key={`${p.id}-${idx}`} onClick={async () => {
-                  if (isLinked) {
-                    if (file.place_id === p.id) {
-                      await handleAssign(file.id, { place_id: null })
-                    } else {
-                      try {
-                        const linksRes = await filesApi.getLinks(tripId, file.id)
-                        const link = (linksRes.links || []).find((l: any) => l.place_id === p.id)
-                        if (link) await filesApi.removeLink(tripId, file.id, link.id)
-                        refreshFiles()
-                      } catch {}
-                    }
-                  } else {
-                    if (!file.place_id) {
-                      await handleAssign(file.id, { place_id: p.id })
-                    } else {
-                      try {
-                        await filesApi.addLink(tripId, file.id, { place_id: p.id })
-                        refreshFiles()
-                      } catch {}
-                    }
-                  }
-                }} style={{
+                <button type="button" key={`${p.id}-${idx}`} onClick={() => toggleLink(file, 'place_id', p.id)} style={{
                   width: '100%', textAlign: 'start', paddingBlock: 6, paddingInlineEnd: 10, paddingInlineStart: 20, background: isLinked ? 'var(--bg-hover)' : 'none',
                   border: 'none', cursor: 'pointer', fontSize: 'calc(13px * var(--fs-scale-body, 1))', color: 'var(--text-primary)',
                   borderRadius: 8, fontFamily: 'inherit', fontWeight: isLinked ? 600 : 400,
@@ -136,29 +128,7 @@ export function AssignModal(S: FileManagerState) {
               const isLinked = file.reservation_id === r.id || (file.linked_reservation_ids || []).includes(r.id)
               const Icon = TRANSPORT_TYPES.has(r.type) ? transportIcon(r.type) : Ticket
               return (
-                <button type="button" key={r.id} onClick={async () => {
-                  if (isLinked) {
-                    if (file.reservation_id === r.id) {
-                      await handleAssign(file.id, { reservation_id: null })
-                    } else {
-                      try {
-                        const linksRes = await filesApi.getLinks(tripId, file.id)
-                        const link = (linksRes.links || []).find((l: any) => l.reservation_id === r.id)
-                        if (link) await filesApi.removeLink(tripId, file.id, link.id)
-                        refreshFiles()
-                      } catch {}
-                    }
-                  } else {
-                    if (!file.reservation_id) {
-                      await handleAssign(file.id, { reservation_id: r.id })
-                    } else {
-                      try {
-                        await filesApi.addLink(tripId, file.id, { reservation_id: r.id })
-                        refreshFiles()
-                      } catch {}
-                    }
-                  }
-                }} style={{
+                <button type="button" key={r.id} onClick={() => toggleLink(file, 'reservation_id', r.id)} style={{
                   width: '100%', textAlign: 'start', paddingBlock: 6, paddingInlineEnd: 10, paddingInlineStart: 20, background: isLinked ? 'var(--bg-hover)' : 'none',
                   border: 'none', cursor: 'pointer', fontSize: 'calc(13px * var(--fs-scale-body, 1))', color: 'var(--text-primary)',
                   borderRadius: 8, fontFamily: 'inherit', fontWeight: isLinked ? 600 : 400,

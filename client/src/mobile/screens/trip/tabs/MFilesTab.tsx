@@ -13,6 +13,7 @@ import MFileLinkSheet from './MFileLinkSheet'
 import MFileTrashSheet from './MFileTrashSheet'
 import MDocSyncSheet from './MDocSyncSheet'
 import { canManageDocSync } from '../../../../components/Files/docsync/useDocSync'
+import { filesFromClipboard } from '../../../../components/Files/fileActions'
 import { useAuthStore } from '../../../../store/authStore'
 import MFileLightbox from './MFileLightbox'
 import {
@@ -91,15 +92,7 @@ export default function MFilesTab({ planner, shell }: MTabScreenProps) {
 
   const onPaste = (e: ClipboardEvent<HTMLDivElement>) => {
     if (!planner.canUploadFiles) return
-    const items = e.clipboardData?.items
-    if (!items) return
-    const pasted: File[] = []
-    for (const item of Array.from(items)) {
-      if (item.kind === 'file') {
-        const f = item.getAsFile()
-        if (f) pasted.push(f)
-      }
-    }
+    const pasted = filesFromClipboard(e.clipboardData)
     if (pasted.length > 0) {
       e.preventDefault()
       void uploadFiles(pasted)
