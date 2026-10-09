@@ -356,6 +356,14 @@ jobs:
         # its phone twin share stays in one hook (scripts/dup-lint.mjs).
         run: cd client && npm run lint:dup
 
+      - name: Desktop and phone pairs check
+        # Each view in scripts/feature-pairs.json imports its feature's shared
+        # hook, and every file under src/mobile/screens is listed there, as a
+        # view of a pair or as phone only with a reason, so a new phone screen
+        # cannot grow its own copy of a desktop feature's logic
+        # (scripts/pairs-lint.mjs).
+        run: cd client && npm run lint:pairs
+
       - name: Skipped and focused tests check
         run: cd client && npm run lint:skips
 
