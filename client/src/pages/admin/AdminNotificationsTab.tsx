@@ -1,5 +1,4 @@
 import React, { useId } from 'react'
-import { authApi, notificationsApi } from '../../api/client'
 import { Bell, BellRing, CalendarClock, Mail, Save, Send, Smartphone, Webhook } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { TranslationFn } from '../../types'
@@ -7,6 +6,7 @@ import type { useAdmin } from './useAdmin'
 import AdminNotificationsPanel from './AdminNotificationsPanel'
 import AdminNotificationDefaultsPanel from './AdminNotificationDefaultsPanel'
 import { SWITCH_ONLY_CHANNELS, useNotificationChannels } from '../../components/Admin/useNotificationChannels'
+import { MASK, useAdminNotificationSettings } from '../../components/Admin/useAdminNotificationSettings'
 import ToggleSwitch from '../../components/Settings/ToggleSwitch'
 import {
   SETTINGS_BUTTON, SETTINGS_BUTTON_DANGER, SETTINGS_BUTTON_PRIMARY, SettingRow, SettingRows, SettingsCard,
@@ -21,9 +21,6 @@ interface AdminNotificationsTabProps {
 
 /** The glyph on each switch-only channel's card; anything else is the push channel. */
 const CHANNEL_ICONS: Record<string, LucideIcon> = { webhook: Webhook, ntfy: BellRing }
-
-/** A stored secret comes back from the server as this mask. */
-const MASK = '••••••••'
 
 /** The save and test buttons under a card's fields, on a hairline of their own. */
 function CardActions({ children }: { children: React.ReactNode }): React.ReactElement {
@@ -55,27 +52,15 @@ const SMTP_FIELDS: { key: string; label: string; placeholder: string; type?: str
 // preference matrix. The channel switches come from useNotificationChannels,
 // which the phone section shares.
 export default function AdminNotificationsTab({ admin, t }: AdminNotificationsTabProps): React.ReactElement {
-  const { toast, smtpValues, setSmtpValues, smtpLoaded, setTripRemindersEnabled, managed } = admin
+  const { toast, smtpValues, setSmtpValues, smtpLoaded, managed } = admin
   const ids = useId()
 
   const channels = useNotificationChannels(admin, t)
   const emailActive = channels.isActive('email')
-  const tripRemindersActive = smtpValues.notify_trip_reminder !== 'false'
-
-  const smtpConfigured = !!(smtpValues.smtp_host?.trim())
-  const saveNotifications = async () => {
-    // Saves credentials only — channel activation is auto-saved by the toggle
-    const notifKeys = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from', 'smtp_skip_tls_verify']
-    const payload: Record<string, string> = {}
-    for (const k of notifKeys) { if (smtpValues[k] !== undefined) payload[k] = smtpValues[k] }
-    try {
-      await authApi.updateAppSettings(payload)
-      toast.success(t('admin.notifications.saved'))
-      authApi.getAppConfig().then((c: { trip_reminders_enabled?: boolean }) => {
-        if (c?.trip_reminders_enabled !== undefined) setTripRemindersEnabled(c.trip_reminders_enabled)
-      }).catch(() => {})
-    } catch { toast.error(t('common.error')) }
-  }
+  const {
+    tripRemindersActive, smtpConfigured, saveSmtp: saveNotifications, testSmtp, toggleTripReminders, saveAdminWebhook,
+    testAdminWebhook, clearNtfyToken, saveAdminNtfy, testAdminNtfy,
+  } = useAdminNotificationSettings(admin, t)
 
   const smtpField = (field: typeof SMTP_FIELDS[number]) => (
     <EditorField key={field.key} label={field.label} htmlFor={`${ids}-${field.key}`}>
@@ -153,17 +138,7 @@ export default function AdminNotificationsTab({ admin, t }: AdminNotificationsTa
                 <Save size={14} strokeWidth={2.2} />{t('common.save')}
               </button>
               <button type="button"
-                onClick={async () => {
-                  const smtpKeys = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from', 'smtp_skip_tls_verify']
-                  const payload: Record<string, string> = {}
-                  for (const k of smtpKeys) { if (smtpValues[k] !== undefined) payload[k] = smtpValues[k] }
-                  await authApi.updateAppSettings(payload).catch(() => {})
-                  try {
-                    const result = await notificationsApi.testSmtp()
-                    if (result.success) toast.success(t('admin.smtp.testSuccess'))
-                    else toast.error(result.error || t('admin.smtp.testFailed'))
-                  } catch { toast.error(t('admin.smtp.testFailed')) }
-                }}
+                onClick={testSmtp}
                 disabled={!smtpConfigured}
                 className={SETTINGS_BUTTON}
               >
@@ -202,20 +177,7 @@ export default function AdminNotificationsTab({ admin, t }: AdminNotificationsTa
             <ToggleSwitch
               on={tripRemindersActive}
               label={t('admin.notifications.tripReminders.title')}
-              onToggle={async () => {
-                const next = !tripRemindersActive
-                setSmtpValues(prev => ({ ...prev, notify_trip_reminder: next ? 'true' : 'false' }))
-                try {
-                  await authApi.updateAppSettings({ notify_trip_reminder: next ? 'true' : 'false' })
-                  toast.success(next ? t('admin.notifications.tripReminders.enabled') : t('admin.notifications.tripReminders.disabled'))
-                  authApi.getAppConfig().then((c: { trip_reminders_enabled?: boolean }) => {
-                    if (c?.trip_reminders_enabled !== undefined) setTripRemindersEnabled(c.trip_reminders_enabled)
-                  }).catch(() => {})
-                } catch {
-                  setSmtpValues(prev => ({ ...prev, notify_trip_reminder: tripRemindersActive ? 'true' : 'false' }))
-                  toast.error(t('common.error'))
-                }
-              }}
+              onToggle={toggleTripReminders}
             />
           }
         />
@@ -241,27 +203,12 @@ export default function AdminNotificationsTab({ admin, t }: AdminNotificationsTa
             )}
             <CardActions>
               <button type="button"
-                onClick={async () => {
-                  try {
-                    await authApi.updateAppSettings({ admin_webhook_url: smtpValues.admin_webhook_url || '' })
-                    toast.success(t('admin.notifications.adminWebhookPanel.saved'))
-                  } catch { toast.error(t('common.error')) }
-                }}
+                onClick={saveAdminWebhook}
                 className={SETTINGS_BUTTON_PRIMARY}>
                 <Save size={14} strokeWidth={2.2} />{t('common.save')}
               </button>
               <button type="button"
-                onClick={async () => {
-                  // A masked value means the URL only lives on the server — send no url and let
-                  // the server test the stored one instead of pre-saving the mask.
-                  const url = smtpValues.admin_webhook_url === MASK ? undefined : smtpValues.admin_webhook_url
-                  try {
-                    if (url) await authApi.updateAppSettings({ admin_webhook_url: url }).catch(() => {})
-                    const result = await notificationsApi.testWebhook(url)
-                    if (result.success) toast.success(t('admin.notifications.adminWebhookPanel.testSuccess'))
-                    else toast.error(result.error || t('admin.notifications.adminWebhookPanel.testFailed'))
-                  } catch { toast.error(t('admin.notifications.adminWebhookPanel.testFailed')) }
-                }}
+                onClick={testAdminWebhook}
                 disabled={!smtpValues.admin_webhook_url?.trim()}
                 className={SETTINGS_BUTTON}
               >
@@ -306,13 +253,7 @@ export default function AdminNotificationsTab({ admin, t }: AdminNotificationsTa
                   />
                   {smtpValues.admin_ntfy_token === MASK && (
                     <button type="button"
-                      onClick={async () => {
-                        try {
-                          await authApi.updateAppSettings({ admin_ntfy_token: '' })
-                          setSmtpValues(prev => ({ ...prev, admin_ntfy_token: '' }))
-                          toast.success(t('admin.notifications.adminNtfyPanel.tokenCleared'))
-                        } catch { toast.error(t('common.error')) }
-                      }}
+                      onClick={clearNtfyToken}
                       className={`${SETTINGS_BUTTON_DANGER} flex-none`}
                       style={fs(13, 'body')}
                     >
@@ -324,37 +265,12 @@ export default function AdminNotificationsTab({ admin, t }: AdminNotificationsTa
             </>)}
             <CardActions>
               <button type="button"
-                onClick={async () => {
-                  try {
-                    await authApi.updateAppSettings({
-                      admin_ntfy_server: smtpValues.admin_ntfy_server || '',
-                      admin_ntfy_topic: smtpValues.admin_ntfy_topic || '',
-                      ...(smtpValues.admin_ntfy_token && smtpValues.admin_ntfy_token !== MASK
-                        ? { admin_ntfy_token: smtpValues.admin_ntfy_token }
-                        : {}),
-                    })
-                    toast.success(t('admin.notifications.adminNtfyPanel.saved'))
-                  } catch { toast.error(t('common.error')) }
-                }}
+                onClick={saveAdminNtfy}
                 className={SETTINGS_BUTTON_PRIMARY}>
                 <Save size={14} strokeWidth={2.2} />{t('common.save')}
               </button>
               <button type="button"
-                onClick={async () => {
-                  const topic = smtpValues.admin_ntfy_topic?.trim()
-                  if (!topic) return
-                  try {
-                    const token = smtpValues.admin_ntfy_token && smtpValues.admin_ntfy_token !== MASK
-                      ? smtpValues.admin_ntfy_token : null
-                    const result = await notificationsApi.testNtfy({
-                      topic,
-                      server: smtpValues.admin_ntfy_server || null,
-                      token,
-                    })
-                    if (result.success) toast.success(t('admin.notifications.adminNtfyPanel.testSuccess'))
-                    else toast.error(result.error || t('admin.notifications.adminNtfyPanel.testFailed'))
-                  } catch { toast.error(t('admin.notifications.adminNtfyPanel.testFailed')) }
-                }}
+                onClick={testAdminNtfy}
                 disabled={!smtpValues.admin_ntfy_topic?.trim()}
                 className={SETTINGS_BUTTON}
               >
