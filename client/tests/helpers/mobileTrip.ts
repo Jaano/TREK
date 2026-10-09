@@ -1,5 +1,7 @@
 import { vi } from 'vitest';
 import type { TripPlanner, MTripShellApi } from '../../src/mobile/screens/trip/MTripShell';
+import type { Reservation } from '../../src/types';
+import { changeTransitRouteWith, openTransportEditorWith } from '../../src/pages/tripPlanner/transportEditorOpeners';
 import { buildTrip } from './factories';
 
 /**
@@ -299,6 +301,10 @@ export function buildPlanner(overrides: Partial<TripPlanner> = {}): TripPlanner 
     handleSaveReservation: vi.fn(),
     handleSaveTransport: vi.fn(),
     handleDeleteReservation: vi.fn(),
+    // The planner's two ways into the transport editor, run on the setter spies above
+    // the way usePlannerDialogs runs them on its state.
+    openTransportEditor: vi.fn((r: Reservation) => openTransportEditorWith(planner, r)),
+    changeTransitRoute: vi.fn((r: Reservation) => changeTransitRouteWith(planner, r)),
 
     selectedPlace: null,
     dayOrderMap: new Map<number, number>(),
@@ -309,7 +315,8 @@ export function buildPlanner(overrides: Partial<TripPlanner> = {}): TripPlanner 
     splashDone: true,
   };
 
-  return { ...base, ...overrides } as unknown as TripPlanner;
+  const planner = { ...base, ...overrides } as unknown as TripPlanner;
+  return planner;
 }
 
 export function buildShell(overrides: Partial<MTripShellApi> = {}): MTripShellApi {

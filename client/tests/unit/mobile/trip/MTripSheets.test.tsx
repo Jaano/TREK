@@ -13,7 +13,7 @@ import { buildPlanner, buildShell } from '../../../helpers/mobileTrip'
 import { resetAllStores, seedStore } from '../../../helpers/store'
 import { fireEvent, render, screen, waitFor, within } from '../../../helpers/render'
 
-// FE-MOB-SHOST-001 to FE-MOB-SHOST-029, FE-MOB-SHOST-032 and FE-MOB-SHOST-033 (030 and 031 live in MTripSheets.members.test.tsx)
+// FE-MOB-SHOST-001 to FE-MOB-SHOST-029 and FE-MOB-SHOST-032 to FE-MOB-SHOST-034 (030 and 031 live in MTripSheets.members.test.tsx)
 //
 // Every child sheet is stubbed: this file is about the host — which sheet is
 // mounted for which shell.sheet id, and how the host's own callbacks wire the
@@ -160,18 +160,20 @@ vi.mock('../../../../src/components/Trips/TripMembersModal', () => ({
 }))
 
 vi.mock('../../../../src/components/Planner/TransitJourneyModal', () => ({
-  default: ({ reservation, canEdit, onClose, onSave, onDelete, onChangeRoute }: {
+  default: ({ reservation, canEdit, onClose, onSave, onDelete, onChangeRoute, onEditDetails }: {
     reservation: Reservation
     canEdit: boolean
     onClose: () => void
     onSave: (fields: Record<string, unknown>) => Promise<void>
     onDelete: () => Promise<void>
     onChangeRoute: () => void
+    onEditDetails: () => void
   }) => (
     <div data-testid="stub-transit" data-title={reservation.title} data-canedit={String(canEdit)}>
       <button type="button" onClick={() => void onSave({ title: 'Renamed' })}>save transit</button>
       <button type="button" onClick={() => void onDelete()}>delete transit</button>
       <button type="button" onClick={onChangeRoute}>change route</button>
+      <button type="button" onClick={onEditDetails}>edit details</button>
       <button type="button" onClick={onClose}>close transit</button>
     </div>
   ),
@@ -371,6 +373,16 @@ describe('MTripSheets', () => {
     fireEvent.click(screen.getByText('change route'))
     expect(planner.setTransitPrefill).toHaveBeenCalledWith({ from: null, to: null })
     expect(planner.setTransportModalDayId).toHaveBeenCalledWith(null)
+  })
+
+  it('FE-MOB-SHOST-034: editing the details opens the transport editor on the newer store copy', () => {
+    const fresh = { ...JOURNEY, title: 'Tokyo → Kyoto (saved)' } as Reservation
+    const { planner } = renderHost({ transitJourney: JOURNEY, reservations: [fresh] })
+    fireEvent.click(screen.getByText('edit details'))
+    expect(planner.openTransportEditor).toHaveBeenCalledWith(fresh)
+    expect(planner.setEditingTransport).toHaveBeenCalledWith(fresh)
+    expect(planner.setTransportModalAutomated).toHaveBeenCalledWith(false)
+    expect(planner.setShowTransportModal).toHaveBeenCalledWith(true)
   })
 
   it('FE-MOB-SHOST-020: a booking opens the expense editor for its linked item and closes again', () => {

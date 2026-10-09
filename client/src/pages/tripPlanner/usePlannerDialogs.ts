@@ -5,6 +5,7 @@ import type { RoadtripStopDraft } from '../../components/Roadtrip/RoadtripStopPo
 import { useAirtrailConnection } from '../../hooks/useAirtrailConnection'
 import type { Place, Reservation } from '../../types'
 import type { PlannerBase, PlannerSearchParams } from './plannerTypes'
+import { changeTransitRouteWith, openTransportEditorWith } from './transportEditorOpeners'
 
 interface PlannerDialogsOptions extends Pick<PlannerBase, 'tripId' | 'tripActions'> {
   searchParams: PlannerSearchParams[0]
@@ -136,32 +137,14 @@ export function usePlannerDialogs(options: PlannerDialogsOptions) {
   // whose editor also asks for day_edit.
   const [bookingDetailOpen, setBookingDetailOpen] = useState<{ id: number; fromDayList: boolean } | null>(null)
 
-  // The full transport editor on a saved entry. For a transit journey that is where
-  // travellers, costs, files, code and status live; an unchanged-endpoints save keeps
-  // the stored itinerary (#2148).
+  // The full transport editor on a saved entry, and the transit search re-entered
+  // seeded with a journey's route. The phone trip sheets open them with the same
+  // helpers on the planner's setters.
   const openTransportEditor = useCallback((r: Reservation) => {
-    setEditingTransport(r)
-    setTransportModalDayId(r.day_id ?? null)
-    setTransportModalAutomated(false)
-    setTransitPrefill(null)
-    setTransitJourney(null)
-    setShowTransportModal(true)
+    openTransportEditorWith({ setEditingTransport, setTransportModalDayId, setTransportModalAutomated, setTransitPrefill, setTransitJourney, setShowTransportModal }, r)
   }, [])
-  // Re-enters the transit search seeded with a journey's route; the journey is
-  // REPLACED on save (editingTransport drives handleSaveTransport's update path).
   const changeTransitRoute = useCallback((r: Reservation) => {
-    const eps = r.endpoints || []
-    const from = eps.find(e => e.role === 'from')
-    const to = eps.find(e => e.role === 'to')
-    setTransitPrefill({
-      from: from ? { name: from.name, lat: from.lat, lng: from.lng } : null,
-      to: to ? { name: to.name, lat: to.lat, lng: to.lng } : null,
-    })
-    setEditingTransport(r)
-    setTransportModalDayId(r.day_id ?? null)
-    setTransportModalAutomated(true)
-    setTransitJourney(null)
-    setShowTransportModal(true)
+    changeTransitRouteWith({ setEditingTransport, setTransportModalDayId, setTransportModalAutomated, setTransitPrefill, setTransitJourney, setShowTransportModal }, r)
   }, [])
 
   // The bottom-nav "+" is context-aware per tab: on the Bookings / Transports tabs

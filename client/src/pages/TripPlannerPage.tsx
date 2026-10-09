@@ -1,7 +1,6 @@
 import React, { useState, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, useNavigate, useSearchParams } from 'react-router'
-import { useTripStore } from '../store/tripStore'
 import { useSettingsStore } from '../store/settingsStore'
 import { MapViewAuto as MapView } from '../components/Map/MapViewAuto'
 import type { CompassMap } from '../components/Map/MapCompassPill'
@@ -25,10 +24,6 @@ import { BookingDetailPopup } from '../components/Planner/bookings/BookingDetail
 import BookingImportModal from '../components/Planner/BookingImportModal'
 import AirTrailImportModal from '../components/Planner/AirTrailImportModal'
 // MemoriesPanel moved to Journey addon
-import type { ExpensePrefill } from '../components/Budget/CostsPanel'
-import { expenseEditorFor } from '../components/Budget/CostsPanel.helpers'
-import type { BookingExpenseRequest } from '../components/Planner/BookingCostsSection.types'
-import type { BudgetItem } from '../types'
 import PluginFrame from '../components/Plugins/PluginFrame'
 import ErrorBoundary from '../components/shared/ErrorBoundary'
 import { getDayBookendHotels } from '../utils/dayOrder'
@@ -41,7 +36,6 @@ import { useToast } from '../components/shared/Toast'
 import { Map, X, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Ticket, Wallet, FolderOpen, Users, Train } from 'lucide-react'
 import { addonsApi, accommodationsApi, authApi, tripsApi, mapsApi } from '../api/client'
 import { accommodationRepo } from '../repo/accommodationRepo'
-import { useAuthStore } from '../store/authStore'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
 import { Tooltip } from '../components/shared/Tooltip'
 import { useTripWebSocket } from '../hooks/useTripWebSocket'
@@ -50,6 +44,9 @@ import { usePlaceSelection } from '../hooks/usePlaceSelection'
 import { usePlannerHistory } from '../hooks/usePlannerHistory'
 import type { Accommodation, TripMember, Day, Place, Reservation } from '../types'
 import { useTripPlannerPage } from './tripPlanner/useTripPlannerPage'
+import { useBookingExpenseEditor } from './tripPlanner/useBookingExpenseEditor'
+import { applyTripCoverUpdate } from './tripPlanner/tripCover'
+import { latestReservation } from './tripPlanner/transportEditorOpeners'
 import {
   ReservationsPanel, FileManager, CostsPanel, ExpenseModal, CollabPanel,
   RoadtripSidebar, RoadtripCorridorPanel, RoadtripLimitsCard, RoadtripStopPopup, RoadtripStayModal, RoadtripTrackModal,
@@ -185,22 +182,13 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
 
   // Costs expense editor opened from a booking modal (save-then-open). Lives at the
   // page level so it has tripMembers / base currency / current user available.
-  const meId = useAuthStore(s => s.user?.id ?? -1)
-  const displayCurrency = useSettingsStore(s => s.settings.default_currency)
+  const { meId, costsBase, openBookingExpense, expenseEditor, onExpenseSaved } = useBookingExpenseEditor({
+    tripId, tripCurrency: trip?.currency, receiptExpense, clearReceiptExpense,
+  })
   const distanceUnit = useSettingsStore(s => s.settings.distance_unit)
-  const costsBase = (displayCurrency || trip?.currency || 'EUR').toUpperCase()
   // Transit search departs against a real date, so the whole Automated mode —
   // the day-header tram button and the modal's mode switch — is off without one.
   const tripHasDates = Boolean(trip?.start_date && trip?.end_date)
-  const loadBudgetItems = useTripStore(s => s.loadBudgetItems)
-  const [bookingExpense, setBookingExpense] = useState<{ editing: BudgetItem | null; prefill?: ExpensePrefill } | null>(null)
-  const openBookingExpense = (req: BookingExpenseRequest) => {
-    if (req.editItem) setBookingExpense({ editing: req.editItem })
-    else if (req.prefill) setBookingExpense({ editing: null, prefill: req.prefill })
-  }
-  // One expense editor for both openers: a booking's Costs block, and a scanned
-  // receipt sent here from the background tasks widget.
-  const expenseEditor = expenseEditorFor(bookingExpense, () => setBookingExpense(null), receiptExpense, clearReceiptExpense)
 
   if (isLoading || !splashDone) {
     return (
@@ -946,7 +934,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
         onClose={() => setShowTripForm(false)}
         onSave={async (data) => { await tripActions.updateTrip(tripId, data); loadAccommodations(); toast.success(t('trip.toast.tripUpdated')) }}
         trip={trip}
-        onCoverUpdate={(_, coverUrl) => useTripStore.setState(state => ({ trip: state.trip ? { ...state.trip, cover_image: coverUrl } : state.trip }))}
+        onCoverUpdate={applyTripCoverUpdate}
       />
       <TripMembersModal isOpen={showMembersModal} onClose={() => setShowMembersModal(false)} tripId={tripId} tripTitle={trip?.title} onMembersChanged={refreshMembers} />
       <ReservationModal isOpen={showReservationModal} onClose={() => { if (importReviewActive) { advanceImportReview() } else { setShowReservationModal(false); setEditingReservation(null); setBookingForAssignmentId(null) } }} onSave={async (data) => { const r = await handleSaveReservation(data); if (importReviewActive && r) advanceImportReview(); return r }} reservation={editingReservation} prefill={reservationPrefill} days={days} places={places} assignments={assignments} selectedDayId={selectedDayId} files={files} onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined} onFileDelete={(id) => tripActions.deleteFile(tripId, id)} accommodations={tripAccommodations} defaultAssignmentId={bookingForAssignmentId} onOpenExpense={openBookingExpense} tripMembers={tripMembers} />
@@ -967,7 +955,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
           onDelete={async () => { await handleDeleteReservation(transitJourney.id); setTransitJourney(null) }}
           onChangeRoute={() => changeTransitRoute(transitJourney)}
           // The store copy may be newer than the journey held in state.
-          onEditDetails={() => openTransportEditor(reservations.find(r => r.id === transitJourney.id) ?? transitJourney)}
+          onEditDetails={() => openTransportEditor(latestReservation(reservations, transitJourney))}
         />
       )}
       {/* A booking clicked on the desktop plan: its detail first, the editor one Edit away. */}
@@ -1001,7 +989,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
               editing={expenseEditor.editing}
               prefill={expenseEditor.prefill}
               onClose={expenseEditor.close}
-              onSaved={() => { expenseEditor.close(); loadBudgetItems(tripId) }}
+              onSaved={onExpenseSaved}
             />
           </Suspense>
         </ErrorBoundary>
