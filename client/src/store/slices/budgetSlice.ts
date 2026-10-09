@@ -7,6 +7,7 @@ import type { BudgetCreateItemRequest, BudgetFallbackFx, BudgetFreezeRatesRespon
 import { getApiErrorMessage } from '../../types'
 import { withFallbackFx } from '../../hooks/useExchangeRates'
 import { notify } from '../notify'
+import { orderBudgetByCategories } from './budgetOrder'
 
 type SetState = StoreApi<TripStoreState>['setState']
 type GetState = StoreApi<TripStoreState>['getState']
@@ -138,23 +139,7 @@ export const createBudgetSlice = (set: SetState, get: GetState): BudgetSlice => 
 
   reorderBudgetCategories: async (tripId, orderedCategories) => {
     // Optimistic: reorder items by new category order (Map preserves insertion order for numeric keys)
-    set(state => {
-      const grouped = new Map<string, BudgetItem[]>()
-      for (const item of state.budgetItems) {
-        const cat = item.category || 'Other'
-        if (!grouped.has(cat)) grouped.set(cat, [])
-        grouped.get(cat)!.push(item)
-      }
-      const reordered: BudgetItem[] = []
-      for (const cat of orderedCategories) {
-        const items = grouped.get(cat)
-        if (items) reordered.push(...items)
-      }
-      for (const [cat, items] of grouped) {
-        if (!orderedCategories.includes(cat)) reordered.push(...items)
-      }
-      return { budgetItems: reordered }
-    })
+    set(state => ({ budgetItems: orderBudgetByCategories(state.budgetItems, orderedCategories) }))
     try {
       await budgetApi.reorderCategories(tripId, orderedCategories)
     } catch (err: unknown) {
