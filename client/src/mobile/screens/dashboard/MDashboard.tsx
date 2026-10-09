@@ -7,12 +7,11 @@ import { useTranslation } from '../../../i18n'
 import MDancingTrek from '../../components/MDancingTrek'
 import { useDashboard } from '../../../pages/dashboard/useDashboard'
 import {
-  type DashboardTrip, MS_PER_DAY, daysUntil, getTripStatus,
+  type DashboardTrip, MS_PER_DAY, daysUntil, fullDate, getTripStatus,
 } from '../../../pages/dashboard/dashboardModel'
 import { useAuthStore } from '../../../store/authStore'
 import { useInAppNotificationStore } from '../../../store/inAppNotificationStore'
-import { usePluginStore } from '../../../store/pluginStore'
-import { useTripCardBadges } from '../../../components/Plugins/TripCardBadges'
+import { useDashboardPlugins } from '../../../components/Dashboard/useDashboardPlugins'
 import type { TripCardBadge } from '../../../api/client'
 import DemoBanner from '../../../components/Layout/DemoBanner'
 import { IcsSubscribeModal } from '../../../components/Planner/IcsSubscribeModal'
@@ -26,17 +25,6 @@ import MUserMenu from './MUserMenu'
 import { useMobileDashOrder, useMobileDashVisibility, MobileDashWidget } from './MDashWidgets'
 import MNewTripSheet from './MNewTripSheet'
 import type { MobileDashToken } from '@trek/shared'
-
-// Localized short date for the pills; the year only shows when it isn't the
-// current one (same rule as the desktop cards).
-function fullDate(dateStr: string | null | undefined, locale: string): string | null {
-  if (!dateStr) return null
-  const date = new Date(dateStr + 'T00:00:00Z')
-  if (Number.isNaN(date.getTime())) return null
-  const opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short', timeZone: 'UTC' }
-  if (date.getUTCFullYear() !== new Date().getUTCFullYear()) opts.year = 'numeric'
-  return date.toLocaleDateString(locale, opts)
-}
 
 type TripFilter = 'planned' | 'archive' | 'completed'
 
@@ -72,9 +60,7 @@ export default function MDashboard(): React.ReactElement {
   // Plugin dashboard widgets + trip-card badges, mirroring the desktop page:
   // same slot filter (only true dashboard widgets), one badge fetch for all
   // visible cards, gated on any plugin being active. Fail-safe like desktop.
-  const widgetPlugins = usePluginStore(s => s.plugins).filter(p => p.type === 'widget' && p.slot !== 'hero' && p.slot !== 'place-detail' && p.slot !== 'day-detail' && p.slot !== 'reservation-detail')
-  const anyPluginActive = usePluginStore(s => s.plugins).length > 0
-  const badgesFor = useTripCardBadges(gridTrips.map(trip => trip.id), anyPluginActive)
+  const { widgetPlugins, badgesFor } = useDashboardPlugins(gridTrips.map(trip => trip.id))
 
   // Mobile-only dashboard arrangement: the featured trip stays on top, then the
   // trip list + widgets render in the user's chosen order (Settings → Appearance).
