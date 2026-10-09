@@ -1,4 +1,4 @@
-// FE-MOB-AADD-001 to FE-MOB-AADD-034
+// FE-MOB-AADD-001 to FE-MOB-AADD-035
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -682,6 +682,26 @@ describe('MAdminAddonManager', () => {
 
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await screen.findByText('Failed to save');
+  });
+
+  it('FE-MOB-AADD-035: switching to Anthropic saves an empty base URL instead of the old host', async () => {
+    const user = userEvent.setup();
+    let body: { config?: Record<string, unknown> } | null = null;
+    server.use(
+      addonsRoute([llmAddon({ provider: 'openai', model: 'gpt-4o', baseUrl: 'https://api.openai.com/v1', apiKey: '' })]),
+      http.put('/api/admin/addons/llm_parsing', async ({ request }) => {
+        body = (await request.json()) as { config?: Record<string, unknown> };
+        return HttpResponse.json({ success: true });
+      }),
+    );
+    render(<><ToastContainer /><MAdminAddonManager /></>);
+
+    await user.click(await screen.findByRole('button', { name: /Anthropic/ }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await screen.findByText('Saved');
+    expect(body?.config?.provider).toBe('anthropic');
+    expect(body?.config?.baseUrl).toBe('');
   });
 
   it('FE-MOB-AADD-033: whether the model reads images is a three-way choice, saved as picked', async () => {
