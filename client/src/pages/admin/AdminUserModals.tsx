@@ -11,7 +11,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import React, { useId } from 'react';
-import { adminApi } from '../../api/client';
+import { useAdminUserActions } from '../../components/Admin/useAdminUserActions';
 import CustomSelect from '../../components/shared/CustomSelect';
 import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import { Tooltip } from '../../components/shared/Tooltip';
@@ -93,9 +93,6 @@ function PasswordInput({
 // Pure layout around the useAdmin hook.
 export default function AdminUserModals({ admin, t }: AdminUserModalsProps): React.ReactElement {
   const {
-    logout,
-    navigate,
-    toast,
     editingUser,
     setEditingUser,
     editForm,
@@ -110,10 +107,10 @@ export default function AdminUserModals({ admin, t }: AdminUserModalsProps): Rea
     showRotateJwtModal,
     setShowRotateJwtModal,
     rotatingJwt,
-    setRotatingJwt,
     handleCreateUser,
     handleSaveUser,
   } = admin;
+  const { rotateJwt, resetPasskeys } = useAdminUserActions(admin, t);
   const [showCreatePw, setShowCreatePw] = React.useState(false);
   const [showEditPw, setShowEditPw] = React.useState(false);
   // The user whose passkeys wait for the admin's answer in the confirm dialog.
@@ -405,18 +402,7 @@ docker run -d --name trek \\
             </DialogButton>
             <button
               type="button"
-              onClick={async () => {
-                setRotatingJwt(true);
-                try {
-                  await adminApi.rotateJwtSecret();
-                  setShowRotateJwtModal(false);
-                  logout();
-                  navigate('/login', { state: { noRedirect: true } });
-                } catch {
-                  toast.error(t('common.error'));
-                  setRotatingJwt(false);
-                }
-              }}
+              onClick={rotateJwt}
               disabled={rotatingJwt}
               className={DANGER_FILL}
               style={fs(13, 'body')}
@@ -447,12 +433,7 @@ docker run -d --name trek \\
         onClose={() => setPasskeyResetUser(null)}
         onConfirm={async () => {
           if (!passkeyResetUser) return;
-          try {
-            const r = await adminApi.resetUserPasskeys(passkeyResetUser.id);
-            toast.success(t('admin.passkey.resetDone', { count: r.deleted ?? 0 }));
-          } catch {
-            toast.error(t('common.error'));
-          }
+          await resetPasskeys(passkeyResetUser);
         }}
         title={t('admin.passkey.reset')}
         message={passkeyResetUser ? t('admin.passkey.resetConfirm', { name: passkeyResetUser.username }) : ''}
