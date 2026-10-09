@@ -4,6 +4,7 @@ import { packingApi } from '../../api/client'
 import { useTripStore } from '../../store/tripStore'
 import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
+import { PackingTemplateOption } from './PackingTemplateOption'
 
 interface Template {
   id: number
@@ -79,23 +80,7 @@ export default function ApplyTemplateButton({ tripId, visibility, style, classNa
           }}
         >
           {templates.map(tmpl => (
-            <button type="button" key={tmpl.id} onClick={() => handleApply(tmpl.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'transparent', fontFamily: 'inherit', fontSize: 'calc(12px * var(--fs-scale-body, 1))', color: 'var(--text-primary)',
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-            >
-              <Package size={13} className="text-content-faint" />
-              <div style={{ flex: 1, textAlign: 'start' }}>
-                <div style={{ fontWeight: 600 }}>{tmpl.name}</div>
-                <div style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>
-                  {tmpl.item_count} {t('admin.packingTemplates.items', { count: tmpl.item_count })}
-                </div>
-              </div>
-            </button>
+            <PackingTemplateOption key={tmpl.id} name={tmpl.name} itemCount={tmpl.item_count} onClick={() => handleApply(tmpl.id)} t={t} />
           ))}
         </div>
       )}

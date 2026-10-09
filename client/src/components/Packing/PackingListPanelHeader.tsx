@@ -3,6 +3,7 @@ import {
 } from 'lucide-react'
 import type { PackingState } from './usePackingListPanel'
 import NameDialog from '../shared/NameDialog'
+import { PackingTemplateOption } from './PackingTemplateOption'
 
 export function PackingHeader(S: PackingState) {
   const {
@@ -63,22 +64,14 @@ export function PackingHeader(S: PackingState) {
                   boxShadow: '0 4px 16px rgba(0,0,0,0.12)', padding: 4, minWidth: 200,
                 }}>
                   {availableTemplates.map(tmpl => (
-                    <button type="button" key={tmpl.id} onClick={() => handleApplyTemplate(tmpl.id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                        padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                        background: 'transparent', fontFamily: 'inherit', fontSize: 'calc(12px * var(--fs-scale-body, 1))', color: 'var(--text-primary)',
-                        transition: 'background 0.1s',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-tertiary)'}
-                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                    >
-                      <Package size={13} className="text-content-faint" />
-                      <div style={{ flex: 1, textAlign: 'start' }}>
-                        <div style={{ fontWeight: 600 }}>{tmpl.name}</div>
-                        <div style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{tmpl.item_count} {t('admin.packingTemplates.items', { count: tmpl.item_count })}</div>
-                      </div>
-                    </button>
+                    <PackingTemplateOption
+                      key={tmpl.id}
+                      name={tmpl.name}
+                      itemCount={tmpl.item_count}
+                      onClick={() => handleApplyTemplate(tmpl.id)}
+                      t={t}
+                      fade
+                    />
                   ))}
                 </div>
               )}
