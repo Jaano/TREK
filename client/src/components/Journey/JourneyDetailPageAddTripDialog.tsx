@@ -1,11 +1,10 @@
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { Link2, Search } from 'lucide-react'
 import { useTranslation } from '../../i18n'
-import { journeyApi } from '../../api/client'
-import { useToast } from '../shared/Toast'
 import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { INPUT } from '../shared/dialogParts'
 import { pickGradient } from '../../pages/journeyDetail/JourneyDetailPage.helpers'
+import { useJourneyTripLinking } from './useJourneySettings'
 
 export function AddTripDialog({ journeyId, existingTripIds, onClose, onAdded }: {
   journeyId: number
@@ -15,14 +14,9 @@ export function AddTripDialog({ journeyId, existingTripIds, onClose, onAdded }: 
 }) {
   const { t } = useTranslation()
   const labelId = useId()
-  const [trips, setTrips] = useState<{ id: number; title: string; destination?: string; start_date?: string; end_date?: string }[]>([])
   const [search, setSearch] = useState('')
-  const [adding, setAdding] = useState<number | null>(null)
-  const toast = useToast()
-
-  useEffect(() => {
-    journeyApi.availableTrips().then(d => setTrips(d.trips || [])).catch(() => {})
-  }, [])
+  const { availableTrips: trips, linkingTripId: adding, linkTrip: handleAdd } =
+    useJourneyTripLinking({ journeyId, onLinked: onAdded, loadOnMount: true })
 
   const filtered = trips.filter(trip => {
     if (existingTripIds.includes(trip.id)) return false
@@ -30,19 +24,6 @@ export function AddTripDialog({ journeyId, existingTripIds, onClose, onAdded }: 
     const q = search.toLowerCase()
     return trip.title.toLowerCase().includes(q) || (trip.destination || '').toLowerCase().includes(q)
   })
-
-  const handleAdd = async (tripId: number) => {
-    setAdding(tripId)
-    try {
-      await journeyApi.addTrip(journeyId, tripId)
-      toast.success(t('journey.trips.tripLinked'))
-      onAdded()
-    } catch {
-      toast.error(t('journey.trips.linkFailed'))
-    } finally {
-      setAdding(null)
-    }
-  }
 
   return (
     <DialogShell

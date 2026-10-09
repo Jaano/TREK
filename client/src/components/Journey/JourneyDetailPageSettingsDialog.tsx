@@ -1,19 +1,15 @@
-import { useId, useState, useRef, type ChangeEvent, type ReactNode } from 'react'
-import { useNavigate } from 'react-router'
+import { useId, useState, useRef, type ReactNode } from 'react'
 import { X, ImagePlus, Trash2, Archive, ArchiveRestore, Undo2, Settings, Crown } from 'lucide-react'
-import { useJourneyStore } from '../../store/journeyStore'
 import { useTranslation } from '../../i18n'
-import { journeyApi } from '../../api/client'
-import { useToast } from '../shared/Toast'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import { Tooltip } from '../shared/Tooltip'
 import { DeleteButton, DialogButton, DialogFooter, DialogHeader, DialogSection, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { AddRowButton, EditorField, INPUT, Segmented } from '../shared/dialogParts'
 import JourneyShareSection from './JourneyShareSection'
+import { useJourneySettings } from './useJourneySettings'
 import type { JourneyContributor, JourneyDetail } from '../../store/journeyStore'
 import { pickGradient } from '../../pages/journeyDetail/JourneyDetailPage.helpers'
 import { AddTripDialog } from './JourneyDetailPageAddTripDialog'
-import { normalizeImageFile } from '../../utils/convertHeic'
 import ToggleSwitch from '../Settings/ToggleSwitch'
 import { TripMemberAvatar } from '../Trips/TripMemberAvatar'
 import { avatarSrc } from '../../utils/avatarSrc'
@@ -46,155 +42,17 @@ export function JourneySettingsDialog({ journey, onClose, onSaved, onOpenInvite,
 }) {
   const { t } = useTranslation()
   const labelId = useId()
-  const [title, setTitle] = useState(journey.title)
-  const [subtitle, setSubtitle] = useState(journey.subtitle || '')
-  const [saving, setSaving] = useState(false)
+  const {
+    title, setTitle, subtitle, setSubtitle, saving, isDirty, archiving, unlinkTarget, setUnlinkTarget,
+    showDeleteConfirm, setShowDeleteConfirm, savingTracks, savingField, savingPhotoLocation, savingStatus, statusChoice,
+    handleSave, handleCoverUpload, handleArchiveToggle, handleTracksToggle, handleFieldToggle, handlePhotoLocationToggle,
+    handleStatusChange, handleDelete, handleRemoveContributor, confirmUnlink,
+  } = useJourneySettings({ journey, onSaved, onRefresh, onContentChanged: onSaved })
   const [showAddTrip, setShowAddTrip] = useState(false)
-  const [unlinkTarget, setUnlinkTarget] = useState<{ trip_id: number; title: string } | null>(null)
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
 
-  const isDirty = title !== journey.title || subtitle !== (journey.subtitle || '')
   const handleClose = () => { if (isDirty) setShowDiscardConfirm(true); else onClose() }
   const coverRef = useRef<HTMLInputElement>(null)
-  const toast = useToast()
-  const navigate = useNavigate()
-  const { updateJourney, deleteJourney } = useJourneyStore()
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      await updateJourney(journey.id, { title, subtitle: subtitle || null })
-      onSaved()
-    } catch {
-      toast.error(t('journey.settings.saveFailed'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleCoverUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const formData = new FormData()
-    formData.append('cover', await normalizeImageFile(file))
-    try {
-      await journeyApi.uploadCover(journey.id, formData)
-      toast.success(t('journey.settings.coverUpdated'))
-      onSaved()
-    } catch {
-      toast.error(t('journey.settings.coverFailed'))
-    }
-  }
-
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [archiving, setArchiving] = useState(false)
-
-  const handleArchiveToggle = async () => {
-    setArchiving(true)
-    try {
-      const newStatus = journey.status === 'archived' ? 'active' : 'archived'
-      await updateJourney(journey.id, { status: newStatus })
-      toast.success(newStatus === 'archived' ? t('journey.settings.archived') : t('journey.settings.reopened'))
-      onSaved()
-    } catch {
-      toast.error(t('journey.settings.saveFailed'))
-    } finally {
-      setArchiving(false)
-    }
-  }
-
-  // Saved on the spot rather than on Save, like the archive switch above it:
-  // it is a view setting, and the point of it is seeing the map change (#2194).
-  const [savingTracks, setSavingTracks] = useState(false)
-  const handleTracksToggle = async () => {
-    setSavingTracks(true)
-    try {
-      await updateJourney(journey.id, { show_trip_tracks: !journey.show_trip_tracks })
-      // onRefresh, not onSaved: onSaved closes the dialog, which would destroy the
-      // switch the moment it is flipped AND skip handleClose's unsaved-changes
-      // guard, silently dropping a title the owner had typed but not saved yet.
-      onRefresh()
-    } catch {
-      toast.error(t('journey.settings.saveFailed'))
-    } finally {
-      setSavingTracks(false)
-    }
-  }
-
-  /**
-   * Turn one of the optional entry fields off for this journey.
-   *
-   * Saved on the spot for the same reason the tracks switch is, and through
-   * `onRefresh` rather than `onSaved` so flipping a switch does not close the
-   * dialog out from under a half-typed title.
-   *
-   * Nothing is erased: an entry that already carries a mood keeps it in the
-   * database, the form simply stops asking. Switching back on brings it into
-   * view again.
-   */
-  const [savingField, setSavingField] = useState<string | null>(null)
-  const handleFieldToggle = async (field: 'show_verdict' | 'show_mood' | 'show_weather') => {
-    setSavingField(field)
-    try {
-      await updateJourney(journey.id, { [field]: journey[field] === 0 })
-      onRefresh()
-    } catch {
-      toast.error(t('journey.settings.saveFailed'))
-    } finally {
-      setSavingField(null)
-    }
-  }
-
-  // Entries placed from their photos (#1003), saved on the spot like the tracks switch.
-  const [savingPhotoLocation, setSavingPhotoLocation] = useState(false)
-  const handlePhotoLocationToggle = async () => {
-    setSavingPhotoLocation(true)
-    try {
-      await updateJourney(journey.id, { photo_location: !journey.photo_location })
-      onRefresh()
-    } catch {
-      toast.error(t('journey.settings.saveFailed'))
-    } finally {
-      setSavingPhotoLocation(false)
-    }
-  }
-
-  // The state shown for the journey, set by hand (#762). Saved on the spot like
-  // the switches; 'auto' stores null and hands it back to the trip dates.
-  const [savingStatus, setSavingStatus] = useState(false)
-  const statusChoice = journey.status_override ?? 'auto'
-  const handleStatusChange = async (next: 'auto' | 'draft' | 'live' | 'completed') => {
-    if (next === statusChoice || savingStatus) return
-    setSavingStatus(true)
-    try {
-      await updateJourney(journey.id, { status_override: next === 'auto' ? null : next })
-      onRefresh()
-    } catch {
-      toast.error(t('journey.settings.saveFailed'))
-    } finally {
-      setSavingStatus(false)
-    }
-  }
-
-  const handleDelete = async () => {
-    try {
-      await deleteJourney(journey.id)
-      navigate('/journey')
-    } catch {
-      toast.error(t('journey.settings.failedToDelete'))
-    }
-  }
-
-  const handleRemoveContributor = async (c: JourneyContributor) => {
-    if (!window.confirm(t('journey.contributors.removeConfirm', { username: c.username }))) return
-    try {
-      await journeyApi.removeContributor(journey.id, c.user_id)
-      toast.success(t('journey.contributors.removed'))
-      onRefresh()
-    } catch {
-      toast.error(t('journey.contributors.removeFailed'))
-    }
-  }
 
   const archived = journey.status === 'archived'
   const archiveLabel = archived ? t('journey.settings.reopenJourney') : t('journey.settings.endJourney')
@@ -428,17 +286,7 @@ export function JourneySettingsDialog({ journey, onClose, onSaved, onOpenInvite,
       <ConfirmDialog
         isOpen={!!unlinkTarget}
         onClose={() => setUnlinkTarget(null)}
-        onConfirm={async () => {
-          if (!unlinkTarget) return
-          try {
-            await journeyApi.removeTrip(journey.id, unlinkTarget.trip_id)
-            toast.success(t('journey.trips.tripUnlinked'))
-            setUnlinkTarget(null)
-            onSaved()
-          } catch {
-            toast.error(t('journey.trips.unlinkFailed'))
-          }
-        }}
+        onConfirm={confirmUnlink}
         title={t('journey.trips.unlinkTrip')}
         message={t('journey.trips.unlinkMessage', { title: unlinkTarget?.title })}
         confirmLabel={t('journey.trips.unlink')}
