@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import apiClient from '../../api/client';
 import { useTranslation } from '../../i18n';
@@ -17,6 +17,12 @@ interface VacayUserPickerOptions {
    * from the last load stays.
    */
   clearOnLoadError: boolean;
+  /**
+   * The phone sheets pass their open flag: every opening clears the pick, folds
+   * the inline user list and reloads the users. The desktop dialogs leave it out
+   * and load on their own.
+   */
+  sheetOpen?: boolean;
 }
 
 /**
@@ -29,12 +35,15 @@ export function useVacayUserPicker<U extends { id: number; username: string }>({
   successKey,
   errorKey,
   clearOnLoadError,
+  sheetOpen,
 }: VacayUserPickerOptions) {
   const { t } = useTranslation();
   const toast = useToast();
   const [available, setAvailable] = useState<U[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
+  /** Whether the inline user list of a phone sheet is unfolded. */
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -44,6 +53,21 @@ export function useVacayUserPicker<U extends { id: number; username: string }>({
       if (clearOnLoadError) setAvailable([]);
     }
   }, [endpoint, clearOnLoadError]);
+
+  useEffect(() => {
+    if (!sheetOpen) return;
+    setSelected(null);
+    setPickerOpen(false);
+    void load();
+  }, [sheetOpen, load]);
+
+  const togglePicker = () => setPickerOpen((o) => !o);
+
+  /** Picks a user from the inline list and folds it. */
+  const pick = (userId: number) => {
+    setSelected(userId);
+    setPickerOpen(false);
+  };
 
   /** Sends to the picked user; `onSent` runs right after the success toast. */
   const send = async (onSent: () => void) => {
@@ -62,5 +86,16 @@ export function useVacayUserPicker<U extends { id: number; username: string }>({
 
   const selectedUser = available.find((u) => u.id === selected);
 
-  return { available, selected, setSelected, selectedUser, sending, load, send };
+  return {
+    available,
+    selected,
+    setSelected,
+    selectedUser,
+    sending,
+    load,
+    send,
+    pickerOpen,
+    togglePicker,
+    pick,
+  };
 }

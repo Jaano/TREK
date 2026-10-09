@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { ChevronDown, Clock, Loader2, X } from 'lucide-react'
 import MSheet from '../../components/MSheet'
 import MIconBtn from '../../components/MIconBtn'
@@ -20,21 +19,14 @@ interface MVacayInviteSheetProps {
 export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetProps) {
   const { t } = useTranslation()
   const { invite, pendingInvites, cancelInvite } = useVacayStore()
-  const { available, selected, setSelected, selectedUser, sending, load, send } = useVacayUserPicker<VacayUser>({
+  const { available, selected, selectedUser, sending, send, pickerOpen, togglePicker, pick } = useVacayUserPicker<VacayUser>({
     endpoint: '/addons/vacay/available-users',
     submit: invite,
     successKey: 'vacay.inviteSent',
     errorKey: 'vacay.inviteError',
     clearOnLoadError: true,
+    sheetOpen: open,
   })
-  const [pickerOpen, setPickerOpen] = useState(false)
-
-  useEffect(() => {
-    if (!open) return
-    setSelected(null)
-    setPickerOpen(false)
-    void load()
-  }, [open, setSelected, load])
 
   const handleSend = () => send(onClose)
 
@@ -59,7 +51,7 @@ export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetPr
           <>
             <button
               type="button"
-              onClick={() => setPickerOpen(o => !o)}
+              onClick={togglePicker}
               className="flex w-full items-center gap-[9px] rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-[14px] py-3 text-[0.8125rem] font-semibold"
             >
               <span className={`min-w-0 flex-1 truncate text-start ${selectedUser ? '' : 'text-m-muted'}`}>
@@ -73,7 +65,7 @@ export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetPr
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => { setSelected(u.id); setPickerOpen(false) }}
+                    onClick={() => pick(u.id)}
                     className={`flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[9px] text-start text-[0.8125rem] font-semibold ${
                       u.id === selected ? 'bg-[color:var(--m-ic)]' : ''
                     }`}

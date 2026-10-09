@@ -2,12 +2,11 @@ import { useId, useState } from 'react'
 import { Share2, Eye, EyeOff, Loader2, X } from 'lucide-react'
 import { useVacayStore } from '../../store/vacayStore'
 import { useTranslation } from '../../i18n'
-import { getApiErrorMessage } from '../../types'
-import { useToast } from '../shared/Toast'
 import CustomSelect from '../shared/CustomSelect'
 import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
-import apiClient from '../../api/client'
 import VacayBadge from './VacayBadge'
+import { useVacayShareActions } from './useVacayShareActions'
+import { useVacayUserPicker } from './useVacayUserPicker'
 
 /**
  * Sidebar card for read-only calendar sharing (#444/#667). Deliberately separate
@@ -16,45 +15,27 @@ import VacayBadge from './VacayBadge'
  */
 export default function VacaySharedCalendars() {
   const { t } = useTranslation()
-  const toast = useToast()
-  const { outgoingShares, incomingShares, shareWith, removeShare, setShareHidden } = useVacayStore()
+  const { outgoingShares, incomingShares, shareWith } = useVacayStore()
 
   const [showShare, setShowShare] = useState(false)
-  const [availableUsers, setAvailableUsers] = useState<{ id: number; username: string }[]>([])
-  const [selectedUser, setSelectedUser] = useState<number | null>(null)
-  const [sharing, setSharing] = useState(false)
+  const {
+    available: availableUsers, selected: selectedUser, setSelected: setSelectedUser,
+    sending: sharing, load: loadAvailable, send,
+  } = useVacayUserPicker({
+    endpoint: '/addons/vacay/shares/available-users',
+    submit: shareWith,
+    successKey: 'vacay.shareSent',
+    errorKey: 'vacay.shareFailed',
+    clearOnLoadError: false,
+  })
   const shareLabelId = useId()
 
-  const loadAvailable = async () => {
-    try {
-      const data = await apiClient.get('/addons/vacay/shares/available-users').then(r => r.data)
-      setAvailableUsers(data.users)
-    } catch { /* */ }
-  }
+  const handleShare = () => send(() => {
+    setShowShare(false)
+    setSelectedUser(null)
+  })
 
-  const handleShare = async () => {
-    if (!selectedUser) return
-    setSharing(true)
-    try {
-      await shareWith(selectedUser)
-      toast.success(t('vacay.shareSent'))
-      setShowShare(false)
-      setSelectedUser(null)
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('vacay.shareFailed')))
-    } finally {
-      setSharing(false)
-    }
-  }
-
-  // The optimistic hide and the removals reject on server errors — surface them
-  // instead of leaving an unhandled rejection behind a silently reverted toggle.
-  const handleToggleHidden = (id: number, hidden: boolean) => {
-    setShareHidden(id, hidden).catch((err: unknown) => toast.error(getApiErrorMessage(err, t('vacay.shareFailed'))))
-  }
-  const handleRemove = (id: number) => {
-    removeShare(id).catch((err: unknown) => toast.error(getApiErrorMessage(err, t('vacay.shareFailed'))))
-  }
+  const { toggleHidden: handleToggleHidden, remove: handleRemove } = useVacayShareActions()
 
   const closeShare = () => setShowShare(false)
 

@@ -4,10 +4,9 @@ import { useVacay } from '../../../pages/vacay/useVacay'
 import { useVacayStore } from '../../../store/vacayStore'
 import { useAuthStore } from '../../../store/authStore'
 import { useTranslation } from '../../../i18n'
-import { useToast } from '../../../components/shared/Toast'
 import { currentPeriodYear, windowMonths } from '../../../vacay/yearWindow'
 import { FALLBACK_PERSON_COLOR, localDateStr, type DayVisualContext } from './vacayDayModel'
-import { getApiErrorMessage } from '../../../types'
+import { useVacayShareActions } from '../../../components/Vacay/useVacayShareActions'
 import {
   useDefaultVacayPerson, useVacayCalendarLogic, vacayWindowShape, type VacayMode,
 } from '../../../components/Vacay/useVacayCalendarLogic'
@@ -23,8 +22,7 @@ export type MVacaySheet = 'invite' | 'settings' | 'share' | null
  * mode, sheets) plus the derived per-day render context.
  */
 export function useMVacay() {
-  const { t, locale } = useTranslation()
-  const toast = useToast()
+  const { locale } = useTranslation()
   const navigate = useNavigate()
   const {
     years, selectedYear, setSelectedYear, loading,
@@ -35,7 +33,7 @@ export function useMVacay() {
     stats, users, holidays,
     selectedUserId, setSelectedUserId, isFused,
     updateVacationDays,
-    incomingShares, setShareHidden, yearSettings,
+    incomingShares, yearSettings,
   } = useVacayStore()
   const currentUser = useAuthStore(s => s.user)
 
@@ -103,9 +101,7 @@ export function useMVacay() {
 
   // Shared-chip tap: the optimistic hide toggle rolls back on server errors —
   // tell the user instead of letting the chip snap back silently.
-  const toggleShareHidden = useCallback((shareId: number, hidden: boolean) => {
-    setShareHidden(shareId, hidden).catch((err: unknown) => toast.error(getApiErrorMessage(err, t('vacay.shareFailed'))))
-  }, [setShareHidden, toast, t])
+  const { toggleHidden: toggleShareHidden } = useVacayShareActions()
 
   // Fusion: logging for each other — any fused member is selectable.
   const selectPerson = useCallback((id: number) => {

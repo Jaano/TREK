@@ -1,4 +1,4 @@
-// FE-COMP-VACAYPICK-001 to -006: picking a user for the fusion invite and the calendar share.
+// FE-COMP-VACAYPICK-001 to -009: picking a user for the fusion invite and the calendar share.
 import { act, renderHook } from '@testing-library/react';
 
 import apiClient from '../../api/client';
@@ -92,5 +92,54 @@ describe('useVacayUserPicker', () => {
     expect(toast.error).toHaveBeenCalledWith('already shared');
     expect(onSent).not.toHaveBeenCalled();
     expect(result.current.sending).toBe(false);
+  });
+
+  it('FE-COMP-VACAYPICK-007: the desktop dialogs (no sheetOpen) never load on their own', () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: { users: USERS } });
+    picker(false);
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it('FE-COMP-VACAYPICK-008: every opening of a phone sheet clears the pick, folds the list and reloads', async () => {
+    const get = vi.spyOn(apiClient, 'get').mockResolvedValue({ data: { users: USERS } });
+    const { result, rerender } = renderHook(
+      ({ open }: { open: boolean }) =>
+        useVacayUserPicker<{ id: number; username: string }>({
+          endpoint: '/addons/vacay/available-users',
+          submit,
+          successKey: 'vacay.inviteSent',
+          errorKey: 'vacay.inviteError',
+          clearOnLoadError: true,
+          sheetOpen: open,
+        }),
+      { initialProps: { open: false } }
+    );
+    expect(get).not.toHaveBeenCalled();
+    await act(async () => rerender({ open: true }));
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(result.current.available).toEqual(USERS);
+    act(() => result.current.togglePicker());
+    act(() => result.current.setSelected(2));
+    expect(result.current.pickerOpen).toBe(true);
+    await act(async () => rerender({ open: false }));
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(result.current.selected).toBe(2);
+    await act(async () => rerender({ open: true }));
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(result.current.selected).toBeNull();
+    expect(result.current.pickerOpen).toBe(false);
+  });
+
+  it('FE-COMP-VACAYPICK-009: toggling unfolds the inline list and picking a user folds it again', () => {
+    const { result } = picker(true);
+    expect(result.current.pickerOpen).toBe(false);
+    act(() => result.current.togglePicker());
+    expect(result.current.pickerOpen).toBe(true);
+    act(() => result.current.pick(3));
+    expect(result.current.selected).toBe(3);
+    expect(result.current.pickerOpen).toBe(false);
+    act(() => result.current.togglePicker());
+    act(() => result.current.togglePicker());
+    expect(result.current.pickerOpen).toBe(false);
   });
 });
