@@ -1,16 +1,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { RefreshCw, Camera, X, Play } from 'lucide-react'
-import { normalizeImageFiles } from '../../utils/convertHeic'
-import { isVideoFile } from '../../utils/videoPoster'
 import { useJourneyStore } from '../../store/journeyStore'
 import { useTranslation } from '../../i18n'
 import { journeyApi } from '../../api/client'
 import { useToast } from '../shared/Toast'
-import { getApiErrorMessage } from '../../types'
 import type { JourneyEntry, GalleryPhoto, JourneyTrip } from '../../store/journeyStore'
 import { photoUrl, posterlessVideo } from '../../pages/journeyDetail/JourneyDetailPage.helpers'
 import { ProviderPicker, type ProviderPhotoGroup } from './JourneyDetailPageProviderPicker'
 import { useConnectedPhotoProviders } from './useConnectedPhotoProviders'
+import { useGalleryUpload } from './useGalleryUpload'
 import { ScrollTrigger } from './JourneyDetailPageScrollTrigger'
 import EmptyState from '../shared/EmptyState'
 
@@ -30,8 +28,8 @@ export function GalleryView({ entries, gallery, journeyId, userId, trips, onPhot
   const { t } = useTranslation()
   const [showPicker, setShowPicker] = useState(false)
   const [pickerProvider, setPickerProvider] = useState<string | null>(null)
-  const [galleryProgress, setGalleryProgress] = useState<{ done: number; total: number } | null>(null)
-  const galleryUploading = galleryProgress !== null
+  const { uploading: galleryUploading, handleGalleryUpload } =
+    useGalleryUpload({ journeyId, onUploaded: onRefresh, trackProgress: true })
   const toast = useToast()
 
   // The providers enabled AND connected for the current user, handed up: the page
@@ -61,33 +59,6 @@ export function GalleryView({ entries, gallery, journeyId, userId, trips, onPhot
 
   const galleryFileRef = useRef<HTMLInputElement>(null)
   useEffect(() => { onRegisterUpload?.(() => galleryFileRef.current?.click()) }, [onRegisterUpload])
-
-  const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files?.length) return
-    setGalleryProgress({ done: 0, total: files.length })
-    try {
-      // Videos skip HEIC normalization; only images are converted (#823).
-      const all = Array.from(files)
-      const videos = all.filter(isVideoFile)
-      const images = all.filter(f => !isVideoFile(f))
-      const normalized = [...(images.length ? await normalizeImageFiles(images) : []), ...videos]
-      const { failed } = await useJourneyStore.getState().uploadGalleryPhotos(journeyId, normalized, {
-        onProgress: p => setGalleryProgress({ done: p.done, total: p.total }),
-      })
-      if (failed.length > 0) {
-        toast.error(t('journey.editor.uploadPartialFailed', { failed: String(failed.length), total: String(normalized.length) }))
-      } else {
-        toast.success(t('journey.photosUploaded', { count: files.length }))
-      }
-      onRefresh()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('journey.photosUploadFailed')))
-    } finally {
-      setGalleryProgress(null)
-    }
-    e.target.value = ''
-  }
 
   const handleDeletePhoto = async (galleryPhotoId: number) => {
     const store = useJourneyStore.getState()
