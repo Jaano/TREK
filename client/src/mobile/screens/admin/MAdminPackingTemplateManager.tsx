@@ -1,13 +1,8 @@
-import { useState, useEffect, useRef, ReactNode } from 'react'
-import { adminApi } from '../../../api/client'
-import { useToast } from '../../../components/shared/Toast'
+import { ReactNode } from 'react'
+import { usePackingTemplateAdmin } from '../../../components/Admin/usePackingTemplateAdmin'
 import { useTranslation } from '../../../i18n'
 import { Plus, Trash2, Edit2, Package, X, Check, ChevronDown, ChevronRight, FolderPlus } from 'lucide-react'
 import { MAdminButton, MAdminCard, MAdminCardHead, MAdminInput } from './MAdminUi'
-
-interface TemplateCategory { id: number; template_id: number; name: string; sort_order: number }
-interface TemplateItem { id: number; category_id: number; name: string; sort_order: number }
-interface Template { id: number; name: string; item_count: number; category_count: number; created_by_name: string }
 
 // Small round icon action button in the mobile admin idiom (flat --m-ic circle).
 function PkIconBtn({
@@ -52,146 +47,19 @@ const inlineFieldCls =
 
 /**
  * Mobile-native re-skin of the admin Packing Template Manager: create/rename/
- * delete templates, expand a template to manage its categories and items. All
- * state, effects and adminApi mutations are preserved from the desktop version.
+ * delete templates, expand a template to manage its categories and items. The
+ * state, effects and adminApi writes live in the shared usePackingTemplateAdmin hook.
  */
 export default function MAdminPackingTemplateManager() {
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-  const [showCreate, setShowCreate] = useState(false)
-  const [createName, setCreateName] = useState('')
-
-  // Expanded template state
-  const [expandedId, setExpandedId] = useState<number | null>(null)
-  const [categories, setCategories] = useState<TemplateCategory[]>([])
-  const [items, setItems] = useState<TemplateItem[]>([])
-
-  // Editing states
-  const [editingTemplate, setEditingTemplate] = useState<number | null>(null)
-  const [editTemplateName, setEditTemplateName] = useState('')
-  const [editingCatId, setEditingCatId] = useState<number | null>(null)
-  const [editCatName, setEditCatName] = useState('')
-  const [editingItemId, setEditingItemId] = useState<number | null>(null)
-  const [editItemName, setEditItemName] = useState('')
-
-  // Adding states
-  const [addingCategory, setAddingCategory] = useState(false)
-  const [newCatName, setNewCatName] = useState('')
-  const [addingItemToCatId, setAddingItemToCatId] = useState<number | null>(null)
-  const [newItemName, setNewItemName] = useState('')
-  const addItemRef = useRef<HTMLInputElement>(null)
-
-  const toast = useToast()
+  const {
+    templates, isLoading, showCreate, setShowCreate, createName, setCreateName, expandedId, categories, items,
+    editingTemplate, setEditingTemplate, editTemplateName, setEditTemplateName, editingCatId, setEditingCatId,
+    editCatName, setEditCatName, editingItemId, setEditingItemId, editItemName, setEditItemName, addingCategory,
+    setAddingCategory, newCatName, setNewCatName, addingItemToCatId, setAddingItemToCatId, newItemName,
+    setNewItemName, addItemRef, toggleExpand, handleCreateTemplate, handleDeleteTemplate, handleRenameTemplate,
+    handleAddCategory, handleRenameCategory, handleDeleteCategory, handleAddItem, handleRenameItem, handleDeleteItem,
+  } = usePackingTemplateAdmin({ genericDeleteErrors: true })
   const { t } = useTranslation()
-
-  useEffect(() => { void loadTemplates() }, [])
-
-  const loadTemplates = async () => {
-    setIsLoading(true)
-    try {
-      const data = await adminApi.packingTemplates()
-      setTemplates(data.templates || [])
-    } catch { toast.error(t('admin.packingTemplates.loadError')) }
-    finally { setIsLoading(false) }
-  }
-
-  const toggleExpand = async (id: number) => {
-    if (expandedId === id) { setExpandedId(null); return }
-    setExpandedId(id)
-    setAddingCategory(false)
-    setAddingItemToCatId(null)
-    try {
-      const data = await adminApi.getPackingTemplate(id)
-      setCategories(data.categories || [])
-      setItems(data.items || [])
-    } catch { toast.error(t('admin.packingTemplates.loadError')) }
-  }
-
-  // Template CRUD
-  const handleCreateTemplate = async () => {
-    if (!createName.trim()) return
-    try {
-      const data = await adminApi.createPackingTemplate({ name: createName.trim() })
-      setTemplates(prev => [{ ...data.template, item_count: 0, category_count: 0 }, ...prev])
-      setCreateName(''); setShowCreate(false)
-      setExpandedId(data.template.id); setCategories([]); setItems([])
-      toast.success(t('admin.packingTemplates.created'))
-    } catch { toast.error(t('admin.packingTemplates.createError')) }
-  }
-
-  const handleDeleteTemplate = async (id: number) => {
-    try {
-      await adminApi.deletePackingTemplate(id)
-      setTemplates(prev => prev.filter(t => t.id !== id))
-      if (expandedId === id) setExpandedId(null)
-      toast.success(t('admin.packingTemplates.deleted'))
-    } catch { toast.error(t('admin.packingTemplates.deleteError')) }
-  }
-
-  const handleRenameTemplate = async (id: number) => {
-    if (!editTemplateName.trim()) { setEditingTemplate(null); return }
-    try {
-      await adminApi.updatePackingTemplate(id, { name: editTemplateName.trim() })
-      setTemplates(prev => prev.map(t => t.id === id ? { ...t, name: editTemplateName.trim() } : t))
-      setEditingTemplate(null)
-    } catch { toast.error(t('admin.packingTemplates.saveError')) }
-  }
-
-  // Category CRUD
-  const handleAddCategory = async () => {
-    if (!newCatName.trim() || !expandedId) return
-    try {
-      const data = await adminApi.addTemplateCategory(expandedId, { name: newCatName.trim() })
-      setCategories(prev => [...prev, data.category])
-      setNewCatName(''); setAddingCategory(false)
-    } catch { toast.error(t('admin.packingTemplates.saveError')) }
-  }
-
-  const handleRenameCategory = async (catId: number) => {
-    if (!editCatName.trim() || !expandedId) { setEditingCatId(null); return }
-    try {
-      await adminApi.updateTemplateCategory(expandedId, catId, { name: editCatName.trim() })
-      setCategories(prev => prev.map(c => c.id === catId ? { ...c, name: editCatName.trim() } : c))
-      setEditingCatId(null)
-    } catch { toast.error(t('admin.packingTemplates.saveError')) }
-  }
-
-  const handleDeleteCategory = async (catId: number) => {
-    if (!expandedId) return
-    try {
-      await adminApi.deleteTemplateCategory(expandedId, catId)
-      setCategories(prev => prev.filter(c => c.id !== catId))
-      setItems(prev => prev.filter(i => i.category_id !== catId))
-    } catch { toast.error(t('admin.toast.deleteError')) }
-  }
-
-  // Item CRUD
-  const handleAddItem = async (catId: number) => {
-    if (!newItemName.trim() || !expandedId) return
-    try {
-      const data = await adminApi.addTemplateItem(expandedId, catId, { name: newItemName.trim() })
-      setItems(prev => [...prev, data.item])
-      setNewItemName('')
-      setTimeout(() => addItemRef.current?.focus(), 30)
-    } catch { toast.error(t('admin.packingTemplates.saveError')) }
-  }
-
-  const handleRenameItem = async (itemId: number) => {
-    if (!editItemName.trim() || !expandedId) { setEditingItemId(null); return }
-    try {
-      await adminApi.updateTemplateItem(expandedId, itemId, { name: editItemName.trim() })
-      setItems(prev => prev.map(i => i.id === itemId ? { ...i, name: editItemName.trim() } : i))
-      setEditingItemId(null)
-    } catch { toast.error(t('admin.packingTemplates.saveError')) }
-  }
-
-  const handleDeleteItem = async (itemId: number) => {
-    if (!expandedId) return
-    try {
-      await adminApi.deleteTemplateItem(expandedId, itemId)
-      setItems(prev => prev.filter(i => i.id !== itemId))
-    } catch { toast.error(t('admin.toast.deleteError')) }
-  }
 
   return (
     <MAdminCard>
