@@ -1,4 +1,8 @@
-import type { Reservation } from '../../types';
+import { typeToCostCategory } from '@trek/shared';
+
+import type { BudgetItem, Reservation, TripFile } from '../../types';
+import type { BookingExpenseRequest } from './BookingCostsSection.types';
+import { importedPriceEntry } from './importedPrice';
 
 /**
  * What the transport and the booking forms share on both shells: the travellers
@@ -44,4 +48,59 @@ export async function uploadBookingFiles(
     fd.append('description', description);
     await upload(fd);
   }
+}
+
+/**
+ * Which expense the user asked for while saving a booking: a new one or an edit of
+ * the linked one. The form saves itself first, so the request can name the saved id.
+ */
+export interface BookingExpenseIntent {
+  editItem?: BudgetItem;
+  create?: boolean;
+}
+
+/**
+ * The expense editor request to open once a booking is saved, or null when the user
+ * asked for none or the save came back without a record.
+ */
+export function expenseRequestAfterSave(
+  intent: BookingExpenseIntent | null | undefined,
+  savedId: number | null | undefined,
+  booking: { title: string; type: string }
+): BookingExpenseRequest | null {
+  if (!intent || !savedId) return null;
+  if (intent.editItem) return { editItem: intent.editItem };
+  return { prefill: { reservationId: savedId, name: booking.title, category: typeToCostCategory(booking.type) } };
+}
+
+/**
+ * The cost an import review previews before the booking exists: the parsed price the
+ * save will link, so the preview and the save cannot name different currencies.
+ * Nothing for a saved booking or a booking that was not imported.
+ */
+export function pendingImportExpense(
+  reservation: unknown,
+  prefill: { metadata?: unknown } | null | undefined,
+  type: string
+): { total_price: number; category: string; currency: string | null } | null {
+  const entry = !reservation && prefill ? importedPriceEntry(prefill.metadata, type) : null;
+  return entry ? { ...entry, currency: entry.currency ?? null } : null;
+}
+
+/**
+ * The trip files shown on a saved booking: the ones uploaded to it, the ones linked
+ * to it on the server and the ones linked in this dialog. Nothing before it is saved.
+ */
+export function attachedBookingFiles(
+  files: TripFile[],
+  reservationId: number | null | undefined,
+  linkedFileIds: number[]
+): TripFile[] {
+  if (!reservationId) return [];
+  return files.filter(
+    (f) =>
+      f.reservation_id === reservationId ||
+      linkedFileIds.includes(f.id) ||
+      f.linked_reservation_ids?.includes(reservationId)
+  );
 }

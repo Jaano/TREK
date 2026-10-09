@@ -13,10 +13,9 @@ import { useTranslation } from '../../i18n'
 import { useToast } from '../shared/Toast'
 import { useTripStore } from '../../store/tripStore'
 import { useAddonStore } from '../../store/addonStore'
-import type { Day, Place, Accommodation, Reservation, TripFile, BudgetItem, AssignmentsMap } from '../../types'
+import type { Day, Place, Accommodation, Reservation, TripFile, AssignmentsMap } from '../../types'
 import { BookingCostsSection } from './BookingCostsSection'
 import { BookingLinkAndFiles } from './BookingLinkAndFiles'
-import { importedPriceEntry } from './importedPrice'
 import { TravelerPicker } from './TravelerPicker'
 import type { TripMember } from '../Budget/BudgetPanelMemberChips'
 import type { BookingExpenseRequest } from './BookingCostsSection.types'
@@ -27,13 +26,14 @@ import { DialogShell, DialogSection, DialogFooter, FooterSpacer, DialogButton, D
 import { INPUT, TEXTAREA, READONLY_BOX, LABEL, GRID_2, GRID_3, PANEL, SEARCH_ON_PANEL, EditorField, Segmented, PillSelect, AddRowButton } from '../shared/dialogParts'
 import { fs, Eyebrow, type StatusTone } from './bookings/bookingParts'
 import { typeInfo } from './bookings/bookingsModel'
-import { typeToCostCategory } from '@trek/shared'
 import {
   EMPTY_TRANSPORT_FIELDS, TRANSPORT_TYPE_OPTIONS as TYPE_OPTIONS, emptyCarStop, emptyStationWaypoint, emptyWaypoint,
   transportDayOptions, type StationWaypointForm, type WaypointForm,
 } from './transportEndpoints'
 import { useTransportForm } from './useTransportForm'
-import { travelerIdsOf, travelersChanged, uploadBookingFiles } from './bookingFormModel'
+import { expenseRequestAfterSave, pendingImportExpense, travelerIdsOf, travelersChanged, uploadBookingFiles } from './bookingFormModel'
+import { useBookingExpenseIntent } from './useBookingExpenseIntent'
+import { useBookingFileAttach } from './useBookingFileAttach'
 
 const defaultForm = {
   ...EMPTY_TRANSPORT_FIELDS,
@@ -88,7 +88,10 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
   const { id: tripId } = useParams<{ id: string }>()
   // Set right before submitting when the user clicked "create/edit expense", so
   // the post-save handler knows to open the Costs editor for the saved booking.
-  const expenseIntentRef = useRef<{ editItem?: BudgetItem; create?: boolean } | null>(null)
+  const expense = useBookingExpenseIntent(() => handleSubmit(), {
+    remove: item => deleteBudgetItem(Number(tripId), item.id),
+    onError: () => toast.error(t('common.unknownError')),
+  })
   const {
     form, set, stationRoute, automated, setAutomated, fromPick, setFromPick, toPick, setToPick,
     waypoints, setWaypoints, trainWaypoints, setTrainWaypoints, carStops, setCarStops, moveCarStop,
@@ -96,8 +99,7 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
     seed, payload, writesFlightLegs, writesTrainLegs,
   } = useTransportForm(defaultForm)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [uploadingFile, setUploadingFile] = useState(false)
-  const [linkedFileIds, setLinkedFileIds] = useState<number[]>([])
+  const attach = useBookingFileAttach({ reservation, files, onFileUpload, setPendingFiles, toast, t })
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -152,12 +154,8 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
       }
       // The user asked to create/edit the linked expense — open the Costs editor
       // for the now-saved booking. Gated on saved?.id so a failed save doesn't.
-      const intent = expenseIntentRef.current
-      expenseIntentRef.current = null
-      if (intent && onOpenExpense && saved?.id) {
-        if (intent.editItem) onOpenExpense({ editItem: intent.editItem })
-        else onOpenExpense({ prefill: { reservationId: saved.id, name: form.title, category: typeToCostCategory(form.type) } })
-      }
+      const expenseRequest = expenseRequestAfterSave(expense.take(), saved?.id, form)
+      if (expenseRequest && onOpenExpense) onOpenExpense(expenseRequest)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : t('common.unknownError'))
     } finally {
@@ -165,48 +163,9 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
     }
   }
 
-  const handleCreateExpense = () => { expenseIntentRef.current = { create: true }; void handleSubmit() }
-  const handleEditExpense = (item: BudgetItem) => { expenseIntentRef.current = { editItem: item }; void handleSubmit() }
-  const handleRemoveExpense = async (item: BudgetItem) => {
-    try { await deleteBudgetItem(Number(tripId), item.id) } catch { toast.error(t('common.unknownError')) }
-  }
-
   // On an import review (not yet saved), preview the parsed price as the cost that will be
   // linked: the same entry the save sends, so the two cannot name different currencies.
-  const importedEntry = !reservation && prefill ? importedPriceEntry(prefill.metadata, form.type) : null
-  const pendingExpense = importedEntry ? { ...importedEntry, currency: importedEntry.currency ?? null } : null
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (reservation?.id) {
-      setUploadingFile(true)
-      try {
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('reservation_id', String(reservation.id))
-        fd.append('description', reservation.title)
-        await onFileUpload!(fd)
-        toast.success(t('reservations.toast.fileUploaded'))
-      } catch {
-        toast.error(t('reservations.toast.uploadError'))
-      } finally {
-        setUploadingFile(false)
-        e.target.value = ''
-      }
-    } else {
-      setPendingFiles(prev => [...prev, file])
-      e.target.value = ''
-    }
-  }
-
-  const attachedFiles = reservation?.id
-    ? files.filter(f =>
-        f.reservation_id === reservation.id ||
-        linkedFileIds.includes(f.id) ||
-        (f.linked_reservation_ids && f.linked_reservation_ids.includes(reservation.id))
-      )
-    : []
+  const pendingExpense = pendingImportExpense(reservation, prefill, form.type)
 
   const dayOptions = transportDayOptions(days, t, locale)
 
@@ -593,15 +552,15 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
             inputClass={INPUT}
             reservationId={reservation?.id}
             tripFiles={files}
-            attachedFiles={attachedFiles}
+            attachedFiles={attach.attachedFiles}
             pendingFiles={pendingFiles}
-            onRemovePending={index => setPendingFiles(prev => prev.filter((_, j) => j !== index))}
+            onRemovePending={attach.removePending}
             fileInputRef={fileInputRef}
-            onFileChange={handleFileChange}
+            onFileChange={attach.handleFileChange}
             canAttach={!!onFileUpload}
-            uploading={uploadingFile}
-            onLinked={fileId => setLinkedFileIds(prev => [...prev, fileId])}
-            onDetached={fileId => setLinkedFileIds(prev => prev.filter(id => id !== fileId))}
+            uploading={attach.uploadingFile}
+            onLinked={attach.linkFile}
+            onDetached={attach.detachFile}
           />
 
           {/* Costs: create or view the expenses linked to this booking */}
@@ -609,9 +568,9 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
             <BookingCostsSection
               reservationId={reservation?.id ?? null}
               pendingExpense={pendingExpense}
-              onCreate={handleCreateExpense}
-              onEdit={handleEditExpense}
-              onRemove={handleRemoveExpense}
+              onCreate={expense.create}
+              onEdit={expense.edit}
+              onRemove={expense.remove}
               labelClassName={LABEL}
               customTooltips
             />

@@ -1,10 +1,19 @@
-// FE-PLANNER-BOOKINGFORM-001 to -004: the travellers and picked files of the
-// transport and booking forms, desktop and phone alike.
+// FE-PLANNER-BOOKINGFORM-001 to -007: the travellers, picked files, attached files
+// and expense requests of the transport and booking forms, desktop and phone alike.
+import { typeToCostCategory } from '@trek/shared';
 import { describe, expect, it, vi } from 'vitest';
 
-import { buildReservation } from '../../../tests/helpers/factories';
+import { buildBudgetItem, buildReservation, buildTripFile } from '../../../tests/helpers/factories';
 import type { Reservation } from '../../types';
-import { toggledTraveler, travelerIdsOf, travelersChanged, uploadBookingFiles } from './bookingFormModel';
+import {
+  attachedBookingFiles,
+  expenseRequestAfterSave,
+  pendingImportExpense,
+  toggledTraveler,
+  travelerIdsOf,
+  travelersChanged,
+  uploadBookingFiles,
+} from './bookingFormModel';
 
 const withTravelers = (...ids: number[]) =>
   buildReservation({ travelers: ids.map((user_id) => ({ user_id, username: `u${user_id}` })) } as Partial<Reservation>);
@@ -49,5 +58,40 @@ describe('bookingFormModel', () => {
     upload.mockClear();
     await uploadBookingFiles(upload, 42, [], 'none');
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('FE-PLANNER-BOOKINGFORM-005: an expense wish opens the editor for the saved booking, nothing else does', () => {
+    const booking = { title: 'Hotel Adlon', type: 'hotel' };
+    const item = buildBudgetItem({ id: 7 });
+    expect(expenseRequestAfterSave({ create: true }, 42, booking)).toEqual({
+      prefill: { reservationId: 42, name: 'Hotel Adlon', category: typeToCostCategory('hotel') },
+    });
+    expect(expenseRequestAfterSave({ editItem: item }, 42, booking)).toEqual({ editItem: item });
+    expect(expenseRequestAfterSave(null, 42, booking)).toBeNull();
+    expect(expenseRequestAfterSave({ create: true }, undefined, booking)).toBeNull();
+    expect(expenseRequestAfterSave({ editItem: item }, null, booking)).toBeNull();
+  });
+
+  it('FE-PLANNER-BOOKINGFORM-006: an import review previews the parsed price, a saved booking does not', () => {
+    const prefill = { metadata: { price: 120, priceCurrency: 'eur' } };
+    const preview = pendingImportExpense(null, prefill, 'hotel');
+    expect(preview).toEqual({ total_price: 120, category: typeToCostCategory('hotel'), currency: 'EUR' });
+    expect(pendingImportExpense(null, { metadata: { price: 50 } }, 'other')?.currency).toBeNull();
+    expect(pendingImportExpense(buildReservation(), prefill, 'hotel')).toBeNull();
+    expect(pendingImportExpense(null, null, 'hotel')).toBeNull();
+    expect(pendingImportExpense(null, { metadata: {} }, 'hotel')).toBeNull();
+  });
+
+  it('FE-PLANNER-BOOKINGFORM-007: a saved booking shows its own, server linked and dialog linked files', () => {
+    const files = [
+      buildTripFile({ id: 1, reservation_id: 5 }),
+      buildTripFile({ id: 2, reservation_id: null, linked_reservation_ids: [5] }),
+      buildTripFile({ id: 3, reservation_id: null }),
+      buildTripFile({ id: 4, reservation_id: 9 }),
+    ];
+    expect(attachedBookingFiles(files, 5, []).map((f) => f.id)).toEqual([1, 2]);
+    expect(attachedBookingFiles(files, 5, [3]).map((f) => f.id)).toEqual([1, 2, 3]);
+    expect(attachedBookingFiles(files, null, [3])).toEqual([]);
+    expect(attachedBookingFiles(files, undefined, [])).toEqual([]);
   });
 });

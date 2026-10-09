@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Check, ChevronDown, ChevronUp, Plus, TrainFront, TramFront, Trash2, X } from 'lucide-react'
 import MSheet from '../../../components/MSheet'
 import { useAddonStore } from '../../../../store/addonStore'
 import { useTranslation } from '../../../../i18n'
-import { typeToCostCategory } from '@trek/shared'
 import CustomSelect from '../../../../components/shared/CustomSelect'
 import CustomTimePicker from '../../../../components/shared/CustomTimePicker'
 import { BookingCodeInput } from '../../../../components/shared/BookingCode'
@@ -16,7 +15,8 @@ import {
   transportDayOptions, type StationWaypointForm, type WaypointForm,
 } from '../../../../components/Planner/transportEndpoints'
 import { useTransportForm } from '../../../../components/Planner/useTransportForm'
-import { travelerIdsOf, travelersChanged, uploadBookingFiles } from '../../../../components/Planner/bookingFormModel'
+import { expenseRequestAfterSave, travelerIdsOf, travelersChanged, uploadBookingFiles } from '../../../../components/Planner/bookingFormModel'
+import { useBookingExpenseIntent } from '../../../../components/Planner/useBookingExpenseIntent'
 import { Eyebrow, FIELD_AREA_CLS, FIELD_CLS, FormSheetFooter, FormSheetHeader } from './PlSheetChrome'
 import MBookingFilesCosts from './MBookingFilesCosts'
 import GuestBadge from '../../../../components/shared/GuestBadge'
@@ -73,7 +73,7 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
   } = useTransportForm(EMPTY_TRANSPORT_FIELDS)
   // Ref (not state) so handleSubmit reads the intent set by the same click — a
   // state value would be stale in that render's closure and never open the editor.
-  const expenseIntentRef = useRef(false)
+  const expense = useBookingExpenseIntent(() => handleSubmit())
   const [deleteArmed, setDeleteArmed] = useState(false)
   // Open-time snapshot so the sheet content survives the exit animation.
   const [snap, setSnap] = useState<{ res: Reservation | null; prefill: BookingReviewDraft | null }>({ res: null, prefill: null })
@@ -82,7 +82,7 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
     if (!showTransportModal) return
     setSnap({ res: editingTransport, prefill: transportPrefill })
     setAutomated(transportModalAutomated)
-    expenseIntentRef.current = false
+    expense.reset()
     setDeleteArmed(false)
     // On a review-import, seed the booking's Files with the parsed source document.
     setPendingFiles(!editingTransport && transportPrefill?._sourceFiles ? transportPrefill._sourceFiles : [])
@@ -142,8 +142,7 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
 
   const handleSubmit = async () => {
     if (!form.title.trim() || isSaving) return
-    const withExpense = expenseIntentRef.current
-    expenseIntentRef.current = false
+    const withExpense = expense.take()
     setIsSaving(true)
     try {
       const saved = await saveTransport(buildPayload(days, {
@@ -162,9 +161,8 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
       if (saved?.id && canUploadFiles) {
         await uploadBookingFiles(fd => planner.tripActions.addFile(tripId, fd), saved.id, pendingFiles, form.title)
       }
-      if (withExpense && saved?.id) {
-        onOpenExpense({ prefill: { reservationId: saved.id, name: form.title, category: typeToCostCategory(form.type) } })
-      }
+      const expenseRequest = expenseRequestAfterSave(withExpense, saved?.id, form)
+      if (expenseRequest) onOpenExpense(expenseRequest)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : t('common.unknownError'))
     } finally {
@@ -664,7 +662,7 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
               canUploadFiles={canUploadFiles}
               showCosts={isBudgetEnabled}
               createDisabled={!form.title.trim() || isSaving}
-              onCreate={() => { expenseIntentRef.current = true; void handleSubmit() }}
+              onCreate={expense.create}
               onEdit={item => onOpenExpense({ editItem: item })}
             />
           </>

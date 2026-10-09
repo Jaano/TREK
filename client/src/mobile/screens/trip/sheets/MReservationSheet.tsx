@@ -1,18 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, FileText, Hotel, Link2, ParkingSquare, Ticket, Users, Utensils } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Check, Link2, Ticket } from 'lucide-react'
 import MSheet from '../../../components/MSheet'
 import { useAddonStore } from '../../../../store/addonStore'
 import { useTranslation } from '../../../../i18n'
-import { resolveDayId } from '../../../../utils/formatters'
-import { parseReservationMetadata } from '../../../../utils/flightLegs'
-import { typeToCostCategory } from '@trek/shared'
 import CustomSelect from '../../../../components/shared/CustomSelect'
 import CustomTimePicker from '../../../../components/shared/CustomTimePicker'
 import { CustomDatePicker } from '../../../../components/shared/CustomDateTimePicker'
 import { BookingCodeInput } from '../../../../components/shared/BookingCode'
 import { Eyebrow, FIELD_AREA_CLS, FIELD_CLS, FormSheetFooter, FormSheetHeader } from './PlSheetChrome'
 import MBookingFilesCosts from './MBookingFilesCosts'
-import { uploadBookingFiles } from '../../../../components/Planner/bookingFormModel'
+import { expenseRequestAfterSave, travelerIdsOf, travelersChanged, uploadBookingFiles } from '../../../../components/Planner/bookingFormModel'
+import { useBookingExpenseIntent } from '../../../../components/Planner/useBookingExpenseIntent'
+import {
+  RESERVATION_TYPE_OPTIONS as TYPE_OPTIONS, reservationFieldsFrom, reservationFieldsFromPrefill,
+} from '../../../../components/Planner/reservationFormModel'
+import { useReservationForm } from '../../../../components/Planner/useReservationForm'
 import { buildAssignmentOptions } from '../../../../components/Planner/assignmentOptions'
 import GuestBadge from '../../../../components/shared/GuestBadge'
 import { SPLIT_COLORS } from '../../../../components/Budget/BudgetPanel.constants'
@@ -26,15 +28,6 @@ export interface MReservationSheetProps {
   planner: TripPlanner
   onOpenExpense: (req: BookingExpenseRequest) => void
 }
-
-const TYPE_OPTIONS = [
-  { value: 'hotel', labelKey: 'reservations.type.hotel', Icon: Hotel },
-  { value: 'restaurant', labelKey: 'reservations.type.restaurant', Icon: Utensils },
-  { value: 'event', labelKey: 'reservations.type.event', Icon: Ticket },
-  { value: 'tour', labelKey: 'reservations.type.tour', Icon: Users },
-  { value: 'parking', labelKey: 'reservations.type.parking', Icon: ParkingSquare },
-  { value: 'other', labelKey: 'reservations.type.other', Icon: FileText },
-]
 
 // Traveler picker row — same surface as the cost-split rows (bg on --m-ic).
 const TRAVELER_ROW_CLS = 'flex w-full items-center gap-[9px] rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[9px] text-start'
@@ -70,19 +63,18 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
 
   const isBudgetEnabled = useAddonStore(s => s.isEnabled('budget'))
 
-  const [form, setForm] = useState(EMPTY)
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const {
+    form, setForm, set, isSaving, setIsSaving, pendingFiles, setPendingFiles, travelerIds, setTravelerIds, toggleTraveler,
+    isEndBeforeStart, dateBounds, startDate, startTime, setStartDate, setStartTime, takeStopDay,
+    pickPlace, pickHotelPlace, pickHotelStart, pickHotelEnd, saveData: buildSaveData,
+  } = useReservationForm(EMPTY, days, places)
   const assignmentOptions = useMemo(
     () => buildAssignmentOptions(days, assignments, t, locale),
     [days, assignments, t, locale],
   )
 
-  // Travelers assigned to this booking (#1517) — seeded from the editing
-  // reservation on open, persisted separately after the save resolves.
-  const [travelerIds, setTravelerIds] = useState<Set<number>>(new Set())
-  const [isSaving, setIsSaving] = useState(false)
   // Ref (not state) so handleSubmit reads the intent set by the same click.
-  const expenseIntentRef = useRef(false)
+  const expense = useBookingExpenseIntent(() => handleSubmit())
   // Open-time snapshot so the sheet content survives the exit animation.
   const [snap, setSnap] = useState<{ res: typeof editingReservation; assignmentId: number | null }>(
     { res: null, assignmentId: null },
@@ -96,49 +88,16 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
     if (!showReservationModal) return
     setSnap({ res: editingReservation, assignmentId: bookingForAssignmentId ?? null })
     setAssignmentId(bookingForAssignmentId ?? editingReservation?.assignment_id ?? '')
-    expenseIntentRef.current = false
+    expense.reset()
     setPendingFiles([])
-    setTravelerIds(new Set((editingReservation?.travelers || []).map(tv => tv.user_id)))
+    setTravelerIds(travelerIdsOf(editingReservation))
 
     const res = editingReservation
     if (res) {
-      const meta = parseReservationMetadata(res)
-      const rawEnd = res.reservation_end_time || ''
-      let endDate = '', endTime = rawEnd
-      if (rawEnd.includes('T')) { endDate = rawEnd.split('T')[0]; endTime = rawEnd.split('T')[1]?.slice(0, 5) || '' }
-      else if (/^\d{4}-\d{2}-\d{2}$/.test(rawEnd)) { endDate = rawEnd; endTime = '' }
-      const acc = tripAccommodations.find(a => a.id == res.accommodation_id)
-      setForm({
-        ...EMPTY,
-        title: res.title || '', type: res.type || 'other', status: res.status || 'pending',
-        reservation_time: res.reservation_time ? res.reservation_time.slice(0, 16) : '',
-        reservation_end_time: endTime, end_date: endDate,
-        location: res.location || '', confirmation_number: res.confirmation_number || '',
-        notes: res.notes || '', url: res.url || '',
-        place_id: res.place_id || '', accommodation_id: res.accommodation_id || '',
-        meta_check_in_time: meta.check_in_time || '', meta_check_out_time: meta.check_out_time || '',
-        hotel_place_id: acc?.place_id || '', hotel_start_day: acc?.start_day_id || '', hotel_end_day: acc?.end_day_id || '',
-        hotel_address: places.find(p => p.id == acc?.place_id)?.address || res.location || '',
-      })
+      setForm({ ...EMPTY, ...reservationFieldsFrom(res, tripAccommodations, places, false) })
     } else if (reservationPrefill) {
       const pf = reservationPrefill
-      const meta = (pf.metadata && typeof pf.metadata === 'object' ? pf.metadata : {}) as Record<string, string>
-      const rawEnd = typeof pf.reservation_end_time === 'string' ? pf.reservation_end_time : ''
-      let endDate = '', endTime = rawEnd
-      if (rawEnd.includes('T')) { endDate = rawEnd.split('T')[0]; endTime = rawEnd.split('T')[1]?.slice(0, 5) || '' }
-      else if (/^\d{4}-\d{2}-\d{2}$/.test(rawEnd)) { endDate = rawEnd; endTime = '' }
-      setForm({
-        ...EMPTY,
-        title: pf.title || '', type: pf.type || 'other', status: pf.status || 'pending',
-        reservation_time: typeof pf.reservation_time === 'string' ? pf.reservation_time.slice(0, 16) : '',
-        reservation_end_time: endTime, end_date: endDate,
-        location: pf.location || '', confirmation_number: pf.confirmation_number || '',
-        notes: pf.notes || '', url: (pf as { url?: string }).url || '',
-        meta_check_in_time: meta.check_in_time || '', meta_check_out_time: meta.check_out_time || '',
-        hotel_start_day: resolveDayId(days, pf._accommodation?.check_in),
-        hotel_end_day: resolveDayId(days, pf._accommodation?.check_out),
-        hotel_address: pf._venue?.address || '',
-      })
+      setForm({ ...EMPTY, ...reservationFieldsFromPrefill(pf, days, false) })
       setPendingFiles(pf._sourceFiles ?? [])
     } else {
       // Opened from a day's toolbar: start on that day rather than on a blank
@@ -163,13 +122,6 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
 
   const res = snap.res
   const isHotel = form.type === 'hotel'
-  const set = (field: keyof typeof EMPTY, value: string | number) => setForm(prev => ({ ...prev, [field]: value }))
-
-  const toggleTraveler = (id: number) => setTravelerIds(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
 
   const TravelerAvatar = ({ m, idx, dim }: { m: TripMember; idx: number; dim: boolean }) =>
     m.avatar_url
@@ -185,20 +137,6 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
         </span>
       )
 
-  const isEndBeforeStart = (() => {
-    if (isHotel || !form.end_date || !form.reservation_time) return false
-    const sDate = form.reservation_time.split('T')[0]
-    const sTime = form.reservation_time.split('T')[1] || ''
-    const eTime = form.reservation_end_time || ''
-    // Without a time on either side the booking is all-day, so an end on the
-    // start day is fine — only compare the dates there.
-    if (!sTime || !eTime) return form.end_date < sDate
-    return `${form.end_date}T${eTime}` <= `${sDate}T${sTime}`
-  })()
-
-  const startDate = (form.reservation_time || '').split('T')[0] || ''
-  const startTime = (form.reservation_time || '').split('T')[1] || ''
-
   const fmtDate = (d?: string | null) =>
     d ? new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' }) : undefined
 
@@ -212,9 +150,8 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
 
   // Restrict non-hotel booking dates to the trip's span (#1662); hotels already
   // constrain to trip days via their day dropdowns.
-  const tripDates = days.map(d => d.date).filter((d): d is string => !!d).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-  const tripMinDate = tripDates[0]
-  const tripMaxDate = tripDates[tripDates.length - 1]
+  const tripMinDate = dateBounds.min
+  const tripMaxDate = dateBounds.max
 
   const handleClose = () => {
     if (importReviewActive) { advanceImportReview(); return }
@@ -227,72 +164,23 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
   const handleSubmit = async () => {
     // Only the costs button reaches this without the footer's date check.
     if (isEndBeforeStart) { toast.error(t('reservations.validation.endBeforeStart')); return }
-    const withExpense = expenseIntentRef.current
-    expenseIntentRef.current = false
+    const withExpense = expense.take()
     setIsSaving(true)
     try {
-      const metadata: Record<string, string> = {}
-      if (isHotel) {
-        if (form.meta_check_in_time) metadata.check_in_time = form.meta_check_in_time
-        if (form.meta_check_out_time) metadata.check_out_time = form.meta_check_out_time
-      }
-      let combinedEndTime: string = form.reservation_end_time
-      if (form.end_date) {
-        combinedEndTime = form.reservation_end_time ? `${form.end_date}T${form.reservation_end_time}` : form.end_date
-      } else if (form.reservation_end_time && form.reservation_time) {
-        combinedEndTime = `${startDate}T${form.reservation_end_time}`
-      }
-      const saveData: Record<string, unknown> & { title: string } = {
-        title: form.title, type: form.type, status: form.status,
-        reservation_time: isHotel ? null : (form.reservation_time || null),
-        reservation_end_time: isHotel ? null : (combinedEndTime || null),
-        location: isHotel ? form.hotel_address : form.location,
-        confirmation_number: form.confirmation_number,
-        notes: form.notes, url: form.url,
-        assignment_id: (isHotel && !form.accommodation_id) ? null : (assignmentId || null),
-        accommodation_id: isHotel ? (form.accommodation_id || null) : null,
-        place_id: isHotel ? null : (form.place_id || null),
-        // An empty object, not null: null clears the column outright, and that
-        // took the mirrored booking price with it on every edit of a type that
-        // fills no metadata of its own — restaurant, event, tour, parking, other,
-        // a hotel without check-in times (#2233). An object still clears what the
-        // form dropped, and lets the server carry the price across.
-        metadata,
-        // Omitted on an edit for the same reason as the desktop dialog: the
-        // server swaps the whole endpoint set when the key is present, and this
-        // sheet never edits endpoints (#2216).
-        ...(snap.res?.id ? {} : { endpoints: [] }),
-        needs_review: false,
-      }
-      if (isHotel && (form.hotel_start_day || form.hotel_end_day)) {
-        saveData.create_accommodation = {
-          place_id: form.hotel_place_id || null,
-          venue: (!form.hotel_place_id && (form.hotel_address || form.title))
-            ? { name: form.title, address: form.hotel_address || null } : null,
-          address: form.hotel_address || null,
-          start_day_id: form.hotel_start_day || form.hotel_end_day,
-          end_day_id: form.hotel_end_day || form.hotel_start_day,
-          check_in: form.meta_check_in_time || null,
-          check_out: form.meta_check_out_time || null,
-          confirmation: form.confirmation_number || null,
-        }
-      }
+      const saveData = buildSaveData({ assignmentId, isEdit: !!snap.res?.id, withCheckInEnd: false })
       const saved = await handleSaveReservation(saveData as never)
       // Persist the traveler assignment once we have the reservation id (from the
       // save result on create, or the edited reservation) — only when it changed.
       const savedId = saved?.id ?? res?.id
       if (savedId) {
-        const original = (res?.travelers || []).map(tv => tv.user_id)
-        const next = [...travelerIds]
-        const changed = original.length !== next.length || next.some(id => !original.includes(id))
-        if (changed) await setReservationTravelers(tripId, savedId, next)
+        const { changed, nextIds } = travelersChanged(res, travelerIds)
+        if (changed) await setReservationTravelers(tripId, savedId, nextIds)
       }
       if (saved?.id && canUploadFiles) {
         await uploadBookingFiles(fd => planner.tripActions.addFile(tripId, fd), saved.id, pendingFiles, form.title)
       }
-      if (withExpense && saved?.id) {
-        onOpenExpense({ prefill: { reservationId: saved.id, name: form.title, category: typeToCostCategory(form.type) } })
-      }
+      const expenseRequest = expenseRequestAfterSave(withExpense, saved?.id, form)
+      if (expenseRequest) onOpenExpense(expenseRequest)
       if (importReviewActive && saved) advanceImportReview()
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : t('common.unknownError'))
@@ -355,7 +243,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
                 <Eyebrow className="mb-[5px] uppercase">{t('reservations.date')}</Eyebrow>
                 <CustomDatePicker
                   value={startDate}
-                  onChange={d => set('reservation_time', d ? (startTime ? `${d}T${startTime}` : d) : '')}
+                  onChange={setStartDate}
                   min={tripMinDate}
                   max={tripMaxDate}
                 />
@@ -364,10 +252,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
                 <Eyebrow className="mb-[5px] uppercase">{t('reservations.startTime')}</Eyebrow>
                 <CustomTimePicker
                   value={startTime}
-                  onChange={tm => {
-                    const d = startDate || days.find(dy => dy.id === selectedDayId)?.date || ''
-                    set('reservation_time', tm ? `${d}T${tm}` : d)
-                  }}
+                  onChange={tm => setStartTime(tm, days.find(dy => dy.id === selectedDayId)?.date || '')}
                 />
               </div>
             </div>
@@ -391,17 +276,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
             <Eyebrow className="mb-[5px] mt-3 uppercase">{t('reservations.meta.linkPlace')}</Eyebrow>
             <CustomSelect
               value={form.place_id}
-              onChange={value => {
-                const p = places.find(pl => pl.id === value)
-                setForm(prev => {
-                  const next = { ...prev, place_id: value }
-                  if (value && p) {
-                    if (!prev.title) next.title = p.name
-                    if (!prev.location && p.address) next.location = p.address
-                  }
-                  return next
-                })
-              }}
+              onChange={pickPlace}
               options={placeOptions}
               placeholder={t('reservations.meta.pickPlace')}
               searchable
@@ -425,17 +300,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
             <Eyebrow className="mb-[5px] mt-3 uppercase">{t('reservations.meta.hotelPlace')}</Eyebrow>
             <CustomSelect
               value={form.hotel_place_id}
-              onChange={value => {
-                const p = places.find(pl => pl.id === value)
-                setForm(prev => {
-                  const next = { ...prev, hotel_place_id: value }
-                  if (value && p) {
-                    if (!prev.title) next.title = p.name
-                    next.hotel_address = p.address || prev.hotel_address
-                  }
-                  return next
-                })
-              }}
+              onChange={pickHotelPlace}
               options={hotelPlaceOptions}
               placeholder={t('reservations.meta.pickHotel')}
               searchable
@@ -447,12 +312,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
                 <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.fromDay')}</Eyebrow>
                 <CustomSelect
                   value={form.hotel_start_day}
-                  onChange={value => setForm(prev => ({
-                    ...prev,
-                    hotel_start_day: value,
-                    hotel_end_day: days.findIndex(d => d.id === value) > days.findIndex(d => d.id === prev.hotel_end_day)
-                      ? value : prev.hotel_end_day,
-                  }))}
+                  onChange={pickHotelStart}
                   options={dayOptions}
                   placeholder={t('reservations.meta.selectDay')}
                   size="sm"
@@ -462,12 +322,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
                 <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.toDay')}</Eyebrow>
                 <CustomSelect
                   value={form.hotel_end_day}
-                  onChange={value => setForm(prev => ({
-                    ...prev,
-                    hotel_start_day: days.findIndex(d => d.id === value) < days.findIndex(d => d.id === prev.hotel_start_day)
-                      ? value : prev.hotel_start_day,
-                    hotel_end_day: value,
-                  }))}
+                  onChange={pickHotelEnd}
                   options={dayOptions}
                   placeholder={t('reservations.meta.selectDay')}
                   size="sm"
@@ -586,7 +441,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
                 const opt = assignmentOptions.find(o => o.value === value)
                 // Same courtesy as the desktop dialog: an undated booking takes
                 // the day of the stop it was just linked to.
-                if (opt?.dayDate) setForm(prev => (prev.reservation_time ? prev : { ...prev, reservation_time: opt.dayDate! }))
+                if (opt?.dayDate) takeStopDay(opt.dayDate)
               }}
               placeholder={t('reservations.pickAssignment')}
               options={[{ value: '', label: t('reservations.noAssignment') }, ...assignmentOptions]}
@@ -605,7 +460,7 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
           canUploadFiles={canUploadFiles}
           showCosts={isBudgetEnabled}
           createDisabled={!form.title.trim() || isSaving}
-          onCreate={() => { expenseIntentRef.current = true; void handleSubmit() }}
+          onCreate={expense.create}
           onEdit={item => onOpenExpense({ editItem: item })}
         />
       </div>
