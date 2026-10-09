@@ -1,4 +1,5 @@
-import type { Assignment, RoadtripStopType } from '@trek/shared'
+import type { Assignment, Place, RoadtripStopType } from '@trek/shared'
+import type { PlaceDetailsSelection } from './PlaceDetailsColumn'
 
 export interface PlaceFormData {
   name: string
@@ -93,6 +94,102 @@ export const DEFAULT_FORM: PlaceFormData = {
   notes: '',
   transport_mode: 'walking',
   website: '',
+}
+
+/**
+ * The place being edited, as the form edits it. Its times are stored per day-assignment,
+ * not on the pool place, so with an assignment in context (itinerary edit, or a
+ * single-assignment pool edit) they are read off its embedded place. `extra` is what one
+ * shell's form adds to the place's own fields, ahead of the day note.
+ */
+export function placeEditForm(
+  place: Place,
+  assignment: Assignment | null | undefined,
+  extra: Partial<PlaceFormData> = {},
+): PlaceFormData {
+  const timeSource = assignment?.place ?? place
+  return {
+    name: place.name || '',
+    description: place.description || '',
+    address: place.address || '',
+    lat: place.lat != null ? String(place.lat) : '',
+    lng: place.lng != null ? String(place.lng) : '',
+    category_id: place.category_id != null ? String(place.category_id) : '',
+    place_time: timeSource.place_time || '',
+    end_time: timeSource.end_time || '',
+    notes: place.notes || '',
+    transport_mode: place.transport_mode || 'walking',
+    website: place.website || '',
+    ...extra,
+    // The day-specific note rides only with an assignment in context (#2163);
+    // otherwise the key stays absent so submit never sends a notes write.
+    ...(assignment ? { assignment_notes: assignment.notes || '' } : {}),
+  }
+}
+
+/** A position the form opens on: a POI tapped on the map, or a right-click on it. */
+export interface PlacePrefill {
+  lat: number
+  lng: number
+  name?: string
+  address?: string
+  website?: string
+  phone?: string
+  osm_id?: string
+}
+
+/** A blank form at a prefilled position, with what the POI already knew. */
+export function prefillForm(prefill: PlacePrefill, extra: Partial<PlaceFormData> = {}): PlaceFormData {
+  return {
+    ...DEFAULT_FORM,
+    lat: String(prefill.lat),
+    lng: String(prefill.lng),
+    name: prefill.name || '',
+    address: prefill.address || '',
+    website: prefill.website || '',
+    phone: prefill.phone || '',
+    osm_id: prefill.osm_id,
+    ...extra,
+  }
+}
+
+/**
+ * What the details column describes when the form opens: the place being edited, else
+ * whatever a map POI prefilled, else nothing yet.
+ */
+export function openingDetailsSelection(
+  place: Pick<Place, 'name' | 'lat' | 'lng' | 'google_place_id' | 'amap_poi_id' | 'osm_id'> | null | undefined,
+  prefill: PlacePrefill | null | undefined,
+): PlaceDetailsSelection | null {
+  if (place && place.lat != null && place.lng != null) {
+    return {
+      placeId: place.google_place_id || place.amap_poi_id || place.osm_id || undefined,
+      lat: Number(place.lat),
+      lng: Number(place.lng),
+      name: place.name || '',
+    }
+  }
+  if (prefill) {
+    return { placeId: prefill.osm_id || undefined, lat: prefill.lat, lng: prefill.lng, name: prefill.name || '' }
+  }
+  return null
+}
+
+/**
+ * The fields a fresh opening owns. A blank form owns nothing yet. A POI tapped on the map
+ * or a right-click place arrives prefilled from a place, so those fields belong to it and
+ * a later search pick may clear them. An existing place being edited is the opposite:
+ * everything on that form came out of the database and none of it is a search result's
+ * to drop.
+ */
+export function openingAutoFilled(place: unknown, prefill: PlacePrefill | null | undefined): Set<ResultField> {
+  return new Set(
+    !place && prefill
+      ? (['name', 'address', 'lat', 'lng', 'website', 'phone', 'osm_id'] as ResultField[]).filter(
+          (field) => !!prefill[field as keyof PlacePrefill],
+        )
+      : [],
+  )
 }
 
 /**
@@ -193,6 +290,50 @@ export function findDuplicatePlace(
     ) return p
   }
   return null
+}
+
+/** The name a likely duplicate (#1152) is announced with, or null when the trip has none. */
+export function duplicateName(form: PlaceFormData, places: Parameters<typeof findDuplicatePlace>[1]): string | null {
+  const dup = findDuplicatePlace(form, places)
+  return dup ? dup.name || form.name : null
+}
+
+/** The form as the save takes it: coordinates as numbers, an empty category as null. */
+export interface PlaceFormPayload extends Omit<PlaceFormData, 'lat' | 'lng' | 'category_id'> {
+  lat: number | null
+  lng: number | null
+  category_id: string | null
+  /** Files chosen before the place existed: uploaded once the save has given it an id. */
+  _pendingFiles?: File[]
+}
+
+/**
+ * What a save sends. `extra` is what one shell adds after the category, from the
+ * coordinates being saved. The note of the day in context only travels when that
+ * assignment is in context AND the note actually changed (#2163): an untouched note must
+ * not produce a PUT, or a legacy note longer than the field would be re-sent on every
+ * unrelated save.
+ */
+export function placeFormPayload<E extends object = object>(
+  form: PlaceFormData,
+  pendingFiles: File[],
+  assignment: Pick<Assignment, 'notes'> | null | undefined,
+  extra?: (lat: number | null, lng: number | null) => E,
+): PlaceFormPayload & E {
+  const lat = form.lat ? Number.parseFloat(form.lat) : null
+  const lng = form.lng ? Number.parseFloat(form.lng) : null
+  const payload = {
+    ...form,
+    lat,
+    lng,
+    category_id: form.category_id || null,
+    ...(extra ? extra(lat, lng) : {}),
+    _pendingFiles: pendingFiles.length > 0 ? pendingFiles : undefined,
+  } as PlaceFormPayload & E
+  if (!assignment || (form.assignment_notes ?? '') === (assignment.notes ?? '')) {
+    delete payload.assignment_notes
+  }
+  return payload
 }
 
 /**

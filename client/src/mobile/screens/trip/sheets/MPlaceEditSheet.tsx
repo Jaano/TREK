@@ -3,10 +3,15 @@ import { MapPin } from 'lucide-react'
 import MSheet from '../../../components/MSheet'
 import {
   DEFAULT_FORM,
+  endsBeforeStart,
   mergeResult,
+  parseCoordinatePair,
+  placeEditForm,
+  placeFormPayload,
+  prefillForm,
   type PlaceFormData,
-  type ResultField,
 } from '../../../../components/Planner/PlaceFormModal.helpers'
+import { usePlaceForm } from '../../../../components/Planner/usePlaceForm'
 import { Eyebrow, FIELD_AREA_CLS, FIELD_CLS, FormSheetFooter, FormSheetHeader } from './PlSheetChrome'
 import { useAddonStore } from '../../../../store/addonStore'
 import type { BookingExpenseRequest } from '../../../../components/Planner/BookingCostsSection.types'
@@ -15,7 +20,7 @@ import PlCategoryPicker from './PlCategoryPicker'
 import PlTimeFields from './PlTimeFields'
 import PlFileAttach from './PlFileAttach'
 import MLinkedCosts from './MLinkedCosts'
-import PlaceDetailsColumn, { type PlaceDetailsSelection } from '../../../../components/Planner/PlaceDetailsColumn'
+import PlaceDetailsColumn from '../../../../components/Planner/PlaceDetailsColumn'
 import { useTranslation } from '../../../../i18n'
 import { useAuthStore } from '../../../../store/authStore'
 import { useSettingsStore } from '../../../../store/settingsStore'
@@ -27,30 +32,6 @@ export interface MPlaceEditSheetProps {
   planner: TripPlanner
   /** Opens the Costs editor for this place's linked expense (#1298). */
   onOpenExpense: (req: BookingExpenseRequest) => void
-}
-
-// #1152: same duplicate heuristic as the desktop form — shared Google Place ID,
-// case-insensitive name match, or near-identical coordinates (~11 m).
-const DUP_COORD_TOLERANCE = 0.0001
-
-function findDuplicateName(
-  form: PlaceFormData,
-  places: { name?: string | null; lat?: number | string | null; lng?: number | string | null; google_place_id?: string | null }[],
-): string | null {
-  const name = form.name.trim().toLowerCase()
-  const gid = (form.google_place_id || '').trim()
-  const lat = form.lat ? Number.parseFloat(form.lat) : null
-  const lng = form.lng ? Number.parseFloat(form.lng) : null
-  for (const p of places || []) {
-    if (gid && p.google_place_id && p.google_place_id === gid) return p.name || form.name
-    if (name && p.name && p.name.trim().toLowerCase() === name) return p.name
-    if (
-      lat != null && lng != null && p.lat != null && p.lng != null &&
-      Math.abs(Number(p.lat) - lat) <= DUP_COORD_TOLERANCE &&
-      Math.abs(Number(p.lng) - lng) <= DUP_COORD_TOLERANCE
-    ) return p.name || form.name
-  }
-  return null
 }
 
 /**
@@ -86,13 +67,14 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
     handleSavePlace, setDeletePlaceId, confirmDeletePlace,
   } = planner
 
-  const [form, setForm] = useState<PlaceFormData>(DEFAULT_FORM)
-  // Which fields the last picked search result wrote. See mergeResult.
-  const autoFilledRef = useRef<Set<ResultField>>(new Set())
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  const [isSaving, setIsSaving] = useState(false)
+  // The fields, which of them the last picked search result wrote (see mergeResult), the
+  // pending files and the details block follow the same rules as the desktop dialog.
+  const {
+    form, setForm, autoFilledRef, pendingFiles, addFiles, removeFile, handlePaste, isSaving, setIsSaving,
+    duplicateWarning, detailsSelection, setDetailsSelection, openForm, handleChange, pickImage, adoptDescription,
+    warnIfDuplicate,
+  } = usePlaceForm({ t, toast, canUploadFiles })
   const [resolvingPick, setResolvingPick] = useState(false)
-  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null)
   const isBudgetEnabled = useAddonStore(s => s.isEnabled('budget'))
   // Set right before submit: the place has to exist before an expense can point
   // at it, exactly like MReservationSheet does it.
@@ -104,10 +86,6 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
   const [sheetPlace, setSheetPlace] = useState<Place | null>(null)
   const [sheetAssignmentId, setSheetAssignmentId] = useState<number | null>(null)
 
-  // The details block under the search field follows the same selection rules
-  // as the desktop dialog's left column: the picked search result, else the
-  // place being edited, else whatever a map POI prefilled.
-  const [detailsSelection, setDetailsSelection] = useState<PlaceDetailsSelection | null>(null)
   const placesEnrichEnabled = useAuthStore(s => s.placesEnrichEnabled)
   const { language, locale } = useTranslation()
   const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
@@ -130,76 +108,18 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
   }, [sheetPlace, assignments, ctxAssignment])
 
   // Prefill on open — same source order as the desktop form: editing place
-  // (times off the in-context assignment), map/POI prefill coords, blank.
+  // (times off the in-context assignment), map/POI prefill coords, blank. The
+  // details block follows the same order, so it never keeps showing the previous
+  // sheet's place.
   useEffect(() => {
     if (!showPlaceForm) return
     setSheetPlace(editingPlace)
     setSheetAssignmentId(editingAssignmentId)
-    if (editingPlace) {
-      const assignment = findVisit(storedAssignments, editingAssignmentId)
-      const timeSource = assignment?.place ?? editingPlace
-      setForm({
-        name: editingPlace.name || '',
-        description: editingPlace.description || '',
-        address: editingPlace.address || '',
-        lat: editingPlace.lat != null ? String(editingPlace.lat) : '',
-        lng: editingPlace.lng != null ? String(editingPlace.lng) : '',
-        category_id: editingPlace.category_id != null ? String(editingPlace.category_id) : '',
-        place_time: timeSource.place_time || '',
-        end_time: timeSource.end_time || '',
-        notes: editingPlace.notes || '',
-        transport_mode: editingPlace.transport_mode || 'walking',
-        website: editingPlace.website || '',
-        // The day-specific note rides only with an assignment in context (#2163);
-        // otherwise the key stays absent so submit never sends a notes write.
-        ...(assignment ? { assignment_notes: assignment.notes || '' } : {}),
-      })
-    } else if (prefillCoords) {
-      setForm({
-        ...DEFAULT_FORM,
-        lat: String(prefillCoords.lat),
-        lng: String(prefillCoords.lng),
-        name: prefillCoords.name || '',
-        address: prefillCoords.address || '',
-        website: prefillCoords.website || '',
-        phone: prefillCoords.phone || '',
-        osm_id: prefillCoords.osm_id,
-      })
-    } else {
-      setForm(DEFAULT_FORM)
-    }
-    // Same source order as the desktop dialog: an existing place's provider id
-    // and coordinates, a map POI's prefill, or nothing. Without this the block
-    // would keep showing the previous sheet's place.
-    if (editingPlace && editingPlace.lat != null && editingPlace.lng != null) {
-      setDetailsSelection({
-        placeId: editingPlace.google_place_id || editingPlace.amap_poi_id || editingPlace.osm_id || undefined,
-        lat: Number(editingPlace.lat),
-        lng: Number(editingPlace.lng),
-        name: editingPlace.name || '',
-      })
-    } else if (prefillCoords) {
-      setDetailsSelection({
-        placeId: prefillCoords.osm_id || undefined,
-        lat: prefillCoords.lat,
-        lng: prefillCoords.lng,
-        name: prefillCoords.name || '',
-      })
-    } else {
-      setDetailsSelection(null)
-    }
-    // A fresh sheet owns nothing yet; one opened on a map POI owns whatever
-    // that POI filled in. An existing place being edited owns nothing either —
-    // everything on that form came out of the database.
-    autoFilledRef.current = new Set(
-      !editingPlace && prefillCoords
-        ? (['name', 'address', 'lat', 'lng', 'website', 'phone', 'osm_id'] as ResultField[]).filter(
-            (field) => !!prefillCoords[field as keyof typeof prefillCoords],
-          )
-        : [],
-    )
-    setPendingFiles([])
-    setDuplicateWarning(null)
+    let next: PlaceFormData
+    if (editingPlace) next = placeEditForm(editingPlace, findVisit(storedAssignments, editingAssignmentId))
+    else if (prefillCoords) next = prefillForm(prefillCoords)
+    else next = DEFAULT_FORM
+    openForm(next, editingPlace, prefillCoords)
     setDeleteArmed(false)
     // storedAssignments is a fresh map each load, so it is read at open time only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -209,12 +129,6 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
   // as the desktop dialog: the day currently open first, the whole trip only
   // while it still fits inside one region.
   const { box: locationBias } = useLocationBias()
-
-  const handleChange = (field: keyof PlaceFormData, value: string) => {
-    // Typed by hand, so the next pick must leave it alone.
-    autoFilledRef.current.delete(field as ResultField)
-    setForm(prev => ({ ...prev, [field]: value }))
-  }
 
   // Same fix as the desktop dialog, same helper. `?? prev.X` cannot tell a
   // value the user typed from one the previous pick wrote, so searching an
@@ -248,37 +162,16 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
   }
 
   const handleCoordPaste = (e: ClipboardEvent<HTMLInputElement>) => {
-    const text = e.clipboardData.getData('text').trim()
-    // Same grammar as before, spelled without the overlapping quantifiers pasted text
-    // could make backtrack: the separator is either a comma/semicolon with optional
-    // padding or pure whitespace, and a decimal is digits with an optional ".digits".
-    const match = text.match(/^(-?\d+(?:\.\d*)?)(?:\s*[,;]\s*|\s+)(-?\d+(?:\.\d*)?)$/)
-    if (match) {
+    const pair = parseCoordinatePair(e.clipboardData.getData('text'))
+    if (pair) {
       e.preventDefault()
-      setForm(prev => ({ ...prev, lat: match[1], lng: match[2] }))
-    }
-  }
-
-  // Clipboard images/PDFs from any focused field become pending attachments.
-  const handlePaste = (e: ClipboardEvent) => {
-    if (!canUploadFiles) return
-    for (const item of Array.from(e.clipboardData?.items || [])) {
-      if (item.type.startsWith('image/') || item.type === 'application/pdf') {
-        e.preventDefault()
-        const file = item.getAsFile()
-        if (file) setPendingFiles(prev => [...prev, file])
-        return
-      }
+      setForm(prev => ({ ...prev, lat: pair[0], lng: pair[1] }))
     }
   }
 
   // End before start blocks the save — tied to the values, not to which entry
   // point opened the sheet.
-  const hasTimeError = Boolean(
-    form.place_time && form.end_time &&
-    form.place_time.length >= 5 && form.end_time.length >= 5 &&
-    form.end_time <= form.place_time,
-  )
+  const hasTimeError = endsBeforeStart(form.place_time, form.end_time)
 
   const handleSubmit = async () => {
     if (!form.name.trim()) {
@@ -287,32 +180,12 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
     }
     // #1152: first save of a new place warns on likely duplicates; a second
     // tap with the warning showing is the explicit "add anyway".
-    if (!sheetPlace && !duplicateWarning) {
-      const dup = findDuplicateName(form, places)
-      if (dup) {
-        setDuplicateWarning(dup)
-        toast.warning(t('places.duplicateExists', { name: dup }))
-        return
-      }
-    }
+    if (!sheetPlace && !duplicateWarning && warnIfDuplicate(places)) return
     const withExpense = expenseIntentRef.current
     expenseIntentRef.current = false
     setIsSaving(true)
     try {
-      const payload = {
-        ...form,
-        lat: form.lat ? Number.parseFloat(form.lat) : null,
-        lng: form.lng ? Number.parseFloat(form.lng) : null,
-        category_id: form.category_id || null,
-        _pendingFiles: pendingFiles.length > 0 ? pendingFiles : undefined,
-      }
-      // #2163: the per-assignment note only travels when an assignment is in
-      // context AND the value actually changed — same dirty-check as the
-      // desktop form, so an untouched note never produces a PUT.
-      if (!ctxAssignment || (form.assignment_notes ?? '') === (ctxAssignment.notes ?? '')) {
-        delete payload.assignment_notes
-      }
-      const saved = await handleSavePlace(payload)
+      const saved = await handleSavePlace(placeFormPayload(form, pendingFiles, ctxAssignment))
       const savedId = saved?.id ?? sheetPlace?.id ?? null
       if (withExpense && savedId) {
         onOpenExpense({ prefill: { placeId: savedId, name: form.name.trim(), category: 'activities' } })
@@ -371,8 +244,8 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
             <PlaceDetailsColumn
               selection={detailsSelection}
               selectedImageUrl={form.image_url}
-              onPickImage={(url) => setForm(prev => ({ ...prev, image_url: url ?? undefined }))}
-              onAdoptDescription={(text) => setForm(prev => ({ ...prev, description: text }))}
+              onPickImage={pickImage}
+              onAdoptDescription={adoptDescription}
               hasDescription={!!form.description.trim()}
               language={language}
               timeFormat={timeFormat}
@@ -479,8 +352,8 @@ export default function MPlaceEditSheet({ planner, onOpenExpense }: MPlaceEditSh
           <PlFileAttach
             planner={planner}
             files={pendingFiles}
-            onAdd={files => setPendingFiles(prev => [...prev, ...files])}
-            onRemove={idx => setPendingFiles(prev => prev.filter((_, i) => i !== idx))}
+            onAdd={addFiles}
+            onRemove={removeFile}
           />
         )}
 
