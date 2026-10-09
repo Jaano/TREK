@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import MCollabNotes from '../../../../src/mobile/screens/trip/tabs/MCollabNotes'
-import type { CollabNoteData } from '../../../../src/mobile/screens/trip/tabs/collabModel'
+import type { CollabNoteData } from '../../../../src/components/Collab/collabModel'
 import type { TripPlanner } from '../../../../src/mobile/screens/trip/MTripShell'
 import { addListener, removeListener } from '../../../../src/api/websocket'
 import { openFile } from '../../../../src/utils/fileDownload'

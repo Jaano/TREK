@@ -1,5 +1,6 @@
 /**
- * Collab view-model — types + pure helpers shared by MCollabChat/Notes/Polls.
+ * Collab view-model — types + pure helpers shared by the desktop Collab panel
+ * and the phone's MCollabChat/Notes/Polls.
  * Mirrors the real `/api/trips/:tripId/collab/*` response shapes (verified
  * against `server/src/nest/collab/collab.controller.ts` +
  * `server/src/services/collabService.ts`, byte-identical to the legacy Express
@@ -49,7 +50,7 @@ export interface ChatMessage {
 
 /** The 8 quick-tap reactions (long-press / double-tap popover). Same set the
  *  desktop right-click menu offers — kept in sync for cross-platform muscle
- *  memory, redefined locally since we don't import Desktop Collab files. */
+ *  memory. */
 export const QUICK_REACTIONS = ['❤️', '😂', '👍', '😮', '😢', '🔥', '👏', '🎉']
 
 /** Bubble corner radii, spec 03 §6.1 — constant per sender, not per group
@@ -60,7 +61,7 @@ export const OWN_BUBBLE_RADIUS = { borderStartStartRadius: 16, borderStartEndRad
 export const OTHER_BUBBLE_RADIUS = { borderStartStartRadius: 4, borderStartEndRadius: 16, borderEndEndRadius: 16, borderEndStartRadius: 16 } as const
 
 // SQLite stores UTC without a 'Z' suffix — append one so JS parses it as UTC
-// rather than local time (same fix the desktop helpers apply).
+// rather than local time.
 export function parseUtcDate(iso: string): Date {
   return new Date(iso && !iso.endsWith('Z') ? `${iso}Z` : iso)
 }
@@ -84,7 +85,8 @@ export function formatChatClockTime(iso: string, is12h: boolean): string {
   return `${String(h).padStart(2, '0')}:${mm}`
 }
 
-export function formatChatDateSeparator(iso: string, t: Translate, locale: string): string {
+/** Today / Yesterday, else the date; without a locale the browser's own (the desktop chat). */
+export function formatChatDateSeparator(iso: string, t: Translate, locale?: string): string {
   const d = parseUtcDate(iso)
   const now = new Date()
   const yesterday = new Date()

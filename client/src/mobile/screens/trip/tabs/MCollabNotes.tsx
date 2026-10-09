@@ -21,7 +21,7 @@ import {
   sortNotes,
   type CollabNoteData,
   type CollabNoteFile,
-} from './collabModel'
+} from '../../../../components/Collab/collabModel'
 
 interface MCollabNotesProps {
   planner: TripPlanner

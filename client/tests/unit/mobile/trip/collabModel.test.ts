@@ -25,7 +25,7 @@ import {
   type CollabNoteData,
   type CollabPollData,
   type PollVoter,
-} from '../../../../src/mobile/screens/trip/tabs/collabModel';
+} from '../../../../src/components/Collab/collabModel';
 
 // FE-MOB-CLBM-001 to FE-MOB-CLBM-023
 

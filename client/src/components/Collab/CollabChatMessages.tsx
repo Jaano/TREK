@@ -2,7 +2,7 @@ import React from 'react'
 import { Trash2, Reply, ChevronUp } from 'lucide-react'
 import { Tooltip } from '../shared/Tooltip'
 import { URL_REGEX } from './CollabChat.constants'
-import { formatTime, formatDateSeparator, shouldShowDateSeparator } from './CollabChat.helpers'
+import { formatChatClockTime, formatChatDateSeparator, shouldShowChatDateSeparator } from './collabModel'
 import { MessageText } from './CollabChatMessageText'
 import { CollabChatAttachment } from './CollabChatAttachment'
 import { LinkPreview } from './CollabChatLinkPreview'
@@ -43,7 +43,7 @@ export function ChatMessages(props: any) {
             const nextMsg = messages[idx + 1]
             const isNewGroup = idx === 0 || String(prevMsg?.user_id) !== String(msg.user_id)
             const isLastInGroup = !nextMsg || String(nextMsg?.user_id) !== String(msg.user_id)
-            const showDate = shouldShowDateSeparator(msg, prevMsg)
+            const showDate = shouldShowChatDateSeparator(msg, prevMsg)
             const showAvatar = !own && isLastInGroup
             const bigEmoji = isEmojiOnly(msg.text)
             const hasReply = msg.reply_text || msg.reply_to
@@ -54,14 +54,14 @@ export function ChatMessages(props: any) {
                   {showDate && (
                     <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 6px' }}>
                       <span style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))', fontWeight: 600, color: 'var(--text-faint)', background: 'var(--bg-card)', padding: '3px 12px', borderRadius: 99, letterSpacing: 0.3, textTransform: 'uppercase' }}>
-                        {formatDateSeparator(msg.created_at, t)}
+                        {formatChatDateSeparator(msg.created_at, t)}
                       </span>
                     </div>
                   )}
                   <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}>
                     <span style={{ display: 'inline-flex', gap: 6, fontSize: 'calc(11px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', fontStyle: 'italic' }}>
                       <span>{msg.username} {t('collab.chat.deletedMessage') || 'deleted a message'}</span>
-                      <span style={{ fontStyle: 'normal' }}>{formatTime(msg.created_at, is12h)}</span>
+                      <span style={{ fontStyle: 'normal' }}>{formatChatClockTime(msg.created_at, is12h)}</span>
                     </span>
                   </div>
                 </React.Fragment>
@@ -85,7 +85,7 @@ export function ChatMessages(props: any) {
                       background: 'var(--bg-card)', padding: '3px 12px', borderRadius: 99,
                       letterSpacing: 0.3, textTransform: 'uppercase',
                     }}>
-                      {formatDateSeparator(msg.created_at, t)}
+                      {formatChatDateSeparator(msg.created_at, t)}
                     </span>
                   </div>
                 )}
@@ -243,7 +243,7 @@ export function ChatMessages(props: any) {
                     {/* Timestamp — only on last message of group */}
                     {isLastInGroup && (
                       <span style={{ fontSize: 'calc(9px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)', marginTop: 2, padding: '0 4px' }}>
-                        {formatTime(msg.created_at, is12h)}
+                        {formatChatClockTime(msg.created_at, is12h)}
                       </span>
                     )}
                   </div>

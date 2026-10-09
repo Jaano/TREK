@@ -22,7 +22,7 @@ import {
   splitPolls,
   totalPollVotes,
   type CollabPollData,
-} from './collabModel'
+} from '../../../../components/Collab/collabModel'
 
 interface MCollabPollsProps {
   planner: TripPlanner
