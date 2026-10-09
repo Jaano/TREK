@@ -3,13 +3,11 @@ import { UserPlus, Check, Loader2, Clock, Palette } from 'lucide-react'
 import { useVacayStore } from '../../store/vacayStore'
 import { useAuthStore } from '../../store/authStore'
 import { useTranslation } from '../../i18n'
-import { getApiErrorMessage } from '../../types'
-import { useToast } from '../shared/Toast'
 import CustomSelect from '../shared/CustomSelect'
 import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
-import apiClient from '../../api/client'
 import VacayBadge from './VacayBadge'
 import { useDefaultVacayPerson } from './useVacayCalendarLogic'
+import { useVacayUserPicker } from './useVacayUserPicker'
 
 const PRESET_COLORS = [
   '#6366f1', '#ec4899', '#14b8a6', '#8b5cf6', '#ef4444',
@@ -19,7 +17,6 @@ const PRESET_COLORS = [
 
 export default function VacayPersons() {
   const { t } = useTranslation()
-  const toast = useToast()
   const { users, pendingInvites, invite, cancelInvite, updateColor, selectedUserId, setSelectedUserId, isFused } = useVacayStore()
   const { user: currentUser } = useAuthStore()
 
@@ -28,33 +25,23 @@ export default function VacayPersons() {
   const [showInvite, setShowInvite] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [colorEditUserId, setColorEditUserId] = useState(null)
-  const [availableUsers, setAvailableUsers] = useState([])
-  const [selectedInviteUser, setSelectedInviteUser] = useState(null)
-  const [inviting, setInviting] = useState(false)
+  const {
+    available: availableUsers, selected: selectedInviteUser, setSelected: setSelectedInviteUser,
+    sending: inviting, load: loadAvailable, send,
+  } = useVacayUserPicker<{ id: number; username: string; email: string }>({
+    endpoint: '/addons/vacay/available-users',
+    submit: invite,
+    successKey: 'vacay.inviteSent',
+    errorKey: 'vacay.inviteError',
+    clearOnLoadError: false,
+  })
   const inviteLabelId = useId()
   const colorLabelId = useId()
 
-  const loadAvailable = async () => {
-    try {
-      const data = await apiClient.get('/addons/vacay/available-users').then(r => r.data)
-      setAvailableUsers(data.users)
-    } catch { /* */ }
-  }
-
-  const handleInvite = async () => {
-    if (!selectedInviteUser) return
-    setInviting(true)
-    try {
-      await invite(selectedInviteUser)
-      toast.success(t('vacay.inviteSent'))
-      setShowInvite(false)
-      setSelectedInviteUser(null)
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('vacay.inviteError')))
-    } finally {
-      setInviting(false)
-    }
-  }
+  const handleInvite = () => send(() => {
+    setShowInvite(false)
+    setSelectedInviteUser(null)
+  })
 
   const handleColorChange = async (color: string) => {
     await updateColor(color, colorEditUserId)
@@ -173,7 +160,7 @@ export default function VacayPersons() {
         ) : (
           <CustomSelect
             value={selectedInviteUser}
-            onChange={setSelectedInviteUser}
+            onChange={v => setSelectedInviteUser(Number(v))}
             options={availableUsers.map(u => ({ value: u.id, label: `${u.username} (${u.email})` }))}
             placeholder={t('vacay.selectUser')}
             searchable

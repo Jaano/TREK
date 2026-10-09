@@ -4,9 +4,8 @@ import MSheet from '../../components/MSheet'
 import MIconBtn from '../../components/MIconBtn'
 import { useVacayStore } from '../../../store/vacayStore'
 import { useTranslation } from '../../../i18n'
-import { useToast } from '../../../components/shared/Toast'
-import { getApiErrorMessage, type VacayUser } from '../../../types'
-import apiClient from '../../../api/client'
+import { type VacayUser } from '../../../types'
+import { useVacayUserPicker } from '../../../components/Vacay/useVacayUserPicker'
 
 interface MVacayInviteSheetProps {
   open: boolean
@@ -20,37 +19,24 @@ interface MVacayInviteSheetProps {
  */
 export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetProps) {
   const { t } = useTranslation()
-  const toast = useToast()
   const { invite, pendingInvites, cancelInvite } = useVacayStore()
-  const [available, setAvailable] = useState<VacayUser[]>([])
-  const [selected, setSelected] = useState<number | null>(null)
+  const { available, selected, setSelected, selectedUser, sending, load, send } = useVacayUserPicker<VacayUser>({
+    endpoint: '/addons/vacay/available-users',
+    submit: invite,
+    successKey: 'vacay.inviteSent',
+    errorKey: 'vacay.inviteError',
+    clearOnLoadError: true,
+  })
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [sending, setSending] = useState(false)
 
   useEffect(() => {
     if (!open) return
     setSelected(null)
     setPickerOpen(false)
-    apiClient.get('/addons/vacay/available-users')
-      .then(r => setAvailable(r.data.users))
-      .catch(() => setAvailable([]))
-  }, [open])
+    void load()
+  }, [open, setSelected, load])
 
-  const selectedUser = available.find(u => u.id === selected)
-
-  const handleSend = async () => {
-    if (!selected) return
-    setSending(true)
-    try {
-      await invite(selected)
-      toast.success(t('vacay.inviteSent'))
-      onClose()
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, t('vacay.inviteError')))
-    } finally {
-      setSending(false)
-    }
-  }
+  const handleSend = () => send(onClose)
 
   return (
     <MSheet open={open} onClose={onClose} variant="card" material="glass" ariaLabel={t('vacay.inviteUser')}>
