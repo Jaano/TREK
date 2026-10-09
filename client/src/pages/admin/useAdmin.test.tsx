@@ -1,4 +1,4 @@
-// FE-ADMHOOK-001 to FE-ADMHOOK-053
+// FE-ADMHOOK-001 to FE-ADMHOOK-058
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +8,7 @@ import { server } from '../../../tests/helpers/msw/server';
 import { act, renderHook, waitFor } from '../../../tests/helpers/render';
 import { resetAllStores, seedStore } from '../../../tests/helpers/store';
 import { TranslationProvider } from '../../i18n/TranslationContext';
+import { adminApi } from '../../api/client';
 import { useAuthStore } from '../../store/authStore';
 
 import { useAdmin } from './useAdmin';
@@ -862,5 +863,74 @@ describe('useAdmin', () => {
     expect(result.current.mcpEnabled).toBe(false);
     expect(result.current.hour12).toBe(false);
     expect(result.current.currentUser?.username).toBe('admin');
+  });
+  it('FE-ADMHOOK-054: saving the demo baseline toasts the outcome, with the server message on failure', async () => {
+    const save = vi.spyOn(adminApi, 'saveDemoBaseline').mockResolvedValue({});
+    const { result } = await mountAdmin();
+
+    await act(() => result.current.saveDemoBaseline());
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(toastCalls).toContainEqual({ type: 'success', message: 'Baseline saved! Resets will restore to this state.' });
+
+    save.mockRejectedValueOnce({ response: { data: { error: 'Not a demo' } } });
+    await act(() => result.current.saveDemoBaseline());
+    expect(toastCalls).toContainEqual({ type: 'error', message: 'Not a demo' });
+
+    save.mockRejectedValueOnce(new Error('offline'));
+    await act(() => result.current.saveDemoBaseline());
+    expect(toastCalls).toContainEqual({ type: 'error', message: 'Failed to save baseline' });
+  });
+
+  it('FE-ADMHOOK-055: bag tracking flips at once and saves the new value', async () => {
+    const update = vi.spyOn(adminApi, 'updateBagTracking').mockResolvedValue({});
+    const { result } = await mountAdmin();
+    const before = result.current.bagTrackingEnabled;
+
+    await act(() => result.current.toggleBagTracking());
+    expect(update).toHaveBeenCalledWith(!before);
+    expect(result.current.bagTrackingEnabled).toBe(!before);
+  });
+
+  it('FE-ADMHOOK-056: a failed bag tracking save flips back without a toast', async () => {
+    vi.spyOn(adminApi, 'updateBagTracking').mockRejectedValue(new Error('x'));
+    const { result } = await mountAdmin();
+    const before = result.current.bagTrackingEnabled;
+    const toastsBefore = toastCalls.length;
+
+    await act(() => result.current.toggleBagTracking());
+    expect(result.current.bagTrackingEnabled).toBe(before);
+    expect(toastCalls).toHaveLength(toastsBefore);
+  });
+
+  it('FE-ADMHOOK-057: a collab feature toggle saves only that key', async () => {
+    vi.spyOn(adminApi, 'getCollabFeatures').mockResolvedValue({ chat: true, notes: true, polls: true, whatsnext: true });
+    const update = vi.spyOn(adminApi, 'updateCollabFeatures').mockResolvedValue({});
+    const { result } = await mountAdmin();
+    await waitFor(() => expect(result.current.collabFeatures.chat).toBe(true));
+
+    await act(() => result.current.toggleCollabFeature('chat'));
+    expect(update).toHaveBeenCalledWith({ chat: false });
+    expect(result.current.collabFeatures).toEqual({ chat: false, notes: true, polls: true, whatsnext: true });
+  });
+
+  it('FE-ADMHOOK-058: a failed collab toggle rolls back its own key and keeps a later one', async () => {
+    vi.spyOn(adminApi, 'getCollabFeatures').mockResolvedValue({ chat: true, notes: true, polls: true, whatsnext: true });
+    let fail!: (e: unknown) => void;
+    vi.spyOn(adminApi, 'updateCollabFeatures')
+      .mockReturnValueOnce(new Promise((_, reject) => (fail = reject)))
+      .mockResolvedValueOnce({});
+    const { result } = await mountAdmin();
+    await waitFor(() => expect(result.current.collabFeatures.chat).toBe(true));
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.toggleCollabFeature('chat');
+    });
+    await act(() => result.current.toggleCollabFeature('notes'));
+    await act(async () => {
+      fail(new Error('x'));
+      await pending;
+    });
+    expect(result.current.collabFeatures).toEqual({ chat: true, notes: false, polls: true, whatsnext: true });
   });
 });

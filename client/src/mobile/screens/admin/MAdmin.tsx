@@ -24,7 +24,6 @@ import {
   Users,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { adminApi } from '../../../api/client'
 import { useTranslation } from '../../../i18n'
 import { useCountUp } from '../../../hooks/useCountUp'
 import { useAdmin } from '../../../pages/admin/useAdmin'
@@ -71,12 +70,12 @@ export default function MAdmin() {
   const { t, locale } = useTranslation()
   const admin = useAdmin()
   const {
-    demoMode, mcpEnabled, devMode, managed, toast, navigate,
+    demoMode, mcpEnabled, devMode, managed, navigate,
     activeTab, setActiveTab, stats, serverTimezone,
-    bagTrackingEnabled, setBagTrackingEnabled,
-    collabFeatures, setCollabFeatures,
+    bagTrackingEnabled, collabFeatures,
     setShowCreateUser,
     updateInfo, setShowUpdateModal,
+    saveDemoBaseline, toggleBagTracking, toggleCollabFeature,
   } = admin
   const [sectionsOpen, setSectionsOpen] = useState(false)
 
@@ -100,15 +99,6 @@ export default function MAdmin() {
     ...(devMode ? [{ id: 'dev-notifications', label: 'Dev: Notifications', icon: Bug }] : []),
   ]
   const activeSection = sections.find((s) => s.id === activeTab) ?? sections[0]
-
-  const saveDemoBaseline = async () => {
-    try {
-      await adminApi.saveDemoBaseline()
-      toast.success('Baseline saved! Resets will restore to this state.')
-    } catch (e) {
-      toast.error(e.response?.data?.error || 'Failed to save baseline')
-    }
-  }
 
   return (
     // Flow screen: scrolls with the document (#1809), so no height and no
@@ -221,27 +211,9 @@ export default function MAdmin() {
       {activeTab === 'addons' && (
         <MAdminAddonManager
           bagTrackingEnabled={bagTrackingEnabled}
-          onToggleBagTracking={async () => {
-            const next = !bagTrackingEnabled
-            setBagTrackingEnabled(next)
-            try {
-              await adminApi.updateBagTracking(next)
-            } catch {
-              setBagTrackingEnabled(!next)
-            }
-          }}
+          onToggleBagTracking={toggleBagTracking}
           collabFeatures={collabFeatures}
-          onToggleCollabFeature={async (key: string) => {
-            const previous = collabFeatures[key]
-            setCollabFeatures({ ...collabFeatures, [key]: !previous })
-            try {
-              await adminApi.updateCollabFeatures({ [key]: !previous })
-            } catch {
-              // Only this key rolls back — a slower request must not undo a toggle
-              // the admin made in the meantime.
-              setCollabFeatures(prev => ({ ...prev, [key]: previous }))
-            }
-          }}
+          onToggleCollabFeature={toggleCollabFeature}
         />
       )}
       {activeTab === 'plugins' && <MAdminPluginsPanel />}

@@ -509,6 +509,38 @@ export function useAdmin() {
     }
   }
 
+  // The admin shell's own actions, the same on desktop and phone.
+  const saveDemoBaseline = async () => {
+    try {
+      await adminApi.saveDemoBaseline()
+      toast.success('Baseline saved! Resets will restore to this state.')
+    } catch (e: unknown) {
+      toast.error((e as { response?: { data?: { error?: string } } }).response?.data?.error || 'Failed to save baseline')
+    }
+  }
+
+  const toggleBagTracking = async () => {
+    const next = !bagTrackingEnabled
+    setBagTrackingEnabled(next)
+    try {
+      await adminApi.updateBagTracking(next)
+    } catch {
+      setBagTrackingEnabled(!next)
+    }
+  }
+
+  const toggleCollabFeature = async (key: string) => {
+    const previous = (collabFeatures as Record<string, boolean>)[key]
+    setCollabFeatures({ ...collabFeatures, [key]: !previous })
+    try {
+      await adminApi.updateCollabFeatures({ [key]: !previous })
+    } catch {
+      // Only this key rolls back: a slower request must not undo a toggle the
+      // admin made in the meantime.
+      setCollabFeatures(prev => ({ ...prev, [key]: previous }))
+    }
+  }
+
   return {
     // store-derived
     demoMode, serverTimezone, hour12, mcpEnabled, devMode, managed, currentUser,
@@ -550,5 +582,6 @@ export function useAdmin() {
     toggleKey, handleSaveApiKeys, handleValidateKeys, handleValidateKey,
     handleCreateUser, handleCreateInvite, handleDeleteInvite, copyInviteLink,
     handleEditUser, handleSaveUser, handleDeleteUser,
+    saveDemoBaseline, toggleBagTracking, toggleCollabFeature,
   }
 }

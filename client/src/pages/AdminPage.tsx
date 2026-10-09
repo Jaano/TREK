@@ -1,6 +1,5 @@
 import SchoolHolidayCatalog from '../components/Admin/SchoolHolidayCatalog'
 import React, { Fragment } from 'react'
-import { adminApi } from '../api/client'
 import DevNotificationsPanel from '../components/Admin/DevNotificationsPanel'
 import DefaultUserSettingsTab from '../components/Admin/DefaultUserSettingsTab'
 import { useTranslation } from '../i18n'
@@ -41,12 +40,12 @@ function AdminPageDesktop(): React.ReactElement {
   // each tab/section renders from a dedicated sub-component.
   const admin = useAdmin()
   const {
-    demoMode, mcpEnabled, devMode, managed, toast,
+    demoMode, mcpEnabled, devMode, managed,
     activeTab, setActiveTab, stats,
-    bagTrackingEnabled, setBagTrackingEnabled,
-    collabFeatures, setCollabFeatures,
+    bagTrackingEnabled, collabFeatures,
     serverTimezone,
     updateInfo, setShowUpdateModal,
+    saveDemoBaseline, toggleBagTracking, toggleCollabFeature,
   } = admin
 
   const gUsers = t('admin.group.users')
@@ -124,14 +123,7 @@ function AdminPageDesktop(): React.ReactElement {
                 <p className="m-0 mt-0.5 text-content-muted" style={fs(12.5, 'body')}>Save current state as the hourly reset point. All admin trips and settings will be preserved.</p>
               </div>
               <button type="button"
-                onClick={async () => {
-                  try {
-                    await adminApi.saveDemoBaseline()
-                    toast.success('Baseline saved! Resets will restore to this state.')
-                  } catch (e) {
-                    toast.error(e.response?.data?.error || 'Failed to save baseline')
-                  }
-                }}
+                onClick={saveDemoBaseline}
                 className={`${SETTINGS_BUTTON_PRIMARY} flex-none`}
                 style={fs(13, 'body')}
               >
@@ -164,21 +156,7 @@ function AdminPageDesktop(): React.ReactElement {
 
           {activeTab === 'addons' && (
             <div className="space-y-6">
-              <AddonManager bagTrackingEnabled={bagTrackingEnabled} onToggleBagTracking={async () => {
-                const next = !bagTrackingEnabled
-                setBagTrackingEnabled(next)
-                try { await adminApi.updateBagTracking(next) } catch { setBagTrackingEnabled(!next) }
-              }} collabFeatures={collabFeatures} onToggleCollabFeature={async (key: string) => {
-                const previous = collabFeatures[key]
-                setCollabFeatures({ ...collabFeatures, [key]: !previous })
-                try {
-                  await adminApi.updateCollabFeatures({ [key]: !previous })
-                } catch {
-                  // Only this key rolls back — a slower request must not undo a toggle
-                  // the admin made in the meantime.
-                  setCollabFeatures(prev => ({ ...prev, [key]: previous }))
-                }
-              }} />
+              <AddonManager bagTrackingEnabled={bagTrackingEnabled} onToggleBagTracking={toggleBagTracking} collabFeatures={collabFeatures} onToggleCollabFeature={toggleCollabFeature} />
             </div>
           )}
 
