@@ -1,10 +1,7 @@
-import { useEffect, useId, useState, type ComponentType } from 'react'
-import { adminApi } from '../../api/client'
+import { useId, type ComponentType } from 'react'
 import { useTranslation } from '../../i18n'
-import { useAddonStore } from '../../store/addonStore'
 import { useIsDark } from '../../hooks/useIsDark'
-import { useToast } from '../shared/Toast'
-import { Puzzle, ListChecks, Wallet, FileText, CalendarDays, Globe, Briefcase, Image, Terminal, Link2, Compass, BookOpen, MessageCircle, StickyNote, BarChart3, Sparkles, Luggage, Plane, Server, Cloud, Bookmark, Users, Loader2, RefreshCw } from 'lucide-react'
+import { Puzzle, ListChecks, Wallet, FileText, CalendarDays, Globe, Briefcase, Image, Terminal, Link2, Compass, BookOpen, Sparkles, Luggage, Plane, Server, Cloud, Bookmark, Users, Loader2, RefreshCw } from 'lucide-react'
 import CustomSelect from '../shared/CustomSelect'
 import { asLlmVision, LLM_VISION_MODES, type LlmVision } from '@trek/shared'
 import EmptyState from '../shared/EmptyState'
@@ -17,6 +14,9 @@ import { Tooltip } from '../shared/Tooltip'
 import { fs } from '../shared/DialogShell'
 import { EditorField, INPUT, Segmented } from '../shared/dialogParts'
 import { SettingsCard, SettingsHint, StatusPill, SETTINGS_BUTTON_PRIMARY } from '../Settings/settingsKit'
+import { type Addon, type CollabFeatures, COLLAB_SUB_FEATURES, getAddonLabel, MASKED, RECOMMENDED_MODELS } from './addons/addonModel'
+import { useAddonManager } from './addons/useAddonManager'
+import { useLlmParsingConfig } from './addons/useLlmParsingConfig'
 
 // Keys are the `icon` column from the addons table (see server seeds.ts); anything
 // unknown falls back to Puzzle. Users/Sparkles cover collab and llm_parsing, which
@@ -52,24 +52,6 @@ const PROVIDER_ICONS: Record<string, ComponentType<{ size?: number }>> = {
   ...DOCUMENT_PROVIDER_ICONS,
 }
 
-interface Addon {
-  id: string
-  name: string
-  description: string
-  icon: string
-  type: string
-  enabled: boolean
-  config?: Record<string, unknown>
-}
-
-interface ProviderOption {
-  key: string
-  label: string
-  description: string
-  enabled: boolean
-  toggle: () => Promise<void>
-}
-
 interface AddonIconProps {
   name: string
   size?: number
@@ -99,91 +81,12 @@ const TYPE_META: Record<string, { icon: ComponentType<{ size?: number }>; labelK
   integration: { icon: Link2, labelKey: 'admin.addons.type.integration', hintKey: 'admin.addons.integrationHint' },
 }
 
-interface CollabFeatures { chat: boolean; notes: boolean; links?: boolean; polls: boolean; whatsnext: boolean }
-
-const COLLAB_SUB_FEATURES = [
-  { key: 'chat', icon: MessageCircle, titleKey: 'admin.collab.chat.title', subtitleKey: 'admin.collab.chat.subtitle' },
-  { key: 'notes', icon: StickyNote, titleKey: 'admin.collab.notes.title', subtitleKey: 'admin.collab.notes.subtitle' },
-  { key: 'links', icon: Link2, titleKey: 'collab.tabs.links', subtitleKey: 'admin.collab.links.subtitle' },
-  { key: 'polls', icon: BarChart3, titleKey: 'admin.collab.polls.title', subtitleKey: 'admin.collab.polls.subtitle' },
-  { key: 'whatsnext', icon: Sparkles, titleKey: 'admin.collab.whatsnext.title', subtitleKey: 'admin.collab.whatsnext.subtitle' },
-] as const
-
 export default function AddonManager({ bagTrackingEnabled, onToggleBagTracking, collabFeatures, onToggleCollabFeature }: { bagTrackingEnabled?: boolean; onToggleBagTracking?: () => void; collabFeatures?: CollabFeatures; onToggleCollabFeature?: (key: string) => void }) {
   const { t } = useTranslation()
   const dark = useIsDark()
-  const toast = useToast()
-  const refreshGlobalAddons = useAddonStore(s => s.loadAddons)
-  const [addons, setAddons] = useState<Addon[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    void loadAddons().finally(() => setLoading(false))
-  }, [])
-
-  const loadAddons = async () => {
-    try {
-      const data = await adminApi.addons()
-      setAddons(data.addons)
-    } catch (err: unknown) {
-      toast.error(t('admin.addons.toast.error'))
-    }
-  }
-
-  /** Optimistic flip, per-row rollback on failure. Rolling the whole addons
-   *  snapshot back instead would undo a toggle the user hit in parallel. */
-  const handleToggle = async (addon: Addon) => {
-    const newEnabled = !addon.enabled
-    setAddons(prev => prev.map(a => a.id === addon.id ? { ...a, enabled: newEnabled } : a))
-    try {
-      await adminApi.updateAddon(addon.id, { enabled: newEnabled })
-    } catch (err: unknown) {
-      setAddons(prev => prev.map(a => a.id === addon.id ? { ...a, enabled: !newEnabled } : a))
-      toast.error(t('admin.addons.toast.error'))
-      return
-    }
-    refreshGlobalAddons()
-    // Journey off disables every photo provider with it, and the response carries
-    // only Journey. Without re-reading, switching Journey back on brings the shelf
-    // up with providers the database has long since turned off.
-    // Same for Documents: switching it off disables every document provider in
-    // the database, and the response carries only the addon itself.
-    if (addon.id === 'journey' || addon.id === 'documents') await loadAddons()
-    toast.success(t('admin.addons.toast.updated'))
-  }
-
-  const isPhotoProviderAddon = (addon: Addon) => {
-    return addon.type === 'photo_provider'
-  }
-
-  const isDocumentProviderAddon = (addon: Addon) => {
-    return addon.type === 'document_provider'
-  }
-
-  const isPhotosAddon = (addon: Addon) => {
-    const haystack = `${addon.id} ${addon.name} ${addon.description}`.toLowerCase()
-    return addon.type === 'trip' && (addon.icon === 'Image' || haystack.includes('photo') || haystack.includes('memories'))
-  }
-
-  const photoProviderAddons = addons.filter(isPhotoProviderAddon)
-  const documentProviderAddons = addons.filter(isDocumentProviderAddon)
-  const tripAddons = addons.filter(a => a.type === 'trip' && !isPhotosAddon(a))
-  const globalAddons = addons.filter(a => a.type === 'global')
-  const integrationAddons = addons.filter(a => a.type === 'integration')
-  const providerOptions: ProviderOption[] = photoProviderAddons.map((provider) => ({
-      key: provider.id,
-      label: provider.name,
-      description: provider.description,
-      enabled: provider.enabled,
-      toggle: () => handleToggle(provider),
-    }))
-  const documentProviderOptions: ProviderOption[] = documentProviderAddons.map((provider) => ({
-      key: provider.id,
-      label: provider.name,
-      description: provider.description,
-      enabled: provider.enabled,
-      toggle: () => handleToggle(provider),
-    }))
+  const {
+    addons, loading, handleToggle, tripAddons, globalAddons, integrationAddons, providerOptions, documentProviderOptions,
+  } = useAddonManager()
 
   if (loading) {
     return (
@@ -365,17 +268,8 @@ function GroupHead({ icon: Icon, label, hint, addons, t }: {
   )
 }
 
-const MASKED = '••••••••'
 const EYEBROW = 'font-geist font-bold uppercase tracking-[.08em] text-content-faint'
 const SMALL_BUTTON = 'inline-flex flex-none items-center rounded-[9px] px-2.5 py-1 font-medium transition-colors disabled:cursor-default disabled:opacity-60'
-const DEFAULT_OLLAMA_URL = 'http://localhost:11434/v1'
-
-/** Curated models the local extractor is tuned for, pullable via Ollama. The router drives
- *  one model per document via Ollama's grammar-constrained `format`; "thinking" is disabled
- *  automatically, so the Qwen3 family works without any tuning. A host only needs one. */
-const RECOMMENDED_MODELS: { id: string; label: string; note: string; recommended: boolean; vision: boolean }[] = [
-  { id: 'qwen3.5:4b', label: 'Qwen3.5 — 4B', note: 'Recommended · small and quick on CPU, 3.4 GB download, 256K context (thinking auto-disabled) · Apache-2.0', recommended: true, vision: true },
-]
 
 /**
  * Instance-wide AI-parsing config. When set, applies to the whole instance and
@@ -385,83 +279,11 @@ const RECOMMENDED_MODELS: { id: string; label: string; note: string; recommended
  */
 function LlmParsingConfig({ addon }: { addon: Addon }) {
   const { t } = useTranslation()
-  const toast = useToast()
-  const cfg = (addon.config ?? {}) as Record<string, unknown>
-  const [provider, setProvider] = useState<string>((cfg.provider as string) ?? 'local')
-  const [model, setModel] = useState<string>((cfg.model as string) ?? '')
-  const [baseUrl, setBaseUrl] = useState<string>((cfg.baseUrl as string) ?? '')
-  const [apiKey, setApiKey] = useState<string>((cfg.apiKey as string) ?? '')
-  const [vision, setVision] = useState<LlmVision>(asLlmVision(cfg.vision))
-  const [saving, setSaving] = useState(false)
+  const {
+    provider, setProvider, model, setModel, baseUrl, setBaseUrl, apiKey, setApiKey, vision, setVision, saving,
+    installed, modelsErr, loadingModels, pulling, pullPct, pullStatus, isInstalled, loadModels, pull, save,
+  } = useLlmParsingConfig(addon)
   const fieldId = useId()
-
-  // Local-provider model management.
-  const [installed, setInstalled] = useState<string[]>([])
-  const [modelsErr, setModelsErr] = useState('')
-  const [loadingModels, setLoadingModels] = useState(false)
-  const [pulling, setPulling] = useState<string | null>(null)
-  const [pullPct, setPullPct] = useState(0)
-  const [pullStatus, setPullStatus] = useState('')
-
-  const effectiveUrl = baseUrl.trim() || DEFAULT_OLLAMA_URL
-  const isInstalled = (id: string) => installed.some(n => n === id || n.startsWith(id + ':') || n.startsWith(id))
-
-  const loadModels = async () => {
-    if (provider !== 'local') return
-    setLoadingModels(true)
-    setModelsErr('')
-    try {
-      const res = await adminApi.llmLocalModels(effectiveUrl)
-      setInstalled(res.models.map(m => m.name))
-    } catch (e: unknown) {
-      setModelsErr(e instanceof Error ? e.message : 'Could not reach the local LLM server')
-      setInstalled([])
-    } finally {
-      setLoadingModels(false)
-    }
-  }
-
-  // Load installed models when the local provider is active.
-  useEffect(() => {
-    if (provider === 'local') void loadModels()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [provider])
-
-  const pull = async (id: string) => {
-    if (pulling) return
-    setPulling(id)
-    setPullPct(0)
-    setPullStatus('starting…')
-    try {
-      await adminApi.llmLocalPull(effectiveUrl, id, (p) => {
-        if (p.error) throw new Error(p.error)
-        if (p.status) setPullStatus(p.status)
-        if (p.total && p.completed != null) setPullPct(Math.round((p.completed / p.total) * 100))
-      })
-      toast.success('Model pulled')
-      setModel(id)
-      await loadModels()
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Pull failed')
-    } finally {
-      setPulling(null)
-      setPullPct(0)
-      setPullStatus('')
-    }
-  }
-
-  const save = async () => {
-    setSaving(true)
-    try {
-      // Send the masked sentinel unchanged so the server keeps the stored key.
-      await adminApi.updateAddon(addon.id, { config: { provider, model: model.trim(), baseUrl: provider === 'anthropic' ? '' : baseUrl.trim(), apiKey, vision } })
-      toast.success('Saved')
-    } catch {
-      toast.error('Failed to save')
-    } finally {
-      setSaving(false)
-    }
-  }
 
   const providerOptions = [
     { value: 'local', label: 'Local · OpenAI-compatible', icon: <Server size={14} />, badge: 'Ollama' },
@@ -584,16 +406,3 @@ function LlmParsingConfig({ addon }: { addon: Addon }) {
     </li>
   )
 }
-
-function getAddonLabel(t: (key: string) => string, addon: Addon): { name: string; description: string } {
-  const nameKey = `admin.addons.catalog.${addon.id}.name`
-  const descKey = `admin.addons.catalog.${addon.id}.description`
-  const translatedName = t(nameKey)
-  const translatedDescription = t(descKey)
-
-  return {
-    name: translatedName !== nameKey ? translatedName : addon.name,
-    description: translatedDescription !== descKey ? translatedDescription : addon.description,
-  }
-}
-
