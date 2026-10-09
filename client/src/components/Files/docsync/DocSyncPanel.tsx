@@ -4,6 +4,7 @@ import { DialogHeader, DialogShell, DialogTile, NEUTRAL_TINT } from '../../share
 import { useTranslation } from '../../../i18n/TranslationContext'
 import { DOCUMENT_PROVIDER_ICONS } from '../../shared/DocumentProviderIcons'
 import { StateBadge } from './DocSyncBits'
+import { slugFor } from './docSyncModel'
 import { useConflicts } from './useConflicts'
 import { storeName, useDocSync, type DocSyncLink, type DocSyncProvider } from './useDocSync'
 import DocSyncBinding from './DocSyncBinding'
@@ -415,20 +416,4 @@ function Empty() {
       <p className="mx-auto mt-1 max-w-sm text-caption text-content-muted">{t('docsync.noProvidersHint')}</p>
     </div>
   )
-}
-
-/**
- * A folder name from the trip's own title, so nobody has to invent one.
- *
- * The id is appended because two trips can share a title and a folder cannot.
- */
-function slugFor(title: string | undefined, tripId: number | string): string {
-  const base = (title || 'trek')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40)
-  return `${base || 'trek'}-${tripId}`
 }

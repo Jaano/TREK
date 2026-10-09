@@ -1,8 +1,9 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useId, useMemo, useState } from 'react'
 import { FolderPlus, Loader2, Search } from 'lucide-react'
 import { DialogHeader, DialogShell, DialogTile, NEUTRAL_TINT } from '../../shared/DialogShell'
 import { useTranslation } from '../../../i18n/TranslationContext'
-import type { DocSyncConnection, DocSyncScope, useDocSync } from './useDocSync'
+import type { DocSyncConnection, useDocSync } from './useDocSync'
+import { NEW_SCOPE, useScopePicker } from './useScopePicker'
 
 /**
  * Picking the container a trip lives in.
@@ -32,65 +33,19 @@ export default function DocSyncScopeModal({
 }) {
   const { t } = useTranslation()
   const labelId = useId()
-  const [scopes, setScopes] = useState<DocSyncScope[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
-  const [newName, setNewName] = useState(suggestedName)
-  const [working, setWorking] = useState<string | null>(null)
-
-  // `loadScopes`, not `sync`: the hook hands back a fresh object on every
-  // render of the panel above, so depending on it re-listed the provider's
-  // folders each time anything up there changed. The callback itself is
-  // stable. Taken out of `sync` first, because calling it as `sync.loadScopes`
-  // inside the effect makes the whole object a dependency again.
-  const { loadScopes } = sync
-  useEffect(() => {
-    let cancelled = false
-    void (async () => {
-      const res = await loadScopes(connection.id)
-      if (cancelled) return
-      setScopes(res.scopes)
-      setError(res.error ?? null)
-    })()
-    return () => { cancelled = true }
-  }, [connection.id, loadScopes])
+  const { scopes, error, name: newName, setName: setNewName, working, bind, createAndBind } = useScopePicker({
+    connectionId: connection.id,
+    suggestedName,
+    sync,
+    onBound,
+  })
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase()
     if (!needle || !scopes) return scopes ?? []
     return scopes.filter(s => s.label.toLowerCase().includes(needle))
   }, [scopes, query])
-
-  const bind = async (scope: DocSyncScope) => {
-    setWorking(scope.scopeKey)
-    const ok = await sync.createLink({
-      connectionId: connection.id,
-      scopeKey: scope.scopeKey,
-      remoteRootId: scope.remoteRootId,
-      remoteRootPath: scope.remoteRootPath,
-      remoteLabel: scope.label,
-      direction: 'both',
-      deletePolicy: 'unlink',
-      conflictPolicy: 'manual',
-      syncEnabled: true,
-    })
-    setWorking(null)
-    if (ok) onBound()
-  }
-
-  const createAndBind = async () => {
-    const name = newName.trim()
-    if (!name) return
-    setWorking('__new__')
-    try {
-      // A refused create leaves nothing to bind; the hook has already put the
-      // reason where the dialog shows it.
-      const scope = await sync.createScope(connection.id, name)
-      if (scope) await bind(scope)
-    } finally {
-      setWorking(null)
-    }
-  }
 
   return (
     <DialogShell
@@ -126,7 +81,7 @@ export default function DocSyncScopeModal({
               disabled={!newName.trim() || working !== null}
               className="flex shrink-0 items-center gap-2 rounded-lg bg-accent px-3.5 py-2 text-body font-medium text-accent-text transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {working === '__new__' ? <Loader2 size={14} className="animate-spin" /> : <FolderPlus size={14} />}
+              {working === NEW_SCOPE ? <Loader2 size={14} className="animate-spin" /> : <FolderPlus size={14} />}
               {t('docsync.scope.createAction')}
             </button>
           </div>

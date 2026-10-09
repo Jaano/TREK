@@ -3,6 +3,7 @@ import { useTranslation } from '../../../i18n/TranslationContext'
 import { DOCUMENT_PROVIDER_ICONS } from '../../shared/DocumentProviderIcons'
 import TrekIcon from '../../shared/TrekIcon'
 import { Badge } from './DocSyncBits'
+import { toggledDirection } from './docSyncModel'
 
 export type SyncDirection = 'both' | 'pull' | 'push'
 
@@ -58,10 +59,8 @@ export default function DocSyncFlow({
   /** Turning a lane off leaves the other one; turning the last one off is refused. */
   const toggle = (lane: 'push' | 'pull') => {
     if (disabled) return
-    const nextPush = lane === 'push' ? !pushOn : pushOn
-    const nextPull = lane === 'pull' ? !pullOn : pullOn
-    if (!nextPush && !nextPull) return
-    onChange(nextPush && nextPull ? 'both' : nextPush ? 'push' : 'pull')
+    const next = toggledDirection(direction, lane)
+    if (next) onChange(next)
   }
 
   return (
