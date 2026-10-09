@@ -1,11 +1,11 @@
-import { FileText, MapPin, Pencil, Trash2 } from 'lucide-react'
+import { MapPin } from 'lucide-react'
 import MDancingTrek from '../../../components/MDancingTrek'
 import { RES_ICONS } from '../../../../components/Planner/DayPlanSidebar.constants'
 import { formatTime, formatPriceText } from '../../../../utils/formatters'
 import { useTranslation } from '../../../../i18n'
 import type { Reservation } from '../../../../types'
-import MConfirmSheet from '../../settings/MConfirmSheet'
-import { ConfirmationCode, Field, ReservationPluginSlots, SectionHeader, StatusDot, TabScroller, TravelerAvatars, TravelerFilterRow } from './tabChrome'
+import { CardActions, CardDeleteSheet, CardFiles, CardTitleButton, CardWhenAndCode } from './MReservationCardParts'
+import { Field, ReservationPluginSlots, SectionHeader, StatusDot, TabScroller, TravelerAvatars, TravelerFilterRow } from './tabChrome'
 import { STATUS_COLOR, type MTabScreenProps } from './tabModel'
 import { cardWhen, parseTransportMeta } from './transportsModel'
 import { BOOKING_TYPE_COLOR } from '../../../../components/Planner/bookings/bookingsModel'
@@ -136,59 +136,22 @@ function BookingCard({ res, planner, canEdit, compact }: {
       {/* Header */}
       <div className="flex items-center gap-[7px] border-b border-[color:var(--m-rowbr)] px-3 py-[10px]" style={{ background: tint }}>
         <StatusDot color={dotColor} />
-        <button type="button" onClick={openEdit} className="flex min-w-0 flex-1 items-center gap-[7px] text-start">
-          <span className="inline-flex flex-none items-center gap-1 rounded-full border border-[color:var(--m-rowbr)] bg-m-card px-2 py-[2px] font-geist text-[0.5625rem] font-bold uppercase tracking-[.06em] text-m-muted">
-            <TypeIcon size={10} strokeWidth={2.2} style={{ color: typeColor }} />
-            {t(`reservations.type.${res.type}`)}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-[0.78125rem] font-bold text-m-ink">{res.title}</span>
-          {!!res.needs_review && (
-            <span className="flex-none rounded-full bg-[rgba(232,161,58,.16)] px-2 py-[2px] font-geist text-[0.5rem] font-bold uppercase tracking-[.03em] text-[color:var(--m-st-pending)]">
-              {t('reservations.needsReview')}
-            </span>
-          )}
-        </button>
-        {canEdit && (
-          <button
-            type="button"
-            onClick={openEdit}
-            aria-label={t('common.edit')}
-            className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[color:var(--m-ic)] text-m-muted"
-          >
-            <Pencil size={12} strokeWidth={2} />
-          </button>
-        )}
-        {canEdit && (
-          <button
-            type="button"
-            onClick={card.askDelete}
-            aria-label={t('common.delete')}
-            className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[color:var(--m-ic)] text-m-muted"
-          >
-            <Trash2 size={12} strokeWidth={2} />
-          </button>
-        )}
+        <CardTitleButton res={res} TypeIcon={TypeIcon} typeColor={typeColor} onOpen={openEdit} t={t} />
+        {canEdit && <CardActions onEdit={openEdit} onDelete={card.askDelete} t={t} />}
       </div>
 
       {/* Body — split around the booking code so the reveal can be its own
           control instead of a click handler buried inside the card button. */}
       {!compact && (
         <div className="px-3 pb-3 pt-[9px]">
-          <button type="button" onClick={openEdit} className="block w-full text-start">
-            <div className="flex gap-2">
-              <Field label={t('reservations.date')} className="flex-[1.4]">{dayValue}</Field>
-              <Field label={t('reservations.time')} className="flex-1" tabular>{timeValue}</Field>
-            </div>
-          </button>
-
-          {res.confirmation_number && (
-            <ConfirmationCode
-              code={res.confirmation_number}
-              label={t('reservations.confirmationCode')}
-              blurred={card.codeBlurred}
-              onToggle={card.toggleCode}
-            />
-          )}
+          <CardWhenAndCode
+            dayValue={dayValue}
+            timeValue={timeValue}
+            code={res.confirmation_number}
+            card={card}
+            onOpen={openEdit}
+            t={t}
+          />
 
           <button type="button" onClick={openEdit} className="block w-full text-start">
             {metaCells.length > 0 && (
@@ -214,44 +177,13 @@ function BookingCard({ res, planner, canEdit, compact }: {
               </div>
             )}
 
-            {files.length > 0 && (
-              <div className="mt-2">
-                <div className="mb-[3px] font-geist text-[0.5625rem] font-bold uppercase tracking-[.08em] text-m-faint">
-                  {t('files.title')}
-                </div>
-                <div className="flex flex-col gap-1">
-                  {/* A span with a button role, not a <button>: the whole card body
-                      is already one, and buttons cannot nest. */}
-                  {files.map(f => (
-                    <span
-                      key={f.id}
-                      role="button"
-                      tabIndex={0}
-                      {...card.fileChip(f)}
-                      className="flex items-center gap-[6px] rounded-[10px] border border-[color:var(--m-rowbr)] bg-m-card px-[10px] py-[7px]"
-                    >
-                      <FileText size={12} strokeWidth={2} className="flex-none text-m-muted" />
-                      <span className="truncate font-geist text-[0.65625rem] font-semibold text-m-muted">{f.original_name}</span>
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
+            <CardFiles files={files} card={card} t={t} />
           </button>
         </div>
       )}
       {!compact && <ReservationPluginSlots tripId={planner.tripId} reservationId={res.id} />}
 
-      <MConfirmSheet
-        open={card.confirmingDelete}
-        onClose={card.cancelDelete}
-        title={t('reservations.confirm.deleteTitle')}
-        message={t('reservations.confirm.deleteBody', { name: res.title })}
-        confirmLabel={t('common.delete')}
-        cancelLabel={t('common.cancel')}
-        danger
-        onConfirm={card.confirmDelete}
-      />
+      <CardDeleteSheet title={res.title} card={card} t={t} />
     </div>
   )
 }
