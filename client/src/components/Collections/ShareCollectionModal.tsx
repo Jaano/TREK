@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import React, { useId, type ReactNode } from 'react'
 import { avatarSrc } from '../../utils/avatarSrc'
 import { UserPlus, UserMinus, UserX, Loader2, Clock, Crown, LogOut, Share2 } from 'lucide-react'
 import type { CollectionMember, CollectionRole } from '@trek/shared'
@@ -6,13 +6,9 @@ import { DialogButton, DialogFooter, DialogHeader, DialogSection, DialogShell, D
 import ConfirmDialog from '../shared/ConfirmDialog'
 import CustomSelect from '../shared/CustomSelect'
 import { Tooltip } from '../shared/Tooltip'
-import { useToast } from '../shared/Toast'
 import { TripMemberAvatar } from '../Trips/TripMemberAvatar'
-import { useCollectionStore } from '../../store/collectionStore'
-import { useAuthStore } from '../../store/authStore'
-import { collectionsApi } from '../../api/collections'
-import { getApiErrorMessage } from '../../utils/apiError'
 import type { TranslationFn } from '../../types'
+import { useCollectionSharing } from './useCollectionSharing'
 
 interface ShareCollectionModalProps {
   isOpen: boolean
@@ -64,113 +60,16 @@ export default function ShareCollectionModal({
   onAfterLeave,
   t,
 }: ShareCollectionModalProps): React.ReactElement | null {
-  const toast = useToast()
   const labelId = useId()
-  const currentUserId = useAuthStore(s => s.user?.id)
-  const invite = useCollectionStore(s => s.invite)
-  const cancelInvite = useCollectionStore(s => s.cancelInvite)
-  const removeMember = useCollectionStore(s => s.removeMember)
-  const setMemberRole = useCollectionStore(s => s.setMemberRole)
-  const leave = useCollectionStore(s => s.leave)
-
-  const [availableUsers, setAvailableUsers] = useState<{ id: number; username: string }[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | ''>('')
-  const [inviteRole, setInviteRole] = useState<CollectionRole>('editor')
-  const [settingRoleId, setSettingRoleId] = useState<number | null>(null)
-  const [inviting, setInviting] = useState(false)
-  const [cancellingId, setCancellingId] = useState<number | null>(null)
-  const [removingId, setRemovingId] = useState<number | null>(null)
-  const [confirmLeave, setConfirmLeave] = useState(false)
-  const [leaving, setLeaving] = useState(false)
-
-  // Load the invitable users whenever an owner opens the modal.
-  useEffect(() => {
-    if (!isOpen || !isOwner) return
-    let cancelled = false
-    collectionsApi.availableUsers(collectionId)
-      .then(data => { if (!cancelled) setAvailableUsers(data.users) })
-      .catch(() => { if (!cancelled) setAvailableUsers([]) })
-    return () => { cancelled = true }
-  }, [isOpen, isOwner, collectionId, members.length])
-
-  // Reset transient state on close.
-  useEffect(() => {
-    if (!isOpen) {
-      setSelectedUserId('')
-      setConfirmLeave(false)
-    }
-  }, [isOpen])
-
-  const sortedMembers = useMemo(() => {
-    // Owner first, then accepted, then pending — alphabetised within each band.
-    const rank = (m: CollectionMember) => (m.is_owner ? 0 : m.status === 'accepted' ? 1 : 2)
-    return [...members].sort((a, b) => rank(a) - rank(b) || a.username.localeCompare(b.username))
-  }, [members])
+  const {
+    currentUserId, availableUsers, sortedMembers, selectedUserId, setSelectedUserId, inviteRole, setInviteRole,
+    inviting, confirmLeave, setConfirmLeave, leaving, busyUserId, setRole, cancel, remove, handleInvite, handleLeave,
+  } = useCollectionSharing({ open: isOpen, collectionId, isOwner, members, onAfterLeave, t })
+  const settingRoleId = busyUserId('role')
+  const cancellingId = busyUserId('cancel')
+  const removingId = busyUserId('remove')
 
   if (!isOpen) return null
-
-  const handleInvite = async () => {
-    if (selectedUserId === '' || inviting) return
-    setInviting(true)
-    try {
-      await invite(collectionId, Number(selectedUserId), inviteRole)
-      toast.success(t('collections.invite.sent'))
-      setSelectedUserId('')
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('collections.invite.error')))
-    } finally {
-      setInviting(false)
-    }
-  }
-
-  const handleSetRole = async (userId: number, role: CollectionRole) => {
-    if (settingRoleId != null) return
-    setSettingRoleId(userId)
-    try {
-      await setMemberRole(collectionId, userId, role)
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setSettingRoleId(null)
-    }
-  }
-
-  const handleCancel = async (userId: number) => {
-    if (cancellingId != null) return
-    setCancellingId(userId)
-    try {
-      await cancelInvite(collectionId, userId)
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setCancellingId(null)
-    }
-  }
-
-  const handleRemove = async (userId: number) => {
-    if (removingId != null) return
-    setRemovingId(userId)
-    try {
-      await removeMember(collectionId, userId)
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setRemovingId(null)
-    }
-  }
-
-  const handleLeave = async () => {
-    setLeaving(true)
-    try {
-      await leave(collectionId)
-      toast.success(t('collections.share.left'))
-      onAfterLeave()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setLeaving(false)
-    }
-  }
 
   const roleOptions = ROLE_ORDER.map(r => ({ value: r, label: t(`collections.role.${r}`) }))
 
@@ -214,8 +113,8 @@ export default function ShareCollectionModal({
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <CustomSelect
-                    value={selectedUserId}
-                    onChange={v => setSelectedUserId(v === '' ? '' : Number(v))}
+                    value={selectedUserId ?? ''}
+                    onChange={v => setSelectedUserId(v === '' ? null : Number(v))}
                     options={availableUsers.map(u => ({ value: u.id, label: u.username }))}
                     placeholder={t('collections.share.inviteUser')}
                     searchable
@@ -228,7 +127,7 @@ export default function ShareCollectionModal({
                 <DialogButton
                   variant="primary"
                   onClick={() => void handleInvite()}
-                  disabled={selectedUserId === '' || inviting}
+                  disabled={selectedUserId == null || inviting}
                   icon={inviting ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} strokeWidth={2.2} />}
                 >
                   {t('collections.share.sendInvite')}
@@ -259,7 +158,7 @@ export default function ShareCollectionModal({
                     <CustomSelect
                       size="sm"
                       value={member.role ?? 'editor'}
-                      onChange={v => handleSetRole(member.user_id, v as CollectionRole)}
+                      onChange={v => setRole(member.user_id, v as CollectionRole)}
                       options={roleOptions}
                       disabled={settingRoleId === member.user_id}
                     />
@@ -282,12 +181,12 @@ export default function ShareCollectionModal({
                   </div>
                   {standing}
                   {isOwner && pending && (
-                    <RowAction label={t('collections.share.cancel')} onClick={() => handleCancel(member.user_id)} disabled={cancellingId === member.user_id}>
+                    <RowAction label={t('collections.share.cancel')} onClick={() => cancel(member.user_id)} disabled={cancellingId === member.user_id}>
                       {cancellingId === member.user_id ? <Loader2 size={14} className="animate-spin" /> : <UserX size={15} />}
                     </RowAction>
                   )}
                   {isOwner && !member.is_owner && member.status === 'accepted' && (
-                    <RowAction label={t('collections.share.remove')} onClick={() => handleRemove(member.user_id)} disabled={removingId === member.user_id}>
+                    <RowAction label={t('collections.share.remove')} onClick={() => remove(member.user_id)} disabled={removingId === member.user_id}>
                       {removingId === member.user_id ? <Loader2 size={14} className="animate-spin" /> : <UserMinus size={15} />}
                     </RowAction>
                   )}
