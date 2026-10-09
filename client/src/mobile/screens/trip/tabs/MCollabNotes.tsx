@@ -6,7 +6,7 @@ import { sanitizedMarkdownPlugins, sanitizedMarkdownComponents } from '../../../
 import { Check, ExternalLink, FileText, Paperclip, Pin, PinOff, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import MDancingTrek from '../../../components/MDancingTrek'
 import { collabApi } from '../../../../api/client'
-import { addListener, removeListener } from '../../../../api/websocket'
+import { useCollabNotesData } from '../../../../components/Collab/useCollabNotesData'
 import { openFile } from '../../../../utils/fileDownload'
 import { safeExternalHref } from '../../../../utils/safeUrl'
 import MSheet from '../../../components/MSheet'
@@ -47,9 +47,9 @@ function linkHost(url: string): string {
 }
 
 /**
- * Trip-tab Collab / Notes. Same architecture as MCollabChat: own state, own
- * `collabApi` calls, own WebSocket listener — no `tripStore`/`tripActions`
- * (10-tab-databindings.md §8.4). The demo only has a placeholder for this
+ * Trip-tab Collab / Notes. The list and its WebSocket listener come from
+ * useCollabNotesData, the hook the desktop panel reads too; no
+ * `tripStore`/`tripActions` (10-tab-databindings.md §8.4). The demo only has a placeholder for this
  * sub-tab, so the card/filter/form design below is new (spec 03 §6.4 audit
  * item), built in the same visual language as MTransportsTab.
  */
@@ -58,43 +58,11 @@ export default function MCollabNotes({ planner }: MCollabNotesProps) {
   const canEdit = planner.can('collab_edit', planner.trip)
   const canUploadFiles = planner.can('file_upload', planner.trip)
 
-  const [notes, setNotes] = useState<CollabNoteData[]>([])
-  const [loading, setLoading] = useState(true)
+  const { notes, setNotes, loading, uploadNoteFiles } = useCollabNotesData({ tripId, t, toast })
   const [activeCategory, setActiveCategory] = useState<string | null>(null)
   const [formTarget, setFormTarget] = useState<NoteFormTarget | null>(null)
   const [viewingNote, setViewingNote] = useState<CollabNoteData | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
-
-  // ── Load ──
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    collabApi.getNotes(tripId).then((data: GetNotesResponse) => {
-      if (!cancelled) setNotes(data.notes || [])
-    }).catch(() => { /* leave notes empty */ }).finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [tripId])
-
-  // ── WebSocket (own listener, not handleRemoteEvent) ──
-  useEffect(() => {
-    const handler = (event: Record<string, unknown>) => {
-      if (String(event.tripId) !== String(tripId)) return
-      if (event.type === 'collab:note:created') {
-        const note = event.note as CollabNoteData
-        setNotes(prev => (prev.some(n => n.id === note.id) ? prev : [note, ...prev]))
-      }
-      if (event.type === 'collab:note:updated') {
-        const note = event.note as CollabNoteData
-        setNotes(prev => prev.map(n => (n.id === note.id ? { ...n, ...note } : n)))
-      }
-      if (event.type === 'collab:note:deleted') {
-        const noteId = event.noteId as number
-        setNotes(prev => prev.filter(n => n.id !== noteId))
-      }
-    }
-    addListener(handler)
-    return () => removeListener(handler)
-  }, [tripId])
 
   const categories = noteCategoriesList(notes)
   const colorMap = buildCategoryColorMap(notes)
@@ -113,17 +81,13 @@ export default function MCollabNotes({ planner }: MCollabNotesProps) {
       throw new Error('create failed')
     }
     if (data.pendingFiles.length > 0) {
-      for (const file of data.pendingFiles) {
-        const fd = new FormData()
-        fd.append('file', file)
-        try { await collabApi.uploadNoteFile(tripId, created.id, fd) } catch { toast.error(t('common.error')) }
-      }
+      await uploadNoteFiles(created.id, data.pendingFiles)
       const fresh = (await collabApi.getNotes(tripId)) as GetNotesResponse
       setNotes(fresh.notes || [])
       return
     }
     setNotes(prev => (prev.some(n => n.id === created.id) ? prev : [created, ...prev]))
-  }, [tripId, toast, t])
+  }, [tripId, toast, t, setNotes, uploadNoteFiles])
 
   const handleUpdate = useCallback(async (
     noteId: number,
@@ -139,17 +103,13 @@ export default function MCollabNotes({ planner }: MCollabNotesProps) {
       throw new Error('update failed')
     }
     if (pendingFiles.length > 0) {
-      for (const file of pendingFiles) {
-        const fd = new FormData()
-        fd.append('file', file)
-        try { await collabApi.uploadNoteFile(tripId, noteId, fd) } catch { toast.error(t('common.error')) }
-      }
+      await uploadNoteFiles(noteId, pendingFiles)
       const fresh = (await collabApi.getNotes(tripId)) as GetNotesResponse
       setNotes(fresh.notes || [])
       return
     }
     if (updated) setNotes(prev => prev.map(n => (n.id === noteId ? { ...n, ...updated } : n)))
-  }, [tripId, toast, t])
+  }, [tripId, toast, t, setNotes, uploadNoteFiles])
 
   const handleDelete = useCallback(async (noteId: number) => {
     try {
@@ -158,7 +118,7 @@ export default function MCollabNotes({ planner }: MCollabNotesProps) {
     } catch {
       toast.error(t('common.error'))
     }
-  }, [tripId, toast, t])
+  }, [tripId, toast, t, setNotes])
 
   // Returns whether the file is really gone — the form sheet only drops the
   // chip once the server confirmed it.
@@ -173,7 +133,7 @@ export default function MCollabNotes({ planner }: MCollabNotesProps) {
       toast.error(t('common.error'))
       return false
     }
-  }, [tripId, toast, t])
+  }, [tripId, toast, t, setNotes])
 
   const openNote = (note: CollabNoteData) => (canEdit ? setFormTarget(note) : setViewingNote(note))
 

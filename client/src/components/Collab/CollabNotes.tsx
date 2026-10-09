@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useId, useMemo } from 'react'
+import { useState, useCallback, useId, useMemo } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -10,13 +10,13 @@ import { DialogButton, DialogFooter, DialogHeader, DialogSection, DialogShell, D
 import { collabApi } from '../../api/client'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTripStore } from '../../store/tripStore'
-import { addListener, removeListener } from '../../api/websocket'
 import { useTranslation } from '../../i18n'
 import { useToast } from '../shared/Toast'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import EmptyState from '../shared/EmptyState'
 import type { User } from '../../types'
 import type { CollabNote } from './CollabNotes.types'
+import { useCollabNotesData } from './useCollabNotesData'
 import { FONT, NOTE_COLORS } from './CollabNotes.constants'
 import { NoteFormModal } from './CollabNotesFormModal'
 import { CategorySettingsModal } from './CollabNotesCategorySettingsModal'
@@ -43,8 +43,7 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
   const can = useCanDo()
   const trip = useTripStore((s) => s.trip)
   const canEdit = can('collab_edit', trip)
-  const [notes, setNotes] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { notes, setNotes, loading, uploadNoteFiles } = useCollabNotesData<CollabNote>({ tripId, t, toast, resetOnLoadError: true })
   const [showNewModal, setShowNewModal] = useState(false)
   const [editingNote, setEditingNote] = useState(null)
   const [viewingNote, setViewingNote] = useState<CollabNote | null>(null)
@@ -77,49 +76,6 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
     return NOTE_COLORS[Object.keys(categoryColors).length % NOTE_COLORS.length].value
   }
 
-  // ── Load notes on mount ──
-  useEffect(() => {
-    if (!tripId) return
-    let cancelled = false
-    setLoading(true)
-    collabApi.getNotes(tripId)
-      .then(data => { if (!cancelled) setNotes(data?.notes || data || []) })
-      .catch(() => { if (!cancelled) setNotes([]) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [tripId])
-
-  // ── WebSocket real-time sync ──
-  useEffect(() => {
-    if (!tripId) return
-
-    const handler = (msg) => {
-      // The panel is not remounted on a trip change, so an event still in flight
-      // from the trip we just left must not land in this list.
-      if (String(msg?.tripId) !== String(tripId)) return
-      if (msg.type === 'collab:note:created' && msg.note) {
-        setNotes(prev => {
-          if (prev.some(n => n.id === msg.note.id)) return prev
-          return [msg.note, ...prev]
-        })
-      }
-      if (msg.type === 'collab:note:updated' && msg.note) {
-        setNotes(prev =>
-          prev.map(n => (n.id === msg.note.id ? { ...n, ...msg.note } : n))
-        )
-      }
-      if (msg.type === 'collab:note:deleted') {
-        const deletedId = msg.noteId || msg.id
-        if (deletedId) {
-          setNotes(prev => prev.filter(n => n.id !== deletedId))
-        }
-      }
-    }
-
-    addListener(handler)
-    return () => removeListener(handler)
-  }, [tripId])
-
   // ── Actions ──
   const handleCreateNote = useCallback(async (data) => {
     const pendingFiles = data._pendingFiles || []
@@ -135,11 +91,7 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
       const note = created.note || created
       // Upload pending files
       if (pendingFiles.length > 0 && note.id) {
-        for (const file of pendingFiles) {
-          const fd = new FormData()
-          fd.append('file', file)
-          try { await collabApi.uploadNoteFile(tripId, note.id, fd) } catch (err) { console.error('Failed to upload note attachment:', err); toast.error(t('common.error')) }
-        }
+        await uploadNoteFiles(note.id, pendingFiles, err => console.error('Failed to upload note attachment:', err))
         // Reload note with attachments
         const fresh = await collabApi.getNotes(tripId)
         if (fresh?.notes) setNotes(fresh.notes)
@@ -151,7 +103,7 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
         return [note, ...prev]
       })
     }
-  }, [tripId, toast, t])
+  }, [tripId, toast, t, setNotes, uploadNoteFiles])
 
   const handleUpdateNote = useCallback(async (noteId, data, opts: { silent?: boolean } = {}) => {
     let result
@@ -168,7 +120,7 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
         prev.map(n => (n.id === noteId ? { ...n, ...updated } : n))
       )
     }
-  }, [tripId, toast, t])
+  }, [tripId, toast, t, setNotes])
 
   // A colour or a rename is N single-note writes; if one of them is rejected the
   // rest still have to run, and the list has to be re-read so it stops showing a
@@ -178,7 +130,7 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
       const fresh = await collabApi.getNotes(tripId)
       setNotes(fresh?.notes || fresh || [])
     } catch {}
-  }, [tripId])
+  }, [tripId, setNotes])
 
   const saveCategoryColors = useCallback(async (newMap) => {
     let failed = 0
@@ -224,16 +176,12 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
     delete data._pendingFiles
     await handleUpdateNote(editingNote.id, data)
     if (pendingFiles.length > 0) {
-      for (const file of pendingFiles) {
-        const fd = new FormData()
-        fd.append('file', file)
-        try { await collabApi.uploadNoteFile(tripId, editingNote.id, fd) } catch { toast.error(t('common.error')) }
-      }
+      await uploadNoteFiles(editingNote.id, pendingFiles)
       const fresh = await collabApi.getNotes(tripId)
       if (fresh?.notes) setNotes(fresh.notes)
       window.dispatchEvent(new Event('collab-files-changed'))
     }
-  }, [editingNote, tripId, handleUpdateNote, toast, t])
+  }, [editingNote, tripId, handleUpdateNote, setNotes, uploadNoteFiles])
 
   const handleDeleteNoteFile = useCallback(async (noteId, fileId) => {
     try { await collabApi.deleteNoteFile(tripId, noteId, fileId) } catch { toast.error(t('common.error')) }
@@ -249,7 +197,7 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
     }
     setNotes(prev => prev.filter(n => n.id !== noteId))
     window.dispatchEvent(new Event('collab-files-changed'))
-  }, [tripId, toast, t])
+  }, [tripId, toast, t, setNotes])
 
   // ── Derived data ──
   const categories = [...new Set(notes.map(n => n.category).filter(Boolean))]
