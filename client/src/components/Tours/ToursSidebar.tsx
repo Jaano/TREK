@@ -12,6 +12,7 @@ import { NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { Tooltip } from '../shared/Tooltip'
 import EmptyState from '../shared/EmptyState'
 import { TourDayMenu } from './tourParts'
+import { filterTours, type TourFilter } from './tourPresentation'
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024
 
@@ -44,7 +45,7 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
   const { canEdit, canAssign } = useTourPermissions({ tripId, canEdit: editPermission, canAssign: assignPermission })
   const toast = useToast()
   const loadTrip = useTripStore(s => s.loadTrip)
-  const [filter, setFilter] = useState<'all' | 'unplanned' | 'planned'>('all')
+  const [filter, setFilter] = useState<TourFilter>('all')
   const [importing, setImporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const filterRef = useRef<HTMLDivElement>(null)
@@ -95,11 +96,7 @@ export default function ToursSidebar({ tripId, days, tours, loading = false, sel
     unplanned: tours.filter(tr => !tr.planned).length,
     planned: tours.filter(tr => tr.planned).length,
   }
-  const filtered = tours.filter(tr => {
-    if (filter === 'unplanned') return !tr.planned
-    if (filter === 'planned') return tr.planned
-    return true
-  })
+  const filtered = filterTours(tours, filter)
 
   useEffect(() => {
     if (!filterOpen) return

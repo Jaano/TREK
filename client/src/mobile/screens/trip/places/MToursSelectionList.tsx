@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, Mountain, AlertTriangle, CalendarDays } from 'lucid
 import type { TourListItem } from '@trek/shared'
 import { useSettingsStore } from '../../../../store/settingsStore'
 import { formatDistance, formatElevation } from '../../../../utils/units'
-import { hikeSourceBadgeLabel } from '../../../../components/Tours/tourPresentation'
+import { filterTours, hikeSourceBadgeLabel, type TourFilter } from '../../../../components/Tours/tourPresentation'
 import type { TripPlanner, MTripShellApi } from '../MTripShell'
 import { useTourPermissions, type TourPermissionProps } from '../../../../components/Tours/useTourPermissions'
 
@@ -10,7 +10,7 @@ interface MToursSelectionListProps extends TourPermissionProps {
   planner: TripPlanner
   shell: MTripShellApi
   /** All / Unplanned / Planned — same three states as the Places pool. */
-  filter: 'all' | 'unplanned' | 'planned'
+  filter: TourFilter
 }
 
 /**
@@ -28,11 +28,7 @@ export default function MToursSelectionList({ planner, shell, filter, canAssign:
   const distanceUnit = useSettingsStore(s => s.settings.distance_unit)
   const tours: TourListItem[] = planner.tours
 
-  const filtered = tours.filter(tr => {
-    if (filter === 'unplanned') return !tr.planned
-    if (filter === 'planned') return tr.planned
-    return true
-  })
+  const filtered = filterTours(tours, filter)
 
   if (filtered.length === 0) {
     return (

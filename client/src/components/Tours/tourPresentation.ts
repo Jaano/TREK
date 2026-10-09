@@ -2,6 +2,9 @@ import type { TourListItem } from '@trek/shared'
 
 export type TourSource = 'trek' | 'gpx' | 'wanderer'
 
+/** All / Unplanned / Planned, the same three states as the Places pool. */
+export type TourFilter = 'all' | 'unplanned' | 'planned'
+
 type Translate = (key: string, params?: Record<string, unknown>) => string
 
 /**
@@ -19,4 +22,13 @@ export function hikeSourceBadgeLabel(
   t: Translate,
 ): string {
   return t(`tours.badge.${tourSource(tour)}`)
+}
+
+/** The tours a list shows under the All / Unplanned / Planned filter, in their order. */
+export function filterTours<T extends Pick<TourListItem, 'planned'>>(tours: T[], filter: TourFilter): T[] {
+  return tours.filter(tr => {
+    if (filter === 'unplanned') return !tr.planned
+    if (filter === 'planned') return tr.planned
+    return true
+  })
 }

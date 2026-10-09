@@ -20,6 +20,7 @@ import MPlacesBulkCategorySheet from './MPlacesBulkCategorySheet'
 import MPlacesSaveToCollectionSheet from './MPlacesSaveToCollectionSheet'
 import MPlacesToursModeSwitch from './MPlacesToursModeSwitch'
 import MToursSelectionList from './MToursSelectionList'
+import type { TourFilter } from '../../../../components/Tours/tourPresentation'
 import { filterPool, firstPlannedDayNumbers, plannedPlaceIds } from './placesBrowserModel'
 import { MCategoryFilterList, MRatingFloorChips, SquareCheck } from './MPlacesFilterControls'
 import { countActivePlacesFilters } from '../../../../utils/placesFilter'
@@ -46,7 +47,7 @@ export default function MPlacesBrowser({ planner, shell }: MPlacesBrowserProps) 
   // Top level of the places browser, mirroring the desktop right add-panel's
   // Places <-> Tours switch placement.
   const [toursMode, setToursMode] = useState(false)
-  const [toursFilter, setToursFilter] = useState<'all' | 'unplanned' | 'planned'>('all')
+  const [toursFilter, setToursFilter] = useState<TourFilter>('all')
 
   const poolPlaces = useMemo(
     // Places that are tours stay out of the Places pool while the addon is on.
