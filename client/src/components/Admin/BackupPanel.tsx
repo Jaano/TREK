@@ -1,9 +1,5 @@
-import { useState, useEffect, useRef, type ChangeEvent } from 'react'
-import { backupApi } from '../../api/client'
-import { useToast } from '../shared/Toast'
 import { Download, Trash2, Plus, RefreshCw, RotateCcw, Upload, Clock, Check, HardDrive, Loader2 } from 'lucide-react'
 import { useTranslation } from '../../i18n'
-import { useSettingsStore } from '../../store/settingsStore'
 import CustomSelect from '../shared/CustomSelect'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import EmptyState from '../shared/EmptyState'
@@ -21,200 +17,19 @@ import {
   SettingsCard,
   StatusPill,
 } from '../Settings/settingsKit'
-import { getApiErrorMessage } from '../../types'
-
-const INTERVAL_OPTIONS = [
-  { value: 'hourly',  labelKey: 'backup.interval.hourly' },
-  { value: 'daily',   labelKey: 'backup.interval.daily' },
-  { value: 'weekly',  labelKey: 'backup.interval.weekly' },
-  { value: 'monthly', labelKey: 'backup.interval.monthly' },
-]
-
-const KEEP_OPTIONS = [
-  { value: 1,  labelKey: 'backup.keep.1day' },
-  { value: 3,  labelKey: 'backup.keep.3days' },
-  { value: 7,  labelKey: 'backup.keep.7days' },
-  { value: 14, labelKey: 'backup.keep.14days' },
-  { value: 30, labelKey: 'backup.keep.30days' },
-  { value: 0,  labelKey: 'backup.keep.forever' },
-]
-
-const DAYS_OF_WEEK = [
-  { value: 0, labelKey: 'backup.dow.sunday' },
-  { value: 1, labelKey: 'backup.dow.monday' },
-  { value: 2, labelKey: 'backup.dow.tuesday' },
-  { value: 3, labelKey: 'backup.dow.wednesday' },
-  { value: 4, labelKey: 'backup.dow.thursday' },
-  { value: 5, labelKey: 'backup.dow.friday' },
-  { value: 6, labelKey: 'backup.dow.saturday' },
-]
-
-const HOURS = Array.from({ length: 24 }, (_, i) => i)
-
-const DAYS_OF_MONTH = Array.from({ length: 28 }, (_, i) => i + 1)
+import { DAYS_OF_MONTH, DAYS_OF_WEEK, HOURS, INTERVAL_OPTIONS, KEEP_OPTIONS, useBackupAdmin } from './useBackupAdmin'
 
 /** The compact buttons of a backup row: white on a hairline, a size under the card's own. */
 const ROW_BUTTON = 'inline-flex items-center gap-1.5 rounded-[10px] bg-surface-card px-2.5 py-1.5 font-medium text-content shadow-sm ring-1 ring-edge-faint hover:bg-surface-secondary disabled:cursor-default disabled:opacity-50'
 
-interface BackupItem {
-  filename: string
-  created_at?: string | null
-  size?: number | null
-}
-
-interface RestoreTarget {
-  type: 'file' | 'upload'
-  filename: string
-  file?: File
-}
-
 export default function BackupPanel() {
-  const [backups, setBackups] = useState<BackupItem[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [isCreating, setIsCreating] = useState(false)
-  const [restoringFile, setRestoringFile] = useState<string | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [autoSettings, setAutoSettings] = useState({ enabled: false, interval: 'daily', keep_days: 7, hour: 2, day_of_week: 0, day_of_month: 1 })
-  const [autoSettingsSaving, setAutoSettingsSaving] = useState(false)
-  const [autoSettingsDirty, setAutoSettingsDirty] = useState(false)
-  const [serverTimezone, setServerTimezone] = useState('')
-  const [restoreConfirm, setRestoreConfirm] = useState<RestoreTarget | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const toast = useToast()
-  const { t, locale } = useTranslation()
-  const is12h = useSettingsStore(s => s.settings.time_format) === '12h'
-
-  const loadBackups = async () => {
-    setIsLoading(true)
-    try {
-      const data = await backupApi.list()
-      setBackups(data.backups || [])
-    } catch {
-      toast.error(t('backup.toast.loadError'))
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const loadAutoSettings = async () => {
-    try {
-      const data = await backupApi.getAutoSettings()
-      setAutoSettings(data.settings)
-      if (data.timezone) setServerTimezone(data.timezone)
-    } catch {}
-  }
-
-  useEffect(() => { void loadBackups(); void loadAutoSettings() }, [])
-
-  const handleCreate = async () => {
-    setIsCreating(true)
-    try {
-      await backupApi.create()
-      toast.success(t('backup.toast.created'))
-      await loadBackups()
-    } catch {
-      toast.error(t('backup.toast.createError'))
-    } finally {
-      setIsCreating(false)
-    }
-  }
-
-  const handleRestore = (filename: string) => {
-    setRestoreConfirm({ type: 'file', filename })
-  }
-
-  const handleUploadRestore = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    e.target.value = ''
-    setRestoreConfirm({ type: 'upload', filename: file.name, file })
-  }
-
-  const executeRestore = async () => {
-    if (!restoreConfirm) return
-    const { type, filename, file } = restoreConfirm
-    setRestoreConfirm(null)
-
-    if (type === 'file') {
-      setRestoringFile(filename)
-      try {
-        await backupApi.restore(filename)
-        toast.success(t('backup.toast.restored'))
-        setTimeout(() => window.location.reload(), 1500)
-      } catch (err: unknown) {
-        toast.error(getApiErrorMessage(err, t('backup.toast.restoreError')))
-        setRestoringFile(null)
-      }
-    } else {
-      setIsUploading(true)
-      try {
-        await backupApi.uploadRestore(file)
-        toast.success(t('backup.toast.restored'))
-        setTimeout(() => window.location.reload(), 1500)
-      } catch (err: unknown) {
-        toast.error(getApiErrorMessage(err, t('backup.toast.uploadError')))
-        setIsUploading(false)
-      }
-    }
-  }
-
-  // The question is asked in the planner's confirm dialog; the delete itself runs once it is answered.
-  const handleDelete = (filename: string) => {
-    setDeleteTarget(filename)
-  }
-
-  const executeDelete = async () => {
-    const filename = deleteTarget
-    setDeleteTarget(null)
-    if (!filename) return
-    try {
-      await backupApi.delete(filename)
-      toast.success(t('backup.toast.deleted'))
-      setBackups(prev => prev.filter(b => b.filename !== filename))
-    } catch {
-      toast.error(t('backup.toast.deleteError'))
-    }
-  }
-
-  const handleAutoSettingsChange = (key: string, value: unknown) => {
-    setAutoSettings(prev => ({ ...prev, [key]: value }))
-    setAutoSettingsDirty(true)
-  }
-
-  const handleSaveAutoSettings = async () => {
-    setAutoSettingsSaving(true)
-    try {
-      const data = await backupApi.setAutoSettings(autoSettings)
-      setAutoSettings(data.settings)
-      setAutoSettingsDirty(false)
-      toast.success(t('backup.toast.settingsSaved'))
-    } catch {
-      toast.error(t('backup.toast.settingsError'))
-    } finally {
-      setAutoSettingsSaving(false)
-    }
-  }
-
-  const formatSize = (bytes: number | null | undefined) => {
-    if (!bytes) return '-'
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
-  }
-
-  const formatDate = (dateStr: string | null | undefined) => {
-    if (!dateStr) return '-'
-    try {
-      const opts: Intl.DateTimeFormatOptions = {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      }
-      if (serverTimezone) opts.timeZone = serverTimezone
-      return new Date(dateStr).toLocaleString(locale, opts)
-    } catch { return dateStr }
-  }
-
-  const isAuto = (filename: string) => filename.startsWith('auto-backup-')
+  const {
+    backups, isLoading, isCreating, restoringFile, isUploading, autoSettings, autoSettingsSaving, autoSettingsDirty,
+    serverTimezone, restoreConfirm, setRestoreConfirm, deleteTarget, setDeleteTarget, fileInputRef, is12h,
+    loadBackups, handleCreate, handleDownload, handleRestore, handleUploadRestore, executeRestore, handleDelete,
+    executeDelete, handleAutoSettingsChange, handleSaveAutoSettings, formatSize, formatDate, isAuto,
+  } = useBackupAdmin()
+  const { t } = useTranslation()
 
   const headerActions = (
     <>
@@ -315,7 +130,7 @@ export default function BackupPanel() {
               </div>
               <div className="flex flex-none items-center gap-1.5">
                 <button type="button"
-                  onClick={() => backupApi.download(backup.filename).catch(() => toast.error(t('backup.toast.downloadError')))}
+                  onClick={() => handleDownload(backup.filename)}
                   className={ROW_BUTTON}
                   style={fs(12, 'body')}
                 >
