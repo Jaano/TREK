@@ -5,8 +5,7 @@ import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { sanitizedMarkdownPlugins, sanitizedMarkdownComponents } from '../../../../components/shared/markdownSanitize'
 import MDancingTrek from '../../../components/MDancingTrek'
-import { collabApi } from '../../../../api/client'
-import { addListener, removeListener } from '../../../../api/websocket'
+import { useCollabPolls } from '../../../../components/Collab/useCollabPolls'
 import { useAuthStore } from '../../../../store/authStore'
 import ToggleSwitch from '../../../../components/Settings/ToggleSwitch'
 import MSheet from '../../../components/MSheet'
@@ -28,9 +27,6 @@ interface MCollabPollsProps {
   planner: TripPlanner
 }
 
-interface GetPollsResponse { polls: CollabPollData[] }
-interface PollResponse { poll: CollabPollData }
-
 interface PollFormSubmitData {
   question: string
   options: string[]
@@ -39,9 +35,9 @@ interface PollFormSubmitData {
 }
 
 /**
- * Trip-tab Collab / Polls. Same self-contained architecture as
- * MCollabChat/MCollabNotes (own state, own `collabApi` calls, own WebSocket
- * listener — 10-tab-databindings.md §8.5). The demo only has a placeholder,
+ * Trip-tab Collab / Polls. The list, its WebSocket listener and the poll
+ * actions come from useCollabPolls, the hook the desktop panel reads too
+ * (10-tab-databindings.md §8.5). The demo only has a placeholder,
  * so question/options/results/deadline/close/delete below is a new design in
  * the established mobile visual language, not a port of desktop markup.
  */
@@ -51,96 +47,21 @@ export default function MCollabPolls({ planner }: MCollabPollsProps) {
   const canEdit = planner.can('collab_edit', planner.trip)
   const currentUserId = user?.id ?? null
 
-  const [polls, setPolls] = useState<CollabPollData[]>([])
-  const [loading, setLoading] = useState(true)
+  const { polls, loading, createPoll, votePoll: handleVote, closePoll: handleClosePoll, deletePoll: handleDelete } =
+    useCollabPolls({ tripId, t, toast, replaceClosedPoll: true })
   const [showForm, setShowForm] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [collapsedClosed, setCollapsedClosed] = useState(false)
-  const [, setTick] = useState(0)
 
-  // ── Load ──
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    collabApi.getPolls(tripId).then((data: GetPollsResponse) => {
-      if (!cancelled) setPolls(data.polls || [])
-    }).catch(() => { /* leave polls empty */ }).finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [tripId])
-
-  // ── WebSocket (own listener, not handleRemoteEvent) ──
-  useEffect(() => {
-    const handler = (event: Record<string, unknown>) => {
-      if (String(event.tripId) !== String(tripId)) return
-      if (event.type === 'collab:poll:created') {
-        const poll = event.poll as CollabPollData
-        setPolls(prev => (prev.some(p => p.id === poll.id) ? prev : [poll, ...prev]))
-      }
-      if (event.type === 'collab:poll:voted' || event.type === 'collab:poll:closed') {
-        const poll = event.poll as CollabPollData
-        setPolls(prev => prev.map(p => (p.id === poll.id ? poll : p)))
-      }
-      if (event.type === 'collab:poll:deleted') {
-        const pollId = event.pollId as number
-        setPolls(prev => prev.filter(p => p.id !== pollId))
-      }
-    }
-    addListener(handler)
-    return () => removeListener(handler)
-  }, [tripId])
-
-  // ── Deadline countdown ticker — re-render every 30s so formatPollCountdown recomputes ──
-  useEffect(() => {
-    if (!polls.some(p => p.deadline && isPollActive(p))) return
-    const iv = setInterval(() => setTick(v => v + 1), 30000)
-    return () => clearInterval(iv)
-  }, [polls])
-
-  const handleCreate = useCallback(async (data: PollFormSubmitData) => {
-    try {
-      const res = (await collabApi.createPoll(tripId, {
-        question: data.question,
-        options: data.options,
-        // Server reads `data.multiple || data.multiple_choice`
-        // (nest/collab/collab.service.ts) — both are sent so either shape lands.
-        multiple: data.multipleChoice,
-        multiple_choice: data.multipleChoice,
-        deadline: data.deadline || undefined,
-      })) as PollResponse
-      setPolls(prev => (prev.some(p => p.id === res.poll.id) ? prev : [res.poll, ...prev]))
-    } catch {
-      toast.error(t('common.error'))
-      throw new Error('create failed')
-    }
-  }, [tripId, toast, t])
-
-  const handleVote = useCallback(async (pollId: number, optionIndex: number) => {
-    try {
-      const res = (await collabApi.votePoll(tripId, pollId, optionIndex)) as PollResponse
-      // Reconcile against the poll we asked about, like handleClosePoll does.
-      setPolls(prev => prev.map(p => (p.id === pollId ? res.poll : p)))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }, [tripId, toast, t])
-
-  const handleClosePoll = useCallback(async (pollId: number) => {
-    try {
-      const res = (await collabApi.closePoll(tripId, pollId)) as PollResponse
-      setPolls(prev => prev.map(p => (p.id === pollId ? res.poll : p)))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }, [tripId, toast, t])
-
-  const handleDelete = useCallback(async (pollId: number) => {
-    try {
-      await collabApi.deletePoll(tripId, pollId)
-      setPolls(prev => prev.filter(p => p.id !== pollId))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }, [tripId, toast, t])
+  const handleCreate = useCallback((data: PollFormSubmitData) => createPoll({
+    question: data.question,
+    options: data.options,
+    // Server reads `data.multiple || data.multiple_choice`
+    // (nest/collab/collab.service.ts), so both are sent and either shape lands.
+    multiple: data.multipleChoice,
+    multiple_choice: data.multipleChoice,
+    deadline: data.deadline || undefined,
+  }), [createPoll])
 
   if (loading) {
     return (

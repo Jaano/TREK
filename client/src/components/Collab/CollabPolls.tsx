@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useId } from 'react'
+import React, { useState, useCallback, useId } from 'react'
 import { Plus, Trash2, X, Check, BarChart3, Lock, Clock } from 'lucide-react'
 import { RoundAction } from '../Planner/bookings/bookingParts'
 import CollabPanelHead, { HEAD_ACTION } from './CollabPanelHead'
@@ -9,36 +9,20 @@ import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { sanitizedMarkdownComponents, sanitizedMarkdownPlugins } from '../shared/markdownSanitize'
-import { collabApi } from '../../api/client'
-import { addListener, removeListener } from '../../api/websocket'
 import { useTranslation } from '../../i18n'
 import { useToast } from '../shared/Toast'
 import { useCanDo } from '../../store/permissionsStore'
 import { useTripStore } from '../../store/tripStore'
 import EmptyState from '../shared/EmptyState'
 import type { User } from '../../types'
+import type { CollabPollCreateRequest } from '@trek/shared'
+import { useCollabPolls } from './useCollabPolls'
+import { hasUserVoted, isPollActive, pollMaxVoteCount, splitPolls, totalPollVotes, type CollabPollData } from './collabModel'
 
 interface PollVoter {
   user_id: number
   username: string
   avatar_url: string | null
-}
-
-interface PollOption {
-  id: number
-  text: string
-  voters: PollVoter[]
-}
-
-interface Poll {
-  id: number
-  question: string
-  options: PollOption[]
-  multiple_choice: boolean
-  is_closed: boolean
-  deadline: string | null
-  created_by: number
-  created_at: string
 }
 
 const FONT = "var(--font-system)"
@@ -81,15 +65,6 @@ function timeRemaining(deadline) {
   if (days > 0) return `${days}d ${hrs % 24}h`
   if (hrs > 0) return `${hrs}h ${mins % 60}m`
   return `${mins}m`
-}
-
-function isExpired(deadline) {
-  if (!deadline) return false
-  return new Date(deadline).getTime() <= Date.now()
-}
-
-function totalVotes(poll) {
-  return (poll.options || []).reduce((s, o) => s + (o.voters?.length || 0), 0)
 }
 
 // ── Create Poll Modal ────────────────────────────────────────────────────────
@@ -210,7 +185,7 @@ function PollChip({ icon, tone = 'muted', children }: { icon?: React.ReactNode; 
 
 // ── Poll Card ────────────────────────────────────────────────────────────────
 interface PollCardProps {
-  poll: Poll
+  poll: CollabPollData
   currentUser: User
   canEdit: boolean
   onVote: (pollId: number, optionId: number) => Promise<void>
@@ -220,12 +195,12 @@ interface PollCardProps {
 }
 
 function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: PollCardProps) {
-  const total = totalVotes(poll)
-  const isClosed = poll.is_closed || isExpired(poll.deadline)
+  const total = totalPollVotes(poll)
+  const isClosed = !isPollActive(poll)
   const remaining = timeRemaining(poll.deadline)
-  const hasVoted = (poll.options || []).some(o => (o.voters || []).some(v => String(v.user_id) === String(currentUser.id)))
+  const hasVoted = hasUserVoted(poll, currentUser.id)
   // Highest vote count across the options; 0 for a poll without options.
-  const topCount = (poll.options || []).reduce((max, o) => Math.max(max, o.voters?.length || 0), 0)
+  const topCount = pollMaxVoteCount(poll)
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-edge-faint bg-surface-card">
@@ -324,98 +299,17 @@ export default function CollabPolls({ tripId, currentUser }: CollabPollsProps) {
   const can = useCanDo()
   const trip = useTripStore((s) => s.trip)
   const canEdit = can('collab_edit', trip)
-  const [polls, setPolls] = useState([])
-  const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const { polls, loading, createPoll, votePoll: handleVote, closePoll: handleClose, deletePoll: handleDelete } = useCollabPolls({
+    tripId, t, toast, resetOnLoadError: true,
+  })
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    collabApi.getPolls(tripId).then(data => {
-      if (!cancelled) setPolls(Array.isArray(data) ? data : data.polls || [])
-    }).catch(() => {
-      if (!cancelled) setPolls([])
-    }).finally(() => {
-      if (!cancelled) setLoading(false)
-    })
-    return () => { cancelled = true }
-  }, [tripId])
+  const handleCreate = useCallback(async (data: CollabPollCreateRequest) => {
+    await createPoll(data)
+    setShowForm(false)
+  }, [createPoll])
 
-  // WebSocket
-  useEffect(() => {
-    const handler = (msg) => {
-      if (!msg?.type) return
-      // The panel is not remounted on a trip change, so an event still in flight
-      // from the trip we just left must not land in this list.
-      if (String(msg.tripId) !== String(tripId)) return
-      if (msg.type === 'collab:poll:created' && msg.poll) {
-        setPolls(prev => prev.some(p => p.id === msg.poll.id) ? prev : [msg.poll, ...prev])
-      }
-      if (msg.type === 'collab:poll:voted' && msg.poll) {
-        setPolls(prev => prev.map(p => p.id === msg.poll.id ? msg.poll : p))
-      }
-      if (msg.type === 'collab:poll:closed' && msg.poll) {
-        setPolls(prev => prev.map(p => p.id === msg.poll.id ? { ...p, ...msg.poll, is_closed: true } : p))
-      }
-      if (msg.type === 'collab:poll:deleted') {
-        const id = msg.pollId || msg.poll?.id
-        if (id) setPolls(prev => prev.filter(p => p.id !== id))
-      }
-    }
-    addListener(handler)
-    return () => removeListener(handler)
-  }, [tripId])
-
-  const handleCreate = useCallback(async (data) => {
-    try {
-      const result = await collabApi.createPoll(tripId, data)
-      const created = result.poll || result
-      setPolls(prev => prev.some(p => p.id === created.id) ? prev : [created, ...prev])
-      setShowForm(false)
-    } catch (err) {
-      toast.error(t('common.error'))
-      throw err
-    }
-  }, [tripId, toast, t])
-
-  const handleVote = useCallback(async (pollId, optionIndex) => {
-    try {
-      const result = await collabApi.votePoll(tripId, pollId, optionIndex)
-      const updated = result.poll || result
-      setPolls(prev => prev.map(p => p.id === updated.id ? updated : p))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }, [tripId, toast, t])
-
-  const handleClose = useCallback(async (pollId) => {
-    try {
-      await collabApi.closePoll(tripId, pollId)
-      setPolls(prev => prev.map(p => p.id === pollId ? { ...p, is_closed: true } : p))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }, [tripId, toast, t])
-
-  const handleDelete = useCallback(async (pollId) => {
-    try {
-      await collabApi.deletePoll(tripId, pollId)
-      setPolls(prev => prev.filter(p => p.id !== pollId))
-    } catch {
-      toast.error(t('common.error'))
-    }
-  }, [tripId, toast, t])
-
-  const activePolls = polls.filter(p => !p.is_closed && !isExpired(p.deadline))
-  const closedPolls = polls.filter(p => p.is_closed || isExpired(p.deadline))
-
-  // Deadline ticker
-  const [, setTick] = useState(0)
-  useEffect(() => {
-    if (!polls.some(p => p.deadline && !p.is_closed)) return
-    const iv = setInterval(() => setTick(t => t + 1), 30000)
-    return () => clearInterval(iv)
-  }, [polls])
+  const { active: activePolls, closed: closedPolls } = splitPolls(polls)
 
   if (loading) {
     return (
