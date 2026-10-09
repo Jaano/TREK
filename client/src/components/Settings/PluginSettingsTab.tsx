@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { Save, Loader2, Link2, Unlink, CheckCircle, Puzzle, Zap } from 'lucide-react'
 import { resolvePluginIcon } from '../shared/PluginIcon'
 import CustomSelect from '../shared/CustomSelect'
@@ -7,12 +7,11 @@ import { fs } from '../shared/DialogShell'
 import { EditorField, INPUT } from '../shared/dialogParts'
 import { SettingRow, SettingRows, SettingsCard, SettingsHint, SETTINGS_BUTTON, SETTINGS_BUTTON_DANGER, SETTINGS_BUTTON_PRIMARY } from './settingsKit'
 import PluginFrame from '../Plugins/PluginFrame'
-import { pluginsApi, type PluginUserSettingField, type PluginAction } from '../../api/client'
+import type { PluginUserSettingField } from '../../api/client'
 import { usePluginStore } from '../../store/pluginStore'
-import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
 import PluginActivityPanel from './PluginActivityPanel'
-import { seedSettingsValues, findMissingRequired, settingsPatch } from '../Plugins/settingsForm'
+import { usePluginOAuth, usePluginUserSettings, type PluginOAuthState } from '../Plugins/usePluginUserSettings'
 
 type FieldGroup = { kind: 'switches' | 'fields'; fields: PluginUserSettingField[] }
 
@@ -52,30 +51,13 @@ function CheckSwitch({ id, checked, onChange }: { id: string; checked: boolean; 
  * holds the tokens; this only triggers connect (redirect to the provider) / disconnect. */
 function PluginOAuthSection({ id, state, setState }: {
   id: string
-  state: { configured: boolean; connected: boolean } | null
-  setState: (s: { configured: boolean; connected: boolean }) => void
+  state: PluginOAuthState | null
+  setState: (s: PluginOAuthState) => void
 }) {
   const { t } = useTranslation()
-  const toast = useToast()
-  const [busy, setBusy] = useState(false)
+  const { busy, connect, disconnect } = usePluginOAuth(id, state, setState)
 
   if (!state?.configured) return null
-
-  const connect = async () => {
-    setBusy(true)
-    try {
-      const { authorizeUrl } = await pluginsApi.oauthConnect(id)
-      window.location.href = authorizeUrl // hand off to the provider; returns to /settings
-    } catch {
-      toast.error(t('common.error')); setBusy(false)
-    }
-  }
-  const disconnect = async () => {
-    setBusy(true)
-    try { await pluginsApi.oauthDisconnect(id); setState({ ...state, connected: false }) }
-    catch { toast.error(t('common.error')) }
-    finally { setBusy(false) }
-  }
 
   return (
     <SettingRows>
@@ -100,78 +82,28 @@ function PluginOAuthSection({ id, state, setState }: {
  */
 function PluginSettingsForm({ id, name, icon }: { id: string; name: string; icon: string | null }) {
   const { t } = useTranslation()
-  const toast = useToast()
-  const [fields, setFields] = useState<PluginUserSettingField[] | null>(null)
-  const [values, setValues] = useState<Record<string, string | boolean>>({})
-  const [saving, setSaving] = useState(false)
-  const [oauth, setOauth] = useState<{ configured: boolean; connected: boolean } | null>(null)
-  const [actions, setActions] = useState<PluginAction[]>([])
-  const [running, setRunning] = useState<string | null>(null)
-  const [actionResult, setActionResult] = useState<Record<string, { ok: boolean; message?: string }>>({})
-  // A dangerous action waits here for the user's answer in the confirm dialog.
-  const [pendingAction, setPendingAction] = useState<PluginAction | null>(null)
+  const {
+    fields,
+    values,
+    setValue,
+    hasFields,
+    visible,
+    saving,
+    save,
+    actions,
+    running,
+    actionResult,
+    runAction,
+    performAction,
+    pendingAction,
+    setPendingAction,
+    oauth,
+    setOauth,
+  } = usePluginUserSettings(id)
 
-  useEffect(() => {
-    let alive = true
-    pluginsApi.userSettings(id)
-      .then(r => {
-        if (!alive) return
-        setFields(r.fields)
-        setActions(r.actions ?? [])
-        setValues(seedSettingsValues(r.fields, r.config))
-      })
-      .catch(() => { if (alive) setFields([]) })
-    pluginsApi.oauthStatus(id).then(s => { if (alive) setOauth(s) }).catch(() => { if (alive) setOauth(null) })
-    return () => { alive = false }
-  }, [id])
-
-  const hasFields = (fields?.length ?? 0) > 0
-  // Show the card if the plugin has user fields, actions, OR an OAuth connection to offer.
-  if (fields === null || (!hasFields && actions.length === 0 && !oauth?.configured)) return null
-
-  // An action runs AS the caller, so it sees the values they just saved — run the save
-  // first if the form is dirty would be nicer, but keeping it explicit is less surprising.
-  const runAction = (a: PluginAction) => {
-    if (a.danger) { setPendingAction(a); return }
-    void performAction(a)
-  }
-
-  const performAction = async (a: PluginAction) => {
-    setRunning(a.key)
-    try {
-      const res = await pluginsApi.runAction(id, a.key)
-      setActionResult(prev => ({ ...prev, [a.key]: res }))
-    } catch {
-      setActionResult(prev => ({ ...prev, [a.key]: { ok: false, message: t('common.error') } }))
-    } finally {
-      setRunning(null)
-    }
-  }
-
-  const save = async () => {
-    const missing = findMissingRequired(fields, values)
-    if (missing) {
-      toast.error(t('settings.plugins.requiredMissing', { field: missing.label || missing.key }))
-      return
-    }
-    setSaving(true)
-    try {
-      const r = await pluginsApi.saveUserSettings(id, settingsPatch(fields, values))
-      setValues(seedSettingsValues(fields, r.config))
-      toast.success(t('settings.plugins.saved'))
-    } catch (e) {
-      // A 4xx names what the server refused (a required field it knows about and this
-      // stale field list doesn't); a 5xx body is not for the user.
-      const err = e as { response?: { status?: number; data?: { error?: string } } }
-      const refused = err.response?.status && err.response.status < 500 ? err.response.data?.error : undefined
-      toast.error(refused || t('common.error'))
-    } finally {
-      setSaving(false)
-    }
-  }
+  if (!visible || fields === null) return null
 
   const fieldId = (key: string) => `plugin-setting-${id}-${key}`
-  const setValue = (key: string, value: string | boolean) => setValues(v => ({ ...v, [key]: value }))
   const labelOf = (f: PluginUserSettingField): ReactNode => (
     <>{f.label || f.key}{f.required && <span className="text-danger"> *</span>}</>
   )

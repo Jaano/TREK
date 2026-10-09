@@ -1,19 +1,9 @@
-import { useEffect, useState } from 'react'
 import { History, RefreshCw } from 'lucide-react'
-import { pluginsApi } from '../../api/client'
 import { useTranslation } from '../../i18n'
 import { Tooltip } from '../shared/Tooltip'
 import { fs } from '../shared/DialogShell'
 import { SettingsCard, SettingsHint, SETTINGS_ICON_BUTTON } from './settingsKit'
-
-interface ActivityRow {
-  ts: string
-  plugin_id: string
-  plugin_name: string | null
-  method: string
-  resource: string | null
-  code: string
-}
+import { usePluginActivity } from './usePluginActivity'
 
 /**
  * Tailwind classes for a result-code pill. "ok" stays neutral; an access denial
@@ -37,24 +27,8 @@ const TD = 'px-3 py-3 align-middle'
  * shows the empty state, never a crash.
  */
 export default function PluginActivityPanel() {
-  const { t, locale } = useTranslation()
-  const [rows, setRows] = useState<ActivityRow[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const load = () => {
-    setLoading(true)
-    pluginsApi.myActivity()
-      .then(r => setRows(r.activity))
-      .catch(() => setRows([]))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => { load() }, [])
-
-  const fmtWhen = (ts: string): string => {
-    const d = new Date(ts)
-    return Number.isNaN(d.getTime()) ? ts : d.toLocaleString(locale)
-  }
+  const { t } = useTranslation()
+  const { rows, loading, load, fmtWhen } = usePluginActivity()
 
   const refreshLabel = t('settings.pluginActivity.refresh')
 
