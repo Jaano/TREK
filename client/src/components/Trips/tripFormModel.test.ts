@@ -1,4 +1,4 @@
-// FE-COMP-TRIPFORMMODEL-001 to -006: the trip form checks the dialog and the phone sheet share.
+// FE-COMP-TRIPFORMMODEL-001 to -007: the trip form checks the dialog and the phone sheet share.
 import { MAX_TRIP_DAYS, addIsoDays } from '@trek/shared';
 
 import { endDateForNewStart, tripFormError } from './tripFormModel';
@@ -51,5 +51,17 @@ describe('endDateForNewStart', () => {
     expect(endDateForNewStart('', '2026-05-03', '2026-05-09')).toBe('2026-05-09');
     expect(endDateForNewStart('2026-05-08', '2026-05-03', '2026-05-05')).toBe('2026-05-05');
     expect(endDateForNewStart('2026-05-01', '2026-05-08', '')).toBe('2026-05-08');
+  });
+
+  it('FE-COMP-TRIPFORMMODEL-007: the kept length counts calendar days across a DST change', () => {
+    const runnerTimeZone = process.env.TZ;
+    process.env.TZ = 'Europe/Berlin';
+    try {
+      // Summer time starts on 2026-03-29 in Berlin.
+      expect(endDateForNewStart('2026-03-20', '2026-03-25', '2026-03-27')).toBe('2026-04-01');
+    } finally {
+      if (runnerTimeZone === undefined) delete process.env.TZ;
+      else process.env.TZ = runnerTimeZone;
+    }
   });
 });

@@ -1,4 +1,4 @@
-import { MAX_TRIP_DAYS, tripSpanDays } from '@trek/shared';
+import { MAX_TRIP_DAYS, addIsoDays, tripSpanDays } from '@trek/shared';
 
 type T = (key: string, params?: Record<string, string | number>) => string;
 
@@ -34,12 +34,9 @@ export function tripFormError(
  */
 export function endDateForNewStart(startDate: string, endDate: string, value: string): string {
   if (value && endDate && startDate && endDate >= startDate) {
-    const duration = Math.round(
-      (new Date(endDate + 'T00:00:00Z').getTime() - new Date(startDate + 'T00:00:00Z').getTime()) / 86400000
-    );
-    const newEnd = new Date(value + 'T00:00:00Z');
-    newEnd.setDate(newEnd.getDate() + duration);
-    return newEnd.toISOString().split('T')[0];
+    // Counted in UTC calendar days: a local-time shift across a DST change used to
+    // drop or add a day.
+    return addIsoDays(value, tripSpanDays(startDate, endDate) - 1);
   }
   if (value && (!endDate || endDate < value)) return value;
   return endDate;
