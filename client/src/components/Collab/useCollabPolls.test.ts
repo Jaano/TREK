@@ -1,6 +1,7 @@
-// FE-COLLAB-POLLS-001 to FE-COLLAB-POLLS-013: the poll logic behind the desktop Collab
-// panel (empties on a failed load, flips the closed flag itself) and the phone's polls tab
-// (keeps the list, shows the closed poll the server answers with).
+// FE-COLLAB-POLLS-001 to FE-COLLAB-POLLS-015: the poll logic behind the desktop Collab
+// panel (empties on a failed load, flips the closed flag itself, ticks until a poll is
+// closed) and the phone's polls tab (keeps the list, shows the closed poll the server
+// sends, puts a vote answer on the poll it voted on, stops ticking once a deadline passed).
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -227,25 +228,46 @@ describe('useCollabPolls', () => {
     expect(renders).toBeGreaterThan(before);
   });
 
-  it('FE-COLLAB-POLLS-012: no tick for closed, expired or deadline free polls', async () => {
+  it('FE-COLLAB-POLLS-012: no tick for closed or deadline free polls, an expired one ticks only on desktop', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const past = new Date(Date.now() - 1000).toISOString();
     const ahead = new Date(Date.now() + 3_600_000).toISOString();
-    vi.mocked(collabApi.getPolls).mockResolvedValue({
-      polls: [poll(1), poll(2, { deadline: past }), poll(3, { deadline: ahead, is_closed: true })],
-    });
-    let renders = 0;
     const toast = { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() };
-    const { result } = renderHook(() => {
-      renders += 1;
-      return useCollabPolls({ tripId: 1, t, toast });
-    });
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    const before = renders;
+    const renderCounted = (polls: CollabPollData[], over: Partial<CollabPollsOptions>) => {
+      vi.mocked(collabApi.getPolls).mockResolvedValue({ polls });
+      const counter = { renders: 0 };
+      const view = renderHook(() => {
+        counter.renders += 1;
+        return useCollabPolls({ tripId: 1, t, toast, ...over });
+      });
+      return { ...view, counter };
+    };
+
+    const quiet = renderCounted([poll(1), poll(3, { deadline: ahead, is_closed: true })], {});
+    await waitFor(() => expect(quiet.result.current.loading).toBe(false));
+    const quietBefore = quiet.counter.renders;
     act(() => {
       vi.advanceTimersByTime(90_000);
     });
-    expect(renders).toBe(before);
+    expect(quiet.counter.renders).toBe(quietBefore);
+    quiet.unmount();
+
+    const phone = renderCounted([poll(2, { deadline: past })], { tickOnlyWhileActive: true });
+    await waitFor(() => expect(phone.result.current.loading).toBe(false));
+    const phoneBefore = phone.counter.renders;
+    act(() => {
+      vi.advanceTimersByTime(90_000);
+    });
+    expect(phone.counter.renders).toBe(phoneBefore);
+    phone.unmount();
+
+    const desktop = renderCounted([poll(2, { deadline: past })], {});
+    await waitFor(() => expect(desktop.result.current.loading).toBe(false));
+    const desktopBefore = desktop.counter.renders;
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(desktop.counter.renders).toBeGreaterThan(desktopBefore);
   });
 
   it('FE-COLLAB-POLLS-013: a poll create answered with the bare poll is read too', async () => {
@@ -255,5 +277,28 @@ describe('useCollabPolls', () => {
       await result.current.createPoll({ question: 'Q', options: ['A', 'B'] });
     });
     expect(result.current.polls.map((p) => p.id)).toEqual([11, 1, 2]);
+  });
+
+  it('FE-COLLAB-POLLS-014: on the phone a live closed event replaces the poll with the one it carries', async () => {
+    const { result } = await loaded({ replaceClosedPoll: true });
+    act(() => {
+      wsHandler()({ type: 'collab:poll:closed', tripId: 1, poll: { id: 2, question: 'closed live' } });
+    });
+    expect(result.current.polls[1]).toEqual({ id: 2, question: 'closed live' });
+  });
+
+  it('FE-COLLAB-POLLS-015: a vote answer lands on the answered id on desktop and on the voted poll on the phone', async () => {
+    vi.mocked(collabApi.votePoll).mockResolvedValue({ poll: poll(2, { question: 'answer' }) });
+    const desktop = await loaded();
+    await act(async () => {
+      await desktop.result.current.votePoll(1, 0);
+    });
+    expect(desktop.result.current.polls.map((p) => p.question)).toEqual(['Poll 1', 'answer']);
+
+    const phone = await loaded({ matchVoteByPollId: true });
+    await act(async () => {
+      await phone.result.current.votePoll(1, 0);
+    });
+    expect(phone.result.current.polls.map((p) => p.question)).toEqual(['answer', 'Poll 2']);
   });
 });

@@ -48,7 +48,14 @@ export default function MCollabPolls({ planner }: MCollabPollsProps) {
   const currentUserId = user?.id ?? null
 
   const { polls, loading, createPoll, votePoll: handleVote, closePoll: handleClosePoll, deletePoll: handleDelete } =
-    useCollabPolls({ tripId, t, toast, replaceClosedPoll: true })
+    useCollabPolls({
+      tripId,
+      t,
+      toast,
+      replaceClosedPoll: true,
+      matchVoteByPollId: true,
+      tickOnlyWhileActive: true,
+    })
   const [showForm, setShowForm] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null)
   const [collapsedClosed, setCollapsedClosed] = useState(false)

@@ -19,8 +19,15 @@ export interface CollabPollsOptions {
   toast: ReturnType<typeof useToast>;
   /** The desktop panel outlives a trip change, so a failed load there empties the list. */
   resetOnLoadError?: boolean;
-  /** The phone shows the closed poll the server answers with; the desktop panel only flips its flag. */
+  /**
+   * The phone shows the closed poll the server sends, both as the close answer and as the
+   * live event; the desktop panel flips its flag and merges the live event into the poll.
+   */
   replaceClosedPoll?: boolean;
+  /** The phone puts a vote answer on the poll it voted on; the desktop panel on the id in the answer. */
+  matchVoteByPollId?: boolean;
+  /** The phone stops the countdown tick once a deadline passes; the desktop panel ticks until the poll is closed. */
+  tickOnlyWhileActive?: boolean;
 }
 
 /**
@@ -35,6 +42,8 @@ export function useCollabPolls({
   toast,
   resetOnLoadError = false,
   replaceClosedPoll = false,
+  matchVoteByPollId = false,
+  tickOnlyWhileActive = false,
 }: CollabPollsOptions) {
   const [polls, setPolls] = useState<CollabPollData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +81,12 @@ export function useCollabPolls({
         setPolls((prev) => prev.map((p) => (p.id === poll.id ? poll : p)));
       }
       if (msg.type === 'collab:poll:closed' && poll) {
-        setPolls((prev) => prev.map((p) => (p.id === poll.id ? { ...p, ...poll, is_closed: true } : p)));
+        setPolls((prev) =>
+          prev.map((p) => {
+            if (p.id !== poll.id) return p;
+            return replaceClosedPoll ? poll : { ...p, ...poll, is_closed: true };
+          })
+        );
       }
       if (msg.type === 'collab:poll:deleted') {
         const id = (msg.pollId as number | undefined) || poll?.id;
@@ -81,14 +95,14 @@ export function useCollabPolls({
     };
     addListener(handler);
     return () => removeListener(handler);
-  }, [tripId]);
+  }, [tripId, replaceClosedPoll]);
 
   // Re-render every 30s while a deadline is still counting down.
   useEffect(() => {
-    if (!polls.some((p) => p.deadline && isPollActive(p))) return;
+    if (!polls.some((p) => p.deadline && (tickOnlyWhileActive ? isPollActive(p) : !p.is_closed))) return;
     const iv = setInterval(() => setTick((v) => v + 1), 30000);
     return () => clearInterval(iv);
-  }, [polls]);
+  }, [polls, tickOnlyWhileActive]);
 
   /** Rethrows after the toast, so the form that called it stays open. */
   const createPoll = useCallback(
@@ -108,12 +122,13 @@ export function useCollabPolls({
     async (pollId: number, optionIndex: number) => {
       try {
         const updated = readPoll(await collabApi.votePoll(tripId, pollId, optionIndex));
-        setPolls((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+        const target = matchVoteByPollId ? pollId : updated.id;
+        setPolls((prev) => prev.map((p) => (p.id === target ? updated : p)));
       } catch {
         toast.error(t('common.error'));
       }
     },
-    [tripId, toast, t]
+    [tripId, matchVoteByPollId, toast, t]
   );
 
   const closePoll = useCallback(
