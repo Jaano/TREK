@@ -236,6 +236,8 @@ export function useCollabChatData({
     [tripId, toast, t]
   );
 
+  // The setters, messagesRef and isAtBottom are only here because useCollabChat hands them
+  // on in the return shape the desktop chat panel has always had; nothing writes them.
   return {
     messages,
     setMessages,
