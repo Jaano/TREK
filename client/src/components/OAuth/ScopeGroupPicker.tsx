@@ -1,9 +1,9 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { Check, ChevronDown, ChevronRight, Minus } from 'lucide-react'
-import { getScopesByGroup } from '../../api/oauthScopes'
 import { useTranslation } from '../../i18n'
 import { fs } from '../shared/DialogShell'
 import { SettingRows, SETTINGS_BUTTON } from '../Settings/settingsKit'
+import { useScopeSelection } from './useScopeSelection'
 
 interface Props {
   selected: string[]
@@ -32,18 +32,15 @@ function CheckBox({ checked, mixed = false }: { checked: boolean; mixed?: boolea
  */
 export default function ScopeGroupPicker({ selected, onChange }: Props): React.ReactElement {
   const { t } = useTranslation()
-  const [open, setOpen] = useState<Record<string, boolean>>({})
-
-  const scopesByGroup = getScopesByGroup(t)
-  const allScopeKeys = Object.values(scopesByGroup).flat().map(s => s.scope)
-  const allSelected  = allScopeKeys.every(s => selected.includes(s))
+  const { scopesByGroup, allSelected, open, groupState, toggleOpen, toggleAll, toggleGroup, toggleScope } =
+    useScopeSelection(selected, onChange)
 
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex justify-end">
         <button
           type="button"
-          onClick={() => onChange(allSelected ? [] : allScopeKeys)}
+          onClick={toggleAll}
           className={`${SETTINGS_BUTTON} px-3 py-1.5`}
           style={fs(12, 'body')}
         >
@@ -53,16 +50,14 @@ export default function ScopeGroupPicker({ selected, onChange }: Props): React.R
       <div className="max-h-96 overflow-y-auto overscroll-contain">
         <SettingRows>
           {Object.entries(scopesByGroup).map(([group, groupScopes]) => {
-            const groupScopeKeys    = groupScopes.map(s => s.scope)
-            const allGroupSelected  = groupScopeKeys.every(s => selected.includes(s))
-            const someGroupSelected = groupScopeKeys.some(s => selected.includes(s))
-            const mixed = someGroupSelected && !allGroupSelected
+            const state = groupState(groupScopes)
+            const { allSelected: allGroupSelected, someSelected: someGroupSelected, mixed } = state
             return (
               <div key={group}>
                 <div className="flex items-center gap-2 px-3.5 py-2.5">
                   <button
                     type="button"
-                    onClick={() => setOpen(prev => ({ ...prev, [group]: !prev[group] }))}
+                    onClick={() => toggleOpen(group)}
                     aria-expanded={!!open[group]}
                     className="flex min-w-0 flex-1 items-center gap-1.5 text-start text-content-secondary hover:text-content"
                   >
@@ -72,7 +67,7 @@ export default function ScopeGroupPicker({ selected, onChange }: Props): React.R
                     <span className="truncate font-geist font-bold uppercase tracking-[.08em]" style={fs(10.5)}>{group}</span>
                     {someGroupSelected && (
                       <span className="flex-none font-geist tabular-nums text-content-faint" style={fs(11)}>
-                        ({groupScopeKeys.filter(s => selected.includes(s)).length}/{groupScopeKeys.length})
+                        ({state.selectedCount}/{state.keys.length})
                       </span>
                     )}
                   </button>
@@ -81,11 +76,7 @@ export default function ScopeGroupPicker({ selected, onChange }: Props): React.R
                     role="checkbox"
                     aria-checked={mixed ? 'mixed' : allGroupSelected}
                     aria-label={allGroupSelected ? `Deselect all ${group}` : `Select all ${group}`}
-                    onClick={() => onChange(
-                      allGroupSelected
-                        ? selected.filter(s => !groupScopeKeys.includes(s))
-                        : [...new Set([...selected, ...groupScopeKeys])]
-                    )}
+                    onClick={() => toggleGroup(state)}
                     className="grid h-7 w-7 flex-none place-items-center rounded-[8px] hover:bg-surface-secondary"
                   >
                     <CheckBox checked={allGroupSelected} mixed={mixed} />
@@ -101,7 +92,7 @@ export default function ScopeGroupPicker({ selected, onChange }: Props): React.R
                           type="button"
                           role="checkbox"
                           aria-checked={on}
-                          onClick={() => onChange(on ? selected.filter(s => s !== scope) : [...selected, scope])}
+                          onClick={() => toggleScope(scope)}
                           className="flex w-full items-start gap-2.5 px-3.5 py-2.5 text-start transition-colors hover:bg-surface-tertiary"
                         >
                           <span className="mt-px"><CheckBox checked={on} /></span>
