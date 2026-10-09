@@ -1,5 +1,6 @@
 // FE-COLLAB-NOTESDATA-001 to FE-COLLAB-NOTESDATA-008: the note list behind the desktop
-// Collab panel (empties on a failed load) and the phone's notes tab (keeps the list), with
+// Collab panel (empties on a failed load, waits for a trip id) and the phone's notes tab
+// (keeps the list, always loads), with
 // the live note events and the attachment upload both run after saving a note.
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -79,11 +80,16 @@ describe('useCollabNotesData', () => {
     expect(empty.result.current.notes).toEqual([]);
   });
 
-  it('FE-COLLAB-NOTESDATA-002: without a trip nothing loads or listens', () => {
-    const { result } = setup({ tripId: 0 });
+  it('FE-COLLAB-NOTESDATA-002: without a trip the desktop list waits, the phone list still loads', async () => {
+    const desktop = setup({ tripId: 0, waitForTripId: true });
     expect(collabApi.getNotes).not.toHaveBeenCalled();
     expect(addListener).not.toHaveBeenCalled();
-    expect(result.current.loading).toBe(true);
+    expect(desktop.result.current.loading).toBe(true);
+
+    const phone = await loaded({ tripId: 0 });
+    expect(collabApi.getNotes).toHaveBeenCalledWith(0);
+    expect(addListener).toHaveBeenCalledTimes(1);
+    expect(phone.result.current.notes.map((n) => n.id)).toEqual([1, 2]);
   });
 
   it('FE-COLLAB-NOTESDATA-003: a failed reload empties the desktop list and keeps the phone list', async () => {

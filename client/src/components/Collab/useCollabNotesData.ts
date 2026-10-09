@@ -12,6 +12,8 @@ export interface CollabNotesDataOptions {
   toast: ReturnType<typeof useToast>;
   /** The desktop panel outlives a trip change, so a failed load there empties the list. */
   resetOnLoadError?: boolean;
+  /** The desktop panel loads and listens only once it has a trip id; the phone tab always does. */
+  waitForTripId?: boolean;
 }
 
 /**
@@ -26,12 +28,13 @@ export function useCollabNotesData<N extends { id: number } = CollabNoteData>({
   t,
   toast,
   resetOnLoadError = false,
+  waitForTripId = false,
 }: CollabNotesDataOptions) {
   const [notes, setNotes] = useState<N[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!tripId) return;
+    if (waitForTripId && !tripId) return;
     let cancelled = false;
     setLoading(true);
     collabApi
@@ -48,10 +51,10 @@ export function useCollabNotesData<N extends { id: number } = CollabNoteData>({
     return () => {
       cancelled = true;
     };
-  }, [tripId, resetOnLoadError]);
+  }, [tripId, resetOnLoadError, waitForTripId]);
 
   useEffect(() => {
-    if (!tripId) return;
+    if (waitForTripId && !tripId) return;
     const handler = (msg: Record<string, unknown>) => {
       // An event still in flight from a trip just left must not land in this list.
       if (String(msg?.tripId) !== String(tripId)) return;
@@ -69,7 +72,7 @@ export function useCollabNotesData<N extends { id: number } = CollabNoteData>({
     };
     addListener(handler);
     return () => removeListener(handler);
-  }, [tripId]);
+  }, [tripId, waitForTripId]);
 
   /**
    * Uploads a saved note's attachments one by one; a file the server refuses is toasted

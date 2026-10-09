@@ -43,7 +43,13 @@ function useCollabNotes({ tripId, currentUser }: CollabNotesProps) {
   const can = useCanDo()
   const trip = useTripStore((s) => s.trip)
   const canEdit = can('collab_edit', trip)
-  const { notes, setNotes, loading, uploadNoteFiles } = useCollabNotesData<CollabNote>({ tripId, t, toast, resetOnLoadError: true })
+  const { notes, setNotes, loading, uploadNoteFiles } = useCollabNotesData<CollabNote>({
+    tripId,
+    t,
+    toast,
+    resetOnLoadError: true,
+    waitForTripId: true,
+  })
   const [showNewModal, setShowNewModal] = useState(false)
   const [editingNote, setEditingNote] = useState(null)
   const [viewingNote, setViewingNote] = useState<CollabNote | null>(null)
