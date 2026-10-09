@@ -1,15 +1,19 @@
-// FE-FILES-ACTIONS-001 to FE-FILES-ACTIONS-012: the paste and link rules the desktop file
-// manager and the phone's files tab and link sheet share, with the id reading each keeps.
+// FE-FILES-ACTIONS-001 to FE-FILES-ACTIONS-020: the paste, link, field save and trash rules the
+// desktop file manager and the phone's files tab and sheets share, with what each view keeps.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildTripFile } from '../../../tests/helpers/factories';
 import { filesApi } from '../../api/client';
 import {
+  DESKTOP_FILE_TRASH_TOAST_RULES,
   PHONE_FILE_LINK_RULES,
+  PHONE_FILE_UPDATE_RULES,
   filesFromClipboard,
   planFileLinkToggle,
   runFileLinkRecordStep,
   toggleFileLink,
+  trashFileWithToast,
+  updateFileFields,
 } from './fileActions';
 
 function clipboard(items: { kind: string; file: File | null }[]): DataTransfer {
@@ -136,5 +140,107 @@ describe('running a link toggle', () => {
     await expect(toggleFileLink(1, buildTripFile({ id: 9, reservation_id: 7 }), 'reservation_id', 7)).rejects.toThrow(
       'nope'
     );
+  });
+});
+
+function feedback(t: (key: string) => string = (key) => key) {
+  return { t, toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() } };
+}
+
+describe('updateFileFields', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('FE-FILES-ACTIONS-013: saves the fields and starts the reload without waiting on desktop', async () => {
+    vi.spyOn(filesApi, 'update').mockResolvedValue({});
+    const fb = feedback();
+    let finishReload: () => void = () => {};
+    const refresh = vi.fn(() => new Promise<void>((resolve) => (finishReload = resolve)));
+    await updateFileFields(1, 7, { place_id: 3 }, { ...fb, refresh });
+    expect(filesApi.update).toHaveBeenCalledWith(1, 7, { place_id: 3 });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(fb.toast.error).not.toHaveBeenCalled();
+    finishReload();
+  });
+
+  it('FE-FILES-ACTIONS-014: desktop resolves before a slow reload is done', async () => {
+    vi.spyOn(filesApi, 'update').mockResolvedValue({});
+    const order: string[] = [];
+    const refresh = vi.fn(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      order.push('reloaded');
+    });
+    const reload = updateFileFields(1, 7, { description: 'x' }, { ...feedback(), refresh }).then(() =>
+      order.push('resolved')
+    );
+    await reload;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(order).toEqual(['resolved', 'reloaded']);
+  });
+
+  it('FE-FILES-ACTIONS-015: the phone waits for the reload before it resolves', async () => {
+    vi.spyOn(filesApi, 'update').mockResolvedValue({});
+    const fb = feedback();
+    const order: string[] = [];
+    const refresh = vi.fn(async () => {
+      await Promise.resolve();
+      order.push('reloaded');
+    });
+    await updateFileFields(1, 7, { description: 'seat 14A' }, { ...fb, refresh }, PHONE_FILE_UPDATE_RULES);
+    order.push('resolved');
+    expect(order).toEqual(['reloaded', 'resolved']);
+    expect(filesApi.update).toHaveBeenCalledWith(1, 7, { description: 'seat 14A' });
+  });
+
+  it('FE-FILES-ACTIONS-016: on the phone a failed reload shows the assign error', async () => {
+    vi.spyOn(filesApi, 'update').mockResolvedValue({});
+    const fb = feedback();
+    const refresh = vi.fn(() => Promise.reject(new Error('offline')));
+    await updateFileFields(1, 7, { description: 'x' }, { ...fb, refresh }, PHONE_FILE_UPDATE_RULES);
+    expect(fb.toast.error).toHaveBeenCalledWith('files.toast.assignError');
+  });
+
+  it('FE-FILES-ACTIONS-017: a failed save shows the assign error and skips the reload in both views', async () => {
+    vi.spyOn(filesApi, 'update').mockRejectedValue(new Error('500'));
+    for (const rules of [undefined, PHONE_FILE_UPDATE_RULES]) {
+      const fb = feedback();
+      const refresh = vi.fn();
+      await updateFileFields(1, 7, { reservation_id: null }, { ...fb, refresh }, rules);
+      expect(refresh).not.toHaveBeenCalled();
+      expect(fb.toast.error).toHaveBeenCalledWith('files.toast.assignError');
+    }
+  });
+});
+
+describe('trashFileWithToast', () => {
+  it('FE-FILES-ACTIONS-018: a trashed file says so and then calls onTrashed', async () => {
+    const fb = feedback();
+    const remove = vi.fn().mockResolvedValue(undefined);
+    const onTrashed = vi.fn();
+    await trashFileWithToast(remove, { ...fb, onTrashed });
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(fb.toast.success).toHaveBeenCalledWith('files.toast.trashed');
+    expect(onTrashed).toHaveBeenCalledTimes(1);
+    expect(fb.toast.error).not.toHaveBeenCalled();
+  });
+
+  it('FE-FILES-ACTIONS-019: an empty translation falls back to English on desktop only', async () => {
+    const desktop = feedback(() => '');
+    await trashFileWithToast(vi.fn().mockResolvedValue(undefined), desktop, DESKTOP_FILE_TRASH_TOAST_RULES);
+    expect(desktop.toast.success).toHaveBeenCalledWith('Moved to trash');
+
+    const phone = feedback(() => '');
+    await trashFileWithToast(vi.fn().mockResolvedValue(undefined), phone);
+    expect(phone.toast.success).toHaveBeenCalledWith('');
+  });
+
+  it('FE-FILES-ACTIONS-020: a failed delete shows the delete error and skips onTrashed', async () => {
+    const fb = feedback();
+    const onTrashed = vi.fn();
+    await trashFileWithToast(vi.fn().mockRejectedValue(new Error('403')), { ...fb, onTrashed });
+    expect(fb.toast.success).not.toHaveBeenCalled();
+    expect(onTrashed).not.toHaveBeenCalled();
+    expect(fb.toast.error).toHaveBeenCalledWith('files.toast.deleteError');
   });
 });

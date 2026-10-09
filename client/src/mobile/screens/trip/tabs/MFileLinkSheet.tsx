@@ -3,6 +3,7 @@ import { Check, Link2, Loader2, MapPin, Ticket, TrainFront } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import MSheet from '../../../components/MSheet'
 import { PHONE_FILE_LINK_RULES, toggleFileLink, type FileLinkField } from '../../../../components/Files/fileActions'
+import { linkedFileIds } from '../../../../components/Files/fileListRules'
 import type { TripFile } from '../../../../types'
 import type { TripPlanner } from '../MTripShell'
 import { Eyebrow, TileHeader } from '../sheets/MTripSheetUi'
@@ -33,13 +34,8 @@ export default function MFileLinkSheet({ planner, file, onClose }: MFileLinkShee
 
   if (!shown) return <MSheet open={false} onClose={onClose} variant="card" material="glass" />
 
-  const placeIds = new Set<number>()
-  if (shown.place_id != null) placeIds.add(shown.place_id)
-  for (const id of shown.linked_place_ids || []) if (id != null) placeIds.add(id)
-
-  const resIds = new Set<number>()
-  if (shown.reservation_id != null) resIds.add(shown.reservation_id)
-  for (const id of shown.linked_reservation_ids || []) if (id != null) resIds.add(id)
+  const placeIds = new Set(linkedFileIds(shown, 'place_id'))
+  const resIds = new Set(linkedFileIds(shown, 'reservation_id'))
 
   const refresh = () => tripActions.loadFiles(tripId)
 

@@ -1,5 +1,6 @@
 import { filesApi } from '../../api/client';
-import type { TripFile } from '../../types';
+import type { TranslationFn, TripFile } from '../../types';
+import type { useToast } from '../shared/Toast';
 
 /** The files a paste carries, in clipboard order; text and other non-file items are skipped. */
 export function filesFromClipboard(clipboardData: DataTransfer | null | undefined): File[] {
@@ -105,4 +106,63 @@ export async function toggleFileLink(
   const step = planFileLinkToggle(file, field, targetId, rules);
   if (step.kind === 'update') await filesApi.update(tripId, file.id, step.data);
   else await runFileLinkRecordStep(tripId, file.id, field, targetId, step.kind, rules);
+}
+
+interface FileFeedback {
+  t: TranslationFn;
+  toast: ReturnType<typeof useToast>;
+}
+
+/**
+ * How a field save reloads the files, which differs between the views. The desktop manager
+ * starts its reload and moves on; the phone's file sheet waits for the reload, so a failed
+ * reload shows the same error as a failed save and its busy marker stays until it is done.
+ */
+export interface FileUpdateRules {
+  awaitRefresh?: boolean;
+}
+
+export const PHONE_FILE_UPDATE_RULES: FileUpdateRules = { awaitRefresh: true };
+
+/** Saves fields of a file (its note, its place or booking) and reloads the files; a failure shows the assign error. */
+export async function updateFileFields(
+  tripId: number,
+  fileId: number,
+  data: Parameters<typeof filesApi.update>[2],
+  { t, toast, refresh }: FileFeedback & { refresh: () => unknown },
+  rules: FileUpdateRules = {}
+): Promise<void> {
+  try {
+    await filesApi.update(tripId, fileId, data);
+    if (rules.awaitRefresh) await refresh();
+    else void refresh();
+  } catch {
+    toast.error(t('files.toast.assignError'));
+  }
+}
+
+/**
+ * The trash toast, which differs between the views: the desktop manager falls back to an
+ * English text when the translation is empty, the phone shows the translation as it is.
+ */
+export interface FileTrashToastRules {
+  trashedFallback?: string;
+}
+
+export const DESKTOP_FILE_TRASH_TOAST_RULES: FileTrashToastRules = { trashedFallback: 'Moved to trash' };
+
+/** Moves a file to the trash through the view's delete call and says how it went. */
+export async function trashFileWithToast(
+  remove: () => Promise<unknown>,
+  { t, toast, onTrashed }: FileFeedback & { onTrashed?: () => void },
+  rules: FileTrashToastRules = {}
+): Promise<void> {
+  try {
+    await remove();
+    const trashed = t('files.toast.trashed');
+    toast.success(rules.trashedFallback ? trashed || rules.trashedFallback : trashed);
+    onTrashed?.();
+  } catch {
+    toast.error(t('files.toast.deleteError'));
+  }
 }

@@ -7,6 +7,7 @@ import { AuthedImg } from './FileManagerAuthedImg'
 import { AvatarChip } from './FileManagerAvatarChip'
 import { Tooltip } from '../shared/Tooltip'
 import { SourceBadge } from './FileManagerSourceBadge'
+import { DESKTOP_FILE_LINK_LIST_RULES, linkedFileTargets } from './fileListRules'
 
 export function FileRow(p: FileManagerState & { file: TripFile; isTrash?: boolean }) {
   const {
@@ -14,15 +15,7 @@ export function FileRow(p: FileManagerState & { file: TripFile; isTrash?: boolea
     handleStar, handleRestore, handlePermanentDelete, handleDelete, openFile, setAssignFileId,
   } = p
   const FileIcon = getFileIcon(file.mime_type)
-  const allLinkedPlaceIds = new Set<number>()
-  if (file.place_id) allLinkedPlaceIds.add(file.place_id)
-  for (const pid of (file.linked_place_ids || [])) allLinkedPlaceIds.add(pid)
-  const linkedPlaces = [...allLinkedPlaceIds].map(pid => places?.find(p => p.id === pid)).filter(Boolean)
-  // All linked reservations (primary + file_links)
-  const allLinkedResIds = new Set<number>()
-  if (file.reservation_id) allLinkedResIds.add(file.reservation_id)
-  for (const rid of (file.linked_reservation_ids || [])) allLinkedResIds.add(rid)
-  const linkedReservations = [...allLinkedResIds].map(rid => reservations?.find(r => r.id === rid)).filter(Boolean)
+  const linked = linkedFileTargets(file, places, reservations, TRANSPORT_TYPES, DESKTOP_FILE_LINK_LIST_RULES)
   return (
     <div key={file.id} className="group flex items-start gap-2.5 rounded-[14px] border border-edge-faint bg-surface-secondary px-3 py-2.5 transition-colors hover:border-edge"
       style={{ opacity: isTrash ? 0.7 : 1 }}
@@ -78,11 +71,11 @@ export function FileRow(p: FileManagerState & { file: TripFile; isTrash?: boolea
           {!!file.file_size && <span style={{ fontSize: 'calc(11px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{formatSize(file.file_size)}</span>}
           <span style={{ fontSize: 'calc(11px * var(--fs-scale-caption, 1))', color: 'var(--text-faint)' }}>{formatDateWithLocale(file.created_at, locale)}</span>
 
-          {linkedPlaces.map(p => (
+          {linked.places.map(p => (
             <SourceBadge key={p.id} icon={MapPin} kind={t('files.sourcePlan')} label={p.name} />
           ))}
-          {linkedReservations.map(r => (
-            TRANSPORT_TYPES.has(r.type)
+          {linked.reservations.map(({ reservation: r, transport }) => (
+            transport
               ? <SourceBadge key={r.id} icon={transportIcon(r.type)} kind={t('files.sourceTransport')} label={r.title || t('files.sourceTransport')} />
               : <SourceBadge key={r.id} icon={Ticket} kind={t('files.sourceBooking')} label={r.title || t('files.sourceBooking')} />
           ))}

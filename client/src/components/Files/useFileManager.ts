@@ -10,10 +10,11 @@ import { useAuthStore } from '../../store/authStore'
 import { canManageDocSync } from './docsync/useDocSync'
 import { useDocSyncOffered } from './docsync/useDocSyncOffered'
 import { getAuthUrl } from '../../api/authUrl'
-import { isImage, isMedia, isWalletPass } from './FileManager.helpers'
+import { isMedia, isWalletPass } from './FileManager.helpers'
 import { openFile as openFileInTab } from '../../utils/fileDownload'
 import { useFileTrash } from './useFileTrash'
-import { filesFromClipboard } from './fileActions'
+import { DESKTOP_FILE_TRASH_TOAST_RULES, filesFromClipboard, trashFileWithToast, updateFileFields } from './fileActions'
+import { matchesFileFilter } from './fileListRules'
 
 export interface FileManagerProps {
   files?: TripFile[]
@@ -132,23 +133,9 @@ export function useFileManager({ files = [], onUpload, onDelete, onUpdate, place
     }
   }, [onDrop])
 
-  const filteredFiles = files.filter(f => {
-    if (filterType === 'starred') return !!f.starred
-    if (filterType === 'pdf') return f.mime_type === 'application/pdf'
-    if (filterType === 'image') return isImage(f.mime_type)
-    if (filterType === 'doc') return (f.mime_type || '').includes('word') || (f.mime_type || '').includes('excel') || (f.mime_type || '').includes('text')
-    if (filterType === 'collab') return !!f.note_id
-    return true
-  })
+  const filteredFiles = files.filter(f => matchesFileFilter(f, filterType))
 
-  const handleDelete = async (id) => {
-    try {
-      await onDelete(id)
-      toast.success(t('files.toast.trashed') || 'Moved to trash')
-    } catch {
-      toast.error(t('files.toast.deleteError'))
-    }
-  }
+  const handleDelete = (id) => trashFileWithToast(() => onDelete(id), { t, toast }, DESKTOP_FILE_TRASH_TOAST_RULES)
 
   useEffect(() => {
     if (previewFile) {
@@ -158,14 +145,8 @@ export function useFileManager({ files = [], onUpload, onDelete, onUpdate, place
     }
   }, [previewFile?.url])
 
-  const handleAssign = async (fileId: number, data: { place_id?: number | null; reservation_id?: number | null }) => {
-    try {
-      await filesApi.update(tripId, fileId, data)
-      refreshFiles()
-    } catch {
-      toast.error(t('files.toast.assignError'))
-    }
-  }
+  const handleAssign = (fileId: number, data: { place_id?: number | null; reservation_id?: number | null }) =>
+    updateFileFields(tripId, fileId, data, { t, toast, refresh: refreshFiles })
 
   // Image OR video — both open in the lightbox; videos play there (#823).
   const mediaFiles = filteredFiles.filter(f => isMedia(f.mime_type))
