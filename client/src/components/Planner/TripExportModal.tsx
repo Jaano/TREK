@@ -6,11 +6,7 @@ import { IcsSubscribeModal } from './IcsSubscribeModal'
 import { SoftPill } from './planParts'
 import { useToast } from '../shared/Toast'
 import type { Trip, Day, Place, Category, AssignmentsMap, Reservation, DayNote } from '../../types'
-import { useSettingsStore } from '../../store/settingsStore'
-import { useRoadtripSettings } from '../../hooks/useRoadtripSettings'
-import { useAuthStore } from '../../store/authStore'
-import { hasPersonalPlan } from '../PDF/pdfScope'
-import { importChunk } from '../../utils/chunkReload'
+import { useTripExport } from './useTripExport'
 
 /**
  * What a GPX download can carry. Worded by what someone wants on their device
@@ -60,88 +56,21 @@ export function TripExportModal({
   t, locale, toast, canManageShare = true,
 }: TripExportModalProps) {
   const [subscribeOpen, setSubscribeOpen] = useState(false)
-  // Which row is working, so the dialog can say so instead of looking inert
-  // while a 226 kB PDF builder is fetched and a document is rendered.
-  const [busy, setBusy] = useState<string | null>(null)
-  // The PDF is built outside React, so it cannot read this itself (#2066).
-  const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
-  const distanceUnit = useSettingsStore(s => s.settings.distance_unit)
-  // The export gets the store's assignments and applies the day plan's own filter to
-  // them, so it needs the same switch the plan reads.
-  const showServiceStops = useRoadtripSettings(s => s.roadtrip_service_stops_in_days !== false, tripId)
   const titleId = useId()
-  const fileBase = trip?.title || 'trip'
-
-  // Shared tail of every download: Firefox and Safari cancel the download when
-  // the object URL is revoked before they picked the blob up, hence the delay.
-  const saveBlob = (blob: Blob, filename: string) => {
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 100)
-  }
-
-  const myId = useAuthStore(s => s.user?.id)
-  // "My plan" (#2168) only once somebody has been given a part of the trip.
-  const offerMine = myId != null && hasPersonalPlan(assignments, reservations)
-
-  const exportPdf = async (mine = false) => {
-    if (busy) return
-    setBusy(mine ? 'pdf:mine' : 'pdf')
-    const flatNotes = Object.entries(dayNotes).flatMap(([dayId, notes]) =>
-      notes.map(n => ({ ...n, day_id: Number(dayId) })),
-    )
-    try {
-      // Loaded on click: the PDF builder is ~226 kB and hangs off the days
-      // sidebar, so every trip used to pay for it whether or not anyone
-      // exported. A missing chunk lands in the catch and shows the same error
-      // the export already had.
-      const { downloadTripPDF } = await importChunk(() => import('../PDF/TripPDF'))
-      await downloadTripPDF({ trip, days, places, assignments, categories, dayNotes: flatNotes, reservations, t, locale, timeFormat, distanceUnit, showServiceStops, onlyUserId: mine ? myId : undefined })
-      onClose()
-    } catch (e) {
-      console.error('PDF error:', e)
-      toast.error(`${t('dayplan.pdfError')}: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const downloadIcs = async () => {
-    if (busy) return
-    setBusy('ics')
-    try {
-      const res = await fetch(`/api/trips/${tripId}/export.ics`, { credentials: 'include' })
-      if (!res.ok) throw new Error()
-      saveBlob(await res.blob(), `${fileBase}.ics`)
-      onClose()
-    } catch {
-      toast.error(t('planner.icsExportFailed'))
-    } finally {
-      setBusy(null)
-    }
-  }
-
-  const downloadGpx = async (key: string, query: string) => {
-    if (busy) return
-    setBusy(`gpx:${key}`)
-    try {
-      const res = await fetch(`/api/trips/${tripId}/places/export.gpx${query}`, { credentials: 'include' })
-      // 404 here means the selection is empty, which is worth its own message:
-      // "nothing happened" and "the download broke" look identical otherwise.
-      if (res.status === 404) { toast.info(t('dayplan.gpxEmpty')); return }
-      if (!res.ok) throw new Error()
-      saveBlob(await res.blob(), `${fileBase}.gpx`)
-      onClose()
-    } catch {
-      toast.error(t('dayplan.gpxFailed'))
-    } finally {
-      setBusy(null)
-    }
-  }
+  const {
+    fileBase, offerMine, isRunning, anyRunning, exportPdf, downloadIcs, downloadGpx,
+  } = useTripExport({
+    tripId,
+    data: { trip, days, places, assignments, categories, reservations, dayNotes },
+    t,
+    locale,
+    toast,
+    exclusive: true,
+    onExported: onClose,
+    requireTrip: false,
+    closeAfterPdf: true,
+    logPdfErrors: true,
+  })
 
   const header = (
     <DialogHeader
@@ -166,8 +95,8 @@ export function TripExportModal({
               icon={FileText}
               title={t('dayplan.pdf')}
               sub={t('dayplan.pdfTooltip')}
-              busy={busy === 'pdf'}
-              disabled={busy != null}
+              busy={isRunning('pdf')}
+              disabled={anyRunning}
               onClick={() => exportPdf()}
             />
             {offerMine && (
@@ -175,8 +104,8 @@ export function TripExportModal({
                 icon={UserRound}
                 title={t('dayplan.pdfMine')}
                 sub={t('dayplan.pdfMineSub')}
-                busy={busy === 'pdf:mine'}
-                disabled={busy != null}
+                busy={isRunning('pdf:mine')}
+                disabled={anyRunning}
                 onClick={() => exportPdf(true)}
               />
             )}
@@ -189,8 +118,8 @@ export function TripExportModal({
               icon={CalendarDays}
               title={t('mobileTrip.icsDownload')}
               sub={`${fileBase}.ics`}
-              busy={busy === 'ics'}
-              disabled={busy != null}
+              busy={isRunning('ics')}
+              disabled={anyRunning}
               onClick={downloadIcs}
             />
             {canManageShare && (
@@ -198,7 +127,7 @@ export function TripExportModal({
                 icon={CalendarPlus}
                 title={t('mobileTrip.icsSubscribe')}
                 sub={t('mobileTrip.icsSubscribeSub')}
-                disabled={busy != null}
+                disabled={anyRunning}
                 onClick={() => setSubscribeOpen(true)}
               />
             )}
@@ -215,8 +144,8 @@ export function TripExportModal({
                 key={scope.key}
                 icon={scope.icon}
                 title={t(scope.labelKey)}
-                busy={busy === `gpx:${scope.key}`}
-                disabled={busy != null}
+                busy={isRunning(`gpx:${scope.key}`)}
+                disabled={anyRunning}
                 onClick={() => downloadGpx(scope.key, scope.query)}
               />
             ))}

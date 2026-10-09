@@ -3,15 +3,11 @@ import { CalendarPlus, ChevronRight, FileDown, Share2, UserRound } from 'lucide-
 import MSheet from '../../../components/MSheet'
 import { IcsSubscribeModal } from '../../../../components/Planner/IcsSubscribeModal'
 import { useTripStore } from '../../../../store/tripStore'
-import { useSettingsStore } from '../../../../store/settingsStore'
-import { useRoadtripSettings } from '../../../../hooks/useRoadtripSettings'
 import { useTranslation } from '../../../../i18n'
-import { useAuthStore } from '../../../../store/authStore'
-import { hasPersonalPlan } from '../../../../components/PDF/pdfScope'
+import { useTripExport } from '../../../../components/Planner/useTripExport'
 import { INNER_CLS, TileHeader } from './MTripSheetUi'
 import type { MTripSheetsProps } from '../MTripShell'
 import type { LucideIcon } from 'lucide-react'
-import { importChunk } from '../../../../utils/chunkReload'
 
 /**
  * Export sheet ('export', opened from the Mehr sheet): the desktop day-plan
@@ -21,106 +17,40 @@ import { importChunk } from '../../../../utils/chunkReload'
  */
 export default function MExportSheet({ planner, shell }: MTripSheetsProps) {
   const { t, locale } = useTranslation()
-  // The PDF is built outside React, so it cannot read this itself (#2066).
-  const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
-  const distanceUnit = useSettingsStore(s => s.settings.distance_unit)
-  // Fed the way the desktop dialog feeds it: the store's assignments and the switch,
-  // and the export applies the day plan's filter itself, so both shells print the same.
-  const showServiceStops = useRoadtripSettings(s => s.roadtrip_service_stops_in_days !== false, planner.tripId)
   const open = shell.sheet?.id === 'export'
   const dayNotes = useTripStore(s => s.dayNotes)
   const [subscribeOpen, setSubscribeOpen] = useState(false)
-  const [pdfBusy, setPdfBusy] = useState<false | 'all' | 'mine'>(false)
-  const myId = useAuthStore(s => s.user?.id)
-  const offerMine = myId != null && hasPersonalPlan(planner.storedAssignments, planner.reservations)
-  const [icsBusy, setIcsBusy] = useState(false)
-  const [gpxBusy, setGpxBusy] = useState(false)
+  // Fed the way the desktop dialog feeds it: the store's assignments, and the export
+  // applies the day plan's filter itself, so both shells print the same. The PDF stays
+  // open here; a calendar or GPX file closes the sheet.
+  const { offerMine, isRunning, exportPdf, downloadIcs, downloadGpx } = useTripExport({
+    tripId: planner.tripId,
+    data: {
+      trip: planner.trip,
+      days: planner.days,
+      places: planner.places,
+      assignments: planner.storedAssignments,
+      categories: planner.categories,
+      reservations: planner.reservations,
+      dayNotes,
+    },
+    t,
+    locale,
+    toast: planner.toast,
+    exclusive: false,
+    onExported: shell.closeSheet,
+    requireTrip: true,
+    closeAfterPdf: false,
+    logPdfErrors: false,
+  })
   // The subscription link reads the trip without an account, so it needs the
   // same permission as the public share link. The ICS download beside it does
   // not: that is a file this member may already read.
   const canManageShare = planner.can('share_manage', planner.trip)
 
-  const exportPdf = async (mine = false) => {
-    if (!planner.trip || pdfBusy) return
-    const flatNotes = Object.entries(dayNotes).flatMap(([dayId, notes]) =>
-      notes.map(n => ({ ...n, day_id: Number(dayId) })),
-    )
-    setPdfBusy(mine ? 'mine' : 'all')
-    try {
-      // See DayPlanSidebarToolbar: loaded on demand, not with the trip.
-      const { downloadTripPDF } = await importChunk(() => import('../../../../components/PDF/TripPDF'))
-      await downloadTripPDF({
-        trip: planner.trip,
-        days: planner.days,
-        places: planner.places,
-        assignments: planner.storedAssignments,
-        categories: planner.categories,
-        dayNotes: flatNotes,
-        reservations: planner.reservations,
-        t,
-        locale,
-        timeFormat,
-        distanceUnit,
-        showServiceStops,
-        onlyUserId: mine ? myId : undefined,
-      })
-    } catch (e) {
-      planner.toast.error(`${t('dayplan.pdfError')}: ${e instanceof Error ? e.message : String(e)}`)
-    } finally {
-      setPdfBusy(false)
-    }
-  }
-
-  const downloadIcs = async () => {
-    if (icsBusy) return
-    setIcsBusy(true)
-    try {
-      const res = await fetch(`/api/trips/${planner.tripId}/export.ics`, { credentials: 'include' })
-      if (!res.ok) throw new Error()
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${planner.trip?.title || 'trip'}.ics`
-      document.body.appendChild(a)
-      a.click()
-      // Firefox/Safari cancel the download when the object URL is revoked
-      // before they picked the blob up.
-      setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 100)
-      shell.closeSheet()
-    } catch {
-      planner.toast.error(t('planner.icsExportFailed'))
-    } finally {
-      setIcsBusy(false)
-    }
-  }
-
   // Everything in one file here: the desktop menu's three scopes are a hover
   // affordance the phone does not have, and "the whole trip" is what you want
   // on a device anyway.
-  const downloadGpx = async () => {
-    if (gpxBusy) return
-    setGpxBusy(true)
-    try {
-      const res = await fetch(`/api/trips/${planner.tripId}/places/export.gpx`, { credentials: 'include' })
-      if (res.status === 404) { planner.toast.info(t('dayplan.gpxEmpty')); return }
-      if (!res.ok) throw new Error()
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `${planner.trip?.title || 'trip'}.gpx`
-      document.body.appendChild(a)
-      a.click()
-      setTimeout(() => { URL.revokeObjectURL(url); a.remove() }, 100)
-      shell.closeSheet()
-    } catch {
-      planner.toast.error(t('dayplan.gpxFailed'))
-    } finally {
-      setGpxBusy(false)
-    }
-  }
-
   return (
     <MSheet open={open} onClose={shell.closeSheet} variant="card" material="glass" ariaLabel={t('mobileTrip.export')}>
       <div className="flex-none px-[18px] pt-4">
@@ -136,29 +66,29 @@ export default function MExportSheet({ planner, shell }: MTripSheetsProps) {
         <div className="flex flex-col gap-2">
           <ExportRow
             icon={FileDown}
-            title={pdfBusy === 'all' ? t('common.loading') : t('dayplan.pdf')}
+            title={isRunning('pdf') ? t('common.loading') : t('dayplan.pdf')}
             sub={t('dayplan.pdfTooltip')}
             onClick={() => void exportPdf()}
           />
           {offerMine && (
             <ExportRow
               icon={UserRound}
-              title={pdfBusy === 'mine' ? t('common.loading') : t('dayplan.pdfMine')}
+              title={isRunning('pdf:mine') ? t('common.loading') : t('dayplan.pdfMine')}
               sub={t('dayplan.pdfMineSub')}
               onClick={() => void exportPdf(true)}
             />
           )}
           <ExportRow
             icon={FileDown}
-            title={icsBusy ? t('common.loading') : t('mobileTrip.icsDownload')}
+            title={isRunning('ics') ? t('common.loading') : t('mobileTrip.icsDownload')}
             sub={`${planner.trip?.title || 'trip'}.ics`}
             onClick={() => void downloadIcs()}
           />
           <ExportRow
             icon={Share2}
-            title={gpxBusy ? t('common.loading') : t('dayplan.gpxAll')}
+            title={isRunning('gpx:all') ? t('common.loading') : t('dayplan.gpxAll')}
             sub={t('dayplan.gpxTooltip')}
-            onClick={() => void downloadGpx()}
+            onClick={() => void downloadGpx('all', '')}
           />
           {canManageShare && (
             <ExportRow
