@@ -13,26 +13,14 @@ import {
   Loader2,
   Tag,
 } from 'lucide-react';
-import { useEffect, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react';
-import apiClient from '../../api/client';
-import { getLocaleForLanguage, useTranslation } from '../../i18n';
+import { type ComponentType, type CSSProperties, type ReactNode } from 'react';
+import { useTranslation } from '../../i18n';
+import { escapeReleaseHtml as escapeHtml, parseReleaseNotes } from '../../utils/releaseNotes';
 import { fs } from '../shared/DialogShell';
 import { SETTINGS_BUTTON, SettingsCard, StatusPill } from '../Settings/settingsKit';
+import { useGithubReleases } from './useGithubReleases';
 
 const REPO = 'liketrek/TREK';
-const PER_PAGE = 10;
-
-interface GithubRelease {
-  id: number;
-  prerelease: boolean;
-  tag_name: string;
-  name: string | null;
-  body: string | null;
-  published_at: string | null;
-  created_at: string;
-  author: { login: string } | null;
-  [key: string]: unknown;
-}
 
 /** The Discord mark, sized and coloured like the lucide glyphs beside it. */
 function DiscordIcon({ size = 18 }: { size?: number }) {
@@ -79,73 +67,15 @@ function SupportCard({ link }: { link: SupportLink }) {
 }
 
 export default function GitHubPanel({ isPrerelease = false }: { isPrerelease?: boolean }) {
-  const { t, language } = useTranslation();
-  const [releases, setReleases] = useState<GithubRelease[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-
-  const fetchReleases = async (pageNum = 1, append = false) => {
-    try {
-      const res = await apiClient.get(`/admin/github-releases`, { params: { per_page: PER_PAGE, page: pageNum } });
-      const data = Array.isArray(res.data) ? res.data : [];
-      setReleases((prev) => (append ? [...prev, ...data] : data));
-      setHasMore(data.length === PER_PAGE);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
-    }
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    void fetchReleases(1).finally(() => setLoading(false));
-  }, []);
-
-  const handleLoadMore = async () => {
-    const next = page + 1;
-    setLoadingMore(true);
-    await fetchReleases(next, true);
-    setPage(next);
-    setLoadingMore(false);
-  };
-
-  const toggleExpand = (id: number) => {
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString(getLocaleForLanguage(language), { day: 'numeric', month: 'short', year: 'numeric' });
-  };
+  const { t } = useTranslation();
+  const {
+    shownReleases: shown, loading, error, expanded, toggleExpand, hasMore, loadingMore, handleLoadMore, formatDate,
+  } = useGithubReleases({ isPrerelease });
 
   // Simple markdown-to-html for release notes (handles headers, bold, lists, links)
   const renderBody = (body: string) => {
     if (!body) return null;
-    const lines = body.split('\n');
-    const elements: ReactNode[] = [];
-    let listItems: string[] = [];
 
-    const flushList = () => {
-      if (listItems.length > 0) {
-        elements.push(
-          <ul key={`ul-${elements.length}`} className="my-1.5 space-y-1 ps-0">
-            {listItems.map((item, i) => (
-              <li key={i} className="flex gap-2 leading-relaxed text-content-secondary" style={fs(12.5, 'body')}>
-                <span className="mt-[0.6em] h-1 w-1 flex-shrink-0 rounded-full bg-content-faint" />
-                <span dangerouslySetInnerHTML={{ __html: inlineFormat(item) }} />
-              </li>
-            ))}
-          </ul>
-        );
-        listItems = [];
-      }
-    };
-
-    const escapeHtml = (str: string) =>
-      str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const inlineFormat = (text: string) => {
       return escapeHtml(text)
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -159,43 +89,42 @@ export default function GitHubPanel({ isPrerelease = false }: { isPrerelease?: b
         });
     };
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        flushList();
-        continue;
+    return parseReleaseNotes(body).map((block, idx) => {
+      if (block.kind === 'ul') {
+        return (
+          <ul key={`ul-${idx}`} className="my-1.5 space-y-1 ps-0">
+            {block.items.map((item, i) => (
+              <li key={i} className="flex gap-2 leading-relaxed text-content-secondary" style={fs(12.5, 'body')}>
+                <span className="mt-[0.6em] h-1 w-1 flex-shrink-0 rounded-full bg-content-faint" />
+                <span dangerouslySetInnerHTML={{ __html: inlineFormat(item) }} />
+              </li>
+            ))}
+          </ul>
+        );
       }
-
-      if (trimmed.startsWith('### ')) {
-        flushList();
-        elements.push(
-          <h4 key={elements.length} className="mb-1 mt-3 font-geist font-bold uppercase tracking-[.08em] text-content-faint first:mt-0" style={fs(10)}>
-            {trimmed.slice(4)}
+      if (block.kind === 'h4') {
+        return (
+          <h4 key={idx} className="mb-1 mt-3 font-geist font-bold uppercase tracking-[.08em] text-content-faint first:mt-0" style={fs(10)}>
+            {block.text}
           </h4>
         );
-      } else if (trimmed.startsWith('## ')) {
-        flushList();
-        elements.push(
-          <h3 key={elements.length} className="mb-1 mt-3 font-semibold text-content first:mt-0" style={fs(13, 'body')}>
-            {trimmed.slice(3)}
+      }
+      if (block.kind === 'h3') {
+        return (
+          <h3 key={idx} className="mb-1 mt-3 font-semibold text-content first:mt-0" style={fs(13, 'body')}>
+            {block.text}
           </h3>
         );
-      } else if (/^[-*] /.test(trimmed)) {
-        listItems.push(trimmed.slice(2));
-      } else {
-        flushList();
-        elements.push(
-          <p
-            key={elements.length}
-            className="my-1 leading-relaxed text-content-secondary"
-            style={fs(12.5, 'body')}
-            dangerouslySetInnerHTML={{ __html: inlineFormat(trimmed) }}
-          />
-        );
       }
-    }
-    flushList();
-    return elements;
+      return (
+        <p
+          key={idx}
+          className="my-1 leading-relaxed text-content-secondary"
+          style={fs(12.5, 'body')}
+          dangerouslySetInnerHTML={{ __html: inlineFormat(block.text) }}
+        />
+      );
+    });
   };
 
   const supportLinks: SupportLink[] = [
@@ -257,7 +186,6 @@ export default function GitHubPanel({ isPrerelease = false }: { isPrerelease?: b
   } else if (error) {
     releasesCard = <SettingsCard icon={AlertTriangle} tone="danger" title={t('admin.github.error')} hint={error} />;
   } else {
-    const shown = isPrerelease ? releases : releases.filter((r) => !r.prerelease);
     releasesCard = (
       <SettingsCard
         icon={History}
