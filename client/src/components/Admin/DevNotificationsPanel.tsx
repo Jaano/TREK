@@ -1,26 +1,12 @@
-import React, { useState, useEffect, useId } from 'react'
-import { adminApi, tripsApi } from '../../api/client'
-import { getApiErrorMessage } from '../../utils/apiError'
-import { useAuthStore } from '../../store/authStore'
-import { useToast } from '../shared/Toast'
+import React, { useId } from 'react'
 import { fs } from '../shared/DialogShell'
 import { EditorField, INPUT } from '../shared/dialogParts'
 import { SettingsCard, StatusPill } from '../Settings/settingsKit'
+import { useDevNotifications } from './useDevNotifications'
 import {
   Bell, Zap, CheckCircle, Navigation, User, Calendar, Clock, Image, MessageSquare, Tag, UserPlus,
   Download, MapPin, ChevronDown, FlaskConical, Loader2, Map as MapIcon, ShieldCheck,
 } from 'lucide-react'
-
-interface Trip {
-  id: number
-  title: string
-}
-
-interface AppUser {
-  id: number
-  username: string
-  email: string
-}
 
 /** A native select in the editors' box look, with the chevron the CustomSelect draws. */
 const SELECT = `${INPUT} appearance-none pe-9`
@@ -40,44 +26,11 @@ function ButtonGrid({ children }: { children: React.ReactNode }): React.ReactEle
 }
 
 export default function DevNotificationsPanel(): React.ReactElement {
-  const toast = useToast()
   const ids = useId()
-  const user = useAuthStore(s => s.user)
-  const [sending, setSending] = useState<string | null>(null)
-  const [trips, setTrips] = useState<Trip[]>([])
-  const [selectedTripId, setSelectedTripId] = useState<number | null>(null)
-  const [users, setUsers] = useState<AppUser[]>([])
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
-
-  useEffect(() => {
-    tripsApi.list().then(data => {
-      const list = (data.trips || data || []) as Trip[]
-      setTrips(list)
-      if (list.length > 0) setSelectedTripId(list[0].id)
-    }).catch(() => {})
-    adminApi.users().then(data => {
-      const list = (data.users || data || []) as AppUser[]
-      setUsers(list)
-      if (list.length > 0) setSelectedUserId(list[0].id)
-    }).catch(() => {})
-  }, [])
-
-  const fire = async (label: string, payload: Record<string, unknown>) => {
-    setSending(label)
-    try {
-      await adminApi.sendTestNotification(payload)
-      toast.success(`Sent: ${label}`)
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Failed'))
-    } finally {
-      setSending(null)
-    }
-  }
-
-  const selectedTrip = trips.find(t => t.id === selectedTripId)
-  const selectedUser = users.find(u => u.id === selectedUserId)
-  const username = user?.username || 'Admin'
-  const tripTitle = selectedTrip?.title || 'Test Trip'
+  const {
+    sending, trips, selectedTripId, setSelectedTripId, users, selectedUserId, setSelectedUserId,
+    tripInviteId, vacayInviteId, send,
+  } = useDevNotifications()
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -114,41 +67,16 @@ export default function DevNotificationsPanel(): React.ReactElement {
       >
         <ButtonGrid>
           <Btn id="simple-me" label="Simple → Me" sub="test_simple · user" icon={Bell}
-            onClick={() => fire('simple-me', {
-              event: 'test_simple',
-              scope: 'user',
-              targetId: user?.id,
-              params: {},
-            })}
+            onClick={send.simpleMe}
           />
           <Btn id="boolean-me" label="Boolean → Me" sub="test_boolean · user" icon={CheckCircle}
-            onClick={() => fire('boolean-me', {
-              event: 'test_boolean',
-              scope: 'user',
-              targetId: user?.id,
-              params: {},
-              inApp: {
-                type: 'boolean',
-                positiveCallback: { action: 'test_approve', payload: {} },
-                negativeCallback: { action: 'test_deny', payload: {} },
-              },
-            })}
+            onClick={send.booleanMe}
           />
           <Btn id="navigate-me" label="Navigate → Me" sub="test_navigate · user" icon={Navigation}
-            onClick={() => fire('navigate-me', {
-              event: 'test_navigate',
-              scope: 'user',
-              targetId: user?.id,
-              params: {},
-            })}
+            onClick={send.navigateMe}
           />
           <Btn id="simple-admins" label="Simple → All Admins" sub="test_simple · admin" icon={Zap}
-            onClick={() => fire('simple-admins', {
-              event: 'test_simple',
-              scope: 'admin',
-              targetId: 0,
-              params: {},
-            })}
+            onClick={send.simpleAdmins}
           />
         </ButtonGrid>
       </SettingsCard>
@@ -167,46 +95,19 @@ export default function DevNotificationsPanel(): React.ReactElement {
           </EditorField>
           <ButtonGrid>
             <Btn id="booking_change" label="booking_change" sub="navigate · trip" icon={Calendar}
-              onClick={() => selectedTripId && fire('booking_change', {
-                event: 'booking_change',
-                scope: 'trip',
-                targetId: selectedTripId,
-                params: { actor: username, trip: tripTitle, booking: 'Test Hotel', type: 'hotel', tripId: String(selectedTripId) },
-              })}
+              onClick={send.bookingChange}
             />
             <Btn id="trip_reminder" label="trip_reminder" sub="navigate · trip" icon={Clock}
-              onClick={() => selectedTripId && fire('trip_reminder', {
-                event: 'trip_reminder',
-                scope: 'trip',
-                targetId: selectedTripId,
-                params: { trip: tripTitle, tripId: String(selectedTripId) },
-              })}
+              onClick={send.tripReminder}
             />
             <Btn id="photos_shared" label="photos_shared" sub="navigate · trip" icon={Image}
-              onClick={() => selectedTripId && fire('photos_shared', {
-                event: 'photos_shared',
-                scope: 'trip',
-                targetId: selectedTripId,
-                // A string on purpose: notification params are Record<string, string> end to end, the server
-                // sends count: String(added), and resolveTemplate reads a numeric string as the plural count.
-                params: { actor: username, trip: tripTitle, count: '5', tripId: String(selectedTripId) },
-              })}
+              onClick={send.photosShared}
             />
             <Btn id="collab_message" label="collab_message" sub="navigate · trip" icon={MessageSquare}
-              onClick={() => selectedTripId && fire('collab_message', {
-                event: 'collab_message',
-                scope: 'trip',
-                targetId: selectedTripId,
-                params: { actor: username, trip: tripTitle, preview: 'This is a test message preview.', tripId: String(selectedTripId) },
-              })}
+              onClick={send.collabMessage}
             />
             <Btn id="packing_tagged" label="packing_tagged" sub="navigate · trip" icon={Tag}
-              onClick={() => selectedTripId && fire('packing_tagged', {
-                event: 'packing_tagged',
-                scope: 'trip',
-                targetId: selectedTripId,
-                params: { actor: username, trip: tripTitle, category: 'Clothing', tripId: String(selectedTripId) },
-              })}
+              onClick={send.packingTagged}
             />
           </ButtonGrid>
         </SettingsCard>
@@ -226,28 +127,18 @@ export default function DevNotificationsPanel(): React.ReactElement {
           </EditorField>
           <ButtonGrid>
             <Btn
-              id={`trip_invite-${selectedUserId}`}
+              id={tripInviteId}
               label="trip_invite"
               sub="navigate · user"
               icon={UserPlus}
-              onClick={() => selectedUserId && fire(`trip_invite-${selectedUserId}`, {
-                event: 'trip_invite',
-                scope: 'user',
-                targetId: selectedUserId,
-                params: { actor: username, trip: tripTitle, invitee: selectedUser?.email || '', tripId: String(selectedTripId ?? 0) },
-              })}
+              onClick={send.tripInvite}
             />
             <Btn
-              id={`vacay_invite-${selectedUserId}`}
+              id={vacayInviteId}
               label="vacay_invite"
               sub="navigate · user"
               icon={MapPin}
-              onClick={() => selectedUserId && fire(`vacay_invite-${selectedUserId}`, {
-                event: 'vacay_invite',
-                scope: 'user',
-                targetId: selectedUserId,
-                params: { actor: username, planId: '1' },
-              })}
+              onClick={send.vacayInvite}
             />
           </ButtonGrid>
         </SettingsCard>
@@ -257,12 +148,7 @@ export default function DevNotificationsPanel(): React.ReactElement {
       <SettingsCard icon={ShieldCheck} title="Admin-Scoped Events" hint="Fires to all admin users.">
         <ButtonGrid>
           <Btn id="version_available" label="version_available" sub="navigate · admin" icon={Download}
-            onClick={() => fire('version_available', {
-              event: 'version_available',
-              scope: 'admin',
-              targetId: 0,
-              params: { version: '9.9.9-test' },
-            })}
+            onClick={send.versionAvailable}
           />
         </ButtonGrid>
       </SettingsCard>
