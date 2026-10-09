@@ -12,6 +12,7 @@ import { parseReservationMetadata } from '../../utils/flightLegs'
 import { BookingDialogHeader } from './bookings/BookingDialogShell'
 import { BOX, Eyebrow, Field, fs, toneColor, toneOf } from './bookings/bookingParts'
 import { filesFor } from '../../utils/reservationFiles'
+import { bookingDayLabel, segmentCodeLabel } from './transportDetailModel'
 import { TransitLegs, transitSummary } from './bookings/transitParts'
 import type { Reservation } from '../../types'
 
@@ -185,8 +186,7 @@ function detailCells(res: Reservation, meta: Record<string, unknown>, t: Transla
   if (legs.length > 1) {
     for (const leg of legs) {
       if (!leg?.confirmation_number) continue
-      const segment = [leg.from, leg.to].filter(Boolean).join(' → ')
-      add(segment || t('reservations.confirmationCode'), leg.confirmation_number, true)
+      add(segmentCodeLabel(leg, t), leg.confirmation_number, true)
     }
   }
   return cells
@@ -196,9 +196,7 @@ function detailCells(res: Reservation, meta: Record<string, unknown>, t: Transla
 function whenOf(res: Reservation, locale: string, timeFormat: string): { day: string; time: string } {
   const { date, time } = splitReservationDateTime(res.reservation_time)
   const { time: endTime } = splitReservationDateTime(res.reservation_end_time)
-  const day = date
-    ? new Date(date + 'T00:00:00Z').toLocaleDateString(locale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
-    : ''
+  const day = date ? bookingDayLabel(date, locale) : ''
   const start = time ? formatTime(time, locale, timeFormat) : ''
   const end = endTime ? formatTime(endTime, locale, timeFormat) : ''
   return { day, time: start && end ? `${start} → ${end}` : start }

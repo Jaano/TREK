@@ -10,6 +10,7 @@ import { getFlightLegs, getTrainLegs, usesStationRoute } from '../../../../utils
 import { openFile } from '../../../../utils/fileDownload'
 import { runsOnDay } from '../../../../utils/reservationRoutes'
 import { filesFor } from '../../../../utils/reservationFiles'
+import { bookingDayLabel, segmentCodeLabel } from '../../../../components/Planner/transportDetailModel'
 import type { Reservation } from '../../../../types'
 import { Eyebrow, INNER_CLS, StatBox, TileHeader, displayTime } from './MTripSheetUi'
 
@@ -88,11 +89,7 @@ export default function MTransportSheet({ planner, shell }: MTripSheetsProps) {
   if (meta.flight_number) subParts.push(meta.flight_number)
   if (meta.train_number) subParts.push(meta.train_number)
   if (from?.name && to?.name) subParts.push(`${from.name} → ${to.name}`)
-  else if (date) {
-    subParts.push(new Date(`${date}T00:00:00Z`).toLocaleDateString(locale, {
-      weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC',
-    }))
-  }
+  else if (date) subParts.push(bookingDayLabel(date, locale))
 
   const seat = meta.seat
   const platform = meta.platform
@@ -247,7 +244,7 @@ export default function MTransportSheet({ planner, shell }: MTripSheetsProps) {
             {legCodes.map((leg, i) => (
               <div key={i} className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-[0.71875rem] font-medium">
-                  {[leg.from, leg.to].filter(Boolean).join(' → ') || t('reservations.confirmationCode')}
+                  {segmentCodeLabel(leg, t)}
                 </span>
                 <button
                   type="button"
