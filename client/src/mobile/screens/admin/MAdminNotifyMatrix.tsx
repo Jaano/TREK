@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { adminApi } from '../../../api/client'
 import type { TranslationFn } from '../../../types'
 import type { useToast } from '../../../components/shared/Toast'
@@ -24,9 +24,20 @@ const BUILTIN_CHANNELS = ['inapp', 'email', 'webhook', 'ntfy'] as const
 // AdminNotificationsPanel. Loads its own data and auto-saves each toggle.
 export default function MAdminNotifyMatrix({ t, toast }: { t: TranslationFn; toast: ReturnType<typeof useToast> }) {
   const [matrix, setMatrix] = useState<MatrixData | null>(null)
+  // Toggles fire faster than React re-renders, so the live preferences are mirrored in a
+  // ref. Reading state out of the render closure would let a second toggle undo the first.
+  const prefsRef = useRef<MatrixData['preferences'] | null>(null)
+
+  const writePrefs = (prefs: MatrixData['preferences']) => {
+    prefsRef.current = prefs
+    setMatrix((m) => (m ? { ...m, preferences: prefs } : m))
+  }
 
   useEffect(() => {
-    adminApi.getNotificationPreferences().then((data: MatrixData) => setMatrix(data)).catch(() => {})
+    adminApi.getNotificationPreferences().then((data: MatrixData) => {
+      prefsRef.current = data.preferences
+      setMatrix(data)
+    }).catch(() => {})
   }, [])
 
   if (!matrix) {
@@ -53,16 +64,16 @@ export default function MAdminNotifyMatrix({ t, toast }: { t: TranslationFn; toa
   )
 
   const toggle = async (eventType: string, channel: string) => {
-    const current = matrix.preferences[eventType]?.[channel] ?? true
-    const updated = {
-      ...matrix.preferences,
-      [eventType]: { ...matrix.preferences[eventType], [channel]: !current },
-    }
-    setMatrix((m) => (m ? { ...m, preferences: updated } : m))
+    const before = prefsRef.current ?? matrix.preferences
+    const current = before[eventType]?.[channel] ?? true
+    const updated = { ...before, [eventType]: { ...before[eventType], [channel]: !current } }
+    writePrefs(updated)
     try {
       await adminApi.updateNotificationPreferences(updated)
     } catch {
-      setMatrix((m) => (m ? { ...m, preferences: matrix.preferences } : m))
+      // Revert this cell only: a toggle that already went through keeps its value.
+      const latest = prefsRef.current ?? updated
+      writePrefs({ ...latest, [eventType]: { ...latest[eventType], [channel]: current } })
       toast.error(t('common.error'))
     }
   }
