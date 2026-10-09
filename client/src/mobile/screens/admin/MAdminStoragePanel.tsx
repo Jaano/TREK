@@ -14,6 +14,7 @@ import { CACHE_CATEGORIES, primaryNameOf } from '../../../components/Admin/stora
 import { useBackendForm } from '../../../components/Admin/storage/useBackendForm'
 import { categoryNames, migrationPromptLine, useStoragePanel } from '../../../components/Admin/storage/useStoragePanel'
 import MToggle from '../../components/MToggle'
+import MStorageTestResult from '../../components/MStorageTestResult'
 import MSetPickerSheet from '../settings/MSetPickerSheet'
 import MConfirmSheet from '../settings/MConfirmSheet'
 import { MSetSelectRow } from '../settings/MSettingsUi'
@@ -298,23 +299,7 @@ export default function MAdminStoragePanel(): React.ReactElement {
                     </MAdminButton>
                   )}
                 </div>
-                {result === 'running' ? (
-                  <p className="mt-2 font-geist text-[0.625rem] text-m-muted">{t('storage.test.running')}</p>
-                ) : (
-                  result && (
-                    <div className="mt-2 space-y-0.5">
-                      <p className="text-[0.75rem] font-bold text-m-ink">
-                        {result.ok ? t('storage.test.ok') : t('storage.test.failed')}
-                      </p>
-                      {result.targets.map((target) => (
-                        <p key={target.name} className="font-geist text-[0.625rem] text-m-muted">
-                          {target.ok ? '✓' : '✗'} {target.name}
-                          {target.error ? ` — ${target.error}` : ''}
-                        </p>
-                      ))}
-                    </div>
-                  )
-                )}
+                <MStorageTestResult result={result} />
                 {row.mirrorTargets.length > 0 && (
                   <div className="mt-2">
                     {backfill?.status === 'running' ? (
@@ -401,23 +386,7 @@ export default function MAdminStoragePanel(): React.ReactElement {
                     {t('storage.actions.remove')}
                   </MAdminButton>
                 </div>
-                {result === 'running' ? (
-                  <p className="mt-2 font-geist text-[0.625rem] text-m-muted">{t('storage.test.running')}</p>
-                ) : (
-                  result && (
-                    <div className="mt-2 space-y-0.5">
-                      <p className="text-[0.75rem] font-bold text-m-ink">
-                        {result.ok ? t('storage.test.ok') : t('storage.test.failed')}
-                      </p>
-                      {result.targets.map((target) => (
-                        <p key={target.name} className="font-geist text-[0.625rem] text-m-muted">
-                          {target.ok ? '✓' : '✗'} {target.name}
-                          {target.error ? ` — ${target.error}` : ''}
-                        </p>
-                      ))}
-                    </div>
-                  )
-                )}
+                <MStorageTestResult result={result} />
               </div>
             )
           })}
