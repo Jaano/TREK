@@ -1,21 +1,9 @@
-import React, { useEffect, useId, useMemo, useState } from 'react'
+import React, { useId } from 'react'
 import { Search, MapPin, Loader2, Copy, CalendarDays } from 'lucide-react'
 import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { INPUT } from '../shared/dialogParts'
-import { useToast } from '../shared/Toast'
-import { tripsApi } from '../../api/client'
-import { getApiErrorMessage } from '../../utils/apiError'
-import { formatDate } from '../../utils/formatters'
-import { useTranslation } from '../../i18n'
 import type { TranslationFn } from '../../types'
-
-interface TripOption {
-  id: number
-  title: string
-  start_date?: string | null
-  end_date?: string | null
-  cover_image?: string | null
-}
+import { useTripCopyPicker } from './useTripCopyPicker'
 
 interface CopyToTripModalProps {
   isOpen: boolean
@@ -34,62 +22,11 @@ interface CopyToTripModalProps {
  * place (detail panel) and bulk select-mode ("Copy N to trip").
  */
 export default function CopyToTripModal({ isOpen, onClose, placeIds, onCopy, t }: CopyToTripModalProps): React.ReactElement | null {
-  const toast = useToast()
-  const { language } = useTranslation()
   const labelId = useId()
-  const [trips, setTrips] = useState<TripOption[]>([])
-  const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState('')
-  const [busyTripId, setBusyTripId] = useState<number | null>(null)
-
-  useEffect(() => {
-    if (!isOpen) return
-    let cancelled = false
-    setLoading(true)
-    setSearch('')
-    tripsApi.list()
-      .then((res: { trips?: TripOption[] }) => { if (!cancelled) setTrips(res.trips ?? []) })
-      .catch(() => { if (!cancelled) setTrips([]) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [isOpen])
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return trips
-    return trips.filter(tr => (tr.title ?? '').toLowerCase().includes(q))
-  }, [trips, search])
-
-  const dateRange = (tr: TripOption): string => {
-    const s = formatDate(tr.start_date, language)
-    const e = formatDate(tr.end_date, language)
-    if (s && e) return `${s} – ${e}`
-    return s || e || ''
-  }
+  const { loading, search, setSearch, filtered, busyTripId, dateRange, handleCopy } =
+    useTripCopyPicker({ open: isOpen, onCopy, onClose, t, emptySelection: placeIds.length === 0 })
 
   if (!isOpen) return null
-
-  const handleCopy = async (tripId: number) => {
-    if (busyTripId != null || placeIds.length === 0) return
-    setBusyTripId(tripId)
-    try {
-      const res = await onCopy(tripId)
-      if (res.copied > 0) {
-        toast.success(t('collections.copiedCount', { count: res.copied }))
-      }
-      if (res.skipped.length > 0) {
-        toast.info(t('collections.skippedDuplicates', { count: res.skipped.length }))
-      }
-      if (res.copied === 0 && res.skipped.length === 0) {
-        toast.info(t('collections.copyNothing'))
-      }
-      onClose()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setBusyTripId(null)
-    }
-  }
 
   return (
     <DialogShell
