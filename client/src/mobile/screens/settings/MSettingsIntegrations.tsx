@@ -1,11 +1,9 @@
-import { useEffect } from 'react'
-import { useAddonStore } from '../../../store/addonStore'
 import MPhotoProvidersSection from './MPhotoProvidersSection'
 import MAirTrailConnectionSection from './MAirTrailConnectionSection'
 import MDawarichConnectionSection from './MDawarichConnectionSection'
 import MLlmConnectionSection from './MLlmConnectionSection'
 import MSettingsMcp from './MSettingsMcp'
-import { useAuthStore } from '../../../store/authStore'
+import { useIntegrationGates } from '../../../components/Settings/useIntegrationGates'
 
 /**
  * "Integrations" section. The photo-provider / AirTrail / LLM connection forms
@@ -14,16 +12,7 @@ import { useAuthStore } from '../../../store/authStore'
  * function audit is rebuilt natively in the mobile design language.
  */
 export default function MSettingsIntegrations() {
-  const { isEnabled: addonEnabled, loadAddons } = useAddonStore()
-  const mcpEnabled = addonEnabled('mcp')
-  const airtrailEnabled = addonEnabled('airtrail')
-  const llmEnabled = addonEnabled('llm_parsing')
-  const dawarichEnabled = addonEnabled('dawarich')
-  const managed = useAuthStore((s) => s.managed)
-
-  useEffect(() => {
-    loadAddons()
-  }, [loadAddons])
+  const { mcpEnabled, airtrailEnabled, llmEnabled, dawarichEnabled, managed } = useIntegrationGates({ reloadAddons: true })
 
   return (
     <>

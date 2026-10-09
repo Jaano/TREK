@@ -17,8 +17,6 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { useTranslation } from '../../../i18n'
 import { useSettings } from '../../../pages/settings/useSettings'
-import { useAuthStore } from '../../../store/authStore'
-import { usePluginStore } from '../../../store/pluginStore'
 import MSettingsPlugins from './MSettingsPlugins'
 import MSettingsOffline from './MSettingsOffline'
 import MSettingsGeneral from './MSettingsGeneral'
@@ -44,9 +42,7 @@ interface SectionTab {
 export default function MSettings() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const { hasIntegrations, appVersion, activeTab, setActiveTab } = useSettings()
-  const managed = useAuthStore((s) => s.managed)
-  const hasPlugins = usePluginStore((s) => s.plugins.length > 0)
+  const { hasIntegrations, hasPlugins, appVersion, activeTab, setActiveTab, managed } = useSettings()
   const [dropOpen, setDropOpen] = useState(false)
 
   const tabs: SectionTab[] = [

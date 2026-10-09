@@ -15,7 +15,6 @@ import HelpAnchor from '../components/Help/HelpAnchor'
 import { getHelpContext } from '../help/registry'
 import OfflineTab from '../components/Settings/OfflineTab'
 import PluginSettingsTab from '../components/Settings/PluginSettingsTab'
-import { usePluginStore } from '../store/pluginStore'
 import { useSettings } from './settings/useSettings'
 
 export default function SettingsPage(): React.ReactElement {
@@ -27,8 +26,7 @@ export default function SettingsPage(): React.ReactElement {
 function SettingsPageDesktop(): React.ReactElement {
   const { t } = useTranslation()
   // Page = wiring container: addon/version loading + active-tab state in the hook.
-  const { hasIntegrations, appVersion, activeTab, setActiveTab, managed } = useSettings()
-  const hasPlugins = usePluginStore(s => s.plugins.length > 0)
+  const { hasIntegrations, hasPlugins, appVersion, activeTab, setActiveTab, managed } = useSettings()
   // Every tab is its own help screen; a tab without one falls back to the settings overview.
   const helpId = getHelpContext(`settings-${activeTab}`) ? `settings-${activeTab}` : 'settings'
 

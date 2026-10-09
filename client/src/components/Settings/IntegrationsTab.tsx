@@ -1,26 +1,25 @@
 import Section from './Section'
-import React, { useEffect, useId } from 'react'
+import React, { useId } from 'react'
 import { useTranslation } from '../../i18n'
 import { useToast } from '../shared/Toast'
 import { Trash2, Copy, Terminal, Plus, Check, Key, KeyRound, ChevronRight, RefreshCw, AlertTriangle, Link2 } from 'lucide-react'
-import { useAddonStore } from '../../store/addonStore'
 import PhotoProvidersSection from './PhotoProvidersSection'
 import AirTrailConnectionSection from './AirTrailConnectionSection'
 import DawarichConnectionSection from './DawarichConnectionSection'
 import LlmConnectionSection from './LlmConnectionSection'
 import ApiKeysSection from './ApiKeysSection'
 import ScopeGroupPicker from '../OAuth/ScopeGroupPicker'
-import { useAuthStore } from '../../store/authStore'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import { Tooltip } from '../shared/Tooltip'
 import { DialogButton, DialogFooter, DialogHeader, DialogSection, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { EditorField, INPUT, Segmented, TEXTAREA } from '../shared/dialogParts'
 import { SETTINGS_BUTTON, SETTINGS_BUTTON_PRIMARY, SETTINGS_ICON_BUTTON, SettingRows, SettingsHint, StatusPill } from './settingsKit'
 import { OAUTH_PRESETS, useMcpIntegration, type OAuthClient } from './useMcpIntegration'
+import { useIntegrationGates } from './useIntegrationGates'
 
 export default function IntegrationsTab(): React.ReactElement {
   const S = useIntegrations()
-  const managed = useAuthStore((s) => s.managed)
+  const managed = S.managed
   return (
     <>
       {/* Immich, Synology Photos and AirTrail all connect to a server the reader
@@ -46,19 +45,11 @@ export default function IntegrationsTab(): React.ReactElement {
 function useIntegrations() {
   const { t, locale } = useTranslation()
   const toast = useToast()
-  const { isEnabled: addonEnabled, loadAddons } = useAddonStore()
-  const mcpEnabled = addonEnabled('mcp')
-  const airtrailEnabled = addonEnabled('airtrail')
-  const llmEnabled = addonEnabled('llm_parsing')
-  const dawarichEnabled = addonEnabled('dawarich')
-
-  useEffect(() => {
-    loadAddons()
-  }, [loadAddons])
+  const { mcpEnabled, airtrailEnabled, llmEnabled, dawarichEnabled, managed } = useIntegrationGates({ reloadAddons: true })
 
   const mcp = useMcpIntegration({ enabled: mcpEnabled, reloadClientsAfterWrite: false })
 
-  return { t, locale, toast, mcpEnabled, airtrailEnabled, llmEnabled, dawarichEnabled, ...mcp }
+  return { t, locale, toast, mcpEnabled, airtrailEnabled, llmEnabled, dawarichEnabled, managed, ...mcp }
 }
 
 type IntegrationsState = ReturnType<typeof useIntegrations>
