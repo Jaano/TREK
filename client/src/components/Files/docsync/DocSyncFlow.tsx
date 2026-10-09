@@ -3,9 +3,9 @@ import { useTranslation } from '../../../i18n/TranslationContext'
 import { DOCUMENT_PROVIDER_ICONS } from '../../shared/DocumentProviderIcons'
 import TrekIcon from '../../shared/TrekIcon'
 import { Badge } from './DocSyncBits'
-import { toggledDirection } from './docSyncModel'
+import { toggledDirection, type SyncDirection } from './docSyncModel'
 
-export type SyncDirection = 'both' | 'pull' | 'push'
+export type { SyncDirection }
 
 export interface FlowHoldings {
   /** Documents this trip has in TREK. */

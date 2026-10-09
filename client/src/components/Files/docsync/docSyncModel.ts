@@ -1,11 +1,12 @@
-import type { SyncDirection } from './DocSyncFlow';
+/** Which way a binding syncs: into the trip, out to the provider, or both. */
+export type SyncDirection = 'both' | 'pull' | 'push';
 
 /**
  * The direction after switching one lane of a binding on or off, or null when that would
  * switch off the last one. The desktop flow bar and the phone's two lane buttons both
  * ask this.
  */
-export function toggledDirection(direction: string, lane: 'push' | 'pull'): SyncDirection | null {
+export function toggledDirection(direction: SyncDirection, lane: 'push' | 'pull'): SyncDirection | null {
   const pushOn = direction === 'both' || direction === 'push';
   const pullOn = direction === 'both' || direction === 'pull';
   const nextPush = lane === 'push' ? !pushOn : pushOn;
