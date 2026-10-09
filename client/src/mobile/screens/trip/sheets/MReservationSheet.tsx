@@ -12,7 +12,7 @@ import { CustomDatePicker } from '../../../../components/shared/CustomDateTimePi
 import { BookingCodeInput } from '../../../../components/shared/BookingCode'
 import { Eyebrow, FIELD_AREA_CLS, FIELD_CLS, FormSheetFooter, FormSheetHeader } from './PlSheetChrome'
 import MBookingFilesCosts from './MBookingFilesCosts'
-import { uploadBookingFiles } from './uploadBookingFiles'
+import { uploadBookingFiles } from '../../../../components/Planner/bookingFormModel'
 import { buildAssignmentOptions } from '../../../../components/Planner/assignmentOptions'
 import GuestBadge from '../../../../components/shared/GuestBadge'
 import { SPLIT_COLORS } from '../../../../components/Budget/BudgetPanel.constants'
@@ -287,7 +287,9 @@ export default function MReservationSheet({ planner, onOpenExpense }: MReservati
         const changed = original.length !== next.length || next.some(id => !original.includes(id))
         if (changed) await setReservationTravelers(tripId, savedId, next)
       }
-      await uploadBookingFiles(planner, saved?.id, pendingFiles, form.title)
+      if (saved?.id && canUploadFiles) {
+        await uploadBookingFiles(fd => planner.tripActions.addFile(tripId, fd), saved.id, pendingFiles, form.title)
+      }
       if (withExpense && saved?.id) {
         onOpenExpense({ prefill: { reservationId: saved.id, name: form.title, category: typeToCostCategory(form.type) } })
       }

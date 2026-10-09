@@ -1,26 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Bike, Bus, Car, CarTaxiFront, Check, ChevronDown, ChevronUp, Plane, Plus, Route, Sailboat, CableCar, Ship, Train, TrainFront, TramFront, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronUp, Plus, TrainFront, TramFront, Trash2, X } from 'lucide-react'
 import MSheet from '../../../components/MSheet'
 import { useAddonStore } from '../../../../store/addonStore'
 import { useTranslation } from '../../../../i18n'
-import { formatDate, resolveDayId, splitReservationDateTime } from '../../../../utils/formatters'
-import { orderedEndpoints, parseReservationMetadata, stripAirportCode, usesStationRoute } from '../../../../utils/flightLegs'
 import { typeToCostCategory } from '@trek/shared'
 import CustomSelect from '../../../../components/shared/CustomSelect'
 import CustomTimePicker from '../../../../components/shared/CustomTimePicker'
 import { BookingCodeInput } from '../../../../components/shared/BookingCode'
-import AirportSelect, { type Airport } from '../../../../components/Planner/AirportSelect'
-import LocationSelect, { type LocationPoint } from '../../../../components/Planner/LocationSelect'
+import AirportSelect from '../../../../components/Planner/AirportSelect'
+import LocationSelect from '../../../../components/Planner/LocationSelect'
 import { toLocationPicks } from '../../../../components/Planner/locationPicks'
-import { importedPriceEntry } from '../../../../components/Planner/importedPrice'
 import TransitSearchPanel from '../../../../components/Planner/TransitSearchPanel'
+import {
+  EMPTY_TRANSPORT_FIELDS, TRANSPORT_TYPE_OPTIONS as TYPE_OPTIONS, emptyCarStop, emptyStationWaypoint, emptyWaypoint,
+  transportDayOptions, type StationWaypointForm, type WaypointForm,
+} from '../../../../components/Planner/transportEndpoints'
+import { useTransportForm } from '../../../../components/Planner/useTransportForm'
+import { travelerIdsOf, travelersChanged, uploadBookingFiles } from '../../../../components/Planner/bookingFormModel'
 import { Eyebrow, FIELD_AREA_CLS, FIELD_CLS, FormSheetFooter, FormSheetHeader } from './PlSheetChrome'
 import MBookingFilesCosts from './MBookingFilesCosts'
-import { uploadBookingFiles } from './uploadBookingFiles'
 import GuestBadge from '../../../../components/shared/GuestBadge'
 import { SPLIT_COLORS } from '../../../../components/Budget/BudgetPanel.constants'
 import { useTripStore } from '../../../../store/tripStore'
-import type { Day, Place, Reservation, ReservationEndpoint, TripMember } from '../../../../types'
+import type { Place, Reservation, TripMember } from '../../../../types'
 import type { BookingReviewDraft } from '../../../../components/Planner/parsedItemToDraft'
 import type { BookingExpenseRequest } from '../../../../components/Planner/BookingCostsSection.types'
 import type { TripPlanner } from '../MTripShell'
@@ -30,104 +32,8 @@ export interface MTransportFormSheetProps {
   onOpenExpense: (req: BookingExpenseRequest) => void
 }
 
-const TRANSPORT_TYPES = ['flight', 'train', 'bus', 'car', 'taxi', 'bicycle', 'cruise', 'ferry', 'cable_car', 'transit', 'transport_other'] as const
-type TransportType = typeof TRANSPORT_TYPES[number]
-
-const TYPE_OPTIONS = [
-  { value: 'flight', labelKey: 'reservations.type.flight', Icon: Plane },
-  { value: 'train', labelKey: 'reservations.type.train', Icon: Train },
-  { value: 'bus', labelKey: 'reservations.type.bus', Icon: Bus },
-  { value: 'car', labelKey: 'reservations.type.car', Icon: Car },
-  { value: 'taxi', labelKey: 'reservations.type.taxi', Icon: CarTaxiFront },
-  { value: 'bicycle', labelKey: 'reservations.type.bicycle', Icon: Bike },
-  { value: 'cruise', labelKey: 'reservations.type.cruise', Icon: Ship },
-  { value: 'ferry', labelKey: 'reservations.type.ferry', Icon: Sailboat },
-  { value: 'cable_car', labelKey: 'reservations.type.cable_car', Icon: CableCar },
-  { value: 'transport_other', labelKey: 'reservations.type.transport_other', Icon: Route },
-]
-
-interface EndpointPick {
-  airport?: Airport
-  location?: LocationPoint
-}
-
-// ── Endpoint / metadata helpers (ported 1:1 from the desktop TransportModal so
-// the saved shape is byte-identical). ──────────────────────────────────────────
-function endpointFromAirport(a: Airport, role: 'from' | 'to' | 'stop', sequence: number, date: string | null, time: string | null): Omit<ReservationEndpoint, 'id' | 'reservation_id'> {
-  return { role, sequence, name: a.city ? `${a.city} (${a.iata})` : a.name, code: a.iata, lat: a.lat, lng: a.lng, timezone: a.tz, local_date: date, local_time: time }
-}
-function endpointFromLocation(l: LocationPoint, role: 'from' | 'to' | 'stop', sequence: number, date: string | null, time: string | null): Omit<ReservationEndpoint, 'id' | 'reservation_id'> {
-  return { role, sequence, name: l.name, code: null, lat: l.lat, lng: l.lng, timezone: null, local_date: date, local_time: time }
-}
-function airportFromEndpoint(e: ReservationEndpoint | undefined): Airport | null {
-  if (!e || !e.code) return null
-  return { iata: e.code, icao: null, name: e.name, city: stripAirportCode(e.name), country: '', lat: e.lat, lng: e.lng, tz: e.timezone || '' }
-}
-function locationFromEndpoint(e: ReservationEndpoint | undefined): LocationPoint | null {
-  if (!e) return null
-  return { name: e.name, lat: e.lat, lng: e.lng, address: null }
-}
-
-// The places a driver planned between pick-up and return (#1797), the same shape the
-// desktop TransportModal edits. Without an editor here the save below would rebuild the
-// endpoint list from from/to alone and the server, which replaces every endpoint row of a
-// booking, would drop the stops a phone never showed.
-interface CarStopForm {
-  location: LocationPoint | null
-  time: string
-}
-const emptyCarStop = (): CarStopForm => ({ location: null, time: '' })
-
-// A flight is an ordered list of airports; N waypoints = N-1 legs. The origin
-// only departs, the destination only arrives, each stop does both.
-interface WaypointForm {
-  airport: Airport | null
-  arrDayId: string | number
-  arrTime: string
-  depDayId: string | number
-  depTime: string
-  airline: string
-  flight_number: string
-  seat: string
-  // Booking reference of the leg leaving this waypoint (#1943); empty means the
-  // booking's own reference covers it.
-  confirmation_number: string
-}
-function emptyWaypoint(dayId: string | number = ''): WaypointForm {
-  return { airport: null, arrDayId: dayId, arrTime: '', depDayId: dayId, depTime: '', airline: '', flight_number: '', seat: '', confirmation_number: '' }
-}
-
-// A train mirrors the flight route model, but its waypoints are STATIONS
-// (location search) and each leg carries a train number + platform.
-interface StationWaypointForm {
-  location: LocationPoint | null
-  arrDayId: string | number
-  arrTime: string
-  depDayId: string | number
-  depTime: string
-  train_number: string
-  platform: string
-  seat: string
-  confirmation_number: string
-}
-function emptyStationWaypoint(dayId: string | number = ''): StationWaypointForm {
-  return { location: null, arrDayId: dayId, arrTime: '', depDayId: dayId, depTime: '', train_number: '', platform: '', seat: '', confirmation_number: '' }
-}
-
 // Traveler picker row — same surface as the cost-split rows (bg on --m-ic).
 const TRAVELER_ROW_CLS = 'flex w-full items-center gap-[9px] rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[9px] text-start'
-
-const EMPTY = {
-  title: '',
-  type: 'flight' as TransportType,
-  status: 'pending' as 'pending' | 'confirmed',
-  start_day_id: '' as string | number,
-  end_day_id: '' as string | number,
-  departure_time: '',
-  arrival_time: '',
-  confirmation_number: '',
-  notes: '',
-}
 
 /**
  * Add/edit transport sheet — the mobile counterpart of the desktop
@@ -135,8 +41,9 @@ const EMPTY = {
  * editingTransport / transportPrefill / transportModalAutomated) so every entry
  * point (transports tab, day header, timeline, "change route", import review)
  * opens it unchanged. The manual tab supports single- and multi-leg flights /
- * trains; the automated tab embeds the shared TransitSearchPanel. Saving reuses
- * planner.handleSaveTransport, whose payload shape is preserved byte-for-byte.
+ * trains; the automated tab embeds the shared TransitSearchPanel. The form, its
+ * route rows and the saved shape come from useTransportForm, as on the desktop;
+ * saving reuses planner.handleSaveTransport.
  */
 export default function MTransportFormSheet({ planner, onOpenExpense }: MTransportFormSheetProps) {
   const {
@@ -158,20 +65,12 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
   // The trip's places, offered by every location field of the manual tab (#2468).
   const locationPicks = useMemo(() => toLocationPicks(places), [places])
 
-  const [form, setForm] = useState({ ...EMPTY })
-  // Trains and cruises share the station list (#1807), as on desktop.
-  const stationRoute = usesStationRoute(form.type)
-  const [automated, setAutomated] = useState(false)
-  const [fromPick, setFromPick] = useState<EndpointPick>({})
-  const [toPick, setToPick] = useState<EndpointPick>({})
-  const [waypoints, setWaypoints] = useState<WaypointForm[]>([emptyWaypoint(), emptyWaypoint()])
-  const [trainWaypoints, setTrainWaypoints] = useState<StationWaypointForm[]>([emptyStationWaypoint(), emptyStationWaypoint()])
-  const [carStops, setCarStops] = useState<CarStopForm[]>([])
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  // Travelers assigned to this booking (#1517) — seeded from the editing
-  // reservation on open, persisted separately after the save resolves.
-  const [travelerIds, setTravelerIds] = useState<Set<number>>(new Set())
-  const [isSaving, setIsSaving] = useState(false)
+  const {
+    form, set, stationRoute, automated, setAutomated, fromPick, setFromPick, toPick, setToPick,
+    waypoints, setWaypoints, trainWaypoints, setTrainWaypoints, carStops, setCarStops, moveCarStop,
+    pendingFiles, setPendingFiles, travelerIds, setTravelerIds, toggleTraveler, isSaving, setIsSaving,
+    seed, payload: buildPayload, writesFlightLegs, writesTrainLegs,
+  } = useTransportForm(EMPTY_TRANSPORT_FIELDS)
   // Ref (not state) so handleSubmit reads the intent set by the same click — a
   // state value would be stale in that render's closure and never open the editor.
   const expenseIntentRef = useRef(false)
@@ -187,170 +86,23 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
     setDeleteArmed(false)
     // On a review-import, seed the booking's Files with the parsed source document.
     setPendingFiles(!editingTransport && transportPrefill?._sourceFiles ? transportPrefill._sourceFiles : [])
-    setTravelerIds(new Set((editingTransport?.travelers || []).map(tv => tv.user_id)))
+    setTravelerIds(travelerIdsOf(editingTransport))
 
     // Edit uses the saved `editingTransport`; a review-import populates from the
     // prefill. Either way the init reads the same fields; the reservation still
     // decides edit-vs-create at submit time.
-    const src = (editingTransport ?? transportPrefill) as Reservation | null
-    if (src) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const meta = typeof src.metadata === 'string' ? JSON.parse(src.metadata || '{}') : ((src.metadata as any) || {})
-      const eps = src.endpoints || []
-      const from = eps.find(e => e.role === 'from')
-      const to = eps.find(e => e.role === 'to')
-      const type = (TRANSPORT_TYPES as readonly string[]).includes(src.type) ? (src.type as TransportType) : 'flight'
-      setForm({
-        title: src.title || '',
-        type,
-        status: src.status === 'confirmed' ? 'confirmed' : 'pending',
-        // For an edit, keep the saved day; for an imported prefill (no day_id),
-        // resolve it from the parsed pick-up/return date so it isn't lost.
-        start_day_id: src.day_id ?? resolveDayId(days, splitReservationDateTime(src.reservation_time).date),
-        end_day_id: src.end_day_id ?? resolveDayId(days, splitReservationDateTime(src.reservation_end_time).date),
-        departure_time: splitReservationDateTime(src.reservation_time).time ?? '',
-        arrival_time: splitReservationDateTime(src.reservation_end_time).time ?? '',
-        confirmation_number: src.confirmation_number || '',
-        notes: src.notes || '',
-      })
-      // Only an import prefill carries a per-endpoint local_date without a day_id. On an
-      // edit the saved day wins: local_date is denormalised and can lag behind after a
-      // day drag, insertDay or a trip-date shift (mirrors TransportModal).
-      const endpointDayId = (ep?: { local_date?: string | null } | null) =>
-        editingTransport ? '' : resolveDayId(days, ep?.local_date)
-      // Origin and destination fall back to the reservation's own day columns. An
-      // intermediate stop has none, so when metadata.legs is missing (imported or
-      // MCP-created bookings) its local_date is the only day left to seed from.
-      const stopDayId = (ep?: { local_date?: string | null } | null) => resolveDayId(days, ep?.local_date)
-
-      if (type === 'flight') {
-        const orderedEps = orderedEndpoints(src)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const metaLegs: any[] = Array.isArray(meta.legs) ? meta.legs : []
-        let wps: WaypointForm[]
-        if (orderedEps.length >= 2) {
-          wps = orderedEps.map((ep, i) => {
-            const legInto = metaLegs[i - 1]
-            const legOut = metaLegs[i]
-            const isFirst = i === 0
-            const isLast = i === orderedEps.length - 1
-            const stopDay = !isFirst && !isLast ? stopDayId(ep) : ''
-            return {
-              airport: airportFromEndpoint(ep),
-              arrDayId: legInto?.arr_day_id ?? (endpointDayId(ep) || (isLast ? (src.end_day_id ?? '') : stopDay)),
-              arrTime: legInto?.arr_time ?? (!isFirst ? (ep.local_time ?? '') : ''),
-              depDayId: legOut?.dep_day_id ?? (endpointDayId(ep) || (isFirst ? (src.day_id ?? '') : stopDay)),
-              depTime: legOut?.dep_time ?? (!isLast ? (ep.local_time ?? '') : ''),
-              airline: legOut?.airline ?? (isFirst ? (meta.airline ?? '') : ''),
-              flight_number: legOut?.flight_number ?? (isFirst ? (meta.flight_number ?? '') : ''),
-              seat: legOut?.seat ?? (isFirst ? (meta.seat ?? '') : ''),
-              // The booking's own reference stays in the form's field, never on a
-              // leg, so a plain re-save cannot duplicate it onto the first segment.
-              confirmation_number: legOut?.confirmation_number ?? '',
-            }
-          })
-        } else {
-          const dep = emptyWaypoint(endpointDayId(from) || (src.day_id ?? ''))
-          dep.airport = airportFromEndpoint(from)
-          dep.depTime = splitReservationDateTime(src.reservation_time).time ?? ''
-          dep.airline = meta.airline ?? ''
-          dep.flight_number = meta.flight_number ?? ''
-          dep.seat = meta.seat ?? ''
-          const arr = emptyWaypoint(endpointDayId(to) || (src.end_day_id ?? src.day_id ?? ''))
-          arr.airport = airportFromEndpoint(to)
-          arr.arrTime = splitReservationDateTime(src.reservation_end_time).time ?? ''
-          wps = [dep, arr]
-        }
-        setWaypoints(wps)
-        setFromPick({})
-        setToPick({})
-      } else if (usesStationRoute(type)) {
-        const orderedEps = orderedEndpoints(src)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const metaLegs: any[] = Array.isArray(meta.legs) ? meta.legs : []
-        let wps: StationWaypointForm[]
-        if (orderedEps.length >= 2) {
-          wps = orderedEps.map((ep, i) => {
-            const legInto = metaLegs[i - 1]
-            const legOut = metaLegs[i]
-            const isFirst = i === 0
-            const isLast = i === orderedEps.length - 1
-            const stopDay = !isFirst && !isLast ? stopDayId(ep) : ''
-            return {
-              location: locationFromEndpoint(ep),
-              arrDayId: legInto?.arr_day_id ?? (endpointDayId(ep) || (isLast ? (src.end_day_id ?? '') : stopDay)),
-              arrTime: legInto?.arr_time ?? (!isFirst ? (ep.local_time ?? '') : ''),
-              depDayId: legOut?.dep_day_id ?? (endpointDayId(ep) || (isFirst ? (src.day_id ?? '') : stopDay)),
-              depTime: legOut?.dep_time ?? (!isLast ? (ep.local_time ?? '') : ''),
-              train_number: legOut?.train_number ?? (isFirst ? (meta.train_number ?? '') : ''),
-              platform: legOut?.platform ?? (isFirst ? (meta.platform ?? '') : ''),
-              seat: legOut?.seat ?? (isFirst ? (meta.seat ?? '') : ''),
-              // See the flight branch: the booking's own reference stays out of the legs.
-              confirmation_number: legOut?.confirmation_number ?? '',
-            }
-          })
-        } else {
-          const dep = emptyStationWaypoint(endpointDayId(from) || (src.day_id ?? ''))
-          dep.location = locationFromEndpoint(from)
-          dep.depTime = splitReservationDateTime(src.reservation_time).time ?? ''
-          dep.train_number = meta.train_number ?? ''
-          dep.platform = meta.platform ?? ''
-          dep.seat = meta.seat ?? ''
-          const arr = emptyStationWaypoint(endpointDayId(to) || (src.end_day_id ?? src.day_id ?? ''))
-          arr.location = locationFromEndpoint(to)
-          arr.arrTime = splitReservationDateTime(src.reservation_end_time).time ?? ''
-          wps = [dep, arr]
-        }
-        setTrainWaypoints(wps)
-        setFromPick({})
-        setToPick({})
-      } else {
-        setFromPick({ location: locationFromEndpoint(from) || undefined })
-        setToPick({ location: locationFromEndpoint(to) || undefined })
-        setWaypoints([emptyWaypoint(), emptyWaypoint()])
-        setTrainWaypoints([emptyStationWaypoint(), emptyStationWaypoint()])
-        // Stops persist for every type; only a car offers an editor for them, so only a
-        // car reads them back into one. The others keep passing theirs through untouched.
-        setCarStops(
-          src.type === 'car'
-            ? (src.endpoints ?? [])
-                .filter(e => e.role === 'stop')
-                .slice()
-                .sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0))
-                .map(e => ({ location: locationFromEndpoint(e), time: e.local_time ?? '' }))
-            : [],
-        )
-      }
-    } else {
-      setForm({ ...EMPTY, start_day_id: transportModalDayId ?? '', end_day_id: transportModalDayId ?? '' })
-      setFromPick({})
-      setToPick({})
-      setWaypoints([emptyWaypoint(transportModalDayId ?? ''), emptyWaypoint(transportModalDayId ?? '')])
-      setTrainWaypoints([emptyStationWaypoint(transportModalDayId ?? ''), emptyStationWaypoint(transportModalDayId ?? '')])
-      setCarStops([])
-    }
+    seed((editingTransport ?? transportPrefill) as Reservation | null, days, {
+      isEdit: !!editingTransport,
+      fallbackType: 'flight',
+      dayId: transportModalDayId ?? '',
+      stopDaysFromEndpoints: true,
+      resetHiddenRoutes: true,
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showTransportModal])
 
   const res = snap.res
   const prefill = snap.prefill
-  const set = (field: keyof typeof EMPTY, value: string | number) => setForm(prev => ({ ...prev, [field]: value }))
-
-  const moveCarStop = (index: number, delta: number): void => {
-    setCarStops(prev => {
-      const to = index + delta
-      if (to < 0 || to >= prev.length) return prev
-      const next = [...prev]
-      ;[next[index], next[to]] = [next[to], next[index]]
-      return next
-    })
-  }
-
-  const toggleTraveler = (id: number) => setTravelerIds(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id); else next.add(id)
-    return next
-  })
 
   const TravelerAvatar = ({ m, idx, dim }: { m: TripMember; idx: number; dim: boolean }) =>
     m.avatar_url
@@ -368,20 +120,7 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
 
   const showModeToggle = !res && tripHasDates
 
-  const dayOptions = [
-    { value: '', label: '—' },
-    ...days.map(d => {
-      const dateBadge = d.date ? (formatDate(d.date, locale) ?? undefined) : undefined
-      const dayBadge = d.title ? t('dayplan.dayN', { n: d.day_number }) : undefined
-      return { value: d.id, label: d.title || t('dayplan.dayN', { n: d.day_number }), badge: dateBadge ?? dayBadge }
-    }),
-  ]
-
-  // Same condition handleSubmit uses to write metadata.legs, over the waypoints
-  // that actually become endpoints: below it there are no legs to hold a
-  // per-segment booking code and the value would be dropped on save (#1943).
-  const writesFlightLegs = waypoints.filter(w => w.airport).length > 2
-  const writesTrainLegs = trainWaypoints.filter(w => w.location).length > 2
+  const dayOptions = transportDayOptions(days, t, locale)
 
   const handleClose = () => {
     if (importReviewActive) { advanceImportReview(); return }
@@ -407,190 +146,22 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
     expenseIntentRef.current = false
     setIsSaving(true)
     try {
-      const startDay = days.find(d => d.id === Number(form.start_day_id))
-      const endDay = days.find(d => d.id === Number(form.end_day_id))
-
-      const buildTime = (day: Day | undefined, time: string): string | null => {
-        if (!time) return null
-        return day?.date ? `${day.date}T${time}` : time
-      }
-
-      const dayDate = (id: string | number): string | null => days.find(d => d.id === Number(id))?.date ?? null
-      const flightWps = form.type === 'flight' ? waypoints.filter(w => w.airport) : []
-      const firstWp = flightWps[0]
-      const lastWp = flightWps[flightWps.length - 1]
-      const trainWps = stationRoute ? trainWaypoints : []
-      const trainStations = trainWps.filter(w => w.location)
-      // The day/time anchors have to be the rows that actually become endpoints
-      // (same as the flight path); only a train without a single picked station
-      // falls back to the raw rows so its day and time survive.
-      const trainAnchors = trainStations.length > 0 ? trainStations : trainWps
-      const firstTrainWp = trainAnchors[0]
-      const lastTrainWp = trainAnchors[trainAnchors.length - 1]
-      // Per-leg day-plan positions are owned by the day planner — keep them on re-save.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const origLegs: any[] = res ? (parseReservationMetadata(res).legs || []) : []
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const metadata: Record<string, any> = {}
-      if (form.type === 'flight') {
-        if (firstWp?.airline) metadata.airline = firstWp.airline
-        if (firstWp?.flight_number) metadata.flight_number = firstWp.flight_number
-        if (firstWp?.airport) {
-          metadata.departure_airport = firstWp.airport.iata
-          metadata.departure_timezone = firstWp.airport.tz
-        }
-        if (lastWp?.airport) {
-          metadata.arrival_airport = lastWp.airport.iata
-          metadata.arrival_timezone = lastWp.airport.tz
-        }
-        if (flightWps.length > 2) {
-          metadata.legs = flightWps.slice(0, -1).map((w, i) => {
-            const next = flightWps[i + 1]
-            return {
-              from: w.airport!.iata,
-              to: next.airport!.iata,
-              ...(w.airline ? { airline: w.airline } : {}),
-              ...(w.flight_number ? { flight_number: w.flight_number } : {}),
-              ...(w.seat ? { seat: w.seat } : {}),
-              ...(w.confirmation_number ? { confirmation_number: w.confirmation_number } : {}),
-              dep_day_id: w.depDayId ? Number(w.depDayId) : null,
-              dep_time: w.depTime || null,
-              arr_day_id: next.arrDayId ? Number(next.arrDayId) : null,
-              arr_time: next.arrTime || null,
-              ...(origLegs[i]?.day_positions ? { day_positions: origLegs[i].day_positions } : {}),
-            }
-          })
-        }
-        if (firstWp?.seat) metadata.seat = firstWp.seat
-      } else if (stationRoute) {
-        if (firstTrainWp?.train_number) metadata.train_number = firstTrainWp.train_number
-        if (firstTrainWp?.platform) metadata.platform = firstTrainWp.platform
-        if (firstTrainWp?.seat) metadata.seat = firstTrainWp.seat
-        if (trainStations.length > 2) {
-          metadata.legs = trainStations.slice(0, -1).map((w, i) => {
-            const next = trainStations[i + 1]
-            return {
-              from: w.location!.name,
-              to: next.location!.name,
-              ...(w.train_number ? { train_number: w.train_number } : {}),
-              ...(w.platform ? { platform: w.platform } : {}),
-              ...(w.seat ? { seat: w.seat } : {}),
-              ...(w.confirmation_number ? { confirmation_number: w.confirmation_number } : {}),
-              dep_day_id: w.depDayId ? Number(w.depDayId) : null,
-              dep_time: w.depTime || null,
-              arr_day_id: next.arrDayId ? Number(next.arrDayId) : null,
-              arr_time: next.arrTime || null,
-              ...(origLegs[i]?.day_positions ? { day_positions: origLegs[i].day_positions } : {}),
-            }
-          })
-        }
-      }
-
-      // A transit itinerary lives in metadata.transit + 'stop' endpoints, which
-      // this form neither shows nor edits — keep them while from/to are unchanged.
-      const prevMeta = res ? parseReservationMetadata(res) : {}
-      const prevEndpointsAll = res?.endpoints || []
-      const prevFrom = prevEndpointsAll.find(ep => ep.role === 'from')
-      const prevTo = prevEndpointsAll.find(ep => ep.role === 'to')
-      const near = (a?: number | null, b?: number | null) => a != null && b != null && Math.abs(a - b) < 1e-6
-      const keepTransit = !!(prevMeta.transit && form.type !== 'flight' &&
-        prevFrom && prevTo && fromPick.location && toPick.location &&
-        near(prevFrom.lat, fromPick.location.lat) && near(prevFrom.lng, fromPick.location.lng) &&
-        near(prevTo.lat, toPick.location.lat) && near(prevTo.lng, toPick.location.lng))
-      if (keepTransit) metadata.transit = prevMeta.transit
-      // A joined AirTrail import records its source flight ids in metadata.airtrail_ids.
-      if (Array.isArray(prevMeta.airtrail_ids)) metadata.airtrail_ids = prevMeta.airtrail_ids
-
-      const startDate = startDay?.date ?? null
-      const endDate = (endDay ?? startDay)?.date ?? null
-      const endpoints: ReturnType<typeof endpointFromAirport>[] = []
-      if (form.type === 'flight') {
-        flightWps.forEach((w, i) => {
-          const isFirst = i === 0
-          const isLast = i === flightWps.length - 1
-          const role: 'from' | 'to' | 'stop' = isFirst ? 'from' : isLast ? 'to' : 'stop'
-          const dId = isLast ? w.arrDayId : w.depDayId
-          const time = isLast ? w.arrTime : w.depTime
-          endpoints.push(endpointFromAirport(w.airport!, role, i, dayDate(dId), time || null))
-        })
-      } else if (stationRoute) {
-        trainStations.forEach((w, i) => {
-          const isFirst = i === 0
-          const isLast = i === trainStations.length - 1
-          const role: 'from' | 'to' | 'stop' = isFirst ? 'from' : isLast ? 'to' : 'stop'
-          const dId = isLast ? w.arrDayId : w.depDayId
-          const time = isLast ? w.arrTime : w.depTime
-          const date = dayDate(dId) ?? (isLast ? dayDate(firstTrainWp?.depDayId ?? '') : null)
-          endpoints.push(endpointFromLocation(w.location!, role, i, date, time || null))
-        })
-      } else {
-        if (fromPick.location) endpoints.push(endpointFromLocation(fromPick.location, 'from', 0, startDate, form.departure_time || null))
-        // A car writes the stops the driver planned; every other type keeps passing the
-        // itinerary's transfer stops through while the route is unchanged (#1065).
-        const carEndpoints = form.type === 'car'
-          ? carStops
-              .filter(s => s.location)
-              .map((s, i) => endpointFromLocation(s.location!, 'stop', i + 1, startDate, s.time || null))
-          : []
-        const stops = keepTransit && form.type !== 'car'
-          ? prevEndpointsAll.filter(ep => ep.role === 'stop').slice().sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
-          : []
-        stops.forEach((s, i) => endpoints.push({
-          role: 'stop', sequence: i + 1, name: s.name, code: s.code ?? null,
-          lat: s.lat, lng: s.lng, timezone: s.timezone ?? null,
-          local_date: s.local_date ?? null, local_time: s.local_time ?? null,
-        }))
-        carEndpoints.forEach(e => endpoints.push(e))
-        const stopCount = stops.length + carEndpoints.length
-        if (toPick.location) endpoints.push(endpointFromLocation(toPick.location, 'to', stopCount + 1, endDate, form.arrival_time || null))
-      }
-
-      const flightDepDay = firstWp && firstWp.depDayId ? Number(firstWp.depDayId) : null
-      const flightArrDay = lastWp && lastWp.arrDayId ? Number(lastWp.arrDayId) : null
-      const trainDepDay = firstTrainWp && firstTrainWp.depDayId ? Number(firstTrainWp.depDayId) : null
-      const trainArrDay = lastTrainWp && lastTrainWp.arrDayId ? Number(lastTrainWp.arrDayId) : null
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const payload: Record<string, any> & { title: string } = {
-        title: form.title,
-        type: form.type,
-        status: form.status,
-        day_id: form.type === 'flight' ? flightDepDay : stationRoute ? trainDepDay : (form.start_day_id ? Number(form.start_day_id) : null),
-        end_day_id: form.type === 'flight' ? flightArrDay : stationRoute ? trainArrDay : (form.end_day_id ? Number(form.end_day_id) : null),
-        reservation_time: form.type === 'flight'
-          ? buildTime(days.find(d => d.id === flightDepDay), firstWp?.depTime || '')
-          : stationRoute
-            ? buildTime(days.find(d => d.id === trainDepDay), firstTrainWp?.depTime || '')
-            : buildTime(startDay, form.departure_time),
-        reservation_end_time: form.type === 'flight'
-          ? buildTime(days.find(d => d.id === flightArrDay), lastWp?.arrTime || '')
-          : stationRoute
-            ? buildTime(days.find(d => d.id === trainArrDay) ?? days.find(d => d.id === trainDepDay), lastTrainWp?.arrTime || '')
-            : buildTime(endDay ?? startDay, form.arrival_time),
-        location: null,
-        confirmation_number: form.confirmation_number || null,
-        notes: form.notes || null,
-        metadata: Object.keys(metadata).length > 0 ? metadata : null,
-        endpoints,
-        needs_review: false,
-      }
-      // Imported booking → auto-create the linked cost from the parsed price
-      // (only on create and only when a price is present).
-      if (!res && prefill && isBudgetEnabled) {
-        const entry = importedPriceEntry(prefill.metadata, form.type)
-        if (entry) payload.create_budget_entry = entry
-      }
-      const saved = await saveTransport(payload)
+      const saved = await saveTransport(buildPayload(days, {
+        reservation: res, prefill, budgetEnabled: isBudgetEnabled, anchorOnStations: true, emptyMetadataAsNull: true,
+      }))
       // Persist the traveler assignment once we have the reservation id (from the
       // save result on create, or the edited reservation) — only when it changed.
       const savedId = saved?.id ?? res?.id
       if (savedId) {
-        const original = (res?.travelers || []).map(tv => tv.user_id)
-        const next = [...travelerIds]
-        const changed = original.length !== next.length || next.some(id => !original.includes(id))
-        if (changed) await setReservationTravelers(tripId, savedId, next)
+        const { changed, nextIds } = travelersChanged(res, travelerIds)
+        if (changed) await setReservationTravelers(tripId, savedId, nextIds)
       }
-      await uploadBookingFiles(planner, saved?.id, pendingFiles, form.title)
+      // Runs after both a create and an edit: the sheet only holds files the user just
+      // picked, so nothing is uploaded twice, and skipping the edit dropped them without
+      // a word (#2534). A save that did not come back with a record uploads nothing.
+      if (saved?.id && canUploadFiles) {
+        await uploadBookingFiles(fd => planner.tripActions.addFile(tripId, fd), saved.id, pendingFiles, form.title)
+      }
       if (withExpense && saved?.id) {
         onOpenExpense({ prefill: { reservationId: saved.id, name: form.title, category: typeToCostCategory(form.type) } })
       }
