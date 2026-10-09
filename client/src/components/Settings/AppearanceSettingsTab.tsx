@@ -1,45 +1,15 @@
-import React, { useEffect, useRef, useState, type ReactNode } from 'react'
+import React, { type ReactNode } from 'react'
 import { Paintbrush, Eye, LayoutDashboard, Sun, Moon, Monitor, RotateCcw } from 'lucide-react'
 import { useTranslation } from '../../i18n'
-import { useSettingsStore } from '../../store/settingsStore'
-import { useToast } from '../shared/Toast'
 import { DialogSection, fs } from '../shared/DialogShell'
 import { Segmented } from '../shared/dialogParts'
 import Section from './Section'
 import ToggleSwitch from './ToggleSwitch'
 import { SETTINGS_BUTTON, SettingRow, SettingRows, StatusPill } from './settingsKit'
-import { applyAppearance } from '../../theme/applyAppearance'
 import { APPEARANCE_SCHEMES, CUSTOM_ACCENT_PRESETS } from '../../theme/schemes'
-import {
-  DEFAULT_APPEARANCE,
-  normalizeAppearance,
-  APPEARANCE_SCALE_MIN,
-  APPEARANCE_SCALE_MAX,
-  type AppearanceConfig,
-} from '@trek/shared'
-
-// ── WCAG contrast helpers (for the custom-accent legibility hint) ────────────
-function channelLum(v: number): number {
-  return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
-}
-function relLuminance(hex: string): number {
-  const c = hex.replace('#', '')
-  const full = c.length === 3 ? c.split('').map((x) => x + x).join('') : c
-  const r = channelLum(Number.parseInt(full.slice(0, 2), 16) / 255)
-  const g = channelLum(Number.parseInt(full.slice(2, 4), 16) / 255)
-  const b = channelLum(Number.parseInt(full.slice(4, 6), 16) / 255)
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b
-}
-function contrastRatio(a: string, b: string): number {
-  const la = relLuminance(a)
-  const lb = relLuminance(b)
-  const [hi, lo] = la > lb ? [la, lb] : [lb, la]
-  return (hi + 0.05) / (lo + 0.05)
-}
-const isHex = (v: string) => /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)
-
-type DesktopWidgetKey = keyof AppearanceConfig['dashboard']['desktop']
-type MobileWidgetKey = keyof AppearanceConfig['dashboard']['mobile']
+import { APPEARANCE_SCALE_MIN, APPEARANCE_SCALE_MAX } from '@trek/shared'
+import { DESKTOP_GROUPS, MOBILE_GROUPS, isHex } from './appearanceModel'
+import { useAppearanceEditor } from './useAppearanceEditor'
 
 const WIDGET_LABELS: Record<string, string> = {
   sidebar: 'Right sidebar',
@@ -52,17 +22,6 @@ const WIDGET_LABELS: Record<string, string> = {
   daysTraveled: 'Days traveled',
   distanceFlown: 'Distance flown',
 }
-// Grouped by where the widgets actually sit on the dashboard. The right sidebar
-// has a master toggle (off → no sidebar, layout centers); its individual
-// widgets only matter while the sidebar is shown.
-const DESKTOP_GROUPS: { id: string; fallback: string; master?: DesktopWidgetKey; keys: DesktopWidgetKey[] }[] = [
-  { id: 'belowHero', fallback: 'Below the hero', keys: ['atlas', 'tripsTotal', 'daysTraveled', 'distanceFlown'] },
-  { id: 'rightSidebar', fallback: 'Right sidebar', master: 'sidebar', keys: ['currency', 'collections', 'timezones', 'upcomingReservations'] },
-]
-const MOBILE_GROUPS: { id: string; fallback: string; keys: MobileWidgetKey[] }[] = [
-  { id: 'belowHero', fallback: 'Below the hero', keys: ['tripsTotal', 'daysTraveled'] },
-  { id: 'bottomOfPage', fallback: 'Bottom of page', keys: ['currency', 'collections', 'timezones', 'upcomingReservations'] },
-]
 
 /** A tile of the scheme grid: a colour dot and a name, raised and outlined while chosen. */
 const SWATCH = 'flex min-w-0 items-center gap-2 rounded-[12px] border bg-surface-card px-3 py-2.5 text-start font-medium text-content transition-colors'
@@ -74,75 +33,13 @@ const swatchLook = (active: boolean) => active
 const DOT = 'h-4 w-4 flex-none rounded-full shadow-[inset_0_0_0_1px_var(--border-faint)]'
 
 export default function AppearanceSettingsTab(): React.ReactElement {
-  const { settings, updateSetting } = useSettingsStore()
   const { t } = useTranslation()
-  const toast = useToast()
   const tr = (key: string, fallback: string) => t(key) || fallback
-
-  const [cfg, setCfg] = useState<AppearanceConfig>(() => normalizeAppearance(settings.appearance))
-  const persistTimer = useRef<number | undefined>(undefined)
-  // What the pending timer would have written, so leaving the tab inside the
-  // debounce window still saves instead of silently dropping the change.
-  const pendingWrite = useRef<AppearanceConfig | null>(null)
-
-  // Re-sync when settings change elsewhere (e.g. server reconcile / another tab).
-  useEffect(() => {
-    setCfg(normalizeAppearance(settings.appearance))
-  }, [settings.appearance])
-
-  // Flush any pending persist on unmount.
-  useEffect(() => () => {
-    if (!persistTimer.current) return
-    window.clearTimeout(persistTimer.current)
-    // The component is gone, so a failure has nowhere to be shown.
-    if (pendingWrite.current) updateSetting('appearance', pendingWrite.current).catch(() => {})
-  }, [updateSetting])
-
-  const isDark =
-    settings.dark_mode === true ||
-    settings.dark_mode === 'dark' ||
-    (settings.dark_mode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-
-  // Live preview now (DOM), persist after a short debounce (API).
-  const update = (patch: Partial<AppearanceConfig>) => {
-    const next = { ...cfg, ...patch }
-    setCfg(next)
-    applyAppearance({ darkMode: settings.dark_mode, appearance: next, isSharedPage: false })
-    if (persistTimer.current) window.clearTimeout(persistTimer.current)
-    pendingWrite.current = next
-    persistTimer.current = window.setTimeout(() => {
-      pendingWrite.current = null
-      updateSetting('appearance', next).catch((e: unknown) =>
-        toast.error(e instanceof Error ? e.message : t('common.error'))
-      )
-    }, 350)
-  }
-
-  const setMode = async (mode: string) => {
-    try {
-      await updateSetting('dark_mode', mode)
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : t('common.error'))
-    }
-  }
-
-  const setWidget = (device: 'desktop' | 'mobile', key: string, on: boolean) => {
-    update({
-      dashboard: {
-        ...cfg.dashboard,
-        [device]: { ...cfg.dashboard[device], [key]: on },
-      },
-    })
-  }
-
-  const resetAll = () => update({ ...DEFAULT_APPEARANCE })
-
-  const accentLight = cfg.accent?.light ?? '#4f46e5'
-  const accentDark = cfg.accent?.dark ?? '#6366f1'
-  const customRatio = contrastRatio(isDark ? accentDark : accentLight, '#ffffff')
+  const { cfg, darkMode, isDark, update, setMode, setWidget, resetAll, accentLight, accentDark, customRatio } =
+    useAppearanceEditor()
 
   // The stored mode, read the way the old boolean values meant it.
-  const cur = settings.dark_mode
+  const cur = darkMode
   const mode = cur === true ? 'dark' : cur === false ? 'light' : String(cur ?? '')
 
   return (
