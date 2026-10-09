@@ -1,14 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import { Camera, Check, Copy, ExternalLink, Loader2, MapPin, Navigation, Pencil, Trash2, X } from 'lucide-react'
 import type { CollectionLabel, CollectionLink, CollectionPlace, CollectionStatus } from '@trek/shared'
 import type { Category, TranslationFn } from '../../../types'
-import { mapsApi } from '../../../api/client'
-import { useToast } from '../../../components/shared/Toast'
-import { normalizeImageFile } from '../../../utils/convertHeic'
-import { getApiErrorMessage } from '../../../utils/apiError'
+import { useCollectionPlaceForm } from '../../../components/Collections/useCollectionPlaceForm'
 import { normalizeLinkUrl, STATUS_ORDER } from '../../../pages/collections/collectionsModel'
 import MSheet from '../../components/MSheet'
 import PlaceRating from '../../../components/shared/StarRating'
@@ -56,103 +53,15 @@ interface MCollPlaceSheetProps {
 export default function MCollPlaceSheet({
   place, canEdit, canDelete, categories, labels, onClose, onSetStatus, onSave, onUploadImage, onCopyToTrip, onRemove, onRate, t,
 }: MCollPlaceSheetProps) {
-  const toast = useToast()
   const imageInputRef = useRef<HTMLInputElement | null>(null)
-  const [imgBusy, setImgBusy] = useState(false)
-  // Hold the last place through the exit animation.
-  const [held, setHeld] = useState<CollectionPlace | null>(place)
-  if (place && place !== held) setHeld(place)
-
-  const [editing, setEditing] = useState(false)
-  const [name, setName] = useState('')
-  const [address, setAddress] = useState('')
-  const [categoryId, setCategoryId] = useState<number | null>(null)
-  const [description, setDescription] = useState('')
-  const [links, setLinks] = useState<CollectionLink[]>([])
-  const [labelIds, setLabelIds] = useState<number[]>([])
-  const [saving, setSaving] = useState(false)
-  const [fetchedPhoto, setFetchedPhoto] = useState<string | null>(null)
   const [navOpen, setNavOpen] = useState(false)
   const navBtnRef = useRef<HTMLButtonElement | null>(null)
-  const heldId = held?.id
-
-  // Reseed the form + cover fetch when a different place is opened.
-  const seededId = useRef<number | null>(null)
-  useEffect(() => {
-    if (!held || seededId.current === held.id) return
-    seededId.current = held.id
-    setEditing(false)
-    setName(held.name)
-    setAddress(held.address ?? '')
-    setCategoryId(held.category_id ?? null)
-    setDescription(held.description ?? '')
-    setLinks(held.links ?? [])
-    setLabelIds(held.label_ids ?? [])
-    setFetchedPhoto(null)
-    if (held.image_url) return
-    const photoId = held.google_place_id || held.osm_id || (held.lat != null && held.lng != null ? `${held.lat},${held.lng}` : null)
-    if (!photoId) return
-    let cancelled = false
-    mapsApi.placePhoto(photoId, held.lat ?? undefined, held.lng ?? undefined, held.name)
-      .then(res => { if (!cancelled && res?.photoUrl) setFetchedPhoto(res.photoUrl) })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [held, heldId])
-
-  const save = async () => {
-    if (!held) return
-    const cleanLinks = links.map(l => ({ label: l.label?.trim() || undefined, url: normalizeLinkUrl(l.url) })).filter(l => l.url)
-    setSaving(true)
-    try {
-      await onSave({ name: name.trim() || held.name, address: address.trim() || null, description: description.trim() || null, links: cleanLinks, category_id: categoryId, label_ids: labelIds })
-      setEditing(false)
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const cancelEdit = () => {
-    if (!held) return
-    setEditing(false)
-    setName(held.name)
-    setAddress(held.address ?? '')
-    setCategoryId(held.category_id ?? null)
-    setDescription(held.description ?? '')
-    setLinks(held.links ?? [])
-    setLabelIds(held.label_ids ?? [])
-  }
-
-  const cover = held?.image_url || fetchedPhoto
-
-  const handleImagePick = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file || !held || !onUploadImage) return
-    setImgBusy(true)
-    try {
-      await onUploadImage(await normalizeImageFile(file))
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('places.imageUploadError')))
-    } finally {
-      setImgBusy(false)
-    }
-  }
-
-  const handleImageRemove = async () => {
-    setImgBusy(true)
-    try {
-      await onSave({ image_url: null })
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('places.imageUploadError')))
-    } finally {
-      setImgBusy(false)
-    }
-  }
-
-  const assignedLabels = labels.filter(l => (held?.label_ids ?? []).includes(l.id))
-  const toggleLabel = (id: number) => setLabelIds(labelIds.includes(id) ? labelIds.filter(x => x !== id) : [...labelIds, id])
+  const {
+    shown: held, editing, setEditing, name, setName, address, setAddress, categoryId, setCategoryId, description, setDescription,
+    links, setLinks, labelIds, toggleLabel, saving, imgBusy, cover, assignedLabels, handleImagePick, handleImageRemove, cancelEdit, save,
+  } = useCollectionPlaceForm({
+    place, labels, onSave, onUploadImage, t, normalizeLinkUrl, holdLastPlace: true, dropPhotoOnPlaceUpdate: true,
+  })
 
   const navTargets = getNavigationTargets(held)
   const actionBtn =
