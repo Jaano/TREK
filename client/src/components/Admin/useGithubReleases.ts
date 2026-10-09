@@ -73,12 +73,13 @@ export function useGithubReleases({ isPrerelease, fillPages = false }: UseGithub
     let more = true;
 
     for (let i = 0; i < MAX_PAGES_PER_LOAD; i++) {
+      // Step on only when another page follows, so `page` ends on the last one read.
+      if (i > 0) pageNum += 1;
       const data = await fetchPage(pageNum);
       if (!data) return;
       collected.push(...data);
       more = data.length === PER_PAGE;
       if (!more || collected.some(isShown)) break;
-      pageNum += 1;
     }
 
     setReleases((prev) => (append ? [...prev, ...collected] : collected));

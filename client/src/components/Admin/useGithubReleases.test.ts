@@ -1,4 +1,4 @@
-// FE-COMP-GHREL-HOOK-001 to -010: the release history behind both admin shells.
+// FE-COMP-GHREL-HOOK-001 to -011: the release history behind both admin shells.
 import { act, renderHook, waitFor } from '@testing-library/react';
 
 import apiClient from '../../api/client';
@@ -125,6 +125,20 @@ describe('useGithubReleases, filling pages', () => {
     expect(requestedPages(spy)).toEqual([1, 2, 3, 4, 5]);
     expect(result.current.releases).toHaveLength(50);
     expect(result.current.hasMore).toBe(true);
+  });
+
+  it('FE-COMP-GHREL-HOOK-011: load more after a five page walk goes on with the next unread page', async () => {
+    const pages: Record<number, GithubRelease[]> = {};
+    for (let p = 1; p <= 5; p++) pages[p] = fullPage(p * 10, true);
+    pages[6] = [release(60)];
+    const spy = serve(pages);
+    const { result } = renderHook(() => useGithubReleases({ isPrerelease: false, fillPages: true }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    await act(async () => {
+      await result.current.handleLoadMore();
+    });
+    expect(requestedPages(spy)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(result.current.shownReleases.map((r) => r.id)).toEqual([60]);
   });
 
   it('FE-COMP-GHREL-HOOK-008: a failed load more keeps the list, holds the page, and the retry clears the error', async () => {
