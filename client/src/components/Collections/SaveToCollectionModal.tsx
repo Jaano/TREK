@@ -1,14 +1,9 @@
-import React, { useEffect, useId, useMemo, useState, useCallback } from 'react'
-import { useNavigate } from 'react-router'
+import React, { useId } from 'react'
 import { Bookmark, BookmarkCheck, Check, CheckCircle2, Loader2, Plus } from 'lucide-react'
 import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, PILL, fs } from '../shared/DialogShell'
-import { useToast } from '../shared/Toast'
 import { useTranslation } from '../../i18n'
-import { collectionsApi } from '../../api/collections'
 import StatusBadge from './StatusBadge'
-import { useSaveToCollectionStore } from '../../store/saveToCollectionStore'
-import { getApiErrorMessage } from '../../utils/apiError'
-import type { Collection, CollectionMembership, CollectionStatus } from '@trek/shared'
+import { VISITED_EVERYWHERE_BUSY, useSaveToCollection } from './useSaveToCollection'
 
 /**
  * Globally-mounted list picker for the "Save to Collection" entry points
@@ -19,136 +14,11 @@ import type { Collection, CollectionMembership, CollectionStatus } from '@trek/s
  * so the inspector bookmark indicator stays in sync. One mount, no prop drilling.
  */
 export default function SaveToCollectionModal(): React.ReactElement | null {
-  const target = useSaveToCollectionStore(s => s.target)
-  const close = useSaveToCollectionStore(s => s.close)
-  const bumpVersion = useSaveToCollectionStore(s => s.bumpVersion)
+  const { target, close, lists, loading, busyId, savedByCollection, unvisited, handleStatus, handleVisitedEverywhere, handleToggle, openCollections } = useSaveToCollection()
   const { t } = useTranslation()
-  const toast = useToast()
-  const navigate = useNavigate()
   const labelId = useId()
 
-  const [lists, setLists] = useState<Collection[]>([])
-  const [membership, setMembership] = useState<CollectionMembership | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [busyId, setBusyId] = useState<number | null>(null)
-
-  const membershipQuery = useMemo(() => {
-    if (!target) return null
-    return {
-      google_place_id: target.google_place_id ?? undefined,
-      google_ftid: target.google_ftid ?? undefined,
-      name: target.name,
-      lat: target.lat ?? undefined,
-      lng: target.lng ?? undefined,
-    }
-  }, [target])
-
-  const refreshMembership = useCallback(async () => {
-    if (!membershipQuery) return
-    try {
-      const m = await collectionsApi.membership(membershipQuery)
-      setMembership(m)
-    } catch {
-      setMembership({ saved: false, lists: [] })
-    }
-  }, [membershipQuery])
-
-  // Load lists + membership whenever the picker opens for a new target.
-  useEffect(() => {
-    if (!target) return
-    let cancelled = false
-    setLoading(true)
-    setMembership(null)
-    void Promise.all([collectionsApi.list().catch(() => ({ collections: [], incomingInvites: [] })), membershipQuery ? collectionsApi.membership(membershipQuery).catch(() => ({ saved: false, lists: [] as CollectionMembership['lists'] })) : Promise.resolve({ saved: false, lists: [] as CollectionMembership['lists'] })])
-      .then(([listRes, m]) => {
-        if (cancelled) return
-        setLists(listRes.collections)
-        setMembership(m)
-      })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target])
-
   if (!target) return null
-
-  const savedByCollection = new Map<number, CollectionMembership['lists'][number]>()
-  for (const l of membership?.lists ?? []) savedByCollection.set(l.collection_id, l)
-
-  /** Lists holding this place that the viewer may edit and that are not visited yet. */
-  const unvisited = (membership?.lists ?? []).filter(l => l.can_edit && l.status !== 'visited')
-
-  const handleStatus = async (entry: CollectionMembership['lists'][number], next: CollectionStatus) => {
-    if (busyId != null) return
-    setBusyId(entry.collection_id)
-    try {
-      await collectionsApi.setStatus(entry.place_id, next)
-      await refreshMembership()
-      bumpVersion()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  const handleVisitedEverywhere = async () => {
-    if (busyId != null || unvisited.length === 0) return
-    setBusyId(-1)
-    try {
-      const { updated } = await collectionsApi.setStatusMany(unvisited.map(l => l.place_id), 'visited')
-      toast.success(t('collections.markedVisited', { count: updated }))
-      await refreshMembership()
-      bumpVersion()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  const handleToggle = async (list: Collection) => {
-    if (busyId != null) return
-    const savedPlaceId = savedByCollection.get(list.id)?.place_id
-    setBusyId(list.id)
-    try {
-      if (savedPlaceId != null) {
-        await collectionsApi.deletePlace(savedPlaceId)
-        toast.success(t('collections.removedFromList', { name: list.name }))
-      } else {
-        await collectionsApi.savePlace({
-          collection_id: list.id,
-          source_trip_id: target.source_trip_id ?? null,
-          source_place_id: target.source_place_id ?? null,
-          name: target.name,
-          description: target.description ?? null,
-          lat: target.lat ?? null,
-          lng: target.lng ?? null,
-          address: target.address ?? null,
-          category_id: target.category_id ?? null,
-          price: target.price ?? null,
-          currency: target.currency ?? null,
-          notes: target.notes ?? null,
-          image_url: target.image_url ?? null,
-          google_place_id: target.google_place_id ?? null,
-          google_ftid: target.google_ftid ?? null,
-          osm_id: target.osm_id ?? null,
-          website: target.website ?? null,
-          phone: target.phone ?? null,
-          force: true,
-        })
-        toast.success(t('collections.addedToList', { name: list.name }))
-      }
-      await refreshMembership()
-      bumpVersion()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setBusyId(null)
-    }
-  }
-
-  const openCollections = () => { close(); navigate('/collections') }
 
   return (
     <DialogShell
@@ -167,7 +37,7 @@ export default function SaveToCollectionModal(): React.ReactElement | null {
           pills={unvisited.length > 0 ? (
             <button type="button" onClick={handleVisitedEverywhere} disabled={busyId != null}
               className={`${PILL} hover:opacity-80 disabled:opacity-60`}>
-              {busyId === -1 ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} strokeWidth={2.2} />}
+              {busyId === VISITED_EVERYWHERE_BUSY ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} strokeWidth={2.2} />}
               {unvisited.length > 1 ? t('collections.markVisitedAll') : t('collections.markVisited')}
             </button>
           ) : undefined}
