@@ -9,6 +9,7 @@ import { EditorField, Segmented } from '../../components/shared/dialogParts'
 import { SettingsCard, SettingRows, SettingsHint, StatusPill, SETTINGS_BUTTON, SETTINGS_BUTTON_PRIMARY, SETTINGS_ICON_BUTTON } from '../../components/Settings/settingsKit'
 import type { TranslationFn } from '../../types'
 import type { useAdmin } from './useAdmin'
+import { inviteStatus } from './adminModel'
 
 interface AdminUsersTabProps {
   admin: ReturnType<typeof useAdmin>
@@ -151,9 +152,7 @@ export default function AdminUsersTab({ admin, t, locale }: AdminUsersTabProps):
         ) : (
           <SettingRows>
             {invites.map(inv => {
-              const isExpired = inv.expires_at && new Date(inv.expires_at) < new Date()
-              const isUsedUp = inv.max_uses > 0 && inv.used_count >= inv.max_uses
-              const isActive = !isExpired && !isUsedUp
+              const { isActive, labelKey } = inviteStatus(inv)
               return (
                 <div key={inv.id} className={`flex items-center gap-3 px-3.5 py-3 ${isActive ? '' : 'opacity-70'}`}>
                   <span className={`grid h-8 w-8 flex-none place-items-center rounded-[10px] bg-surface-tertiary ${isActive ? 'text-content-secondary' : 'text-content-faint'}`}>
@@ -163,7 +162,7 @@ export default function AdminUsersTab({ admin, t, locale }: AdminUsersTabProps):
                     <div className="flex min-w-0 items-center gap-2">
                       <code className="min-w-0 truncate font-geist font-semibold text-content" style={fs(12.5, 'body')}>{inv.token.slice(0, 12)}...</code>
                       <StatusPill tone={isActive ? 'success' : 'neutral'}>
-                        {isUsedUp ? t('admin.invite.usedUp') : isExpired ? t('admin.invite.expired') : t('admin.invite.active')}
+                        {t(labelKey)}
                       </StatusPill>
                     </div>
                     <div className="mt-0.5 truncate text-content-faint" style={fs(11.5)}>

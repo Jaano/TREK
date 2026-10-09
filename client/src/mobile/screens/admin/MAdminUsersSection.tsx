@@ -1,6 +1,7 @@
 import { Copy, Link2, Trash2, UserPlus } from 'lucide-react'
 import type { TranslationFn } from '../../../types'
 import type { useAdmin } from '../../../pages/admin/useAdmin'
+import { inviteStatus } from '../../../pages/admin/adminModel'
 import MAdminPermissionsPanel from './MAdminPermissionsPanel'
 import MSheet from '../../components/MSheet'
 import MChip from '../../components/MChip'
@@ -100,9 +101,7 @@ export default function MAdminUsersSection({ admin, t, locale }: MAdminUsersSect
           <div className="py-4 text-center font-geist text-[0.6875rem] text-m-faint">{t('admin.invite.empty')}</div>
         ) : (
           invites.map((inv) => {
-            const isExpired = inv.expires_at && new Date(inv.expires_at) < new Date()
-            const isUsedUp = inv.max_uses > 0 && inv.used_count >= inv.max_uses
-            const isActive = !isExpired && !isUsedUp
+            const { isActive, labelKey } = inviteStatus(inv)
             return (
               <div
                 key={inv.id}
@@ -119,7 +118,7 @@ export default function MAdminUsersSection({ admin, t, locale }: MAdminUsersSect
                           : 'bg-[color:var(--m-ic)] text-m-faint'
                       }`}
                     >
-                      {isUsedUp ? t('admin.invite.usedUp') : isExpired ? t('admin.invite.expired') : t('admin.invite.active')}
+                      {t(labelKey)}
                     </span>
                   </div>
                   <div className="mt-[2px] truncate font-geist text-[0.59375rem] text-m-muted">
