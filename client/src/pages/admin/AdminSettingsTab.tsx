@@ -1,5 +1,5 @@
 import React from 'react'
-import { adminApi, authApi } from '../../api/client'
+import { adminApi } from '../../api/client'
 import { getApiErrorMessage } from '../../types'
 import {
   AlertTriangle, CheckCircle, Eye, EyeOff, FileType, Fingerprint, KeyRound, Loader2, LockKeyhole, LogIn,
@@ -16,6 +16,7 @@ import GoogleOptions from './GoogleOptions'
 import GoogleDailyLimitRow from '../../components/Admin/GoogleDailyLimitRow'
 import ProviderBlock from './ProviderBlock'
 import TrekApiCard from './TrekApiCard'
+import { useAdminSettingsActions } from '../../components/Admin/useAdminSettingsActions'
 import { placesGoogleOnlyHint } from '../../utils/placeSource'
 import type { TranslationFn } from '../../types'
 import type { useAdmin } from './useAdmin'
@@ -112,22 +113,18 @@ function SaveBar({ onClick, saving, label }: { onClick: () => void; saving: bool
 export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): React.ReactElement {
   const {
     toast,
-    setPlacesPhotosEnabled, setPlacesAutocompleteEnabled, setPlacesDetailsEnabled, setPlacesEnrichEnabled, setPlaceShadowEnabled,
-    placesPhotosEnabled, setPlacesPhotosEnabledState,
-    placesAutocompleteEnabled, setPlacesAutocompleteEnabledState,
-    placesDetailsEnabled, setPlacesDetailsEnabledState,
-    placesEnrichEnabled, setPlacesEnrichEnabledState,
+    placesPhotosEnabled, placesAutocompleteEnabled, placesDetailsEnabled, placesEnrichEnabled,
     placesGoogleOnly, handleTogglePlacesGoogleOnly,
     transitProvider, setTransitProviderState,
     transitGoogleKeySource, setTransitGoogleKeySource,
-    placeShadowEnabled, setPlaceShadowEnabledState,
-    oidcConfig, setOidcConfig, savingOidc, setSavingOidc,
+    placeShadowEnabled,
+    oidcConfig, setOidcConfig, savingOidc,
     passwordLogin, setPasswordLogin, passwordRegistration, setPasswordRegistration,
     oidcLogin, setOidcLogin, oidcRegistration, setOidcRegistration,
     envOverrideOidcOnly, oidcConfigured, requireMfa,
     passkeyLogin, setPasskeyLogin, passkeyConfigured,
     webauthnRpId, setWebauthnRpId, webauthnOrigins, setWebauthnOrigins, savingWebauthn, handleSaveWebauthn,
-    allowedFileTypes, setAllowedFileTypes, savingFileTypes, setSavingFileTypes,
+    allowedFileTypes, setAllowedFileTypes, savingFileTypes,
     mapsKey, setMapsKey, unsplashKey, setUnsplashKey, amapKey, setAmapKey, hasMapsKey, hasAmapKey, keyInputProps, mapsKeyTestable, showKeys, savingKeys, validating, validation,
     placesProvider, savingPlacesProvider, handleSavePlacesProvider,
     managed,
@@ -135,6 +132,10 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
     handleToggleAuthSetting, handleToggleRequireMfa,
     toggleKey, handleSaveApiKeys, handleValidateKey,
   } = admin
+  const {
+    saveOidc, saveFileTypes, togglePlacesPhotos, togglePlacesAutocomplete, togglePlacesDetails, togglePlacesEnrich,
+    togglePlaceShadow,
+  } = useAdminSettingsActions(admin, t)
 
   const passwordLoginLocked = !passwordLogin && !oidcLogin
   const oidcLoginLocked = !passwordLogin && oidcLogin
@@ -345,19 +346,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
             <SaveBar
               label={t('common.save')}
               saving={savingOidc}
-              onClick={async () => {
-                setSavingOidc(true)
-                try {
-                  const payload: Record<string, unknown> = { issuer: oidcConfig.issuer, client_id: oidcConfig.client_id, display_name: oidcConfig.display_name, discovery_url: oidcConfig.discovery_url }
-                  if (oidcConfig.client_secret) payload.client_secret = oidcConfig.client_secret
-                  await adminApi.updateOidc(payload)
-                  toast.success(t('admin.oidcSaved'))
-                } catch (err: unknown) {
-                  toast.error(getApiErrorMessage(err, t('common.error')))
-                } finally {
-                  setSavingOidc(false)
-                }
-              }}
+              onClick={saveOidc}
             />
           </SettingsCard>
           )}
@@ -380,14 +369,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
           <SaveBar
             label={t('common.save')}
             saving={savingFileTypes}
-            onClick={async () => {
-              setSavingFileTypes(true)
-              try {
-                await authApi.updateAppSettings({ allowed_file_types: allowedFileTypes })
-                toast.success(t('admin.fileTypesSaved'))
-              } catch { toast.error(t('common.error')) }
-              finally { setSavingFileTypes(false) }
-            }}
+            onClick={saveFileTypes}
           />
         </SettingsCard>
 
@@ -466,12 +448,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
                   <ToggleSwitch
                     on={placesPhotosEnabled}
                     label={t('admin.placesPhotos.title')}
-                    onToggle={async () => {
-                      const next = !placesPhotosEnabled
-                      setPlacesPhotosEnabledState(next)
-                      setPlacesPhotosEnabled(next)
-                      try { await adminApi.updatePlacesPhotos(next) } catch { setPlacesPhotosEnabledState(!next); setPlacesPhotosEnabled(!next) }
-                    }}
+                    onToggle={() => togglePlacesPhotos(!placesPhotosEnabled)}
                   />
                 }
               />
@@ -482,12 +459,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
                   <ToggleSwitch
                     on={placesAutocompleteEnabled}
                     label={t('admin.placesAutocomplete.title')}
-                    onToggle={async () => {
-                      const next = !placesAutocompleteEnabled
-                      setPlacesAutocompleteEnabledState(next)
-                      setPlacesAutocompleteEnabled(next)
-                      try { await adminApi.updatePlacesAutocomplete(next) } catch { setPlacesAutocompleteEnabledState(!next); setPlacesAutocompleteEnabled(!next) }
-                    }}
+                    onToggle={() => togglePlacesAutocomplete(!placesAutocompleteEnabled)}
                   />
                 }
               />
@@ -498,12 +470,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
                   <ToggleSwitch
                     on={placesDetailsEnabled}
                     label={t('admin.placesDetails.title')}
-                    onToggle={async () => {
-                      const next = !placesDetailsEnabled
-                      setPlacesDetailsEnabledState(next)
-                      setPlacesDetailsEnabled(next)
-                      try { await adminApi.updatePlacesDetails(next) } catch { setPlacesDetailsEnabledState(!next); setPlacesDetailsEnabled(!next) }
-                    }}
+                    onToggle={() => togglePlacesDetails(!placesDetailsEnabled)}
                   />
                 }
               />
@@ -514,12 +481,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
                   <ToggleSwitch
                     on={placesEnrichEnabled}
                     label={t('admin.placesEnrich.title')}
-                    onToggle={async () => {
-                      const next = !placesEnrichEnabled
-                      setPlacesEnrichEnabledState(next)
-                      setPlacesEnrichEnabled(next)
-                      try { await adminApi.updatePlacesEnrich(next) } catch { setPlacesEnrichEnabledState(!next); setPlacesEnrichEnabled(!next) }
-                    }}
+                    onToggle={() => togglePlacesEnrich(!placesEnrichEnabled)}
                   />
                 }
               />
@@ -667,12 +629,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
                 <ToggleSwitch
                   on={placeShadowEnabled}
                   label={t('admin.placeShadow.title')}
-                  onToggle={async () => {
-                    const next = !placeShadowEnabled
-                    setPlaceShadowEnabledState(next)
-                    setPlaceShadowEnabled(next)
-                    try { await adminApi.updatePlaceShadow(next) } catch { setPlaceShadowEnabledState(!next); setPlaceShadowEnabled(!next) }
-                  }}
+                  onToggle={() => togglePlaceShadow(!placeShadowEnabled)}
                 />
               }
             />

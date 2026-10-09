@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Check, ChevronRight, Globe2, KeyRound, Library, ShieldOff, WifiOff, X } from 'lucide-react'
+import { Check, ChevronRight, Library, X } from 'lucide-react'
 import TrekMark from '../../../components/shared/TrekMark'
+import { TREK_API_SOURCES as SOURCES, trekApiFacts, trekApiFields } from '../../../components/Admin/trekApiModel'
 import { useTranslation } from '../../../i18n'
 
 /**
@@ -18,13 +19,6 @@ import { useTranslation } from '../../../i18n'
  * two-column layout with a hover-revealed disclosure. What is shared is the
  * wording, key for key, so the two pages cannot drift in what they claim.
  */
-
-/**
- * Proper nouns, so they are not translated. Naming them is also a licence
- * obligation rather than decoration: ODbL and CC BY-SA both require attribution
- * wherever their content is shown.
- */
-const SOURCES = ['Overture Maps Foundation', 'OpenStreetMap', 'Wikivoyage', 'Wikimedia']
 
 const chip = 'rounded-full border border-[color:var(--m-rowbr)] px-2 py-[2px] font-geist text-[0.625rem]'
 
@@ -65,26 +59,9 @@ export function MTrekApiBlock() {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
 
-  const facts = [
-    { Icon: Globe2, text: t('admin.trekApi.factPlaces') },
-    { Icon: KeyRound, text: t('admin.trekApi.factNoKey') },
-    { Icon: WifiOff, text: t('admin.trekApi.factOffline') },
-    { Icon: ShieldOff, text: t('admin.trekApi.factPrivacy') },
-  ]
-
+  const facts = trekApiFacts(t)
   // The same fields the desktop card lists, reusing words TREK already has.
-  const fields = [
-    t('places.formName'),
-    t('collections.coordinates'),
-    t('places.formCategory'),
-    t('places.formAddress'),
-    t('admin.trekApi.fieldPhone'),
-    t('common.email'),
-    t('places.formWebsite'),
-    t('places.formDescription'),
-    t('inspector.openingHours'),
-    t('admin.trekApi.fieldStableId'),
-  ]
+  const fields = trekApiFields(t)
 
   return (
     <div className="relative mt-[18px]">

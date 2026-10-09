@@ -1,9 +1,10 @@
 import React from 'react'
-import { Check, ChevronRight, Globe2, KeyRound, Library, ShieldOff, WifiOff, X } from 'lucide-react'
+import { Check, ChevronRight, Library, X } from 'lucide-react'
 import TrekMark from '../../components/shared/TrekMark'
 import { fs } from '../../components/shared/DialogShell'
 import { StatusPill } from '../../components/Settings/settingsKit'
 import type { TranslationFn } from '../../types'
+import { TREK_API_SOURCES as SOURCES, trekApiFacts, trekApiFields } from '../../components/Admin/trekApiModel'
 
 interface TrekApiCardProps {
   t: TranslationFn
@@ -21,13 +22,6 @@ interface TrekApiCardProps {
  * is the row count of the current index, and "no queries logged" is enforced in
  * three places on the server rather than promised here.
  */
-/**
- * Proper nouns, so they are not translated. Naming them is also a licence
- * obligation, not decoration: ODbL and CC BY-SA both require attribution
- * wherever their content is shown.
- */
-const SOURCES = ['Overture Maps Foundation', 'OpenStreetMap', 'Wikivoyage', 'Wikimedia']
-
 const CHIP = 'rounded-full border px-2.5 py-[3px] font-medium'
 
 /** One of the three lists under "more": an icon and a name, chips, a note. */
@@ -45,27 +39,8 @@ function FactGroup({ icon, title, note, children }: { icon: React.ReactNode; tit
 }
 
 export default function TrekApiCard({ t }: TrekApiCardProps): React.ReactElement {
-  // Reuses the words TREK already has for these fields wherever it has them,
-  // so the chip row costs two new strings instead of ten.
-  const fields = [
-    t('places.formName'),
-    t('collections.coordinates'),
-    t('places.formCategory'),
-    t('places.formAddress'),
-    t('admin.trekApi.fieldPhone'),
-    t('common.email'),
-    t('places.formWebsite'),
-    t('places.formDescription'),
-    t('inspector.openingHours'),
-    t('admin.trekApi.fieldStableId'),
-  ]
-
-  const facts = [
-    { Icon: Globe2, text: t('admin.trekApi.factPlaces') },
-    { Icon: KeyRound, text: t('admin.trekApi.factNoKey') },
-    { Icon: WifiOff, text: t('admin.trekApi.factOffline') },
-    { Icon: ShieldOff, text: t('admin.trekApi.factPrivacy') },
-  ]
+  const fields = trekApiFields(t)
+  const facts = trekApiFacts(t)
 
   return (
     <div className="overflow-hidden rounded-[14px] border bg-surface-card shadow-sm"
