@@ -2,7 +2,7 @@ import React from 'react'
 import { Hourglass } from 'lucide-react'
 import { useTranslation } from '../../i18n/TranslationContext'
 import { formatDurationShort } from './roadtripModel'
-import { STOP_KINDS } from './stopKinds'
+import { DWELL_CHOICES, STOP_KINDS } from './stopKinds'
 import type { RoadtripStopType } from '@trek/shared'
 
 /**
@@ -15,9 +15,6 @@ import type { RoadtripStopType } from '@trek/shared'
  * disc in the other is the reader's problem, not a detail. So the table is read once and
  * the pills are drawn once.
  */
-
-/** How long to stand still, offered as the few answers anyone actually gives. */
-const DWELL_CHOICES = [5, 10, 20, 30, 45, 60]
 
 const CHOSEN = 'border-transparent bg-accent font-semibold text-accent-text'
 const UNCHOSEN = 'border-edge text-content-secondary hover:border-content-faint hover:text-content'
