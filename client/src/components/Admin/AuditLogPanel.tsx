@@ -1,21 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react'
-import { adminApi } from '../../api/client'
+import React from 'react'
 import { useTranslation } from '../../i18n'
 import { RefreshCw, ClipboardList, Loader2 } from 'lucide-react'
 import { fs } from '../shared/DialogShell'
 import { SETTINGS_BUTTON, SettingsCard, SettingsHint, StatusPill } from '../Settings/settingsKit'
-
-interface AuditEntry {
-  id: number
-  created_at: string
-  user_id: number | null
-  username: string | null
-  user_email: string | null
-  action: string
-  resource: string | null
-  details: Record<string, unknown> | null
-  ip: string | null
-}
+import { useAuditLog } from './useAuditLog'
 
 interface AuditLogPanelProps {
   serverTimezone?: string
@@ -26,81 +14,8 @@ const TD = 'px-3.5 py-2.5 align-top'
 const CODE = 'font-geist tabular-nums'
 
 export default function AuditLogPanel({ serverTimezone }: AuditLogPanelProps): React.ReactElement {
-  const { t, locale } = useTranslation()
-  const [entries, setEntries] = useState<AuditEntry[]>([])
-  const [total, setTotal] = useState(0)
-  const [offset, setOffset] = useState(0)
-  const [loading, setLoading] = useState(true)
-  const limit = 100
-
-  const loadFirstPage = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await adminApi.auditLog({ limit, offset: 0 }) as {
-        entries: AuditEntry[]
-        total: number
-      }
-      setEntries(data.entries || [])
-      setTotal(data.total ?? 0)
-      setOffset(0)
-    } catch {
-      setEntries([])
-      setTotal(0)
-      setOffset(0)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  const loadMore = useCallback(async () => {
-    const nextOffset = offset + limit
-    setLoading(true)
-    try {
-      const data = await adminApi.auditLog({ limit, offset: nextOffset }) as {
-        entries: AuditEntry[]
-        total: number
-      }
-      setEntries((prev) => [...prev, ...(data.entries || [])])
-      setTotal(data.total ?? 0)
-      setOffset(nextOffset)
-    } catch {
-      /* keep existing */
-    } finally {
-      setLoading(false)
-    }
-  }, [offset])
-
-  useEffect(() => {
-    loadFirstPage()
-  }, [loadFirstPage])
-
-  const fmtTime = (iso: string) => {
-    try {
-      return new Date(iso.endsWith('Z') ? iso : iso + 'Z').toLocaleString(locale, {
-        dateStyle: 'short',
-        timeStyle: 'medium',
-        timeZone: serverTimezone || undefined,
-      })
-    } catch {
-      return iso
-    }
-  }
-
-  const fmtDetails = (d: Record<string, unknown> | null) => {
-    if (!d || Object.keys(d).length === 0) return '—'
-    try {
-      return JSON.stringify(d)
-    } catch {
-      return '—'
-    }
-  }
-
-  const userLabel = (e: AuditEntry) => {
-    if (e.username) return e.username
-    if (e.user_email) return e.user_email
-    if (e.user_id != null) return `#${e.user_id}`
-    return '—'
-  }
+  const { t } = useTranslation()
+  const { entries, total, loading, loadFirstPage, loadMore, fmtTime, fmtDetails, userLabel } = useAuditLog(serverTimezone)
 
   let body: React.ReactNode
   if (loading && entries.length === 0) {
