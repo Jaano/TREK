@@ -1,24 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
 import { Image, Loader2, Search, Trash2 } from 'lucide-react'
-import type { Collection, CollectionLink } from '@trek/shared'
+import type { Collection } from '@trek/shared'
 import type { TranslationFn } from '../../../types'
-import { tripsApi } from '../../../api/client'
-import { useCollectionStore } from '../../../store/collectionStore'
-import { useToast } from '../../../components/shared/Toast'
-import { getApiErrorMessage } from '../../../utils/apiError'
+import { useListEditor } from '../../../components/Collections/useListEditor'
 import { normalizeLinkUrl } from '../../../pages/collections/collectionsModel'
 import MSheet from '../../components/MSheet'
 import MCollLinksEditor from './MCollLinksEditor'
 import { listCoverGradient, SWATCH_COLORS } from './collectionsMobileModel'
 import { CancelPill, PrimaryPill, SheetFooter, SheetHeader, TEXTAREA_CLS } from './MCollSheetKit'
-
-interface CoverSearchPhoto {
-  id: string
-  url: string
-  thumb: string
-  description?: string | null
-  photographer?: string | null
-}
 
 // Scrims over the cover photo / Unsplash thumbs — fixed dark overlays in both themes.
 const COVER_OVERLAY =
@@ -41,129 +29,10 @@ interface MCollEditSheetProps {
  * description and links. Deleting goes through the shared confirm flow.
  */
 export default function MCollEditSheet({ target, onClose, onCreated, onRequestDelete, t }: MCollEditSheetProps) {
-  const createCollection = useCollectionStore(s => s.createCollection)
-  const updateCollection = useCollectionStore(s => s.updateCollection)
-  const uploadCover = useCollectionStore(s => s.uploadCover)
-  const toast = useToast()
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  // Hold the last target through the exit animation.
-  const [held, setHeld] = useState<Collection | 'new' | null>(target)
-  if (target && target !== held) setHeld(target)
-  const editing = held && held !== 'new' ? held : null
-
-  const [name, setName] = useState('')
-  const [color, setColor] = useState(SWATCH_COLORS[0])
-  const [description, setDescription] = useState('')
-  const [links, setLinks] = useState<CollectionLink[]>([])
-  const [coverFile, setCoverFile] = useState<File | null>(null)
-  const [coverPreview, setCoverPreview] = useState<string | null>(null)
-  const [pendingUnsplashUrl, setPendingUnsplashUrl] = useState<string | null>(null)
-  const [coverQuery, setCoverQuery] = useState('')
-  const [coverResults, setCoverResults] = useState<CoverSearchPhoto[]>([])
-  const [searchingCover, setSearchingCover] = useState(false)
-  const coverSeq = useRef(0)
-  const [saving, setSaving] = useState(false)
-  // A create that failed at the cover step keeps its id so a retry updates it.
-  const [createdId, setCreatedId] = useState<number | null>(null)
-  const objectUrl = useRef<string | null>(null)
-
-  const dropObjectUrl = () => {
-    if (objectUrl.current) { URL.revokeObjectURL(objectUrl.current); objectUrl.current = null }
-  }
-
-  // (Re)seed the form whenever the sheet opens on a target.
-  useEffect(() => {
-    if (!target) return
-    const edit = target !== 'new' ? target : null
-    setName(edit?.name ?? '')
-    setColor(edit?.color ?? SWATCH_COLORS[0])
-    setDescription(edit?.description ?? '')
-    setLinks(edit?.links ?? [])
-    setCoverFile(null)
-    dropObjectUrl()
-    setCoverPreview(edit?.cover_image ?? null)
-    setPendingUnsplashUrl(null)
-    setCoverQuery('')
-    setCoverResults([])
-    setCreatedId(null)
-  }, [target])
-
-  useEffect(() => () => dropObjectUrl(), [])
-
-  // A create that only failed at the cover step already produced the list —
-  // hand it over on the way out instead of leaving it behind unnoticed.
-  const close = () => {
-    if (createdId != null) onCreated(createdId)
-    onClose()
-  }
-
-  const pickCover = (file: File | undefined) => {
-    if (!file) return
-    dropObjectUrl()
-    const url = URL.createObjectURL(file)
-    objectUrl.current = url
-    setCoverFile(file)
-    setCoverPreview(url)
-    setPendingUnsplashUrl(null)
-  }
-
-  const searchCover = async () => {
-    const query = coverQuery.trim() || name.trim()
-    if (!query) return
-    const seq = ++coverSeq.current
-    setSearchingCover(true)
-    try {
-      const data = await tripsApi.searchCoverImages(query)
-      if (seq !== coverSeq.current) return
-      setCoverResults(data.photos || [])
-    } catch {
-      if (seq === coverSeq.current) setCoverResults([])
-    } finally {
-      if (seq === coverSeq.current) setSearchingCover(false)
-    }
-  }
-
-  const pickUnsplash = (photo: CoverSearchPhoto) => {
-    if (!photo.url) return
-    dropObjectUrl()
-    setCoverFile(null)
-    setPendingUnsplashUrl(photo.url)
-    setCoverPreview(photo.url)
-  }
-
-  const save = async () => {
-    const trimmed = name.trim()
-    if (!trimmed || saving) return
-    const cleanLinks = links
-      .map(l => ({ label: l.label?.trim() || undefined, url: normalizeLinkUrl(l.url) }))
-      .filter(l => l.url)
-    const payload = {
-      name: trimmed,
-      color,
-      description: description.trim() || null,
-      links: cleanLinks,
-      ...(pendingUnsplashUrl ? { cover_image: pendingUnsplashUrl } : {}),
-    }
-    setSaving(true)
-    try {
-      let id = editing?.id ?? createdId
-      if (id != null) {
-        await updateCollection(id, payload)
-      } else {
-        const created = await createCollection(payload)
-        id = created?.id ?? null
-        setCreatedId(id)
-      }
-      if (id != null && coverFile) await uploadCover(id, coverFile)
-      if (!editing && id != null) onCreated(id)
-      onClose()
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, t('common.error')))
-    } finally {
-      setSaving(false)
-    }
-  }
+  const {
+    editing, fileRef, name, setName, color, setColor, description, setDescription, links, setLinks,
+    coverPreview, coverQuery, setCoverQuery, coverResults, searchingCover, saving, close, pickCover, searchCover, pickUnsplash, save,
+  } = useListEditor({ target, onClose, onCreated, t, defaultColor: SWATCH_COLORS[0], holdLastTarget: true, normalizeLinkUrl })
 
   const label = 'mb-[5px] font-geist text-[0.6875rem] font-bold text-m-muted'
   const canDeleteList = editing != null && editing.is_owner !== false
