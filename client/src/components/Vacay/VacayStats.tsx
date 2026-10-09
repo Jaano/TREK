@@ -7,10 +7,7 @@ import { windowMonths } from '../../vacay/yearWindow'
 import type { VacayStat, TranslationFn } from '../../types'
 import { NumericInput } from '../shared/NumericInput'
 import VacayBadge from './VacayBadge'
-
-// Used/remaining can be fractional once half days (#552) are in play; entry
-// fractions are exact multiples of 0.5, so one decimal is enough and never drifts.
-const fmtDays = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+import { fmtDays } from './vacayFormat'
 
 // The sidebar card can be folded away; the choice is a personal view preference,
 // so it lives in localStorage rather than on the plan.

@@ -1,4 +1,4 @@
-import { useState, useEffect, useId, type HTMLAttributes } from 'react'
+import { useState, useId, type HTMLAttributes } from 'react'
 import { UserPlus, Check, Loader2, Clock, Palette } from 'lucide-react'
 import { useVacayStore } from '../../store/vacayStore'
 import { useAuthStore } from '../../store/authStore'
@@ -9,6 +9,7 @@ import CustomSelect from '../shared/CustomSelect'
 import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import apiClient from '../../api/client'
 import VacayBadge from './VacayBadge'
+import { useDefaultVacayPerson } from './useVacayCalendarLogic'
 
 const PRESET_COLORS = [
   '#6366f1', '#ec4899', '#14b8a6', '#8b5cf6', '#ef4444',
@@ -23,9 +24,7 @@ export default function VacayPersons() {
   const { user: currentUser } = useAuthStore()
 
   // Default selectedUserId to current user
-  useEffect(() => {
-    if (!selectedUserId && currentUser) setSelectedUserId(currentUser.id)
-  }, [currentUser, selectedUserId])
+  useDefaultVacayPerson()
   const [showInvite, setShowInvite] = useState(false)
   const [showColorPicker, setShowColorPicker] = useState(false)
   const [colorEditUserId, setColorEditUserId] = useState(null)

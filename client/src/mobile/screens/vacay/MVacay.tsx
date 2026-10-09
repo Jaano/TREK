@@ -10,9 +10,7 @@ import MVacayInviteSheet from './MVacayInviteSheet'
 import MVacaySettingsSheet from './MVacaySettingsSheet'
 import MVacayShareSheet from './MVacayShareSheet'
 import { FALLBACK_PERSON_COLOR } from './vacayDayModel'
-
-/** Half days (#552) make the balance fractional; one decimal is exact and never drifts. */
-const fmtDays = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+import { fmtDays } from '../../../components/Vacay/vacayFormat'
 
 const WEEKDAY_KEYS_MONDAY = ['vacay.mon', 'vacay.tue', 'vacay.wed', 'vacay.thu', 'vacay.fri', 'vacay.sat', 'vacay.sun'] as const
 const WEEKDAY_KEYS_SUNDAY = ['vacay.sun', 'vacay.mon', 'vacay.tue', 'vacay.wed', 'vacay.thu', 'vacay.fri', 'vacay.sat'] as const

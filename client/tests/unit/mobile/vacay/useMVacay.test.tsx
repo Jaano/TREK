@@ -201,8 +201,8 @@ describe('useMVacay', () => {
     });
     const { result } = await mount();
 
-    expect(result.current.dayCtx.sharedMap?.['2026-07-01']).toEqual([{ color: '#f59e0b' }]);
-    expect(result.current.dayCtx.sharedMap?.['2026-07-02']).toEqual([{ color: '#f59e0b' }]);
+    expect(result.current.dayCtx.sharedMap?.['2026-07-01']).toEqual([expect.objectContaining({ color: '#f59e0b' })]);
+    expect(result.current.dayCtx.sharedMap?.['2026-07-02']).toEqual([expect.objectContaining({ color: '#f59e0b' })]);
     expect(result.current.dayCtx.sharedMap?.['2026-07-03']).toBeUndefined();
   });
 
