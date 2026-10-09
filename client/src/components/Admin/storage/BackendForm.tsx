@@ -1,7 +1,6 @@
-import React, { useId, useState } from 'react'
+import React, { useId } from 'react'
 import { HardDrive } from 'lucide-react'
 import {
-  STORAGE_BACKEND_TYPES,
   STORAGE_BACKEND_TYPE_IDS,
   type StorageBackend,
   type StorageBackendFieldDef,
@@ -21,17 +20,7 @@ import {
   fs,
 } from '../../shared/DialogShell'
 import { EditorField, GRID_2, INPUT } from '../../shared/dialogParts'
-
-type FieldValues = Record<string, string | string[]>
-
-function valuesOf(backend: StorageBackend | null): FieldValues {
-  if (!backend) return {}
-  const values: FieldValues = {}
-  for (const [key, value] of Object.entries(backend.options)) {
-    values[key] = Array.isArray(value) ? value : String(value)
-  }
-  return values
-}
+import { useBackendForm } from './useBackendForm'
 
 export interface BackendFormMirrorProps {
   /** Selectable replica targets (the form excludes its own name at render). */
@@ -76,40 +65,13 @@ export default function BackendForm({
   const { t } = useTranslation()
   const labelId = useId()
   const fieldId = (key: string) => `${labelId}-${key}`
-  const [type, setType] = useState<StorageBackendTypeId>(initial?.type ?? 'local')
-  const [name, setName] = useState(initial?.name ?? '')
-  const [values, setValues] = useState<FieldValues>(() => valuesOf(initial))
-  const [targets, setTargets] = useState<string[]>(mirror?.initialTargets ?? [])
-
-  const fields = STORAGE_BACKEND_TYPES[type].fields as readonly StorageBackendFieldDef[]
-  const refOptions = backendNames.filter((candidate) => candidate !== name.trim())
-  const setValue = (key: string, value: string | string[]) =>
-    setValues((prev) => ({ ...prev, [key]: value }))
-
-  const filled = (field: StorageBackendFieldDef): boolean => {
-    const value = values[field.key]
-    if (field.kind === 'backend-ref-list') return Array.isArray(value) && value.length > 0
-    return typeof value === 'string' && value.trim() !== ''
-  }
-  const duplicate = name.trim() !== (initial?.name ?? '') && backendNames.includes(name.trim())
-  const canApply =
-    name.trim() !== '' && !duplicate && fields.every((f) => !f.required || filled(f))
+  const {
+    type, changeType, name, setName, values, setValue, toggleRef, targets, toggleTarget, fields, refOptions,
+    duplicate, canApply, buildBackend, visibleCandidates,
+  } = useBackendForm({ initial, backendNames, mirror })
 
   const apply = () => {
-    const options: Record<string, unknown> = {}
-    for (const field of fields) {
-      const value = values[field.key]
-      if (field.kind === 'backend-ref-list') {
-        options[field.key] = Array.isArray(value) ? value : []
-        continue
-      }
-      const text = typeof value === 'string' ? value : ''
-      if (text === '' && !field.required) continue // omitted → the shared schema default applies
-      options[field.key] = field.kind === 'number' ? Number(text) : text
-    }
-    // The options were built from the same field defs the schema is generated
-    // from — this is the same sanctioned cast storageModel.asWireBackend makes.
-    const payload = { name: name.trim(), type, options } as StorageBackend
+    const payload = buildBackend()
     // Arity matters: the landed tests pin single-argument calls when no mirror
     // block is supplied (toHaveBeenCalledWith treats a trailing undefined as a
     // mismatch), so the second argument exists only when the composer does.
@@ -143,14 +105,7 @@ export default function BackendForm({
                   type="checkbox"
                   className={CHECKBOX}
                   checked={selected.includes(candidate)}
-                  onChange={(e) =>
-                    setValue(
-                      field.key,
-                      e.target.checked
-                        ? [...selected, candidate]
-                        : selected.filter((existing) => existing !== candidate),
-                    )
-                  }
+                  onChange={(e) => toggleRef(field.key, candidate, e.target.checked)}
                 />
                 <span className="min-w-0 truncate font-geist">{candidate}</span>
               </label>
@@ -180,8 +135,6 @@ export default function BackendForm({
       </EditorField>
     )
   }
-
-  const visibleCandidates = mirror ? mirror.candidates.filter((candidate) => candidate !== name.trim()) : []
 
   return (
     <DialogShell
@@ -232,10 +185,7 @@ export default function BackendForm({
         <EditorField label={t('storage.form.type')}>
           <CustomSelect
             value={type}
-            onChange={(next) => {
-              setType(next as StorageBackendTypeId)
-              setValues({}) // a different type has different fields
-            }}
+            onChange={(next) => changeType(next as StorageBackendTypeId)}
             options={STORAGE_BACKEND_TYPE_IDS.filter((id) => id !== 'mirror').map((id) => ({
               value: id,
               label: t(`storage.type.${id}`),
@@ -259,13 +209,7 @@ export default function BackendForm({
                     type="checkbox"
                     className={CHECKBOX}
                     checked={targets.includes(candidate)}
-                    onChange={(e) =>
-                      setTargets(
-                        e.target.checked
-                          ? [...targets, candidate]
-                          : targets.filter((existing) => existing !== candidate),
-                      )
-                    }
+                    onChange={(e) => toggleTarget(candidate, e.target.checked)}
                   />
                   <span className="min-w-0 truncate font-geist">{candidate}</span>
                 </label>
