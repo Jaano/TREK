@@ -210,6 +210,33 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
   const mapInsetLeft = leftPanelPx ? leftPanelPx + 10 : 0
   const mapInsetRight = rightPanelPx ? rightPanelPx + 10 : 0
 
+  // The place inspector and the tour dialog open on the selected place, beside
+  // the panels or in the phone-width sheet. What every one of them gets; each
+  // call site adds what differs.
+  const selectedPlaceProps = {
+    days, selectedDayId, selectedAssignmentId, assignments, files,
+    onClose: () => setSelectedPlaceId(null),
+    onFileUpload: canUploadFiles ? (fd: FormData) => tripActions.addFile(tripId, fd) : undefined,
+    onAssignToDay: handleAssignToDay,
+    onRemoveAssignment: handleRemoveAssignment,
+  }
+  const placeInspectorProps = {
+    ...selectedPlaceProps,
+    roadtripEndDay, roadtripStay, roadtripActive,
+    onEditTransport: openLinkedTransport,
+    onEditReservation: openLinkedReservation,
+    categories, reservations, tripMembers,
+    onSetParticipants: placeActions.setParticipants,
+    onUpdatePlace: placeActions.updatePlace,
+    onUploadImage: async (placeId: number, file: File) => { await tripActions.uploadPlaceImage(tripId, placeId, file) },
+    onImageFromFile: async (placeId: number, fileId: number) => { await tripActions.setPlaceImageFromFile(tripId, placeId, fileId) },
+    onRate: placeActions.ratePlace,
+  }
+  const tourDetailProps = {
+    ...selectedPlaceProps,
+    onUpdatePlace: async (placeId: number, data: Partial<Place>) => { await tripActions.updatePlace(tripId, placeId, data); await reloadTourPlaceIds() },
+  }
+
   // The trip is a family of help screens: the frame, then one per tab, and on
   // the plan one per overlay that is open. A screen that has no help yet falls
   // back to the frame.
@@ -273,22 +300,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
             />
 
             <div className="hidden md:block" style={{ position: 'absolute', left: 10, top: 10, bottom: 10, zIndex: 20 }}>
-              {/* The panel's tab: a flap on its edge while open, a raised accent tile once it is tucked away. */}
-              <Tooltip label={leftHidden ? t('trip.mobilePlan') : t('common.collapse')} placement="right">
-                <button type="button" onClick={toggleLeft}
-                  aria-label={leftHidden ? t('trip.mobilePlan') : t('common.collapse')}
-                  className={leftHidden ? 'bg-accent text-accent-text shadow-md hover:opacity-90' : 'text-content-faint hover:text-content'}
-                  style={{
-                    position: leftHidden ? 'fixed' : 'absolute', top: leftHidden ? 'calc(var(--nav-h) + 44px + 14px)' : 14, left: leftHidden ? 10 : undefined, right: leftHidden ? undefined : -28, zIndex: -1,
-                    width: 36, height: 36, borderRadius: leftHidden ? 10 : '0 10px 10px 0',
-                    background: leftHidden ? undefined : 'var(--sidebar-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-                    border: 'none',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'color 0.15s',
-                  }}>
-                  {leftHidden ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-                </button>
-              </Tooltip>
+              <LeftPanelTab hidden={leftHidden} label={leftHidden ? t('trip.mobilePlan') : t('common.collapse')} onToggle={toggleLeft} />
 
               <div style={{
                 width: leftHidden ? 0 : leftWidth, height: '100%',
@@ -559,31 +571,11 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
 
             {selectedPlace && (!toursEnabled || tourDataReady) && !selectedTour && !isMobile && (
               <PlaceInspector
-                roadtripEndDay={roadtripEndDay}
-                roadtripStay={roadtripStay} roadtripActive={roadtripActive}
-                onEditTransport={openLinkedTransport}
-                onEditReservation={openLinkedReservation}
+                {...placeInspectorProps}
                 onOpenBooking={openBookingDetail}
                 place={selectedPlace}
-                categories={categories}
-                days={days}
-                selectedDayId={selectedDayId}
-                selectedAssignmentId={selectedAssignmentId}
-                assignments={assignments}
-                reservations={reservations}
-                onClose={() => setSelectedPlaceId(null)}
                 onEdit={() => openPlaceEditor(selectedPlace, selectedAssignmentId)}
                 onDelete={() => handleDeletePlace(selectedPlace.id)}
-                onAssignToDay={handleAssignToDay}
-                onRemoveAssignment={handleRemoveAssignment}
-                files={files}
-                onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined}
-                tripMembers={tripMembers}
-                onSetParticipants={placeActions.setParticipants}
-                onUpdatePlace={placeActions.updatePlace}
-                onUploadImage={async (placeId, file) => { await tripActions.uploadPlaceImage(tripId, placeId, file) }}
-                onImageFromFile={async (placeId, fileId) => { await tripActions.setPlaceImageFromFile(tripId, placeId, fileId) }}
-                onRate={placeActions.ratePlace}
                 leftWidth={isMobile ? 0 : leftPanelPx}
                 rightWidth={isMobile ? 0 : rightPanelPx}
               />
@@ -593,30 +585,10 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
               <div className="bg-[rgba(0,0,0,0.3)]" style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', paddingBottom: 'var(--bottom-nav-h)' }} role="presentation" onClick={() => setSelectedPlaceId(null)}>
                 <div style={{ width: '100%', maxHeight: '85vh' }} role="presentation" onClick={e => e.stopPropagation()}>
                   <PlaceInspector
-                    roadtripEndDay={roadtripEndDay}
-                    roadtripStay={roadtripStay} roadtripActive={roadtripActive}
-                    onEditTransport={openLinkedTransport}
-                    onEditReservation={openLinkedReservation}
+                    {...placeInspectorProps}
                     place={selectedPlace}
-                    categories={categories}
-                    days={days}
-                    selectedDayId={selectedDayId}
-                    selectedAssignmentId={selectedAssignmentId}
-                    assignments={assignments}
-                    reservations={reservations}
-                    onClose={() => setSelectedPlaceId(null)}
                     onEdit={() => { openPlaceEditor(selectedPlace, selectedAssignmentId); setSelectedPlaceId(null) }}
                     onDelete={() => { handleDeletePlace(selectedPlace.id); setSelectedPlaceId(null) }}
-                    onAssignToDay={handleAssignToDay}
-                    onRemoveAssignment={handleRemoveAssignment}
-                    files={files}
-                    onFileUpload={canUploadFiles ? (fd) => tripActions.addFile(tripId, fd) : undefined}
-                    tripMembers={tripMembers}
-                    onSetParticipants={placeActions.setParticipants}
-                    onUpdatePlace={placeActions.updatePlace}
-                    onUploadImage={async (placeId, file) => { await tripActions.uploadPlaceImage(tripId, placeId, file) }}
-                onImageFromFile={async (placeId, fileId) => { await tripActions.setPlaceImageFromFile(tripId, placeId, fileId) }}
-                    onRate={placeActions.ratePlace}
                     leftWidth={0}
                     rightWidth={0}
                   />
@@ -630,19 +602,10 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                 tour={selectedTour}
                 desktopNonModal
                 desktopFocusReturnTarget={tourDetails.openerRef.current?.placeId === selectedTour.place_id ? tourDetails.openerRef.current.element : null}
+                {...tourDetailProps}
                 canEdit={canPlaceEdit}
                 canAssign={canDayEdit}
                 place={selectedPlace}
-                days={days}
-                selectedDayId={selectedDayId}
-                selectedAssignmentId={selectedAssignmentId}
-                assignments={assignments}
-                files={files}
-                onClose={() => setSelectedPlaceId(null)}
-                onUpdatePlace={async (placeId, data) => { await tripActions.updatePlace(tripId, placeId, data); await reloadTourPlaceIds() }}
-                onFileUpload={canUploadFiles ? (formData) => tripActions.addFile(tripId, formData) : undefined}
-                onAssignToDay={handleAssignToDay}
-                onRemoveAssignment={handleRemoveAssignment}
                 leftWidth={leftPanelPx}
                 rightWidth={rightPanelPx}
               />
@@ -653,19 +616,10 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                 <div style={{ width: '100%', maxHeight: '85vh' }} role="presentation" onClick={event => event.stopPropagation()}>
                   <TourDetailDialog
                     tour={selectedTour}
+                    {...tourDetailProps}
                     canEdit={canPlaceEdit}
                     canAssign={canDayEdit}
                     place={selectedPlace}
-                    days={days}
-                    selectedDayId={selectedDayId}
-                    selectedAssignmentId={selectedAssignmentId}
-                    assignments={assignments}
-                    files={files}
-                    onClose={() => setSelectedPlaceId(null)}
-                    onUpdatePlace={async (placeId, data) => { await tripActions.updatePlace(tripId, placeId, data); await reloadTourPlaceIds() }}
-                    onFileUpload={canUploadFiles ? (formData) => tripActions.addFile(tripId, formData) : undefined}
-                    onAssignToDay={handleAssignToDay}
-                    onRemoveAssignment={handleRemoveAssignment}
                   />
                 </div>
               </div>,
@@ -717,21 +671,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
               onViewBaseLayerChange={tourPlanner.setMapBaseLayer}
             />
             <div className="hidden md:block" style={{ position: 'absolute', left: 10, top: 10, bottom: 10, zIndex: 20 }}>
-              <Tooltip label={leftHidden ? t('trip.mobilePlan') : t('common.collapse')} placement="right">
-                <button type="button" onClick={toggleLeft}
-                  aria-label={leftHidden ? t('trip.mobilePlan') : t('common.collapse')}
-                  aria-expanded={!leftHidden}
-                  className={`${leftHidden ? 'bg-accent text-accent-text shadow-md hover:opacity-90' : 'text-content-faint hover:text-content'} focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent`}
-                  style={{
-                    position: leftHidden ? 'fixed' : 'absolute', top: leftHidden ? 'calc(var(--nav-h) + 44px + 14px)' : 14,
-                    left: leftHidden ? 10 : undefined, right: leftHidden ? undefined : -28, zIndex: -1,
-                    width: 36, height: 36, borderRadius: leftHidden ? 10 : '0 10px 10px 0',
-                    background: leftHidden ? undefined : 'var(--sidebar-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-                    border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s',
-                  }}>
-                  {leftHidden ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-                </button>
-              </Tooltip>
+              <LeftPanelTab hidden={leftHidden} label={leftHidden ? t('trip.mobilePlan') : t('common.collapse')} onToggle={toggleLeft} announced />
               <div style={{
                 width: leftHidden ? 0 : leftPanelPx, height: '100%', position: 'relative',
                 background: 'var(--sidebar-bg)', backdropFilter: 'blur(24px) saturate(180%)',
@@ -1041,5 +981,35 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
         confirmLabel={t('roadtrip.stay.releaseAction')}
       />
     </div>
+  )
+}
+
+interface LeftPanelTabProps {
+  hidden: boolean
+  label: string
+  onToggle: () => void
+  /** Also states whether the panel is open and shows a focus ring (the tour planner's tab). */
+  announced?: boolean
+}
+
+/** The left panel's tab: a flap on its edge while open, a raised accent tile once it is tucked away. */
+export function LeftPanelTab({ hidden, label, onToggle, announced = false }: LeftPanelTabProps): React.ReactElement {
+  const look = hidden ? 'bg-accent text-accent-text shadow-md hover:opacity-90' : 'text-content-faint hover:text-content'
+  return (
+    <Tooltip label={label} placement="right">
+      <button type="button" onClick={onToggle}
+        aria-label={label}
+        aria-expanded={announced ? !hidden : undefined}
+        className={announced ? `${look} focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent` : look}
+        style={{
+          position: hidden ? 'fixed' : 'absolute', top: hidden ? 'calc(var(--nav-h) + 44px + 14px)' : 14,
+          left: hidden ? 10 : undefined, right: hidden ? undefined : -28, zIndex: -1,
+          width: 36, height: 36, borderRadius: hidden ? 10 : '0 10px 10px 0',
+          background: hidden ? undefined : 'var(--sidebar-bg)', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
+          border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'color 0.15s',
+        }}>
+        {hidden ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+      </button>
+    </Tooltip>
   )
 }
