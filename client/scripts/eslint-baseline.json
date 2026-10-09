@@ -1,19 +1,19 @@
 {
   "src": {
-    "@typescript-eslint/no-explicit-any": 174,
-    "@typescript-eslint/no-unused-expressions": 4,
-    "@typescript-eslint/no-unused-vars": 194,
-    "no-empty": 34,
+    "@typescript-eslint/no-explicit-any": 155,
+    "@typescript-eslint/no-unused-expressions": 2,
+    "@typescript-eslint/no-unused-vars": 184,
+    "no-empty": 19,
     "no-useless-assignment": 7,
     "no-useless-escape": 1,
     "preserve-caught-error": 53,
-    "react-hooks/exhaustive-deps": 144,
-    "react-refresh/only-export-components": 48,
-    "unused-disable-directive": 7
+    "react-hooks/exhaustive-deps": 124,
+    "react-refresh/only-export-components": 47,
+    "unused-disable-directive": 6
   },
   "suppressed": {
-    "@typescript-eslint/no-explicit-any": 50,
-    "react-hooks/exhaustive-deps": 64
+    "@typescript-eslint/no-explicit-any": 44,
+    "react-hooks/exhaustive-deps": 47
   },
   "tests": {
     "@typescript-eslint/no-explicit-any": 492,
