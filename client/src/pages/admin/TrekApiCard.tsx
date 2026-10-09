@@ -1,8 +1,9 @@
 import React from 'react'
-import { Check, ChevronRight, Library, X } from 'lucide-react'
+import { Check, Library, X } from 'lucide-react'
 import TrekMark from '../../components/shared/TrekMark'
 import { fs } from '../../components/shared/DialogShell'
 import { StatusPill } from '../../components/Settings/settingsKit'
+import FoldSummary from './FoldSummary'
 import type { TranslationFn } from '../../types'
 import { TREK_API_SOURCES as SOURCES, trekApiFacts, trekApiFields } from '../../components/Admin/trekApiModel'
 
@@ -72,20 +73,9 @@ export default function TrekApiCard({ t }: TrekApiCardProps): React.ReactElement
       </div>
 
       <details className="group border-t border-edge-faint">
-        <summary
-          className="flex cursor-pointer list-none items-center gap-2.5 px-3.5 py-2.5
-                     hover:bg-surface-hover focus-visible:outline-none
-                     focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--text-primary)]
-                     [&::-webkit-details-marker]:hidden"
-        >
-          <ChevronRight
-            size={15}
-            strokeWidth={2}
-            className="flex-none text-content-faint transition-transform group-open:rotate-90"
-            aria-hidden="true"
-          />
+        <FoldSummary>
           <span className="font-medium text-content" style={fs(13, 'body')}>{t('admin.trekApi.more')}</span>
-        </summary>
+        </FoldSummary>
         <div className="divide-y divide-edge-faint border-t border-edge-faint bg-surface-secondary">
           {/* The fields as chips rather than a paragraph. A list of what you
               get is something you scan, not something you read, and a sentence

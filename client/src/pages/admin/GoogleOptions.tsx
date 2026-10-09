@@ -1,7 +1,7 @@
 import React from 'react'
-import { ChevronRight } from 'lucide-react'
 import { fs } from '../../components/shared/DialogShell'
 import { StatusPill } from '../../components/Settings/settingsKit'
+import FoldSummary from './FoldSummary'
 
 interface GoogleOptionsProps {
   /** "Google options" — the heading of the fold. */
@@ -27,20 +27,10 @@ interface GoogleOptionsProps {
 export default function GoogleOptions({ title, summary, children }: GoogleOptionsProps): React.ReactElement {
   return (
     <details className="group overflow-hidden rounded-[12px] border border-edge-faint bg-surface-secondary">
-      <summary
-        className="flex cursor-pointer list-none items-center gap-2.5 px-3.5 py-2.5 hover:bg-surface-hover
-                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[color:var(--text-primary)]
-                   [&::-webkit-details-marker]:hidden"
-      >
-        <ChevronRight
-          size={15}
-          strokeWidth={2}
-          className="flex-none text-content-faint transition-transform group-open:rotate-90"
-          aria-hidden="true"
-        />
+      <FoldSummary>
         <span className="min-w-0 flex-1 truncate font-medium text-content" style={fs(13, 'body')}>{title}</span>
         <StatusPill>{summary}</StatusPill>
-      </summary>
+      </FoldSummary>
       <div className="divide-y divide-edge-faint border-t border-edge-faint bg-surface-card">{children}</div>
     </details>
   )
