@@ -1,9 +1,9 @@
-import { useState } from 'react'
 import type { Reservation } from '../../../types'
 import { useTranslation } from '../../../i18n'
 import { useTripStore } from '../../../store/tripStore'
 import { useToast } from '../../shared/Toast'
 import ConfirmDialog from '../../shared/ConfirmDialog'
+import { useReservationDelete } from './useReservationDelete'
 
 /**
  * The two things a booking can have done to it without its editor: switching
@@ -17,23 +17,17 @@ export function useBookingActions(tripId: number, onDelete: (id: number) => unkn
   const { t } = useTranslation()
   const toast = useToast()
   const toggleReservationStatus = useTripStore(s => s.toggleReservationStatus)
-  const [pendingDelete, setPendingDelete] = useState<Reservation | null>(null)
+  const { pendingDelete, requestDelete, cancelDelete, confirmDelete } =
+    useReservationDelete(onDelete, () => toast.error(t('reservations.toast.deleteError')), beforeDelete)
 
   const toggleStatus = (r: Reservation) => {
     toggleReservationStatus(tripId, r.id).catch(() => toast.error(t('reservations.toast.updateError')))
-  }
-  const confirmDelete = async () => {
-    const r = pendingDelete
-    setPendingDelete(null)
-    if (!r) return
-    beforeDelete?.(r)
-    try { await onDelete(r.id) } catch { toast.error(t('reservations.toast.deleteError')) }
   }
 
   const confirmDialog = (
     <ConfirmDialog
       isOpen={!!pendingDelete}
-      onClose={() => setPendingDelete(null)}
+      onClose={cancelDelete}
       onConfirm={confirmDelete}
       title={t('reservations.confirm.deleteTitle')}
       message={t('reservations.confirm.deleteBody', { name: pendingDelete?.title ?? '' })}
@@ -42,5 +36,5 @@ export function useBookingActions(tripId: number, onDelete: (id: number) => unkn
     />
   )
 
-  return { toggleStatus, requestDelete: setPendingDelete, pendingDelete, confirmDialog }
+  return { toggleStatus, requestDelete, pendingDelete, confirmDialog }
 }

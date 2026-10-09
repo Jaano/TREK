@@ -1,16 +1,18 @@
-import { useState } from 'react'
 import { FileText, MapPin, Pencil, Trash2 } from 'lucide-react'
 import MDancingTrek from '../../../components/MDancingTrek'
 import { RES_ICONS } from '../../../../components/Planner/DayPlanSidebar.constants'
-import { splitReservationDateTime, formatTime, formatPriceText } from '../../../../utils/formatters'
-import { openFile } from '../../../../utils/fileDownload'
+import { formatTime, formatPriceText } from '../../../../utils/formatters'
 import { useTranslation } from '../../../../i18n'
 import type { Reservation } from '../../../../types'
 import MConfirmSheet from '../../settings/MConfirmSheet'
 import { ConfirmationCode, Field, ReservationPluginSlots, SectionHeader, StatusDot, TabScroller, TravelerAvatars, TravelerFilterRow } from './tabChrome'
 import { STATUS_COLOR, type MTabScreenProps } from './tabModel'
-import { groupTransports, orderedEndpoints, parseTransportMeta } from './transportsModel'
-import { BOOKING_TYPE_COLOR } from './bookingsModel'
+import { cardWhen, parseTransportMeta } from './transportsModel'
+import { BOOKING_TYPE_COLOR } from '../../../../components/Planner/bookings/bookingsModel'
+import { useReservationListFilter } from '../../../../components/Planner/bookings/useReservationListFilter'
+import { useReservationCard } from '../../../../components/Planner/bookings/useReservationCard'
+import { orderedEndpoints } from '../../../../utils/flightLegs'
+import { filesFor } from '../../../../utils/reservationFiles'
 
 /**
  * Tab 2 — Buchungen. Real `planner.reservations` filtered to the non-transport
@@ -22,16 +24,11 @@ import { BOOKING_TYPE_COLOR } from './bookingsModel'
  */
 export default function MBookingsTab({ planner, shell }: MTabScreenProps) {
   const { t, reservations, days } = planner
-  const [travelerFilter, setTravelerFilter] = useState<Set<number>>(new Set())
   const allBookings = reservations.filter(r => !planner.TRANSPORT_TYPES.has(r.type))
-  const bookings = travelerFilter.size === 0 ? allBookings : allBookings.filter(r => (r.travelers || []).some(tv => travelerFilter.has(tv.user_id)))
-  const groups = groupTransports(bookings, days)
+  const {
+    travelerFilter, groups, showTravelerFilter, toggleTravelerFilter, clearTravelerFilter, collapsed, toggleSection: toggle,
+  } = useReservationListFilter(allBookings, days, planner.tripMembers.length)
   const canEdit = planner.can('reservation_edit', planner.trip)
-  const showTravelerFilter = planner.tripMembers.length > 1 && allBookings.some(r => (r.travelers || []).length > 0)
-  const toggleTravelerFilter = (id: number) => setTravelerFilter(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
-
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-  const toggle = (id: string) => setCollapsed(c => ({ ...c, [id]: !c[id] }))
 
   const sections = [
     { id: 'confirmed', label: t('reservations.confirmed'), rows: groups.confirmed },
@@ -45,7 +42,7 @@ export default function MBookingsTab({ planner, shell }: MTabScreenProps) {
           members={planner.tripMembers}
           active={travelerFilter}
           onToggle={toggleTravelerFilter}
-          onClear={() => setTravelerFilter(new Set())}
+          onClear={clearTravelerFilter}
           label={t('reservations.travelers.label')}
           allLabel={t('common.all')}
         />
@@ -88,9 +85,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
   const { t, days } = planner
   const { locale } = useTranslation()
   const timeFormat = planner.settings.time_format || '24h'
-  const blurCodes = planner.settings.blur_booking_codes
-  const [codeRevealed, setCodeRevealed] = useState(false)
-  const [confirmDelete, setConfirmDelete] = useState(false)
+  const card = useReservationCard(res, planner)
 
   const meta = parseTransportMeta(res)
   const TypeIcon = RES_ICONS[res.type as keyof typeof RES_ICONS] || RES_ICONS.other
@@ -106,12 +101,6 @@ function BookingCard({ res, planner, canEdit, compact }: {
   const endDay = isHotel && res.accommodation_end_day_id
     ? days.find(d => d.id === res.accommodation_end_day_id)
     : res.end_day_id != null ? days.find(d => d.id === res.end_day_id) : undefined
-
-  const startDt = splitReservationDateTime(res.reservation_time)
-  const endDt = splitReservationDateTime(res.reservation_end_time)
-  const fmtDate = (date: string) =>
-    new Date(`${date}T00:00:00Z`).toLocaleDateString(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' })
-  const dayLabel = (day: NonNullable<typeof startDay>) => day.title || t('dayplan.dayN', { n: day.day_number })
 
   const eps = orderedEndpoints(res)
   const hasEndpoints = eps.some(e => e.role === 'from') && eps.some(e => e.role === 'to')
@@ -132,9 +121,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
   }
   if (meta.check_out_time) metaCells.push({ label: t('reservations.meta.checkOut'), value: formatTime(meta.check_out_time, locale, timeFormat) })
 
-  const files = (planner.files || []).filter(
-    f => !f.deleted_at && (f.reservation_id === res.id || (f.linked_reservation_ids || []).includes(res.id)),
-  )
+  const files = filesFor(res, planner.files || [])
 
   const openEdit = () => {
     if (!canEdit) return
@@ -142,14 +129,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
     planner.setShowReservationModal(true)
   }
 
-  const timeValue = startDt.time
-    ? `${formatTime(startDt.time, locale, timeFormat)}${endDt.time ? ` – ${formatTime(endDt.time, locale, timeFormat)}` : ''}`
-    : '—'
-  const dayValue = startDay
-    ? `${dayLabel(startDay)}${endDay && endDay.id !== startDay.id ? ` – ${dayLabel(endDay)}` : ''}`
-    : startDt.date
-      ? fmtDate(startDt.date)
-      : '—'
+  const { dayValue, timeValue } = cardWhen(res, startDay, endDay, t, locale, timeFormat)
 
   return (
     <div className="mt-2 overflow-hidden rounded-2xl border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)]">
@@ -181,7 +161,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
         {canEdit && (
           <button
             type="button"
-            onClick={() => setConfirmDelete(true)}
+            onClick={card.askDelete}
             aria-label={t('common.delete')}
             className="flex h-[26px] w-[26px] flex-none items-center justify-center rounded-full bg-[color:var(--m-ic)] text-m-muted"
           >
@@ -205,8 +185,8 @@ function BookingCard({ res, planner, canEdit, compact }: {
             <ConfirmationCode
               code={res.confirmation_number}
               label={t('reservations.confirmationCode')}
-              blurred={!!blurCodes && !codeRevealed}
-              onToggle={blurCodes ? () => setCodeRevealed(v => !v) : undefined}
+              blurred={card.codeBlurred}
+              onToggle={card.toggleCode}
             />
           )}
 
@@ -247,8 +227,7 @@ function BookingCard({ res, planner, canEdit, compact }: {
                       key={f.id}
                       role="button"
                       tabIndex={0}
-                      onClick={e => { e.stopPropagation(); void openFile(f.url, f.original_name) }}
-                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); void openFile(f.url, f.original_name) } }}
+                      {...card.fileChip(f)}
                       className="flex items-center gap-[6px] rounded-[10px] border border-[color:var(--m-rowbr)] bg-m-card px-[10px] py-[7px]"
                     >
                       <FileText size={12} strokeWidth={2} className="flex-none text-m-muted" />
@@ -264,19 +243,14 @@ function BookingCard({ res, planner, canEdit, compact }: {
       {!compact && <ReservationPluginSlots tripId={planner.tripId} reservationId={res.id} />}
 
       <MConfirmSheet
-        open={confirmDelete}
-        onClose={() => setConfirmDelete(false)}
+        open={card.confirmingDelete}
+        onClose={card.cancelDelete}
         title={t('reservations.confirm.deleteTitle')}
         message={t('reservations.confirm.deleteBody', { name: res.title })}
         confirmLabel={t('common.delete')}
         cancelLabel={t('common.cancel')}
         danger
-        onConfirm={() => {
-          setConfirmDelete(false)
-          Promise.resolve(planner.handleDeleteReservation(res.id)).catch(() =>
-            planner.toast.error(t('reservations.toast.deleteError')),
-          )
-        }}
+        onConfirm={card.confirmDelete}
       />
     </div>
   )

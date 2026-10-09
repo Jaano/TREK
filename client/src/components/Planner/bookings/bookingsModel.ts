@@ -3,8 +3,6 @@ import {
   TramFront, Users, ParkingSquare, type LucideIcon,
 } from 'lucide-react'
 import type { AssignmentsMap, Day, Reservation } from '../../../types'
-import { TRANSPORT_TYPE_COLOR } from '../../../mobile/screens/trip/tabs/transportsModel'
-import { BOOKING_TYPE_COLOR } from '../../../mobile/screens/trip/tabs/bookingsModel'
 import { splitReservationDateTime } from '../../../utils/formatters'
 import { parseReservationMetadata } from '../../../utils/flightLegs'
 
@@ -23,8 +21,33 @@ export interface ReservationTypeInfo {
   color: string
 }
 
-// Icons and label keys for every reservation type. The colours come from the phone's
-// models so the two shells can never drift apart on what a flight looks like.
+/** Type-chip accent per transport type, the same on the desktop and the phone. */
+export const TRANSPORT_TYPE_COLOR: Record<string, string> = {
+  flight: '#3b82f6',
+  train: '#06b6d4',
+  bus: '#059669',
+  car: '#6b7280',
+  taxi: '#ca8a04',
+  bicycle: '#84cc16',
+  cruise: '#0ea5e9',
+  ferry: '#0d9488',
+  cable_car: '#dc2626',
+  transit: '#7c3aed',
+  transport_other: '#6b7280',
+}
+
+/** Type-chip accent per booking type (hotel, restaurant, event, tour, parking, other). */
+export const BOOKING_TYPE_COLOR: Record<string, string> = {
+  hotel: '#8b5cf6',
+  restaurant: '#ef4444',
+  event: '#f59e0b',
+  tour: '#10b981',
+  parking: '#2563eb',
+  other: '#6b7280',
+}
+
+// Icons and label keys for every reservation type. The colours above are shared with
+// the phone's tabs so the two shells can never drift apart on what a flight looks like.
 const TYPES: Record<string, { Icon: LucideIcon; chipKey?: string }> = {
   flight: { Icon: Plane }, train: { Icon: Train }, bus: { Icon: Bus }, car: { Icon: Car },
   taxi: { Icon: CarTaxiFront }, bicycle: { Icon: Bike }, cruise: { Icon: Ship }, ferry: { Icon: Sailboat }, cable_car: { Icon: CableCar },
@@ -139,12 +162,17 @@ function matchesStatus(r: Reservation, status: StatusFilter): boolean {
   return status === 'confirmed' ? r.status === 'confirmed' : r.status !== 'confirmed'
 }
 
+/** Whether one of the chosen travellers is on the booking; with nobody chosen, every booking passes. */
+export function onTravelers(r: Reservation, travelers: Set<number>): boolean {
+  return travelers.size === 0 || (r.travelers || []).some(tv => travelers.has(tv.user_id))
+}
+
 export function applyFilters(list: Reservation[], f: BookingFilters, labelOf: (type: string) => string): Reservation[] {
   const q = f.query.trim().toLowerCase()
   return list.filter(r =>
     (f.types.size === 0 || f.types.has(r.type))
     && matchesStatus(r, f.status)
-    && (f.travelers.size === 0 || (r.travelers || []).some(tv => f.travelers.has(tv.user_id)))
+    && onTravelers(r, f.travelers)
     && (!q || searchText(r, labelOf(r.type)).includes(q)),
   )
 }
@@ -180,6 +208,28 @@ export function sortReservations(list: Reservation[], days: Day[], by: SortBy, d
       return sign * primary(a, b) || byDate(a, b)
     })
     .map(x => x.r)
+}
+
+export interface StatusGroups {
+  confirmed: Reservation[]
+  pending: Reservation[]
+  transit: Reservation[]
+}
+
+/**
+ * The phone tabs' three sections, each in date order: confirmed and pending, and
+ * transit (automated public transport, #1065) on its own whatever its status.
+ * A booking type never matches `transit`, so the split fits the bookings tab too.
+ */
+export function groupTransports(list: Reservation[], days: Day[]): StatusGroups {
+  const sorted = sortReservations(list, days, 'date', 'asc', () => '')
+  const transit = sorted.filter(r => r.type === 'transit')
+  const nonTransit = sorted.filter(r => r.type !== 'transit')
+  return {
+    confirmed: nonTransit.filter(r => r.status === 'confirmed'),
+    pending: nonTransit.filter(r => r.status !== 'confirmed'),
+    transit,
+  }
 }
 
 function statusRank(r: Reservation, transitApart: boolean): number {

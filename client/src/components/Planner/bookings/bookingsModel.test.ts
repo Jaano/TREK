@@ -1,9 +1,11 @@
-// FE-PLANNER-BKMODEL-001 to FE-PLANNER-BKMODEL-040
+// FE-PLANNER-BKMODEL-001 to FE-PLANNER-BKMODEL-043
 import { describe, it, expect } from 'vitest';
 import { Plane, TramFront, FileText, Hotel } from 'lucide-react';
 import { buildAssignment, buildDay, buildPlace, buildReservation } from '../../../../tests/helpers/factories';
 import type { Day, Reservation, ReservationEndpoint } from '../../../types';
 import {
+  BOOKING_TYPE_COLOR,
+  TRANSPORT_TYPE_COLOR,
   TYPE_ORDER,
   applyFilters,
   buildAssignmentLookup,
@@ -11,6 +13,8 @@ import {
   daySpan,
   displayTitle,
   groupReservations,
+  groupTransports,
+  onTravelers,
   parseMeta,
   phaseOf,
   searchText,
@@ -349,5 +353,37 @@ describe('displayTitle', () => {
     expect(displayTitle(buildReservation({ title: '', place_name: 'Hotel Sakura', location: 'Kyoto' }))).toBe('Hotel Sakura');
     expect(displayTitle(buildReservation({ title: '', location: 'Kyoto', endpoints: [ep({})] }))).toBe('Kyoto');
     expect(displayTitle(buildReservation({ title: '' }))).toBe('');
+  });
+});
+
+describe('onTravelers and the shared type colours', () => {
+  it('FE-PLANNER-BKMODEL-041: with nobody chosen every booking passes, otherwise one chosen traveller has to be on it', () => {
+    const shared = buildReservation({ travelers: [{ user_id: 1, username: 'ann' }, { user_id: 2, username: 'bob' }] } as Partial<Reservation>);
+    const nobody = buildReservation({ travelers: undefined });
+    expect(onTravelers(shared, new Set())).toBe(true);
+    expect(onTravelers(nobody, new Set())).toBe(true);
+    expect(onTravelers(shared, new Set([2, 9]))).toBe(true);
+    expect(onTravelers(shared, new Set([9]))).toBe(false);
+    expect(onTravelers(nobody, new Set([1]))).toBe(false);
+  });
+
+  it('FE-PLANNER-BKMODEL-042: the type colours are the ones the type info and the phone tabs paint with', () => {
+    expect(BOOKING_TYPE_COLOR.hotel).toBe('#8b5cf6');
+    expect(BOOKING_TYPE_COLOR.parking).toBe('#2563eb');
+    expect(TRANSPORT_TYPE_COLOR.cable_car).toBe('#dc2626');
+    expect(typeInfo('hotel').color).toBe(BOOKING_TYPE_COLOR.hotel);
+    expect(typeInfo('ferry').color).toBe(TRANSPORT_TYPE_COLOR.ferry);
+  });
+
+  it('FE-PLANNER-BKMODEL-043: groupTransports orders like the date sort and splits confirmed, pending and transit', () => {
+    const transit = buildReservation({ id: 1, type: 'transit', status: 'pending', reservation_time: '2025-06-01T07:00' });
+    const later = buildReservation({ id: 2, type: 'train', status: 'confirmed', reservation_time: '2025-06-02T09:00' });
+    const sooner = buildReservation({ id: 3, type: 'bus', status: 'confirmed', reservation_time: '2025-06-01T09:00' });
+    const open = buildReservation({ id: 4, type: 'car', status: 'pending', reservation_time: null, day_id: null });
+    const groups = groupTransports([later, transit, open, sooner], days);
+    expect(groups.confirmed.map(r => r.id)).toEqual([3, 2]);
+    expect(groups.pending.map(r => r.id)).toEqual([4]);
+    expect(groups.transit.map(r => r.id)).toEqual([1]);
+    expect(sortReservations([later, transit, open, sooner], days, 'date', 'asc', label).map(r => r.id)).toEqual([1, 3, 2, 4]);
   });
 });

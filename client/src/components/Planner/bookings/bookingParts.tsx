@@ -4,13 +4,13 @@ import type { Reservation, TripFile } from '../../../types'
 import type { ReservationTraveler } from '@trek/shared'
 import { useTranslation } from '../../../i18n'
 import { avatarSrc } from '../../../utils/avatarSrc'
-import { openFile } from '../../../utils/fileDownload'
 import GuestBadge from '../../shared/GuestBadge'
 import { Tooltip } from '../../shared/Tooltip'
 import { PILL } from '../../shared/DialogShell'
 import { useToast } from '../../shared/Toast'
 import { parseMeta, typeInfo } from './bookingsModel'
 import type { BookingFacts } from './bookingFacts'
+import { openAttachment } from './openAttachment'
 
 // The phone's card language on the desktop: small Geist eyebrows, framed value
 // boxes, count pills. Sizes scale with the user's text size setting.
@@ -273,7 +273,7 @@ export function TravelerStack({ travelers, max = 3 }: { travelers: ReservationTr
 export function useOpenFile() {
   const { t } = useTranslation()
   const toast = useToast()
-  return (f: TripFile) => { openFile(f.url, f.original_name).catch(() => toast.error(t('files.openError'))) }
+  return (f: TripFile) => openAttachment(f, () => toast.error(t('files.openError')))
 }
 
 /** The attached files, one framed row each, opening the file. */
