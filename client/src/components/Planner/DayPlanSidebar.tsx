@@ -1116,6 +1116,36 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     window.__dragData = null
   }
 
+  // A stop or a note dragged in from another day moves over to this one. True
+  // when the drop was such a move, so the drop handler stops there.
+  const moveInFromOtherDay = (dayId: number, { assignmentId, noteId, fromDayId }: { assignmentId: string; noteId: string; fromDayId: number }): boolean => {
+    if (assignmentId && fromDayId !== dayId) {
+      moveToDay(Number(assignmentId), fromDayId, dayId).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
+    } else if (noteId && fromDayId !== dayId) {
+      tripActions.moveDayNote(tripId, fromDayId, dayId, Number(noteId)).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
+    } else {
+      return false
+    }
+    setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null
+    return true
+  }
+
+  // Puts the dragged row after the day's last row, unless it is that row already.
+  // A transport only moves when its reservation id is given. False when the day
+  // has no rows to put it after.
+  const dropAfterLastItem = (dayId: number, { assignmentId, noteId, reservationId = '' }: { assignmentId: string; noteId: string; reservationId?: string }): boolean => {
+    const m = getMergedItems(dayId)
+    if (m.length === 0) return false
+    const lastItem = m[m.length - 1]
+    if (assignmentId && String(lastItem?.data?.id) !== assignmentId)
+      void handleMergedDrop(dayId, 'place', Number(assignmentId), lastItem.type, lastItem.data.id, true)
+    else if (noteId && String(lastItem?.data?.id) !== noteId)
+      void handleMergedDrop(dayId, 'note', Number(noteId), lastItem.type, lastItem.data.id, true)
+    else if (reservationId && String(lastItem?.data?.id) !== reservationId)
+      void handleMergedDrop(dayId, 'transport', Number(reservationId), lastItem.type, lastItem.data.id, true)
+    return true
+  }
+
   // Total Cost reads the expenses in Costs when it is on (#2551).
   const budgetItems = useTripStore(s => s.budgetItems)
   const costsEnabled = useAddonStore(s => s.isEnabled('budget'))
@@ -1178,6 +1208,8 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     toggleLock,
     handleOptimize,
     handleDropOnDay,
+    moveInFromOtherDay,
+    dropAfterLastItem,
     totalCostLabel,
     expandedRouteDayIds,
     setExpandedRouteDayIds,
@@ -1347,6 +1379,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
     toggleLock,
     handleOptimize,
     handleDropOnDay,
+    moveInFromOtherDay,
+    dropAfterLastItem,
     totalCostLabel,
     expandedRouteDayIds,
     setExpandedRouteDayIds,
@@ -1812,21 +1846,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                       onAssignToDay?.(Number.parseInt(placeId), day.id)
                       setDropTargetKey(null); window.__dragData = null; return
                     }
-                    if (assignmentId && fromDayId !== day.id) {
-                      moveToDay(Number(assignmentId), fromDayId, day.id).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
-                      setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; return
-                    }
-                    if (noteId && fromDayId !== day.id) {
-                      tripActions.moveDayNote(tripId, fromDayId, day.id, Number(noteId)).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
-                      setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; return
-                    }
-                    const m = getMergedItems(day.id)
-                    if (m.length === 0) return
-                    const lastItem = m[m.length - 1]
-                    if (assignmentId && String(lastItem?.data?.id) !== assignmentId)
-                      void handleMergedDrop(day.id, 'place', Number(assignmentId), lastItem.type, lastItem.data.id, true)
-                    else if (noteId && String(lastItem?.data?.id) !== noteId)
-                      void handleMergedDrop(day.id, 'note', Number(noteId), lastItem.type, lastItem.data.id, true)
+                    if (moveInFromOtherDay(day.id, { assignmentId, noteId, fromDayId })) return
+                    dropAfterLastItem(day.id, { assignmentId, noteId })
                   }}
                 >
                   {hotelLegs[day.id]?.top && (() => {
@@ -2627,23 +2648,8 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                         setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; window.__dragData = null; return
                       }
                       if (!assignmentId && !noteId && !fromReservationId) { dragDataRef.current = null; window.__dragData = null; return }
-                      if (assignmentId && fromDayId !== day.id) {
-                        moveToDay(Number(assignmentId), fromDayId, day.id).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
-                        setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; return
-                      }
-                      if (noteId && fromDayId !== day.id) {
-                        tripActions.moveDayNote(tripId, fromDayId, day.id, Number(noteId)).catch((err: unknown) => toast.error(err instanceof Error ? err.message : t('common.unknownError')))
-                        setDraggingId(null); setDropTargetKey(null); dragDataRef.current = null; return
-                      }
-                      const m = getMergedItems(day.id)
-                      if (m.length === 0) return
-                      const lastItem = m[m.length - 1]
-                      if (assignmentId && String(lastItem?.data?.id) !== assignmentId)
-                        void handleMergedDrop(day.id, 'place', Number(assignmentId), lastItem.type, lastItem.data.id, true)
-                      else if (noteId && String(lastItem?.data?.id) !== noteId)
-                        void handleMergedDrop(day.id, 'note', Number(noteId), lastItem.type, lastItem.data.id, true)
-                      else if (fromReservationId && String(lastItem?.data?.id) !== fromReservationId)
-                        void handleMergedDrop(day.id, 'transport', Number(fromReservationId), lastItem.type, lastItem.data.id, true)
+                      if (moveInFromOtherDay(day.id, { assignmentId, noteId, fromDayId })) return
+                      if (!dropAfterLastItem(day.id, { assignmentId, noteId, reservationId: fromReservationId })) return
                       setDropTargetKey(null); dragDataRef.current = null; window.__dragData = null
                     }}
                   >
