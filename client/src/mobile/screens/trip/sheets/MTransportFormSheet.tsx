@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, ChevronDown, ChevronUp, Plus, TrainFront, TramFront, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronUp, Plus, TrainFront, TramFront, X } from 'lucide-react'
 import MSheet from '../../../components/MSheet'
+import { MBookingCodeStatus, MBookingNotes, MBookingTravelers, MRouteStopCard } from './MBookingFields'
 import { useAddonStore } from '../../../../store/addonStore'
 import { useTranslation } from '../../../../i18n'
 import CustomSelect from '../../../../components/shared/CustomSelect'
@@ -17,12 +18,10 @@ import {
 import { useTransportForm } from '../../../../components/Planner/useTransportForm'
 import { expenseRequestAfterSave, travelerIdsOf, travelersChanged, uploadBookingFiles } from '../../../../components/Planner/bookingFormModel'
 import { useBookingExpenseIntent } from '../../../../components/Planner/useBookingExpenseIntent'
-import { Eyebrow, FIELD_AREA_CLS, FIELD_CLS, FormSheetFooter, FormSheetHeader } from './PlSheetChrome'
+import { Eyebrow, FIELD_CLS, FormSheetFooter, FormSheetHeader } from './PlSheetChrome'
 import MBookingFilesCosts from './MBookingFilesCosts'
-import GuestBadge from '../../../../components/shared/GuestBadge'
-import { SPLIT_COLORS } from '../../../../components/Budget/BudgetPanel.constants'
 import { useTripStore } from '../../../../store/tripStore'
-import type { Place, Reservation, TripMember } from '../../../../types'
+import type { Place, Reservation } from '../../../../types'
 import type { BookingReviewDraft } from '../../../../components/Planner/parsedItemToDraft'
 import type { BookingExpenseRequest } from '../../../../components/Planner/BookingCostsSection.types'
 import type { TripPlanner } from '../MTripShell'
@@ -31,9 +30,6 @@ export interface MTransportFormSheetProps {
   planner: TripPlanner
   onOpenExpense: (req: BookingExpenseRequest) => void
 }
-
-// Traveler picker row — same surface as the cost-split rows (bg on --m-ic).
-const TRAVELER_ROW_CLS = 'flex w-full items-center gap-[9px] rounded-[12px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] px-3 py-[9px] text-start'
 
 /**
  * Add/edit transport sheet — the mobile counterpart of the desktop
@@ -103,20 +99,6 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
 
   const res = snap.res
   const prefill = snap.prefill
-
-  const TravelerAvatar = ({ m, idx, dim }: { m: TripMember; idx: number; dim: boolean }) =>
-    m.avatar_url
-      ? <img src={m.avatar_url} alt="" style={{ width: 22, height: 22, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, opacity: dim ? 0.45 : 1 }} />
-      : (
-        <span
-          style={{
-            width: 22, height: 22, borderRadius: '50%', background: SPLIT_COLORS[idx % SPLIT_COLORS.length].gradient,
-            color: '#fff', display: 'grid', placeItems: 'center', fontSize: 8.8, fontWeight: 700, flexShrink: 0, opacity: dim ? 0.45 : 1,
-          }}
-        >
-          {(m.username || '?').charAt(0).toUpperCase()}
-        </span>
-      )
 
   const showModeToggle = !res && tripHasDates
 
@@ -317,70 +299,43 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
                     const roleLabel = isFirst ? t('reservations.meta.from') : isLast ? t('reservations.meta.to') : t('reservations.layover.stop')
                     return (
                       <div key={i} className="flex flex-col gap-[6px]">
-                        <div className="rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] p-[11px]">
-                          <div className="mb-[8px] flex items-center gap-2">
-                            <span className="flex-none font-geist text-[0.625rem] font-bold uppercase tracking-[.09em] text-m-faint">{roleLabel}</span>
+                        <MRouteStopCard
+                          t={t}
+                          roleLabel={roleLabel}
+                          picker={<AirportSelect value={wp.airport} onChange={a => updateWp({ airport: a || null })} />}
+                          isFirst={isFirst}
+                          isLast={isLast}
+                          onRemove={() => setWaypoints(prev => prev.filter((_, j) => j !== i))}
+                          times={wp}
+                          onTimesChange={updateWp}
+                          dayOptions={dayOptions}
+                        >
+                          <div className="mt-2 flex gap-2">
+                            <div className="min-w-0 flex-[1.2]">
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.airline')}</Eyebrow>
+                              <input type="text" value={wp.airline} onChange={e => updateWp({ airline: e.target.value })} placeholder="Lufthansa" className={FIELD_CLS} />
+                            </div>
                             <div className="min-w-0 flex-1">
-                              <AirportSelect value={wp.airport} onChange={a => updateWp({ airport: a || null })} />
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.flightNumber')}</Eyebrow>
+                              <input type="text" value={wp.flight_number} onChange={e => updateWp({ flight_number: e.target.value })} placeholder="LH 123" className={FIELD_CLS} />
                             </div>
-                            {!isFirst && !isLast && (
-                              <button type="button" onClick={() => setWaypoints(prev => prev.filter((_, j) => j !== i))} aria-label={t('common.delete')} className="flex-none text-m-faint">
-                                <Trash2 size={14} strokeWidth={2} />
-                              </button>
-                            )}
+                            <div className="min-w-0 flex-[0.7]">
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.seat')}</Eyebrow>
+                              <input type="text" value={wp.seat} onChange={e => updateWp({ seat: e.target.value })} placeholder="12A" className={FIELD_CLS} />
+                            </div>
                           </div>
-                          {!isFirst && (
-                            <div className="flex gap-2">
-                              <div className="min-w-0 flex-1">
-                                <Eyebrow className="mb-[5px] uppercase">{t('reservations.arrivalDate')}</Eyebrow>
-                                <CustomSelect value={wp.arrDayId} onChange={v => updateWp({ arrDayId: v })} placeholder={t('dayplan.dayN', { n: '?' })} options={dayOptions} size="sm" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <Eyebrow className="mb-[5px] uppercase">{t('reservations.arrivalTime')}</Eyebrow>
-                                <CustomTimePicker value={wp.arrTime} onChange={v => updateWp({ arrTime: v })} />
-                              </div>
+                          {writesFlightLegs && (
+                            <div className="mt-2">
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.confirmationCode')}</Eyebrow>
+                              <BookingCodeInput
+                                value={wp.confirmation_number}
+                                onChange={e => updateWp({ confirmation_number: e.target.value })}
+                                placeholder={t('reservations.confirmationPlaceholder')}
+                                className={FIELD_CLS}
+                              />
                             </div>
                           )}
-                          {!isLast && (
-                            <>
-                              <div className={`flex gap-2 ${!isFirst ? 'mt-2' : ''}`}>
-                                <div className="min-w-0 flex-1">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.departureDate')}</Eyebrow>
-                                  <CustomSelect value={wp.depDayId} onChange={v => updateWp({ depDayId: v })} placeholder={t('dayplan.dayN', { n: '?' })} options={dayOptions} size="sm" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.departureTime')}</Eyebrow>
-                                  <CustomTimePicker value={wp.depTime} onChange={v => updateWp({ depTime: v })} />
-                                </div>
-                              </div>
-                              <div className="mt-2 flex gap-2">
-                                <div className="min-w-0 flex-[1.2]">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.airline')}</Eyebrow>
-                                  <input type="text" value={wp.airline} onChange={e => updateWp({ airline: e.target.value })} placeholder="Lufthansa" className={FIELD_CLS} />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.flightNumber')}</Eyebrow>
-                                  <input type="text" value={wp.flight_number} onChange={e => updateWp({ flight_number: e.target.value })} placeholder="LH 123" className={FIELD_CLS} />
-                                </div>
-                                <div className="min-w-0 flex-[0.7]">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.seat')}</Eyebrow>
-                                  <input type="text" value={wp.seat} onChange={e => updateWp({ seat: e.target.value })} placeholder="12A" className={FIELD_CLS} />
-                                </div>
-                              </div>
-                              {writesFlightLegs && (
-                                <div className="mt-2">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.confirmationCode')}</Eyebrow>
-                                  <BookingCodeInput
-                                    value={wp.confirmation_number}
-                                    onChange={e => updateWp({ confirmation_number: e.target.value })}
-                                    placeholder={t('reservations.confirmationPlaceholder')}
-                                    className={FIELD_CLS}
-                                  />
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
+                        </MRouteStopCard>
                         {!isLast && (
                           <button
                             type="button"
@@ -409,70 +364,43 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
                         : t(cruise ? 'reservations.cruise.port' : 'reservations.layover.stop')
                     return (
                       <div key={i} className="flex flex-col gap-[6px]">
-                        <div className="rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-ic)] p-[11px]">
-                          <div className="mb-[8px] flex items-center gap-2">
-                            <span className="flex-none font-geist text-[0.625rem] font-bold uppercase tracking-[.09em] text-m-faint">{roleLabel}</span>
+                        <MRouteStopCard
+                          t={t}
+                          roleLabel={roleLabel}
+                          picker={<LocationSelect value={wp.location} onChange={l => updateWp({ location: l || null })} places={locationPicks} />}
+                          isFirst={isFirst}
+                          isLast={isLast}
+                          onRemove={() => setTrainWaypoints(prev => prev.filter((_, j) => j !== i))}
+                          times={wp}
+                          onTimesChange={updateWp}
+                          dayOptions={dayOptions}
+                        >
+                          {!cruise && <div className="mt-2 flex gap-2">
+                            <div className="min-w-0 flex-[1.2]">
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.trainNumber')}</Eyebrow>
+                              <input type="text" value={wp.train_number} onChange={e => updateWp({ train_number: e.target.value })} placeholder="ICE 123" className={FIELD_CLS} />
+                            </div>
                             <div className="min-w-0 flex-1">
-                              <LocationSelect value={wp.location} onChange={l => updateWp({ location: l || null })} places={locationPicks} />
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.platform')}</Eyebrow>
+                              <input type="text" value={wp.platform} onChange={e => updateWp({ platform: e.target.value })} placeholder="12" className={FIELD_CLS} />
                             </div>
-                            {!isFirst && !isLast && (
-                              <button type="button" onClick={() => setTrainWaypoints(prev => prev.filter((_, j) => j !== i))} aria-label={t('common.delete')} className="flex-none text-m-faint">
-                                <Trash2 size={14} strokeWidth={2} />
-                              </button>
-                            )}
-                          </div>
-                          {!isFirst && (
-                            <div className="flex gap-2">
-                              <div className="min-w-0 flex-1">
-                                <Eyebrow className="mb-[5px] uppercase">{t('reservations.arrivalDate')}</Eyebrow>
-                                <CustomSelect value={wp.arrDayId} onChange={v => updateWp({ arrDayId: v })} placeholder={t('dayplan.dayN', { n: '?' })} options={dayOptions} size="sm" />
-                              </div>
-                              <div className="min-w-0 flex-1">
-                                <Eyebrow className="mb-[5px] uppercase">{t('reservations.arrivalTime')}</Eyebrow>
-                                <CustomTimePicker value={wp.arrTime} onChange={v => updateWp({ arrTime: v })} />
-                              </div>
+                            <div className="min-w-0 flex-[0.7]">
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.seat')}</Eyebrow>
+                              <input type="text" value={wp.seat} onChange={e => updateWp({ seat: e.target.value })} placeholder="42A" className={FIELD_CLS} />
+                            </div>
+                          </div>}
+                          {writesTrainLegs && !cruise && (
+                            <div className="mt-2">
+                              <Eyebrow className="mb-[5px] uppercase">{t('reservations.confirmationCode')}</Eyebrow>
+                              <BookingCodeInput
+                                value={wp.confirmation_number}
+                                onChange={e => updateWp({ confirmation_number: e.target.value })}
+                                placeholder={t('reservations.confirmationPlaceholder')}
+                                className={FIELD_CLS}
+                              />
                             </div>
                           )}
-                          {!isLast && (
-                            <>
-                              <div className={`flex gap-2 ${!isFirst ? 'mt-2' : ''}`}>
-                                <div className="min-w-0 flex-1">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.departureDate')}</Eyebrow>
-                                  <CustomSelect value={wp.depDayId} onChange={v => updateWp({ depDayId: v })} placeholder={t('dayplan.dayN', { n: '?' })} options={dayOptions} size="sm" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.departureTime')}</Eyebrow>
-                                  <CustomTimePicker value={wp.depTime} onChange={v => updateWp({ depTime: v })} />
-                                </div>
-                              </div>
-                              {!cruise && <div className="mt-2 flex gap-2">
-                                <div className="min-w-0 flex-[1.2]">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.trainNumber')}</Eyebrow>
-                                  <input type="text" value={wp.train_number} onChange={e => updateWp({ train_number: e.target.value })} placeholder="ICE 123" className={FIELD_CLS} />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.platform')}</Eyebrow>
-                                  <input type="text" value={wp.platform} onChange={e => updateWp({ platform: e.target.value })} placeholder="12" className={FIELD_CLS} />
-                                </div>
-                                <div className="min-w-0 flex-[0.7]">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.meta.seat')}</Eyebrow>
-                                  <input type="text" value={wp.seat} onChange={e => updateWp({ seat: e.target.value })} placeholder="42A" className={FIELD_CLS} />
-                                </div>
-                              </div>}
-                              {writesTrainLegs && !cruise && (
-                                <div className="mt-2">
-                                  <Eyebrow className="mb-[5px] uppercase">{t('reservations.confirmationCode')}</Eyebrow>
-                                  <BookingCodeInput
-                                    value={wp.confirmation_number}
-                                    onChange={e => updateWp({ confirmation_number: e.target.value })}
-                                    placeholder={t('reservations.confirmationPlaceholder')}
-                                    className={FIELD_CLS}
-                                  />
-                                </div>
-                              )}
-                            </>
-                          )}
-                        </div>
+                        </MRouteStopCard>
                         {!isLast && (
                           <button
                             type="button"
@@ -589,69 +517,19 @@ export default function MTransportFormSheet({ planner, onOpenExpense }: MTranspo
             )}
 
             {/* BOOKING CODE + STATUS */}
-            <div className="mt-3 flex gap-2">
-              <div className="min-w-0 flex-1">
-                <Eyebrow className="mb-[5px] uppercase">{t('reservations.confirmationCode')}</Eyebrow>
-                <BookingCodeInput
-                  value={form.confirmation_number}
-                  onChange={e => set('confirmation_number', e.target.value)}
-                  placeholder={t('reservations.confirmationPlaceholder')}
-                  className={FIELD_CLS}
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <Eyebrow className="mb-[5px] uppercase">{t('reservations.status')}</Eyebrow>
-                <div className="flex rounded-full bg-[color:var(--m-ic)] p-[3px]">
-                  {(['pending', 'confirmed'] as const).map(s => (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => set('status', s)}
-                      className={`flex-1 rounded-full py-[7px] text-[0.71875rem] font-semibold ${
-                        form.status === s ? 'bg-m-act text-m-actfg' : 'text-m-muted'
-                      }`}
-                    >
-                      {t(`reservations.${s}`)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* NOTES */}
-            <Eyebrow className="mb-[5px] mt-3 uppercase">{t('reservations.notes')}</Eyebrow>
-            <textarea
-              value={form.notes}
-              onChange={e => set('notes', e.target.value)}
-              rows={2}
-              placeholder={t('reservations.notesPlaceholder')}
-              className={FIELD_AREA_CLS}
+            <MBookingCodeStatus
+              t={t}
+              code={form.confirmation_number}
+              onCodeChange={value => set('confirmation_number', value)}
+              status={form.status}
+              onStatusChange={value => set('status', value)}
             />
 
+            {/* NOTES */}
+            <MBookingNotes t={t} value={form.notes} onChange={value => set('notes', value)} />
+
             {/* TRAVELERS */}
-            <Eyebrow className="mb-[6px] mt-3 uppercase">{t('reservations.travelers.label')}</Eyebrow>
-            {tripMembers.length === 0 ? (
-              <div className="text-[0.71875rem] text-m-faint">{t('reservations.travelers.none')}</div>
-            ) : (
-              <div className="flex flex-col gap-[6px]">
-                {tripMembers.map((m, idx) => {
-                  const on = travelerIds.has(m.id)
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => toggleTraveler(m.id)}
-                      className={`${TRAVELER_ROW_CLS} ${on ? '' : 'opacity-60'}`}
-                    >
-                      <TravelerAvatar m={m} idx={idx} dim={!on} />
-                      <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium text-m-ink">{m.username}</span>
-                      {m.is_guest && <GuestBadge size="xs" />}
-                      {on && <Check size={15} strokeWidth={2.4} className="flex-none text-m-act" />}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+            <MBookingTravelers t={t} tripMembers={tripMembers} selectedIds={travelerIds} onToggle={toggleTraveler} />
 
             {/* FILES + COSTS */}
             <MBookingFilesCosts

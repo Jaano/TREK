@@ -101,13 +101,11 @@ export const DYNAMIC_ALLOWED = [
     template: 'journey.studio.${key}',
     because: 'key comes from an `as const` tuple of frame and stroke styles written beside the call, typed literals',
   })),
-  ...['mobile/screens/trip/sheets/MReservationSheet.tsx', 'mobile/screens/trip/sheets/MTransportFormSheet.tsx'].map(
-    (file) => ({
-      file,
-      template: 'reservations.${s}',
-      because: "s iterates the literal ['pending', 'confirmed'] as const; reservations.pending/confirmed exist",
-    })
-  ),
+  {
+    file: 'mobile/screens/trip/sheets/MBookingFields.tsx',
+    template: 'reservations.${s}',
+    because: "s iterates the literal ['pending', 'confirmed'] as const; reservations.pending/confirmed exist",
+  },
   ...['components/Admin/AdminPluginsPanel.tsx', 'mobile/screens/admin/MAdminPluginsPanel.tsx'].map((file) => ({
     file,
     template: 'admin.plugins.perm.${perm}',
