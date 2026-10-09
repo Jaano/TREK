@@ -10,12 +10,13 @@ import apiClient, { mapsApi, pluginsApi, type PluginAtlasLayer } from '../../api
 import L from 'leaflet'
 import type { GeoJsonFeatureCollection } from '../../types'
 import { A2_TO_A3, countryStatus, visitedRegionCount, visitMonth, findBucketDuplicate, isBucketDuplicateError, isCountryVisible, normalizeRegionName, regionCacheEvictions, withCountryMarkedVisited, wishlistA3Codes, wishlistRegionCodes, countryColor, REGION_CACHE_MAX, bucketTooltipWidth, bucketTooltipPlacement, bucketTooltipNeedsScroll, type AtlasData, type AtlasPlaceHit, type CountryDetail, type BucketItem } from './atlasModel'
-import { continentForCountry, escapeHtml, type VisitStatus } from '@trek/shared'
+import { continentForCountry, escapeHtml } from '@trek/shared'
 import { useGlassGlare } from '../../components/Atlas/useGlassGlare'
 import { dawarichApi } from '../../api/dawarich'
 import { useToast } from '../../components/shared/Toast'
 import { getApiErrorMessage } from '../../types'
 import { usePlaceLanguage } from '../../hooks/usePlaceLanguage'
+import type { AtlasConfirmAction, VisitedRegionMap } from './useAtlasCountryActions'
 
 const PLANNED_KEY = 'trek_atlas_show_planned'
 
@@ -163,7 +164,7 @@ export function useAtlas() {
   // The list of a country's places, opened from its detail (#2174).
   const [placesOpen, setPlacesOpen] = useState(false)
   const [geoData, setGeoData] = useState<GeoJsonFeatureCollection | null>(null)
-  const [visitedRegions, setVisitedRegions] = useState<Record<string, { code: string; name: string; placeCount: number; manuallyMarked?: boolean; status?: VisitStatus }[]>>({})
+  const [visitedRegions, setVisitedRegions] = useState<VisitedRegionMap>({})
   const [pluginLayers, setPluginLayers] = useState<PluginAtlasLayer[]>([])
   const pluginLayerRef = useRef<L.GeoJSON | null>(null)
   const regionLayerRef = useRef<L.GeoJSON | null>(null)
@@ -194,7 +195,7 @@ export function useAtlas() {
   const loadCountryDetailRef = useRef<(code: string) => void>(() => {})
   const handleMarkCountryRef = useRef<(code: string, name: string) => void>(() => {})
   const setConfirmActionRef = useRef<typeof setConfirmAction>(() => {})
-  const [confirmAction, setConfirmAction] = useState<{ type: 'mark' | 'unmark' | 'choose' | 'bucket' | 'choose-region' | 'unmark-region'; code: string; name: string; regionCode?: string; countryName?: string } | null>(null)
+  const [confirmAction, setConfirmAction] = useState<AtlasConfirmAction | null>(null)
   const [bucketMonth, setBucketMonth] = useState(0)
   const [bucketYear, setBucketYear] = useState(0)
 

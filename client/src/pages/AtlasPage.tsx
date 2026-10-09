@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from '../i18n'
 import Navbar from '../components/Layout/Navbar'
-import apiClient from '../api/client'
 import CustomSelect from '../components/shared/CustomSelect'
 import EmptyState from '../components/shared/EmptyState'
 import { Globe, MapPin, Briefcase, Calendar, Flag, PanelLeftOpen, PanelLeftClose, X, Star, Plus, Trash2, Search, Check, ArrowLeft, ChevronRight, type LucideIcon } from 'lucide-react'
@@ -12,13 +11,11 @@ import { DialogButton, DialogFooter, DialogHeader, DialogShell, DialogTile, Foot
 import { EditorField, GRID_2 } from '../components/shared/dialogParts'
 import DawarichAtlasSidePanel from '../components/Dawarich/DawarichAtlasSidePanel'
 import CountryFlag from '../components/shared/CountryFlag'
-import { A2_TO_A3, countryCodeToFlag, findBucketDuplicate, isBucketDuplicateError, visitedRegionCount, withCountryMarkedVisited, type AtlasCountry, type AtlasStats, type AtlasData, type CountryDetail } from './atlas/atlasModel'
-import { continentForCountry } from '@trek/shared'
+import { A2_TO_A3, countryCodeToFlag, visitedRegionCount, type AtlasCountry, type AtlasStats, type AtlasData, type CountryDetail } from './atlas/atlasModel'
 import { useAtlas } from './atlas/useAtlas'
+import { bucketMonthTarget, useAtlasCountryActions, type AtlasCountryActionsOptions } from './atlas/useAtlasCountryActions'
 import AtlasCountrySearch from './atlas/AtlasCountrySearch'
 import AtlasLayerToggle from './atlas/AtlasLayerToggle'
-import { useToast } from '../components/shared/Toast'
-import { getApiErrorMessage } from '../types'
 import HelpAnchor from '../components/Help/HelpAnchor'
 import AtlasCountryPlaces from '../components/Atlas/AtlasCountryPlaces'
 import { getIntlLanguage } from '@trek/shared'
@@ -66,7 +63,6 @@ function AtlasPageDesktop(): React.ReactElement {
     bucketPoiMonth, setBucketPoiMonth, bucketPoiYear, setBucketPoiYear,
     bucketSearching, bucketSearch, setBucketSearch, reloadAfterDawarich,
   } = useAtlas()
-  const toast = useToast()
   // Solid surfaces when the user disabled transparency (read at render — the
   // attribute is already set by applyAppearance before navigating here).
   const noTransparency = typeof document !== 'undefined' && document.documentElement.hasAttribute('data-no-transparency')
@@ -236,215 +232,147 @@ function AtlasPageDesktop(): React.ReactElement {
 
       {/* Country action popup: the flag and the name at the head, what can be
           done with the country below. A region names its country under its own name. */}
-      {confirmAction && (
-        <DialogShell
-          onClose={() => setConfirmAction(null)}
-          labelledBy={COUNTRY_DIALOG_TITLE}
-          width="narrow"
-          header={(
-            <DialogHeader
-              tile={(
-                <DialogTile>
-                  {confirmAction.code.length === 2 ? (
-                    <img src={`https://flagcdn.com/w80/${confirmAction.code.toLowerCase()}.png`} alt={confirmAction.code} className="h-6 w-[34px] rounded-[5px] object-cover ring-1 ring-edge-faint" />
-                  ) : (
-                    <span className="leading-none" style={fs(26, 'subtitle')}>{countryCodeToFlag(confirmAction.code)}</span>
-                  )}
-                </DialogTile>
-              )}
-              // The two removals take the danger wash ConfirmDialog asks its destructive questions in.
-              tint={confirmAction.type === 'unmark' || confirmAction.type === 'unmark-region' ? 'var(--danger-soft)' : NEUTRAL_TINT}
-              labelId={COUNTRY_DIALOG_TITLE}
-              onClose={() => setConfirmAction(null)}
-              title={confirmAction.name}
-              sub={confirmAction.countryName || undefined}
-            />
-          )}
-          footer={(
-            <DialogFooter>
-              {confirmAction.type === 'bucket' && (
-                <DialogButton onClick={() => setConfirmAction({ ...confirmAction, type: confirmAction.regionCode ? 'choose-region' : 'choose' })} icon={<ArrowLeft size={14} strokeWidth={2.2} />}>
-                  {t('common.back')}
-                </DialogButton>
-              )}
-              <FooterSpacer />
-              {confirmAction.type !== 'bucket' && (
-                <DialogButton onClick={() => setConfirmAction(null)}>{t('common.cancel')}</DialogButton>
-              )}
-              {confirmAction.type === 'mark' && (
-                <DialogButton variant="primary" onClick={executeConfirmAction}>{t('atlas.markVisited')}</DialogButton>
-              )}
-              {confirmAction.type === 'unmark' && (
-                <button type="button" onClick={executeConfirmAction} className={DANGER_BUTTON} style={fs(13, 'body')}>
-                  {t('atlas.unmark')}
-                </button>
-              )}
-              {confirmAction.type === 'unmark-region' && (
-                <button type="button" onClick={async () => {
-                  const { code: countryCode, regionCode: rCode } = confirmAction
-                  if (!rCode) return
-                  try {
-                    await apiClient.delete(`/addons/atlas/region/${rCode}/mark`)
-                    setVisitedRegions(prev => {
-                      const remaining = (prev[countryCode] || []).filter(r => r.code !== rCode)
-                      const next = { ...prev, [countryCode]: remaining }
-                      if (remaining.length === 0) delete next[countryCode]
-                      return next
-                    })
-                    // If no visible regions remain at all (not just manually-marked ones:
-                    // the server now hides a region regardless of how it was derived, and
-                    // cascades to the country the same way), remove the country too, but
-                    // only when it has no real place/trip data of its own: a country with
-                    // real places is never actually hidden server-side (#1490), so
-                    // optimistically removing it here would just flash and reappear on
-                    // the next reload.
-                    setData(prev => {
-                      if (!prev) return prev
-                      const c = prev.countries.find(c => c.code === countryCode)
-                      if (!c || c.placeCount > 0 || c.tripCount > 0) return prev
-                      const remainingRegions = (visitedRegions[countryCode] || []).filter(r => r.code !== rCode)
-                      if (remainingRegions.length > 0) return prev
-                      const cont = continentForCountry(countryCode)
-                      return {
-                        ...prev,
-                        countries: prev.countries.filter(c => c.code !== countryCode),
-                        stats: { ...prev.stats, totalCountries: Math.max(0, prev.stats.totalCountries - 1) },
-                        continents: { ...prev.continents, [cont]: Math.max(0, (prev.continents?.[cont] || 0) - 1) },
-                      }
-                    })
-                  } catch (err) {
-                    toast.error(getApiErrorMessage(err, t('common.error')))
-                  }
-                  setConfirmAction(null)
-                }} className={DANGER_BUTTON} style={fs(13, 'body')}>
-                  {t('atlas.unmark')}
-                </button>
-              )}
-              {confirmAction.type === 'bucket' && (
-                <DialogButton variant="primary" icon={<Star size={14} strokeWidth={2.2} />} onClick={async () => {
-                  const targetDate = bucketMonth > 0 && bucketYear > 0 ? `${bucketYear}-${String(bucketMonth).padStart(2, '0')}` : null
-                  // #1898: one entry per target date. The dialog stays open on a
-                  // duplicate so another month can be picked right away.
-                  if (findBucketDuplicate(bucketList, { name: confirmAction.name, country_code: confirmAction.code, target_date: targetDate, lat: null, lng: null })) {
-                    toast.error(t('atlas.bucketDuplicate'))
-                    return
-                  }
-                  try {
-                    const r = await apiClient.post('/addons/atlas/bucket-list', { name: confirmAction.name, country_code: confirmAction.code, target_date: targetDate, region_code: confirmAction.regionCode ?? null })
-                    setBucketList(prev => [r.data.item, ...prev])
-                  } catch (err) {
-                    if (isBucketDuplicateError(err)) {
-                      toast.error(t('atlas.bucketDuplicate'))
-                      return
-                    }
-                    toast.error(getApiErrorMessage(err, t('common.error')))
-                  }
-                  setBucketMonth(0); setBucketYear(0)
-                  setConfirmAction(null)
-                }}>
-                  {t('atlas.addToBucket')}
-                </DialogButton>
-              )}
-            </DialogFooter>
-          )}
-        >
-          {confirmAction.type === 'choose' && (
-            <div className="flex flex-col gap-2">
-              <CountryChoice icon={MapPin} title={t('atlas.markVisited')} hint={t('atlas.markVisitedHint')} onClick={async () => {
-                try {
-                  await apiClient.post(`/addons/atlas/country/${confirmAction.code}/mark`)
-                  setData(prev => (prev ? withCountryMarkedVisited(prev, confirmAction.code) : prev))
-                } catch (err) {
-                  toast.error(getApiErrorMessage(err, t('common.error')))
-                }
-                setConfirmAction(null)
-              }} />
-              <CountryChoice icon={Star} tone="text-warning" title={t('atlas.addToBucket')} hint={t('atlas.addToBucketHint')}
-                onClick={() => setConfirmAction({ ...confirmAction, type: 'bucket' })} />
-              {(() => {
-                const wishlistItems = bucketList.filter(b => b.country_code === confirmAction.code)
-                if (wishlistItems.length === 0) return null
-                return (
-                  <CountryChoice icon={Trash2} tone="text-danger" title={t('atlas.removeFromBucket')} hint={t('atlas.removeFromBucketHint')} onClick={async () => {
-                    await Promise.all(wishlistItems.map(item => handleDeleteBucketItem(item.id)))
-                    setConfirmAction(null)
-                  }} />
-                )
-              })()}
-            </div>
-          )}
-
-          {confirmAction.type === 'choose-region' && (
-            <div className="flex flex-col gap-2">
-              <CountryChoice icon={MapPin} title={t('atlas.markVisited')} hint={t('atlas.markRegionVisitedHint')} onClick={async () => {
-                const { code: countryCode, name: rName, regionCode: rCode } = confirmAction
-                if (!rCode) return
-                try {
-                  await apiClient.post(`/addons/atlas/region/${rCode}/mark`, { name: rName, country_code: countryCode })
-                  setVisitedRegions(prev => {
-                    const existing = prev[countryCode] || []
-                    if (existing.find(r => r.code === rCode)) return prev
-                    return { ...prev, [countryCode]: [...existing, { code: rCode, name: rName, placeCount: 0, manuallyMarked: true }] }
-                  })
-                  setData(prev => (prev ? withCountryMarkedVisited(prev, countryCode) : prev))
-                } catch (err) {
-                  toast.error(getApiErrorMessage(err, t('common.error')))
-                }
-                setConfirmAction(null)
-              }} />
-              <CountryChoice icon={Star} tone="text-warning" title={t('atlas.addToBucket')} hint={t('atlas.addToBucketHint')}
-                onClick={() => setConfirmAction({ ...confirmAction, type: 'bucket' })} />
-            </div>
-          )}
-
-          {confirmAction.type === 'unmark' && (
-            <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.confirmUnmark')}</p>
-          )}
-
-          {confirmAction.type === 'unmark-region' && (
-            <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.confirmUnmarkRegion')}</p>
-          )}
-
-          {confirmAction.type === 'mark' && (
-            <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.confirmMark')}</p>
-          )}
-
-          {confirmAction.type === 'bucket' && (
-            <>
-              <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.bucketWhen')}</p>
-              <div className={GRID_2}>
-                <EditorField label={t('atlas.month')} htmlFor={BUCKET_MONTH_ID}>
-                  <CustomSelect
-                    id={BUCKET_MONTH_ID}
-                    value={String(bucketMonth)}
-                    onChange={v => setBucketMonth(Number(v))}
-                    placeholder={t('atlas.month')}
-                    options={[
-                      { value: '0', label: t('common.none') },
-                      ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2000, i).toLocaleString(getIntlLanguage(language), { month: 'long' }) })),
-                    ]}
-                    size="sm"
-                  />
-                </EditorField>
-                <EditorField label={t('atlas.year')} htmlFor={BUCKET_YEAR_ID}>
-                  <CustomSelect
-                    id={BUCKET_YEAR_ID}
-                    value={String(bucketYear)}
-                    onChange={v => setBucketYear(Number(v))}
-                    placeholder={t('atlas.year')}
-                    options={[
-                      { value: '0', label: t('common.none') },
-                      ...Array.from({ length: 20 }, (_, i) => ({ value: String(new Date().getFullYear() + i), label: String(new Date().getFullYear() + i) })),
-                    ]}
-                    size="sm"
-                  />
-                </EditorField>
-              </div>
-            </>
-          )}
-        </DialogShell>
-      )}
+      <CountryActionDialog
+        t={t} language={language} confirmAction={confirmAction} setConfirmAction={setConfirmAction}
+        executeConfirmAction={executeConfirmAction} setData={setData} visitedRegions={visitedRegions}
+        setVisitedRegions={setVisitedRegions} bucketList={bucketList} setBucketList={setBucketList}
+        handleDeleteBucketItem={handleDeleteBucketItem}
+        bucketMonth={bucketMonth} setBucketMonth={setBucketMonth} bucketYear={bucketYear} setBucketYear={setBucketYear}
+      />
     </div>
+  )
+}
+
+type CountryActionDialogProps = AtlasCountryActionsOptions & Pick<ReturnType<typeof useAtlas>,
+  'language' | 'executeConfirmAction' | 'bucketMonth' | 'setBucketMonth' | 'bucketYear' | 'setBucketYear'>
+
+/** The country action popup over useAtlasCountryActions, the logic it shares with the phone sheet. */
+function CountryActionDialog(props: CountryActionDialogProps): React.ReactElement | null {
+  const { t, language, confirmAction, setConfirmAction, executeConfirmAction, bucketMonth, setBucketMonth, bucketYear, setBucketYear } = props
+  const { onWishlist, markCountry, markRegion, unmarkRegion, addBucket, removeBucket } = useAtlasCountryActions(props)
+  const addBucketForMonth = () => addBucket(bucketMonthTarget(bucketMonth, bucketYear), () => { setBucketMonth(0); setBucketYear(0) })
+  if (!confirmAction) return null
+  return (
+    <DialogShell
+      onClose={() => setConfirmAction(null)}
+      labelledBy={COUNTRY_DIALOG_TITLE}
+      width="narrow"
+      header={(
+        <DialogHeader
+          tile={(
+            <DialogTile>
+              {confirmAction.code.length === 2 ? (
+                <img src={`https://flagcdn.com/w80/${confirmAction.code.toLowerCase()}.png`} alt={confirmAction.code} className="h-6 w-[34px] rounded-[5px] object-cover ring-1 ring-edge-faint" />
+              ) : (
+                <span className="leading-none" style={fs(26, 'subtitle')}>{countryCodeToFlag(confirmAction.code)}</span>
+              )}
+            </DialogTile>
+          )}
+          // The two removals take the danger wash ConfirmDialog asks its destructive questions in.
+          tint={confirmAction.type === 'unmark' || confirmAction.type === 'unmark-region' ? 'var(--danger-soft)' : NEUTRAL_TINT}
+          labelId={COUNTRY_DIALOG_TITLE}
+          onClose={() => setConfirmAction(null)}
+          title={confirmAction.name}
+          sub={confirmAction.countryName || undefined}
+        />
+      )}
+      footer={(
+        <DialogFooter>
+          {confirmAction.type === 'bucket' && (
+            <DialogButton onClick={() => setConfirmAction({ ...confirmAction, type: confirmAction.regionCode ? 'choose-region' : 'choose' })} icon={<ArrowLeft size={14} strokeWidth={2.2} />}>
+              {t('common.back')}
+            </DialogButton>
+          )}
+          <FooterSpacer />
+          {confirmAction.type !== 'bucket' && (
+            <DialogButton onClick={() => setConfirmAction(null)}>{t('common.cancel')}</DialogButton>
+          )}
+          {confirmAction.type === 'mark' && (
+            <DialogButton variant="primary" onClick={executeConfirmAction}>{t('atlas.markVisited')}</DialogButton>
+          )}
+          {confirmAction.type === 'unmark' && (
+            <button type="button" onClick={executeConfirmAction} className={DANGER_BUTTON} style={fs(13, 'body')}>
+              {t('atlas.unmark')}
+            </button>
+          )}
+          {confirmAction.type === 'unmark-region' && (
+            <button type="button" onClick={unmarkRegion} className={DANGER_BUTTON} style={fs(13, 'body')}>
+              {t('atlas.unmark')}
+            </button>
+          )}
+          {confirmAction.type === 'bucket' && (
+            <DialogButton variant="primary" icon={<Star size={14} strokeWidth={2.2} />} onClick={addBucketForMonth}>
+              {t('atlas.addToBucket')}
+            </DialogButton>
+          )}
+        </DialogFooter>
+      )}
+    >
+      {confirmAction.type === 'choose' && (
+        <div className="flex flex-col gap-2">
+          <CountryChoice icon={MapPin} title={t('atlas.markVisited')} hint={t('atlas.markVisitedHint')} onClick={markCountry} />
+          <CountryChoice icon={Star} tone="text-warning" title={t('atlas.addToBucket')} hint={t('atlas.addToBucketHint')}
+            onClick={() => setConfirmAction({ ...confirmAction, type: 'bucket' })} />
+          {onWishlist && (
+            <CountryChoice icon={Trash2} tone="text-danger" title={t('atlas.removeFromBucket')} hint={t('atlas.removeFromBucketHint')} onClick={removeBucket} />
+          )}
+        </div>
+      )}
+
+      {confirmAction.type === 'choose-region' && (
+        <div className="flex flex-col gap-2">
+          <CountryChoice icon={MapPin} title={t('atlas.markVisited')} hint={t('atlas.markRegionVisitedHint')} onClick={() => markRegion()} />
+          <CountryChoice icon={Star} tone="text-warning" title={t('atlas.addToBucket')} hint={t('atlas.addToBucketHint')}
+            onClick={() => setConfirmAction({ ...confirmAction, type: 'bucket' })} />
+        </div>
+      )}
+
+      {confirmAction.type === 'unmark' && (
+        <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.confirmUnmark')}</p>
+      )}
+
+      {confirmAction.type === 'unmark-region' && (
+        <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.confirmUnmarkRegion')}</p>
+      )}
+
+      {confirmAction.type === 'mark' && (
+        <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.confirmMark')}</p>
+      )}
+
+      {confirmAction.type === 'bucket' && (
+        <>
+          <p className="m-0 text-content-secondary" style={fs(13.5, 'body')}>{t('atlas.bucketWhen')}</p>
+          <div className={GRID_2}>
+            <EditorField label={t('atlas.month')} htmlFor={BUCKET_MONTH_ID}>
+              <CustomSelect
+                id={BUCKET_MONTH_ID}
+                value={String(bucketMonth)}
+                onChange={v => setBucketMonth(Number(v))}
+                placeholder={t('atlas.month')}
+                options={[
+                  { value: '0', label: t('common.none') },
+                  ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(2000, i).toLocaleString(getIntlLanguage(language), { month: 'long' }) })),
+                ]}
+                size="sm"
+              />
+            </EditorField>
+            <EditorField label={t('atlas.year')} htmlFor={BUCKET_YEAR_ID}>
+              <CustomSelect
+                id={BUCKET_YEAR_ID}
+                value={String(bucketYear)}
+                onChange={v => setBucketYear(Number(v))}
+                placeholder={t('atlas.year')}
+                options={[
+                  { value: '0', label: t('common.none') },
+                  ...Array.from({ length: 20 }, (_, i) => ({ value: String(new Date().getFullYear() + i), label: String(new Date().getFullYear() + i) })),
+                ]}
+                size="sm"
+              />
+            </EditorField>
+          </div>
+        </>
+      )}
+    </DialogShell>
   )
 }
 
