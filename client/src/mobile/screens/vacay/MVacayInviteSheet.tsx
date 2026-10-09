@@ -1,6 +1,7 @@
 import { ChevronDown, Clock, Loader2, X } from 'lucide-react'
 import MSheet from '../../components/MSheet'
 import MIconBtn from '../../components/MIconBtn'
+import MUserPickerList from '../../components/MUserPickerList'
 import { useVacayStore } from '../../../store/vacayStore'
 import { useTranslation } from '../../../i18n'
 import { type VacayUser } from '../../../types'
@@ -59,22 +60,7 @@ export default function MVacayInviteSheet({ open, onClose }: MVacayInviteSheetPr
               </span>
               <ChevronDown size={14} strokeWidth={2} className="flex-none text-m-faint" />
             </button>
-            {pickerOpen && (
-              <div className="mt-[6px] max-h-[180px] overflow-y-auto rounded-[14px] border border-[color:var(--m-rowbr)] bg-[color:var(--m-sheetop)] p-[6px]">
-                {available.map(u => (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => pick(u.id)}
-                    className={`flex w-full items-center gap-[9px] rounded-[10px] px-[10px] py-[9px] text-start text-[0.8125rem] font-semibold ${
-                      u.id === selected ? 'bg-[color:var(--m-ic)]' : ''
-                    }`}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{u.username}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {pickerOpen && <MUserPickerList users={available} selected={selected} onPick={pick} />}
           </>
         )}
 
