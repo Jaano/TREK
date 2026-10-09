@@ -6,6 +6,7 @@ import type { TripFile } from '../../types'
 import { getAuthUrl } from '../../api/authUrl'
 import { openFile as openFileUrl } from '../../utils/fileDownload'
 import { triggerDownload, isVideo } from './FileManager.helpers'
+import { useMediaLightbox } from './useMediaLightbox'
 import VideoPlayer from '../Journey/VideoPlayerLazy'
 import { Tooltip } from '../shared/Tooltip'
 
@@ -22,41 +23,15 @@ interface ImageLightboxProps {
 export function ImageLightbox({ files, initialIndex, onClose }: ImageLightboxProps) {
   const { t } = useTranslation()
   const [index, setIndex] = useState(initialIndex)
-  const [imgSrc, setImgSrc] = useState('')
-  const [touchStart, setTouchStart] = useState<number | null>(null)
-  const file = files[index]
-
-  const fileIsVideo = isVideo(file?.mime_type)
-
-  useEffect(() => {
-    setImgSrc('')
-    // Images use a one-shot signed URL; a video must use the plain same-origin
-    // URL (cookie auth) so its many Range requests all authenticate (#823).
-    if (!file || isVideo(file.mime_type)) return
-    // Arrowing through the gallery leaves several mints in flight; only the one for
-    // the file still on screen may paint.
-    let current = true
-    getAuthUrl(file.url, 'download').then(u => { if (current) setImgSrc(u) }).catch(() => {})
-    return () => { current = false }
-  }, [file?.url, file?.mime_type])
-
-  const goPrev = () => setIndex(i => Math.max(0, i - 1))
-  const goNext = () => setIndex(i => Math.min(files.length - 1, i + 1))
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-      if (e.key === 'ArrowLeft') goPrev()
-      if (e.key === 'ArrowRight') goNext()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
+  const { file, imgSrc, fileIsVideo, hasPrev, hasNext, goPrev, goNext, onTouchStart, onTouchEnd } = useMediaLightbox({
+    files,
+    index,
+    onIndexChange: setIndex,
+    onClose,
+  })
 
   if (!file) return null
 
-  const hasPrev = index > 0
-  const hasNext = index < files.length - 1
   const navBtn = (side: 'left' | 'right', onClick: () => void, show: boolean): React.ReactNode => show ? (
     <button type="button" onClick={e => { e.stopPropagation(); onClick() }}
       style={{
@@ -82,14 +57,8 @@ export function ImageLightbox({ files, initialIndex, onClose }: ImageLightboxPro
       role="presentation"
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 2000, display: 'flex', flexDirection: 'column', paddingBottom: 'var(--bottom-nav-h)' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
-      onTouchStart={e => setTouchStart(e.touches[0].clientX)}
-      onTouchEnd={e => {
-        if (touchStart === null) return
-        const diff = e.changedTouches[0].clientX - touchStart
-        if (diff > 60) goPrev()
-        else if (diff < -60) goNext()
-        setTouchStart(null)
-      }}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
     >
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', flexShrink: 0 }}>
