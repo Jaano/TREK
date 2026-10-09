@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { ChevronDown, Languages, Map, Rocket } from 'lucide-react'
 import { useTranslation, SUPPORTED_LANGUAGES } from '../../../i18n'
-import { useSettingsStore } from '../../../store/settingsStore'
-import { useToast } from '../../../components/shared/Toast'
+import { useSettingSaver } from '../../../components/Settings/useSettingSaver'
 import { SYMBOLS, currenciesWith } from '../../../components/Budget/BudgetPanel.constants'
 import { TRIP_TAB_IDS, TRIP_TAB_LABEL_KEYS, isTripTabId } from '../../../constants/tripTabs'
 import { DEFAULT_START_PAGE, DEFAULT_START_TRIP_TAB, type StartPage } from '../../../utils/startDestination'
@@ -20,22 +19,13 @@ import { preferredNavAppOptions } from '../../../components/Planner/placeNavigat
  */
 export default function MSettingsGeneral() {
   const { t, locale } = useTranslation()
-  const toast = useToast()
-  const { settings, updateSetting } = useSettingsStore()
+  const { settings, save } = useSettingSaver()
   const [currencyOpen, setCurrencyOpen] = useState(false)
   const [langOpen, setLangOpen] = useState(false)
   const [startTabOpen, setStartTabOpen] = useState(false)
   const [navAppOpen, setNavAppOpen] = useState(false)
   const navAppOptions = preferredNavAppOptions(t)
   const navAppValue = settings.preferred_nav_app || ''
-
-  const save = async (key: keyof Settings, value: Settings[keyof Settings]) => {
-    try {
-      await updateSetting(key, value)
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : t('common.error'))
-    }
-  }
 
   const startPage: StartPage = settings.start_page === 'active_trip' ? 'active_trip' : DEFAULT_START_PAGE
   const startTripTab = isTripTabId(settings.start_trip_tab) ? settings.start_trip_tab : DEFAULT_START_TRIP_TAB

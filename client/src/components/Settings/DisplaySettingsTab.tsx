@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Languages, Map, ChevronDown, Rocket } from 'lucide-react'
 import { SUPPORTED_LANGUAGES, useTranslation } from '../../i18n'
-import { useSettingsStore, DEFAULT_SETTINGS } from '../../store/settingsStore'
-import { useToast } from '../shared/Toast'
+import { DEFAULT_SETTINGS } from '../../store/settingsStore'
 import CustomSelect from '../shared/CustomSelect'
 import { Segmented } from '../shared/dialogParts'
 import { fs } from '../shared/DialogShell'
@@ -13,6 +12,7 @@ import { SYMBOLS, currenciesWith } from '../Budget/BudgetPanel.constants'
 import Section from './Section'
 import ToggleSwitch from './ToggleSwitch'
 import { ChoiceChips, SettingRow, SettingRows } from './settingsKit'
+import { useSettingSaver } from './useSettingSaver'
 import { TRIP_TAB_IDS, TRIP_TAB_LABEL_KEYS } from '../../constants/tripTabs'
 import { DEFAULT_START_PAGE, DEFAULT_START_TRIP_TAB } from '../../utils/startDestination'
 import type { DistanceUnit } from '../../types'
@@ -23,9 +23,8 @@ import { weekStartOptions } from '../../utils/calendarWeek'
 const SELECT_BOX = 'w-[260px] max-w-full'
 
 export default function DisplaySettingsTab(): React.ReactElement {
-  const { settings, updateSetting } = useSettingsStore()
+  const { settings, save } = useSettingSaver()
   const { t, locale } = useTranslation()
-  const toast = useToast()
   const [tempUnit, setTempUnit] = useState<string>(settings.temperature_unit || DEFAULT_SETTINGS.temperature_unit)
   const [distanceUnit, setDistanceUnit] = useState<DistanceUnit>(settings.distance_unit || DEFAULT_SETTINGS.distance_unit)
   const [langOpen, setLangOpen] = useState(false)
@@ -48,19 +47,13 @@ export default function DisplaySettingsTab(): React.ReactElement {
     setDistanceUnit(settings.distance_unit || DEFAULT_SETTINGS.distance_unit)
   }, [settings.distance_unit])
 
-  const saveOnOff = async (key: OnOffKey, value: boolean) => {
-    try { await updateSetting(key, value) }
-    catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
-  }
+  const saveOnOff = (key: OnOffKey, value: boolean) => save(key, value)
 
   const startPage = settings.start_page === 'active_trip' ? 'active_trip' : DEFAULT_START_PAGE
   const startTripTab = settings.start_trip_tab || DEFAULT_START_TRIP_TAB
   const currentLanguage = SUPPORTED_LANGUAGES.find(o => o.value === settings.language) || SUPPORTED_LANGUAGES[0]
 
-  const pickLanguage = async (value: string) => {
-    try { await updateSetting('language', value) }
-    catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
-  }
+  const pickLanguage = (value: string) => save('language', value)
 
   return (
     <>
@@ -79,8 +72,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                   { value: 'active_trip', label: t('settings.startPageActiveTrip') },
                 ]}
                 onChange={async value => {
-                  try { await updateSetting('start_page', value) }
-                  catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                  await save('start_page', value)
                 }}
               />
             }
@@ -96,8 +88,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                   <CustomSelect
                     value={startTripTab}
                     onChange={async v => {
-                      try { await updateSetting('start_trip_tab', String(v)) }
-                      catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                      await save('start_trip_tab', String(v))
                     }}
                     options={TRIP_TAB_IDS.map(id => ({ value: id, label: t(TRIP_TAB_LABEL_KEYS[id]) }))}
                   />
@@ -120,8 +111,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                 <CustomSelect
                   value={settings.default_currency || ''}
                   onChange={async v => {
-                    try { await updateSetting('default_currency', String(v)) }
-                    catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                    await save('default_currency', String(v))
                   }}
                   options={[
                     { value: '', label: t('settings.currencyTrip') },
@@ -182,8 +172,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                 <CustomSelect
                   value={settings.place_language || ''}
                   onChange={async v => {
-                    try { await updateSetting('place_language', String(v)) }
-                    catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                    await save('place_language', String(v))
                   }}
                   options={[
                     { value: '', label: t('settings.placeLanguageApp') },
@@ -208,8 +197,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                 ]}
                 onChange={async value => {
                   setTempUnit(value)
-                  try { await updateSetting('temperature_unit', value) }
-                  catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                  await save('temperature_unit', value)
                 }}
               />
             }
@@ -228,8 +216,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                 ]}
                 onChange={async value => {
                   setDistanceUnit(value)
-                  try { await updateSetting('distance_unit', value) }
-                  catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                  await save('distance_unit', value)
                 }}
               />
             }
@@ -250,8 +237,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                   label: <>{opt.short}<span className="hidden font-geist tabular-nums text-content-faint sm:inline">{` (${opt.example})`}</span></>,
                 }))}
                 onChange={async value => {
-                  try { await updateSetting('time_format', value) }
-                  catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                  await save('time_format', value)
                 }}
               />
             }
@@ -266,8 +252,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                 <CustomSelect
                   value={settings.week_start || DEFAULT_WEEK_START}
                   onChange={async v => {
-                    try { await updateSetting('week_start', String(v)) }
-                    catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                    await save('week_start', String(v))
                   }}
                   options={weekStartOptions(locale)}
                 />
@@ -288,8 +273,7 @@ export default function DisplaySettingsTab(): React.ReactElement {
                 <CustomSelect
                   value={settings.preferred_nav_app || ''}
                   onChange={async v => {
-                    try { await updateSetting('preferred_nav_app', String(v)) }
-                    catch (e: unknown) { toast.error(e instanceof Error ? e.message : t('common.error')) }
+                    await save('preferred_nav_app', String(v))
                   }}
                   options={preferredNavAppOptions(t)}
                 />
