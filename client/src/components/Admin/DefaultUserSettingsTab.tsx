@@ -1,8 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React from 'react'
 import { Loader2, Map as MapIcon, Settings2 } from 'lucide-react'
-import { adminApi } from '../../api/client'
 import { useTranslation } from '../../i18n'
-import { useToast } from '../shared/Toast'
 import Section from '../Settings/Section'
 import { SettingRows, SettingsHint } from '../Settings/settingsKit'
 import { fs } from '../shared/DialogShell'
@@ -10,64 +8,13 @@ import { EditorField, INPUT, Segmented } from '../shared/dialogParts'
 import CustomSelect from '../shared/CustomSelect'
 import { MapView } from '../Map/MapView'
 import { SYMBOLS, currenciesWith } from '../Budget/BudgetPanel.constants'
-import type { DistanceUnit, Place, WeekStart } from '../../types'
+import type { DistanceUnit, WeekStart } from '../../types'
 import { weekStartOptions } from '../../utils/calendarWeek'
-import { normalizeTileUrl, withTileApiKey } from '../../utils/tileUrl'
-import {
-  MAPBOX_DEFAULT_STYLE,
-  defaultStyleForProvider,
-  getStylePresets,
-  isOpenFreeMapStyle,
-  normalizeStyleForProvider,
-  styleSettingKey,
-  type GlMapProvider,
-} from '../Map/glProviders'
-import { useAuthStore } from '../../store/authStore'
-import RoutingInstanceFields, { type RoutingDefaults } from './RoutingInstanceFields'
-
-const MAP_PRESETS = [
-  { name: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' },
-  { name: 'OpenStreetMap DE', url: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png' },
-  // The app default, and a vector style rather than a {z}/{x}/{y} template: no
-  // key, no registration, no request limits.
-  { name: 'OpenFreeMap Positron', url: 'https://tiles.openfreemap.org/styles/positron' },
-  { name: 'OpenFreeMap Bright', url: 'https://tiles.openfreemap.org/styles/bright' },
-  // CARTO watermarks keyless tiles since 26.08.2026 and issues keys by mail, so
-  // these two need one; without it the map falls back to the default (#2054).
-  { name: 'CartoDB Light', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' },
-  { name: 'CartoDB Dark', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' },
-  { name: 'Stadia Smooth', url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png' },
-]
-
-type Defaults = RoutingDefaults & {
-  temperature_unit?: string
-  distance_unit?: DistanceUnit
-  dark_mode?: string | boolean
-  time_format?: string
-  week_start?: WeekStart
-  default_currency?: string
-  blur_booking_codes?: boolean
-  map_tile_url?: string
-  carto_api_key?: string
-  map_provider?: string
-  mapbox_access_token?: string
-  mapbox_style?: string
-  maplibre_style?: string
-  mapbox_3d_enabled?: boolean
-  mapbox_quality_mode?: boolean
-}
-
-type MapProvider = 'leaflet' | GlMapProvider
-
-function normalizeProvider(value: unknown): MapProvider {
-  return value === 'mapbox-gl' || value === 'maplibre-gl' ? value : 'leaflet'
-}
-
-/** Only the GL providers keep a style — Leaflet is handled by its callers. */
-function styleForProvider(provider: GlMapProvider, style?: string | null): string {
-  if (provider === 'mapbox-gl' && isOpenFreeMapStyle(style)) return MAPBOX_DEFAULT_STYLE
-  return normalizeStyleForProvider(provider, style)
-}
+import { withTileApiKey } from '../../utils/tileUrl'
+import { defaultStyleForProvider } from '../Map/glProviders'
+import { DEFAULT_MAP_PRESETS as MAP_PRESETS, type MapProvider } from '../Settings/mapSettingsModel'
+import RoutingInstanceFields from './RoutingInstanceFields'
+import { useDefaultUserSettings, type Defaults } from './useDefaultUserSettings'
 
 /**
  * One default as a row of the card's white box: its name (with the reset link
@@ -114,57 +61,18 @@ function colorModeValue(value: string | boolean | undefined): string {
   return value ?? ''
 }
 
+/** A failed save names the error it threw, or falls back to the generic one. */
+function errorText(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback
+}
+
 export default function DefaultUserSettingsTab(): React.ReactElement {
   const { t, locale } = useTranslation()
-  const toast = useToast()
-  const [defaults, setDefaults] = useState<Defaults>({})
-  const [loaded, setLoaded] = useState(false)
-  const [mapTileUrl, setMapTileUrl] = useState('')
-  const managed = useAuthStore((s) => s.managed)
-  const [mapboxToken, setMapboxToken] = useState('')
-  const [cartoKey, setCartoKey] = useState('')
-  const [mapboxStyle, setMapboxStyle] = useState('')
-
-  useEffect(() => {
-    adminApi.getDefaultUserSettings().then((data: Defaults) => {
-      const provider = normalizeProvider(data.map_provider)
-      setDefaults(data)
-      setMapTileUrl(normalizeTileUrl(data.map_tile_url || ''))
-      setMapboxToken(data.mapbox_access_token || '')
-      setCartoKey(data.carto_api_key || '')
-      setMapboxStyle(provider === 'leaflet' ? (data.mapbox_style || '') : styleForProvider(provider, provider === 'maplibre-gl' ? data.maplibre_style : data.mapbox_style))
-      setLoaded(true)
-    }).catch(() => setLoaded(true))
-  }, [])
-
-  const save = async (patch: Partial<Defaults>) => {
-    try {
-      const updated = await adminApi.updateDefaultUserSettings(patch as Record<string, unknown>)
-      setDefaults(updated)
-      toast.success(t('admin.defaultSettings.saved'))
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t('common.error'))
-    }
-  }
-
-  const reset = async (key: keyof Defaults) => {
-    try {
-      const updated = await adminApi.updateDefaultUserSettings({ [key]: null })
-      setDefaults(updated)
-      if (key === 'map_tile_url') setMapTileUrl('')
-      if (key === 'mapbox_access_token') setMapboxToken('')
-      if (key === 'carto_api_key') setCartoKey('')
-      if (key === 'mapbox_style' || key === 'maplibre_style') {
-        const provider = normalizeProvider(defaults.map_provider)
-        setMapboxStyle(provider === 'leaflet' ? '' : defaultStyleForProvider(provider))
-      }
-      toast.success(t('admin.defaultSettings.reset'))
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t('common.error'))
-    }
-  }
-
-  const isSet = (key: keyof Defaults) => defaults[key] !== undefined
+  const {
+    defaults, loaded, managed, isSet, save, reset, mapTileUrl, setMapTileUrl, mapboxToken, setMapboxToken,
+    cartoKey, setCartoKey, mapboxStyle, setMapboxStyle, mapPreviewPlaces, mapProvider, glStylePresets, styleKey,
+    saveMapProvider, pickTilePreset, pickStylePreset, commitStyle,
+  } = useDefaultUserSettings({ errorMessage: errorText, previewCreatedAt: () => String(new Date()) })
 
   // Inside the row's own <label>, after the name: the link only shows once the
   // default is set, and the name stays the label's text.
@@ -179,31 +87,6 @@ export default function DefaultUserSettingsTab(): React.ReactElement {
       </button>
     ) : null
 
-  const mapPreviewPlaces = useMemo((): Place[] => [{
-    id: 1,
-    trip_id: 1,
-    name: 'Preview center',
-    description: null,
-    notes: null,
-    lat: 48.8566,
-    lng: 2.3522,
-    address: null,
-    category_id: null,
-    price: null,
-    currency: null,
-    image_url: null,
-    google_place_id: null,
-    osm_id: null,
-    route_geometry: null,
-    place_time: null,
-    end_time: null,
-    duration_minutes: null,
-    transport_mode: null,
-    website: null,
-    phone: null,
-    created_at: String(new Date()),
-  }], [])
-
   if (!loaded) {
     return (
       <div className="flex items-center gap-2.5 rounded-2xl border border-edge-faint bg-surface-secondary px-4 py-5 text-content-faint" style={fs(12.5, 'body')}>
@@ -214,20 +97,6 @@ export default function DefaultUserSettingsTab(): React.ReactElement {
   }
 
   const darkMode = defaults.dark_mode
-  const mapProvider = normalizeProvider(defaults.map_provider)
-  const glStylePresets = mapProvider === 'leaflet' ? [] : getStylePresets(mapProvider)
-  const styleKey: keyof Defaults = mapProvider === 'maplibre-gl' ? 'maplibre_style' : 'mapbox_style'
-  const saveMapProvider = (nextProvider: MapProvider) => {
-    const patch: Partial<Defaults> = { map_provider: nextProvider }
-    if (nextProvider !== 'leaflet') {
-      // Load + save the new provider's own style slot so the other provider's style is kept.
-      const slot = nextProvider === 'maplibre-gl' ? defaults.maplibre_style : defaults.mapbox_style
-      const nextStyle = styleForProvider(nextProvider, slot)
-      setMapboxStyle(nextStyle)
-      patch[styleSettingKey(nextProvider)] = nextStyle
-    }
-    void save(patch)
-  }
 
   return (
     <div>
@@ -346,7 +215,7 @@ export default function DefaultUserSettingsTab(): React.ReactElement {
         <div className="flex flex-col gap-2">
           <CustomSelect
             value={mapTileUrl}
-            onChange={(value: string) => { if (value) { setMapTileUrl(value); void save({ map_tile_url: value }) } }}
+            onChange={pickTilePreset}
             placeholder={t('settings.mapTemplatePlaceholder.select')}
             options={MAP_PRESETS.map(p => ({ value: p.url, label: p.name }))}
           />
@@ -445,7 +314,7 @@ export default function DefaultUserSettingsTab(): React.ReactElement {
               <div className="flex flex-col gap-2">
                 <CustomSelect
                   value={mapboxStyle}
-                  onChange={(value: string) => { if (value) { setMapboxStyle(value); void save({ [styleKey]: value }) } }}
+                  onChange={pickStylePreset}
                   placeholder={t('admin.defaultSettings.mapboxStylePlaceholder')}
                   options={glStylePresets.map(p => ({ value: p.url, label: p.name }))}
                 />
@@ -453,11 +322,7 @@ export default function DefaultUserSettingsTab(): React.ReactElement {
                   type="text"
                   value={mapboxStyle}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMapboxStyle(e.target.value)}
-                  onBlur={() => {
-                    const nextStyle = normalizeStyleForProvider(mapProvider, mapboxStyle)
-                    setMapboxStyle(nextStyle)
-                    void save({ [styleKey]: nextStyle })
-                  }}
+                  onBlur={commitStyle}
                   placeholder={defaultStyleForProvider(mapProvider)}
                   className={`${INPUT} font-geist`}
                 />
