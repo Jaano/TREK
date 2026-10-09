@@ -1,93 +1,15 @@
-import React, { useEffect, useState, useMemo } from 'react'
-import { adminApi } from '../../api/client'
+import React from 'react'
 import { useTranslation } from '../../i18n'
-import { usePermissionsStore, PermissionLevel } from '../../store/permissionsStore'
-import { useToast } from '../shared/Toast'
+import { PermissionLevel } from '../../store/permissionsStore'
+import { CATEGORIES, LEVEL_LABELS, usePermissionsAdmin } from './usePermissionsAdmin'
 import { Save, Loader2, RotateCcw, ShieldCheck } from 'lucide-react'
 import CustomSelect from '../shared/CustomSelect'
 import { DialogSection, fs } from '../shared/DialogShell'
 import { SETTINGS_BUTTON, SETTINGS_BUTTON_PRIMARY, SettingRow, SettingRows, SettingsCard, StatusPill } from '../Settings/settingsKit'
 
-interface PermissionEntry {
-  key: string
-  level: PermissionLevel
-  defaultLevel: PermissionLevel
-  allowedLevels: PermissionLevel[]
-}
-
-const LEVEL_LABELS: Record<string, string> = {
-  admin: 'perm.level.admin',
-  trip_owner: 'perm.level.tripOwner',
-  trip_member: 'perm.level.tripMember',
-  everybody: 'perm.level.everybody',
-}
-
-const CATEGORIES = [
-  { id: 'trip', keys: ['trip_create', 'trip_edit', 'trip_delete', 'trip_archive', 'trip_cover_upload'] },
-  { id: 'members', keys: ['member_manage'] },
-  { id: 'files', keys: ['file_upload', 'file_edit', 'file_delete'] },
-  { id: 'content', keys: ['place_edit', 'day_edit', 'reservation_edit'] },
-  { id: 'extras', keys: ['budget_edit', 'packing_edit', 'collab_edit', 'share_manage'] },
-]
-
 export default function PermissionsPanel(): React.ReactElement {
   const { t } = useTranslation()
-  const toast = useToast()
-  const [entries, setEntries] = useState<PermissionEntry[]>([])
-  const [values, setValues] = useState<Record<string, PermissionLevel>>({})
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [dirty, setDirty] = useState(false)
-
-  useEffect(() => {
-    void loadPermissions()
-  }, [])
-
-  const loadPermissions = async () => {
-    setLoading(true)
-    try {
-      const data = await adminApi.getPermissions()
-      setEntries(data.permissions)
-      const vals: Record<string, PermissionLevel> = {}
-      for (const p of data.permissions) vals[p.key] = p.level
-      setValues(vals)
-      setDirty(false)
-    } catch {
-      toast.error(t('common.error'))
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleChange = (key: string, level: PermissionLevel) => {
-    setValues(prev => ({ ...prev, [key]: level }))
-    setDirty(true)
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const data = await adminApi.updatePermissions(values)
-      if (data.permissions) {
-        usePermissionsStore.getState().setPermissions(data.permissions)
-      }
-      setDirty(false)
-      toast.success(t('perm.saved'))
-    } catch {
-      toast.error(t('common.error'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleReset = () => {
-    const defaults: Record<string, PermissionLevel> = {}
-    for (const p of entries) defaults[p.key] = p.defaultLevel
-    setValues(defaults)
-    setDirty(true)
-  }
-
-  const entryMap = useMemo(() => new Map(entries.map(e => [e.key, e])), [entries])
+  const { entryMap, values, loading, saving, dirty, handleChange, handleSave, handleReset } = usePermissionsAdmin()
 
   if (loading) {
     return (
