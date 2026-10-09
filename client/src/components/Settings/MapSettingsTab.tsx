@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useMemo, useRef, useId, Suspense, type ReactNode } from 'react'
+import React, { useState, useEffect, useRef, useId, Suspense, type ReactNode } from 'react'
 import { Map, Save, Layers, Box, ChevronDown, Check, Globe2, type LucideIcon } from 'lucide-react'
 import { useTranslation } from '../../i18n'
-import { useSettingsStore } from '../../store/settingsStore'
-import { useToast } from '../shared/Toast'
 import CustomSelect from '../shared/CustomSelect'
 import { fs } from '../shared/DialogShell'
 import { EditorField, INPUT } from '../shared/dialogParts'
@@ -16,41 +14,9 @@ import Section from './Section'
 import ToggleSwitch from './ToggleSwitch'
 import { SETTINGS_BUTTON_PRIMARY, SettingRow, SettingRows, SettingsHint, StatusPill } from './settingsKit'
 import { withTileApiKey } from '../../utils/tileUrl'
-import { AMAP_ROAD, AMAP_SATELLITE } from '../../constants/mapDefaults'
-import type { Place } from '../../types'
-import {
-  MAPBOX_DEFAULT_STYLE,
-  defaultStyleForProvider,
-  getStylePresets,
-  isOpenFreeMapStyle,
-  normalizeStyleForProvider,
-  type GlMapProvider,
-} from '../Map/glProviders'
-import { useAuthStore } from '../../store/authStore'
-
-interface MapPreset {
-  name: string
-  url: string
-}
-
-const MAP_PRESETS: MapPreset[] = [
-  { name: 'OpenStreetMap', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png' },
-  { name: 'OpenStreetMap DE', url: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png' },
-  // The app default, and a vector style rather than a {z}/{x}/{y} template: no
-  // key, no registration, no request limits.
-  { name: 'OpenFreeMap Positron', url: 'https://tiles.openfreemap.org/styles/positron' },
-  { name: 'OpenFreeMap Bright', url: 'https://tiles.openfreemap.org/styles/bright' },
-  // CARTO watermarks keyless tiles since 26.08.2026 and issues keys by mail, so
-  // these two need one; without it the map falls back to the default (#2054).
-  { name: 'CartoDB Light', url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png' },
-  { name: 'CartoDB Dark', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' },
-  { name: 'Stadia Smooth', url: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png' },
-  // Amap (高德). GCJ-02 tiles — the map switches to a shifted projection for
-  // these so markers still land on the right street (see gcj02Crs.ts). The only
-  // basemap here that is genuinely good inside mainland China.
-  { name: '高德地图 (Amap)', url: AMAP_ROAD },
-  { name: '高德卫星 (Amap Satellite)', url: AMAP_SATELLITE },
-]
+import { defaultStyleForProvider, getStylePresets, type GlMapProvider } from '../Map/glProviders'
+import { MAP_PRESETS, PREVIEW_CENTER, PREVIEW_ZOOM } from './mapSettingsModel'
+import { useMapSettingsForm } from './useMapSettingsForm'
 
 /** A field holding a URL, token or key: the box look in Geist, so the characters read apart. */
 const CODE_INPUT = `${INPUT} font-geist`
@@ -161,115 +127,21 @@ function ProviderTile({ active, onClick, icon: Icon, name, subtitle, badge }: {
   )
 }
 
-type Provider = 'leaflet' | GlMapProvider
-
-function normalizeProvider(value: unknown): Provider {
-  return value === 'mapbox-gl' || value === 'maplibre-gl' ? value : 'leaflet'
-}
-
-function styleForProvider(provider: Provider, style?: string | null): string {
-  if (provider === 'leaflet') return style || MAPBOX_DEFAULT_STYLE
-  if (provider === 'mapbox-gl' && isOpenFreeMapStyle(style)) return MAPBOX_DEFAULT_STYLE
-  return normalizeStyleForProvider(provider, style)
-}
-
-// Each GL provider has its own style slot, so toggling providers never clobbers the
-// other one's style. Leaflet/Mapbox use mapbox_style; MapLibre uses maplibre_style.
-function slotStyle(provider: Provider, s: { mapbox_style?: string; maplibre_style?: string }): string | undefined {
-  return provider === 'maplibre-gl' ? s.maplibre_style : s.mapbox_style
-}
-
-/**
- * Somewhere recognisable for the style preview to render. A city shows off label density,
- * 3D buildings and satellite texture in a way open ocean cannot — it is not a user setting,
- * and no map opens here: each map frames itself on its own places.
- */
-const PREVIEW_CENTER: [number, number] = [48.8566, 2.3522]
-const PREVIEW_ZOOM = 16
-
 export default function MapSettingsTab(): React.ReactElement {
-  const { settings, updateSettings } = useSettingsStore()
   const { t } = useTranslation()
-  const toast = useToast()
-  const initialProvider = normalizeProvider(settings.map_provider)
-  const [saving, setSaving] = useState(false)
-  const [provider, setProvider] = useState<Provider>(initialProvider)
-  const [mapTileUrl, setMapTileUrl] = useState<string>(settings.map_tile_url || '')
-  const managed = useAuthStore((s) => s.managed)
-  const [mapboxToken, setMapboxToken] = useState<string>(settings.mapbox_access_token || '')
-  const [cartoKey, setCartoKey] = useState<string>(settings.carto_api_key || '')
-  const [mapboxStyle, setMapboxStyle] = useState<string>(styleForProvider(initialProvider, slotStyle(initialProvider, settings)))
-  const [mapbox3d, setMapbox3d] = useState<boolean>(settings.mapbox_3d_enabled !== false)
-  const [mapboxQuality, setMapboxQuality] = useState<boolean>(settings.mapbox_quality_mode === true)
+  const {
+    managed, saving, provider, changeProvider, mapTileUrl, setMapTileUrl, mapboxToken, setMapboxToken,
+    cartoKey, setCartoKey, cartoNeedsKey, mapboxStyle, setMapboxStyle, mapbox3d, setMapbox3d,
+    mapboxQuality, setMapboxQuality, previewPlaces, save: saveMapSettings,
+  } = useMapSettingsForm()
   // One chunk per engine — see components/Map/glLazy.tsx.
   const GlMapPreview = provider === 'maplibre-gl' ? GlMapPreviewMaplibre : GlMapPreviewMapbox
   // Ties each eyebrow label to its field, so a click on the label focuses it.
   const fieldId = useId()
 
-  useEffect(() => {
-    const nextProvider = normalizeProvider(settings.map_provider)
-    setProvider(nextProvider)
-    setMapTileUrl(settings.map_tile_url || '')
-    setMapboxToken(settings.mapbox_access_token || '')
-    setCartoKey(settings.carto_api_key || '')
-    setMapboxStyle(styleForProvider(nextProvider, slotStyle(nextProvider, settings)))
-    setMapbox3d(settings.mapbox_3d_enabled !== false)
-    setMapboxQuality(settings.mapbox_quality_mode === true)
-  }, [settings])
-
-  const previewPlaces = useMemo((): Place[] => [{
-    id: 1,
-    trip_id: 1,
-    name: 'Preview',
-    description: '',
-    lat: PREVIEW_CENTER[0],
-    lng: PREVIEW_CENTER[1],
-    address: '',
-    category_id: 0,
-    price: null,
-    image_url: null,
-    google_place_id: null,
-    osm_id: null,
-    route_geometry: null,
-    place_time: null,
-    end_time: null,
-    created_at: String(new Date()),
-  }], [])
-
-  const saveMapSettings = async (): Promise<void> => {
-    setSaving(true)
-    try {
-      const glStyle = provider === 'leaflet' ? mapboxStyle : normalizeStyleForProvider(provider, mapboxStyle)
-      // Save into the active provider's own slot so the other provider's style survives.
-      const stylePatch = provider === 'maplibre-gl' ? { maplibre_style: glStyle } : { mapbox_style: glStyle }
-      await updateSettings({
-        map_provider: provider,
-        map_tile_url: mapTileUrl,
-        mapbox_access_token: mapboxToken,
-        carto_api_key: cartoKey,
-        ...stylePatch,
-        mapbox_3d_enabled: mapbox3d,
-        mapbox_quality_mode: mapboxQuality,
-      })
-      // Only mirror the normalized style into the form once it is actually persisted.
-      setMapboxStyle(glStyle)
-      toast.success(t('settings.toast.mapSaved'))
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t('common.error'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
   // 3D is available on every style now — pure satellite uses the
   // mapbox-streets-v8 tileset as a fallback building source.
   const supports3d = true
-  const changeProvider = (nextProvider: Provider) => {
-    setProvider(nextProvider)
-    if (nextProvider !== 'leaflet') setMapboxStyle(styleForProvider(nextProvider, mapboxStyle))
-  }
-  // Only CARTO burns a watermark into keyless tiles, so the nudge is scoped to its hosts.
-  const cartoNeedsKey = mapTileUrl.includes('basemaps.cartocdn.com') && !cartoKey.trim()
   const link = 'font-medium text-content-secondary underline decoration-edge underline-offset-2 hover:text-content'
 
   return (
