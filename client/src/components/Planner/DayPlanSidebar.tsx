@@ -57,6 +57,7 @@ import { planCosts } from './planCosts'
 import { useDayNotes } from '../../hooks/useDayNotes'
 import { useExchangeRates } from '../../hooks/useExchangeRates'
 import { RES_ICONS, getNoteIcon } from './DayPlanSidebar.constants'
+import { withDayPlanDefaults } from './DayPlanSidebar.defaults'
 import { noteSurface } from './noteSurface'
 import { findTodayDayId } from './today'
 import { markdownLinkComponents } from '../shared/markdownLink'
@@ -77,7 +78,7 @@ import type { DayAddControls } from '../../utils/dayAdd'
 import type { DayDeleteQuestion } from '../../utils/dayImpactLines'
 import type { Trip, Day, Place, Category, Assignment, Accommodation, Reservation, AssignmentsMap, RouteResult, RouteSegment, DayNote } from '../../types'
 
-interface DayPlanSidebarProps {
+export interface DayPlanSidebarProps {
   tripId: number
   trip: Trip
   days: Day[]
@@ -189,66 +190,27 @@ const LOCK_OVERLAY_HOVER = 'color-mix(in srgb, var(--danger) 42%, transparent)'
 function useDayPlanSidebar(props: DayPlanSidebarProps) {
   const {
   tripId,
-  trip, days, places, categories, assignments,
+  trip, days, places, assignments,
   selectedDayId, selectedPlaceId, selectedAssignmentId,
-  onSelectDay, onPlaceClick, onDayDetail, accommodations = [],
-  onReorder, onReorderDays, onAddDay, dayAdd, onDeleteDay, deleteDayQuestion,
-  onAssignToDay, onMoveToDay, onRemoveAssignment, onEditPlace, onDeletePlace,
-  reservations = [],
-  visibleConnectionIds = [],
-  onToggleConnection,
-  allConnectionsShown = false,
-  onToggleAllConnections,
+  onSelectDay, accommodations,
+  onReorder,
+  onAssignToDay, onMoveToDay,
+  reservations,
   externalTransportDetail,
   onExternalTransportDetailHandled,
-  onAddReservation,
-  onAddPlace,
-  onAddPlaceToDay,
-  onCreatePlaceForDay,
-  onNavigateToFiles,
-  routeShown = false,
-  routeProfile = 'driving',
-  onToggleRoute,
-  onSetRouteProfile,
+  routeShown,
+  routeProfile,
   onExpandedDaysChange,
   pushUndo,
-  canUndo = false,
-  lastActionLabel = null,
-  onUndo,
   onRouteRefresh,
-  onAddTransport,
-  onAddAccommodation,
-  onPlanTransit,
-  onPlanTransitLeg,
-  onOpenTransit,
-  onEditTransport,
-  onEditReservation,
-  onOpenBooking,
-  onAddBookingToAssignment,
   initialScrollTop,
-  onScrollTopChange,
-  showRouteToolsWhenExpanded = false,
-  isMobile = false,
-  } = props
-  // Below lg the plan and the places sit in separate tabs, so there is nothing
-  // to drag between. A coarse pointer is no longer a reason of its own: tablets
-  // reach the same drag through a long press (#1616).
-  const dragDisabled = isMobile
+  showRouteToolsWhenExpanded,
+  } = withDayPlanDefaults(props)
   const toast = useToast()
-  const { t, language, locale } = useTranslation()
-  const ctxMenu = useContextMenu()
-  const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
+  const { t, locale } = useTranslation()
   const mirrorServiceStops = useRoadtripSettings(s => s.roadtrip_service_stops_in_days !== false)
   const toursEnabled = useAddonStore(s => s.isEnabled('tours'))
   const tripActions = useRef(useTripStore.getState()).current
-  const can = useCanDo()
-  const canEditDays = can('day_edit', trip)
-  // Editing or deleting the place itself is a place right; taking it off the
-  // day stays a day right (#2446).
-  const canEditPlaces = can('place_edit', trip)
-  // The calendar subscription hands out a link that reads the trip without an
-  // account, so it sits behind the same permission as the public share link.
-  const canManageShare = can('share_manage', trip)
 
   const { noteUi, setNoteUi, noteInputRef, dayNotes, openAddNote: _openAddNote, openEditNote: _openEditNote, cancelNote, saveNote, deleteNote: _deleteNote, moveNote: _moveNote } = useDayNotes(tripId)
 
@@ -279,11 +241,6 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
   const legsAbortRef = useRef<AbortController | null>(null)
   const [draggingId, setDraggingId] = useState(null)
   const [lockedIds, setLockedIds] = useState(new Set())
-  const [lockHoverId, setLockHoverId] = useState(null)
-  const [undoHover, setUndoHover] = useState(false)
-  const [hoveredAssignmentId, setHoveredAssignmentId] = useState<number | null>(null)
-  // Transit rows fold their itinerary out inline (#1065).
-  const [expandedTransitIds, setExpandedTransitIds] = useState<Set<number>>(new Set())
   const [dropTargetKey, _setDropTargetKey] = useState(null)
   const dropTargetRef = useRef(null)
   const setDropTargetKey = (key) => { dropTargetRef.current = key; _setDropTargetKey(key) }
@@ -881,10 +838,6 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
 
   const openEditNote = (dayId: number, note: DayNote) => _openEditNote(dayId, note)
 
-  // Deleting a note asks for confirmation first — the edit/delete icons sit close together and are
-  // easy to mis-tap on touch devices, where an accidental delete was previously unrecoverable.
-  const [pendingDeleteNote, setPendingDeleteNote] = useState<{ dayId: number; noteId: number } | null>(null)
-
   const deleteNote = (dayId: number, noteId: number) => _deleteNote(dayId, noteId)
 
   // Unified reorder: assigns positions to ALL item types based on new visual order
@@ -1172,135 +1125,48 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
   }, [days, assignments, reservations, budgetItems, costsEnabled, currency, costBase, locale, fxRates])
 
   return {
-    tripId,
-    trip,
-    days,
-    places,
-    categories,
-    assignments,
-    selectedDayId,
-    selectedPlaceId,
-    selectedAssignmentId,
-    onSelectDay,
-    onPlaceClick,
-    onDayDetail,
-    accommodations,
-    onReorder,
-    onReorderDays,
-    onAddDay,
-    dayAdd,
-    onDeleteDay,
-    deleteDayQuestion,
-    onAssignToDay,
-    onRemoveAssignment,
-    onEditPlace,
-    onDeletePlace,
-    reservations,
-    visibleConnectionIds,
-    onToggleConnection,
-    allConnectionsShown,
-    onToggleAllConnections,
-    externalTransportDetail,
-    onExternalTransportDetailHandled,
-    onAddReservation,
-    onAddPlace,
-    onAddPlaceToDay,
-    onCreatePlaceForDay,
-    onNavigateToFiles,
-    routeShown,
-    routeProfile,
-    onToggleRoute,
-    onSetRouteProfile,
-    onExpandedDaysChange,
-    pushUndo,
-    canUndo,
-    lastActionLabel,
-    onUndo,
-    onRouteRefresh,
-    onAddTransport,
-    onAddAccommodation,
-    onPlanTransit,
-    onPlanTransitLeg,
-    onOpenTransit,
-    onEditTransport,
-    expandedTransitIds,
-    setExpandedTransitIds,
-    onEditReservation,
-    onOpenBooking,
-    onAddBookingToAssignment,
-    initialScrollTop,
-    onScrollTopChange,
-    showRouteToolsWhenExpanded,
-    isMobile,
-    dragDisabled,
     toast,
     t,
-    language,
     locale,
-    ctxMenu,
-    timeFormat,
     tripActions,
-    can,
-    canEditDays,
-    canEditPlaces,
-    canManageShare,
-    noteUi,
-    setNoteUi,
-    noteInputRef,
-    dayNotes,
-    openAddNote,
-    openEditNote,
-    cancelNote,
-    saveNote,
-    deleteNote,
-    pendingDeleteNote,
-    setPendingDeleteNote,
-    moveNote,
+    notes: {
+      noteUi,
+      setNoteUi,
+      noteInputRef,
+      dayNotes,
+      openAddNote,
+      openEditNote,
+      cancelNote,
+      saveNote,
+      deleteNote,
+      moveNote,
+    },
     expandedDays,
     setExpandedDays,
     routeLegs,
-    setRouteLegs,
     hotelLegs,
-    setHotelLegs,
-    legsAbortRef,
     draggingId,
     setDraggingId,
     lockedIds,
-    setLockedIds,
-    lockHoverId,
-    setLockHoverId,
-    undoHover,
-    setUndoHover,
-    hoveredAssignmentId,
-    setHoveredAssignmentId,
     dropTargetKey,
-    _setDropTargetKey,
     dropTargetRef,
     setDropTargetKey,
     dragOverDayId,
     setDragOverDayId,
     transportDetail,
     setTransportDetail,
-    transportPosVersion,
-    setTransportPosVersion,
     timeConfirm,
     setTimeConfirm,
     dragDataRef,
     scrollContainerRef,
     dayRefs,
-    initedTransportIds,
     lastAutoScrolledIdRef,
     getDragData,
-    prevDayCount,
     toggleDay,
     getSpanLabel,
-    getDayOrder,
     computeMultiDayMove,
-    getTransportForDay,
     getActiveRentalsForDay,
     getDayAssignments,
-    computeTransportPosition,
-    initTransportPositions,
     getMergedItems,
     storedPositionBefore,
     placeBelowNote,
@@ -1330,7 +1196,80 @@ const NARROW_PLAN_PX = 320
 
 const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarProps) {
   const S = useDayPlanSidebar(props)
+  const {
+    tripId,
+    trip,
+    days,
+    places,
+    categories,
+    assignments,
+    selectedDayId,
+    selectedPlaceId,
+    selectedAssignmentId,
+    onSelectDay,
+    onPlaceClick,
+    onDayDetail,
+    accommodations,
+    onReorderDays,
+    onAddDay,
+    dayAdd,
+    onDeleteDay,
+    deleteDayQuestion,
+    onAssignToDay,
+    onRemoveAssignment,
+    onEditPlace,
+    onDeletePlace,
+    reservations,
+    visibleConnectionIds,
+    onToggleConnection,
+    allConnectionsShown,
+    onToggleAllConnections,
+    onAddPlace,
+    onCreatePlaceForDay,
+    onNavigateToFiles,
+    routeShown,
+    routeProfile,
+    onToggleRoute,
+    onSetRouteProfile,
+    canUndo,
+    lastActionLabel,
+    onUndo,
+    onAddTransport,
+    onAddAccommodation,
+    onPlanTransit,
+    onPlanTransitLeg,
+    onOpenTransit,
+    onEditTransport,
+    onEditReservation,
+    onOpenBooking,
+    onAddBookingToAssignment,
+    onScrollTopChange,
+    showRouteToolsWhenExpanded,
+    isMobile,
+  } = withDayPlanDefaults(props)
   const onClearDay = props.onClearDay
+  // Below lg the plan and the places sit in separate tabs, so there is nothing
+  // to drag between. A coarse pointer is no longer a reason of its own: tablets
+  // reach the same drag through a long press (#1616).
+  const dragDisabled = isMobile
+  const ctxMenu = useContextMenu()
+  const timeFormat = useSettingsStore(s => s.settings.time_format) || '24h'
+  const can = useCanDo()
+  const canEditDays = can('day_edit', trip)
+  // Editing or deleting the place itself is a place right; taking it off the
+  // day stays a day right (#2446).
+  const canEditPlaces = can('place_edit', trip)
+  // The calendar subscription hands out a link that reads the trip without an
+  // account, so it sits behind the same permission as the public share link.
+  const canManageShare = can('share_manage', trip)
+  const [lockHoverId, setLockHoverId] = useState(null)
+  const [undoHover, setUndoHover] = useState(false)
+  const [hoveredAssignmentId, setHoveredAssignmentId] = useState<number | null>(null)
+  // Transit rows fold their itinerary out inline (#1065).
+  const [expandedTransitIds, setExpandedTransitIds] = useState<Set<number>>(new Set())
+  // Deleting a note asks for confirmation first — the edit/delete icons sit close together and are
+  // easy to mis-tap on touch devices, where an accidental delete was previously unrecoverable.
+  const [pendingDeleteNote, setPendingDeleteNote] = useState<{ dayId: number; noteId: number } | null>(null)
   // The plan sidebar is resizable. Below this the route button's own word is the
   // first thing that stops fitting beside the two export buttons — the icon says
   // the same thing, and the accessible name still spells it out.
@@ -1352,7 +1291,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
   // (e.g. clicking an accommodation) marks every one of those rows selected, so a
   // per-assignment scroll-lock would let each day's row scroll the list in turn.
   // Keying the lock on the selection identity makes only the first row scroll (#1375).
-  const selectionScrollKey = S.selectedAssignmentId != null ? `a${S.selectedAssignmentId}` : S.selectedPlaceId != null ? `p${S.selectedPlaceId}` : null
+  const selectionScrollKey = selectedAssignmentId != null ? `a${selectedAssignmentId}` : selectedPlaceId != null ? `p${selectedPlaceId}` : null
   // Needed by the route-tools visibility gate in the render below (#1330); the hook
   // keeps its own copy, so read it reactively here in the component scope too.
   const optimizeFromAccommodation = useSettingsStore(s => s.settings.optimize_from_accommodation)
@@ -1360,141 +1299,43 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
   const collectionsEnabled = useAddonStore(s => s.isEnabled('collections'))
   const toursEnabled = useAddonStore(s => s.isEnabled('tours'))
   // Plugin time contributions in the day plan (dayScheduleProvider hook).
-  const daySchedule = usePluginDaySchedule(S.tripId)
+  const daySchedule = usePluginDaySchedule(tripId)
   // Per-day colours from the dayTintProvider hook — e.g. which leg of the trip a
   // day belongs to. Empty unless a granted plugin provides them.
-  const dayTints = usePluginDayTints(S.tripId)
+  const dayTints = usePluginDayTints(tripId)
   const routeProfileOptions = useRouteModeOptions()
   const {
-    tripId,
-    trip,
-    days,
-    places,
-    categories,
-    assignments,
-    selectedDayId,
-    selectedPlaceId,
-    selectedAssignmentId,
-    onSelectDay,
-    onPlaceClick,
-    onDayDetail,
-    accommodations,
-    onReorder,
-    onReorderDays,
-    onAddDay,
-    dayAdd,
-    onDeleteDay,
-    deleteDayQuestion,
-    onAssignToDay,
-    onRemoveAssignment,
-    onEditPlace,
-    onDeletePlace,
-    reservations,
-    visibleConnectionIds,
-    onToggleConnection,
-    allConnectionsShown,
-    onToggleAllConnections,
-    externalTransportDetail,
-    onExternalTransportDetailHandled,
-    onAddReservation,
-    onAddPlace,
-    onAddPlaceToDay,
-    onCreatePlaceForDay,
-    onNavigateToFiles,
-    routeShown,
-    routeProfile,
-    onToggleRoute,
-    onSetRouteProfile,
-    onExpandedDaysChange,
-    pushUndo,
-    canUndo,
-    lastActionLabel,
-    onUndo,
-    onRouteRefresh,
-    onAddTransport,
-    onAddAccommodation,
-    onPlanTransit,
-    onPlanTransitLeg,
-    onOpenTransit,
-    onEditTransport,
-    expandedTransitIds,
-    setExpandedTransitIds,
-    onEditReservation,
-    onOpenBooking,
-    onAddBookingToAssignment,
-    initialScrollTop,
-    onScrollTopChange,
-    showRouteToolsWhenExpanded,
-    isMobile,
-    dragDisabled,
     toast,
     t,
-    language,
     locale,
-    ctxMenu,
-    timeFormat,
     tripActions,
-    can,
-    canEditDays,
-    canEditPlaces,
-    canManageShare,
-    noteUi,
-    setNoteUi,
-    noteInputRef,
-    dayNotes,
-    openAddNote,
-    openEditNote,
-    cancelNote,
-    saveNote,
-    deleteNote,
-    pendingDeleteNote,
-    setPendingDeleteNote,
-    moveNote,
+    notes,
     expandedDays,
     setExpandedDays,
     routeLegs,
-    setRouteLegs,
     hotelLegs,
-    setHotelLegs,
-    legsAbortRef,
     draggingId,
     setDraggingId,
     lockedIds,
-    setLockedIds,
-    lockHoverId,
-    setLockHoverId,
-    undoHover,
-    setUndoHover,
-    hoveredAssignmentId,
-    setHoveredAssignmentId,
     dropTargetKey,
-    _setDropTargetKey,
     dropTargetRef,
     setDropTargetKey,
     dragOverDayId,
     setDragOverDayId,
     transportDetail,
     setTransportDetail,
-    transportPosVersion,
-    setTransportPosVersion,
     timeConfirm,
     setTimeConfirm,
     dragDataRef,
     scrollContainerRef,
     dayRefs,
-    initedTransportIds,
     lastAutoScrolledIdRef,
     getDragData,
-    prevDayCount,
     toggleDay,
     getSpanLabel,
-    getDayOrder,
     computeMultiDayMove,
-    getTransportForDay,
     getActiveRentalsForDay,
     getDayAssignments,
-    computeTransportPosition,
-    initTransportPositions,
     getMergedItems,
     storedPositionBefore,
     placeBelowNote,
@@ -1510,6 +1351,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
     expandedRouteDayIds,
     setExpandedRouteDayIds,
   } = S
+  const { noteUi, setNoteUi, noteInputRef, dayNotes, openAddNote, openEditNote, cancelNote, saveNote, deleteNote, moveNote } = notes
   // Stays still waiting for their booking to be confirmed, for the day pills (#2281).
   const pendingStays = useMemo(() => pendingStayIds(reservations), [reservations])
   // Rows that can be dragged lead with a grip; the rest keep its room so every tile lines up.
