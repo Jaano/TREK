@@ -111,7 +111,8 @@ export default function MAdminAddonManager({ bagTrackingEnabled, onToggleBagTrac
 
   const handleToggle = async (addon: Addon) => {
     const newEnabled = !addon.enabled
-    // Optimistic update
+    // Optimistic flip, per-row rollback on failure. Rolling the whole addons snapshot
+    // back instead would undo a toggle the user hit in parallel.
     setAddons(prev => prev.map(a => a.id === addon.id ? { ...a, enabled: newEnabled } : a))
     try {
       await adminApi.updateAddon(addon.id, { enabled: newEnabled })
@@ -139,22 +140,6 @@ export default function MAdminAddonManager({ bagTrackingEnabled, onToggleBagTrac
     return addon.type === 'trip' && (addon.icon === 'Image' || haystack.includes('photo') || haystack.includes('memories'))
   }
 
-  const handleTogglePhotoProvider = async (providerAddon: Addon) => {
-    const enableProvider = !providerAddon.enabled
-    const prev = addons
-
-    setAddons(current => current.map(a => a.id === providerAddon.id ? { ...a, enabled: enableProvider } : a))
-
-    try {
-      await adminApi.updateAddon(providerAddon.id, { enabled: enableProvider })
-      refreshGlobalAddons()
-      toast.success(t('admin.addons.toast.updated'))
-    } catch {
-      setAddons(prev)
-      toast.error(t('admin.addons.toast.error'))
-    }
-  }
-
   const photoProviderAddons = addons.filter(isPhotoProviderAddon)
   const documentProviderAddons = addons.filter(a => a.type === 'document_provider')
   const tripAddons = addons.filter(a => a.type === 'trip' && !isPhotosAddon(a))
@@ -165,7 +150,7 @@ export default function MAdminAddonManager({ bagTrackingEnabled, onToggleBagTrac
       label: provider.name,
       description: provider.description,
       enabled: provider.enabled,
-      toggle: () => handleTogglePhotoProvider(provider),
+      toggle: () => handleToggle(provider),
     }))
   // No credential form under these, unlike the photo providers: a document
   // connection belongs to a trip and is entered there. The admin only decides

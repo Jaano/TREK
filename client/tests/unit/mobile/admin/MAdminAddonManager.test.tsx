@@ -1,4 +1,4 @@
-// FE-MOB-AADD-001 to FE-MOB-AADD-033
+// FE-MOB-AADD-001 to FE-MOB-AADD-034
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -314,6 +314,33 @@ describe('MAdminAddonManager', () => {
     await user.click(screen.getByRole('switch', { name: 'Unsplash' }));
     await screen.findByText('Failed to update addon');
     await waitFor(() => expect(screen.getByRole('switch', { name: 'Unsplash' })).toHaveAttribute('aria-checked', 'false'));
+  });
+
+  it('FE-MOB-AADD-034: a failing provider toggle keeps a provider toggled while it was in flight', async () => {
+    const user = userEvent.setup();
+    server.use(
+      addonsRoute([
+        buildAddon({ id: 'journey', name: 'Journey', type: 'global', icon: 'Compass', enabled: true }),
+        buildAddon({ id: 'immich', name: 'Immich', description: 'Self-hosted photos', type: 'photo_provider', enabled: false }),
+        buildAddon({ id: 'unsplash', name: 'Unsplash', description: 'Stock photos', type: 'photo_provider', enabled: false }),
+      ]),
+      http.put('/api/admin/addons/immich', () => HttpResponse.json({ success: true })),
+      http.put('/api/admin/addons/unsplash', async () => {
+        await delay(150);
+        return HttpResponse.error();
+      }),
+    );
+    render(<><ToastContainer /><MAdminAddonManager /></>);
+    await screen.findByText('Immich');
+
+    // Unsplash is still saving when Immich goes on and through.
+    await user.click(screen.getByRole('switch', { name: 'Unsplash' }));
+    await user.click(screen.getByRole('switch', { name: 'Immich' }));
+    await screen.findByText('Addon updated');
+
+    await screen.findByText('Failed to update addon');
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Unsplash' })).toHaveAttribute('aria-checked', 'false'));
+    expect(screen.getByRole('switch', { name: 'Immich' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('FE-MOB-AADD-026: switching the journey addon off and on again shows the cascaded providers as off', async () => {
