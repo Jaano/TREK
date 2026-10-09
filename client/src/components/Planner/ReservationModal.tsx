@@ -13,8 +13,7 @@ import { useTranslation } from '../../i18n'
 import { CustomDatePicker } from '../shared/CustomDateTimePicker'
 import CustomTimePicker from '../shared/CustomTimePicker'
 import type { Day, Place, Reservation, TripFile, AssignmentsMap, Accommodation } from '../../types'
-import { BookingCostsSection } from './BookingCostsSection'
-import { BookingLinkAndFiles } from './BookingLinkAndFiles'
+import { BookingNotesFilesCosts } from './BookingNotesFilesCosts'
 import { importedPriceEntry } from './importedPrice'
 import { TravelerPicker } from './TravelerPicker'
 import type { TripMember } from '../Budget/BudgetPanelMemberChips'
@@ -23,7 +22,7 @@ import type { BookingReviewDraft } from './parsedItemToDraft'
 import { stayPlaces } from '../../utils/stayPlaces'
 import { BookingDialogHeader, StatusPill } from './bookings/BookingDialogShell'
 import { DialogShell, DialogFooter, FooterSpacer, DialogButton } from '../shared/DialogShell'
-import { INPUT, TEXTAREA, LABEL, GRID_2, GRID_3, EditorField, PillSelect } from '../shared/dialogParts'
+import { INPUT, GRID_2, GRID_3, EditorField, PillSelect } from '../shared/dialogParts'
 import { typeInfo } from './bookings/bookingsModel'
 import type { StatusTone } from './bookings/bookingParts'
 import { RESERVATION_TYPE_OPTIONS as TYPE_OPTIONS, reservationFieldsFrom, reservationFieldsFromPrefill } from './reservationFormModel'
@@ -376,41 +375,21 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
         </EditorField>
       </div>
 
-      <EditorField label={t('reservations.notes')}>
-        <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
-          placeholder={t('reservations.notesPlaceholder')} className={TEXTAREA} />
-      </EditorField>
-
-      <BookingLinkAndFiles
+      <BookingNotesFilesCosts
+        notes={form.notes}
+        onNotesChange={value => set('notes', value)}
         url={form.url}
         onUrlChange={value => set('url', value)}
-        labelClass={LABEL}
-        inputClass={INPUT}
         reservationId={reservation?.id}
         tripFiles={files}
-        attachedFiles={attach.attachedFiles}
         pendingFiles={pendingFiles}
-        onRemovePending={attach.removePending}
         fileInputRef={fileInputRef}
-        onFileChange={attach.handleFileChange}
+        attach={attach}
         canAttach={!!onFileUpload}
-        uploading={attach.uploadingFile}
-        onLinked={attach.linkFile}
-        onDetached={attach.detachFile}
+        showCosts={isBudgetEnabled}
+        pendingExpense={pendingExpense}
+        expense={expense}
       />
-
-      {/* Costs — create / view the expense linked to this booking */}
-      {isBudgetEnabled && (
-        <BookingCostsSection
-          reservationId={reservation?.id ?? null}
-          pendingExpense={pendingExpense}
-          onCreate={expense.create}
-          onEdit={expense.edit}
-          onRemove={expense.remove}
-          labelClassName={LABEL}
-          customTooltips
-        />
-      )}
     </DialogShell>
   )
 }

@@ -14,8 +14,7 @@ import { useToast } from '../shared/Toast'
 import { useTripStore } from '../../store/tripStore'
 import { useAddonStore } from '../../store/addonStore'
 import type { Day, Place, Accommodation, Reservation, TripFile, AssignmentsMap } from '../../types'
-import { BookingCostsSection } from './BookingCostsSection'
-import { BookingLinkAndFiles } from './BookingLinkAndFiles'
+import { BookingNotesFilesCosts } from './BookingNotesFilesCosts'
 import { TravelerPicker } from './TravelerPicker'
 import type { TripMember } from '../Budget/BudgetPanelMemberChips'
 import type { BookingExpenseRequest } from './BookingCostsSection.types'
@@ -23,7 +22,7 @@ import type { BookingReviewDraft } from './parsedItemToDraft'
 import TransitSearchPanel, { type PickedPlace } from './TransitSearchPanel'
 import { BookingDialogHeader, StatusPill } from './bookings/BookingDialogShell'
 import { DialogShell, DialogSection, DialogFooter, FooterSpacer, DialogButton, DeleteButton } from '../shared/DialogShell'
-import { INPUT, TEXTAREA, READONLY_BOX, LABEL, GRID_2, GRID_3, PANEL, SEARCH_ON_PANEL, EditorField, Segmented, PillSelect, AddRowButton } from '../shared/dialogParts'
+import { INPUT, READONLY_BOX, GRID_2, GRID_3, PANEL, SEARCH_ON_PANEL, EditorField, Segmented, PillSelect, AddRowButton } from '../shared/dialogParts'
 import { fs, Eyebrow, type StatusTone } from './bookings/bookingParts'
 import { typeInfo } from './bookings/bookingsModel'
 import {
@@ -540,41 +539,21 @@ export function TransportModal({ isOpen, onClose, onSave, reservation, days, sel
               placeholder={t('reservations.confirmationPlaceholder')} className={INPUT} />
           </EditorField>
 
-          <EditorField label={t('reservations.notes')}>
-            <textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={2}
-              placeholder={t('reservations.notesPlaceholder')} className={TEXTAREA} />
-          </EditorField>
-
-          <BookingLinkAndFiles
+          <BookingNotesFilesCosts
+            notes={form.notes}
+            onNotesChange={value => set('notes', value)}
             url={form.url}
             onUrlChange={value => set('url', value)}
-            labelClass={LABEL}
-            inputClass={INPUT}
             reservationId={reservation?.id}
             tripFiles={files}
-            attachedFiles={attach.attachedFiles}
             pendingFiles={pendingFiles}
-            onRemovePending={attach.removePending}
             fileInputRef={fileInputRef}
-            onFileChange={attach.handleFileChange}
+            attach={attach}
             canAttach={!!onFileUpload}
-            uploading={attach.uploadingFile}
-            onLinked={attach.linkFile}
-            onDetached={attach.detachFile}
+            showCosts={isBudgetEnabled}
+            pendingExpense={pendingExpense}
+            expense={expense}
           />
-
-          {/* Costs: create or view the expenses linked to this booking */}
-          {isBudgetEnabled && (
-            <BookingCostsSection
-              reservationId={reservation?.id ?? null}
-              pendingExpense={pendingExpense}
-              onCreate={expense.create}
-              onEdit={expense.edit}
-              onRemove={expense.remove}
-              labelClassName={LABEL}
-              customTooltips
-            />
-          )}
         </>
       )}
 
