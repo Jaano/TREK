@@ -6,7 +6,6 @@ import {
 import { useMemo, useRef, useState } from 'react'
 import { useStudioStore } from '../../store/studioStore'
 import { photoSrc } from './bookRender'
-import { BOOK_FONTS, BOOK_FONT_ORDER, hasWeight, nearestWeight } from './bookFonts'
 import { FRAME_SHAPES, SHAPE_GROUPS } from './shapes'
 import { ShapeGlyph } from './StudioElementsPanel'
 import { TravelInspector } from './StudioTravelInspector'
@@ -14,6 +13,7 @@ import { Swatches } from './StudioSwatches'
 import { formatBookCoords } from './entryText'
 import { iconComponent, iconLabel, searchIcons } from './iconLibrary'
 import { Choice, Line, NumField, Section, Switch } from './StudioControls'
+import { FontButtons, WeightLine } from './StudioTypeControls'
 import type { JourneySource } from './StudioSidebar'
 import { Tooltip } from '../shared/Tooltip'
 
@@ -320,41 +320,9 @@ export function StudioInspector({
                 nothing about a typeface — and grouped, because "which serif"
                 is a different question from "serif or sans".
               */}
-              <div className="st-fonts">
-                {BOOK_FONT_ORDER.map(id => {
-                  const font = BOOK_FONTS[id]
-                  return (
-                    <button type="button"
-                      key={id}
-                      className={`st-font ${el.font === id ? 'is-on' : ''}`}
-                      style={{ fontFamily: font.stack }}
-                      onClick={() => set({
-                        font: id,
-                        // A family that does not ship this weight would render a
-                        // synthesised bold — a smeared regular in print — so the
-                        // weight moves to the nearest one it really has.
-                        weight: nearestWeight(id, el.weight) as typeof el.weight,
-                      })}
-                      title={font.name}
-                    >
-                      {font.name}
-                    </button>
-                  )
-                })}
-              </div>
+              <FontButtons font={el.font} weight={el.weight} onPick={patch => set(patch)} />
               <div style={{ marginTop: 10 }}>
-                <Line label={t('journey.studio.weight')}>
-                  <Choice
-                    value={el.weight}
-                    options={([400, 500, 600, 700] as const).map(w => ({
-                      value: w,
-                      label: String(w),
-                      disabled: !hasWeight(el.font, w),
-                      title: hasWeight(el.font, w) ? undefined : t('journey.studio.weightMissing'),
-                    }))}
-                    onPick={weight => set({ weight })}
-                  />
-                </Line>
+                <WeightLine font={el.font} weight={el.weight} onPick={weight => set({ weight })} t={t} />
                 <Line label={t('journey.studio.align')}>
                   <div className="st-row">
                     {([['left', AlignLeft], ['center', AlignCenter], ['right', AlignRight], ['justify', AlignJustify]] as const).map(([a, Icon]) => (
