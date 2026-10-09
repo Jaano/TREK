@@ -1,10 +1,16 @@
-// FE-FILES-ACTIONS-001 to FE-FILES-ACTIONS-010: the paste and link rules the desktop file
-// manager and the phone's files tab and link sheet share.
+// FE-FILES-ACTIONS-001 to FE-FILES-ACTIONS-012: the paste and link rules the desktop file
+// manager and the phone's files tab and link sheet share, with the id reading each keeps.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildTripFile } from '../../../tests/helpers/factories';
 import { filesApi } from '../../api/client';
-import { filesFromClipboard, planFileLinkToggle, runFileLinkRecordStep, toggleFileLink } from './fileActions';
+import {
+  PHONE_FILE_LINK_RULES,
+  filesFromClipboard,
+  planFileLinkToggle,
+  runFileLinkRecordStep,
+  toggleFileLink,
+} from './fileActions';
 
 function clipboard(items: { kind: string; file: File | null }[]): DataTransfer {
   return { items: items.map((i) => ({ kind: i.kind, getAsFile: () => i.file })) } as unknown as DataTransfer;
@@ -54,6 +60,12 @@ describe('planFileLinkToggle', () => {
     expect(planFileLinkToggle(file, 'place_id', 5)).toEqual({ kind: 'removeLink' });
     expect(planFileLinkToggle(file, 'reservation_id', 7)).toEqual({ kind: 'removeLink' });
   });
+
+  it('FE-FILES-ACTIONS-011: a zero column is free on desktop and taken on the phone', () => {
+    const file = buildTripFile({ place_id: 0 });
+    expect(planFileLinkToggle(file, 'place_id', 5)).toEqual({ kind: 'update', data: { place_id: 5 } });
+    expect(planFileLinkToggle(file, 'place_id', 5, PHONE_FILE_LINK_RULES)).toEqual({ kind: 'addLink' });
+  });
 });
 
 describe('running a link toggle', () => {
@@ -80,9 +92,9 @@ describe('running a link toggle', () => {
     expect(filesApi.addLink).toHaveBeenNthCalledWith(2, 1, 9, { reservation_id: 7 });
   });
 
-  it('FE-FILES-ACTIONS-008: removing a record looks it up by the target, numeric or not', async () => {
-    await runFileLinkRecordStep(1, 9, 'place_id', 5, 'removeLink');
-    await runFileLinkRecordStep(1, 9, 'reservation_id', 7, 'removeLink');
+  it('FE-FILES-ACTIONS-008: on the phone a record is looked up by the numeric target', async () => {
+    await runFileLinkRecordStep(1, 9, 'place_id', 5, 'removeLink', PHONE_FILE_LINK_RULES);
+    await runFileLinkRecordStep(1, 9, 'reservation_id', 7, 'removeLink', PHONE_FILE_LINK_RULES);
     expect(filesApi.getLinks).toHaveBeenCalledWith(1, 9);
     expect(filesApi.removeLink).toHaveBeenNthCalledWith(1, 1, 9, 50);
     expect(filesApi.removeLink).toHaveBeenNthCalledWith(2, 1, 9, 70);
@@ -95,12 +107,30 @@ describe('running a link toggle', () => {
     expect(filesApi.removeLink).not.toHaveBeenCalled();
   });
 
+  it('FE-FILES-ACTIONS-012: on desktop a record is looked up by the target as it comes', async () => {
+    await runFileLinkRecordStep(1, 9, 'place_id', 5, 'removeLink');
+    await runFileLinkRecordStep(1, 9, 'reservation_id', 7, 'removeLink');
+    expect(filesApi.removeLink).toHaveBeenCalledTimes(1);
+    expect(filesApi.removeLink).toHaveBeenCalledWith(1, 9, 70);
+  });
+
   it('FE-FILES-ACTIONS-010: toggleFileLink writes the column or the record, and rethrows', async () => {
-    await toggleFileLink(1, buildTripFile({ id: 9, place_id: null }), 'place_id', 5);
+    await toggleFileLink(1, buildTripFile({ id: 9, place_id: null }), 'place_id', 5, PHONE_FILE_LINK_RULES);
     expect(filesApi.update).toHaveBeenCalledWith(1, 9, { place_id: 5 });
 
-    await toggleFileLink(1, buildTripFile({ id: 9, place_id: 1 }), 'place_id', 5);
+    await toggleFileLink(1, buildTripFile({ id: 9, place_id: 1 }), 'place_id', 5, PHONE_FILE_LINK_RULES);
     expect(filesApi.addLink).toHaveBeenCalledWith(1, 9, { place_id: 5 });
+
+    await toggleFileLink(1, buildTripFile({ id: 9, place_id: 1, linked_place_ids: [5] }), 'place_id', 5);
+    expect(filesApi.removeLink).not.toHaveBeenCalled();
+    await toggleFileLink(
+      1,
+      buildTripFile({ id: 9, place_id: 1, linked_place_ids: [5] }),
+      'place_id',
+      5,
+      PHONE_FILE_LINK_RULES
+    );
+    expect(filesApi.removeLink).toHaveBeenCalledWith(1, 9, 50);
 
     vi.mocked(filesApi.update).mockRejectedValue(new Error('nope'));
     await expect(toggleFileLink(1, buildTripFile({ id: 9, reservation_id: 7 }), 'reservation_id', 7)).rejects.toThrow(

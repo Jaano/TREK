@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { Check, Link2, Loader2, MapPin, Ticket, TrainFront } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import MSheet from '../../../components/MSheet'
-import { toggleFileLink, type FileLinkField } from '../../../../components/Files/fileActions'
+import { PHONE_FILE_LINK_RULES, toggleFileLink, type FileLinkField } from '../../../../components/Files/fileActions'
 import type { TripFile } from '../../../../types'
 import type { TripPlanner } from '../MTripShell'
 import { Eyebrow, TileHeader } from '../sheets/MTripSheetUi'
@@ -48,7 +48,7 @@ export default function MFileLinkSheet({ planner, file, onClose }: MFileLinkShee
     const key = `${field === 'place_id' ? 'p' : 'r'}${targetId}`
     setBusyKey(key)
     try {
-      await toggleFileLink(tripId, shown, field, targetId)
+      await toggleFileLink(tripId, shown, field, targetId, PHONE_FILE_LINK_RULES)
       refresh()
     } catch {
       toast.error(t('files.toast.assignError'))

@@ -30,19 +30,37 @@ export type FileLinkStep =
   | { kind: 'addLink' }
   | { kind: 'removeLink' };
 
+/**
+ * How a caller reads the ids, which differs between the views. The phone link sheet treats
+ * only a null column as free and finds a link record by the numeric value of its id; the
+ * desktop manager treats any empty column as free and compares the record id as it comes.
+ */
+export interface FileLinkRules {
+  freeOnlyWhenNull?: boolean;
+  matchRecordsByNumber?: boolean;
+}
+
+export const PHONE_FILE_LINK_RULES: FileLinkRules = { freeOnlyWhenNull: true, matchRecordsByNumber: true };
+
 function linkedIds(file: TripFile, field: FileLinkField): number[] {
   const own = file[field];
   const extra = field === 'place_id' ? file.linked_place_ids : file.linked_reservation_ids;
   return [...(own != null ? [own] : []), ...(extra || []).filter((id) => id != null)];
 }
 
-export function planFileLinkToggle(file: TripFile, field: FileLinkField, targetId: number): FileLinkStep {
+export function planFileLinkToggle(
+  file: TripFile,
+  field: FileLinkField,
+  targetId: number,
+  rules: FileLinkRules = {}
+): FileLinkStep {
   const column = (value: number | null) => (field === 'place_id' ? { place_id: value } : { reservation_id: value });
   if (linkedIds(file, field).includes(targetId)) {
     if (file[field] === targetId) return { kind: 'update', data: column(null) };
     return { kind: 'removeLink' };
   }
-  if (!file[field]) return { kind: 'update', data: column(targetId) };
+  const free = rules.freeOnlyWhenNull ? file[field] == null : !file[field];
+  if (free) return { kind: 'update', data: column(targetId) };
   return { kind: 'addLink' };
 }
 
@@ -58,7 +76,8 @@ export async function runFileLinkRecordStep(
   fileId: number,
   field: FileLinkField,
   targetId: number,
-  step: 'addLink' | 'removeLink'
+  step: 'addLink' | 'removeLink',
+  rules: FileLinkRules = {}
 ): Promise<void> {
   if (step === 'addLink') {
     await filesApi.addLink(
@@ -69,7 +88,9 @@ export async function runFileLinkRecordStep(
     return;
   }
   const linksRes = (await filesApi.getLinks(tripId, fileId)) as { links?: FileLinkRecord[] };
-  const link = (linksRes.links || []).find((l) => Number(l[field]) === targetId);
+  const link = (linksRes.links || []).find((l) =>
+    rules.matchRecordsByNumber ? Number(l[field]) === targetId : l[field] === targetId
+  );
   if (link) await filesApi.removeLink(tripId, fileId, link.id);
 }
 
@@ -78,9 +99,10 @@ export async function toggleFileLink(
   tripId: number,
   file: TripFile,
   field: FileLinkField,
-  targetId: number
+  targetId: number,
+  rules: FileLinkRules = {}
 ): Promise<void> {
-  const step = planFileLinkToggle(file, field, targetId);
+  const step = planFileLinkToggle(file, field, targetId, rules);
   if (step.kind === 'update') await filesApi.update(tripId, file.id, step.data);
-  else await runFileLinkRecordStep(tripId, file.id, field, targetId, step.kind);
+  else await runFileLinkRecordStep(tripId, file.id, field, targetId, step.kind, rules);
 }
