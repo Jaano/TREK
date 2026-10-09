@@ -4,7 +4,7 @@ import type { ReservationTraveler } from '@trek/shared'
 import { avatarSrc } from '../../../../utils/avatarSrc'
 import GuestBadge from '../../../../components/shared/GuestBadge'
 import PluginFrame from '../../../../components/Plugins/PluginFrame'
-import { usePluginStore } from '../../../../store/pluginStore'
+import { useReservationDetailPlugins } from '../../../../components/Planner/bookings/useReservationDetailPlugins'
 
 /**
  * Scroll body shared by the list-style trip tabs (transports, bookings, costs,
@@ -133,7 +133,7 @@ export function StatusDot({ color }: { color: string }) {
  * kit plugin that goes dark with TREK keeps compositing transparently.
  */
 export function ReservationPluginSlots({ tripId, reservationId }: { tripId: number; reservationId: number }) {
-  const plugins = usePluginStore(s => s.plugins).filter(p => p.type === 'widget' && p.slot === 'reservation-detail')
+  const plugins = useReservationDetailPlugins()
   if (plugins.length === 0) return null
   return (
     <div className="flex flex-col gap-2 px-3 pb-3">
