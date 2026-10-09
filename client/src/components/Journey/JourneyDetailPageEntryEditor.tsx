@@ -1,32 +1,22 @@
-import { useEffect, useId, useMemo, useState, useRef, type SyntheticEvent } from 'react'
-import { localIsoDate } from '../../utils/localDate'
+import { useEffect, useId, useState, useRef, type SyntheticEvent } from 'react'
 import { Briefcase, X, Plus, Image, Minus, Check, MapPin, Locate, Camera, Play, Loader2, NotebookPen } from 'lucide-react'
-import { normalizeImageFiles } from '../../utils/convertHeic'
 import { isVideoFile } from '../../utils/videoPoster'
 import { type ResilientResult, type UploadProgress } from '../../utils/uploadQueue'
 import { useTranslation } from '../../i18n'
-import { journeyApi, mapsApi, addonsApi, memoriesApi, weatherApi } from '../../api/client'
-import { useToast } from '../shared/Toast'
-import { getCurrentPositionOnce } from '../../hooks/useGeolocation'
-import { getApiErrorMessage } from '../../types'
+import { addonsApi, memoriesApi } from '../../api/client'
 import type { JourneyEntry, JourneyPhoto, GalleryPhoto, JourneyTrip } from '../../store/journeyStore'
 import { MOOD_CONFIG, WEATHER_CONFIG } from '../../pages/journeyDetail/JourneyDetailPage.constants'
-import { photoUrl, posterlessVideo, isValidGeoPoint, geoOnceErrorKey } from '../../pages/journeyDetail/JourneyDetailPage.helpers'
+import { photoUrl, posterlessVideo } from '../../pages/journeyDetail/JourneyDetailPage.helpers'
 import MarkdownToolbar from './MarkdownToolbar'
 import { DatePicker } from './JourneyDetailPageDatePicker'
 import CustomTimePicker from '../shared/CustomTimePicker'
 import ToggleSwitch from '../Settings/ToggleSwitch'
-import { ProviderPicker, type ProviderPhotoGroup } from './JourneyDetailPageProviderPicker'
-import { journeyWeatherCategory } from '../../mobile/screens/journey/mobileJourneyMeta'
+import { ProviderPicker } from './JourneyDetailPageProviderPicker'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import { DialogButton, DialogFooter, DialogHeader, DialogSection, DialogShell, DialogTile, FooterSpacer, NEUTRAL_TINT, fs } from '../shared/DialogShell'
 import { AddRowButton, EditorField, INPUT } from '../shared/dialogParts'
 import { Tooltip } from '../shared/Tooltip'
-import { useJourneyTripSuggestion } from './useJourneyTripSuggestion'
-import { useEntryPhotoOrder } from './useEntryPhotoOrder'
-import { usePlaceLanguage } from '../../hooks/usePlaceLanguage'
-
-type PendingProviderGroup = ProviderPhotoGroup & { provider: string }
+import { useJourneyEntryForm, type PendingProviderGroup } from './useJourneyEntryForm'
 
 /** A chip of the mood and weather rows, as in the collection dialogs' category row. */
 const CHIP = 'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 font-semibold transition-colors'
@@ -146,85 +136,33 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
   onAddProviderPhotos?: (entryId: number, group: PendingProviderGroup) => Promise<void>
   onDone: () => void
 }) {
-  const { t, language } = useTranslation()
-  const placeLang = usePlaceLanguage()
-  const toast = useToast()
-  const [title, setTitle] = useState(entry.title || '')
-  const [story, setStory] = useState(entry.story || '')
-  const [entryDate, setEntryDate] = useState(entry.entry_date || localIsoDate())
-  const [entryTime, setEntryTime] = useState(entry.entry_time?.slice(0, 5) || '')
-  const [locationName, setLocationName] = useState(entry.location_name || '')
-  const [locationLat, setLocationLat] = useState<number | null>(entry.location_lat ?? null)
-  const [locationLng, setLocationLng] = useState<number | null>(entry.location_lng ?? null)
-  const [locationQuery, setLocationQuery] = useState('')
-  const [locationResults, setLocationResults] = useState<{ name: string; address?: string; lat: number; lng: number }[]>([])
-  const [locationSearching, setLocationSearching] = useState(false)
-  const [showLocationResults, setShowLocationResults] = useState(false)
-  const [locating, setLocating] = useState(false)
-  const locationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [mood, setMood] = useState(entry.mood || '')
-  const [weather, setWeather] = useState(entry.weather || '')
-  const [statsExcluded, setStatsExcluded] = useState(entry.stats_excluded ?? false)
-  // The trip this day belongs to, when the journey does not follow it yet (#2265).
-  const tripSuggestion = useJourneyTripSuggestion(journeyId, trips.map(tr => tr.trip_id), entryDate, true)
-  const [isDraft, setIsDraft] = useState(entry.is_draft ?? false)
-  const [pros, setPros] = useState<string[]>(entry.pros_cons?.pros?.length ? entry.pros_cons.pros : [''])
-  const [cons, setCons] = useState<string[]>(entry.pros_cons?.cons?.length ? entry.pros_cons.cons : [''])
-  const [saving, setSaving] = useState(false)
-  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
-  const [photos, setPhotos] = useState<(JourneyPhoto | GalleryPhoto)[]>(entry.photos || [])
-  // Drag a photo onto another's place, or send it to the front (#824).
-  const photoOrder = useEntryPhotoOrder(entry.id, photos, setPhotos)
-  const canReorder = entry.id > 0 && photos.length > 1
-  const [pendingFiles, setPendingFiles] = useState<File[]>([])
-  // Minting the preview URL inline in the JSX would hand out a fresh blob on
-  // every keystroke in the story field and never give one back.
-  const pendingUrls = useMemo(() => pendingFiles.map(f => URL.createObjectURL(f)), [pendingFiles])
-  useEffect(() => () => { pendingUrls.forEach(u => URL.revokeObjectURL(u)) }, [pendingUrls])
-  const [pendingLinkIds, setPendingLinkIds] = useState<number[]>([])
-  const [showGalleryPick, setShowGalleryPick] = useState(false)
+  const { t } = useTranslation()
+  const {
+    title, setTitle, story, setStory, entryDate, setEntryDate, entryTime, setEntryTime,
+    locationName,
+    locationQuery, locationResults, locationSearching, showLocationResults, setShowLocationResults, locating,
+    mood, setMood, weather, setWeather, statsExcluded, setStatsExcluded, tripSuggestion, isDraft, setIsDraft,
+    pros, setPros, cons, setCons, saving, uploadProgress, photos, photoOrder, canReorder,
+    pendingFiles, setPendingFiles, pendingPreviews: pendingUrls,
+    pendingProviderGroups, setPendingProviderGroups, showGalleryPick, setShowGalleryPick, isDirty,
+    availableGalleryPhotos, providerAssetIds, contextLocation, offersStatsToggle, addVerdictRow, verdictRowRef,
+    handleSave, handleFileChange, pickGalleryPhoto, removePhoto, searchLocation, pickLocation, handleUseCurrentLocation,
+  } = useJourneyEntryForm({
+    entry, journeyId, trips, galleryPhotos, onSave, onUploadPhotos, onAddProviderPhotos, onDone,
+    blankVerdictRow: true, dirtyOnCoordinates: true, toastSaveError: true, autoFillWeather: showWeather,
+  })
   const [photoTab, setPhotoTab] = useState<'upload' | 'gallery' | 'external'>('upload')
   const [availableProviders, setAvailableProviders] = useState<{ id: string; name: string }[]>([])
   const [providersLoading, setProvidersLoading] = useState(false)
   const [externalProvider, setExternalProvider] = useState<string | null>(null)
-  const [pendingProviderGroups, setPendingProviderGroups] = useState<PendingProviderGroup[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   // Own input: putting `capture` on the picker above would take the photo library
   // away on a phone, which is the more common way in. This one only ever opens the
   // camera, so tablets and laptops get the same route the phone sheet already has.
   const cameraRef = useRef<HTMLInputElement>(null)
   const storyRef = useRef<HTMLTextAreaElement>(null)
-  // Which verdict row to put the caret in after the next render. Enter adds a row
-  // and the caret has to follow it, or the key does half a job.
-  const verdictFocusRef = useRef<string | null>(null)
-  const persistedEntryIdRef = useRef<number | null>(entry.id > 0 ? entry.id : null)
   const [confirmDiscard, setConfirmDiscard] = useState(false)
   const labelId = useId()
-
-  // Track which fields differ from the entry we started editing so we can
-  // warn before discarding on close/cancel.
-  const originalPros = (entry.pros_cons?.pros ?? []).join('\n')
-  const originalCons = (entry.pros_cons?.cons ?? []).join('\n')
-  const isDirty = (
-    title !== (entry.title || '') ||
-    story !== (entry.story || '') ||
-    entryDate !== (entry.entry_date || localIsoDate()) ||
-    entryTime !== (entry.entry_time?.slice(0, 5) || '') ||
-    locationName !== (entry.location_name || '') ||
-    (locationLat ?? null) !== (entry.location_lat ?? null) ||
-    (locationLng ?? null) !== (entry.location_lng ?? null) ||
-    mood !== (entry.mood || '') ||
-    weather !== (entry.weather || '') ||
-    statsExcluded !== (entry.stats_excluded ?? false) ||
-    isDraft !== (entry.is_draft ?? false) ||
-    pros.filter(p => p.trim()).join('\n') !== originalPros ||
-    cons.filter(c => c.trim()).join('\n') !== originalCons ||
-    pendingFiles.length > 0 ||
-    pendingLinkIds.length > 0 ||
-    pendingProviderGroups.length > 0
-  )
-
-  const availableGalleryPhotos = galleryPhotos.filter(gp => !photos.some(p => p.id === gp.id))
 
   useEffect(() => {
     if (photoTab !== 'external' || availableProviders.length > 0 || providersLoading) return
@@ -250,75 +188,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
   }, [photoTab, availableProviders.length])
 
   const activeExternalProvider = externalProvider || availableProviders[0]?.id || null
-  const providerExistingAssetIds = new Set<string>()
-  if (activeExternalProvider) {
-    photos.forEach(photo => {
-      if (photo.provider === activeExternalProvider && photo.asset_id) providerExistingAssetIds.add(photo.asset_id)
-    })
-    pendingProviderGroups.forEach(group => {
-      if (group.provider === activeExternalProvider) group.assetIds.forEach(assetId => providerExistingAssetIds.add(assetId))
-    })
-  }
-
-  /**
-   * Fill the weather in from the forecast once the entry knows where and when.
-   *
-   * The phone's quick capture has done this since it was built; typing an entry
-   * up at a desk was the one place you still picked the icon by hand (discussion
-   * #2299). The date decides the source on the server: today comes from the
-   * forecast, a backdated day from the ERA5 archive, so writing up last Tuesday
-   * gets last Tuesday's weather rather than this afternoon's.
-   *
-   * Only ever fills an empty field, and each place-and-day is tried once, so a
-   * cleared icon stays cleared and a chosen one is never overwritten.
-   */
-  const weatherTriedRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (!showWeather) return
-    if (typeof locationLat !== 'number' || typeof locationLng !== 'number') return
-    if (weather) return
-    const key = `${locationLat.toFixed(3)},${locationLng.toFixed(3)},${entryDate}`
-    if (weatherTriedRef.current === key) return
-    weatherTriedRef.current = key
-
-    let active = true
-    weatherApi.get(locationLat, locationLng, entryDate, language)
-      .then(result => {
-        // An error-shaped answer carries no `main`, and the dev-only schema check
-        // does not stop it reaching here in production.
-        if (!active || !result || result.error || typeof result.main !== 'string') return
-        const category = journeyWeatherCategory(result.main, result.description ?? '')
-        // Re-checked rather than trusted from the closure: the request is a
-        // round trip and the traveller may have picked an icon while it was out.
-        setWeather(current => current || category)
-      })
-      .catch(() => { /* no weather is a fine outcome for a journal entry */ })
-    return () => { active = false }
-  }, [showWeather, locationLat, locationLng, entryDate, weather, language])
-
-  /**
-   * Enter in a pro or con opens the next one, the way every list of short things
-   * behaves. Reaching for the plus button between every item was the complaint
-   * (discussion #2299); the button stays for the mouse.
-   *
-   * The new row goes directly below the one you are in rather than at the end, so
-   * a thought inserted in the middle lands where you meant it.
-   */
-  const addVerdictRow = (list: 'pros' | 'cons', index: number) => {
-    const [values, setValues] = list === 'pros' ? [pros, setPros] as const : [cons, setCons] as const
-    const next = [...values]
-    next.splice(index + 1, 0, '')
-    setValues(next)
-    verdictFocusRef.current = `${list}-${index + 1}`
-  }
-
-  /** Give the caret to the row `addVerdictRow` just made, once React has drawn it. */
-  const verdictRowRef = (key: string) => (el: HTMLInputElement | null) => {
-    if (el && verdictFocusRef.current === key) {
-      verdictFocusRef.current = null
-      el.focus()
-    }
-  }
+  const providerExistingAssetIds = providerAssetIds(activeExternalProvider)
 
   // Every way out (Cancel, the close button, Escape, the dimmed backdrop) comes
   // through here, so none of them drops an edit without asking first.
@@ -328,121 +198,6 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
       return
     }
     onClose()
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      const entryId = await onSave({
-        title: title || null,
-        story: story || null,
-        entry_date: entryDate,
-        entry_time: entryTime || null,
-        location_name: locationName || null,
-        location_lat: locationLat,
-        location_lng: locationLng,
-        stats_excluded: offersStatsToggle ? statsExcluded : undefined,
-        is_draft: isDraft,
-        mood: mood || null,
-        weather: weather || null,
-        pros_cons: { pros: pros.filter(p => p.trim()), cons: cons.filter(c => c.trim()) },
-        // An explicit Save is the user saying this suggestion is now their entry —
-        // it does not need a story to earn that (#2008).
-        type: entry.type === 'skeleton' ? 'entry' : undefined,
-      }, persistedEntryIdRef.current ?? undefined)
-      if (entryId > 0) persistedEntryIdRef.current = entryId
-      // upload queued files after entry is created
-      if (pendingFiles.length > 0 && entryId) {
-        const filesToUpload = pendingFiles
-        setUploadProgress({ done: 0, total: filesToUpload.length })
-        try {
-          const { failed } = await onUploadPhotos(entryId, filesToUpload, {
-            onProgress: p => setUploadProgress({ done: p.done, total: p.total }),
-          })
-          setPendingFiles(failed)
-          if (failed.length > 0) {
-            toast.error(t('journey.editor.uploadPartialFailed', { failed: String(failed.length), total: String(filesToUpload.length) }))
-          }
-        } catch (err) {
-          toast.error(getApiErrorMessage(err, t('journey.editor.uploadFailed')))
-        } finally {
-          setUploadProgress(null)
-        }
-      }
-      // link gallery photos that were picked before save
-      if (pendingLinkIds.length > 0 && entryId) {
-        for (const photoId of pendingLinkIds) {
-          try { await journeyApi.linkPhoto(entryId, photoId) } catch {}
-        }
-      }
-      if (pendingProviderGroups.length > 0 && entryId && onAddProviderPhotos) {
-        const failed: PendingProviderGroup[] = []
-        for (const group of pendingProviderGroups) {
-          try { await onAddProviderPhotos(entryId, group) } catch { failed.push(group) }
-        }
-        if (failed.length > 0) {
-          setPendingProviderGroups(failed)
-          toast.error(t('journey.editor.externalPhotosPartialFailed', { failed: String(failed.length), total: String(pendingProviderGroups.length) }))
-          return
-        }
-        setPendingProviderGroups([])
-      }
-      onDone()
-    } catch (err) {
-      // Neither the page callback nor journeyStore toasts, so without this the
-      // whole entry just fails to save with no sign of it.
-      toast.error(getApiErrorMessage(err, t('journey.settings.saveFailed')))
-      return
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files?.length) return
-    // Queue files locally until Save so cancel/close actually discards. This
-    // keeps photo behavior consistent with text fields — no silent persistence.
-    const normalized = await normalizeImageFiles(files)
-    setPendingFiles(prev => [...prev, ...normalized])
-  }
-
-  const contextLocation = isValidGeoPoint({ lat: locationLat ?? Number.NaN, lng: locationLng ?? Number.NaN })
-    ? { lat: locationLat!, lng: locationLng!, name: locationName || undefined }
-    : null
-
-  // The route switch belongs to an entry that is a stop, or was one: an entry
-  // without a point was never on the route, and a new one is not on it yet.
-  const offersStatsToggle = entry.id > 0 && (contextLocation != null || !!entry.stats_excluded)
-
-  const handleUseCurrentLocation = async () => {
-    if (locating) return
-    setLocating(true)
-    try {
-      const pos = await getCurrentPositionOnce()
-      // Fill coordinates right away; the name is refined below once the
-      // reverse geocode comes back.
-      const fallbackName = `${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}`
-      if (locationTimerRef.current) clearTimeout(locationTimerRef.current)
-      setLocationSearching(false)
-      setLocationLat(pos.lat)
-      setLocationLng(pos.lng)
-      setLocationName(fallbackName)
-      setLocationQuery('')
-      setLocationResults([])
-      setShowLocationResults(false)
-      try {
-        const data = await mapsApi.reverse(pos.lat, pos.lng, placeLang)
-        const name = data.name || data.address
-        // Only replace the coordinate fallback — don't clobber a search
-        // result the user may have picked while the reverse call was in flight.
-        if (name) setLocationName(prev => (prev === fallbackName ? name : prev))
-      } catch { /* best effort — keep the coordinate fallback */ }
-    } catch (err) {
-      toast.error(t(geoOnceErrorKey(err)))
-    } finally {
-      setLocating(false)
-    }
   }
 
   const header = (
@@ -538,17 +293,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                         type="button"
                         key={gp.id}
                         aria-label={t('journey.editor.fromGallery')}
-                        onClick={async () => {
-                          if (entry.id > 0) {
-                            try {
-                              const linked = await journeyApi.linkPhoto(entry.id, gp.id)
-                              if (linked) setPhotos(prev => [...prev, linked])
-                            } catch {}
-                          } else {
-                            setPendingLinkIds(prev => [...prev, gp.id])
-                            setPhotos(prev => [...prev, gp])
-                          }
-                        }}
+                        onClick={() => pickGalleryPhoto(gp)}
                         className="relative block w-full cursor-pointer overflow-hidden rounded-[10px] border-0 bg-transparent p-0 transition-shadow hover:ring-2 hover:ring-accent"
                         style={{ paddingTop: '100%' }}
                       >
@@ -672,15 +417,9 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                       )}
                       <Tooltip label={t('common.delete')}>
                         <button type="button"
-                          onClick={async (e) => {
+                          onClick={(e) => {
                             e.stopPropagation()
-                            setPhotos(prev => prev.filter(x => x.id !== p.id))
-                            if (entry.id > 0) {
-                              // unlink from entry; gallery row is preserved
-                              try { await journeyApi.unlinkPhoto(entry.id, p.id) } catch {}
-                            } else {
-                              setPendingLinkIds(prev => prev.filter(id => id !== p.id))
-                            }
+                            void removePhoto(p)
                           }}
                           aria-label={t('common.delete')}
                           className={PHOTO_REMOVE}
@@ -803,26 +542,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                 <input
                   id={`${labelId}-location`}
                   value={locationQuery || locationName}
-                  onChange={e => {
-                    const q = e.target.value
-                    setLocationQuery(q)
-                    setShowLocationResults(true)
-                    if (locationTimerRef.current) clearTimeout(locationTimerRef.current)
-                    if (q.trim().length >= 2) {
-                      locationTimerRef.current = setTimeout(async () => {
-                        setLocationSearching(true)
-                        try {
-                          const res = await mapsApi.search(q, placeLang)
-                          setLocationResults((res.places || []).slice(0, 6).map((p: any) => ({
-                            name: p.name, address: p.address, lat: Number(p.lat), lng: Number(p.lng),
-                          })))
-                        } catch { setLocationResults([]) }
-                        finally { setLocationSearching(false) }
-                      }, 400)
-                    } else {
-                      setLocationResults([])
-                    }
-                  }}
+                  onChange={e => searchLocation(e.target.value)}
                   onFocus={() => { if (locationResults.length > 0) setShowLocationResults(true) }}
                   placeholder={t('journey.editor.searchLocation')}
                   className={`${INPUT} pe-9`}
@@ -846,14 +566,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
                     {locationResults.map((r, i) => (
                       <button type="button"
                         key={i}
-                        onClick={() => {
-                          setLocationName(r.name)
-                          setLocationLat(r.lat)
-                          setLocationLng(r.lng)
-                          setLocationQuery('')
-                          setShowLocationResults(false)
-                          setLocationResults([])
-                        }}
+                        onClick={() => pickLocation(r)}
                         className="flex w-full items-start gap-2.5 rounded-[8px] px-2.5 py-2 text-start hover:bg-surface-hover"
                       >
                         <MapPin size={13} className="mt-0.5 flex-none text-content-faint" />
