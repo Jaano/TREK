@@ -1,13 +1,11 @@
-import { useEffect, useId, useState } from 'react'
-import { ExternalLink, Download, FileText } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 import rehypeSanitize from 'rehype-sanitize'
 import { openFile as openFileUrl } from '../../utils/fileDownload'
 import type { FileManagerState } from './useFileManager'
-import { triggerDownload } from './FileManager.helpers'
-import { DialogHeader, DialogShell, DialogTile, NEUTRAL_TINT, PILL } from '../shared/DialogShell'
+import { FilePreviewDialog } from './FileManagerPreviewDialog'
 
 /**
  * Inline preview for uploaded Markdown files (#1345). Fetches the file's text via
@@ -19,7 +17,6 @@ export function MarkdownPreviewModal(S: FileManagerState) {
   const { previewFile, setPreviewFile, previewFileUrl, toast, t } = S
   const [text, setText] = useState('')
   const [err, setErr] = useState(false)
-  const labelId = useId()
   const close = () => setPreviewFile(null)
   const openInTab = () => openFileUrl(previewFile.url, previewFile.original_name).catch(() => toast.error(t('files.openError')))
 
@@ -36,34 +33,19 @@ export function MarkdownPreviewModal(S: FileManagerState) {
   }, [previewFileUrl])
 
   return (
-    <DialogShell
+    <FilePreviewDialog
+      name={previewFile.original_name}
+      url={previewFile.url}
       onClose={close}
-      labelledBy={labelId}
+      onOpenInTab={openInTab}
+      t={t}
       width="editor"
       bodyClassName="collab-note-md min-h-0 flex-1 overflow-y-auto px-7 py-6 leading-relaxed text-content [word-break:break-word]"
-      header={(
-        <DialogHeader
-          tile={<DialogTile><FileText size={20} strokeWidth={1.9} className="text-content-muted" /></DialogTile>}
-          tint={NEUTRAL_TINT}
-          labelId={labelId}
-          onClose={close}
-          title={previewFile.original_name}
-          pills={(
-            <>
-              <button type="button" onClick={openInTab} className={`${PILL} hover:opacity-80`}>
-                <ExternalLink size={13} strokeWidth={2.2} /> {t('files.openTab')}
-              </button>
-              <button type="button" onClick={() => triggerDownload(previewFile.url, previewFile.original_name)} className={`${PILL} hover:opacity-80`}>
-                <Download size={13} strokeWidth={2.2} /> {t('files.download') || 'Download'}
-              </button>
-            </>
-          )}
-        />
-      )}
+      iconClassName="text-content-muted"
     >
       {err
         ? <p className="text-content-muted">{t('files.openError')}</p>
         : <Markdown remarkPlugins={[remarkGfm, remarkBreaks]} rehypePlugins={[rehypeSanitize]}>{text}</Markdown>}
-    </DialogShell>
+    </FilePreviewDialog>
   )
 }
